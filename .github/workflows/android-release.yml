@@ -1,0 +1,155 @@
+name: Release APK
+
+# 打一个 v* 标签即可自动出包并创建 GitHub Release；
+# 也可以在 Actions 页面手动触发（手动触发只构建、不发布）。
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: '是否用当前版本号创建 Release（勾选后需已有对应 tag，一般推荐直接用打 tag 的方式）'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build & Release
+    # 固定镜像：ubuntu-latest 将于 2026-10-19 迁移到 Ubuntu 26，避免构建环境被静默替换
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 配置 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 配置 Android SDK
+        uses: android-actions/setup-android@v3
+        # v3 的 packages 默认值是 'tools platform-tools'，而 tools 已从 SDK 仓库下架，
+        # 会让 sdkmanager 以退出码 1 直接失败。这里只保留 platform-tools。
+        with:
+          packages: 'platform-tools'
+
+      - name: 安装 SDK 组件
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: 配置 Gradle（含依赖缓存）
+        uses: gradle/actions/setup-gradle@v4
+
+      # ---------------------------------------------------------------- 版本号
+      - name: 读取版本号
+        id: ver
+        run: |
+          VERSION=$(grep -oP '(?:appVersionName|versionName)\s*=\s*"\K[^"]+' app/build.gradle.kts | head -1)
+          CODE=$(grep -oP '(?:appVersionCode|versionCode)\s*=\s*\K[0-9]+' app/build.gradle.kts | head -1)
+          echo "name=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "本次构建版本：v$VERSION (versionCode $CODE)"
+
+      - name: 校验 tag 与版本号一致
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          FILE_VERSION="${{ steps.ver.outputs.name }}"
+          if [ "$TAG_VERSION" != "$FILE_VERSION" ]; then
+            echo "::error::tag($TAG_VERSION) 与 build.gradle.kts 的 versionName($FILE_VERSION) 不一致；"
+            echo "::error::否则应用内更新会判断错误。请先修改 versionName 再打 tag。"
+            exit 1
+          fi
+          echo "tag 与 versionName 一致：v$FILE_VERSION"
+
+      # ---------------------------------------------------------------- 签名
+      - name: 准备签名密钥
+        id: ks
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/windtone-release.jks"
+            echo "path=$RUNNER_TEMP/windtone-release.jks" >> "$GITHUB_OUTPUT"
+            echo "::notice::已载入仓库签名密钥"
+          else
+            echo "path=" >> "$GITHUB_OUTPUT"
+            echo "::warning::未配置 secret KEYSTORE_BASE64，本次产物将不带签名，无法直接覆盖安装"
+          fi
+
+      # ---------------------------------------------------------------- 构建
+      - name: 单元测试
+        run: ./gradlew testDebugUnitTest --stacktrace
+
+      - name: 构建 Release 包
+        env:
+          WINDTONE_KEYSTORE: ${{ steps.ks.outputs.path }}
+          WINDTONE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          WINDTONE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          WINDTONE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: 重命名并计算校验值
+        id: apk
+        run: |
+          mkdir -p dist
+          SRC=$(ls app/build/outputs/apk/release/WindTone-v*.apk app/build/outputs/apk/release/*.apk 2>/dev/null | head -1)
+          if [ -z "$SRC" ]; then
+            echo "::error::未找到 Release APK 产物"
+            exit 1
+          fi
+          OUT="dist/WindTone-v${{ steps.ver.outputs.name }}.apk"
+          cp "$SRC" "$OUT"
+          SHA=$(sha256sum "$OUT" | cut -d' ' -f1)
+          SIZE=$(stat -c%s "$OUT")
+          echo "path=$OUT" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+          echo "产物：$OUT"
+          echo "SHA-256：$SHA"
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: WindTone-v${{ steps.ver.outputs.name }}
+          path: dist/*.apk
+          if-no-files-found: error
+          retention-days: 90
+
+      # ---------------------------------------------------------------- 发布
+      - name: 创建 GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: 听风 WindTone ${{ github.ref_name }}
+          files: dist/*.apk
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          body: |
+            ## 听风 WindTone ${{ github.ref_name }}
+
+            安装包：`WindTone-v${{ steps.ver.outputs.name }}.apk`（${{ steps.apk.outputs.size }} 字节）
+            SHA-256：`${{ steps.apk.outputs.sha256 }}`
+
+            ### 安装方式
+            1. 下载下方 APK 到手机；
+            2. 允许「安装未知应用」后点击安装；
+            3. 已安装旧版本的可以直接覆盖升级 —— 歌单、收藏、播放统计都会保留。
+
+            也可以在应用内「设置 → 更新 → 检查更新」中一键升级。

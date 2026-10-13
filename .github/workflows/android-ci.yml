@@ -1,0 +1,71 @@
+name: Android CI
+
+# 主干与 PR 的快速校验：跑单测 + 出一个 debug 包，确保任何提交都能编译通过
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build & Test
+    # 固定镜像：ubuntu-latest 将于 2026-10-19 迁移到 Ubuntu 26，避免构建环境被静默替换
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 配置 Android SDK
+        uses: android-actions/setup-android@v3
+        # v3 的 packages 默认值是 'tools platform-tools'，而 tools 已从 SDK 仓库下架，
+        # 会让 sdkmanager 以退出码 1 直接失败。这里只保留 platform-tools。
+        with:
+          packages: 'platform-tools'
+
+      - name: 安装 SDK 组件
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: 配置 Gradle（含依赖缓存）
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: 单元测试
+        run: ./gradlew testDebugUnitTest --stacktrace
+
+      - name: 编译 Debug 包
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: 上传 Debug 包
+        uses: actions/upload-artifact@v4
+        with:
+          name: WindTone-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: 汇总测试结果
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: app/build/reports/tests/
+          if-no-files-found: ignore
+          retention-days: 7

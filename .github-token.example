@@ -1,0 +1,35 @@
+# 复制本文件为 .github-token，再把你的 GitHub Personal Access Token 粘进去。
+#
+# ⚠️ .github-token 已在 .gitignore 中，绝不会被提交。请勿把它改名为别的文件。
+#
+# ------------------------------------------------------------------
+# 1) 生成 Token
+# ------------------------------------------------------------------
+# 推荐 Fine-grained token（GitHub → Settings → Developer settings →
+# Personal access tokens → Fine-grained tokens），仓库选择 LuckyLearning/WindTone，
+# 权限至少需要：
+#     Contents        : Read and write   （推代码、创建 Release）
+#     Workflows       : Read and write   （推送 .github/workflows/ 下的工作流文件）
+#     Actions         : Read and write   （查看/触发工作流运行）
+#
+# 2) 文件内容格式
+# ------------------------------------------------------------------
+# 只保留「一行」Token，不要夹注释、不要带引号：
+#
+#     github_pat_11ABCDEFG...
+#
+#     （经典 token 则以 ghp_ 开头）
+#
+# 3) 推送
+# ------------------------------------------------------------------
+# 方式 A：命令行临时使用（每次推送都要手动输入或粘贴）
+#     git push https://<token>@github.com/LuckyLearning/WindTone.git main
+#
+# 方式 B：让 git 记住凭据（推荐，长期使用）
+#     git config --global credential.helper manager
+#     第一次 push 时用户名填 GitHub 用户名，密码处粘贴 Token。
+#
+# 方式 C：用脚本读取本文件（见 scripts/push.sh）
+#     bash scripts/push.sh
+#     原理：把 Token 通过 GIT_ASKPASS 临时交给 git，不会写进 remote URL，
+#           也不会出现在 git 的配置文件里。

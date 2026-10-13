@@ -1,0 +1,30 @@
+# 默认按内容自动判定，仓库内统一使用 LF
+* text=auto eol=lf
+
+# Windows 批处理必须保留 CRLF，否则可能无法执行
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制文件不参与换行转换与 diff
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.ico binary
+*.jar binary
+*.jks binary
+*.keystore binary
+*.apk binary
+*.aab binary
+*.zip binary
+*.ttf binary
+*.otf binary
+
+# Gradle Wrapper 脚本保持 LF 且带可执行位
+gradlew text eol=lf
+gradlew.bat text eol=crlf
+
+# 让 GitHub 语言统计正确识别
+*.kt linguist-language=Kotlin
+*.kts linguist-language=Kotlin

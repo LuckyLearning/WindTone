@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  应用内更新下载的 APK 存放位置：cacheDir/updates/
+  只暴露这一个子目录，不对外暴露其他私有文件。
+-->
+<paths>
+    <cache-path
+        name="updates"
+        path="updates/" />
+    <external-cache-path
+        name="updates_external"
+        path="updates/" />
+</paths>
