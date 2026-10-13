@@ -58,7 +58,7 @@ git -C "$ROOT" tag "$TAG"
 
 # 4) 推送（走 scripts/push.sh，Token 不落盘到配置里）
 bash "$ROOT/scripts/push.sh" origin "$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)"
-git -C "$ROOT" push origin "$TAG"
+bash "$ROOT/scripts/push.sh" origin "$TAG"
 
 echo
 echo "✓ 已推送 $TAG"
