@@ -33,6 +33,12 @@
     <!-- Android 8.0+ 从应用内拉起安装器需要此权限，用户仍会在系统弹窗中二次确认 -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!--
+      车载模式开机自启：车机（或手机）开机完成后自动拉起主界面进入播放页。
+      只在设置里开启了「车载模式」时才动作；不开启时收到开机广播什么都不做。
+    -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <application
         android:name=".MusicApp"
         android:allowBackup="true"
@@ -88,6 +94,21 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/music_widget_info" />
+        </receiver>
+
+        <!--
+          车载模式开机自启。BOOT_COMPLETED / QUICKBOOT_POWERON（部分车机在用
+          这类厂商广播表示「上电完成」）。内部会再检查一次车载模式开关，
+          关着就静默返回——手机用户不会被打扰。
+        -->
+        <receiver
+            android:name=".CarBootReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
         </receiver>
 
         <service
