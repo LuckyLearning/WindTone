@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -117,22 +118,26 @@ fun CoverArt(
     modifier: Modifier = Modifier,
     cornerRadius: Dp = 10.dp,
     circular: Boolean = false,
+    fillContainer: Boolean = false,
 ) {
     val appContext = LocalContext.current.applicationContext
     val density = LocalDensity.current
-    var bitmap by remember(song?.stableKey, size) { mutableStateOf<Bitmap?>(null) }
+    // 大屏（车机）上封面尺寸不适合写死 dp，允许调用方传 fillContainer 让父级决定边长；
+    // 解码倍率按 2x 估算，按 400dp 起步避免超大封面解码出过小的位图。
+    val decodeDp = if (fillContainer && size < 400.dp) 400.dp else size
+    var bitmap by remember(song?.stableKey, decodeDp) { mutableStateOf<Bitmap?>(null) }
 
-    LaunchedEffect(song?.stableKey, size) {
+    LaunchedEffect(song?.stableKey, decodeDp) {
         bitmap = null
         val s = song ?: return@LaunchedEffect
-        val targetPx = with(density) { size.roundToPx() } * 2
+        val targetPx = with(density) { decodeDp.roundToPx() } * 2
         bitmap = runCatching { CoverRepository.cover(appContext, s, targetPx) }.getOrNull()
     }
 
     val shape = if (circular) CircleShape else RoundedCornerShape(cornerRadius)
+    val sized = if (fillContainer) modifier.fillMaxSize() else modifier.size(size)
     Box(
-        modifier = modifier
-            .size(size)
+        modifier = sized
             .clip(shape)
             .background(
                 Brush.linearGradient(
@@ -175,10 +180,14 @@ fun SongRow(
     onLongClick: (() -> Unit)? = null,
     onMore: (() -> Unit)? = null,
     onRemove: (() -> Unit)? = null,
+    large: Boolean = false,
 ) {
     val haptic = LocalHapticFeedback.current
     val scheme = MaterialTheme.colorScheme
     val tint = if (isCurrent) scheme.primary else scheme.onSurface
+    val coverSize = if (large) 64.dp else 48.dp
+    val textGap = if (large) 18.dp else 12.dp
+    val padV = if (large) 12.dp else 8.dp
 
     Surface(
         color = if (isCurrent) scheme.primaryContainer.copy(alpha = 0.55f) else scheme.surfaceContainerLow,
@@ -197,26 +206,28 @@ fun SongRow(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(start = 10.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+            modifier = Modifier.padding(start = 10.dp, end = 4.dp, top = padV, bottom = padV),
         ) {
-            CoverArt(song = song, size = 48.dp, cornerRadius = 10.dp)
-            Spacer(Modifier.width(12.dp))
+            CoverArt(song = song, size = coverSize, cornerRadius = if (large) 14.dp else 10.dp)
+            Spacer(Modifier.width(textGap))
             Column(Modifier.weight(1f)) {
                 Text(
                     text = song.title,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = if (large) MaterialTheme.typography.titleMedium
+                    else MaterialTheme.typography.bodyLarge,
                     fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
                     color = tint,
                 )
-                Spacer(Modifier.height(3.dp))
+                Spacer(Modifier.height(if (large) 5.dp else 3.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = song.artistOrUnknown,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = if (large) MaterialTheme.typography.bodyMedium
+                        else MaterialTheme.typography.bodySmall,
                         color = scheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f, fill = false),
                     )
@@ -224,14 +235,15 @@ fun SongRow(
                     LyricBadge(if (song.hasSidecarLyric) "LRC" else "内嵌", subtle = !song.hasSidecarLyric)
                 }
             }
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(if (large) 14.dp else 8.dp))
             Text(
                 text = formatDuration(song.durationMs),
-                style = MaterialTheme.typography.labelMedium,
+                style = if (large) MaterialTheme.typography.bodyMedium
+                else MaterialTheme.typography.labelMedium,
                 color = scheme.onSurfaceVariant,
             )
             when {
-                onRemove != null -> IconButton(onClick = onRemove) {
+                onRemove != null -> IconButton(onClick = onRemove, modifier = largeSize(large)) {
                     Icon(
                         imageVector = Icons.Filled.Close,
                         contentDescription = "从歌单移除",
@@ -239,7 +251,7 @@ fun SongRow(
                     )
                 }
                 // 长按才能操作发现性太差，这里给一个显式的「更多」入口
-                onMore != null -> IconButton(onClick = onMore) {
+                onMore != null -> IconButton(onClick = onMore, modifier = largeSize(large)) {
                     Icon(
                         imageVector = Icons.Filled.MoreVert,
                         contentDescription = "更多操作",
@@ -250,6 +262,10 @@ fun SongRow(
         }
     }
 }
+
+/** 车机档位：把图标按钮撑到 56dp 触控目标（配合 64dp 行高） */
+private fun largeSize(large: Boolean): Modifier =
+    if (large) Modifier.size(56.dp) else Modifier
 
 @Composable
 private fun LyricBadge(text: String, subtle: Boolean = false) {
@@ -287,10 +303,14 @@ fun MiniPlayer(
     onPrevious: () -> Unit,
     onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    large: Boolean = false,
 ) {
     if (song == null) return
     val scheme = MaterialTheme.colorScheme
     val haptic = LocalHapticFeedback.current
+    val coverSize = if (large) 64.dp else 46.dp
+    val btnSize = if (large) 64.dp else 46.dp
+    val iconSize = if (large) 32.dp else 24.dp
 
     Surface(
         color = scheme.surfaceContainerHigh,
@@ -310,12 +330,16 @@ fun MiniPlayer(
             )
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(start = 10.dp, end = 4.dp, bottom = 6.dp),
+                modifier = Modifier.padding(
+                    start = 10.dp,
+                    end = 4.dp,
+                    bottom = if (large) 8.dp else 6.dp,
+                ),
             ) {
                 // 封面区域：左右滑切歌 + 双击暂停
                 Box(
                     modifier = Modifier
-                        .size(46.dp)
+                        .size(coverSize)
                         .clip(RoundedCornerShape(12.dp))
                         .swipeAndDoubleTap(
                             onSwipeNext = onNext,
@@ -323,7 +347,7 @@ fun MiniPlayer(
                             onDoubleTap = onToggle,
                         ),
                 ) {
-                    CoverArt(song = song, size = 46.dp, cornerRadius = 12.dp)
+                    CoverArt(song = song, size = coverSize, cornerRadius = 12.dp)
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
@@ -331,29 +355,33 @@ fun MiniPlayer(
                         song.title,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = if (large) MaterialTheme.typography.titleMedium
+                        else MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
                     )
                     Text(
                         song.artistOrUnknown,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.labelSmall,
+                        style = if (large) MaterialTheme.typography.bodySmall
+                        else MaterialTheme.typography.labelSmall,
                         color = scheme.onSurfaceVariant,
                     )
                 }
-                IconButton(onClick = onToggle, modifier = Modifier.size(46.dp)) {
+                IconButton(onClick = onToggle, modifier = Modifier.size(btnSize)) {
                     Icon(
                         imageVector = if (isPlaying) AppIcons.Pause else Icons.Filled.PlayArrow,
                         contentDescription = if (isPlaying) "暂停" else "播放",
                         tint = scheme.onSurface,
+                        modifier = Modifier.size(iconSize),
                     )
                 }
-                IconButton(onClick = onNext, modifier = Modifier.size(46.dp)) {
+                IconButton(onClick = onNext, modifier = Modifier.size(btnSize)) {
                     Icon(
                         imageVector = AppIcons.SkipNext,
                         contentDescription = "下一首",
                         tint = scheme.onSurface,
+                        modifier = Modifier.size(iconSize),
                     )
                 }
             }

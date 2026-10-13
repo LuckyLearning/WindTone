@@ -2,6 +2,7 @@ package com.luckylearning.windtone.ui
 
 import android.content.Context
 import android.media.AudioManager
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.RepeatMode
@@ -75,6 +76,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.abs
 
+/** 车载模式：歌词态无操作多久后收起顶栏 / 控制键 / 状态行（毫秒） */
+private const val CAR_IMMERSIVE_DELAY_MS = 5_000L
+
 @Composable
 fun PlayerScreen(
     state: PlayerUiState,
@@ -118,6 +122,45 @@ fun PlayerScreen(
     val lyricsExportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/plain")
     ) { uri -> if (uri != null) onExportLyrics(uri) }
+
+    // ------------------------------------------------------ 车载沉浸态
+    //
+    // 车载模式下歌词态 5 秒无触摸 → 收起顶栏 / 歌名行 / 控制键行 / 底部状态行，
+    // 屏幕上只剩「歌词 + 进度条 + 时间」，把纵向空间全让给歌词（见 docs/ui ⑫D 屏）。
+    //
+    // 计时模型：把「最后一次用户操作时刻」记在 [lastActionAt]，
+    // 再让协程睡满 5 秒后把 [immersive] 置真。三处状态的分工：
+    //  · [lastActionAt]：所有交互（点按钮 / 触摸屏幕 / 按返回）统一刷新的时间戳，
+    //    它一变就重启下面那个 delay；
+    //  · [showLyrics]：封面态本身就以封面为主要视觉，不收起，切回歌词态时重新计时；
+    //  · [immersiveOn]：由协程置真、由交互置假，保证「任意触摸立即恢复」。
+    var lastActionAt by remember { mutableStateOf(0L) }
+    var immersiveOn by remember { mutableStateOf(false) }
+    val immersive = state.carMode && showLyrics && immersiveOn
+
+    /** 任意交互：立刻退出沉浸态，并让 5 秒从头计起 */
+    val keepAwake: () -> Unit = {
+        immersiveOn = false
+        lastActionAt = System.currentTimeMillis()
+    }
+
+    // 进入车载模式且停在播放页时，先给满 5 秒再考虑收起
+    LaunchedEffect(state.carMode) {
+        if (state.carMode) keepAwake()
+    }
+
+    // 空闲 5 秒 → 收起。关键：这里的重启条件是 [lastActionAt] + [showLyrics]，
+    // 两者都不含 [immersiveOn]，所以本协程自己置真后不会被自己的写入取消，
+    // 否则 setState 会让 LaunchedEffect 重启，「5 秒后收起」永远执行不完。
+    LaunchedEffect(state.carMode, showLyrics, lastActionAt) {
+        if (!state.carMode || !showLyrics || lastActionAt <= 0L) return@LaunchedEffect
+        delay(CAR_IMMERSIVE_DELAY_MS)
+        immersiveOn = true
+    }
+
+    // 车载沉浸态下按返回：先恢复完整界面，而不是直接收起播放页。
+    // enabled 只在沉浸态为真，其余情况不拦截，交给上层原有的返回逻辑。
+    BackHandler(enabled = immersive) { keepAwake() }
 
     // ---------------------------------------------------------- 音量手势
     val appContext = LocalContext.current.applicationContext
@@ -184,62 +227,80 @@ fun PlayerScreen(
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
+                // 任意触摸（包括点按钮、拖进度条）都算「有操作」，回到完整界面并重新计时。
+                // 只观察不消费，所有既有手势（滑动切歌、拖动进度、点击按钮）保持原样。
+                // 注意：同一个手势会同时命中这里和子按钮的 onClick，但两者都只是把
+                // 时间戳往前推，重复刷新无副作用。
+                .pointerInput(state.carMode) {
+                    if (state.carMode) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                awaitPointerEvent()
+                                immersiveOn = false
+                                lastActionAt = System.currentTimeMillis()
+                            }
+                        }
+                    }
+                }
                 .padding(horizontal = 20.dp)
                 .padding(top = 8.dp, bottom = 12.dp),
         ) {
             // ------------------------------------------------------ 顶栏
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onClose) {
-                    Icon(
-                        Icons.Filled.KeyboardArrowDown,
-                        contentDescription = "收起播放页",
-                        tint = scheme.onSurface,
-                    )
+            // 车载沉浸态淡出：不参与测量，歌词区顺势向上占满
+            if (!immersive) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { keepAwake(); onClose() }) {
+                        Icon(
+                            Icons.Filled.KeyboardArrowDown,
+                            contentDescription = "收起播放页",
+                            tint = scheme.onSurface,
+                        )
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = song?.title ?: "未在播放",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Text(
+                            text = song?.artistOrUnknown ?: "",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = scheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    IconButton(onClick = { keepAwake(); onShowQueue() }) {
+                        Icon(
+                            imageVector = AppIcons.QueueMusic,
+                            contentDescription = "播放队列",
+                            tint = scheme.onSurface,
+                        )
+                    }
+                    IconButton(onClick = { keepAwake(); showLyrics = !showLyrics }) {
+                        Icon(
+                            imageVector = if (showLyrics) AppIcons.Album else AppIcons.Lyrics,
+                            contentDescription = if (showLyrics) "切换为封面" else "切换为歌词",
+                            tint = scheme.onSurface,
+                        )
+                    }
+                    IconButton(onClick = { keepAwake(); showOptions = true }) {
+                        Icon(
+                            imageVector = AppIcons.Tune,
+                            contentDescription = "播放设置",
+                            tint = scheme.onSurface,
+                        )
+                    }
                 }
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = song?.title ?: "未在播放",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Text(
-                        text = song?.artistOrUnknown ?: "",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = scheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                IconButton(onClick = onShowQueue) {
-                    Icon(
-                        imageVector = AppIcons.QueueMusic,
-                        contentDescription = "播放队列",
-                        tint = scheme.onSurface,
-                    )
-                }
-                IconButton(onClick = { showLyrics = !showLyrics }) {
-                    Icon(
-                        imageVector = if (showLyrics) AppIcons.Album else AppIcons.Lyrics,
-                        contentDescription = if (showLyrics) "切换为封面" else "切换为歌词",
-                        tint = scheme.onSurface,
-                    )
-                }
-                IconButton(onClick = { showOptions = true }) {
-                    Icon(
-                        imageVector = AppIcons.Tune,
-                        contentDescription = "播放设置",
-                        tint = scheme.onSurface,
-                    )
-                }
-            }
 
-            Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(8.dp))
+            }
 
             // --------------------------------------------- 中部：封面 / 歌词
             Box(Modifier.weight(1f)) {
@@ -309,105 +370,108 @@ fun PlayerScreen(
             Spacer(Modifier.height(4.dp))
 
             // ------------------------------------------------------ 控制区
-            // 三段式布局：左右两个等宽槽位夹住中间的「上一首 / 播放 / 下一首」，
-            // 保证主控按钮绝对居中；播放模式固定在左槽，不再把整排按钮挤偏。
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                    // 播放模式（顺序 / 列表循环 / 单曲循环 / 随机）合并在这一个按钮上轮换
-                    IconButton(onClick = onCyclePlayMode) {
-                        Icon(
-                            imageVector = playMode.icon,
-                            contentDescription = "播放模式：${playMode.label}",
-                            tint = if (playMode == PlayMode.SEQUENTIAL) scheme.onSurfaceVariant
-                            else scheme.primary,
-                        )
-                    }
-                }
+            // 车载沉浸态整块收起（与顶栏同一开关，见文件头的沉浸态说明）
+            if (!immersive) {
+                // 三段式布局：左右两个等宽槽位夹住中间的「上一首 / 播放 / 下一首」，
+                // 保证主控按钮绝对居中；播放模式固定在左槽，不再把整排按钮挤偏。
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(20.dp),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    IconButton(onClick = onPrevious) {
-                        Icon(
-                            imageVector = AppIcons.SkipPrevious,
-                            contentDescription = "上一首",
-                            tint = scheme.onSurface,
-                            modifier = Modifier.size(34.dp),
-                        )
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                        // 播放模式（顺序 / 列表循环 / 单曲循环 / 随机）合并在这一个按钮上轮换
+                        IconButton(onClick = { onCyclePlayMode(); keepAwake() }) {
+                            Icon(
+                                imageVector = playMode.icon,
+                                contentDescription = "播放模式：${playMode.label}",
+                                tint = if (playMode == PlayMode.SEQUENTIAL) scheme.onSurfaceVariant
+                                else scheme.primary,
+                            )
+                        }
                     }
-                    FilledIconButton(
-                        onClick = onToggle,
-                        shape = CircleShape,
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = scheme.primary,
-                            contentColor = scheme.onPrimary,
-                        ),
-                        modifier = Modifier
-                            .size(66.dp)
-                            .shadow(10.dp, CircleShape),
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(20.dp),
                     ) {
-                        Icon(
-                            imageVector = if (state.isPlaying) AppIcons.Pause else Icons.Filled.PlayArrow,
-                            contentDescription = if (state.isPlaying) "暂停" else "播放",
-                            modifier = Modifier.size(34.dp),
+                        IconButton(onClick = { onPrevious(); keepAwake() }) {
+                            Icon(
+                                imageVector = AppIcons.SkipPrevious,
+                                contentDescription = "上一首",
+                                tint = scheme.onSurface,
+                                modifier = Modifier.size(34.dp),
+                            )
+                        }
+                        FilledIconButton(
+                            onClick = { onToggle(); keepAwake() },
+                            shape = CircleShape,
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = scheme.primary,
+                                contentColor = scheme.onPrimary,
+                            ),
+                            modifier = Modifier
+                                .size(66.dp)
+                                .shadow(10.dp, CircleShape),
+                        ) {
+                            Icon(
+                                imageVector = if (state.isPlaying) AppIcons.Pause else Icons.Filled.PlayArrow,
+                                contentDescription = if (state.isPlaying) "暂停" else "播放",
+                                modifier = Modifier.size(34.dp),
+                            )
+                        }
+                        IconButton(onClick = { onNext(); keepAwake() }) {
+                            Icon(
+                                imageVector = AppIcons.SkipNext,
+                                contentDescription = "下一首",
+                                tint = scheme.onSurface,
+                                modifier = Modifier.size(34.dp),
+                            )
+                        }
+                    }
+                    // 右侧对称空槽：与左槽等宽，把中间三键顶回屏幕正中
+                    Box(Modifier.weight(1f))
+                }
+
+                Spacer(Modifier.height(6.dp))
+
+                // -------------------------------------------------- 状态信息
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    val src = state.lyrics.source
+                    LyricSourceChip(label = src.label)
+                    if (state.lyricOffsetMs != 0) {
+                        Spacer(Modifier.width(6.dp))
+                        LyricSourceChip(label = "偏移 ${state.lyricOffsetMs}ms")
+                    }
+                    if (state.lyrics.hasWordTiming) {
+                        Spacer(Modifier.width(6.dp))
+                        LyricSourceChip(label = "逐字")
+                    }
+                    if (state.sleepRemainingMs > 0) {
+                        Spacer(Modifier.width(6.dp))
+                        LyricSourceChip(
+                            label = "睡眠 %d:%02d".format(
+                                state.sleepRemainingMs / 60000,
+                                (state.sleepRemainingMs % 60000) / 1000,
+                            )
                         )
                     }
-                    IconButton(onClick = onNext) {
-                        Icon(
-                            imageVector = AppIcons.SkipNext,
-                            contentDescription = "下一首",
-                            tint = scheme.onSurface,
-                            modifier = Modifier.size(34.dp),
+                    Spacer(Modifier.weight(1f))
+                    song?.let {
+                        Text(
+                            text = com.luckylearning.windtone.data.MusicRepository.sourceLabel(it.source),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = scheme.onSurfaceVariant,
                         )
+                        Spacer(Modifier.width(10.dp))
                     }
-                }
-                // 右侧对称空槽：与左槽等宽，把中间三键顶回屏幕正中
-                Box(Modifier.weight(1f))
-            }
-
-            Spacer(Modifier.height(6.dp))
-
-            // ------------------------------------------------------ 状态信息
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                val src = state.lyrics.source
-                LyricSourceChip(label = src.label)
-                if (state.lyricOffsetMs != 0) {
-                    Spacer(Modifier.width(6.dp))
-                    LyricSourceChip(label = "偏移 ${state.lyricOffsetMs}ms")
-                }
-                if (state.lyrics.hasWordTiming) {
-                    Spacer(Modifier.width(6.dp))
-                    LyricSourceChip(label = "逐字")
-                }
-                if (state.sleepRemainingMs > 0) {
-                    Spacer(Modifier.width(6.dp))
-                    LyricSourceChip(
-                        label = "睡眠 %d:%02d".format(
-                            state.sleepRemainingMs / 60000,
-                            (state.sleepRemainingMs % 60000) / 1000,
-                        )
-                    )
-                }
-                Spacer(Modifier.weight(1f))
-                song?.let {
                     Text(
-                        text = com.luckylearning.windtone.data.MusicRepository.sourceLabel(it.source),
+                        text = "队列 ${state.queueSize} 首",
                         style = MaterialTheme.typography.labelSmall,
                         color = scheme.onSurfaceVariant,
                     )
-                    Spacer(Modifier.width(10.dp))
                 }
-                Text(
-                    text = "队列 ${state.queueSize} 首",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = scheme.onSurfaceVariant,
-                )
             }
         }
 

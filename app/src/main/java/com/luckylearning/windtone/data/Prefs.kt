@@ -75,6 +75,14 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_LYRIC_WORD_BY_WORD, true)
         set(value) = sp.edit().putBoolean(KEY_LYRIC_WORD_BY_WORD, value).apply()
 
+    /**
+     * 车载模式（默认关闭）。
+     * 开启后：启动直进播放页；播放页 5 秒无操作收起全部控件只留歌词与进度。
+     */
+    var carMode: Boolean
+        get() = sp.getBoolean(KEY_CAR_MODE, false)
+        set(value) = sp.edit().putBoolean(KEY_CAR_MODE, value).apply()
+
     // ---------------- 逐曲歌词偏移：key = 歌曲稳定标识 ----------------
 
     fun lyricOffsetFor(songKey: String): Int =
@@ -202,6 +210,7 @@ class Prefs(context: Context) {
         const val KEY_LAST_POS = "last_pos"
         const val KEY_LYRIC_SCALE = "lyric_scale"
         const val KEY_LYRIC_WORD_BY_WORD = "lyric_word_by_word"
+        const val KEY_CAR_MODE = "car_mode"
         const val KEY_LYRIC_OFFSET = "lyric_offset"
         const val KEY_SHUFFLE = "shuffle"
         const val KEY_PERM_ASKED = "perm_asked"

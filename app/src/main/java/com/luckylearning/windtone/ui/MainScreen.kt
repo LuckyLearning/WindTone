@@ -248,7 +248,42 @@ fun MainScreen(vm: MusicViewModel) {
 
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize()) {
-            Column(
+            // 车载模式：整体换成三栏横屏布局（左导航 / 中列表 / 右正在播放），
+            // 手机的「单列 + 底部导航」在横屏大屏上会把列表压成窄条，故单独走一套。
+            if (player.carMode) {
+                CarHomeScreen(
+                    library = library,
+                    player = player,
+                    progressFlow = vm.progress,
+                    onSelectView = vm::setView,
+                    onOpenSettings = { showSettings = true },
+                    onQuery = vm::setQuery,
+                    onSort = { vm.setSort(library.sortOrder.next()) },
+                    onRescan = { vm.scan() },
+                    onPlay = vm::playQueue,
+                    onSongLongPress = { actionSong = it },
+                    onOpenGroup = vm::openGroup,
+                    onOpenPlaylist = vm::openPlaylist,
+                    onCloseDetail = {
+                        if (library.selectedPlaylist != null) vm.closePlaylist() else vm.closeGroup()
+                    },
+                    onNewPlaylist = { newPlaylistDialog = true },
+                    onImportM3U = {
+                        m3uImportLauncher.launch(
+                            arrayOf("audio/x-mpegurl", "audio/mpegurl", "text/plain", "*/*")
+                        )
+                    },
+                    onOpenScanScope = { showScanScope = true },
+                    onFullScan = requestFullScan,
+                    onImportFolder = importFolder,
+                    granted = granted,
+                    onToggle = vm::togglePlay,
+                    onNext = vm::next,
+                    onPrevious = vm::previous,
+                    onSeek = vm::seekTo,
+                    onExpandPlayer = vm::openPlayer,
+                )
+            } else Column(
                 Modifier
                     .fillMaxSize()
                     .statusBarsPadding()
@@ -419,6 +454,7 @@ fun MainScreen(vm: MusicViewModel) {
                         crashLogText = null
                     },
                     onDynamicTheme = vm::setDynamicTheme,
+                    onCarMode = vm::setCarMode,
                     onLyricScale = vm::setLyricScale,
                     onLyricWordByWord = vm::setLyricWordByWord,
                     onNotifyLyrics = vm::setNotifyLyrics,

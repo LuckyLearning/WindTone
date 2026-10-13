@@ -59,6 +59,7 @@ fun SettingsScreen(
     crashLogText: String?,
     onClose: () -> Unit,
     onDynamicTheme: (Boolean) -> Unit,
+    onCarMode: (Boolean) -> Unit,
     onLyricScale: (Float) -> Unit,
     onLyricWordByWord: (Boolean) -> Unit,
     onNotifyLyrics: (Boolean) -> Unit,
@@ -124,6 +125,12 @@ fun SettingsScreen(
                     subtitle = "从当前歌曲封面提取主色，驱动整个界面的配色",
                     checked = dynamicTheme,
                     onCheckedChange = onDynamicTheme,
+                )
+                SwitchRow(
+                    title = "车载模式",
+                    subtitle = "启动直接进入播放页并锁横屏（车机 / 手机横置）；歌词页 5 秒无操作自动收起顶栏、歌名行、控制键与状态行，只留歌词、进度与时间；触摸任意位置恢复。切到封面态不收起",
+                    checked = player.carMode,
+                    onCheckedChange = onCarMode,
                 )
 
                 // -------------------------------------------------- 歌词

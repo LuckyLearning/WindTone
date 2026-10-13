@@ -210,6 +210,8 @@ data class PlayerUiState(
     val lyricOffsetMs: Int = 0,
     val lyricScale: Float = 1f,
     val lyricWordByWord: Boolean = true,
+    /** 车载模式：启动直进播放页 + 播放页 5 秒无操作进入沉浸态 */
+    val carMode: Boolean = false,
     val playerExpanded: Boolean = false,
     val queueSize: Int = 0,
     // 批次 2 / 3
@@ -290,6 +292,9 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
         PlayerUiState(
             lyricScale = prefs.lyricScale,
             lyricWordByWord = prefs.lyricWordByWord,
+            carMode = prefs.carMode,
+            // 车载模式：启动直接进播放页（跳过库主页）
+            playerExpanded = prefs.carMode,
             shuffle = prefs.shuffle,
             speed = prefs.playbackSpeed,
             notifyLyrics = prefs.notifyLyrics,
@@ -1387,6 +1392,12 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     fun setLyricWordByWord(enabled: Boolean) {
         prefs.lyricWordByWord = enabled
         _player.update { it.copy(lyricWordByWord = enabled) }
+    }
+
+    /** 车载模式：启动直进播放页 + 播放页 5 秒无操作进入沉浸态 */
+    fun setCarMode(enabled: Boolean) {
+        prefs.carMode = enabled
+        _player.update { it.copy(carMode = enabled) }
     }
 
     fun setDynamicTheme(enabled: Boolean) {
