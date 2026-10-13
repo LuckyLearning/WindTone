@@ -518,9 +518,13 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
             LibraryView.ARTIST -> songs.groupBy { it.artistOrUnknown }.map { (k, list) ->
                 GroupInfo(k, k, "${list.size} 首", list.size, list.first())
             }
-            LibraryView.FOLDER -> songs.groupBy { it.folderLabel }.map { (k, list) ->
-                GroupInfo(k, k, "${list.size} 首", list.size, list.first())
-            }
+            // 文件夹视图只列真实存在的目录：拿不到目录路径的歌曲（媒体库没给 path）
+            // 会被归到「未知目录」，这类分组没有可操作的对象，直接不展示。
+            LibraryView.FOLDER -> songs.groupBy { it.folderLabel }
+                .filterKeys { it != UNKNOWN_FOLDER_LABEL }
+                .map { (k, list) ->
+                    GroupInfo(k, k, "${list.size} 首", list.size, list.first())
+                }
             else -> emptyList()
         }.sortedWith(compareBy({ PinyinIndex.initialOf(it.title) }, { it.title.lowercase() }))
         _library.update { if (it.groups == groups) it else it.copy(groups = groups) }
@@ -741,6 +745,64 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
             refreshGroups()
             refreshPlaylists()
             pushMessage("已删除「${song.title}」")
+        }
+    }
+
+    /**
+     * 移除文件夹视图中某个分组下的全部扫描结果。
+     *
+     * 只从应用内部状态与数据库中清除，**不会删除存储中的原始音频文件**。
+     * 会从播放队列、歌单、收藏、播放统计、歌词/封面缓存中一并清理。
+     */
+    fun removeFolderScanResults(group: GroupInfo) {
+        if (_library.value.view != LibraryView.FOLDER) return
+        val key = group.key
+        val removed = _library.value.songs.filter { it.folderLabel == key }
+        if (removed.isEmpty()) return
+        viewModelScope.launch {
+            // 1) 从播放器队列移除
+            val c = ensureController()
+            if (c != null) {
+                val removedKeys = removed.map { it.stableKey }.toSet()
+                var i = c.mediaItemCount - 1
+                while (i >= 0) {
+                    if (c.getMediaItemAt(i).mediaId in removedKeys) c.removeMediaItem(i)
+                    i--
+                }
+                saveQueue()
+            }
+            // 2) 清数据库与缓存
+            withContext(Dispatchers.IO) {
+                removed.forEach { song ->
+                    db.songCacheDao().delete(song.stableKey)
+                    db.playlistDao().removeSongEverywhere(song.stableKey)
+                    db.overrideDao().delete(song.stableKey)
+                    db.playStatDao().delete(song.stableKey)
+                    CoverRepository.evict(song.stableKey)
+                }
+            }
+            // 3) 更新内存状态
+            val removedKeys = removed.map { it.stableKey }.toSet()
+            val songs = _library.value.songs.filterNot { it.stableKey in removedKeys }
+            currentQueue = currentQueue.filterNot { it.stableKey in removedKeys }
+            val query = _library.value.query
+            val visible = searchSongs(songs, query)
+            _library.update {
+                it.copy(
+                    songs = songs,
+                    visible = visible,
+                    letterIndex = buildLetterIndex(visible),
+                    selectedGroup = if (it.selectedGroup?.key == key) null else it.selectedGroup,
+                    detailSongs = if (it.selectedGroup?.key == key) emptyList() else it.detailSongs.filterNot { s -> s.stableKey in removedKeys },
+                    playlistSongs = it.playlistSongs.filterNot { s -> s.stableKey in removedKeys },
+                    extraRecent = it.extraRecent.filterNot { s -> s.stableKey in removedKeys },
+                    extraMostPlayed = it.extraMostPlayed.filterNot { s -> s.stableKey in removedKeys },
+                )
+            }
+            refreshGroups()
+            refreshPlaylists()
+            refreshStats()
+            pushMessage("已移除「${group.title}」的 ${removed.size} 首歌曲")
         }
     }
 
@@ -1849,8 +1911,26 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     }
 }
 
+/** 文件夹维度缺失时的兜底标签，只用于内部分组，不在 UI 中展示 */
+private const val UNKNOWN_FOLDER_LABEL = "未知目录"
+
+/**
+ * 从 SAF 音频文档 URI 反推出所在的目录路径。
+ * 示例：content://.../document/primary%3AMusic%2FTaylor%20Swift%2Fsong.mp3
+ *       → primary:Music/Taylor Swift/song.mp3 → Music/Taylor Swift
+ */
+private fun android.net.Uri.derivedFolderPath(): String? {
+    val docId = lastPathSegment ?: return null
+    val decoded = android.net.Uri.decode(docId)
+    val pathOnly = decoded.substringAfter(':', "")
+    return pathOnly.substringBeforeLast('/', "").takeIf { it.isNotEmpty() }
+}
+
 /** 文件夹维度标签（分组用） */
 private val Song.folderLabel: String
-    get() = folderPath
-        ?: path?.let { java.io.File(it).parent }
-        ?: "未知目录"
+    get() = when {
+        folderPath != null -> folderPath
+        path != null -> java.io.File(path).parent
+        source == com.luckylearning.windtone.data.model.SongSource.FOLDER -> uri.derivedFolderPath()
+        else -> null
+    } ?: UNKNOWN_FOLDER_LABEL

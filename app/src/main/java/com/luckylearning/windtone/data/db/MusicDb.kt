@@ -222,6 +222,10 @@ interface PlayStatDao {
 
     @Query("SELECT COUNT(*) FROM play_stats WHERE favorite = 1")
     suspend fun favoriteCount(): Int
+
+    /** 移除某首歌的播放统计行（清空播放次数、收藏等一切记录） */
+    @Query("DELETE FROM play_stats WHERE songUri = :uri")
+    suspend fun delete(uri: String)
 }
 
 // ---------------------------------------------------------------- 歌曲信息覆盖（本地标签编辑）

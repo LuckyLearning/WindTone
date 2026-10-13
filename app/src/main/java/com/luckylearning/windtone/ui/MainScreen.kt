@@ -169,6 +169,7 @@ fun MainScreen(vm: MusicViewModel) {
     // 长按 / 更多操作相关状态
     var actionSong by remember { mutableStateOf<Song?>(null) }
     var deleteConfirmSong by remember { mutableStateOf<Song?>(null) }
+    var folderRemoveConfirmGroup by remember { mutableStateOf<GroupInfo?>(null) }
     var addToPlaylistSong by remember { mutableStateOf<Song?>(null) }
     var editSong by remember { mutableStateOf<Song?>(null) }
     var infoSong by remember { mutableStateOf<Song?>(null) }
@@ -331,6 +332,8 @@ fun MainScreen(vm: MusicViewModel) {
                         else -> GroupListView(
                             library = library,
                             onOpen = vm::openGroup,
+                            canRemove = library.view == LibraryView.FOLDER,
+                            onRemove = { folderRemoveConfirmGroup = it },
                         )
                     }
                 }
@@ -525,6 +528,33 @@ fun MainScreen(vm: MusicViewModel) {
                 )
             }
 
+            folderRemoveConfirmGroup?.let { group ->
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { folderRemoveConfirmGroup = null },
+                    title = { Text("移除文件夹扫描结果") },
+                    text = {
+                        Text(
+                            "将从音乐库中移除「${group.title}」下的 ${group.count} 首歌曲，" +
+                                "同时从歌单、播放队列、收藏和播放统计中清理。\n" +
+                                "原始音频文件不会被删除，但重新扫描前这些歌曲不会再出现。",
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                folderRemoveConfirmGroup = null
+                                vm.removeFolderScanResults(group)
+                            },
+                        ) {
+                            Text("移除", color = MaterialTheme.colorScheme.error)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { folderRemoveConfirmGroup = null }) { Text("取消") }
+                    },
+                )
+            }
+
             editSong?.let { song ->
                 EditSongDialog(
                     song = song,
@@ -711,7 +741,12 @@ private fun Int.firstVisibleSafe(): Int = (this - 3).coerceAtLeast(0)
 // ================================================================ 分组列表（专辑/歌手/文件夹）
 
 @Composable
-private fun GroupListView(library: LibraryUiState, onOpen: (GroupInfo) -> Unit) {
+private fun GroupListView(
+    library: LibraryUiState,
+    onOpen: (GroupInfo) -> Unit,
+    canRemove: Boolean = false,
+    onRemove: (GroupInfo) -> Unit = {},
+) {
     if (library.groups.isEmpty()) {
         EmptyHint("暂无分组", "扫描完成后即可按此维度浏览", modifier = Modifier.fillMaxSize())
         return
@@ -721,6 +756,7 @@ private fun GroupListView(library: LibraryUiState, onOpen: (GroupInfo) -> Unit) 
         modifier = Modifier.fillMaxSize(),
     ) {
         items(library.groups, key = { it.key }, contentType = { "group" }) { group ->
+            var showMenu by remember { mutableStateOf(false) }
             Surface(
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
                 shape = MaterialTheme.shapes.medium,
@@ -751,6 +787,29 @@ private fun GroupListView(library: LibraryUiState, onOpen: (GroupInfo) -> Unit) 
                     }
                     Spacer(Modifier.width(8.dp))
                     CountPill("${group.count}")
+                    if (canRemove) {
+                        Box {
+                            IconButton(onClick = { showMenu = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.MoreVert,
+                                    contentDescription = "更多操作",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("移除扫描结果") },
+                                    onClick = {
+                                        showMenu = false
+                                        onRemove(group)
+                                    },
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
