@@ -60,6 +60,7 @@ fun SettingsScreen(
     onClose: () -> Unit,
     onDynamicTheme: (Boolean) -> Unit,
     onLyricScale: (Float) -> Unit,
+    onLyricWordByWord: (Boolean) -> Unit,
     onNotifyLyrics: (Boolean) -> Unit,
     onSpeed: (Float) -> Unit,
     onSkipSilence: (Boolean) -> Unit,
@@ -132,6 +133,12 @@ fun SettingsScreen(
                     value = player.lyricScale,
                     range = 0.7f..1.6f,
                     onValueChange = onLyricScale,
+                )
+                SwitchRow(
+                    title = "逐字歌词",
+                    subtitle = "当前行有逐字时间轴时，按字染色（.krc / .yrc / 增强型 LRC）",
+                    checked = player.lyricWordByWord,
+                    onCheckedChange = onLyricWordByWord,
                 )
                 SwitchRow(
                     title = "通知栏 / 锁屏显示歌词",

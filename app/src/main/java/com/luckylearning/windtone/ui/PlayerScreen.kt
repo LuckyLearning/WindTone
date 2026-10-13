@@ -250,6 +250,7 @@ fun PlayerScreen(
                         progressState = progressState,
                         offsetMs = state.lyricOffsetMs,
                         scale = state.lyricScale,
+                        wordByWord = state.lyricWordByWord,
                         onSeekTo = onSeekTo,
                     )
                 } else {

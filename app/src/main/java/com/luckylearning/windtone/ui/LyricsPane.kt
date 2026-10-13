@@ -68,6 +68,7 @@ fun LyricsPane(
     progressState: State<PlaybackProgress>,
     offsetMs: Int,
     scale: Float,
+    wordByWord: Boolean = true,
     onSeekTo: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -84,6 +85,7 @@ fun LyricsPane(
                 progressState = progressState,
                 offsetMs = offsetMs,
                 scale = scale,
+                wordByWord = wordByWord,
                 onSeekTo = onSeekTo,
             )
         }
@@ -172,6 +174,7 @@ private fun SyncedLyrics(
     progressState: State<PlaybackProgress>,
     offsetMs: Int,
     scale: Float,
+    wordByWord: Boolean,
     onSeekTo: (Long) -> Unit,
 ) {
     val listState = rememberLazyListState()
@@ -226,6 +229,7 @@ private fun SyncedLyrics(
                 progressState = progressState,
                 offsetMs = offsetMs,
                 scale = scale,
+                wordByWord = wordByWord,
                 onClick = { if (line.timeMs >= 0) onSeekTo(line.timeMs) },
             )
         }
@@ -239,6 +243,7 @@ private fun LyricLineItem(
     progressState: State<PlaybackProgress>,
     offsetMs: Int,
     scale: Float,
+    wordByWord: Boolean,
     onClick: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -269,7 +274,7 @@ private fun LyricLineItem(
             )
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            if (line.hasWords && active) {
+            if (wordByWord && line.hasWords && active) {
                 KaraokeText(
                     line = line,
                     progressState = progressState,

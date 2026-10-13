@@ -209,6 +209,7 @@ data class PlayerUiState(
     val lyricsLoading: Boolean = false,
     val lyricOffsetMs: Int = 0,
     val lyricScale: Float = 1f,
+    val lyricWordByWord: Boolean = true,
     val playerExpanded: Boolean = false,
     val queueSize: Int = 0,
     // 批次 2 / 3
@@ -288,6 +289,7 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     private val _player = MutableStateFlow(
         PlayerUiState(
             lyricScale = prefs.lyricScale,
+            lyricWordByWord = prefs.lyricWordByWord,
             shuffle = prefs.shuffle,
             speed = prefs.playbackSpeed,
             notifyLyrics = prefs.notifyLyrics,
@@ -1379,6 +1381,12 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
         val s = scale.coerceIn(0.7f, 1.6f)
         prefs.lyricScale = s
         _player.update { it.copy(lyricScale = s) }
+    }
+
+    /** 逐字歌词：当前行有逐字时间轴时按字染色（默认开启） */
+    fun setLyricWordByWord(enabled: Boolean) {
+        prefs.lyricWordByWord = enabled
+        _player.update { it.copy(lyricWordByWord = enabled) }
     }
 
     fun setDynamicTheme(enabled: Boolean) {

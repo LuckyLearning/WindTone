@@ -70,6 +70,11 @@ class Prefs(context: Context) {
         get() = sp.getFloat(KEY_LYRIC_SCALE, 1.0f)
         set(value) = sp.edit().putFloat(KEY_LYRIC_SCALE, value).apply()
 
+    /** 逐字歌词：当前行有逐字时间轴时按字染色（默认开启） */
+    var lyricWordByWord: Boolean
+        get() = sp.getBoolean(KEY_LYRIC_WORD_BY_WORD, true)
+        set(value) = sp.edit().putBoolean(KEY_LYRIC_WORD_BY_WORD, value).apply()
+
     // ---------------- 逐曲歌词偏移：key = 歌曲稳定标识 ----------------
 
     fun lyricOffsetFor(songKey: String): Int =
@@ -196,6 +201,7 @@ class Prefs(context: Context) {
         const val KEY_LAST_URI = "last_uri"
         const val KEY_LAST_POS = "last_pos"
         const val KEY_LYRIC_SCALE = "lyric_scale"
+        const val KEY_LYRIC_WORD_BY_WORD = "lyric_word_by_word"
         const val KEY_LYRIC_OFFSET = "lyric_offset"
         const val KEY_SHUFFLE = "shuffle"
         const val KEY_PERM_ASKED = "perm_asked"

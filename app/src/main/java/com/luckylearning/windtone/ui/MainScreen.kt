@@ -420,6 +420,7 @@ fun MainScreen(vm: MusicViewModel) {
                     },
                     onDynamicTheme = vm::setDynamicTheme,
                     onLyricScale = vm::setLyricScale,
+                    onLyricWordByWord = vm::setLyricWordByWord,
                     onNotifyLyrics = vm::setNotifyLyrics,
                     onSpeed = vm::setSpeed,
                     onSkipSilence = vm::setSkipSilence,
