@@ -66,6 +66,8 @@ android {
         buildConfigField("String", "GITHUB_OWNER", "\"LuckyLearning\"")
         buildConfigField("String", "GITHUB_REPO", "\"WindTone\"")
         buildConfigField("String", "GITHUB_RELEASES_URL", "\"https://github.com/LuckyLearning/WindTone/releases\"")
+        // APK 命名规则：CI 产出的资产名固定为 WindTone-v<版本>.apk（见 release.sh 的 versionName）
+        buildConfigField("String", "APK_ASSET_TEMPLATE", "\"WindTone-v%s.apk\"")
     }
 
     signingConfigs {

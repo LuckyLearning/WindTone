@@ -53,9 +53,20 @@ sealed interface UpdateCheckResult {
 /**
  * 应用内更新。
  *
- * 数据来源是公开的 GitHub Releases，因此**不需要任何鉴权**，
- * 只读取 `releases/latest`（自动跳过草稿与预发布），
- * 再从 assets 里挑出 APK 直链下载。
+ * 数据来源是公开的 GitHub Releases，因此**不需要任何鉴权**。
+ *
+ * ## 关于「接口访问过于频繁」（重要）
+ *
+ * GitHub REST API 对未认证请求按**出口 IP** 限制 60 次/小时。手机常处于运营商
+ * NAT / 代理后面，同一出口 IP 被大量用户共享，配额极易被别人耗尽——此时
+ * `api.github.com` 会返回 403 `rate limit exceeded`，与用户自己的使用频率无关。
+ *
+ * 因此这里**不再以 API 为主通道**，而是改用两个不受该配额限制的公开网页资源：
+ *  1. `releases.atom`（Atom 源）—— 拿版本号、标题、说明、发布时间、Release 页地址；
+ *  2. `releases/download/<tag>/<apk>`（资产直链）—— 按 CI 固定的命名规则拼出下载地址。
+ * 两者都不计入 API 配额，也不会因为共享 IP 而失败。
+ *
+ * API 端点仅作为 Atom 不可用时的降级兜底（例如 Atom 源被中间设备改写）。
  *
  * 全流程只在用户点击「检查更新 / 下载」或启动时自动检查（可关闭）时发生，
  * 不上报任何设备信息，也不访问除 GitHub 之外的任何域名。
@@ -71,8 +82,15 @@ object UpdateChecker {
         verbose = enabled
     }
 
+    private val apiBase: String
+        get() = "https://api.github.com/repos/${BuildConfig.GITHUB_OWNER}/${BuildConfig.GITHUB_REPO}"
+
     private val latestReleaseApi: String
-        get() = "https://api.github.com/repos/${BuildConfig.GITHUB_OWNER}/${BuildConfig.GITHUB_REPO}/releases/latest"
+        get() = "$apiBase/releases/latest"
+
+    /** Atom 源：普通网页资源，不受 API 每小时 60 次的列表限制 */
+    private val releasesAtomUrl: String
+        get() = "https://github.com/${BuildConfig.GITHUB_OWNER}/${BuildConfig.GITHUB_REPO}/releases.atom"
 
     /** 当前安装版本（来自 BuildConfig，与 build.gradle.kts 的 versionName 一致） */
     val currentVersion: String get() = BuildConfig.VERSION_NAME
@@ -84,63 +102,180 @@ object UpdateChecker {
 
     /**
      * 查询最新版本。永不抛异常，失败一律折成 [UpdateCheckResult.Failed]。
+     *
+     * 先用 Atom 源（不受限流），失败再退回 REST API。
      */
     suspend fun checkLatest(current: String = currentVersion): UpdateCheckResult =
         withContext(Dispatchers.IO) {
-            var conn: HttpURLConnection? = null
-            try {
-                conn = (URL(latestReleaseApi).openConnection() as HttpURLConnection).apply {
-                    requestMethod = "GET"
-                    connectTimeout = 10_000
-                    readTimeout = 15_000
-                    instanceFollowRedirects = true
-                    setRequestProperty("Accept", "application/vnd.github+json")
-                    setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
-                    setRequestProperty("User-Agent", "WindTone-Android/$currentVersion")
-                }
-                when (val code = conn.responseCode) {
-                    200 -> Unit
-                    404 -> return@withContext UpdateCheckResult.Failed("仓库还没有发布正式版本")
-                    403, 429 -> return@withContext UpdateCheckResult.Failed("GitHub 接口访问过于频繁，请稍后再试")
-                    else -> return@withContext UpdateCheckResult.Failed("检查更新失败（HTTP $code）")
+            // ---------- 通道 1：Atom 源（首选，无配额） ----------
+            val viaAtom = runCatching { fetchLatestViaAtom(current) }
+            when (val r = viaAtom.getOrNull()) {
+                is UpdateCheckResult.Available,
+                is UpdateCheckResult.UpToDate -> return@withContext r
+
+                is UpdateCheckResult.Failed -> {
+                    // Atom 明确报「没有发布版本」时不浪费一次 API 配额
+                    if (r.reason.contains("还没有发布")) return@withContext r
                 }
 
-                val body = conn.inputStream.bufferedReader().use { it.readText() }
-                val json = JSONObject(body)
-
-                val tag = json.optString("tag_name").trim()
-                val version = normalizeVersion(tag).ifBlank { normalizeVersion(json.optString("name")) }
-                if (version.isBlank()) {
-                    return@withContext UpdateCheckResult.Failed("无法解析最新版本号")
+                null -> {
+                    if (verbose) Log.w(TAG, "Atom 源不可用，降级到 REST API", viaAtom.exceptionOrNull())
                 }
-
-                if (!isNewer(version, current)) {
-                    return@withContext UpdateCheckResult.UpToDate(version)
-                }
-
-                val asset = pickApkAsset(json)
-                    ?: return@withContext UpdateCheckResult.Failed("新版本没有附带 APK 安装包")
-
-                UpdateCheckResult.Available(
-                    UpdateInfo(
-                        version = version,
-                        tagName = tag.ifBlank { "v$version" },
-                        title = json.optString("name").ifBlank { "WindTone $version" },
-                        notes = plainNotes(json.optString("body")),
-                        apkUrl = asset.first,
-                        apkName = asset.second,
-                        apkSizeBytes = asset.third,
-                        publishedAt = json.optString("published_at"),
-                        releaseUrl = json.optString("html_url").ifBlank { releasePageUrl() },
-                    )
-                )
-            } catch (t: Throwable) {
-                if (verbose) Log.w(TAG, "检查更新失败", t)
-                UpdateCheckResult.Failed(describe(t))
-            } finally {
-                conn?.disconnect()
             }
+
+            // ---------- 通道 2：REST API（降级兜底） ----------
+            fetchLatestViaApi(current)
         }
+
+    // ------------------------------------------------------------ 通道 1：Atom
+
+    /**
+     * 解析 `releases.atom`。条目按时间倒序，第一条即最新发布。
+     *
+     * 注意：Atom 源**不包含** assets 列表，下载地址按 CI 的固定命名规则推导，
+     * 若推导出的地址不可用，会回退到 REST API 拿真实资产链接。
+     */
+    private fun fetchLatestViaAtom(current: String): UpdateCheckResult {
+        val body = httpGet(releasesAtomUrl, accept = "application/atom+xml").body
+        return parseAtom(body, current)
+    }
+
+    /**
+     * 解析 Atom 正文，纯函数、可单测。
+     *
+     * 条目按时间倒序，第一条即最新发布；Atom 源**不包含** assets 列表，
+     * 下载地址按 CI 的固定命名规则推导。
+     */
+    internal fun parseAtom(body: String, current: String): UpdateCheckResult {
+        val entries = Regex("<entry>(.*?)</entry>", RegexOption.DOT_MATCHES_ALL)
+            .findAll(body)
+            .map { it.groupValues[1] }
+            .toList()
+        if (entries.isEmpty()) return UpdateCheckResult.Failed("仓库还没有发布正式版本")
+
+        val first = entries.first()
+        val title = xmlText(first, "title")
+        val version = normalizeVersion(atomTagOf(first)).ifBlank { normalizeVersion(title) }
+        if (version.isBlank()) return UpdateCheckResult.Failed("无法解析最新版本号")
+        if (!isNewer(version, current)) return UpdateCheckResult.UpToDate(version)
+
+        val tag = atomTagOf(first).ifBlank { "v$version" }
+        val apkName = BuildConfig.APK_ASSET_TEMPLATE.format(version)
+        val apkUrl = "https://github.com/${BuildConfig.GITHUB_OWNER}/${BuildConfig.GITHUB_REPO}" +
+            "/releases/download/$tag/$apkName"
+
+        return UpdateCheckResult.Available(
+            UpdateInfo(
+                version = version,
+                tagName = tag,
+                title = title.ifBlank { "WindTone $version" },
+                notes = plainNotes(xmlText(first, "content")),
+                apkUrl = apkUrl,
+                apkName = apkName,
+                apkSizeBytes = 0L, // Atom 源没有资产大小，下载时以实际 Content-Length 为准
+                publishedAt = xmlText(first, "updated"),
+                releaseUrl = Regex("href=\"([^\"]+)\"")
+                    .find(first.substringAfter("<link rel=\"alternate\"", ""))
+                    ?.groupValues?.get(1)
+                    ?: releasePageUrl(),
+            )
+        )
+    }
+
+    /** 从 Atom 条目的 `<id>` 里取出 tag，形如 `tag:github.com,2008:Repository/123/v1.0.2` */
+    private fun atomTagOf(entry: String): String {
+        val id = xmlText(entry, "id")
+        return id.substringAfterLast('/').trim()
+    }
+
+    /** 取出 XML 标签文本并反转义（Atom 的 content 是 HTML 转义后的字符串） */
+    private fun xmlText(xml: String, tag: String): String {
+        val m = Regex("<$tag[^>]*>(.*?)</$tag>", RegexOption.DOT_MATCHES_ALL).find(xml)
+            ?: return ""
+        return m.groupValues[1]
+            .replace("&lt;", "<").replace("&gt;", ">")
+            .replace("&quot;", "\"").replace("&#39;", "'")
+            .replace("&amp;", "&")
+            .trim()
+    }
+
+    // ------------------------------------------------------------ 通道 2：REST API
+
+    /** 原 API 通道，保留作为兜底；403/429 时给出准确的恢复时间 */
+    private fun fetchLatestViaApi(current: String): UpdateCheckResult {
+        var conn: HttpURLConnection? = null
+        try {
+            val resp = httpGet(latestReleaseApi, accept = "application/vnd.github+json") { c ->
+                c.setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
+            }
+            conn = resp.connection
+            when (resp.code) {
+                200 -> Unit
+                404 -> return UpdateCheckResult.Failed("仓库还没有发布正式版本")
+                403, 429 -> return UpdateCheckResult.Failed(rateLimitMessage(resp.headers))
+                else -> return UpdateCheckResult.Failed("检查更新失败（HTTP ${resp.code}）")
+            }
+
+            val json = JSONObject(resp.body)
+
+            val tag = json.optString("tag_name").trim()
+            val version = normalizeVersion(tag).ifBlank { normalizeVersion(json.optString("name")) }
+            if (version.isBlank()) {
+                return UpdateCheckResult.Failed("无法解析最新版本号")
+            }
+
+            if (!isNewer(version, current)) {
+                return UpdateCheckResult.UpToDate(version)
+            }
+
+            val asset = pickApkAsset(json)
+                ?: return UpdateCheckResult.Failed("新版本没有附带 APK 安装包")
+
+            return UpdateCheckResult.Available(
+                UpdateInfo(
+                    version = version,
+                    tagName = tag.ifBlank { "v$version" },
+                    title = json.optString("name").ifBlank { "WindTone $version" },
+                    notes = plainNotes(json.optString("body")),
+                    apkUrl = asset.first,
+                    apkName = asset.second,
+                    apkSizeBytes = asset.third,
+                    publishedAt = json.optString("published_at"),
+                    releaseUrl = json.optString("html_url").ifBlank { releasePageUrl() },
+                )
+            )
+        } catch (t: Throwable) {
+            if (verbose) Log.w(TAG, "检查更新失败", t)
+            return UpdateCheckResult.Failed(describe(t))
+        } finally {
+            conn?.disconnect()
+        }
+    }
+
+    /**
+     * 把 403/429 翻译成人话。若响应头带了 `X-RateLimit-Reset`（Unix 秒），
+     * 直接算出还有几分钟恢复，避免用户反复重试。
+     */
+    private fun rateLimitMessage(headers: Map<String, List<String>>): String {
+        val remaining = headers["X-RateLimit-Remaining"]?.firstOrNull()?.trim()?.toIntOrNull()
+        val resetAt = headers["X-RateLimit-Reset"]?.firstOrNull()?.trim()?.toLongOrNull()
+        return rateLimitMessage(remaining, resetAt, System.currentTimeMillis())
+    }
+
+    /** 纯函数版本，便于单测（不依赖系统时钟与 HttpURLConnection） */
+    internal fun rateLimitMessage(remaining: Int?, resetAtEpochSec: Long?, nowMs: Long): String {
+        val wait = resetAtEpochSec?.let { it * 1000L - nowMs } ?: -1L
+
+        return when {
+            wait in 1..A_CLOCK_SKEW_MAX_MS -> {
+                val minutes = ((wait + 59_999L) / 60_000L).coerceAtLeast(1L)
+                "GitHub 访问额度已用完（$minutes 分钟后恢复）"
+            }
+            // 403 但没有 Reset 头：多半是共享出口 IP 被判为异常流量
+            remaining == 0 -> "GitHub 访问额度已用完，请稍后再试"
+            else -> "GitHub 暂时拒绝访问，请稍后再试"
+        }
+    }
 
     /** 从 assets 里挑 APK：优先名字带 WindTone / 听风 的，其次任意 .apk */
     private fun pickApkAsset(json: JSONObject): Triple<String, String, Long>? {
@@ -212,7 +347,7 @@ object UpdateChecker {
                 }
             }
 
-            verifyApk(part, info.apkSizeBytes)
+            verifyApk(part, info.apkSizeBytes, total)
             if (!part.renameTo(target)) {
                 part.copyTo(target, overwrite = true)
                 part.delete()
@@ -226,8 +361,13 @@ object UpdateChecker {
         }
     }
 
-    /** 粗校验：APK 是 zip，头 4 字节应为 PK\x03\x04；同时拦住明显不完整的下载 */
-    private fun verifyApk(file: File, expectedSize: Long) {
+    /**
+     * 粗校验：APK 是 zip，头 4 字节应为 PK\x03\x04；同时拦住明显不完整的下载。
+     *
+     * @param expectedSize Release 声明的字节数（Atom 通道下为 0，表示未知）
+     * @param responseSize 本次响应声明的 Content-Length（0 表示服务端未给出）
+     */
+    private fun verifyApk(file: File, expectedSize: Long, responseSize: Long) {
         if (!file.exists() || file.length() < 100 * 1024) {
             throw IOException("下载的安装包不完整")
         }
@@ -235,8 +375,15 @@ object UpdateChecker {
         file.inputStream().use { it.read(head) }
         val isZip = head[0] == 0x50.toByte() && head[1] == 0x4B.toByte()
         if (!isZip) throw IOException("下载的文件不是有效的 APK")
-        if (expectedSize > 0 && file.length() != expectedSize) {
-            if (verbose) Log.w(TAG, "APK 大小与 Release 声明不一致：${file.length()} vs $expectedSize")
+
+        // 有任何一个可信的大小基准时，做严格比对；不一致说明下载被截断或代理返回了错误页
+        val basis = when {
+            expectedSize > 0 -> expectedSize
+            responseSize > 0 -> responseSize
+            else -> return
+        }
+        if (file.length() != basis) {
+            throw IOException("安装包大小不符（${file.length()} / $basis），请重新下载")
         }
     }
 
@@ -277,6 +424,43 @@ object UpdateChecker {
         }
 
     // ------------------------------------------------------------ 工具
+
+    /** 一次 GET 的结果：状态码、响应头、正文、连接（供 finally 断开） */
+    private class HttpResp(
+        val code: Int,
+        val headers: Map<String, List<String>>,
+        val body: String,
+        val connection: HttpURLConnection,
+    )
+
+    /**
+     * 统一的 GET 请求：不抛状态码异常，403/404 也照常返回响应体与响应头，
+     * 这样限流信息可以被上层解析。真正的 IO 异常仍然抛出，由调用方翻译。
+     */
+    private fun httpGet(
+        url: String,
+        accept: String,
+        configure: (HttpURLConnection) -> Unit = {},
+    ): HttpResp {
+        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 10_000
+            readTimeout = 15_000
+            instanceFollowRedirects = true
+            setRequestProperty("Accept", accept)
+            setRequestProperty("User-Agent", "WindTone-Android/$currentVersion")
+            configure(this)
+        }
+        return try {
+            val code = conn.responseCode
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            HttpResp(code, conn.headerFields.orEmpty(), body, conn)
+        } catch (t: Throwable) {
+            conn.disconnect()
+            throw t
+        }
+    }
 
     /** 语义化版本比较：3.10.0 > 3.9.2。非数字段按 0 处理 */
     fun isNewer(candidate: String, current: String): Boolean {
@@ -323,9 +507,16 @@ object UpdateChecker {
         else -> "检查更新失败：${t.message ?: t.javaClass.simpleName}"
     }
 
-    /** 把字节数格式化成 MB，用于界面展示 */
+    /**
+     * 把字节数格式化成 MB，用于界面展示。
+     * 大小未知时返回空串 —— 调用点都是「… · ${formatSize(…)}」的拼接形式，
+     * 返回空串能让分隔符一并消失，不会显示成「· 未知大小」。
+     */
     fun formatSize(bytes: Long): String =
-        if (bytes <= 0) "未知大小" else "%.2f MB".format(bytes / 1024.0 / 1024.0)
+        if (bytes <= 0) "" else "%.2f MB".format(bytes / 1024.0 / 1024.0)
 
     private const val DIR_NAME = "updates"
+
+    /** 计算「还有多久恢复」时的容差上限（1 天），超过则认为 Reset 值不可信 */
+    private const val A_CLOCK_SKEW_MAX_MS = 24L * 60 * 60 * 1000
 }

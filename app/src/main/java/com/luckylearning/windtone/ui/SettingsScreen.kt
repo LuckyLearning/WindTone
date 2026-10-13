@@ -232,7 +232,10 @@ fun SettingsScreen(
                         update.checking -> "正在访问 GitHub Releases…"
                         info != null ->
                             "当前 v${update.currentVersion} → 最新 v${info.version}" +
-                                " · ${UpdateChecker.formatSize(info.apkSizeBytes)}"
+                                UpdateChecker.formatSize(info.apkSizeBytes)
+                                    .takeIf { it.isNotBlank() }
+                                    ?.let { " · $it" }
+                                    .orEmpty()
 
                         else -> "当前版本 v${update.currentVersion} · 安装包由 GitHub Releases 分发"
                     },
@@ -317,7 +320,7 @@ private fun UpdateDialog(
                 Column {
                     Text(
                         if (update.progress >= 0) "已下载 ${update.progress}%"
-                        else "已下载 ${UpdateChecker.formatSize(update.downloadedBytes)}",
+                        else "已下载 ${UpdateChecker.formatSize(update.downloadedBytes).ifBlank { "0 MB" }}",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Spacer(Modifier.height(10.dp))
@@ -378,7 +381,11 @@ private fun UpdateDialog(
         text = {
             Column {
                 Text(
-                    "当前版本 v${update.currentVersion} · 新版本 ${UpdateChecker.formatSize(info.apkSizeBytes)}",
+                    "当前版本 v${update.currentVersion}" +
+                        UpdateChecker.formatSize(info.apkSizeBytes)
+                            .takeIf { it.isNotBlank() }
+                            ?.let { " · 新版本 $it" }
+                            .orEmpty(),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
