@@ -219,11 +219,11 @@ App 启动 / 用户点「检查更新」
 ### 发布流程（打 tag 即出包）
 
 ```bash
-# 1. 改版本号：app/build.gradle.kts 里的 versionCode +1、versionName 改新版本
+# 1. 改版本号：app/build.gradle.kts 里的 appVersionCode +1、appVersionName 改新版本
 # 2. 提交
-git add -A && git commit -m "release: v3.3.0"
+git add -A && git commit -m "release: v1.0.1"
 # 3. 打 tag 并推送 —— 推 tag 会自动触发 Release 工作流
-git tag v3.3.0
+git tag v1.0.1
 git push origin main --tags
 ```
 
@@ -232,7 +232,7 @@ git push origin main --tags
 1. 校验 tag 与 `build.gradle.kts` 的 `versionName` 一致（不一致直接失败，避免应用内更新判断错乱）；
 2. 跑单元测试；
 3. 用仓库密钥签名构建 Release APK；
-4. 重命名为 `WindTone-v3.3.0.apk`，上传 artifact；
+4. 重命名为 `WindTone-v1.0.1.apk`，上传 artifact；
 5. 创建 GitHub Release 并附上 APK、大小与 SHA-256。
 
 > 也可以只推 `main`：`.github/workflows/android-ci.yml` 会跑单测 + 编译 debug 包做校验，不会发布。
@@ -368,6 +368,7 @@ SHA-256 `75EAECCD7CAB0DB4E30170F52091B3BF80AC0F1D6F89235433EBE2B5876E7398`。
 
 | 版本 | 主要内容 |
 |---|---|
+| **1.0.1** | **播放控制与音乐库整理**。<br>• 播放模式合并：随机播放与循环模式原先各占一个按钮，现合并为播放页上的**单个按钮四态轮换**（顺序播放 → 列表循环 → 单曲循环 → 随机播放），切换时浮出模式名提示；控制区由 5 个按钮减为 4 个。<br>• 文件夹视图：不再显示无路径歌曲聚成的「未知目录」；SAF 来源的歌曲补齐真实目录（按目录树相对路径 + URI 反推），新增**「移除扫描结果」**可一次性清掉某个文件夹下的全部歌曲（不删除手机里的音频文件）。<br>• 新增 `PlayMode` 轮换与推导的单元测试，单测总数 28 → 32。 |
 | **1.0.0** | **首个公开版本**。汇聚开发期多轮迭代的成果：三来源扫描（系统媒体库 / 指定目录 / SAF）、LRC 与内嵌歌词（含 KRC/YRC 逐字时间轴、双语合并、拼音搜索）、Media3 后台播放与通知栏控制、Room 歌单与播放统计、均衡器与响度增强、睡眠定时、桌面小部件与快捷磁贴、崩溃日志；R8 混淆后约 2.9 MB；界面为 M3 动态配色 + 封面主色渐变。<br>本版同时落地工程化能力：GitHub Actions（打 tag 自动出**已签名**包并创建 Release，主干/PR 跑 28 个单元测试）、应用内版本检测与一键升级（GitHub Releases 查询 → APK 下载校验 → FileProvider 安装）。 |
 
 ---
