@@ -2,6 +2,7 @@ package com.luckylearning.windtone.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Base64
 
 enum class SortOrder(val label: String) {
     TITLE("按标题"),
@@ -231,6 +232,47 @@ class Prefs(context: Context) {
         get() = sp.getLong(KEY_LAST_UPDATE_CHECK, 0L)
         set(value) = sp.edit().putLong(KEY_LAST_UPDATE_CHECK, value).apply()
 
+    // ---------------- WebDAV 云盘 ----------------
+
+    /**
+     * WebDAV 服务器地址（如 https://nas.local:5244/dav 或 Alist/OpenList 挂载）。
+     * 为空表示未配置。
+     */
+    var webdavUrl: String
+        get() = sp.getString(KEY_WEBDAV_URL, "").orEmpty()
+        set(value) = sp.edit().putString(KEY_WEBDAV_URL, value.trim()).apply()
+
+    var webdavUser: String
+        get() = sp.getString(KEY_WEBDAV_USER, "").orEmpty()
+        set(value) = sp.edit().putString(KEY_WEBDAV_USER, value).apply()
+
+    /**
+     * WebDAV 密码。Base64 混淆后存储——这不是加密（应用私有目录下
+     * 防的是「一眼明文」，不是逆向），真正的凭证安全要等接入
+     * androidx.security:security-crypto，见 docs/功能规划-第四期-云盘音乐.md §4.1。
+     */
+    var webdavPassword: String
+        get() = runCatching {
+            val raw = sp.getString(KEY_WEBDAV_PASS, "").orEmpty()
+            if (raw.isEmpty()) "" else String(Base64.decode(raw, Base64.DEFAULT), Charsets.UTF_8)
+        }.getOrDefault("")
+        set(value) = sp.edit()
+            .putString(
+                KEY_WEBDAV_PASS,
+                if (value.isEmpty()) "" else Base64.encodeToString(value.toByteArray(Charsets.UTF_8), Base64.NO_WRAP),
+            )
+            .apply()
+
+    /** WebDAV 扫描根路径（"" = 站点根目录） */
+    var webdavRoot: String
+        get() = sp.getString(KEY_WEBDAV_ROOT, "").orEmpty()
+        set(value) = sp.edit().putString(KEY_WEBDAV_ROOT, value.trim().trimEnd('/')).apply()
+
+    /** 是否把 WebDAV 歌曲合并进曲库（配置了服务器后默认合并） */
+    var webdavEnabled: Boolean
+        get() = sp.getBoolean(KEY_WEBDAV_ENABLED, false)
+        set(value) = sp.edit().putBoolean(KEY_WEBDAV_ENABLED, value).apply()
+
     private companion object {
         const val KEY_FOLDERS = "folders"
         const val KEY_SCAN_SCOPE = "scan_scope"
@@ -264,5 +306,10 @@ class Prefs(context: Context) {
         const val KEY_SKIP_SILENCE = "skip_silence"
         const val KEY_AUTO_UPDATE = "auto_check_update"
         const val KEY_LAST_UPDATE_CHECK = "last_update_check_at"
+        const val KEY_WEBDAV_URL = "webdav_url"
+        const val KEY_WEBDAV_USER = "webdav_user"
+        const val KEY_WEBDAV_PASS = "webdav_password"
+        const val KEY_WEBDAV_ROOT = "webdav_root"
+        const val KEY_WEBDAV_ENABLED = "webdav_enabled"
     }
 }

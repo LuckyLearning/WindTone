@@ -38,7 +38,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
@@ -506,6 +506,14 @@ fun MainScreen(vm: MusicViewModel) {
                     onOpenReleasePage = vm::openReleasePage,
                     onIgnoreUpdate = vm::ignoreUpdate,
                     onDismissUpdateDialog = vm::dismissUpdateDialog,
+                    webdavConfigured = library.webdavConfigured,
+                    webdavEnabled = library.webdavEnabled,
+                    webdavScanning = library.webdavScanning,
+                    webdavSongCount = library.webdavSongCount,
+                    webdavMessage = library.webdavMessage,
+                    onWebDavConnect = vm::connectWebDav,
+                    onWebDavScan = vm::scanWebDav,
+                    onWebDavDisconnect = vm::disconnectWebDav,
                 )
             }
 
@@ -1141,7 +1149,7 @@ private fun DetailHeader(
         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
     ) {
         IconButton(onClick = onBack) {
-            Icon(Icons.Filled.ArrowBack, contentDescription = "返回", tint = MaterialTheme.colorScheme.onSurface)
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = MaterialTheme.colorScheme.onSurface)
         }
         Column(Modifier.weight(1f)) {
             Text(

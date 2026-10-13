@@ -39,6 +39,9 @@ object SongDeleter {
 
     /** 直接执行删除（阻塞，需在 IO 线程调用）。返回是否删除成功。 */
     fun deleteNow(context: Context, song: Song): Boolean {
+        // 云端文件不受本应用管辖：永远不删服务器上的原始文件。
+        // 调用侧（MusicViewModel.deleteSong）已提前拦截并提示，这里是兜底。
+        if (song.source == SongSource.WEBDAV) return false
         val ok = runCatching {
             when (song.source) {
                 SongSource.FOLDER -> DocumentsContract.deleteDocument(context.contentResolver, song.uri)
@@ -46,6 +49,7 @@ object SongDeleter {
                     context.contentResolver.delete(song.uri, null, null) > 0 ||
                         song.path?.let { File(it).delete() } == true
                 SongSource.FILE -> song.path?.let { File(it).delete() } ?: false
+                SongSource.WEBDAV -> false
             }
         }.getOrDefault(false)
         if (ok) deleteSidecarLyric(context, song)

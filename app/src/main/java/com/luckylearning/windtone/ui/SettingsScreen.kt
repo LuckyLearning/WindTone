@@ -18,12 +18,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -40,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import android.content.Intent
@@ -86,6 +88,15 @@ fun SettingsScreen(
     onOpenReleasePage: () -> Unit,
     onIgnoreUpdate: () -> Unit,
     onDismissUpdateDialog: () -> Unit,
+    // WebDAV 云盘
+    webdavConfigured: Boolean,
+    webdavEnabled: Boolean,
+    webdavScanning: Boolean,
+    webdavSongCount: Int,
+    webdavMessage: String?,
+    onWebDavConnect: (url: String, user: String, password: String) -> Unit,
+    onWebDavScan: () -> Unit,
+    onWebDavDisconnect: () -> Unit,
 ) {
     val context = LocalContext.current
     val version = remember {
@@ -99,6 +110,10 @@ fun SettingsScreen(
     LaunchedEffect(canDrawOverlay) {
         if (canDrawOverlay) overlayHintVisible = false
     }
+    // WebDAV 表单（只在未连接时展示；连接成功后表单消失，换成状态卡）
+    var davUrl by remember(webdavConfigured) { mutableStateOf("") }
+    var davUser by remember(webdavConfigured) { mutableStateOf("") }
+    var davPass by remember(webdavConfigured) { mutableStateOf("") }
 
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
         Column(
@@ -117,7 +132,7 @@ fun SettingsScreen(
             ) {
                 IconButton(onClick = onClose) {
                     Icon(
-                        Icons.Filled.ArrowBack,
+                        Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "返回",
                         tint = MaterialTheme.colorScheme.onBackground,
                     )
@@ -150,7 +165,7 @@ fun SettingsScreen(
                 )
                 SwitchRow(
                     title = "车载模式",
-                    subtitle = "启动直接进入播放页并锁横屏（车机 / 手机横置）；歌词页 5 秒无操作自动收起顶栏、歌名行、控制键与状态行，只留歌词、进度与时间；触摸任意位置恢复。切到封面态不收起",
+                    subtitle = "启动直接进入播放页并锁横屏（车机 / 手机横置）；歌词页 5 秒无操作自动收起顶栏、歌名行、控制键与状态行，只留歌词、进度与时间；触摸任意位置恢复。切到封面态不收起。开启后设备开机时会自动拉起本应用（车载场景）",
                     checked = player.carMode,
                     onCheckedChange = onCarMode,
                 )
@@ -259,6 +274,85 @@ fun SettingsScreen(
                     onClick = { showEq = true },
                 )
 
+                // -------------------------------------------------- 云盘音乐
+                SectionTitle("云盘音乐（WebDAV）")
+                if (!webdavConfigured) {
+                    Text(
+                        "填写 WebDAV 服务器地址即可把云端音乐合并进曲库在线播放。" +
+                            "家里的 NAS（群晖 / 威联通等）或 Alist、OpenList 都支持；" +
+                            "把百度网盘挂载成 WebDAV 也可以（见项目文档的调研结论）。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 4.dp),
+                    )
+                    OutlinedTextField(
+                        value = davUrl,
+                        onValueChange = { davUrl = it },
+                        label = { Text("服务器地址") },
+                        placeholder = { Text("https://nas.local:5244/dav") },
+                        singleLine = true,
+                        enabled = !webdavScanning,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = davUser,
+                        onValueChange = { davUser = it },
+                        label = { Text("账号（可留空）") },
+                        singleLine = true,
+                        enabled = !webdavScanning,
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                    )
+                    OutlinedTextField(
+                        value = davPass,
+                        onValueChange = { davPass = it },
+                        label = { Text("密码（可留空）") },
+                        singleLine = true,
+                        enabled = !webdavScanning,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                    )
+                    TextButton(
+                        onClick = { onWebDavConnect(davUrl, davUser, davPass) },
+                        enabled = !webdavScanning && davUrl.isNotBlank(),
+                        modifier = Modifier.padding(top = 4.dp),
+                    ) {
+                        Text(if (webdavScanning) "正在连接…" else "连接并扫描")
+                    }
+                } else {
+                    StatCard(
+                        rows = listOf(
+                            "状态" to if (webdavEnabled) "已启用" else "已停用",
+                            "服务器" to "已配置",
+                            "云端歌曲" to "$webdavSongCount 首",
+                        )
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    TextButton(
+                        onClick = onWebDavScan,
+                        enabled = !webdavScanning,
+                    ) { Text(if (webdavScanning) "正在扫描…" else "重新扫描云端目录") }
+                    TextButton(
+                        onClick = onWebDavDisconnect,
+                        enabled = !webdavScanning,
+                    ) { Text("断开并清除配置") }
+                    Text(
+                        "云端歌曲与本地曲库合并展示，支持收藏、歌单与歌词（同目录同名 .lrc）。" +
+                            "账号密码只保存在本机应用私有目录，不上传任何服务器。" +
+                            "云端文件不会被本应用修改或删除。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 4.dp),
+                    )
+                }
+                if (webdavMessage != null) {
+                    Text(
+                        webdavMessage!!,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 2.dp),
+                    )
+                }
+
                 // -------------------------------------------------- 数据
                 SectionTitle("数据")
                 val stats = library.playStats
@@ -357,8 +451,9 @@ fun SettingsScreen(
                 Text(
                     "歌单、收藏、播放统计、歌词等全部数据都只保存在本机；" +
                         "歌词优先读取音频同目录的 .lrc / .krc / .yrc 文件，其次读取音频内嵌歌词。\n" +
-                        "唯一的联网行为是「检查更新 / 下载新版本」——只访问 GitHub Releases，" +
-                        "不采集、不上传任何信息。关闭上面的自动检查开关后，应用完全不联网。",
+                        "联网行为只有两处：「检查更新 / 下载新版本」访问 GitHub Releases；" +
+                        "配置了 WebDAV 后访问你自己的服务器取音乐和歌词。" +
+                        "不采集、不上传任何信息。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 8.dp),

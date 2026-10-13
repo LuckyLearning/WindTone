@@ -26,6 +26,8 @@ import com.luckylearning.windtone.data.SortOrder
 import com.luckylearning.windtone.data.UpdateCheckResult
 import com.luckylearning.windtone.data.UpdateChecker
 import com.luckylearning.windtone.data.UpdateInfo
+import com.luckylearning.windtone.data.webdav.WebDavClient
+import com.luckylearning.windtone.data.webdav.WebDavScanner
 import com.luckylearning.windtone.data.db.MusicDb
 import com.luckylearning.windtone.data.db.PlaylistEntity
 import com.luckylearning.windtone.data.db.PlaylistSongEntity
@@ -137,6 +139,12 @@ data class LibraryUiState(
     // 批次 5 / 6
     val searchHistory: List<String> = emptyList(),
     val playStats: PlayStats = PlayStats(),
+    // WebDAV 云盘
+    val webdavConfigured: Boolean = false,
+    val webdavEnabled: Boolean = false,
+    val webdavScanning: Boolean = false,
+    val webdavSongCount: Int = 0,
+    val webdavMessage: String? = null,
 )
 
 /** 播放统计概览（设置页展示） */
@@ -289,6 +297,8 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
             scanScope = prefs.scanScope,
             folderCount = prefs.folderUris.size,
             folderUris = prefs.folderUris,
+            webdavConfigured = prefs.webdavUrl.isNotEmpty(),
+            webdavEnabled = prefs.webdavEnabled && prefs.webdavUrl.isNotEmpty(),
         )
     )
     val library: StateFlow<LibraryUiState> = _library.asStateFlow()
@@ -327,8 +337,12 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     private var artworkJob: Job? = null
     private var positionJob: Job? = null
     private var searchJob: Job? = null
+    private var webdavScanJob: Job? = null
     private var currentLyricsSong: String? = null
     private var consecutiveErrors = 0
+
+    /** WebDAV 云端歌曲（内存态，不入扫描缓存——冷启动靠重新扫描恢复） */
+    private var webdavSongs: List<Song> = emptyList()
 
     // 收听时长统计：仅在播放中累加，切歌/暂停时结算
     private var listenForKey: String? = null
@@ -376,9 +390,11 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
             if (prefs.scanScope == ScanScope.UNSET) {
                 // 首次安装：不自动扫描，界面会提示用户选择范围
                 _library.update { it.copy(scanning = false, statusText = "") }
+                maybeScanWebDav(auto = true)
                 return@launch
             }
             scan(auto = true)
+            maybeScanWebDav(auto = true)
         }
     }
 
@@ -452,9 +468,12 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 应用歌曲列表：信息覆盖 → 排序 → 拼音索引 → 分组 → 状态落库 */
     private suspend fun applyLibrary(raw: List<Song>, skipped: Int, fromCache: Boolean) {
+        // WebDAV 云端歌曲与本地歌曲合并进同一个曲库，统一排序 / 搜索 / 分组；
+        // 云端曲目靠 Song.source 区分，文件夹视图里按其服务器目录自然成组。
+        val rawAll = if (webdavSongs.isNotEmpty()) raw + webdavSongs else raw
         val overrides = withContext(Dispatchers.IO) { db.overrideDao().all() }
         val oMap = overrides.associateBy { it.songUri }
-        val songs = raw.map { song ->
+        val songs = rawAll.map { song ->
             val o = oMap[song.stableKey]
             if (o == null) song else song.copy(
                 title = o.title?.takeIf { it.isNotBlank() } ?: song.title,
@@ -490,6 +509,7 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
                 folderUris = prefs.folderUris,
                 statusText = "",
                 favoriteUris = favs,
+                webdavSongCount = webdavSongs.size,
             )
         }
         currentQueue = sorted
@@ -741,6 +761,11 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
      * 其余来源（SAF 文档 / 深度扫描路径 / 旧版媒体库）直接在 IO 线程删。
      */
     fun deleteSong(song: Song, launchSystemConfirm: (android.content.IntentSender) -> Unit) {
+        // 云端文件不属于本机存储：不删服务器文件，也不从曲库清（下次扫描会回来）
+        if (song.source == com.luckylearning.windtone.data.model.SongSource.WEBDAV) {
+            pushMessage("云端歌曲不在这里删除；请在 WebDAV 服务器上管理文件")
+            return
+        }
         val app = getApplication<Application>()
         viewModelScope.launch {
             val sender = withContext(Dispatchers.IO) {
@@ -867,6 +892,117 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
             pushMessage("已移除「${group.title}」的 ${removed.size} 首歌曲")
         }
     }
+
+    // ---------------------------------------------------------- WebDAV 云盘
+
+    /**
+     * 连接 WebDAV 服务器并开始首次扫描。
+     *
+     * 先用 PROPFIND(Depth:0) 试连一次：地址打错、密码不对都在这一步拦住，
+     * 不让用户等一轮全库扫描之后才发现连不上。
+     */
+    fun connectWebDav(url: String, user: String, password: String) {
+        if (_library.value.webdavScanning) return
+        viewModelScope.launch {
+            val raw = url.trim()
+            if (raw.isEmpty()) {
+                _library.update { it.copy(webdavMessage = "请填写服务器地址") }
+                return@launch
+            }
+            val normalized = when {
+                raw.startsWith("http://", true) || raw.startsWith("https://", true) -> raw.trimEnd('/')
+                else -> "https://$raw".trimEnd('/')
+            }
+            _library.update { it.copy(webdavScanning = true, webdavMessage = "正在连接…") }
+            val test = withContext(Dispatchers.IO) {
+                WebDavClient.testConnection(normalized, user.trim().ifBlank { null }, password.ifBlank { null })
+            }
+            test.onSuccess {
+                prefs.webdavUrl = normalized
+                prefs.webdavUser = user.trim()
+                prefs.webdavPassword = password
+                prefs.webdavRoot = ""
+                prefs.webdavEnabled = true
+                WebDavClient.config = WebDavClient.Config(normalized, user.trim().ifBlank { null }, password.ifBlank { null })
+                _library.update {
+                    it.copy(webdavConfigured = true, webdavEnabled = true, webdavScanning = false, webdavMessage = "已连接")
+                }
+                scanWebDav()
+            }.onFailure { e ->
+                _library.update {
+                    it.copy(webdavScanning = false, webdavMessage = "连接失败：${e.message ?: "请检查地址与网络"}")
+                }
+            }
+        }
+    }
+
+    /** 手动触发一次 WebDAV 扫描（设置页「重新扫描」） */
+    fun scanWebDav() = maybeScanWebDav(auto = false)
+
+    /**
+     * 扫描 WebDAV 目录并合并进曲库。
+     * [auto] 为 true 时仅在「已配置且启用」的情况下静默执行，失败不打扰用户。
+     */
+    private fun maybeScanWebDav(auto: Boolean) {
+        if (webdavScanJob?.isActive == true) return
+        val url = prefs.webdavUrl
+        if (url.isEmpty() || !prefs.webdavEnabled) return
+        val user = prefs.webdavUser.ifBlank { null }
+        val pass = prefs.webdavPassword.ifBlank { null }
+        WebDavClient.config = WebDavClient.Config(url, user, pass)
+        webdavScanJob = viewModelScope.launch {
+            _library.update { it.copy(webdavScanning = true, webdavMessage = null) }
+            val result = runCatching {
+                WebDavScanner.scan(url, prefs.webdavRoot) { text ->
+                    _library.update { if (it.webdavMessage == text) it else it.copy(webdavMessage = text) }
+                }
+            }
+            result.onSuccess { r ->
+                webdavSongs = r.songs
+                val note = buildString {
+                    append("已找到 ${r.songs.size} 首")
+                    if (r.truncated) append("（已达扫描上限）")
+                }
+                _library.update { it.copy(webdavScanning = false, webdavMessage = note) }
+                // 以「当前本地曲库 + 新云端曲目」重建曲库视图
+                applyLibrary(localSongsOnly(), _library.value.skippedUnsupported, fromCache = false)
+            }.onFailure { e ->
+                Log.w(TAG, "WebDAV 扫描失败", e)
+                webdavSongs = emptyList()
+                _library.update {
+                    it.copy(
+                        webdavScanning = false,
+                        webdavSongCount = 0,
+                        webdavMessage = if (auto) null else "扫描失败：${e.message ?: "请检查网络"}",
+                    )
+                }
+                if (!auto) applyLibrary(localSongsOnly(), _library.value.skippedUnsupported, fromCache = false)
+            }
+        }
+    }
+
+    /** 断开并清除 WebDAV 配置；云端歌曲立即从曲库移除（收藏/歌单记录保留在数据库里） */
+    fun disconnectWebDav() {
+        webdavScanJob?.cancel()
+        webdavScanJob = null
+        webdavSongs = emptyList()
+        WebDavClient.config = null
+        prefs.webdavUrl = ""
+        prefs.webdavUser = ""
+        prefs.webdavPassword = ""
+        prefs.webdavRoot = ""
+        prefs.webdavEnabled = false
+        _library.update {
+            it.copy(webdavConfigured = false, webdavEnabled = false, webdavScanning = false, webdavSongCount = 0, webdavMessage = null)
+        }
+        viewModelScope.launch {
+            applyLibrary(localSongsOnly(), _library.value.skippedUnsupported, fromCache = false)
+        }
+    }
+
+    /** 当前曲库中的本地曲目（去掉 WebDAV 源），用于云端扫描后重建合并视图 */
+    private fun localSongsOnly(): List<Song> =
+        _library.value.songs.filter { it.source != com.luckylearning.windtone.data.model.SongSource.WEBDAV }
 
     // ---------------------------------------------------------- 收藏
 
@@ -1479,8 +1615,8 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
             val stats = withContext(Dispatchers.IO) {
                 PlayStats(
                     listenedSongs = runCatching { db.playStatDao().playedSongCount() }.getOrDefault(0),
-                    totalPlays = runCatching { db.playStatDao().totalPlayCount() }.getOrDefault(0L) ?: 0L,
-                    totalListenedMs = runCatching { db.playStatDao().totalPlayedMs() }.getOrDefault(0L) ?: 0L,
+                    totalPlays = runCatching { db.playStatDao().totalPlayCount() }.getOrNull() ?: 0L,
+                    totalListenedMs = runCatching { db.playStatDao().totalPlayedMs() }.getOrNull() ?: 0L,
                     favorites = runCatching { db.playStatDao().favoriteCount() }.getOrDefault(0),
                 )
             }
