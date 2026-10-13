@@ -296,70 +296,75 @@ fun PlayerScreen(
             )
 
             val durationFallback = state.durationMs
-            Row(Modifier.fillMaxWidth()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 TimeLabel(progressState, durationFallback, showPosition = true)
                 Spacer(Modifier.weight(1f))
-                song?.let {
-                    Text(
-                        text = com.luckylearning.windtone.data.MusicRepository.sourceLabel(it.source),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = scheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.width(10.dp))
-                }
                 TimeLabel(progressState, durationFallback, showPosition = false)
             }
 
             Spacer(Modifier.height(4.dp))
 
             // ------------------------------------------------------ 控制区
+            // 三段式布局：左右两个等宽槽位夹住中间的「上一首 / 播放 / 下一首」，
+            // 保证主控按钮绝对居中；播放模式固定在左槽，不再把整排按钮挤偏。
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceEvenly,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                // 播放模式（顺序 / 列表循环 / 单曲循环 / 随机）合并在这一个按钮上轮换
-                IconButton(onClick = onCyclePlayMode) {
-                    Icon(
-                        imageVector = playMode.icon,
-                        contentDescription = "播放模式：${playMode.label}",
-                        tint = if (playMode == PlayMode.SEQUENTIAL) scheme.onSurfaceVariant
-                        else scheme.primary,
-                    )
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    // 播放模式（顺序 / 列表循环 / 单曲循环 / 随机）合并在这一个按钮上轮换
+                    IconButton(onClick = onCyclePlayMode) {
+                        Icon(
+                            imageVector = playMode.icon,
+                            contentDescription = "播放模式：${playMode.label}",
+                            tint = if (playMode == PlayMode.SEQUENTIAL) scheme.onSurfaceVariant
+                            else scheme.primary,
+                        )
+                    }
                 }
-                IconButton(onClick = onPrevious) {
-                    Icon(
-                        imageVector = AppIcons.SkipPrevious,
-                        contentDescription = "上一首",
-                        tint = scheme.onSurface,
-                        modifier = Modifier.size(34.dp),
-                    )
-                }
-                FilledIconButton(
-                    onClick = onToggle,
-                    shape = CircleShape,
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = scheme.primary,
-                        contentColor = scheme.onPrimary,
-                    ),
-                    modifier = Modifier
-                        .size(66.dp)
-                        .shadow(10.dp, CircleShape),
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(20.dp),
                 ) {
-                    Icon(
-                        imageVector = if (state.isPlaying) AppIcons.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = if (state.isPlaying) "暂停" else "播放",
-                        modifier = Modifier.size(34.dp),
-                    )
+                    IconButton(onClick = onPrevious) {
+                        Icon(
+                            imageVector = AppIcons.SkipPrevious,
+                            contentDescription = "上一首",
+                            tint = scheme.onSurface,
+                            modifier = Modifier.size(34.dp),
+                        )
+                    }
+                    FilledIconButton(
+                        onClick = onToggle,
+                        shape = CircleShape,
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = scheme.primary,
+                            contentColor = scheme.onPrimary,
+                        ),
+                        modifier = Modifier
+                            .size(66.dp)
+                            .shadow(10.dp, CircleShape),
+                    ) {
+                        Icon(
+                            imageVector = if (state.isPlaying) AppIcons.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = if (state.isPlaying) "暂停" else "播放",
+                            modifier = Modifier.size(34.dp),
+                        )
+                    }
+                    IconButton(onClick = onNext) {
+                        Icon(
+                            imageVector = AppIcons.SkipNext,
+                            contentDescription = "下一首",
+                            tint = scheme.onSurface,
+                            modifier = Modifier.size(34.dp),
+                        )
+                    }
                 }
-                IconButton(onClick = onNext) {
-                    Icon(
-                        imageVector = AppIcons.SkipNext,
-                        contentDescription = "下一首",
-                        tint = scheme.onSurface,
-                        modifier = Modifier.size(34.dp),
-                    )
-                }
+                // 右侧对称空槽：与左槽等宽，把中间三键顶回屏幕正中
+                Box(Modifier.weight(1f))
             }
 
             Spacer(Modifier.height(6.dp))
@@ -389,6 +394,14 @@ fun PlayerScreen(
                     )
                 }
                 Spacer(Modifier.weight(1f))
+                song?.let {
+                    Text(
+                        text = com.luckylearning.windtone.data.MusicRepository.sourceLabel(it.source),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = scheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                }
                 Text(
                     text = "队列 ${state.queueSize} 首",
                     style = MaterialTheme.typography.labelSmall,
