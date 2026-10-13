@@ -107,19 +107,22 @@ object UpdateChecker {
      */
     suspend fun checkLatest(current: String = currentVersion): UpdateCheckResult =
         withContext(Dispatchers.IO) {
-            // ---------- 通道 1：Atom 源（首选，无配额） ----------
-            val viaAtom = runCatching { fetchLatestViaAtom(current) }
-            when (val r = viaAtom.getOrNull()) {
-                is UpdateCheckResult.Available,
-                is UpdateCheckResult.UpToDate -> return@withContext r
+            // ---------- 通道 1：Atom 源（首选，无配额；直连失败自动走镜像） ----------
+            var viaAtom: Result<UpdateCheckResult>? = null
+            for (url in downloadCandidates(releasesAtomUrl)) {
+                viaAtom = runCatching { fetchLatestViaAtom(url, current) }
+                when (val r = viaAtom.getOrNull()) {
+                    is UpdateCheckResult.Available,
+                    is UpdateCheckResult.UpToDate -> return@withContext r
 
-                is UpdateCheckResult.Failed -> {
-                    // Atom 明确报「没有发布版本」时不浪费一次 API 配额
-                    if (r.reason.contains("还没有发布")) return@withContext r
-                }
+                    is UpdateCheckResult.Failed -> {
+                        // Atom 明确报「没有发布版本」时不浪费一次 API 配额
+                        if (r.reason.contains("还没有发布")) return@withContext r
+                    }
 
-                null -> {
-                    if (verbose) Log.w(TAG, "Atom 源不可用，降级到 REST API", viaAtom.exceptionOrNull())
+                    null -> {
+                        if (verbose) Log.w(TAG, "Atom 源不可用（$url），尝试下一条线路")
+                    }
                 }
             }
 
@@ -135,8 +138,8 @@ object UpdateChecker {
      * 注意：Atom 源**不包含** assets 列表，下载地址按 CI 的固定命名规则推导，
      * 若推导出的地址不可用，会回退到 REST API 拿真实资产链接。
      */
-    private fun fetchLatestViaAtom(current: String): UpdateCheckResult {
-        val body = httpGet(releasesAtomUrl, accept = "application/atom+xml").body
+    private fun fetchLatestViaAtom(atomUrl: String, current: String): UpdateCheckResult {
+        val body = httpGet(atomUrl, accept = "application/atom+xml").body
         return parseAtom(body, current)
     }
 
@@ -299,15 +302,45 @@ object UpdateChecker {
     // ------------------------------------------------------------ 下载
 
     /**
+     * GitHub 资源的候选线路（按优先级排列），检查更新与下载共用。
+     *
+     * 国内直连 GitHub 的速度经常只有几 KB/s，所以除了直链外，
+     * 还带上两个公开的 GitHub 加速镜像（给原始 URL 加前缀的代理方式）：
+     *  - ghproxy.net
+     *  - gh-proxy.com
+     *
+     * 顺序：**直链优先**——有 VPN / 网络好的用户直链最快也最权威；
+     * 直链慢或失败时由调用方自动落到镜像。
+     * 镜像只做字节转发，不改动文件内容，且下载后仍有 [verifyApk] 兜底校验。
+     * 非 github.com 资源（如自定义直链）不套前缀，原样返回。
+     */
+    internal fun downloadCandidates(apkUrl: String): List<String> = buildList {
+        add(apkUrl)
+        MIRROR_PREFIXES.forEach { prefix ->
+            if (apkUrl.startsWith("https://github.com/", ignoreCase = true)) {
+                add(prefix + apkUrl)
+            }
+        }
+    }
+
+    /**
      * 下载 APK 到 `cacheDir/updates/`。
      * 下载前会清空该目录，避免历史版本堆积；先写 `.part` 再做完整性校验后才改名。
      *
+     * **多线路自动降级**：按 [downloadCandidates] 的顺序逐条尝试。
+     * 每条线路开始后监测速度——起步 [STALL_WINDOW_MS] 内低于 [STALL_MIN_BYTES]
+     * 视为「慢线路」，中断并切换下一条（对国内直连 GitHub 的场景这几乎是必然触发）。
+     * 全部线路失败时抛最后一次的错误，由界面引导用户浏览器手动下载。
+     *
      * @param onProgress 参数为 (已下载字节, 总字节)，总字节为 0 时表示长度未知
+     * @param onLineFallback 某条线路失败即将切换时回调 (即将尝试的线路序号, 候选总数)，
+     *   供界面提示「正在切换镜像」；进度条会从头重新计数
      */
     suspend fun download(
         context: Context,
         info: UpdateInfo,
         onProgress: (Long, Long) -> Unit = { _, _ -> },
+        onLineFallback: (Int, Int) -> Unit = { _, _ -> },
     ): File = withContext(Dispatchers.IO) {
         val dir = File(context.cacheDir, DIR_NAME).apply { if (!exists()) mkdirs() }
         dir.listFiles()?.forEach { runCatching { it.delete() } }
@@ -318,12 +351,41 @@ object UpdateChecker {
         val target = File(dir, safeName)
         val part = File(dir, "$safeName.part")
 
+        val candidates = downloadCandidates(info.apkUrl)
+        var lastError: Throwable? = null
+        for ((index, candidate) in candidates.withIndex()) {
+            try {
+                val responseTotal = downloadOnce(candidate, part, info, onProgress)
+                verifyApk(part, info.apkSizeBytes, responseTotal)
+                if (!part.renameTo(target)) {
+                    part.copyTo(target, overwrite = true)
+                    part.delete()
+                }
+                return@withContext target
+            } catch (t: Throwable) {
+                lastError = t
+                runCatching { part.delete() }
+                if (verbose) Log.w(TAG, "下载线路失败，切换下一条: $candidate", t)
+                val next = index + 1
+                if (next < candidates.size) onLineFallback(next + 1, candidates.size)
+            }
+        }
+        throw lastError ?: IOException("所有下载线路均失败")
+    }
+
+    /** 单条线路的完整下载（连接 → 流式写盘 → 速度监测）。返回响应声明的总字节（未知为 0） */
+    private fun downloadOnce(
+        url: String,
+        part: File,
+        info: UpdateInfo,
+        onProgress: (Long, Long) -> Unit,
+    ): Long {
         var conn: HttpURLConnection? = null
         try {
-            conn = (URL(info.apkUrl).openConnection() as HttpURLConnection).apply {
+            conn = (URL(url).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
-                connectTimeout = 15_000
-                readTimeout = 60_000
+                connectTimeout = 12_000
+                readTimeout = 30_000
                 instanceFollowRedirects = true
                 setRequestProperty("User-Agent", "WindTone-Android/$currentVersion")
                 setRequestProperty("Accept", "application/octet-stream")
@@ -333,6 +395,7 @@ object UpdateChecker {
 
             val total = conn.contentLengthLong.takeIf { it > 0 } ?: info.apkSizeBytes
             var downloaded = 0L
+            val startedAt = System.currentTimeMillis()
             val buf = ByteArray(64 * 1024)
             conn.inputStream.use { input ->
                 FileOutputStream(part).use { out ->
@@ -341,21 +404,18 @@ object UpdateChecker {
                         out.write(buf, 0, n)
                         downloaded += n
                         onProgress(downloaded, total)
+                        // 慢线路判定：起步窗口内几乎没进度 → 中断换线。
+                        // 直链在国内常表现为「能连上但只有几 KB/s」，不切会挂 20 分钟。
+                        val elapsed = System.currentTimeMillis() - startedAt
+                        if (elapsed > STALL_WINDOW_MS && downloaded < STALL_MIN_BYTES) {
+                            throw IOException("线路过慢（${elapsed / 1000}s 仅 ${downloaded / 1024}KB），已自动切换镜像")
+                        }
                         n = input.read(buf)
                     }
                     out.flush()
                 }
             }
-
-            verifyApk(part, info.apkSizeBytes, total)
-            if (!part.renameTo(target)) {
-                part.copyTo(target, overwrite = true)
-                part.delete()
-            }
-            target
-        } catch (t: Throwable) {
-            runCatching { part.delete() }
-            throw t
+            return total
         } finally {
             conn?.disconnect()
         }
@@ -516,6 +576,18 @@ object UpdateChecker {
         if (bytes <= 0) "" else "%.2f MB".format(bytes / 1024.0 / 1024.0)
 
     private const val DIR_NAME = "updates"
+
+    /** GitHub 加速镜像（给原始 URL 加前缀即生效；均为公开代理，只转发字节） */
+    private val MIRROR_PREFIXES = listOf(
+        "https://ghproxy.net/",
+        "https://gh-proxy.com/",
+    )
+
+    /** 慢线路判定窗口：起步 8 秒 */
+    private const val STALL_WINDOW_MS = 8_000L
+
+    /** 慢线路判定阈值：8 秒内不足 512KB（≈64KB/s）即切换 */
+    private const val STALL_MIN_BYTES = 512L * 1024
 
     /** 计算「还有多久恢复」时的容差上限（1 天），超过则认为 Reset 值不可信 */
     private const val A_CLOCK_SKEW_MAX_MS = 24L * 60 * 60 * 1000

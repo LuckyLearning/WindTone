@@ -2121,10 +2121,19 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
             }
             val app = getApplication<Application>()
             runCatching {
-                UpdateChecker.download(app, info) { done, total ->
-                    val pct = if (total > 0) ((done * 100) / total).toInt().coerceIn(0, 100) else -1
-                    _update.update { it.copy(progress = pct, downloadedBytes = done, totalBytes = total) }
-                }
+                UpdateChecker.download(
+                    app,
+                    info,
+                    onProgress = { done, total ->
+                        val pct = if (total > 0) ((done * 100) / total).toInt().coerceIn(0, 100) else -1
+                        _update.update { it.copy(progress = pct, downloadedBytes = done, totalBytes = total) }
+                    },
+                    onLineFallback = { attempt, count ->
+                        _update.update {
+                            it.copy(progress = 0, downloadedBytes = 0L, message = "直连太慢，切换镜像线路 $attempt/$count…")
+                        }
+                    },
+                )
             }.onSuccess { file ->
                 _update.update {
                     it.copy(
@@ -2132,6 +2141,7 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
                         progress = 100,
                         readyApkPath = file.absolutePath,
                         dialogVisible = true,
+                        message = null, // 清掉「切换镜像」之类的下载过程提示
                         needInstallPermission = !UpdateChecker.canInstall(getApplication()),
                     )
                 }

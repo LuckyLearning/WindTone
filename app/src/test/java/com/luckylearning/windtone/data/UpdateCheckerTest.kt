@@ -121,4 +121,22 @@ class UpdateCheckerTest {
         )
         assertTrue("异常 Reset 值不应显示，实际：$msg", !msg.contains("分钟后恢复"))
     }
+
+    // ------------------------------------------------------------ 多线路下载
+
+    @Test
+    fun downloadCandidatesPutDirectLinkFirst() {
+        val url = "https://github.com/LuckyLearning/WindTone/releases/download/v1.0.3/WindTone-v1.0.3.apk"
+        val candidates = UpdateChecker.downloadCandidates(url)
+        assertEquals(url, candidates[0])
+        assertTrue(candidates.size >= 3)
+        assertTrue(candidates[1].startsWith("https://ghproxy.net/https://github.com/"))
+        assertTrue(candidates[2].startsWith("https://gh-proxy.com/https://github.com/"))
+    }
+
+    @Test
+    fun downloadCandidatesSkipMirrorForNonGithubUrl() {
+        val url = "https://example.com/self-hosted.apk"
+        assertEquals(listOf(url), UpdateChecker.downloadCandidates(url))
+    }
 }
