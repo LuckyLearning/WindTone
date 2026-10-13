@@ -19,7 +19,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import com.luckylearning.windtone.lyrics.LyricLine
 import com.luckylearning.windtone.lyrics.Lyrics
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 
 /**
  * 歌词面板：
@@ -71,26 +71,38 @@ fun LyricsPane(
     wordByWord: Boolean = true,
     onSeekTo: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    // 车载模式：字号整体再放大 [CAR_LYRIC_BOOST] 倍。
+    // 车机屏幕离驾驶位更远（约 60~70cm），手机那套 15.5 / 17.5sp 在
+    // 1707dp 宽屏上会显得又小又空，瞄一眼读不清。这里直接折叠进 scale，
+    // 内部所有字号 / 行距计算一行都不用改。
+    carMode: Boolean = false,
 ) {
+    val effectiveScale = if (carMode) scale * CAR_LYRIC_BOOST else scale
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         when {
             loading -> LyricsLoading()
 
             lyrics.isEmpty -> NoLyricsHint()
 
-            !lyrics.synced -> PlainLyrics(lyrics, scale)
+            !lyrics.synced -> PlainLyrics(lyrics, effectiveScale)
 
             else -> SyncedLyrics(
                 lyrics = lyrics,
                 progressState = progressState,
                 offsetMs = offsetMs,
-                scale = scale,
+                scale = effectiveScale,
                 wordByWord = wordByWord,
                 onSeekTo = onSeekTo,
             )
         }
     }
 }
+
+/**
+ * 车载模式歌词放大系数。手机正文 15.5sp × 1.5 ≈ 23sp、当前行 17.5sp × 1.5 ≈ 26sp，
+ * 与效果图 ㊲「车机歌词明显大于手机」的意图一致，同时不至于大到一行放不下几个字。
+ */
+private const val CAR_LYRIC_BOOST = 1.5f
 
 /** 歌词加载中的占位：三行渐隐灰条，比转圈更贴近最终形态 */
 @Composable
@@ -199,20 +211,34 @@ private fun SyncedLyrics(
             }
     }
 
-    LaunchedEffect(currentIndex) {
-        if (currentIndex < 0) return@LaunchedEffect
-        if (System.currentTimeMillis() < userPausedUntil) return@LaunchedEffect
-        val viewportH = listState.layoutInfo.viewportSize.height
-        if (viewportH <= 0) return@LaunchedEffect
-        val linePx = with(density) { (34 * scale).dp.toPx() }
-        val target = -(viewportH / 2f - linePx)
-        programmatic = true
-        try {
-            listState.animateScrollToItem(currentIndex, target.toInt())
-        } catch (_: Throwable) {
-        } finally {
-            programmatic = false
+    // 居中跟随：监听「当前行索引 + 视口高度」，任一变化都把当前行滚回视口正中。
+    //
+    // 为什么不能只监听 currentIndex（旧实现）：视口高度会变——车机进入沉浸态时
+    // 顶栏 / 控制键收起，歌词区突然变高；初次布局时视口还是 0。这些时刻
+    // 行索引没变，旧 effect 不执行，当前行就停在旧位置，看起来沉到屏幕底部。
+    // snapshotFlow 在视口尺寸或索引任一变化时都会重新发射，顺带解决了
+    // 「viewportH == 0 直接 return 后再也不校正」的初次布局问题。
+    LaunchedEffect(listState, density, scale) {
+        snapshotFlow {
+            val h = listState.layoutInfo.viewportSize.height
+            if (h <= 0) null else h to currentIndex
         }
+            .filterNotNull()
+            .distinctUntilChanged()
+            .collect { (viewportH, index) ->
+                if (index < 0) return@collect
+                if (System.currentTimeMillis() < userPausedUntil) return@collect
+                // 行高近似值：文字行高 25dp + 上下 padding 18dp，不必逐行精确测量
+                val linePx = with(density) { (34 * scale).dp.toPx() }
+                val target = -(viewportH / 2f - linePx)
+                programmatic = true
+                try {
+                    listState.animateScrollToItem(index, target.toInt())
+                } catch (_: Throwable) {
+                } finally {
+                    programmatic = false
+                }
+            }
     }
 
     LazyColumn(
@@ -262,17 +288,6 @@ private fun LyricLineItem(
             .padding(horizontal = 14.dp, vertical = 9.dp),
         contentAlignment = Alignment.Center,
     ) {
-        // 当前行左侧指示条
-        if (active) {
-            Box(
-                Modifier
-                    .align(Alignment.CenterStart)
-                    .width(3.dp)
-                    .height(22.dp)
-                    .clip(CircleShape)
-                    .background(scheme.primary)
-            )
-        }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             if (wordByWord && line.hasWords && active) {
                 KaraokeText(

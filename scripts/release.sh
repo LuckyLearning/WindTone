@@ -49,6 +49,13 @@ grep -E 'appVersionName|appVersionCode' "$GRADLE_FILE"
 
 # 2) 本地先验证能编译
 echo "→ 先跑一遍单测确认没坏..."
+# Android 构建必须用 JDK 21（temurin/openjdk），不能落到 IntelliJ 自带的 GraalVM ——
+# GraalVM 的 jlink 在处理 android-35 的 core-for-system-modules.jar 时会报
+# JdkImageTransform 失败。没显式设过 JAVA_HOME 时这里兜一个本机可用的路径。
+if [[ -z "${JAVA_HOME:-}" && -d "C:/Users/stu_l/.jdks/openjdk-21.0.2" ]]; then
+  export JAVA_HOME="C:/Users/stu_l/.jdks/openjdk-21.0.2"
+  echo "  （JAVA_HOME 未设置，已自动使用 $JAVA_HOME）"
+fi
 (cd "$ROOT" && ./gradlew testDebugUnitTest --console=plain -q)
 
 # 3) 提交 + 打 tag

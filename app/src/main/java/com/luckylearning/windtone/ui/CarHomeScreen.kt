@@ -14,15 +14,16 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -64,20 +65,29 @@ import com.luckylearning.windtone.data.model.Song
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * 车机版主页：三栏式横屏布局（替代手机的「单列 + 底部导航」）。
+ * 车机版主页：**两栏**横屏布局（替代手机的「单列 + 底部导航」）。
  *
  * 屏幕基准：2560×1600 中控屏 → hdpi(240) 密度桶 → 约 1707×1067dp 可用空间。
  * 只有 `Prefs.carMode` 打开时才走这里，手机布局完全不受影响。
  *
- *  ┌──────────┬──────────────────────────┬────────────────┐
- *  │ 左侧导航  │ 中间列表                  │ 右侧「正在播放」 │
- *  │  256dp   │      自适应宽度            │     400dp      │
- *  └──────────┴──────────────────────────┴────────────────┘
+ *  ┌──────────┬───────────────────────────────────────────────┐
+ *  │          │                                               │
+ *  │ 左侧导航  │              内容列表（占满剩余宽度）             │
+ *  │  256dp   │                                               │
+ *  │          ├───────────────────────────────────────────────┤
+ *  │          │  常驻播放条：封面 · 歌名/歌手 · ⏮ ⏯ ⏭ · 进度    │
+ *  └──────────┴───────────────────────────────────────────────┘
  *
  * 相比手机布局的三点差异：
  *  1. 底部 NavigationBar 换成左侧纵向导航——横屏下纵向空间充足，侧栏更省纵向像素；
- *  2. 迷你播放条换成常驻的「正在播放」大卡片（大封面 + 大进度条 + 76dp 触控键）；
+ *  2. 迷你播放条换成**底部横贯全宽的大播放条**（大封面 + 76dp 触控键 + 可拖进度条），
+ *     点条上任意位置进入独立的**全屏播放页**；
  *  3. 行高 / 字号 / 图标整体放大一档，保证行车中一眼可辨、一指点中。
+ *
+ * 为什么不做第三栏：原设计右侧挂一个 320~400dp 的「正在播放」大卡片，1707dp 屏上
+ * 中间列表只剩约 1000dp，宽屏优势发挥不出来，曲名长一点就被挤成省略号。
+ * 改成两栏后列表拿到全部剩余宽度，播放控制下沉到底部横条——横条是车机里
+ * 最顺手的位置（离副驾与中控旋钮都近），也不占用列表的横向空间。
  */
 @Composable
 fun CarHomeScreen(
@@ -111,118 +121,136 @@ fun CarHomeScreen(
     var searchOpen by remember { mutableStateOf(false) }
 
     Surface(color = scheme.background, modifier = Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxSize()) {
-            // ------------------------------------------------------ 左侧导航
-            CarNavRail(
-                current = library.view,
-                onSelect = onSelectView,
-                onOpenSettings = onOpenSettings,
-            )
-
-            // ------------------------------------------------------ 中间列表
-            Column(
-                Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .padding(horizontal = 22.dp),
-            ) {
-                CarTopBar(
-                    library = library,
-                    searchOpen = searchOpen,
-                    onToggleSearch = { searchOpen = !searchOpen },
-                    onQuery = onQuery,
-                    onSort = onSort,
-                    onRescan = onRescan,
+        Column(
+            Modifier
+                .fillMaxSize()
+                // 车机是横屏：状态栏在顶部、导航手势条在底部（部分车机在侧边），
+                // 不处理 insets 会让左侧导航第一项与底部播放条被系统条压住。
+                // 与手机端 MainScreen 的处理保持一致。
+                .statusBarsPadding()
+                .navigationBarsPadding(),
+        ) {
+            Row(Modifier.weight(1f).fillMaxWidth()) {
+                // -------------------------------------------------- 左侧导航
+                CarNavRail(
+                    current = library.view,
+                    onSelect = onSelectView,
+                    onOpenSettings = onOpenSettings,
                 )
 
-                Spacer(Modifier.height(14.dp))
+                // -------------------------------------------------- 内容列表
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .padding(horizontal = 22.dp),
+                ) {
+                    CarTopBar(
+                        library = library,
+                        searchOpen = searchOpen,
+                        onToggleSearch = { searchOpen = !searchOpen },
+                        onQuery = onQuery,
+                        onSort = onSort,
+                        onRescan = onRescan,
+                    )
 
-                Box(Modifier.weight(1f)) {
-                    val detail = library.selectedPlaylist != null || library.selectedGroup != null
-                    when {
-                        // 首次进入 / 移除全部目录后：等待用户指定扫描范围
-                        library.scanScope == ScanScope.UNSET && library.songs.isEmpty() ->
-                            CarEmptyState(
-                                title = "还没有音乐",
-                                subtitle = "先扫描全盘，或只导入某个音乐目录。\n同目录的 .lrc / .krc 歌词会被自动识别。",
-                                actions = listOf(
-                                    "扫描全盘" to onFullScan,
-                                    "导入目录" to onImportFolder,
-                                    "扫描范围设置" to onOpenScanScope,
-                                ),
-                                primaryHint = if (granted) null else "首次全盘扫描会申请「读取音频」权限",
+                    Spacer(Modifier.height(14.dp))
+
+                    Box(Modifier.weight(1f)) {
+                        val detail = library.selectedPlaylist != null || library.selectedGroup != null
+                        // 详情态时底部会浮出返回条，列表底部要预留出它的高度，
+                        // 否则最后 2~3 首会被盖住点不到。
+                        val bottomInset = if (detail) 96.dp else 18.dp
+                        when {
+                            // 首次进入 / 移除全部目录后：等待用户指定扫描范围
+                            library.scanScope == ScanScope.UNSET && library.songs.isEmpty() ->
+                                CarEmptyState(
+                                    title = "还没有音乐",
+                                    subtitle = "先扫描全盘，或只导入某个音乐目录。\n同目录的 .lrc / .krc 歌词会被自动识别。",
+                                    actions = listOf(
+                                        "扫描全盘" to onFullScan,
+                                        "导入目录" to onImportFolder,
+                                        "扫描范围设置" to onOpenScanScope,
+                                    ),
+                                    primaryHint = if (granted) null else "首次全盘扫描会申请「读取音频」权限",
+                                )
+
+                            library.scanning && library.songs.isEmpty() ->
+                                CarEmptyState(
+                                    title = "正在扫描…",
+                                    subtitle = library.statusText,
+                                    actions = emptyList(),
+                                )
+
+                            library.selectedPlaylist != null -> CarSongList(
+                                songs = library.playlistSongs,
+                                currentKey = player.current?.stableKey,
+                                isPlaying = player.isPlaying,
+                                emptyTitle = "这个歌单还是空的",
+                                emptySubtitle = "在歌曲行尾点「⋮」即可加入歌单。",
+                                onPlay = { i -> onPlay(library.playlistSongs, i) },
+                                onLongPress = onSongLongPress,
+                                bottomInset = bottomInset,
                             )
 
-                        library.scanning && library.songs.isEmpty() ->
-                            CarEmptyState(
-                                title = "正在扫描…",
-                                subtitle = library.statusText,
-                                actions = emptyList(),
+                            library.selectedGroup != null -> CarSongList(
+                                songs = library.detailSongs,
+                                currentKey = player.current?.stableKey,
+                                isPlaying = player.isPlaying,
+                                emptyTitle = "这里没有歌曲",
+                                emptySubtitle = null,
+                                onPlay = { i -> onPlay(library.detailSongs, i) },
+                                onLongPress = onSongLongPress,
+                                bottomInset = bottomInset,
                             )
 
-                        library.selectedPlaylist != null -> CarSongList(
-                            songs = library.playlistSongs,
-                            currentKey = player.current?.stableKey,
-                            isPlaying = player.isPlaying,
-                            emptyTitle = "这个歌单还是空的",
-                            emptySubtitle = "在歌曲行尾点「⋮」即可加入歌单。",
-                            onPlay = { i -> onPlay(library.playlistSongs, i) },
-                            onLongPress = onSongLongPress,
-                        )
+                            library.view == LibraryView.SONGS -> CarSongList(
+                                songs = library.visible,
+                                currentKey = player.current?.stableKey,
+                                isPlaying = player.isPlaying,
+                                emptyTitle = if (library.songs.isEmpty()) "还没有音乐" else "没有匹配的结果",
+                                emptySubtitle = if (library.songs.isEmpty()) {
+                                    "在左侧切到「扫描范围」选择全盘或指定目录。"
+                                } else {
+                                    "换个关键词试试，支持拼音首字母（如 zjl）。"
+                                },
+                                onPlay = { i -> onPlay(library.visible, i) },
+                                onLongPress = onSongLongPress,
+                                bottomInset = bottomInset,
+                            )
 
-                        library.selectedGroup != null -> CarSongList(
-                            songs = library.detailSongs,
-                            currentKey = player.current?.stableKey,
-                            isPlaying = player.isPlaying,
-                            emptyTitle = "这里没有歌曲",
-                            emptySubtitle = null,
-                            onPlay = { i -> onPlay(library.detailSongs, i) },
-                            onLongPress = onSongLongPress,
-                        )
+                            library.view == LibraryView.PLAYLIST -> CarPlaylistList(
+                                library = library,
+                                onOpen = onOpenPlaylist,
+                                onNewPlaylist = onNewPlaylist,
+                                onImportM3U = onImportM3U,
+                                onPlay = onPlay,
+                                bottomInset = bottomInset,
+                            )
 
-                        library.view == LibraryView.SONGS -> CarSongList(
-                            songs = library.visible,
-                            currentKey = player.current?.stableKey,
-                            isPlaying = player.isPlaying,
-                            emptyTitle = if (library.songs.isEmpty()) "还没有音乐" else "没有匹配的结果",
-                            emptySubtitle = if (library.songs.isEmpty()) {
-                                "在左侧切到「扫描范围」选择全盘或指定目录。"
-                            } else {
-                                "换个关键词试试，支持拼音首字母（如 zjl）。"
-                            },
-                            onPlay = { i -> onPlay(library.visible, i) },
-                            onLongPress = onSongLongPress,
-                        )
+                            else -> CarGroupList(library = library, onOpen = onOpenGroup, bottomInset = bottomInset)
+                        }
 
-                        library.view == LibraryView.PLAYLIST -> CarPlaylistList(
-                            library = library,
-                            onOpen = onOpenPlaylist,
-                            onNewPlaylist = onNewPlaylist,
-                            onImportM3U = onImportM3U,
-                            onPlay = onPlay,
-                        )
-
-                        else -> CarGroupList(library = library, onOpen = onOpenGroup)
-                    }
-
-                    if (detail) {
-                        CarDetailBar(
-                            label = library.selectedPlaylist?.name
-                                ?: library.selectedGroup?.title.orEmpty(),
-                            count = if (library.selectedPlaylist != null) {
-                                library.playlistSongs.size
-                            } else {
-                                library.detailSongs.size
-                            },
-                            onBack = onCloseDetail,
-                            modifier = Modifier.align(Alignment.BottomCenter),
-                        )
+                        if (detail) {
+                            CarDetailBar(
+                                label = library.selectedPlaylist?.name
+                                    ?: library.selectedGroup?.title.orEmpty(),
+                                count = if (library.selectedPlaylist != null) {
+                                    library.playlistSongs.size
+                                } else {
+                                    library.detailSongs.size
+                                },
+                                onBack = onCloseDetail,
+                                modifier = Modifier.align(Alignment.BottomCenter),
+                            )
+                        }
                     }
                 }
             }
 
-            // ------------------------------------------------- 右侧「正在播放」
-            CarNowPlayingPane(
+            // ------------------------------------------------------- 底部播放条
+            // 两栏布局里唯一的播放控制入口：横贯全宽，点任意处进独立全屏播放页。
+            CarNowPlayingBar(
                 player = player,
                 progressFlow = progressFlow,
                 onToggle = onToggle,
@@ -238,9 +266,9 @@ fun CarHomeScreen(
 // ================================================================ 左侧导航
 
 /**
- * 左侧纵向导航：宽度 256dp，条目高 52dp、图标 26dp、文字 17sp。
- * 尺寸全部高于 Google 车机规范的 76dp 触控下限的组成部分（点击热区由条目本身 52dp
- * 加上上下 3dp 间距凑到 58dp，车机为固定视角操作，配合大图标可接受）。
+ * 左侧纵向导航：宽度 256dp，条目高 **64dp**、图标 26dp、文字 17sp。
+ * 高度对齐 Google 车机规范的 76dp 触控下限思路——64dp 条目 + 上下各 4dp 间距 = 72dp 热区，
+ * 与右侧「正在播放」栏的 76dp 按键保持同一标准（原先 56dp 偏小，行车中容易点偏）。
  */
 @Composable
 private fun CarNavRail(
@@ -303,15 +331,21 @@ private fun CarNavItem(
     onClick: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val fg = if (selected) scheme.onPrimary else scheme.onSurfaceVariant
-    Box(Modifier.padding(vertical = 3.dp)) {
+    // 选中态不用 onPrimary：跟随封面取色时 onPrimary 由 seed 派生，
+    // 遇到亮色 seed 会变成接近背景的浅色，导航文字会糊掉。
+    // 这里改用 primaryContainer / onPrimaryContainer —— 两者在浅色与深色方案里
+    // 都是一深一浅成对定义，对比度有保证（M3 容器色的设计意图正是如此）。
+    val container = if (selected) scheme.primaryContainer else scheme.surfaceContainer
+    val fg = if (selected) scheme.onPrimaryContainer else scheme.onSurfaceVariant
+    val shape = MaterialTheme.shapes.medium
+    Box(Modifier.padding(vertical = 4.dp)) {
         Surface(
-            color = if (selected) scheme.primary else scheme.surfaceContainer,
-            shape = RoundedCornerShape(14.dp),
+            color = container,
+            shape = shape,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp)
-                .clip(RoundedCornerShape(14.dp))
+                .height(64.dp)
+                .clip(shape)
                 .clickable(onClick = onClick),
         ) {
             Row(
@@ -397,10 +431,10 @@ private fun CarPillButton(label: String, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     Surface(
         color = scheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(13.dp),
+        shape = MaterialTheme.shapes.medium,
         modifier = Modifier
             .height(52.dp)
-            .clip(RoundedCornerShape(13.dp))
+            .clip(MaterialTheme.shapes.medium)
             .clickable(onClick = onClick),
     ) {
         Box(Modifier.padding(horizontal = 20.dp), contentAlignment = Alignment.Center) {
@@ -435,7 +469,7 @@ private fun CarSearchField(
     val scheme = MaterialTheme.colorScheme
     Surface(
         color = scheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(14.dp),
+        shape = MaterialTheme.shapes.medium,
         modifier = modifier.height(58.dp),
     ) {
         Row(
@@ -493,6 +527,7 @@ private fun CarSongList(
     emptySubtitle: String?,
     onPlay: (Int) -> Unit,
     onLongPress: (Song) -> Unit,
+    bottomInset: Dp = 18.dp,
 ) {
     if (songs.isEmpty()) {
         CarEmptyState(
@@ -513,7 +548,7 @@ private fun CarSongList(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 18.dp),
+        contentPadding = PaddingValues(bottom = bottomInset),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         itemsIndexed(songs, key = { _, s -> s.stableKey }) { index, song ->
@@ -536,6 +571,7 @@ private fun CarSongList(
 private fun CarGroupList(
     library: LibraryUiState,
     onOpen: (GroupInfo) -> Unit,
+    bottomInset: Dp = 18.dp,
 ) {
     if (library.groups.isEmpty()) {
         CarEmptyState(
@@ -547,7 +583,7 @@ private fun CarGroupList(
     }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 18.dp),
+        contentPadding = PaddingValues(bottom = bottomInset),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(library.groups, key = { it.key }) { group ->
@@ -568,6 +604,7 @@ private fun CarPlaylistList(
     onNewPlaylist: () -> Unit,
     onImportM3U: () -> Unit,
     onPlay: (List<Song>, Int) -> Unit,
+    bottomInset: Dp = 18.dp,
 ) {
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -580,7 +617,7 @@ private fun CarPlaylistList(
         }
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 18.dp),
+            contentPadding = PaddingValues(bottom = bottomInset),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             // 两个固定虚拟歌单：最近播放 / 最常播放
@@ -652,10 +689,10 @@ private fun CarCardRow(
     val scheme = MaterialTheme.colorScheme
     Surface(
         color = scheme.surfaceContainerLow,
-        shape = RoundedCornerShape(16.dp),
+        shape = MaterialTheme.shapes.medium,
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(MaterialTheme.shapes.medium)
             .clickable(onClick = onClick),
     ) {
         Row(
@@ -668,7 +705,7 @@ private fun CarCardRow(
                 Box(
                     Modifier
                         .size(64.dp)
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(MaterialTheme.shapes.medium)
                         .background(
                             Brush.linearGradient(
                                 listOf(scheme.primaryContainer, scheme.secondaryContainer)
@@ -704,11 +741,20 @@ private fun CarCardRow(
 // ================================================================ 右侧正在播放
 
 /**
- * 车机常驻「正在播放」栏（400dp）。
- * 无歌曲时显示占位；有歌曲时展示大封面 + 歌名 + 进度 + 76dp 触控键。
+ * 车机底部常驻播放条（横贯全宽）。
+ *
+ * 两栏布局下这里是唯一的播放控制入口：
+ *  - 点条上任意位置（封面 / 空白区 / 歌名区）= 进独立全屏播放页；
+ *  - 左侧三键「⏮ ⏯ ⏭」直接操作，主播放键 68dp，两侧 56dp，均满足车机触控下限；
+ *  - 中部是**可直接拖动**的进度条（[CarProgressBar] 自带「已播 / 总时长」），
+ *    拖动时不会误触发进全屏——进度条自己消费了拖动事件；
+ *  - 最右一个显式的「全屏播放」按钮，避免用户不知道「点条上能进全屏」。
+ *
+ * 为什么不做成第三栏：1707dp 屏上右侧栏 400dp 会吃掉列表近 40% 的宽度，
+ * 长曲名被挤成省略号；横条方案把控制下沉，列表拿到全部剩余宽度。
  */
 @Composable
-private fun CarNowPlayingPane(
+private fun CarNowPlayingBar(
     player: PlayerUiState,
     progressFlow: StateFlow<PlaybackProgress>,
     onToggle: () -> Unit,
@@ -720,139 +766,119 @@ private fun CarNowPlayingPane(
     val scheme = MaterialTheme.colorScheme
     val song = player.current
 
-    Surface(color = scheme.surfaceContainer, modifier = Modifier.width(400.dp).fillMaxHeight()) {
-        Column(
+    Surface(
+        color = scheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
             Modifier
-                .fillMaxSize()
-                .padding(horizontal = 26.dp, vertical = 26.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                "正在播放",
-                fontSize = 15.sp,
-                color = scheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(18.dp))
-
-            if (song == null) {
-                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                    Text(
-                        "还没有在播放的歌曲\n\n在左侧列表点一首歌即可开始",
-                        fontSize = 17.sp,
-                        lineHeight = 26.sp,
-                        color = scheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
+            // ---------------------------------------------------------- 封面
+            Box(
+                Modifier
+                    .size(64.dp)
+                    .clip(MaterialTheme.shapes.small)
+                    .background(scheme.surfaceContainerHighest)
+                    .clickable(onClick = onExpand),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (song != null) {
+                    CoverArt(song = song, size = 64.dp, cornerRadius = 10.dp)
+                } else {
+                    Icon(
+                        imageVector = AppIcons.MusicNote,
+                        contentDescription = null,
+                        tint = scheme.onSurfaceVariant,
+                        modifier = Modifier.size(28.dp),
                     )
                 }
-            } else {
-                // 封面容器：占剩余空间，正方形（widthIn 限制高度不超过宽度）
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(20.dp))
-                            .shadow(16.dp, RoundedCornerShape(20.dp))
-                            .clickable(onClick = onExpand),
-                    ) {
-                        CoverArt(
-                            song = song,
-                            size = 0.dp,
-                            cornerRadius = 20.dp,
-                            fillContainer = true,
-                        )
-                    }
-                }
+            }
 
-                Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.width(16.dp))
+
+            // -------------------------------------------------- 歌名 / 歌手
+            Column(
+                Modifier
+                    .width(240.dp)
+                    .clip(MaterialTheme.shapes.small)
+                    .clickable(onClick = onExpand),
+            ) {
                 Text(
-                    song.title,
-                    fontSize = 23.sp,
+                    text = song?.title ?: "还没有在播放的歌曲",
+                    fontSize = 19.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = scheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
                 )
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(3.dp))
                 Text(
-                    song.artistOrUnknown,
-                    fontSize = 15.sp,
+                    text = song?.artistOrUnknown ?: "在左侧列表点一首歌即可开始",
+                    fontSize = 14.sp,
                     color = scheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
                 )
-
-                Spacer(Modifier.height(18.dp))
-                CarProgressBar(
-                    progressFlow = progressFlow,
-                    fallbackDurationMs = player.durationMs,
-                    onSeek = onSeek,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(20.dp))
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(18.dp),
-                ) {
-                    CarRoundButton(
-                        icon = AppIcons.SkipPrevious,
-                        size = 76.dp,
-                        iconSize = 34.dp,
-                        container = scheme.surfaceContainerHighest,
-                        tint = scheme.onSurface,
-                        contentDescription = "上一首",
-                        onClick = onPrevious,
-                    )
-                    CarRoundButton(
-                        icon = if (player.isPlaying) AppIcons.Pause else Icons.Filled.PlayArrow,
-                        size = 88.dp,
-                        iconSize = 40.dp,
-                        container = scheme.primary,
-                        tint = scheme.onPrimary,
-                        contentDescription = if (player.isPlaying) "暂停" else "播放",
-                        onClick = onToggle,
-                    )
-                    CarRoundButton(
-                        icon = AppIcons.SkipNext,
-                        size = 76.dp,
-                        iconSize = 34.dp,
-                        container = scheme.surfaceContainerHighest,
-                        tint = scheme.onSurface,
-                        contentDescription = "下一首",
-                        onClick = onNext,
-                    )
-                }
-
-                Spacer(Modifier.height(18.dp))
-                Surface(
-                    color = scheme.primary.copy(alpha = 0.12f),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable(onClick = onExpand),
-                ) {
-                    Text(
-                        "点封面进入全屏歌词",
-                        fontSize = 14.sp,
-                        color = scheme.primary,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .padding(vertical = 13.dp)
-                            .fillMaxWidth(),
-                    )
-                }
             }
+
+            Spacer(Modifier.width(22.dp))
+
+            // ------------------------------------------------------ 控制三键
+            CarRoundButton(
+                icon = AppIcons.SkipPrevious,
+                size = 56.dp,
+                iconSize = 28.dp,
+                container = scheme.surfaceContainerHighest,
+                tint = scheme.onSurface,
+                contentDescription = "上一首",
+                onClick = onPrevious,
+            )
+            Spacer(Modifier.width(12.dp))
+            CarRoundButton(
+                icon = if (player.isPlaying) AppIcons.Pause else Icons.Filled.PlayArrow,
+                size = 68.dp,
+                iconSize = 34.dp,
+                container = scheme.primary,
+                tint = scheme.onPrimary,
+                contentDescription = if (player.isPlaying) "暂停" else "播放",
+                onClick = onToggle,
+            )
+            Spacer(Modifier.width(12.dp))
+            CarRoundButton(
+                icon = AppIcons.SkipNext,
+                size = 56.dp,
+                iconSize = 28.dp,
+                container = scheme.surfaceContainerHighest,
+                tint = scheme.onSurface,
+                contentDescription = "下一首",
+                onClick = onNext,
+            )
+
+            Spacer(Modifier.width(22.dp))
+
+            // ------------------------------------------- 进度 + 时间（自带）
+            CarProgressBar(
+                progressFlow = progressFlow,
+                fallbackDurationMs = player.durationMs,
+                onSeek = onSeek,
+                modifier = Modifier.weight(1f),
+            )
+
+            Spacer(Modifier.width(22.dp))
+
+            // 进全屏的显式入口
+            CarRoundButton(
+                icon = AppIcons.Lyrics,
+                size = 56.dp,
+                iconSize = 28.dp,
+                container = scheme.primary.copy(alpha = 0.14f),
+                tint = scheme.primary,
+                contentDescription = "全屏播放",
+                onClick = onExpand,
+            )
         }
     }
 }
@@ -1050,12 +1076,12 @@ private fun CarDetailBar(
     val scheme = MaterialTheme.colorScheme
     Surface(
         color = scheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(16.dp),
+        shape = MaterialTheme.shapes.medium,
         shadowElevation = 8.dp,
         modifier = modifier
             .fillMaxWidth()
             .padding(bottom = 16.dp)
-            .clip(RoundedCornerShape(16.dp)),
+            .clip(MaterialTheme.shapes.medium),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

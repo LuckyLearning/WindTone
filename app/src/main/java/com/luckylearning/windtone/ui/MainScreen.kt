@@ -248,8 +248,9 @@ fun MainScreen(vm: MusicViewModel) {
 
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize()) {
-            // 车载模式：整体换成三栏横屏布局（左导航 / 中列表 / 右正在播放），
+            // 车载模式：整体换成两栏横屏布局（左导航 / 右内容 + 底部常驻播放条），
             // 手机的「单列 + 底部导航」在横屏大屏上会把列表压成窄条，故单独走一套。
+            // 播放页是盖在最上层的独立全屏页（见下方 AnimatedVisibility），不进这两栏。
             if (player.carMode) {
                 CarHomeScreen(
                     library = library,
@@ -432,6 +433,10 @@ fun MainScreen(vm: MusicViewModel) {
                     onCancelSleep = vm::cancelSleep,
                     onSpeed = vm::setSpeed,
                     onExportLyrics = vm::exportLyrics,
+                    // 车载沉浸态常驻歌名行的红心：收藏状态存在 LibraryUiState 里，
+                    // 用 stableKey 做集合查找，和长按菜单保持一致。
+                    isFavorite = player.current?.let { it.stableKey in library.favoriteUris } == true,
+                    onToggleFavorite = vm::toggleFavorite,
                 )
             }
 

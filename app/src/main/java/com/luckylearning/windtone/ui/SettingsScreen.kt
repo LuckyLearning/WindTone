@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -91,6 +93,9 @@ fun SettingsScreen(
             Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
+                // 与库主页 / 播放页保持一致：底部导航栏（手势条）会盖住最后一段内容，
+                // 之前只在顶部做了 statusBarsPadding，滚动到底时「关于」说明会被挡。
+                .navigationBarsPadding()
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -116,7 +121,12 @@ fun SettingsScreen(
                 Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 18.dp),
+                    // 车机横屏可用宽度约 1700dp，若内容铺满整行，开关会被推到离文字
+                    // 一两千像素远的地方，视线要在两端来回跳。这里限宽并水平居中；
+                    // 手机宽度本就小于该上限，约束不生效，行为完全不变。
+                    .widthIn(max = if (player.carMode) 1100.dp else 720.dp)
+                    .align(Alignment.CenterHorizontally)
+                    .padding(horizontal = if (player.carMode) 32.dp else 18.dp),
             ) {
                 // -------------------------------------------------- 外观
                 SectionTitle("外观")

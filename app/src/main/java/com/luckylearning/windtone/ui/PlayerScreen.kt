@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -28,6 +29,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -67,6 +69,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -78,6 +81,16 @@ import kotlin.math.abs
 
 /** 车载模式：歌词态无操作多久后收起顶栏 / 控制键 / 状态行（毫秒） */
 private const val CAR_IMMERSIVE_DELAY_MS = 5_000L
+
+/**
+ * 车载模式播放页的内容限宽。
+ *
+ * 车机屏约 1707dp 宽，但播放页是「竖屏版式」——一个 1707dp 宽的返回键 + 最右设置键
+ * 中间隔着一米多的视线距离，歌词一行也会长到需要扭头读。限宽到 760dp 后，
+ * 版式与手机竖屏基本同构，只是整体更宽松、字号更大。
+ * 760dp 也是 1707dp 屏幕下「不显得空、也不拉太宽」的折中值。
+ */
+private val CAR_CONTENT_MAX_WIDTH = 760.dp
 
 @Composable
 fun PlayerScreen(
@@ -98,6 +111,10 @@ fun PlayerScreen(
     onCancelSleep: () -> Unit,
     onSpeed: (Float) -> Unit,
     onExportLyrics: (android.net.Uri) -> Unit,
+    // 车载沉浸态下常驻歌名行右侧的红心需要自己知道收藏状态并触发切换，
+    // 手机版歌名在顶栏、不带红心，这两个参数在手机模式下不会被用到。
+    isFavorite: Boolean = false,
+    onToggleFavorite: (Song) -> Unit = {},
 ) {
     var showLyrics by remember { mutableStateOf(true) }
     var showOptions by remember { mutableStateOf(false) }
@@ -224,7 +241,11 @@ fun PlayerScreen(
 
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                // 车机：只撑满高度（宽度交给 widthIn 约束，再由 align 居中）；
+                // 手机：撑满整个屏幕，行为与改动前完全一致。
+                .then(
+                    if (state.carMode) Modifier.fillMaxHeight() else Modifier.fillMaxSize()
+                )
                 .statusBarsPadding()
                 .navigationBarsPadding()
                 // 任意触摸（包括点按钮、拖进度条）都算「有操作」，回到完整界面并重新计时。
@@ -242,11 +263,24 @@ fun PlayerScreen(
                         }
                     }
                 }
-                .padding(horizontal = 20.dp)
+                // 车机是 1707dp 宽的横屏，若让手机版竖屏内容直接铺满，控件会被拉到
+                // 屏幕两端：返回键在最左、设置键在最右，视线来回扫一两千像素；
+                // 歌词一行也可能长到 40 字，读完要扭头。这里限宽居中，版式与手机一致。
+                //
+                // 但**沉浸态不限宽**——沉浸态已经把顶栏 / 控制键 / 状态行全收起了，
+                // 只剩歌词 + 歌名行 + 进度条，此时的诉求是「歌词尽量大、尽量宽」，
+                // 再套 760dp 反而把最该利用的宽屏空间浪费掉（效果图 ㊲ 正是全宽歌词）。
+                .widthIn(
+                    max = if (state.carMode && !immersive) CAR_CONTENT_MAX_WIDTH else Dp.Unspecified
+                )
+                .align(Alignment.Center)
+                .padding(horizontal = if (state.carMode) 40.dp else 20.dp)
                 .padding(top = 8.dp, bottom = 12.dp),
         ) {
             // ------------------------------------------------------ 顶栏
-            // 车载沉浸态淡出：不参与测量，歌词区顺势向上占满
+            // 车载沉浸态收起：整条不参与测量，歌词区顺势向上占满。
+            // 注意：歌名 / 歌手不在这里 —— 按效果图 ⑫D，沉浸态只保留
+            // 「歌词 + 歌名行（含红心）+ 进度条 + 时间」，歌名行是常驻的。
             if (!immersive) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { keepAwake(); onClose() }) {
@@ -256,33 +290,9 @@ fun PlayerScreen(
                             tint = scheme.onSurface,
                         )
                     }
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            text = song?.title ?: "未在播放",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Text(
-                            text = song?.artistOrUnknown ?: "",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = scheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                    IconButton(onClick = { keepAwake(); onShowQueue() }) {
-                        Icon(
-                            imageVector = AppIcons.QueueMusic,
-                            contentDescription = "播放队列",
-                            tint = scheme.onSurface,
-                        )
-                    }
+                    // 顶栏中间留空 —— 歌名 / 歌手在顶栏下方的常驻歌名行里
+                    // （效果图 ⑫ 的 p-nowrow），这里不重复显示。
+                    Spacer(Modifier.weight(1f))
                     IconButton(onClick = { keepAwake(); showLyrics = !showLyrics }) {
                         Icon(
                             imageVector = if (showLyrics) AppIcons.Album else AppIcons.Lyrics,
@@ -313,6 +323,7 @@ fun PlayerScreen(
                         scale = state.lyricScale,
                         wordByWord = state.lyricWordByWord,
                         onSeekTo = onSeekTo,
+                        carMode = state.carMode,
                     )
                 } else {
                     CoverPane(
@@ -349,6 +360,45 @@ fun PlayerScreen(
                     }
                 }
             }
+
+            // ------------------------------------------- 歌名行（手机 / 车机通用）
+            // 效果图 ⑫ 的 p-nowrow：歌名 + 歌手 + 红心，贴在进度条正上方。
+            // 手机版与车机版都有这一行 —— 车机沉浸态下顶栏 / 控制键 / 状态行全部收起，
+            // 这一行是唯一保留的歌曲标识（效果图 ⑫D 的红框保留项）；
+            // 手机版顶栏中间是留空的，歌名同样靠这一行显示（早先误把它做成车机专属，
+            // 导致手机版顶栏空一截、歌名消失，已修回）。
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = song?.title ?: "未在播放",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = song?.artistOrUnknown ?: "",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = scheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (song != null) {
+                    IconButton(onClick = { onToggleFavorite(song); keepAwake() }) {
+                        Icon(
+                            imageVector = if (isFavorite) AppIcons.Favorite
+                            else AppIcons.FavoriteBorder,
+                            contentDescription = if (isFavorite) "取消收藏" else "收藏",
+                            tint = if (isFavorite) scheme.primary else scheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(2.dp))
 
             // ------------------------------------------------------ 进度条
             PlaybackSlider(
@@ -427,8 +477,17 @@ fun PlayerScreen(
                             )
                         }
                     }
-                    // 右侧对称空槽：与左槽等宽，把中间三键顶回屏幕正中
-                    Box(Modifier.weight(1f))
+                    // 右侧对称槽：与左槽等宽，把中间三键顶回屏幕正中；
+                    // 槽内放播放队列入口（效果图 ⑫ 的 p-ctl 右槽），与左边的播放模式对称。
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                        IconButton(onClick = { keepAwake(); onShowQueue() }) {
+                            Icon(
+                                imageVector = AppIcons.QueueMusic,
+                                contentDescription = "播放队列",
+                                tint = scheme.onSurface,
+                            )
+                        }
+                    }
                 }
 
                 Spacer(Modifier.height(6.dp))
