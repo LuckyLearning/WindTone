@@ -83,6 +83,37 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_CAR_MODE, false)
         set(value) = sp.edit().putBoolean(KEY_CAR_MODE, value).apply()
 
+    /**
+     * 桌面悬浮歌词（默认关闭）。
+     *
+     * 车机上用：退到桌面 / 导航页时，在最上层挂一条只有文字的单行字幕，
+     * 持续显示当前歌词行。需要 [android.provider.Settings.canDrawOverlays] 授权
+     * 「出现在其他应用上」才能生效——比亚迪 DiLink 车机该权限在
+     * 设置 → 应用 → 权限 → 出现在其他应用上。
+     */
+    var lyricOverlay: Boolean
+        get() = sp.getBoolean(KEY_LYRIC_OVERLAY, false)
+        set(value) = sp.edit().putBoolean(KEY_LYRIC_OVERLAY, value).apply()
+
+    /**
+     * 悬浮歌词的横向偏移（像素，相对屏幕左边缘）。
+     *
+     * 用 `Int.MIN_VALUE` 表示**尚未调整过**，此时服务走默认的「水平铺满居中」。
+     * 一旦用户在调整模式里拖过，就存下一个具体值，下次启动沿用。
+     */
+    var lyricOverlayX: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_X, Int.MIN_VALUE)
+        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_X, value).apply()
+
+    /**
+     * 悬浮歌词的纵向偏移（像素，相对屏幕顶端）。
+     *
+     * `Int.MIN_VALUE` 表示未调整过，走默认的「距顶 48dp 让开状态栏」。
+     */
+    var lyricOverlayY: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_Y, Int.MIN_VALUE)
+        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_Y, value).apply()
+
     // ---------------- 逐曲歌词偏移：key = 歌曲稳定标识 ----------------
 
     fun lyricOffsetFor(songKey: String): Int =
@@ -211,6 +242,9 @@ class Prefs(context: Context) {
         const val KEY_LYRIC_SCALE = "lyric_scale"
         const val KEY_LYRIC_WORD_BY_WORD = "lyric_word_by_word"
         const val KEY_CAR_MODE = "car_mode"
+        const val KEY_LYRIC_OVERLAY = "lyric_overlay"
+        const val KEY_LYRIC_OVERLAY_X = "lyric_overlay_x"
+        const val KEY_LYRIC_OVERLAY_Y = "lyric_overlay_y"
         const val KEY_LYRIC_OFFSET = "lyric_offset"
         const val KEY_SHUFFLE = "shuffle"
         const val KEY_PERM_ASKED = "perm_asked"

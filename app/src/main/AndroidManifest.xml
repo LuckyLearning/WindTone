@@ -18,6 +18,13 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!--
+      桌面悬浮歌词：在车机桌面 / 导航页最上层挂一行歌词字幕。
+      默认关闭，需要用户在系统设置里手动授予「出现在其他应用上」才会生效
+      （比亚迪 DiLink 车机路径：设置 → 应用 → 权限 → 出现在其他应用上）。
+    -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!--
       应用内更新：仅用于向 GitHub Releases 查询新版本、下载 APK。
       除此之外不发任何请求，不采集任何数据（详见 README「权限说明」）。
     -->
@@ -57,6 +64,17 @@
                 <action android:name="androidx.media3.session.MediaSessionService" />
             </intent-filter>
         </service>
+
+        <!--
+          悬浮歌词服务：承载桌面最上层那一行歌词。
+          exported="false"——只由本应用自己起停，不对外暴露。
+          目标车机（比亚迪宋 L DM-i 26 款，DiLink 100 / Android 12）用
+          mediaPlayback 类型即可，无需 Android 14 才有的 specialUse。
+        -->
+        <service
+            android:name=".overlay.LyricOverlayService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
 
         <receiver
             android:name=".widget.MusicWidgetProvider"

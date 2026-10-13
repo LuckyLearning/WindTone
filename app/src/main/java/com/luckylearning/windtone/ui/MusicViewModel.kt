@@ -33,6 +33,7 @@ import com.luckylearning.windtone.data.db.SongCacheEntity
 import com.luckylearning.windtone.data.db.SongOverrideEntity
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.lyrics.Lyrics
+import com.luckylearning.windtone.overlay.LyricOverlayBridge
 import com.luckylearning.windtone.playback.AudioFx
 import com.luckylearning.windtone.playback.PlaybackConnection
 import com.luckylearning.windtone.playback.PlayerHandle
@@ -212,6 +213,10 @@ data class PlayerUiState(
     val lyricWordByWord: Boolean = true,
     /** 车载模式：启动直进播放页 + 播放页 5 秒无操作进入沉浸态 */
     val carMode: Boolean = false,
+    /** 桌面悬浮歌词：车机上退到桌面后仍在最上层显示当前歌词行 */
+    val lyricOverlay: Boolean = false,
+    /** 悬浮歌词是否处于「调整位置」模式（临时可拖动，会话级，不落盘） */
+    val overlayEditing: Boolean = false,
     val playerExpanded: Boolean = false,
     val queueSize: Int = 0,
     // 批次 2 / 3
@@ -293,6 +298,7 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
             lyricScale = prefs.lyricScale,
             lyricWordByWord = prefs.lyricWordByWord,
             carMode = prefs.carMode,
+            lyricOverlay = prefs.lyricOverlay,
             // 车载模式：启动直接进播放页（跳过库主页）
             playerExpanded = prefs.carMode,
             shuffle = prefs.shuffle,
@@ -1400,6 +1406,64 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
         _player.update { it.copy(carMode = enabled) }
     }
 
+    /**
+     * 桌面悬浮歌词开关。
+     *
+     * 落盘 + 更新界面状态 + 同步起停悬浮窗服务。
+     * 若用户开着开关但尚未授权「出现在其他应用上」，`sync` 内部会拒绝启动，
+     * 设置页据此把开关弹回并提示去授权（见 [SettingsScreen]）。
+     */
+    fun setLyricOverlay(enabled: Boolean) {
+        prefs.lyricOverlay = enabled
+        _player.update { it.copy(lyricOverlay = enabled) }
+        LyricOverlayBridge.sync(getApplication(), enabled)
+        if (enabled) {
+            // 刚打开时立刻按当前进度填一行，不必等下一个 tick
+            val c = controller
+            if (c != null) publishLyricToOverlay(c.currentPosition.coerceAtLeast(0L), c.isPlaying)
+        }
+    }
+
+    /** 悬浮歌词是否已获得「出现在其他应用上」权限 */
+    fun canDrawOverlay(): Boolean = LyricOverlayBridge.canDraw(getApplication())
+
+    /**
+     * 进入 / 退出悬浮歌词的「调整位置」模式。
+     *
+     * 进入后窗口临时可拖动（吃触摸），退出后位置落盘并恢复点击穿透。
+     * 只更新会话级状态，不落盘——「是否正在调整」不是需要记住的偏好。
+     */
+    fun setOverlayEditing(editing: Boolean) {
+        LyricOverlayBridge.setEditing(editing)
+        _player.update { it.copy(overlayEditing = editing) }
+    }
+
+    /**
+     * App 前后台切换时同步给悬浮窗。
+     *
+     * 悬浮窗只在 App 退到后台时显示；回到前台时用户看的是播放页歌词，
+     * 桌面字幕属于重复信息，直接隐藏。
+     */
+    fun setAppForeground(foreground: Boolean) {
+        LyricOverlayBridge.setAppForeground(foreground)
+    }
+
+    /**
+     * App 启动时对齐一次悬浮窗服务状态。
+     *
+     * 场景：用户上次开着悬浮歌词，但中途在系统设置里撤了授权，
+     * 或者车机重启后服务被系统清掉——启动时对一次账，避免开关与实际不符。
+     */
+    fun restoreLyricOverlay() {
+        val enabled = prefs.lyricOverlay && canDrawOverlay()
+        if (prefs.lyricOverlay && !enabled) {
+            // 授权已被撤销：开关回置为关，避免界面骗人
+            setLyricOverlay(false)
+        } else {
+            LyricOverlayBridge.sync(getApplication(), enabled)
+        }
+    }
+
     fun setDynamicTheme(enabled: Boolean) {
         prefs.dynamicTheme = enabled
         if (!enabled) _themeSeed.value = null
@@ -1667,6 +1731,7 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
         val mediaId = c.currentMediaItem?.mediaId ?: run {
             flushListen()
             _player.update { it.copy(current = null, lyrics = Lyrics.EMPTY) }
+            LyricOverlayBridge.clear()
             return
         }
         if (!force && currentLyricsSong == mediaId) return
@@ -1758,6 +1823,9 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
 
                     accumulateListening(c.currentMediaItem?.mediaId, playing)
                     if (playing) maybePushLyricToNotification(pos)
+                    // 悬浮歌词：与进度同频驱动，内部按「行文字是否变化」去重，
+                    // 未开启开关时是纯字段比较，开销可忽略。
+                    publishLyricToOverlay(pos, playing)
                 }
                 // 播放中 200ms 刷新，暂停时降到 1s，避免空转耗电
                 delay(if (controller?.isPlaying == true) 200L else 1_000L)
@@ -1785,6 +1853,31 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
             listenAccumMs += delta
             if (listenAccumMs >= 30_000L) flushListen()
         }
+    }
+
+    /**
+     * 把当前歌词行送到桌面悬浮窗。
+     *
+     * 与 [maybePushLyricToNotification] 的区别：
+     *  - 后者只在行号变化时才 `replaceMediaItem`，因为改媒体项是有代价的；
+     *  - 这里**每 tick 都推**，去重放在 [LyricOverlayBridge] 内部按文字比对完成。
+     *    这样暂停 / 恢复播放导致的透明度变化也能立刻反映到悬浮窗上，
+     *    而纯文字不变时不会真的去动 View。
+     *
+     * 无歌词（纯音乐 / 未匹配到）时不推送空行，悬浮窗会保持上次内容或隐藏。
+     */
+    private fun publishLyricToOverlay(positionMs: Long, playing: Boolean) {
+        if (!prefs.lyricOverlay) return
+        val state = _player.value
+        val lyrics = state.lyrics
+        val text = if (!lyrics.isEmpty && lyrics.synced) {
+            val index = lyrics.indexAt(positionMs + state.lyricOffsetMs)
+            lyrics.lines.getOrNull(index)?.text.orEmpty()
+        } else {
+            // 无时间轴歌词（纯文本）没法跟着走，显示标题更有用
+            state.current?.title.orEmpty()
+        }
+        LyricOverlayBridge.publish(text, playing)
     }
 
     /** 把当前歌词行下发到通知栏 / 锁屏（默认关闭，见设置页） */

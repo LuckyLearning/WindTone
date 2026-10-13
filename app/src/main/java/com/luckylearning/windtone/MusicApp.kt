@@ -6,6 +6,8 @@ import android.app.NotificationManager
 import android.os.Build
 import com.luckylearning.windtone.data.CoverRepository
 import com.luckylearning.windtone.data.CrashLog
+import com.luckylearning.windtone.data.Prefs
+import com.luckylearning.windtone.overlay.LyricOverlayBridge
 
 class MusicApp : Application() {
 
@@ -14,6 +16,24 @@ class MusicApp : Application() {
         CrashLog.install(this)
         CoverRepository.clear()
         ensureNotificationChannel()
+        restoreLyricOverlay()
+    }
+
+    /**
+     * 冷启动时对齐悬浮歌词服务。
+     *
+     * 场景：用户上次开着悬浮歌词，但车机重启 / 应用被清后台后服务没了。
+     * 这里只做「开关是开的、授权也在 → 把服务补起来」，
+     * 授权若已被撤销则把开关回置为关，避免界面显示开启却什么都看不到。
+     */
+    private fun restoreLyricOverlay() {
+        val enabled = Prefs(this).lyricOverlay
+        if (!enabled) return
+        if (!LyricOverlayBridge.canDraw(this)) {
+            Prefs(this).lyricOverlay = false
+            return
+        }
+        LyricOverlayBridge.sync(this, true)
     }
 
     private fun ensureNotificationChannel() {

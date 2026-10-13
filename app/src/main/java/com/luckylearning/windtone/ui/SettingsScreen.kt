@@ -30,6 +30,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,6 +42,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import com.luckylearning.windtone.BuildConfig
 import com.luckylearning.windtone.data.UpdateChecker
 
@@ -62,6 +66,9 @@ fun SettingsScreen(
     onClose: () -> Unit,
     onDynamicTheme: (Boolean) -> Unit,
     onCarMode: (Boolean) -> Unit,
+    onLyricOverlay: (Boolean) -> Unit,
+    onOverlayEditing: (Boolean) -> Unit,
+    canDrawOverlay: Boolean,
     onLyricScale: (Float) -> Unit,
     onLyricWordByWord: (Boolean) -> Unit,
     onNotifyLyrics: (Boolean) -> Unit,
@@ -87,6 +94,11 @@ fun SettingsScreen(
         }.getOrNull() ?: "—"
     }
     var showEq by remember { mutableStateOf(false) }
+    // 用户点过悬浮歌词开关但还没授权 → 展开下方授权指引，授权成功返回后自动收起
+    var overlayHintVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(canDrawOverlay) {
+        if (canDrawOverlay) overlayHintVisible = false
+    }
 
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
         Column(
@@ -142,6 +154,66 @@ fun SettingsScreen(
                     checked = player.carMode,
                     onCheckedChange = onCarMode,
                 )
+                SwitchRow(
+                    title = "桌面悬浮歌词",
+                    subtitle = if (canDrawOverlay) {
+                        "退到车机桌面 / 导航页后，在屏幕最上层显示当前歌词行（单行字幕，不挡触摸）"
+                    } else {
+                        "需要先授予「出现在其他应用上」权限，点击开关会自动跳转授权页"
+                    },
+                    checked = player.lyricOverlay,
+                    onCheckedChange = { want ->
+                        if (!want) {
+                            onLyricOverlay(false)
+                        } else if (canDrawOverlay) {
+                            onLyricOverlay(true)
+                        } else {
+                            // 未授权：先跳系统授权页。授权成功返回后由
+                            // MainActivity 的 onResume 重新对账并自动打开开关，
+                            // 这里不预先置 true，免得界面显示开启却什么都看不到。
+                            context.startActivity(
+                                Intent(
+                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    // 带上包名，系统会直接定位到本应用的授权项，
+                                    // 而不是打开应用总列表让用户自己找。
+                                    Uri.parse("package:${context.packageName}"),
+                                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                            )
+                            overlayHintVisible = true
+                        }
+                    },
+                )
+                if (overlayHintVisible && !canDrawOverlay) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                    ) {
+                        Text(
+                            text = "授权路径：设置 → 应用 → 权限 → 出现在其他应用上 → 允许。\n" +
+                                "部分比亚迪车机（DiLink）需要把本应用加入白名单，或先强停一次应用进程，" +
+                                "否则授权后界面可能黑屏或歌词不显示。",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(10.dp),
+                        )
+                    }
+                }
+                // 位置调整：开关打开且已授权时才出现。进入后悬浮窗临时可拖动，
+                // 拖完点「完成」锁回穿透态。
+                if (player.lyricOverlay && canDrawOverlay) {
+                    ActionRow(
+                        title = if (player.overlayEditing) "完成调整" else "调整悬浮歌词位置",
+                        subtitle = if (player.overlayEditing) {
+                            "拖动屏幕上的歌词到合适位置，然后点这里锁定（锁定后点击穿透）"
+                        } else {
+                            "临时解锁，把歌词拖到想要的位置；位置会记住，锁定后不挡触摸"
+                        },
+                        onClick = { onOverlayEditing(!player.overlayEditing) },
+                    )
+                }
 
                 // -------------------------------------------------- 歌词
                 SectionTitle("歌词")

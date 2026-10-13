@@ -180,6 +180,10 @@ fun MainScreen(vm: MusicViewModel) {
     var crashLogText by remember { mutableStateOf<String?>(null) }
     var crashLogCount by remember { mutableStateOf(0) }
 
+    // 「出现在其他应用上」授权状态。用户在系统设置里授权后返回本应用时
+    // 会重新读取一次（见下方 ON_RESUME），设置页据此决定开关能否打开。
+    var canDrawOverlay by remember { mutableStateOf(vm.canDrawOverlay()) }
+
     LaunchedEffect(showSettings) {
         if (showSettings) crashLogCount = vm.crashLogCount()
     }
@@ -215,7 +219,25 @@ fun MainScreen(vm: MusicViewModel) {
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) vm.updateDeepScanFlag()
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    vm.updateDeepScanFlag()
+                    // 悬浮歌词授权是走系统设置页的，回来后必须重新读一次；
+                    // 权限刚被授予时顺手把开关打开并起服务，省掉用户再点一次。
+                    val nowCanDraw = vm.canDrawOverlay()
+                    val changed = nowCanDraw != canDrawOverlay
+                    canDrawOverlay = nowCanDraw
+                    if (changed && nowCanDraw && !player.lyricOverlay) vm.setLyricOverlay(true)
+                }
+
+                // 悬浮窗只在 App 退到后台时显示：回到前台立刻隐藏，
+                // 离开前台再放出来。用 START/STOP 而不是 RESUME/PAUSE，
+                // 因为系统权限弹窗等短暂遮挡不该让字幕闪一下又消失。
+                Lifecycle.Event.ON_START -> vm.setAppForeground(true)
+                Lifecycle.Event.ON_STOP -> vm.setAppForeground(false)
+
+                else -> Unit
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -460,6 +482,9 @@ fun MainScreen(vm: MusicViewModel) {
                     },
                     onDynamicTheme = vm::setDynamicTheme,
                     onCarMode = vm::setCarMode,
+                    onLyricOverlay = vm::setLyricOverlay,
+                    onOverlayEditing = vm::setOverlayEditing,
+                    canDrawOverlay = canDrawOverlay,
                     onLyricScale = vm::setLyricScale,
                     onLyricWordByWord = vm::setLyricWordByWord,
                     onNotifyLyrics = vm::setNotifyLyrics,
