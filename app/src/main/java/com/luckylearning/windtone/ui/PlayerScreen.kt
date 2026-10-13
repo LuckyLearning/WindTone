@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -50,6 +51,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
@@ -58,6 +60,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -81,8 +84,7 @@ fun PlayerScreen(
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     onSeekTo: (Long) -> Unit,
-    onCycleRepeat: () -> Unit,
-    onToggleShuffle: () -> Unit,
+    onCyclePlayMode: () -> Unit,
     onLyricOffset: (Int) -> Unit,
     onResetLyricOffset: () -> Unit,
     onLyricScale: (Float) -> Unit,
@@ -97,6 +99,21 @@ fun PlayerScreen(
     var showOptions by remember { mutableStateOf(false) }
     var showEq by remember { mutableStateOf(false) }
     var showSleep by remember { mutableStateOf(false) }
+
+    // 播放模式（顺序 / 列表循环 / 单曲循环 / 随机）—— 4 个档位共用下面控制区的一个按钮
+    val playMode = playModeOf(state.repeatMode, state.shuffle)
+    var modeHint by remember { mutableStateOf("") }
+    var modeHintVisible by remember { mutableStateOf(false) }
+    var lastPlayMode by remember { mutableStateOf(playMode) }
+    // 切换后浮出模式名 ~1.4s，避免只靠图标让人猜当前是哪一档
+    LaunchedEffect(playMode) {
+        if (playMode == lastPlayMode) return@LaunchedEffect
+        lastPlayMode = playMode
+        modeHint = playMode.label
+        modeHintVisible = true
+        delay(1400)
+        modeHintVisible = false
+    }
 
     val lyricsExportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/plain")
@@ -245,6 +262,30 @@ fun PlayerScreen(
                         onVolumeDelta = onVolumeDelta,
                     )
                 }
+
+                // 播放模式切换提示：浮在封面 / 歌词之上，不参与布局，所以不会顶动其他元素
+                val hintAlpha by animateFloatAsState(
+                    targetValue = if (modeHintVisible) 1f else 0f,
+                    animationSpec = tween(180),
+                    label = "playModeHint",
+                )
+                if (hintAlpha > 0.01f) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = scheme.surfaceContainerHighest.copy(alpha = 0.92f),
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 8.dp)
+                            .alpha(hintAlpha),
+                    ) {
+                        Text(
+                            text = modeHint,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = scheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 7.dp),
+                        )
+                    }
+                }
             }
 
             // ------------------------------------------------------ 进度条
@@ -277,11 +318,13 @@ fun PlayerScreen(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                IconButton(onClick = onToggleShuffle) {
+                // 播放模式（顺序 / 列表循环 / 单曲循环 / 随机）合并在这一个按钮上轮换
+                IconButton(onClick = onCyclePlayMode) {
                     Icon(
-                        imageVector = AppIcons.Shuffle,
-                        contentDescription = if (state.shuffle) "关闭随机播放" else "开启随机播放",
-                        tint = if (state.shuffle) scheme.primary else scheme.onSurfaceVariant,
+                        imageVector = playMode.icon,
+                        contentDescription = "播放模式：${playMode.label}",
+                        tint = if (playMode == PlayMode.SEQUENTIAL) scheme.onSurfaceVariant
+                        else scheme.primary,
                     )
                 }
                 IconButton(onClick = onPrevious) {
@@ -315,15 +358,6 @@ fun PlayerScreen(
                         contentDescription = "下一首",
                         tint = scheme.onSurface,
                         modifier = Modifier.size(34.dp),
-                    )
-                }
-                IconButton(onClick = onCycleRepeat) {
-                    Icon(
-                        imageVector = if (state.repeatMode == Player.REPEAT_MODE_ONE) AppIcons.RepeatOne
-                        else AppIcons.Repeat,
-                        contentDescription = "循环模式",
-                        tint = if (state.repeatMode == Player.REPEAT_MODE_OFF) scheme.onSurfaceVariant
-                        else scheme.primary,
                     )
                 }
             }
@@ -664,3 +698,12 @@ private fun CoverPane(
         }
     }
 }
+
+/** 播放模式 → 图标（顺序 / 列表循环 / 单曲循环 / 随机） */
+private val PlayMode.icon: ImageVector
+    get() = when (this) {
+        PlayMode.SEQUENTIAL -> AppIcons.Sequential
+        PlayMode.REPEAT_ALL -> AppIcons.Repeat
+        PlayMode.REPEAT_ONE -> AppIcons.RepeatOne
+        PlayMode.SHUFFLE -> AppIcons.Shuffle
+    }

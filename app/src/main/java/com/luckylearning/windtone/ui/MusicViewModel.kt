@@ -149,6 +149,55 @@ data class PlayStats(
     val favorites: Int = 0,
 )
 
+/**
+ * 播放模式：把「随机」和「循环」两个开关归一成 4 个用户能理解的档位，
+ * 共用播放页上的同一个按钮轮换，避免各占一个图标位。
+ *
+ * Media3 本身没有单一的“播放模式”，而是 `repeatMode`（关闭 / 列表 / 单曲）
+ * 与 `shuffleModeEnabled` 两个独立开关；这里约定随机优先于循环，
+ * 与主流播放器的表现一致。
+ */
+enum class PlayMode {
+    /** 顺序播放：播完最后一首就停 */
+    SEQUENTIAL,
+
+    /** 列表循环 */
+    REPEAT_ALL,
+
+    /** 单曲循环 */
+    REPEAT_ONE,
+
+    /** 随机播放（乱序 + 列表循环） */
+    SHUFFLE,
+    ;
+
+    /** 点击按钮后切换到下一档 */
+    val next: PlayMode
+        get() = when (this) {
+            SEQUENTIAL -> REPEAT_ALL
+            REPEAT_ALL -> REPEAT_ONE
+            REPEAT_ONE -> SHUFFLE
+            SHUFFLE -> SEQUENTIAL
+        }
+
+    /** 展示名，同时用作切换后的浮动提示文案 */
+    val label: String
+        get() = when (this) {
+            SEQUENTIAL -> "顺序播放"
+            REPEAT_ALL -> "列表循环"
+            REPEAT_ONE -> "单曲循环"
+            SHUFFLE -> "随机播放"
+        }
+}
+
+/** 由 Media3 的 repeatMode + shuffle 两个开关推导当前档位（随机优先） */
+fun playModeOf(repeatMode: Int, shuffle: Boolean): PlayMode = when {
+    shuffle -> PlayMode.SHUFFLE
+    repeatMode == Player.REPEAT_MODE_ONE -> PlayMode.REPEAT_ONE
+    repeatMode == Player.REPEAT_MODE_ALL -> PlayMode.REPEAT_ALL
+    else -> PlayMode.SEQUENTIAL
+}
+
 @Immutable
 data class PlayerUiState(
     val current: Song? = null,
@@ -1183,18 +1232,33 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
         seekTo((base + deltaMs).coerceAtLeast(0L))
     }
 
-    fun cycleRepeatMode() = viewModelScope.launch {
+    /**
+     * 播放模式轮换：顺序 → 列表循环 → 单曲循环 → 随机 → 顺序。
+     *
+     * 合并到播放页的同一个按钮上，不再让「随机」和「循环」各占一个位置。
+     */
+    fun cyclePlayMode() = viewModelScope.launch {
         val c = ensureController() ?: return@launch
-        c.repeatMode = when (c.repeatMode) {
-            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
-            Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
-            else -> Player.REPEAT_MODE_OFF
+        when (playModeOf(c.repeatMode, c.shuffleModeEnabled).next) {
+            // 先关随机再设循环，避免中间态变成「随机 + 循环」
+            PlayMode.SEQUENTIAL -> {
+                c.shuffleModeEnabled = false
+                c.repeatMode = Player.REPEAT_MODE_OFF
+            }
+            PlayMode.REPEAT_ALL -> {
+                c.shuffleModeEnabled = false
+                c.repeatMode = Player.REPEAT_MODE_ALL
+            }
+            PlayMode.REPEAT_ONE -> {
+                c.shuffleModeEnabled = false
+                c.repeatMode = Player.REPEAT_MODE_ONE
+            }
+            // 随机播放 = 乱序 + 列表循环；同理先设好 repeatMode 再开随机
+            PlayMode.SHUFFLE -> {
+                c.repeatMode = Player.REPEAT_MODE_ALL
+                c.shuffleModeEnabled = true
+            }
         }
-    }
-
-    fun toggleShuffle() = viewModelScope.launch {
-        val c = ensureController() ?: return@launch
-        c.shuffleModeEnabled = !c.shuffleModeEnabled
     }
 
     fun playNext(song: Song) {
