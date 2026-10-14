@@ -13,7 +13,7 @@ plugins {
  * CI（.github/workflows/android-release.yml）会从这里读取并与 tag 做一致性校验。
  */
 val appVersionName = "1.0.6"
-val appVersionCode = 8
+val appVersionCode = 9
 
 /**
  * ABI 分包开关。
