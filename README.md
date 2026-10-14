@@ -257,7 +257,8 @@ WindTone/
 │  └─ MusicApp.kt MainActivity.kt
 ├─ app/src/test/                59 个单元测试（歌词解析 / 更新检查 / 播放模式 / Room DAO）
 ├─ scripts/                     图标生成（Python）、本地 SDK 引导（bat）、发版与推送助手
-├─ gradle/ gradlew gradlew.bat  Gradle Wrapper（CI 用）
+├─ gradle/                      Wrapper + **`libs.versions.toml`（依赖与插件版本唯一来源）**
+├─ gradlew gradlew.bat          Gradle Wrapper 启动脚本
 ├─ build.gradle.kts settings.gradle.kts gradle.properties
 └─ .toolchain/                  本地专属：Android SDK + 签名库（已 gitignore）
 ```
@@ -299,6 +300,7 @@ WindTone/
 - Android SDK：platform 35 + build-tools 35.0.0
 - Gradle 8.9（用仓库自带的 wrapper 即可）
 - AGP 8.7.2 / Kotlin 2.0.21 / Compose BOM 2024.10.01 / Media3 1.4.1
+  —— 依赖与插件的版本统一由 `gradle/libs.versions.toml`（Gradle Version Catalog）管控，升级只需改该文件中的一个版本号
 
 ### Android Studio
 直接 `Open` 本仓库根目录即可（仓库根就是 Gradle 工程根）。

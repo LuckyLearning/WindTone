@@ -2,15 +2,20 @@
 import java.util.Properties
 
 plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")
-    id("com.google.devtools.ksp")
+    // 依赖与插件的版本统一由 gradle/libs.versions.toml 管控，见该文件头部说明
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
 }
 
 /**
  * 版本号单一来源：改版本只改这两行即可。
  * CI（.github/workflows/android-release.yml）会从这里读取并与 tag 做一致性校验。
+ *
+ * ⚠️ 这两行**故意不放进 Version Catalog**：`scripts/release.sh` 与
+ * `.github/release-notes` 渲染器都用 `grep` 按这个固定文本格式解析它们，
+ * 搬到 TOML 会连带改掉整条发版链路。第三方依赖版本在 catalog 里，产品版本在这里。
  */
 val appVersionName = "1.0.6"
 val appVersionCode = 9
@@ -212,45 +217,48 @@ androidComponents {
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.appcompat:appcompat:1.7.0")
-    implementation("androidx.activity:activity-compose:1.9.3")
+    // 坐标与版本全部来自 gradle/libs.versions.toml（Version Catalog）。
+    // 这里只写 libs.xxx 访问器 —— 任何字面版本号出现在本块都算破坏约定。
 
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-service:2.8.7")
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.activity.compose)
 
-    implementation("androidx.documentfile:documentfile:1.0.1")
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.service)
 
-    val composeBom = platform("androidx.compose:compose-bom:2024.10.01")
+    implementation(libs.androidx.documentfile)
+
+    // Compose：BOM 对齐全部 compose-* 版本，故下面的库都不带版本号
+    val composeBom = platform(libs.androidx.compose.bom)
     implementation(composeBom)
     androidTestImplementation(composeBom)
 
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-graphics")
-    implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material:material-icons-core")
-    debugImplementation("androidx.compose.ui:ui-tooling")
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.graphics)
+    implementation(libs.androidx.compose.ui.tooling.preview)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.core)
+    debugImplementation(libs.androidx.compose.ui.tooling)
 
-    implementation("androidx.media3:media3-exoplayer:1.4.1")
-    implementation("androidx.media3:media3-session:1.4.1")
-    implementation("androidx.media3:media3-common:1.4.1")
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.session)
+    implementation(libs.androidx.media3.common)
 
-    val roomVersion = "2.6.1"
-    implementation("androidx.room:room-runtime:$roomVersion")
-    implementation("androidx.room:room-ktx:$roomVersion")
-    ksp("androidx.room:room-compiler:$roomVersion")
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
 
-    implementation("com.belerweb:pinyin4j:2.5.1")
+    implementation(libs.pinyin4j)
 
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-    implementation("com.google.guava:guava:33.0.0-android")
+    implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.guava)
 
     // 单元测试（lyrics/ 包为纯 JVM 逻辑，可直接跑）
-    testImplementation("junit:junit:4.13.2")
-    // Robolectric：让 Room（真实 SQLite）能在 JVM 单测里跑，用于迁移与 CASCADE 回归测试
-    testImplementation("org.robolectric:robolectric:4.14.1")
-    testImplementation("androidx.test:core:1.6.1")
+    testImplementation(libs.junit)
+    // Robolectric：让 Room（真实 SQLite）能在 JVM 单测里跑，用于 DAO / CASCADE 回归测试
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
 }
