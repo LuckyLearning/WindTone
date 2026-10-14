@@ -166,4 +166,13 @@ object AppIcons {
             "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z",
         )
     }
+
+    /**
+     * 右箭头：只用在「点开会进入另一个界面」的行上（设置页的子页入口、
+     * 打开弹层/弹窗的行）。就地执行动作或就地展开的行不加，避免满屏箭头。
+     * 规范见 docs/ui/index.html 与 docs/AI开发指南.md。
+     */
+    val ChevronRight: ImageVector by lazy {
+        build("ChevronRight", "M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z")
+    }
 }
