@@ -1,4 +1,8 @@
 package com.luckylearning.windtone.ui
+import com.luckylearning.windtone.state.PlaybackProgress
+import com.luckylearning.windtone.state.PlayMode
+import com.luckylearning.windtone.state.playModeOf
+import com.luckylearning.windtone.state.PlayerUiState
 
 import android.content.Context
 import android.media.AudioManager

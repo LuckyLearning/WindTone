@@ -5,7 +5,7 @@ import android.content.Context
 /**
  * 悬浮歌词的界面侧门面。
  *
- * `MusicViewModel` 与 `MainScreen` 只认这个对象，不直接碰 [LyricOverlayService] ——
+ * `PlayerViewModel` 与 `MainScreen` 只认这个对象，不直接碰 [LyricOverlayService] ——
  * 这样界面层与 Service 之间只有一个极窄的契约，Service 后续要换实现
  * （例如改成 Compose 承载多行）也不必动界面代码。
  */

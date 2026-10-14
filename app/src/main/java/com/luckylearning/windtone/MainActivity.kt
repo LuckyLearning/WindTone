@@ -9,8 +9,11 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.luckylearning.windtone.data.Prefs
+import com.luckylearning.windtone.ui.LibraryViewModel
 import com.luckylearning.windtone.ui.MainScreen
-import com.luckylearning.windtone.ui.MusicViewModel
+import com.luckylearning.windtone.ui.PlayerViewModel
+import com.luckylearning.windtone.ui.SettingsViewModel
+import com.luckylearning.windtone.ui.UpdateViewModel
 import com.luckylearning.windtone.ui.theme.MusicPlayerTheme
 
 class MainActivity : ComponentActivity() {
@@ -32,12 +35,19 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
         setContent {
-            val vm: MusicViewModel = viewModel()
-            val seed by vm.themeSeed.collectAsStateWithLifecycle()
+            // 四个分域 ViewModel：曲库 / 播放 / 更新 / 设置与诊断。
+            // 它们都作用域在同一个 Activity 的 ViewModelStore 上，
+            // 真正的共享状态（播放引擎、曲库索引、消息总线）在 AppContainer 里。
+            val lib: LibraryViewModel = viewModel()
+            val playerVm: PlayerViewModel = viewModel()
+            val updateVm: UpdateViewModel = viewModel()
+            val settings: SettingsViewModel = viewModel()
+
+            val seed by playerVm.themeSeed.collectAsStateWithLifecycle()
             MusicPlayerTheme(
-                seedColor = if (vm.dynamicThemeEnabled()) seed else null,
+                seedColor = if (playerVm.dynamicThemeEnabled()) seed else null,
             ) {
-                MainScreen(vm)
+                MainScreen(lib = lib, playerVm = playerVm, updateVm = updateVm, settings = settings)
             }
         }
     }

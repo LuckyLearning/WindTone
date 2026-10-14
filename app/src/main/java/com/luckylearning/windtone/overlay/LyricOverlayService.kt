@@ -459,7 +459,7 @@ class LyricOverlayService : Service() {
  *
  * 单独抽出来是因为 [LyricOverlayService] 会脱离界面单独启动（例如系统重启后
  * 由 `START_STICKY` 拉起），此时不方便也不应该去 construct 一个完整的
- * `MusicViewModel`，只需要直读一次 SharedPreferences。
+ * `PlayerViewModel`，只需要直读一次 SharedPreferences。
  */
 internal object OverlayPrefs {
     fun enabled(context: Context): Boolean = Prefs(context).lyricOverlay

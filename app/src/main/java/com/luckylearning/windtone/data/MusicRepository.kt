@@ -33,7 +33,16 @@ class MusicRepository(
     private val folderScanner by lazy { FolderScanner(context) }
     private val fileScanner by lazy { FileScanner(context) }
 
-    suspend fun loadLibrary(onProgress: (String) -> Unit = {}): LibraryResult = withContext(Dispatchers.IO) {
+    /**
+     * 扫描并合并三个来源。
+     *
+     * `folderUris` 由调用方传入（目录列表的唯一事实源在 Room 的 `folders` 表，
+     * ViewModel 持有内存副本），仓库层不再直接读偏好。
+     */
+    suspend fun loadLibrary(
+        folderUris: List<String>,
+        onProgress: (String) -> Unit = {},
+    ): LibraryResult = withContext(Dispatchers.IO) {
         val collected = LinkedHashMap<String, Song>()
         var skipped = 0
         val scope = prefs.scanScope
@@ -58,7 +67,7 @@ class MusicRepository(
         val afterMediaStore = collected.size
 
         // 2) SAF 导入的文件夹 —— 两种范围都要扫；「指定目录」模式下是唯一来源
-        val folders = prefs.folderUris
+        val folders = folderUris
         folders.forEachIndexed { index, uriStr ->
             coroutineContext.ensureActive()
             onProgress("正在扫描导入文件夹 ${index + 1}/${folders.size}…")

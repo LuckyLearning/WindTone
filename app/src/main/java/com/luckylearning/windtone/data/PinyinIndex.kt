@@ -24,6 +24,9 @@ object PinyinIndex {
     /** stableKey -> (全拼, 首字母串) */
     private val index = HashMap<String, Pair<String, String>>(1024)
 
+    /** stableKey -> 生成索引时用的原文；原文没变就复用上次的转换结果 */
+    private val textByKey = HashMap<String, String>(1024)
+
     /** 单字 -> 拼音，空串表示「该字没有拼音」（避免重复查询） */
     private val charCache = ConcurrentHashMap<Char, String>(2048)
 
@@ -32,13 +35,28 @@ object PinyinIndex {
 
     private const val CACHE_LIMIT = 8192
 
+    /**
+     * 重建索引（**增量**）。
+     *
+     * 每首歌的索引文本是「标题 + 歌手 + 专辑」；只有这一段文本变化的歌曲才会重新做
+     * 汉字转拼音，其余复用上次结果。重新扫描后绝大多数歌是不变的，这一改动把
+     * 「扫描完成」这一步从全量转换（几千首）降到只处理新增 / 改名的那些。
+     */
     fun build(songs: List<Song>) {
-        val map = HashMap<String, Pair<String, String>>(songs.size * 2)
-        for (song in songs) {
-            val text = "${song.title} ${song.artistOrUnknown} ${song.albumOrUnknown}"
-            map[song.stableKey] = convert(text)
+        val newIndex = HashMap<String, Pair<String, String>>(songs.size * 2)
+        val newText = HashMap<String, String>(songs.size * 2)
+        synchronized(index) {
+            for (song in songs) {
+                val key = song.stableKey
+                val text = "${song.title} ${song.artistOrUnknown} ${song.albumOrUnknown}"
+                newText[key] = text
+                newIndex[key] = if (textByKey[key] == text) index[key] ?: convert(text) else convert(text)
+            }
+            index.clear()
+            index.putAll(newIndex)
+            textByKey.clear()
+            textByKey.putAll(newText)
         }
-        synchronized(index) { index.clear(); index.putAll(map) }
     }
 
     fun full(key: String): String = synchronized(index) { index[key]?.first }.orEmpty()

@@ -1,6 +1,8 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.luckylearning.windtone.ui
+import com.luckylearning.windtone.state.PlaylistInfo
+import com.luckylearning.windtone.state.QueueEntry
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement

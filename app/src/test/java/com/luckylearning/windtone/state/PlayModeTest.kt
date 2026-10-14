@@ -1,4 +1,4 @@
-package com.luckylearning.windtone.ui
+package com.luckylearning.windtone.state
 
 import androidx.media3.common.Player
 import org.junit.Assert.assertEquals

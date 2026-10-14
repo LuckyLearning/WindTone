@@ -31,6 +31,14 @@ data class Song(
     /** 已定位到的同名 .lrc / .txt 歌词文件（若有） */
     val lrcUri: Uri? = null,
     val dateAdded: Long = 0L,
+    /**
+     * 曲库主键（Room `songs.id`）。
+     *
+     * UI 层不关心它——[stableKey] 才是界面查找 / 列表 key / 播放媒体项 id 的依托；
+     * 它只在持久化边界使用（收藏、歌词偏移、队列、封面磁盘缓存文件名的换算）。
+     * 扫描过程中直接构造的 Song 还是 0，落库后由 ViewModel 回填。
+     */
+    val dbId: Long = 0L,
 ) {
     val artistOrUnknown: String
         get() = artist?.takeIf { it.isNotBlank() && it != "<unknown>" } ?: "未知歌手"

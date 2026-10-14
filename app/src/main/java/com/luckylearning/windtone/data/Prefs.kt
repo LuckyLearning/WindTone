@@ -50,30 +50,6 @@ class Prefs(context: Context) {
     private val sp: SharedPreferences =
         context.getSharedPreferences("music_player_prefs", Context.MODE_PRIVATE)
 
-    /**
-     * 已导入的音乐目录（SAF 树 URI）。
-     *
-     * 用换行分隔的字符串存，而不是 `putStringSet`：SharedPreferences 的字符串集合
-     * 底层是 Set，**顺序会丢**（目录列表顺序随机、且不同版本取值不一致），
-     * 用户在范围抽屉里看到的顺序会莫名其妙地变。
-     * 兼容旧数据：新的字符串键为空时回落到旧的 Set 键，并顺手迁移。
-     */
-    var folderUris: List<String>
-        get() {
-            val raw = sp.getString(KEY_FOLDERS_ORDERED, null)
-            if (raw != null) return raw.split('\n').filter { it.isNotBlank() }
-            // 旧版遗留：Set 无序，读出来排序保证稳定的展示顺序
-            val legacy = sp.getStringSet(KEY_FOLDERS, null)?.toList().orEmpty().sorted()
-            if (legacy.isNotEmpty()) sp.edit().putString(KEY_FOLDERS_ORDERED, legacy.joinToString("\n")).apply()
-            return legacy
-        }
-        set(value) {
-            sp.edit()
-                .putString(KEY_FOLDERS_ORDERED, value.joinToString("\n"))
-                .remove(KEY_FOLDERS)
-                .apply()
-        }
-
     /** 扫描范围：默认未选择，装机后不自动扫描 */
     var scanScope: ScanScope
         get() = runCatching { ScanScope.valueOf(sp.getString(KEY_SCAN_SCOPE, ScanScope.UNSET.name)!!) }
@@ -115,14 +91,6 @@ class Prefs(context: Context) {
     var libraryView: String
         get() = sp.getString(KEY_VIEW, "SONGS").orEmpty()
         set(value) = sp.edit().putString(KEY_VIEW, value).apply()
-
-    var lastSongUri: String?
-        get() = sp.getString(KEY_LAST_URI, null)
-        set(value) = sp.edit().putString(KEY_LAST_URI, value).apply()
-
-    var lastPositionMs: Long
-        get() = sp.getLong(KEY_LAST_POS, 0L)
-        set(value) = sp.edit().putLong(KEY_LAST_POS, value).apply()
 
     /** 歌词字号缩放 */
     var lyricScale: Float
@@ -172,48 +140,6 @@ class Prefs(context: Context) {
     var lyricOverlayY: Int
         get() = sp.getInt(KEY_LYRIC_OVERLAY_Y, Int.MIN_VALUE)
         set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_Y, value).apply()
-
-    // ---------------- 逐曲歌词偏移：key = 歌曲稳定标识 ----------------
-
-    fun lyricOffsetFor(songKey: String): Int =
-        sp.getInt(KEY_LYRIC_OFFSET_PREFIX + songKey.hashCode().toString(), 0)
-
-    fun setLyricOffsetFor(songKey: String, offsetMs: Int) {
-        val k = KEY_LYRIC_OFFSET_PREFIX + songKey.hashCode().toString()
-        if (offsetMs == 0) sp.edit().remove(k).apply()
-        else sp.edit().putInt(k, offsetMs.coerceIn(-20_000, 20_000)).apply()
-    }
-
-    /** 旧版全局偏移的迁移读取 */
-    var legacyGlobalLyricOffset: Int
-        get() = sp.getInt(KEY_LYRIC_OFFSET, 0)
-        set(value) = sp.edit().putInt(KEY_LYRIC_OFFSET, value).apply()
-
-    var shuffle: Boolean
-        get() = sp.getBoolean(KEY_SHUFFLE, false)
-        set(value) = sp.edit().putBoolean(KEY_SHUFFLE, value).apply()
-
-    // ---------------- 播放队列持久化（整队列恢复，而非只恢复单曲） ----------------
-
-    /** 队列中歌曲的稳定标识，顺序保存；上限 500 首避免 SharedPreferences 过大 */
-    var queueKeys: List<String>
-        get() = sp.getString(KEY_QUEUE, "").orEmpty()
-            .split('\n').filter { it.isNotBlank() }
-        set(value) = sp.edit().putString(KEY_QUEUE, value.take(500).joinToString("\n")).apply()
-
-    /** 队列中当前播放到第几首 */
-    var queueIndex: Int
-        get() = sp.getInt(KEY_QUEUE_INDEX, 0)
-        set(value) = sp.edit().putInt(KEY_QUEUE_INDEX, value.coerceAtLeast(0)).apply()
-
-    // ---------------- 搜索历史 ----------------
-
-    var searchHistory: List<String>
-        get() = sp.getString(KEY_SEARCH_HISTORY, "").orEmpty()
-            .split('\n').filter { it.isNotBlank() }
-        set(value) = sp.edit()
-            .putString(KEY_SEARCH_HISTORY, value.distinct().take(10).joinToString("\n"))
-            .apply()
 
     // ---------------- 批次 6 新增 ----------------
 
@@ -300,10 +226,23 @@ class Prefs(context: Context) {
         }.getOrDefault(DownloadRoute.AUTO)
         set(value) = sp.edit().putString(KEY_UPDATE_ROUTE, value.name).apply()
 
+    // ================================================================ 变更通知（P4）
+
+    /**
+     * 注册一个「偏好项发生变化」的监听，返回取消函数。
+     *
+     * 需要实时响应的界面用它替代轮询；不需要的继续同步读属性即可（SharedPreferences
+     * 读本身极轻，这里只解决「另一处改了值，这一处要跟着更新」的场景）。
+     */
+    fun onChanged(listener: (key: String) -> Unit): () -> Unit {
+        val l = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key != null) listener(key)
+        }
+        sp.registerOnSharedPreferenceChangeListener(l)
+        return { sp.unregisterOnSharedPreferenceChangeListener(l) }
+    }
+
     private companion object {
-        const val KEY_FOLDERS = "folders"
-        /** 有序的目录列表（换行分隔），优先于旧的 Set 存储 */
-        const val KEY_FOLDERS_ORDERED = "folders_ordered"
         const val KEY_SCAN_SCOPE = "scan_scope"
         const val KEY_SCAN_SCOPE_CHOSEN = "scan_scope_chosen"
         const val KEY_DEEP_SCAN = "deep_scan"
@@ -312,16 +251,12 @@ class Prefs(context: Context) {
         const val DEFAULT_MIN_DURATION_SEC = 60
         const val KEY_SORT = "sort"
         const val KEY_VIEW = "library_view"
-        const val KEY_LAST_URI = "last_uri"
-        const val KEY_LAST_POS = "last_pos"
         const val KEY_LYRIC_SCALE = "lyric_scale"
         const val KEY_LYRIC_WORD_BY_WORD = "lyric_word_by_word"
         const val KEY_CAR_MODE = "car_mode"
         const val KEY_LYRIC_OVERLAY = "lyric_overlay"
         const val KEY_LYRIC_OVERLAY_X = "lyric_overlay_x"
         const val KEY_LYRIC_OVERLAY_Y = "lyric_overlay_y"
-        const val KEY_LYRIC_OFFSET = "lyric_offset"
-        const val KEY_SHUFFLE = "shuffle"
         const val KEY_PERM_ASKED = "perm_asked"
         const val KEY_DYNAMIC_THEME = "dynamic_theme"
         const val KEY_SPEED = "playback_speed"
@@ -331,10 +266,6 @@ class Prefs(context: Context) {
         const val KEY_EQ_BASS = "eq_bass"
         const val KEY_EQ_VIRTUAL = "eq_virtual"
         const val KEY_EQ_LOUDNESS = "eq_loudness"
-        const val KEY_LYRIC_OFFSET_PREFIX = "lyric_offset_song_"
-        const val KEY_QUEUE = "queue_keys"
-        const val KEY_QUEUE_INDEX = "queue_index"
-        const val KEY_SEARCH_HISTORY = "search_history"
         const val KEY_NOTIFY_LYRICS = "notify_lyrics"
         const val KEY_SKIP_SILENCE = "skip_silence"
         const val KEY_AUTO_UPDATE = "auto_check_update"

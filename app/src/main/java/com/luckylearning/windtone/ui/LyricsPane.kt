@@ -1,4 +1,5 @@
 package com.luckylearning.windtone.ui
+import com.luckylearning.windtone.state.PlaybackProgress
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween

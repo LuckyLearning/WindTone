@@ -1,4 +1,10 @@
 package com.luckylearning.windtone.ui
+import com.luckylearning.windtone.state.LibraryView
+import com.luckylearning.windtone.state.GroupInfo
+import com.luckylearning.windtone.state.PlaylistInfo
+import com.luckylearning.windtone.state.LibraryUiState
+import com.luckylearning.windtone.state.PlayerUiState
+import com.luckylearning.windtone.state.VirtualPlaylist
 
 import android.Manifest
 import android.app.Activity
@@ -108,10 +114,17 @@ private val LibraryView.icon: ImageVector
     }
 
 @Composable
-fun MainScreen(vm: MusicViewModel) {
-    val library by vm.library.collectAsStateWithLifecycle()
-    val player by vm.player.collectAsStateWithLifecycle()
-    val update by vm.update.collectAsStateWithLifecycle()
+fun MainScreen(
+    lib: LibraryViewModel,
+    playerVm: PlayerViewModel,
+    updateVm: UpdateViewModel,
+    settings: SettingsViewModel,
+) {
+    val library by lib.library.collectAsStateWithLifecycle()
+    val player by playerVm.player.collectAsStateWithLifecycle()
+    val update by updateVm.update.collectAsStateWithLifecycle()
+    // 诊断页的「数据与存储」快照：null 表示尚未刷新过，进诊断子页时才拉一次
+    val maintenanceReport by settings.maintenanceReport.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -123,9 +136,9 @@ fun MainScreen(vm: MusicViewModel) {
     ) { result ->
         val ok = result[audioPermission] == true || hasPermission(context, audioPermission)
         granted = ok
-        vm.setAudioPermission(ok)
+        lib.setAudioPermission(ok)
         // 只有在用户主动选择「扫描全盘」后才会走到这里
-        if (ok) vm.startFullScan() else vm.notifyScanPermissionDenied()
+        if (ok) lib.startFullScan() else lib.notifyScanPermissionDenied()
     }
 
     // 用户是否正在通过「指定目录」路径挑文件夹（挑完要强制切换到目录范围）
@@ -135,16 +148,15 @@ fun MainScreen(vm: MusicViewModel) {
         ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         if (uri != null) {
-            vm.addFolder(uri, folderScopeOnly = pendingFolderScope)
+            lib.addFolder(uri, folderScopeOnly = pendingFolderScope)
         } else {
-            vm.clearMessage()
-        }
+                }
         pendingFolderScope = false
     }
 
     val m3uImportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
-    ) { uri -> if (uri != null) vm.importM3U(uri) }
+    ) { uri -> if (uri != null) lib.importM3U(uri) }
 
     // M3U 导出：先记录待导出的歌单，等用户选完保存位置再写文件
     var pendingExport by remember { mutableStateOf<PlaylistInfo?>(null) }
@@ -152,19 +164,19 @@ fun MainScreen(vm: MusicViewModel) {
         ActivityResultContracts.CreateDocument("audio/x-mpegurl")
     ) { uri ->
         val pl = pendingExport
-        if (uri != null && pl != null) vm.exportPlaylistM3U(pl, uri)
+        if (uri != null && pl != null) lib.exportPlaylistM3U(pl, uri)
         pendingExport = null
     }
 
     // 崩溃日志导出
     val crashExportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/plain")
-    ) { uri -> if (uri != null) vm.exportCrashLog(uri) }
+    ) { uri -> if (uri != null) settings.exportCrashLog(uri) }
 
     // 删除歌曲：Android 11+ 媒体库文件由系统弹出确认框，结果在这里回来
     val deleteLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
-    ) { result -> vm.onSystemDeleteResult(result.resultCode == Activity.RESULT_OK) }
+    ) { result -> lib.onSystemDeleteResult(result.resultCode == Activity.RESULT_OK) }
 
     // 长按 / 更多操作相关状态
     var actionSong by remember { mutableStateOf<Song?>(null) }
@@ -182,10 +194,10 @@ fun MainScreen(vm: MusicViewModel) {
 
     // 「出现在其他应用上」授权状态。用户在系统设置里授权后返回本应用时
     // 会重新读取一次（见下方 ON_RESUME），设置页据此决定开关能否打开。
-    var canDrawOverlay by remember { mutableStateOf(vm.canDrawOverlay()) }
+    var canDrawOverlay by remember { mutableStateOf(playerVm.canDrawOverlay()) }
 
     LaunchedEffect(showSettings) {
-        if (showSettings) crashLogCount = vm.crashLogCount()
+        if (showSettings) crashLogCount = settings.crashLogCount()
     }
 
     /**
@@ -194,7 +206,7 @@ fun MainScreen(vm: MusicViewModel) {
      */
     val requestFullScan: () -> Unit = {
         if (granted) {
-            vm.startFullScan()
+            lib.startFullScan()
         } else {
             val perms = mutableListOf(audioPermission)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -221,20 +233,20 @@ fun MainScreen(vm: MusicViewModel) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> {
-                    vm.updateDeepScanFlag()
+                    lib.updateDeepScanFlag()
                     // 悬浮歌词授权是走系统设置页的，回来后必须重新读一次；
                     // 权限刚被授予时顺手把开关打开并起服务，省掉用户再点一次。
-                    val nowCanDraw = vm.canDrawOverlay()
+                    val nowCanDraw = playerVm.canDrawOverlay()
                     val changed = nowCanDraw != canDrawOverlay
                     canDrawOverlay = nowCanDraw
-                    if (changed && nowCanDraw && !player.lyricOverlay) vm.setLyricOverlay(true)
+                    if (changed && nowCanDraw && !player.lyricOverlay) playerVm.setLyricOverlay(true)
                 }
 
                 // 悬浮窗只在 App 退到后台时显示：回到前台立刻隐藏，
                 // 离开前台再放出来。用 START/STOP 而不是 RESUME/PAUSE，
                 // 因为系统权限弹窗等短暂遮挡不该让字幕闪一下又消失。
-                Lifecycle.Event.ON_START -> vm.setAppForeground(true)
-                Lifecycle.Event.ON_STOP -> vm.setAppForeground(false)
+                Lifecycle.Event.ON_START -> playerVm.setAppForeground(true)
+                Lifecycle.Event.ON_STOP -> playerVm.setAppForeground(false)
 
                 else -> Unit
             }
@@ -243,10 +255,10 @@ fun MainScreen(vm: MusicViewModel) {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    LaunchedEffect(library.message) {
-        library.message?.takeIf { it.isNotBlank() }?.let {
-            snackbarHostState.showSnackbar(it)
-            vm.clearMessage()
+    // 全局一次性提示（曲库 / 播放 / 维护都会往这条总线上发）
+    LaunchedEffect(lib) {
+        lib.messages.collect { text ->
+            snackbarHostState.showSnackbar(text)
         }
     }
 
@@ -254,15 +266,15 @@ fun MainScreen(vm: MusicViewModel) {
     LaunchedEffect(update.message) {
         update.message?.takeIf { it.isNotBlank() }?.let {
             snackbarHostState.showSnackbar(it)
-            vm.consumeUpdateMessage()
+            updateVm.consumeUpdateMessage()
         }
     }
 
-    BackHandler(enabled = player.playerExpanded) { vm.closePlayer() }
-    BackHandler(enabled = !player.playerExpanded && library.selectedPlaylist != null) { vm.closePlaylist() }
+    BackHandler(enabled = player.playerExpanded) { playerVm.closePlayer() }
+    BackHandler(enabled = !player.playerExpanded && library.selectedPlaylist != null) { lib.closePlaylist() }
     BackHandler(
         enabled = !player.playerExpanded && library.selectedPlaylist == null && library.selectedGroup != null,
-    ) { vm.closeGroup() }
+    ) { lib.closeGroup() }
     BackHandler(enabled = showSettings) {
         showSettings = false
         crashLogText = null
@@ -277,18 +289,18 @@ fun MainScreen(vm: MusicViewModel) {
                 CarHomeScreen(
                     library = library,
                     player = player,
-                    progressFlow = vm.progress,
-                    onSelectView = vm::setView,
+                    progressFlow = playerVm.progress,
+                    onSelectView = lib::setView,
                     onOpenSettings = { showSettings = true },
-                    onQuery = vm::setQuery,
-                    onSort = { vm.setSort(library.sortOrder.next()) },
-                    onRescan = { vm.scan() },
-                    onPlay = vm::playQueue,
+                    onQuery = lib::setQuery,
+                    onSort = { lib.setSort(library.sortOrder.next()) },
+                    onRescan = { lib.scan() },
+                    onPlay = playerVm::playQueue,
                     onSongLongPress = { actionSong = it },
-                    onOpenGroup = vm::openGroup,
-                    onOpenPlaylist = vm::openPlaylist,
+                    onOpenGroup = lib::openGroup,
+                    onOpenPlaylist = lib::openPlaylist,
                     onCloseDetail = {
-                        if (library.selectedPlaylist != null) vm.closePlaylist() else vm.closeGroup()
+                        if (library.selectedPlaylist != null) lib.closePlaylist() else lib.closeGroup()
                     },
                     onNewPlaylist = { newPlaylistDialog = true },
                     onImportM3U = {
@@ -300,13 +312,13 @@ fun MainScreen(vm: MusicViewModel) {
                     onFullScan = requestFullScan,
                     onImportFolder = importFolder,
                     granted = granted,
-                    onToggle = vm::togglePlay,
-                    onNext = vm::next,
-                    onPrevious = vm::previous,
-                    onSeek = vm::seekTo,
-                    onExpandPlayer = vm::openPlayer,
+                    onToggle = playerVm::togglePlay,
+                    onNext = playerVm::next,
+                    onPrevious = playerVm::previous,
+                    onSeek = playerVm::seekTo,
+                    onExpandPlayer = playerVm::openPlayer,
                     isFavorite = player.current?.let { it.stableKey in library.favoriteUris } == true,
-                    onToggleFavorite = { player.current?.let(vm::toggleFavorite) },
+                    onToggleFavorite = { player.current?.let(lib::toggleFavorite) },
                 )
             } else Column(
                 Modifier
@@ -316,21 +328,21 @@ fun MainScreen(vm: MusicViewModel) {
                 LibraryHeader(
                     library = library,
                     granted = granted,
-                    onQuery = vm::setQuery,
-                    onSort = vm::setSort,
+                    onQuery = lib::setQuery,
+                    onSort = lib::setSort,
                     onRequestPermission = { permissionLauncher.launch(arrayOf(audioPermission)) },
                     onImportFolder = importFolder,
-                    onRescan = { vm.scan() },
-                    onRefreshLyrics = vm::refreshLyrics,
-                    onDeepScan = { vm.deepScanSettingsIntent()?.let { context.startActivity(it) } },
+                    onRescan = { lib.scan() },
+                    onRefreshLyrics = lib::refreshLyrics,
+                    onDeepScan = { lib.deepScanSettingsIntent()?.let { context.startActivity(it) } },
                     onImportM3U = {
                         m3uImportLauncher.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "text/plain", "*/*"))
                     },
-                    onSubmitSearch = vm::submitSearch,
-                    onClearSearchHistory = vm::clearSearchHistory,
+                    onSubmitSearch = lib::submitSearch,
+                    onClearSearchHistory = lib::clearSearchHistory,
                     onOpenSettings = { showSettings = true },
                     onCheckUpdate = {
-                        vm.checkUpdate()
+                        updateVm.checkUpdate()
                         snackbarHostState.currentSnackbarData?.dismiss()
                     },
                     onOpenScanScope = { showScanScope = true },
@@ -352,10 +364,11 @@ fun MainScreen(vm: MusicViewModel) {
                         library.scanning && library.songs.isEmpty() -> ScanningState(library.statusText)
 
                         library.selectedPlaylist != null -> PlaylistDetail(
-                            vm = vm,
+                            lib = lib,
+                            playerVm = playerVm,
                             library = library,
                             player = player,
-                            onBack = vm::closePlaylist,
+                            onBack = lib::closePlaylist,
                             onExport = {
                                 pendingExport = library.selectedPlaylist
                                 m3uExportLauncher.launch("${library.selectedPlaylist!!.name}.m3u")
@@ -363,15 +376,15 @@ fun MainScreen(vm: MusicViewModel) {
                         )
 
                         library.selectedGroup != null -> GroupDetail(
-                            vm = vm,
+                            playerVm = playerVm,
                             library = library,
                             player = player,
-                            onBack = vm::closeGroup,
+                            onBack = lib::closeGroup,
                             onSongLongPress = { actionSong = it },
                         )
 
                         library.view == LibraryView.SONGS -> SongsList(
-                            vm = vm,
+                            playerVm = playerVm,
                             library = library,
                             player = player,
                             granted = granted,
@@ -382,7 +395,7 @@ fun MainScreen(vm: MusicViewModel) {
                         )
 
                         library.view == LibraryView.PLAYLIST -> PlaylistListView(
-                            vm = vm,
+                            lib = lib,
                             library = library,
                             onImportM3U = {
                                 m3uImportLauncher.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "text/plain", "*/*"))
@@ -391,7 +404,7 @@ fun MainScreen(vm: MusicViewModel) {
 
                         else -> GroupListView(
                             library = library,
-                            onOpen = vm::openGroup,
+                            onOpen = lib::openGroup,
                             canRemove = library.view == LibraryView.FOLDER,
                             onRemove = { folderRemoveConfirmGroup = it },
                         )
@@ -403,12 +416,12 @@ fun MainScreen(vm: MusicViewModel) {
                 MiniPlayer(
                     song = player.current,
                     isPlaying = player.isPlaying,
-                    progressFlow = vm.progress,
-                    onExpand = vm::openPlayer,
-                    onToggle = vm::togglePlay,
-                    onNext = vm::next,
-                    onPrevious = vm::previous,
-                    onSeek = vm::seekTo,
+                    progressFlow = playerVm.progress,
+                    onExpand = playerVm::openPlayer,
+                    onToggle = playerVm::togglePlay,
+                    onNext = playerVm::next,
+                    onPrevious = playerVm::previous,
+                    onSeek = playerVm::seekTo,
                 )
 
                 // 五视图切换：从顶部一排 FilterChip 改为底部导航栏，单手可达
@@ -418,7 +431,7 @@ fun MainScreen(vm: MusicViewModel) {
                     LibraryView.entries.forEach { view ->
                         NavigationBarItem(
                             selected = library.view == view,
-                            onClick = { vm.setView(view) },
+                            onClick = { lib.setView(view) },
                             icon = {
                                 Icon(
                                     imageVector = view.icon,
@@ -441,30 +454,30 @@ fun MainScreen(vm: MusicViewModel) {
             ) {
                 PlayerScreen(
                     state = player,
-                    progressFlow = vm.progress,
-                    onClose = vm::closePlayer,
-                    onToggle = vm::togglePlay,
-                    onNext = vm::next,
-                    onPrevious = vm::previous,
-                    onSeekTo = vm::seekTo,
-                    onCyclePlayMode = vm::cyclePlayMode,
-                    onLyricOffset = vm::setLyricOffset,
-                    onResetLyricOffset = vm::resetLyricOffset,
-                    onLyricScale = vm::setLyricScale,
-                    onShowQueue = { vm.refreshQueue(); showQueue = true },
-                    onSleep = vm::sleepAfter,
-                    onSleepEndOfSong = vm::sleepEndOfSong,
-                    onCancelSleep = vm::cancelSleep,
-                    onSpeed = vm::setSpeed,
-                    onExportLyrics = vm::exportLyrics,
+                    progressFlow = playerVm.progress,
+                    onClose = playerVm::closePlayer,
+                    onToggle = playerVm::togglePlay,
+                    onNext = playerVm::next,
+                    onPrevious = playerVm::previous,
+                    onSeekTo = playerVm::seekTo,
+                    onCyclePlayMode = playerVm::cyclePlayMode,
+                    onLyricOffset = playerVm::setLyricOffset,
+                    onResetLyricOffset = playerVm::resetLyricOffset,
+                    onLyricScale = playerVm::setLyricScale,
+                    onShowQueue = { playerVm.refreshQueue(); showQueue = true },
+                    onSleep = playerVm::sleepAfter,
+                    onSleepEndOfSong = playerVm::sleepEndOfSong,
+                    onCancelSleep = playerVm::cancelSleep,
+                    onSpeed = playerVm::setSpeed,
+                    onExportLyrics = playerVm::exportLyrics,
                     // 播放设置抽屉 → 音频信息：与长按菜单共用 infoSong + SongInfoSheet
                     onShowAudioInfo = {
-                        player.current?.let { infoSong = it; vm.inspectAudio(it) }
+                        player.current?.let { infoSong = it; playerVm.inspectAudio(it) }
                     },
                     // 车载沉浸态常驻歌名行的红心：收藏状态存在 LibraryUiState 里，
                     // 用 stableKey 做集合查找，和长按菜单保持一致。
                     isFavorite = player.current?.let { it.stableKey in library.favoriteUris } == true,
-                    onToggleFavorite = vm::toggleFavorite,
+                    onToggleFavorite = lib::toggleFavorite,
                 )
             }
 
@@ -477,10 +490,10 @@ fun MainScreen(vm: MusicViewModel) {
                 // 这两个偏好只写 SharedPreferences、不走 StateFlow，直接读方法
                 // 拿到的是一次性快照，开关点了 UI 也不动（用户看起来就是"关不掉"）。
                 // 用本地 state 兜住显示，回调里同步写回。
-                var dynamicThemeOn by remember { mutableStateOf(vm.dynamicThemeEnabled()) }
-                var autoCheckUpdateOn by remember { mutableStateOf(vm.autoCheckUpdateEnabled()) }
+                var dynamicThemeOn by remember { mutableStateOf(playerVm.dynamicThemeEnabled()) }
+                var autoCheckUpdateOn by remember { mutableStateOf(updateVm.autoCheckUpdateEnabled()) }
                 // 下载线路同样只存在 SharedPreferences 里，用本地 state 兜住显示
-                var downloadRouteOn by remember { mutableStateOf(vm.downloadRoute()) }
+                var downloadRouteOn by remember { mutableStateOf(updateVm.downloadRoute()) }
                 SettingsScreen(
                     library = library,
                     player = player,
@@ -493,36 +506,47 @@ fun MainScreen(vm: MusicViewModel) {
                         showSettings = false
                         crashLogText = null
                     },
-                    onDynamicTheme = { dynamicThemeOn = it; vm.setDynamicTheme(it) },
-                    onCarMode = vm::setCarMode,
-                    onLyricOverlay = vm::setLyricOverlay,
-                    onOverlayEditing = vm::setOverlayEditing,
+                    onDynamicTheme = { dynamicThemeOn = it; playerVm.setDynamicTheme(it) },
+                    onCarMode = playerVm::setCarMode,
+                    onLyricOverlay = playerVm::setLyricOverlay,
+                    onOverlayEditing = playerVm::setOverlayEditing,
                     canDrawOverlay = canDrawOverlay,
-                    onLyricScale = vm::setLyricScale,
-                    onLyricWordByWord = vm::setLyricWordByWord,
-                    onNotifyLyrics = vm::setNotifyLyrics,
-                    onSpeed = vm::setSpeed,
-                    onSkipSilence = vm::setSkipSilence,
-                    onClearStats = vm::clearPlayStats,
-                    minSongDurationSec = vm.minSongDurationSec(),
-                    onMinSongDurationSec = vm::setMinSongDurationSec,
-                    onLoadCrashLog = { crashLogText = vm.crashLogText() },
+                    onLyricScale = playerVm::setLyricScale,
+                    onLyricWordByWord = playerVm::setLyricWordByWord,
+                    onNotifyLyrics = playerVm::setNotifyLyrics,
+                    onSpeed = playerVm::setSpeed,
+                    onSkipSilence = playerVm::setSkipSilence,
+                    onClearStats = lib::clearPlayStats,
+                    maintenance = maintenanceReport,
+                    onRefreshMaintenance = settings::refreshMaintenanceReport,
+                    onCleanupMissingSongs = {
+                        settings.cleanupMissingSongs()
+                        lib.reloadAll()
+                    },
+                    onClearCoverCache = settings::clearCoverCache,
+                    onResetUserData = {
+                        settings.resetAllUserData()
+                        lib.reloadAll()
+                    },
+                    minSongDurationSec = lib.minSongDurationSec(),
+                    onMinSongDurationSec = lib::setMinSongDurationSec,
+                    onLoadCrashLog = { crashLogText = settings.crashLogText() },
                     onExportCrashLog = { crashExportLauncher.launch("music-player-crash-${System.currentTimeMillis()}.txt") },
                     onClearCrashLog = {
-                        vm.clearCrashLog()
+                        settings.clearCrashLog()
                         crashLogText = null
-                        crashLogCount = vm.crashLogCount()
+                        crashLogCount = settings.crashLogCount()
                     },
-                    onCheckUpdate = vm::checkUpdate,
-                    onDownloadUpdate = vm::downloadUpdate,
-                    onInstallUpdate = vm::installUpdate,
-                    onGrantInstallPermission = vm::grantInstallPermission,
-                    onAutoCheckUpdate = { autoCheckUpdateOn = it; vm.setAutoCheckUpdate(it) },
+                    onCheckUpdate = updateVm::checkUpdate,
+                    onDownloadUpdate = updateVm::downloadUpdate,
+                    onInstallUpdate = updateVm::installUpdate,
+                    onGrantInstallPermission = updateVm::grantInstallPermission,
+                    onAutoCheckUpdate = { autoCheckUpdateOn = it; updateVm.setAutoCheckUpdate(it) },
                     downloadRoute = downloadRouteOn,
-                    onDownloadRoute = { downloadRouteOn = it; vm.setDownloadRoute(it) },
-                    onOpenReleasePage = vm::openReleasePage,
-                    onIgnoreUpdate = vm::ignoreUpdate,
-                    onDismissUpdateDialog = vm::dismissUpdateDialog,
+                    onDownloadRoute = { downloadRouteOn = it; updateVm.setDownloadRoute(it) },
+                    onOpenReleasePage = updateVm::openReleasePage,
+                    onIgnoreUpdate = updateVm::ignoreUpdate,
+                    onDismissUpdateDialog = updateVm::dismissUpdateDialog,
                 )
             }
 
@@ -543,19 +567,19 @@ fun MainScreen(vm: MusicViewModel) {
                     // 删除文件入口只在文件夹视图开放（歌曲视图的操作以播放管理为主，避免误删）
                     canDelete = library.view == LibraryView.FOLDER,
                     onDismiss = { actionSong = null },
-                    onToggleFavorite = { vm.toggleFavorite(song) },
-                    onPlayNext = { vm.playNext(song) },
+                    onToggleFavorite = { lib.toggleFavorite(song) },
+                    onPlayNext = { playerVm.playNext(song) },
                     onAddToPlaylist = { addToPlaylistSong = song },
                     onEdit = { editSong = song },
                     onViewAlbum = {
-                        vm.setView(LibraryView.ALBUM)
-                        vm.openGroup(GroupInfo(song.albumOrUnknown, song.albumOrUnknown, "", 0, song))
+                        lib.setView(LibraryView.ALBUM)
+                        lib.openGroup(GroupInfo(song.albumOrUnknown, song.albumOrUnknown, "", 0, song))
                     },
                     onViewArtist = {
-                        vm.setView(LibraryView.ARTIST)
-                        vm.openGroup(GroupInfo(song.artistOrUnknown, song.artistOrUnknown, "", 0, song))
+                        lib.setView(LibraryView.ARTIST)
+                        lib.openGroup(GroupInfo(song.artistOrUnknown, song.artistOrUnknown, "", 0, song))
                     },
-                    onAudioInfo = { infoSong = song; vm.inspectAudio(song) },
+                    onAudioInfo = { infoSong = song; playerVm.inspectAudio(song) },
                     onDelete = {
                         actionSong = null
                         deleteConfirmSong = song
@@ -577,7 +601,7 @@ fun MainScreen(vm: MusicViewModel) {
                         TextButton(
                             onClick = {
                                 deleteConfirmSong = null
-                                vm.deleteSong(song) { sender ->
+                                lib.deleteSong(song) { sender ->
                                     deleteLauncher.launch(IntentSenderRequest.Builder(sender).build())
                                 }
                             },
@@ -596,7 +620,7 @@ fun MainScreen(vm: MusicViewModel) {
                     loading = player.audioInfoLoading,
                     onDismiss = {
                         infoSong = null
-                        vm.clearAudioInfo()
+                        playerVm.clearAudioInfo()
                     },
                 )
             }
@@ -606,8 +630,8 @@ fun MainScreen(vm: MusicViewModel) {
                     playlists = library.playlists,
                     song = song,
                     onDismiss = { addToPlaylistSong = null },
-                    onPick = { vm.addToPlaylist(it.id, song) },
-                    onCreateNew = { name -> vm.createPlaylist(name, listOf(song)) },
+                    onPick = { lib.addToPlaylist(it.id, song) },
+                    onCreateNew = { name -> lib.createPlaylist(name, listOf(song)) },
                 )
             }
 
@@ -627,7 +651,7 @@ fun MainScreen(vm: MusicViewModel) {
                         TextButton(
                             onClick = {
                                 folderRemoveConfirmGroup = null
-                                vm.removeFolderScanResults(group)
+                                lib.removeFolderScanResults(group)
                             },
                         ) {
                             Text("移除", color = MaterialTheme.colorScheme.error)
@@ -643,14 +667,14 @@ fun MainScreen(vm: MusicViewModel) {
                 EditSongDialog(
                     song = song,
                     onDismiss = { editSong = null },
-                    onSave = { t, a, al -> vm.updateSongInfo(song, t, a, al) },
+                    onSave = { t, a, al -> lib.updateSongInfo(song, t, a, al) },
                 )
             }
 
             if (newPlaylistDialog) {
                 NewPlaylistDialog(
                     onDismiss = { newPlaylistDialog = false },
-                    onCreate = { vm.createPlaylist(it) },
+                    onCreate = { lib.createPlaylist(it) },
                 )
             }
 
@@ -660,8 +684,8 @@ fun MainScreen(vm: MusicViewModel) {
                     folders = library.folderUris,
                     onFullScan = { showScanScope = false; requestFullScan() },
                     onPickFolder = { showScanScope = false; pickFolderAsScope() },
-                    onUseFolders = { showScanScope = false; vm.setScanScope(ScanScope.FOLDERS) },
-                    onRemoveFolder = { vm.removeFolder(it) },
+                    onUseFolders = { showScanScope = false; lib.setScanScope(ScanScope.FOLDERS) },
+                    onRemoveFolder = { lib.removeFolder(it) },
                     onDismiss = { showScanScope = false },
                 )
             }
@@ -670,9 +694,9 @@ fun MainScreen(vm: MusicViewModel) {
                 QueueSheet(
                     queue = player.queue,
                     onClose = { showQueue = false },
-                    onJump = { vm.jumpToQueue(it) },
-                    onRemove = { vm.removeQueueItem(it) },
-                    onMove = { from, to -> vm.moveQueueItem(from, to) },
+                    onJump = { playerVm.jumpToQueue(it) },
+                    onRemove = { playerVm.removeQueueItem(it) },
+                    onMove = { from, to -> playerVm.moveQueueItem(from, to) },
                 )
             }
         }
@@ -683,7 +707,8 @@ fun MainScreen(vm: MusicViewModel) {
 
 @Composable
 private fun SongsList(
-    vm: MusicViewModel,
+
+    playerVm: PlayerViewModel,
     library: LibraryUiState,
     player: PlayerUiState,
     granted: Boolean,
@@ -747,7 +772,7 @@ private fun SongsList(
                     song = song,
                     isCurrent = player.current?.stableKey == song.stableKey,
                     isPlaying = player.isPlaying,
-                    onClick = { vm.playQueue(library.visible, index) },
+                    onClick = { playerVm.playQueue(library.visible, index) },
                     onLongClick = { onSongLongPress(song) },
                     onMore = { onSongLongPress(song) },
                 )
@@ -904,7 +929,8 @@ private fun GroupListView(
 
 @Composable
 private fun GroupDetail(
-    vm: MusicViewModel,
+
+    playerVm: PlayerViewModel,
     library: LibraryUiState,
     player: PlayerUiState,
     onBack: () -> Unit,
@@ -915,7 +941,7 @@ private fun GroupDetail(
             title = library.selectedGroup?.title.orEmpty(),
             subtitle = "${library.detailSongs.size} 首",
             onBack = onBack,
-            onPlayAll = { vm.playQueue(library.detailSongs, 0) },
+            onPlayAll = { playerVm.playQueue(library.detailSongs, 0) },
         )
         LazyColumn(
             contentPadding = PaddingValues(top = 2.dp, bottom = 16.dp),
@@ -930,7 +956,7 @@ private fun GroupDetail(
                     song = song,
                     isCurrent = player.current?.stableKey == song.stableKey,
                     isPlaying = player.isPlaying,
-                    onClick = { vm.playQueue(library.detailSongs, index) },
+                    onClick = { playerVm.playQueue(library.detailSongs, index) },
                     onLongClick = { onSongLongPress(song) },
                     onMore = { onSongLongPress(song) },
                 )
@@ -943,7 +969,7 @@ private fun GroupDetail(
 
 @Composable
 private fun PlaylistListView(
-    vm: MusicViewModel,
+    lib: LibraryViewModel,
     library: LibraryUiState,
     onImportM3U: () -> Unit,
 ) {
@@ -968,19 +994,19 @@ private fun PlaylistListView(
         item {
             PlaylistRowPlay(
                 info = PlaylistInfo(
-                    MusicViewModel.VIRTUAL_RECENT, "最近播放",
+                    VirtualPlaylist.RECENT, "最近播放",
                     library.extraRecent.size, library.extraRecent.firstOrNull(), virtual = true,
                 ),
-                onOpen = vm::openPlaylist,
+                onOpen = lib::openPlaylist,
             )
         }
         item {
             PlaylistRowPlay(
                 info = PlaylistInfo(
-                    MusicViewModel.VIRTUAL_MOST, "最常播放",
+                    VirtualPlaylist.MOST_PLAYED, "最常播放",
                     library.extraMostPlayed.size, library.extraMostPlayed.firstOrNull(), virtual = true,
                 ),
-                onOpen = vm::openPlaylist,
+                onOpen = lib::openPlaylist,
             )
         }
         if (library.playlists.isEmpty()) {
@@ -989,7 +1015,7 @@ private fun PlaylistListView(
             }
         }
         items(library.playlists, key = { it.id }, contentType = { "playlist" }) { pl ->
-            PlaylistRowPlay(info = pl, onOpen = vm::openPlaylist)
+            PlaylistRowPlay(info = pl, onOpen = lib::openPlaylist)
         }
     }
 }
@@ -1052,7 +1078,9 @@ private fun PlaylistRowPlay(
 
 @Composable
 private fun PlaylistDetail(
-    vm: MusicViewModel,
+
+    lib: LibraryViewModel,
+    playerVm: PlayerViewModel,
     library: LibraryUiState,
     player: PlayerUiState,
     onBack: () -> Unit,
@@ -1076,7 +1104,7 @@ private fun PlaylistDetail(
                 expanded = menuOpen,
                 onDismiss = { menuOpen = false },
                 onRename = { renameDialog = true },
-                onDelete = { vm.deletePlaylist(info.id) },
+                onDelete = { lib.deletePlaylist(info.id) },
                 onExport = onExport,
             )
         }
@@ -1087,7 +1115,7 @@ private fun PlaylistDetail(
             title = info.name,
             subtitle = "${library.playlistSongs.size} 首",
             onBack = onBack,
-            onPlayAll = { vm.playQueue(library.playlistSongs, 0) },
+            onPlayAll = { playerVm.playQueue(library.playlistSongs, 0) },
             playAllEnabled = library.playlistSongs.isNotEmpty(),
             trailing = if (info.virtual) null else menuSlot,
         )
@@ -1110,8 +1138,8 @@ private fun PlaylistDetail(
                         song = song,
                         isCurrent = player.current?.stableKey == song.stableKey,
                         isPlaying = player.isPlaying,
-                        onClick = { vm.playQueue(library.playlistSongs, index) },
-                        onRemove = if (removable) ({ vm.removeFromPlaylist(info.id, song) }) else null,
+                        onClick = { playerVm.playQueue(library.playlistSongs, index) },
+                        onRemove = if (removable) ({ lib.removeFromPlaylist(info.id, song) }) else null,
                     )
                 }
             }
@@ -1133,7 +1161,7 @@ private fun PlaylistDetail(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        if (renameText.isNotBlank()) vm.renamePlaylist(info.id, renameText)
+                        if (renameText.isNotBlank()) lib.renamePlaylist(info.id, renameText)
                         renameDialog = false
                     },
                     enabled = renameText.isNotBlank(),

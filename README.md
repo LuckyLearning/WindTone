@@ -57,7 +57,7 @@ Android 原生本地音乐播放器。**数据全部留在本机**，只在你�
 - **文件夹视图支持删除歌曲文件**：`⋮` →「删除歌曲文件」，媒体库文件走系统确认框，SAF 目录与深度扫描路径直接删，同名 `.lrc` 一并删除
 - **歌单系统**：新建 / 重命名 / 删除 / 加入 / 移除 / 播放全部；固定入口「最近播放」「最常播放」
 - **收藏**（行尾 `⋮` 或长按歌曲 → 底部操作抽屉）
-- **扫描缓存**：歌曲索引落 Room，冷启动先出缓存秒开，再后台按已选范围刷新
+- **曲库持久化**：扫描结果落 Room 曲库，冷启动先出列表秒开，再后台按已选范围增量刷新；文件暂时不可见只标记软删，收藏与歌单不受影响
 - **骨架屏占位**：扫描期间显示 8 行微光占位条，而不是一个转圈
 - **播放统计**：播放次数、累计收听时长、听过的歌曲数（设置页可清空，收藏保留）
 - **音频信息**：`⋮` →「音频信息」，读容器 / 编码 / 码率 / 采样率 / 声道 / 位深 / 时长
@@ -247,13 +247,15 @@ WindTone/
 │  ├─ android-ci.yml            主干/PR：单测 + debug 构建校验
 │  └─ android-release.yml       打 tag：单测 + 签名 Release + 创建 Release
 ├─ app/src/main/java/com/luckylearning/windtone/
-│  ├─ data/                     数据层（扫描 / 数据库 / 封面 / 歌词匹配 / 更新检查 / 删除）
+│  ├─ AppContainer.kt           依赖装配（手写服务定位器）
+│  ├─ data/                     数据层（扫描 / 数据库 / 封面 / 歌词匹配 / 更新 / 维护 / 删除）
 │  ├─ lyrics/                   歌词引擎（纯 JVM，可直接单测）
-│  ├─ playback/                 播放服务与音效
-│  ├─ ui/                       Compose 界面与状态层
-│  ├─ widget/ tile/             桌面小部件与快捷磁贴
+│  ├─ playback/                 播放引擎、播放服务与音效
+│  ├─ state/                    界面状态模型（四个域共用）
+│  ├─ ui/                       Compose 界面与四个分域 ViewModel
+│  ├─ overlay/ widget/ tile/    悬浮歌词 / 桌面小部件 / 快捷磁贴
 │  └─ MusicApp.kt MainActivity.kt
-├─ app/src/test/                28 个单元测试（LRC / 逐字 / 编码嗅探）
+├─ app/src/test/                59 个单元测试（歌词解析 / 更新检查 / 播放模式 / Room DAO）
 ├─ scripts/                     图标生成（Python）、本地 SDK 引导（bat）、发版与推送助手
 ├─ gradle/ gradlew gradlew.bat  Gradle Wrapper（CI 用）
 ├─ build.gradle.kts settings.gradle.kts gradle.properties
@@ -268,7 +270,7 @@ WindTone/
 | 内嵌歌词 | `lyrics/EmbeddedTags.kt` | ID3v2(SYLT/USLT/TXXX)、FLAC Vorbis Comment、Ogg/Opus、MP4 ©lyr |
 | 随机访问读取 | `lyrics/BinaryReader.kt` | 基于 FileChannel，可直接读 `content://` 描述符 |
 | 音乐库聚合 | `data/MusicRepository.kt` | 按扫描范围分流、三来源合并去重 |
-| 数据库 | `data/db/MusicDb.kt` | Room：扫描缓存 / 歌单 / 播放统计 / 信息覆盖，含 `Migration(1,2)` |
+| 数据库 | `data/db/MusicDb.kt` | Room：曲库 / 目录 / 每曲状态 / 歌单 / 队列 / 播放态 / 搜索历史（8 表） |
 | 音频技术信息 | `data/AudioInspector.kt` | `MediaExtractor` 读轨道级参数 |
 | 文件删除 | `data/SongDeleter.kt` | 媒体库 / SAF / 文件路径三套删除通道 |
 | **应用内更新** | `data/UpdateChecker.kt` | GitHub Releases 查询、APK 下载校验、FileProvider 安装 |
@@ -276,10 +278,13 @@ WindTone/
 | 播放服务 | `playback/PlaybackService.kt` | Media3 MediaSessionService |
 | 播放桥接 | `playback/PlaybackConnection.kt` | MediaController 连接与 MediaItem 构造 |
 | 播放句柄 | `playback/PlayerHandle.kt` | ExoPlayer 专有开关（跳过静音）的进程内通道 |
+| **播放引擎** | `playback/PlaybackEngine.kt` | 应用级单例：队列持久化与恢复、播放统计、歌词装载、全部播放动作 |
 | 音效 | `playback/AudioFx.kt` | 均衡器 / 低音 / 环绕 / 响度增强 |
 | 睡眠定时 | `playback/SleepTimer.kt` | 倒计时 / 播完当前曲 |
-| 状态管理 | `ui/MusicViewModel.kt` | 库状态 + 播放状态 + 歌词状态 + 统计 + 更新状态 |
-| 进度与渲染分离 | `ui/MusicViewModel.kt` · `PlaybackProgress` | 播放进度走独立 `StateFlow`，再以 `State<T>` 下沉到叶子组件读取；主界面不再按秒重组 |
+| 依赖装配 | `AppContainer.kt` | 手写服务定位器：各层单例集中在此 |
+| 共享状态 | `data/SongIndex.kt` · `data/MessageBus.kt` | uri↔数据库主键映射 + 跨域一次性提示 |
+| 状态管理 | `ui/LibraryViewModel.kt` · `PlayerViewModel.kt` · `UpdateViewModel.kt` · `SettingsViewModel.kt` | 按曲库 / 播放 / 更新 / 维护四个域分家 |
+| 进度与渲染分离 | `PlaybackEngine` · `PlaybackProgress` | 播放进度走独立 `StateFlow`，再以 `State<T>` 下沉到叶子组件读取；主界面不再按秒重组 |
 | 通用组件 | `ui/Common.kt` | 卡片化列表项 / 迷你播放条 / 骨架屏 / Canvas 唱片插画空态 |
 | 主题 | `ui/theme/Theme.kt` | 封面取色派生 M3 全量色板、统一 5 档圆角 `AppShapes` |
 | 设置页 | `ui/SettingsScreen.kt` | 统一设置 / 统计 / 崩溃日志 / **更新** / 关于 |

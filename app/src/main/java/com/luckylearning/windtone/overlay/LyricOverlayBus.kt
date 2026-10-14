@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.update
  *
  * 为什么要有这一层：
  * 悬浮窗服务在**独立于界面的生命周期**里活着——用户退到车机桌面 / 导航页时，
- * Activity 早就 `onStop` 了，`MusicViewModel` 的 `viewModelScope` 也不一定还在跑。
+ * Activity 早就 `onStop` 了，`PlayerViewModel` 的 `viewModelScope` 也不一定还在跑。
  * 而悬浮窗要显示的是「当前歌词行」，这个信息只有 ViewModel 侧（订阅了播放进度和
  * 歌词数据）最清楚。所以约定：**ViewModel 单向写入，服务单向读取**，
  * 彼此不持有引用，谁先退出都不会把对方拖死。

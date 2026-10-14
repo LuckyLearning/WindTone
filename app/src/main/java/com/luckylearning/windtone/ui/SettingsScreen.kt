@@ -1,4 +1,7 @@
 package com.luckylearning.windtone.ui
+import com.luckylearning.windtone.state.LibraryUiState
+import com.luckylearning.windtone.state.PlayerUiState
+import com.luckylearning.windtone.state.UpdateUiState
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
@@ -52,6 +55,7 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import com.luckylearning.windtone.BuildConfig
+import com.luckylearning.windtone.data.DataMaintenance
 import com.luckylearning.windtone.data.DownloadRoute
 import com.luckylearning.windtone.data.UpdateChecker
 
@@ -98,6 +102,11 @@ fun SettingsScreen(
     onSpeed: (Float) -> Unit,
     onSkipSilence: (Boolean) -> Unit,
     onClearStats: () -> Unit,
+    maintenance: DataMaintenance.Report?,
+    onRefreshMaintenance: () -> Unit,
+    onCleanupMissingSongs: () -> Unit,
+    onClearCoverCache: () -> Unit,
+    onResetUserData: () -> Unit,
     minSongDurationSec: Int,
     onMinSongDurationSec: (Int) -> Unit,
     onLoadCrashLog: () -> Unit,
@@ -137,6 +146,9 @@ fun SettingsScreen(
     // 三处不可撤销的操作统一走二次确认
     var showClearStatsConfirm by remember { mutableStateOf(false) }
     var showClearCrashConfirm by remember { mutableStateOf(false) }
+    // 数据维护（诊断子页）：清理失效歌曲 / 清空全部用户数据
+    var showCleanupConfirm by remember { mutableStateOf(false) }
+    var showResetDataConfirm by remember { mutableStateOf(false) }
 
     // 子页里按返回键先回主页面（本处理器在子页才启用，主页面时交给外层关闭设置页）
     BackHandler(enabled = page != SettingsPage.ROOT) { page = SettingsPage.ROOT }
@@ -374,6 +386,40 @@ fun SettingsScreen(
                         Text("清空播放统计（保留收藏）")
                     }
 
+                    // ------------------------------------------------ 数据与存储
+                    // 进入本页时刷新一次自检：曲库 / 目录 / 歌单 / 缓存的实时占用。
+                    LaunchedEffect(Unit) { onRefreshMaintenance() }
+                    SectionTitle("数据与存储")
+                    StatCard(
+                        rows = listOf(
+                            "曲库歌曲" to if (maintenance == null) "—" else "${maintenance.songs} 首",
+                            "暂不可见" to if (maintenance == null) "—" else "${maintenance.missing} 首",
+                            "导入目录" to if (maintenance == null) "—" else "${maintenance.folders} 个",
+                            "歌单" to if (maintenance == null) "—" else "${maintenance.playlists} 个",
+                            "封面缓存" to (maintenance?.coverSizeText ?: "—"),
+                            "数据库占用" to (maintenance?.dbSizeText ?: "—"),
+                        )
+                    )
+                    ActionRow(
+                        title = "清理失效歌曲",
+                        subtitle = if ((maintenance?.missing ?: 0) > 0) {
+                            "${maintenance!!.missing} 首歌曲的文件已不在本机，清理后其收藏与统计一并移除"
+                        } else {
+                            "文件不在本机的歌曲会保留记录（文件回来后自动恢复）"
+                        },
+                        onClick = { showCleanupConfirm = true },
+                    )
+                    ActionRow(
+                        title = "清空封面缓存",
+                        subtitle = "只删掉本地可重新生成的封面图，不影响收藏与歌单",
+                        onClick = onClearCoverCache,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    // 不可撤销 → 二次确认
+                    TextButton(onClick = { showResetDataConfirm = true }) {
+                        Text("清空全部用户数据（保留曲库）")
+                    }
+
                     // ------------------------------------------------ 崩溃日志
                     SectionTitle("崩溃日志")
                     ActionRow(
@@ -552,6 +598,56 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showClearCrashConfirm = false }) { Text("取消") }
+            },
+        )
+    }
+
+    if (showCleanupConfirm) {
+        AlertDialog(
+            onDismissRequest = { showCleanupConfirm = false },
+            title = { Text("清理失效歌曲？") },
+            text = {
+                Text(
+                    "会删除「文件已不在本机」的歌曲记录，这些歌的收藏、播放统计、歌词偏移与歌单条目会随之消失。" +
+                        "如果文件只是暂时不可用（外置存储未挂载、权限被撤销），先不要清理。该操作不可撤销。",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onCleanupMissingSongs()
+                        showCleanupConfirm = false
+                    },
+                ) { Text("清理") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCleanupConfirm = false }) { Text("取消") }
+            },
+        )
+    }
+
+    if (showResetDataConfirm) {
+        AlertDialog(
+            onDismissRequest = { showResetDataConfirm = false },
+            title = { Text("清空全部用户数据？") },
+            text = {
+                Text(
+                    "会清空收藏、播放统计、逐曲歌词偏移、本地标签编辑、全部歌单、播放队列与搜索历史。" +
+                        "曲库与已导入的目录会保留，歌单一旦清空无法恢复。该操作不可撤销。",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onResetUserData()
+                        showResetDataConfirm = false
+                    },
+                ) { Text("清空") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDataConfirm = false }) { Text("取消") }
             },
         )
     }

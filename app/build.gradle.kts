@@ -30,6 +30,17 @@ val appVersionCode = 9
 val abiSplitsEnabled = (findProperty("abiSplits") as String?)?.toBoolean() == true
 
 /**
+ * Room schema 导出目录。
+ *
+ * 手写 Migration 的 DDL 必须与 Room 运行时期望的结构**完全一致**，
+ * `app/schemas/<数据库类>/<版本>.json` 里存着权威的建表语句与索引。
+ * 改表时对照它写迁移，能避免"装到真机上才报 schema 不匹配"。schema 文件入库。
+ */
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
+/**
  * 签名配置：本地与 CI 使用**同一套**密钥（.toolchain/keystore/windtone.jks）。
  * 密钥本体不进仓库（已 gitignore），CI 侧以 Secrets 注入同样的值。
  *
@@ -165,6 +176,8 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+        // Room 迁移/DAO 回归测试需要真实 SQLite 与应用 Context，走 Robolectric
+        unitTests.isIncludeAndroidResources = true
         unitTests.all { it.useJUnit() }
     }
 }
@@ -237,4 +250,7 @@ dependencies {
 
     // 单元测试（lyrics/ 包为纯 JVM 逻辑，可直接跑）
     testImplementation("junit:junit:4.13.2")
+    // Robolectric：让 Room（真实 SQLite）能在 JVM 单测里跑，用于迁移与 CASCADE 回归测试
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test:core:1.6.1")
 }

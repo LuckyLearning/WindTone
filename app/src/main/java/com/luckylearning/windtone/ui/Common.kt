@@ -1,4 +1,5 @@
 package com.luckylearning.windtone.ui
+import com.luckylearning.windtone.state.PlaybackProgress
 
 import android.graphics.Bitmap
 import androidx.compose.animation.core.LinearEasing

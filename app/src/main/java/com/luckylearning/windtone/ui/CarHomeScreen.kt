@@ -1,4 +1,11 @@
 package com.luckylearning.windtone.ui
+import com.luckylearning.windtone.state.LibraryView
+import com.luckylearning.windtone.state.GroupInfo
+import com.luckylearning.windtone.state.PlaylistInfo
+import com.luckylearning.windtone.state.LibraryUiState
+import com.luckylearning.windtone.state.PlaybackProgress
+import com.luckylearning.windtone.state.PlayerUiState
+import com.luckylearning.windtone.state.VirtualPlaylist
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -634,7 +641,7 @@ private fun CarPlaylistList(
                     onClick = {
                         onOpen(
                             PlaylistInfo(
-                                MusicViewModel.VIRTUAL_RECENT,
+                                VirtualPlaylist.RECENT,
                                 "最近播放",
                                 library.extraRecent.size,
                                 library.extraRecent.firstOrNull(),
@@ -652,7 +659,7 @@ private fun CarPlaylistList(
                     onClick = {
                         onOpen(
                             PlaylistInfo(
-                                MusicViewModel.VIRTUAL_MOST,
+                                VirtualPlaylist.MOST_PLAYED,
                                 "最常播放",
                                 library.extraMostPlayed.size,
                                 library.extraMostPlayed.firstOrNull(),

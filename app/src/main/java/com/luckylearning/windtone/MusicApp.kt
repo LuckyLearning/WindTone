@@ -11,10 +11,13 @@ import com.luckylearning.windtone.overlay.LyricOverlayBridge
 
 class MusicApp : Application() {
 
+    /** 应用级依赖容器；ViewModel 与各仓库都从这里取依赖 */
+    val container: AppContainer by lazy { AppContainer(this) }
+
     override fun onCreate() {
         super.onCreate()
         CrashLog.install(this)
-        CoverRepository.clear()
+        CoverRepository.attach(this)
         ensureNotificationChannel()
         restoreLyricOverlay()
     }
