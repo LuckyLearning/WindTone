@@ -469,6 +469,8 @@ fun SettingsScreen(
                         "版本" to version,
                         "包名" to context.packageName,
                         "最低系统" to "Android 7.0（API 24）",
+                        // v1.0.7 起 Release 按 ABI 分包，这里显示本机架构，方便对照下载
+                        "CPU 架构" to UpdateChecker.primaryAbiLabel().ifBlank { "—" },
                         "更新来源" to "${BuildConfig.GITHUB_OWNER}/${BuildConfig.GITHUB_REPO}",
                     )
                 )

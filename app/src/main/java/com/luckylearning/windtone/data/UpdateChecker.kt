@@ -27,17 +27,25 @@ data class UpdateInfo(
     val title: String,
     /** Release 说明（已做轻量 Markdown 清理，可直接展示） */
     val notes: String,
-    /** APK 下载直链 */
+    /** APK 下载直链（首选：本机 ABI 对应的那个包） */
     val apkUrl: String,
-    /** APK 文件名，如 WindTone-v1.0.0.apk */
+    /** APK 文件名，如 WindTone-v1.0.0-arm64-v8a.apk */
     val apkName: String,
+    /**
+     * 同一版本其它候选包的直链，按「本机首选 ABI → 其它 ABI → universal → 历史单包命名」排序。
+     * 首选 [apkUrl] 失败时依次尝试——Release 里的资产可能不齐全（例如只出了 universal）。
+     */
+    val apkUrlFallbacks: List<String> = emptyList(),
     /** APK 字节数，0 表示未知 */
     val apkSizeBytes: Long,
     /** 发布时间（原始 ISO 字符串） */
     val publishedAt: String,
     /** Release 网页地址 */
     val releaseUrl: String,
-)
+) {
+    /** 去重后的全部候选直链（首选在最前） */
+    val allApkUrls: List<String> get() = (listOf(apkUrl) + apkUrlFallbacks).distinct()
+}
 
 sealed interface UpdateCheckResult {
     /** 有新版本可用 */
@@ -101,6 +109,48 @@ object UpdateChecker {
 
     /** 当前安装版本（来自 BuildConfig，与 build.gradle.kts 的 versionName 一致） */
     val currentVersion: String get() = BuildConfig.VERSION_NAME
+
+    // ------------------------------------------------------------ 架构与资产名
+
+    /**
+     * 本机 CPU 架构（主 ABI 在最前）。
+     *
+     * 用 [android.os.Build.SUPPORTED_ABIS] 而不是 `Build.CPU_ABI`：前者是完整的优先级列表，
+     * 64 位设备上第一个就是 arm64-v8a，能直接对上 Release 里的资产名。
+     * 单元测试环境下取不到（返回 null），此时给空列表，由 [apkNameCandidates] 退到 universal。
+     */
+    internal fun deviceAbis(): List<String> =
+        runCatching { android.os.Build.SUPPORTED_ABIS?.toList().orEmpty() }
+            .getOrDefault(emptyList())
+
+    /**
+     * 按优先级列出这个版本可能存在的 APK 文件名。
+     *
+     * 顺序（**这就是下载尝试顺序**）：
+     *  1. 本机各 ABI：`WindTone-v{版本}-arm64-v8a.apk`（v1.0.7 起的 ABI 分包命名）；
+     *  2. `WindTone-v{版本}-universal.apk`（通用包，任何设备都能装）；
+     *  3. `WindTone-v{版本}.apk`（**历史命名**：1.0.6 及以前只发一个全 ABI 包）。
+     *
+     * 保留第 3 条是为了向下兼容——用户从旧版本升级时，Release 里可能只有老命名的包。
+     * 与 gradle 的命名规则（app/build.gradle.kts 的 androidComponents）必须保持一致。
+     */
+    internal fun apkNameCandidates(version: String, abis: List<String> = deviceAbis()): List<String> {
+        val known = abis.filter { it in KNOWN_ABIS }
+        val names = buildList {
+            known.forEach { add(BuildConfig.APK_ASSET_TEMPLATE_ABI.format(version, it)) }
+            add(BuildConfig.APK_ASSET_TEMPLATE_UNIVERSAL.format(version))
+            add(BuildConfig.APK_ASSET_TEMPLATE.format(version))
+        }
+        return names.distinct()
+    }
+
+    /** 把资产名换算成直链（同一个 tag 目录下） */
+    private fun assetUrl(tag: String, name: String): String =
+        "https://github.com/${BuildConfig.GITHUB_OWNER}/${BuildConfig.GITHUB_REPO}" +
+            "/releases/download/$tag/$name"
+
+    /** 页面展示用的架构标签，如 `arm64-v8a`；取不到时返回空串 */
+    fun primaryAbiLabel(): String = deviceAbis().firstOrNull().orEmpty()
 
     /** Release 列表页，检查失败时可引导用户手动打开 */
     fun releasePageUrl(): String = BuildConfig.GITHUB_RELEASES_URL
@@ -168,9 +218,8 @@ object UpdateChecker {
         if (!isNewer(version, current)) return UpdateCheckResult.UpToDate(version)
 
         val tag = atomTagOf(first).ifBlank { "v$version" }
-        val apkName = BuildConfig.APK_ASSET_TEMPLATE.format(version)
-        val apkUrl = "https://github.com/${BuildConfig.GITHUB_OWNER}/${BuildConfig.GITHUB_REPO}" +
-            "/releases/download/$tag/$apkName"
+        val names = apkNameCandidates(version)
+        val urls = names.map { assetUrl(tag, it) }
 
         return UpdateCheckResult.Available(
             UpdateInfo(
@@ -178,8 +227,9 @@ object UpdateChecker {
                 tagName = tag,
                 title = title.ifBlank { "WindTone $version" },
                 notes = plainNotes(xmlText(first, "content")),
-                apkUrl = apkUrl,
-                apkName = apkName,
+                apkUrl = urls.first(),
+                apkName = names.first(),
+                apkUrlFallbacks = urls.drop(1),
                 apkSizeBytes = 0L, // Atom 源没有资产大小，下载时以实际 Content-Length 为准
                 publishedAt = xmlText(first, "updated"),
                 releaseUrl = Regex("href=\"([^\"]+)\"")
@@ -236,8 +286,10 @@ object UpdateChecker {
                 return UpdateCheckResult.UpToDate(version)
             }
 
-            val asset = pickApkAsset(json)
+            val asset = pickApkAsset(json, version)
                 ?: return UpdateCheckResult.Failed("新版本没有附带 APK 安装包")
+
+            val allUrls = (listOf(asset.first) + asset.fourth).distinct()
 
             return UpdateCheckResult.Available(
                 UpdateInfo(
@@ -247,6 +299,7 @@ object UpdateChecker {
                     notes = plainNotes(json.optString("body")),
                     apkUrl = asset.first,
                     apkName = asset.second,
+                    apkUrlFallbacks = allUrls.drop(1),
                     apkSizeBytes = asset.third,
                     publishedAt = json.optString("published_at"),
                     releaseUrl = json.optString("html_url").ifBlank { releasePageUrl() },
@@ -285,55 +338,89 @@ object UpdateChecker {
         }
     }
 
-    /** 从 assets 里挑 APK：优先名字带 WindTone / 听风 的，其次任意 .apk */
-    private fun pickApkAsset(json: JSONObject): Triple<String, String, Long>? {
+    /**
+     * 从 assets 里挑 APK，按「本机架构优先」排序：
+     *  1. 与 [apkNameCandidates] 同名者（本机 ABI → universal → 历史单包命名）；
+     *  2. 兜底：任意名字里带 `universal` 的 .apk；
+     *  3. 再兜底：任意 .apk。
+     *
+     * 返回 (选中直链, 选中文件名, 字节数, 备选直链列表)。
+     */
+    private fun pickApkAsset(
+        json: JSONObject,
+        version: String,
+    ): Quadruple<String, String, Long, List<String>>? {
         val assets = json.optJSONArray("assets") ?: return null
-        var fallback: Triple<String, String, Long>? = null
-        for (i in 0 until assets.length()) {
-            val a = assets.optJSONObject(i) ?: continue
-            val name = a.optString("name")
-            if (!name.endsWith(".apk", ignoreCase = true)) continue
-            val url = a.optString("browser_download_url")
-            if (url.isBlank()) continue
-            val size = a.optLong("size", 0L)
-            val hit = Triple(url, name, size)
-            val preferred = name.contains("WindTone", ignoreCase = true) || name.contains("听风")
-            if (preferred) return hit
-            if (fallback == null) fallback = hit
+        data class Asset(val name: String, val url: String, val size: Long)
+
+        val apks = buildList {
+            for (i in 0 until assets.length()) {
+                val a = assets.optJSONObject(i) ?: continue
+                val name = a.optString("name")
+                if (!name.endsWith(".apk", ignoreCase = true)) continue
+                val url = a.optString("browser_download_url")
+                if (url.isBlank()) continue
+                add(Asset(name, url, a.optLong("size", 0L)))
+            }
         }
-        return fallback
+        if (apks.isEmpty()) return null
+
+        val preferred = apkNameCandidates(version)
+            .firstNotNullOfOrNull { want -> apks.firstOrNull { it.name == want } }
+            ?: apks.firstOrNull { it.name.contains("universal", ignoreCase = true) }
+            ?: apks.first()
+
+        val others = apks.filter { it.url != preferred.url }.map { it.url }
+        return Quadruple(preferred.url, preferred.name, preferred.size, others)
     }
+
+    /** 四元组（Kotlin 只有 Triple，这里需要四个值） */
+    private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 
     // ------------------------------------------------------------ 下载
 
     /**
-     * 下载安装包的候选线路（按优先级排列）。
+     * 下载安装包的候选线路（按尝试优先级排列）。
      *
-     * [route] 由用户在「设置 → 更新 → 下载线路」里选择，默认 [DownloadRoute.AUTO]：
-     *  - [DownloadRoute.AUTO]：直链优先，慢/失败时自动落到两个公开镜像；
-     *  - [DownloadRoute.DIRECT]：只走 GitHub 官方直链；
-     *  - 指定镜像：**只走这一条**（用户既然手动选了，就不该偷偷换线，
-     *    失败时界面会提示去哪改）。
+     * 两个维度相乘：
+     *  - **包名维度**（[urls]）：本机 ABI 包 → universal → 历史单包命名，见 [apkNameCandidates]。
+     *    包名依次在前，因为 404 是立刻返回的，不会浪费多少时间；
+     *  - **线路维度**（[route]）：由用户在「设置 → 更新 → 下载线路」里选择，默认 [DownloadRoute.AUTO]：
+     *    · [DownloadRoute.AUTO]：直链优先，慢/失败时自动落到两个公开镜像；
+     *    · [DownloadRoute.DIRECT]：只走 GitHub 官方直链；
+     *    · 指定镜像：**只走这一条**（用户既然手动选了，就不该偷偷换线，失败时界面会提示去哪改）。
      *
      * 镜像只做字节转发，不改动文件内容，且下载后仍有 [verifyApk] 兜底校验。
      * 非 github.com 资源（如自定义直链）不套前缀，原样返回。
      */
     internal fun downloadCandidates(
+        urls: List<String>,
+        route: DownloadRoute = DownloadRoute.AUTO,
+    ): List<String> {
+        val out = LinkedHashSet<String>()
+        urls.forEach { url ->
+            if (!url.startsWith("https://github.com/", ignoreCase = true)) {
+                out.add(url)
+                return@forEach
+            }
+            val prefix = route.prefix
+            if (prefix == null) {
+                // 自动：直链 + 全部镜像
+                out.add(url)
+                MIRROR_PREFIXES.forEach { out.add(it + url) }
+            } else {
+                // 手动指定：只给这一条（空前缀 = 直链）
+                out.add(prefix + url)
+            }
+        }
+        return out.toList().ifEmpty { urls }
+    }
+
+    /** 单 URL 版本（测试与简单场景用） */
+    internal fun downloadCandidates(
         apkUrl: String,
         route: DownloadRoute = DownloadRoute.AUTO,
-    ): List<String> = buildList {
-        if (!apkUrl.startsWith("https://github.com/", ignoreCase = true)) return@buildList
-        val prefix = route.prefix
-        when {
-            // 自动：直链 + 全部镜像
-            prefix == null -> {
-                add(apkUrl)
-                MIRROR_PREFIXES.forEach { add(it + apkUrl) }
-            }
-            // 手动指定：只给这一条（空前缀 = 直链）
-            else -> add(prefix + apkUrl)
-        }
-    }.ifEmpty { listOf(apkUrl) }
+    ): List<String> = downloadCandidates(listOf(apkUrl), route)
 
     /**
      * 下载 APK 到 `cacheDir/updates/`。
@@ -366,7 +453,7 @@ object UpdateChecker {
         val target = File(dir, safeName)
         val part = File(dir, "$safeName.part")
 
-        val candidates = downloadCandidates(info.apkUrl, route)
+        val candidates = downloadCandidates(info.allApkUrls, route)
         var lastError: Throwable? = null
         for ((index, candidate) in candidates.withIndex()) {
             try {
@@ -612,6 +699,13 @@ object UpdateChecker {
         "https://ghproxy.net/",
         "https://gh-proxy.com/",
     )
+
+    /**
+     * 会出现在 Release 里的 ABI 名（android 的写法，带连字符）。
+     * 与 `app/build.gradle.kts` 的 `splits.abi.include(...)` 保持一致；
+     * 设备上报的其它架构（如 riscv64）不会被用来推导资产名，直接退到 universal。
+     */
+    private val KNOWN_ABIS = listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
 
     /** 慢线路判定窗口：起步 8 秒 */
     private const val STALL_WINDOW_MS = 8_000L

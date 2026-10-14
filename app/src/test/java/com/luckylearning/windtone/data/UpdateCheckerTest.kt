@@ -45,11 +45,18 @@ class UpdateCheckerTest {
         assertEquals("1.0.3", info.version)
         assertEquals("v1.0.3", info.tagName)
         assertEquals("听风 WindTone v1.0.3", info.title)
+        // 单测环境拿不到设备 ABI（Build.SUPPORTED_ABIS 为默认值），
+        // 候选顺序应退化为 universal → 历史单包命名
+        assertEquals("WindTone-v1.0.3-universal.apk", info.apkName)
         assertEquals(
-            "https://github.com/LuckyLearning/WindTone/releases/download/v1.0.3/WindTone-v1.0.3.apk",
+            "https://github.com/LuckyLearning/WindTone/releases/download/v1.0.3/WindTone-v1.0.3-universal.apk",
             info.apkUrl,
         )
-        assertEquals("WindTone-v1.0.3.apk", info.apkName)
+        // 历史命名必须仍在候选里，否则老版本用户升级会 404
+        assertTrue(
+            "兼容 1.0.6 及以前命名的候选不能丢",
+            info.apkUrlFallbacks.any { it.endsWith("/WindTone-v1.0.3.apk") },
+        )
         assertEquals(
             "https://github.com/LuckyLearning/WindTone/releases/tag/v1.0.3",
             info.releaseUrl,
@@ -184,5 +191,58 @@ class UpdateCheckerTest {
     fun autoRouteFailureSuggestsBrowserFallback() {
         val msg = UpdateChecker.describeDownloadFailure(DownloadRoute.AUTO, null)
         assertTrue("应给出兜底建议，实际：$msg", msg.contains("浏览器"))
+    }
+
+    // ------------------------------------------------------------ ABI 选包
+
+    @Test
+    fun apkNameCandidatesPutsDeviceAbiFirstThenUniversalThenLegacy() {
+        val names = UpdateChecker.apkNameCandidates("1.0.7", listOf("arm64-v8a", "armeabi-v7a"))
+        assertEquals(
+            listOf(
+                "WindTone-v1.0.7-arm64-v8a.apk",
+                "WindTone-v1.0.7-armeabi-v7a.apk",
+                "WindTone-v1.0.7-universal.apk",
+                "WindTone-v1.0.7.apk", // 1.0.6 及以前的历史命名，必须保留在最后
+            ),
+            names,
+        )
+    }
+
+    @Test
+    fun apkNameCandidatesIgnoresUnknownAbi() {
+        // riscv64 之类没有发布包的架构 → 直接退到 universal，不生成无意义的候选名
+        val names = UpdateChecker.apkNameCandidates("1.0.7", listOf("riscv64"))
+        assertEquals(
+            listOf("WindTone-v1.0.7-universal.apk", "WindTone-v1.0.7.apk"),
+            names,
+        )
+    }
+
+    @Test
+    fun atomUsesDeviceAbiAssetNameFirst() {
+        val body = atomBody("v1.0.7" to "听风 WindTone v1.0.7")
+        // 直接验证候选顺序：Atom 通道拿不到 assets，只能按命名规则推导
+        val names = UpdateChecker.apkNameCandidates("1.0.7", listOf("armeabi-v7a"))
+        assertEquals("WindTone-v1.0.7-armeabi-v7a.apk", names.first())
+    }
+
+    @Test
+    fun downloadCandidatesCoverAllAssetNamesThenLines() {
+        val urls = listOf(
+            "https://github.com/LuckyLearning/WindTone/releases/download/v1.0.7/WindTone-v1.0.7-arm64-v8a.apk",
+            "https://github.com/LuckyLearning/WindTone/releases/download/v1.0.7/WindTone-v1.0.7-universal.apk",
+        )
+        // 自动：每个包名先直链、再两个镜像
+        val auto = UpdateChecker.downloadCandidates(urls, DownloadRoute.AUTO)
+        assertEquals(6, auto.size)
+        assertEquals(urls[0], auto[0])
+        assertEquals("https://ghproxy.net/${urls[0]}", auto[1])
+        assertEquals("https://gh-proxy.com/${urls[0]}", auto[2])
+        assertEquals(urls[1], auto[3])
+
+        // 手动指定：每个包名各一条，共 2 条
+        val manual = UpdateChecker.downloadCandidates(urls, DownloadRoute.GHPROXY_NET)
+        assertEquals(listOf("https://ghproxy.net/${urls[0]}", "https://ghproxy.net/${urls[1]}"), manual)
     }
 }

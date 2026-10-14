@@ -102,26 +102,37 @@ jobs:
           WINDTONE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           WINDTONE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           WINDTONE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew assembleRelease --stacktrace
+        # -PabiSplits=true：按 ABI 分包并额外产出 universal 包（本地开发默认关闭）
+        run: ./gradlew assembleRelease -PabiSplits=true --stacktrace
 
-      - name: 重命名并计算校验值
+      - name: 收集产物并计算校验值
         id: apk
         run: |
           mkdir -p dist
-          SRC=$(ls app/build/outputs/apk/release/WindTone-v*.apk app/build/outputs/apk/release/*.apk 2>/dev/null | head -1)
-          if [ -z "$SRC" ]; then
+          shopt -s nullglob
+          SRCS=(app/build/outputs/apk/release/*.apk)
+          if [ ${#SRCS[@]} -eq 0 ]; then
             echo "::error::未找到 Release APK 产物"
             exit 1
           fi
-          OUT="dist/WindTone-v${{ steps.ver.outputs.name }}.apk"
-          cp "$SRC" "$OUT"
-          SHA=$(sha256sum "$OUT" | cut -d' ' -f1)
-          SIZE=$(stat -c%s "$OUT")
-          echo "path=$OUT" >> "$GITHUB_OUTPUT"
-          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
-          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
-          echo "产物：$OUT"
-          echo "SHA-256：$SHA"
+          for f in "${SRCS[@]}"; do cp "$f" dist/; done
+          if ! ls dist/*universal*.apk >/dev/null 2>&1; then
+            echo "::warning::没有找到 universal 包，请检查 abiSplits 配置"
+          fi
+          {
+            echo "### 本次产物"
+            echo
+            echo "| 文件 | 大小 | SHA-256 |"
+            echo "| --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for f in dist/*.apk; do
+            n=$(basename "$f")
+            b=$(stat -c%s "$f")
+            s=$(sha256sum "$f" | cut -d' ' -f1)
+            echo "| \`$n\` | $b 字节 | \`$s\` |" >> "$GITHUB_STEP_SUMMARY"
+            echo "$n  $b  $s"
+          done
+          echo "count=$(ls dist/*.apk | wc -l)" >> "$GITHUB_OUTPUT"
 
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
@@ -131,6 +142,43 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+      # ---------------------------------------------------------------- 发布说明
+      - name: 组装 Release 说明
+        id: notes
+        env:
+          VERSION: ${{ steps.ver.outputs.name }}
+        run: |
+          OUT="$RUNNER_TEMP/release-body.md"
+          NOTES=".github/release-notes/v${VERSION}.md"
+          if [ -f "$NOTES" ]; then
+            cat "$NOTES" > "$OUT"
+            echo "::notice::使用手写说明 $NOTES"
+          else
+            # 没写说明时的兜底：用 git log 生成变更列表，并明确提示
+            PREV=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+            {
+              echo "WindTone ${VERSION}。"
+              echo
+              echo "# 变更"
+              echo
+              if [ -n "$PREV" ]; then
+                git log --pretty=format:'- %s' "$PREV..$GITHUB_REF_NAME" | grep -v '^- release:' || true
+              else
+                git log -n 20 --pretty=format:'- %s' "$GITHUB_REF_NAME"
+              fi
+              echo
+              echo
+              echo "**适用设备**：Android 7.0（API 24）及以上；手机与车机通用。"
+              echo
+              echo "**安装**：下载与设备架构匹配的包（不确定就下 universal），直接覆盖安装，歌单、收藏、播放统计全部保留。"
+              echo
+              echo "**升级**：也可在应用内「设置 → 更新 → 检查更新」一键升级。"
+            } > "$OUT"
+            echo "::warning::未找到 .github/release-notes/v${VERSION}.md，已用 git log 生成兜底说明"
+          fi
+          echo "path=$OUT" >> "$GITHUB_OUTPUT"
+          cat "$OUT"
+
       # ---------------------------------------------------------------- 发布
       - name: 创建 GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
@@ -139,17 +187,5 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: 听风 WindTone ${{ github.ref_name }}
           files: dist/*.apk
-          generate_release_notes: true
+          body_path: ${{ steps.notes.outputs.path }}
           fail_on_unmatched_files: true
-          body: |
-            ## 听风 WindTone ${{ github.ref_name }}
-
-            安装包：`WindTone-v${{ steps.ver.outputs.name }}.apk`（${{ steps.apk.outputs.size }} 字节）
-            SHA-256：`${{ steps.apk.outputs.sha256 }}`
-
-            ### 安装方式
-            1. 下载下方 APK 到手机；
-            2. 允许「安装未知应用」后点击安装；
-            3. 已安装旧版本的可以直接覆盖升级 —— 歌单、收藏、播放统计都会保留。
-
-            也可以在应用内「设置 → 更新 → 检查更新」中一键升级。
