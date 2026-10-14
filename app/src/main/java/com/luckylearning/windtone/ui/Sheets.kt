@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.sp
 import com.luckylearning.windtone.data.AudioInspector
 import com.luckylearning.windtone.data.ScanScope
 import com.luckylearning.windtone.data.model.Song
+import com.luckylearning.windtone.data.model.SongSource
 import com.luckylearning.windtone.playback.AudioFx
 import com.luckylearning.windtone.playback.SleepTimer
 
@@ -402,7 +403,7 @@ fun SongInfoSheet(
                     InfoRow("时长", info.durationText)
                     InfoRow("文件大小", info.sizeText)
                     info.mime?.let { InfoRow("MIME", it) }
-                    InfoRow("路径", song.path ?: song.uri.toString())
+                    InfoRow("路径", songDisplayPath(song))
                 }
             }
             Spacer(Modifier.height(20.dp))
@@ -424,6 +425,43 @@ private fun InfoRow(label: String, value: String) {
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(1f),
         )
+    }
+}
+
+/**
+ * 「路径」行的人类可读形式。
+ *
+ * `song.uri` 原样打印会是百分号编码的 content URI（如
+ * `content://com.android.externalstorage.documents/tree/primary%3AMusic/document/primary%3AMusic%2F38度6%2F38度6%20-%20黑龙.flac`），
+ * 用户看到的就是一堆乱码。这里按来源还原：
+ *  - 有真实绝对路径（深度扫描 / Android 10 以下媒体库）→ 直接用；
+ *  - SAF 文档 URI → 取 `document/` 里的文档 ID（Android 的 Uri 解析已解一次码），
+ *    `primary:` 前缀映射为内置存储根 `/storage/emulated/0/`；
+ *  - WebDAV 云端 → URL 的 path 部分本身就是解码后的；
+ *  - 其余兜底：媒体库相对目录 + 文件名，再不行才回退原始 URI。
+ */
+fun songDisplayPath(song: Song): String {
+    song.path?.takeIf { it.isNotBlank() }?.let { return it }
+    val uri = song.uri
+    val raw = uri.toString()
+    return when {
+        uri.scheme == "content" && raw.contains("/document/") -> {
+            // lastPathSegment 由 android.net.Uri 解析，已经是解码后的文档 ID，
+            // 形如 `primary:Music/38度6/38度6 - 黑龙.flac`
+            val doc = uri.lastPathSegment
+                ?: runCatching { android.net.Uri.decode(raw.substringAfterLast("/document/")) }
+                    .getOrDefault(raw)
+            when {
+                doc.startsWith("primary:") -> "/storage/emulated/0/" + doc.removePrefix("primary:")
+                // 非 primary 存储根（home: 等）没有统一的挂载点，只展示冒号后的相对路径
+                doc.contains(':') -> doc.substringAfter(':', doc)
+                else -> doc
+            }
+        }
+        song.source == SongSource.WEBDAV -> uri.path?.takeIf { it.isNotBlank() } ?: raw
+        song.folderPath != null && song.displayName.isNotBlank() ->
+            song.folderPath.trimEnd('/') + "/" + song.displayName
+        else -> raw
     }
 }
 
@@ -790,11 +828,20 @@ fun PlayerOptionsSheet(
     onOpenEq: () -> Unit,
     onOpenSleep: () -> Unit,
     onExportLyrics: () -> Unit,
+    onAudioInfo: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
             Text("播放设置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+
+            SectionLabel("当前歌曲")
+            OptionRow(
+                icon = AppIcons.Info,
+                title = "音频信息",
+                subtitle = "格式 / 编码 / 采样率 / 文件路径",
+                onClick = onAudioInfo,
+            )
 
             SectionLabel("音效")
             OptionRow(

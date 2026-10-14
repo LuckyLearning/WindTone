@@ -111,6 +111,7 @@ fun PlayerScreen(
     onCancelSleep: () -> Unit,
     onSpeed: (Float) -> Unit,
     onExportLyrics: (android.net.Uri) -> Unit,
+    onShowAudioInfo: () -> Unit = {},
     // 车载沉浸态下常驻歌名行右侧的红心需要自己知道收藏状态并触发切换，
     // 手机版歌名在顶栏、不带红心，这两个参数在手机模式下不会被用到。
     isFavorite: Boolean = false,
@@ -584,6 +585,7 @@ fun PlayerScreen(
                 showOptions = false
                 lyricsExportLauncher.launch("${song?.baseName ?: "歌词"}.lrc")
             },
+            onAudioInfo = { showOptions = false; onShowAudioInfo() },
             onDismiss = { showOptions = false },
         )
     }

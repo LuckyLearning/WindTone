@@ -457,6 +457,10 @@ fun MainScreen(vm: MusicViewModel) {
                     onCancelSleep = vm::cancelSleep,
                     onSpeed = vm::setSpeed,
                     onExportLyrics = vm::exportLyrics,
+                    // 播放设置抽屉 → 音频信息：与长按菜单共用 infoSong + SongInfoSheet
+                    onShowAudioInfo = {
+                        player.current?.let { infoSong = it; vm.inspectAudio(it) }
+                    },
                     // 车载沉浸态常驻歌名行的红心：收藏状态存在 LibraryUiState 里，
                     // 用 stableKey 做集合查找，和长按菜单保持一致。
                     isFavorite = player.current?.let { it.stableKey in library.favoriteUris } == true,
