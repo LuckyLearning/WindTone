@@ -12,8 +12,8 @@ plugins {
  * 版本号单一来源：改版本只改这两行即可。
  * CI（.github/workflows/android-release.yml）会从这里读取并与 tag 做一致性校验。
  */
-val appVersionName = "1.0.4"
-val appVersionCode = 5
+val appVersionName = "1.0.5"
+val appVersionCode = 6
 
 /**
  * 签名配置：本地与 CI 使用**同一套**密钥（.toolchain/keystore/windtone.jks）。
