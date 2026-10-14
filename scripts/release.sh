@@ -47,6 +47,13 @@ sed -i "s/val appVersionCode = $CUR_CODE/val appVersionCode = $NEW_CODE/" "$GRAD
 sed -i "s/val appVersionName = \"$CUR_NAME\"/val appVersionName = \"$NEW_NAME\"/" "$GRADLE_FILE"
 grep -E 'appVersionName|appVersionCode' "$GRADLE_FILE"
 
+# 1.5) 预览发版说明：固定模板 + 只替换版本号，正文不需要手写/让 AI 生成
+echo
+echo "→ 本次 Release 说明预览（由 .github/release-notes/ 模板自动渲染）："
+echo "----------------------------------------------------------------"
+bash "$ROOT/scripts/render-release-notes.sh" "$NEW_NAME" "$NEW_CODE"
+echo "----------------------------------------------------------------"
+
 # 2) 本地先验证能编译
 echo "→ 先跑一遍单测确认没坏..."
 # Android 构建必须用 JDK 21（temurin/openjdk），不能落到 IntelliJ 自带的 GraalVM ——

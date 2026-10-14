@@ -143,9 +143,9 @@ jobs:
           retention-days: 90
 
       # ---------------------------------------------------------------- 发布说明
-      # 说明正文来自**固定模板** `.github/release-notes/template.md`，
-      # 发版时只替换 {version} / {version_code} / {date} 三个占位符 —— 不需要每个版本手写。
-      # 特例（如过渡版本）想单独写说明时，放 `.github/release-notes/v{版本}.md` 即可覆盖模板。
+      # 正文来自**固定模板** `.github/release-notes/template.md`，
+      # 发版时只替换 {version} / {version_code} / {date}，不需要每个版本写文案。
+      # 渲染逻辑在 scripts/render-release-notes.sh 里，与本地 release.sh 共用同一份。
       - name: 组装 Release 说明
         id: notes
         env:
@@ -153,32 +153,9 @@ jobs:
           CODE: ${{ steps.ver.outputs.code }}
         run: |
           OUT="$RUNNER_TEMP/release-body.md"
-          OVERRIDE=".github/release-notes/v${VERSION}.md"
-          TEMPLATE=".github/release-notes/template.md"
-          DATE="$(date -u +%Y-%m-%d)"
-          if [ -f "$OVERRIDE" ]; then
-            SRC="$OVERRIDE"
-            echo "::notice::使用版本专属说明 $OVERRIDE（覆盖固定模板）"
-          else
-            SRC="$TEMPLATE"
-            echo "::notice::使用固定模板 $TEMPLATE"
-          fi
-          if [ -f "$SRC" ]; then
-            sed -e "s/{version}/${VERSION}/g" \
-                -e "s/{version_code}/${CODE}/g" \
-                -e "s/{date}/${DATE}/g" \
-                "$SRC" > "$OUT"
-          else
-            # 模板都没了的兜底：至少给出一份能读的说明（正常不该走到这里）
-            echo "::warning::未找到 $TEMPLATE，退化为 git log 生成的说明"
-            {
-              echo "听风 WindTone ${VERSION}。"
-              echo
-              git log -n 20 --pretty=format:'- %s' "$GITHUB_REF_NAME"
-            } > "$OUT"
-          fi
-          echo "path=$OUT" >> "$GITHUB_OUTPUT"
+          bash scripts/render-release-notes.sh "$VERSION" "$CODE" "$OUT"
           cat "$OUT"
+          echo "path=$OUT" >> "$GITHUB_OUTPUT"
 
       # ---------------------------------------------------------------- 发布
       - name: 创建 GitHub Release
