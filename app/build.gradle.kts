@@ -13,7 +13,7 @@ plugins {
  * CI（.github/workflows/android-release.yml）会从这里读取并与 tag 做一致性校验。
  */
 val appVersionName = "1.0.6"
-val appVersionCode = 7
+val appVersionCode = 8
 
 /**
  * 签名配置：本地与 CI 使用**同一套**密钥（.toolchain/keystore/windtone.jks）。
