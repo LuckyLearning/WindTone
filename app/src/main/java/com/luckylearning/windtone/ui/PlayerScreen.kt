@@ -279,8 +279,7 @@ fun PlayerScreen(
         ) {
             // ------------------------------------------------------ 顶栏
             // 车载沉浸态收起：整条不参与测量，歌词区顺势向上占满。
-            // 注意：歌名 / 歌手不在这里 —— 按效果图 ⑫D，沉浸态只保留
-            // 「歌词 + 歌名行（含红心）+ 进度条 + 时间」，歌名行是常驻的。
+            // 沉浸态最终只保留「歌词 + 进度条 + 时间」（见效果图 ⑫D）。
             if (!immersive) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { keepAwake(); onClose() }) {
@@ -363,14 +362,15 @@ fun PlayerScreen(
 
             // ------------------------------------------- 歌名行（手机 / 车机通用）
             // 效果图 ⑫ 的 p-nowrow：歌名 + 歌手 + 红心，贴在进度条正上方。
-            // 手机版与车机版都有这一行 —— 车机沉浸态下顶栏 / 控制键 / 状态行全部收起，
-            // 这一行是唯一保留的歌曲标识（效果图 ⑫D 的红框保留项）；
-            // 手机版顶栏中间是留空的，歌名同样靠这一行显示（早先误把它做成车机专属，
-            // 导致手机版顶栏空一截、歌名消失，已修回）。
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
+            // 手机版顶栏中间是留空的，歌名靠这一行显示。
+            // 车载沉浸态整行收起（与顶栏同一开关）：设置页文案「收起顶栏、歌名行、
+            // 控制键与状态行，只留歌词、进度与时间」。此前误照旧版效果图 ⑫D 把
+            // 歌名行保留在沉浸态里，2026-10-14 按设置页文案勘误，图与代码同步修正。
+            if (!immersive) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = song?.title ?: "未在播放",
@@ -396,6 +396,7 @@ fun PlayerScreen(
                             tint = if (isFavorite) scheme.primary else scheme.onSurfaceVariant,
                         )
                     }
+                }
                 }
             }
             Spacer(Modifier.height(2.dp))
