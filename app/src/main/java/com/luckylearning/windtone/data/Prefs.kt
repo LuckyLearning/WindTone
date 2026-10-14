@@ -31,10 +31,28 @@ class Prefs(context: Context) {
     private val sp: SharedPreferences =
         context.getSharedPreferences("music_player_prefs", Context.MODE_PRIVATE)
 
+    /**
+     * 已导入的音乐目录（SAF 树 URI）。
+     *
+     * 用换行分隔的字符串存，而不是 `putStringSet`：SharedPreferences 的字符串集合
+     * 底层是 Set，**顺序会丢**（目录列表顺序随机、且不同版本取值不一致），
+     * 用户在范围抽屉里看到的顺序会莫名其妙地变。
+     * 兼容旧数据：新的字符串键为空时回落到旧的 Set 键，并顺手迁移。
+     */
     var folderUris: List<String>
-        get() = sp.getStringSet(KEY_FOLDERS, emptySet())?.toList().orEmpty()
+        get() {
+            val raw = sp.getString(KEY_FOLDERS_ORDERED, null)
+            if (raw != null) return raw.split('\n').filter { it.isNotBlank() }
+            // 旧版遗留：Set 无序，读出来排序保证稳定的展示顺序
+            val legacy = sp.getStringSet(KEY_FOLDERS, null)?.toList().orEmpty().sorted()
+            if (legacy.isNotEmpty()) sp.edit().putString(KEY_FOLDERS_ORDERED, legacy.joinToString("\n")).apply()
+            return legacy
+        }
         set(value) {
-            sp.edit().putStringSet(KEY_FOLDERS, value.toSet()).apply()
+            sp.edit()
+                .putString(KEY_FOLDERS_ORDERED, value.joinToString("\n"))
+                .remove(KEY_FOLDERS)
+                .apply()
         }
 
     /** 扫描范围：默认未选择，装机后不自动扫描 */
@@ -42,6 +60,18 @@ class Prefs(context: Context) {
         get() = runCatching { ScanScope.valueOf(sp.getString(KEY_SCAN_SCOPE, ScanScope.UNSET.name)!!) }
             .getOrDefault(ScanScope.UNSET)
         set(value) = sp.edit().putString(KEY_SCAN_SCOPE, value.name).apply()
+
+    /**
+     * 用户是否**主动选过**扫描范围（含「移除全部目录后回到未选择」这种显式选择）。
+     *
+     * 用来区分两种 UNSET：
+     *  - 从未选过（全新安装）→ 老版本升级兼容逻辑可以把「有缓存但没范围」当作全盘；
+     *  - 主动清空（用户把目录都移除了）→ 绝不能再被兼容逻辑拽成全盘扫描。
+     * 旧数据兼容：只要存过 scan_scope，就说明用户选过。
+     */
+    var scanScopeChosen: Boolean
+        get() = sp.getBoolean(KEY_SCAN_SCOPE_CHOSEN, sp.contains(KEY_SCAN_SCOPE))
+        set(value) = sp.edit().putBoolean(KEY_SCAN_SCOPE_CHOSEN, value).apply()
 
     /** 是否启用「深度扫描」（读取同目录 .lrc 歌词文件） */
     var deepScanEnabled: Boolean
@@ -284,7 +314,10 @@ class Prefs(context: Context) {
 
     private companion object {
         const val KEY_FOLDERS = "folders"
+        /** 有序的目录列表（换行分隔），优先于旧的 Set 存储 */
+        const val KEY_FOLDERS_ORDERED = "folders_ordered"
         const val KEY_SCAN_SCOPE = "scan_scope"
+        const val KEY_SCAN_SCOPE_CHOSEN = "scan_scope_chosen"
         const val KEY_DEEP_SCAN = "deep_scan"
         const val KEY_MIN_DURATION_SEC = "min_song_duration_sec"
         /** 短音频过滤默认阈值：60 秒 */

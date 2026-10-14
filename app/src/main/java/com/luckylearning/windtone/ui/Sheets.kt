@@ -681,12 +681,24 @@ fun ScanScopeSheet(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                     ) {
                         Column(Modifier.weight(1f)) {
+                            // 主标题只显示最后一个文件夹名字；父路径降为次要小字，
+                            // 避免两个同名目录（如 Music/华语 与 Download/华语）分不清
                             Text(
-                                folderLabel(uriString),
+                                folderName(uriString),
                                 style = MaterialTheme.typography.bodyMedium,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
+                            val parent = folderParentPath(uriString)
+                            if (parent.isNotEmpty()) {
+                                Text(
+                                    parent,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                         }
                         IconButton(onClick = { onRemoveFolder(uriString) }) {
                             Icon(
@@ -703,11 +715,21 @@ fun ScanScopeSheet(
     }
 }
 
-/** 把 SAF 树 URI 转成人类可读的目录名（如 `primary:Music/流行` → `Music/流行`） */
+/** 把 SAF 树 URI 转成人类可读的目录路径（如 `primary:Music/流行` → `Music/流行`） */
 private fun folderLabel(uriString: String): String {
     val decoded = runCatching { android.net.Uri.decode(uriString) }.getOrDefault(uriString)
     val tail = decoded.substringAfterLast("tree/", decoded)
     return tail.substringAfterLast(':').ifBlank { tail }
+}
+
+/** 目录展示名：只取最后一个文件夹名字（`Music/华语` → `华语`） */
+private fun folderName(uriString: String): String =
+    folderLabel(uriString).trimEnd('/').substringAfterLast('/').ifBlank { folderLabel(uriString) }
+
+/** 目录的父路径（`Music/华语` → `Music`）；已在存储根目录时为空 */
+private fun folderParentPath(uriString: String): String {
+    val label = folderLabel(uriString).trimEnd('/')
+    return if ('/' in label) label.substringBeforeLast('/') else ""
 }
 
 /** 扫描范围胶囊标签 */

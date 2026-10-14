@@ -40,6 +40,7 @@ import com.luckylearning.windtone.playback.AudioFx
 import com.luckylearning.windtone.playback.PlaybackConnection
 import com.luckylearning.windtone.playback.PlayerHandle
 import com.luckylearning.windtone.playback.SleepTimer
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -287,6 +288,9 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     private val connection = PlaybackConnection(app)
     private val db = MusicDb.get(app)
 
+    /** 当前正在跑的音乐库扫描任务；范围/目录变化时先取消它，避免过期结果回写 */
+    private var scanJob: Job? = null
+
     private val _library = MutableStateFlow(
         LibraryUiState(
             sortOrder = prefs.sortOrder,
@@ -377,8 +381,11 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
             }
             // 老版本升级上来的用户：已有扫描缓存但没有范围记录，视作「全盘」，
             // 保持原有行为；只有全新安装（无缓存）才会停在「等待选择范围」。
-            if (prefs.scanScope == ScanScope.UNSET && cached.isNotEmpty()) {
+            // 注意必须用 scanScopeChosen 判定：用户「主动清空目录」后范围也是 UNSET，
+            // 那种情况绝不能被这条兼容逻辑拽回全盘扫描。
+            if (prefs.scanScope == ScanScope.UNSET && !prefs.scanScopeChosen && cached.isNotEmpty()) {
                 prefs.scanScope = ScanScope.FULL
+                prefs.scanScopeChosen = true
                 _library.update { it.copy(scanScope = ScanScope.FULL) }
             }
             if (cached.isNotEmpty()) {
@@ -404,6 +411,7 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun startFullScan() {
         prefs.scanScope = ScanScope.FULL
+        prefs.scanScopeChosen = true
         _library.update { it.copy(scanScope = ScanScope.FULL) }
         scan()
     }
@@ -415,10 +423,12 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     fun setScanScope(scope: ScanScope) {
         if (scope == ScanScope.FOLDERS && prefs.folderUris.isEmpty()) return
         prefs.scanScope = scope
+        prefs.scanScopeChosen = true
+        cancelScan()
         _library.update {
             it.copy(scanScope = scope, folderCount = prefs.folderUris.size, folderUris = prefs.folderUris)
         }
-        if (scope != ScanScope.UNSET) scan()
+        if (scope != ScanScope.UNSET) scan() else clearLibraryForScopeReset()
     }
 
     /** 是否已导入过音乐目录 */
@@ -439,7 +449,11 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     fun scan(auto: Boolean = false) {
         if (_library.value.scanning) return
         if (_library.value.scanScope == ScanScope.UNSET) return
-        viewModelScope.launch {
+        // 同一时刻只保留最后一次扫描：范围/目录被改动后，旧扫描的结果必须作废，
+        // 否则它会把「已经清空的曲库」重新写回内存与 Room 缓存（见 removeFolder）。
+        scanJob?.cancel()
+        scanJob = viewModelScope.launch {
+            val scopeAtStart = prefs.scanScope
             _library.update {
                 it.copy(
                     scanning = true,
@@ -449,15 +463,27 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
                     folderUris = prefs.folderUris,
                 )
             }
-            val result = runCatching {
+            val result = try {
                 repository.loadLibrary { text -> _library.update { it.copy(statusText = text) } }
-            }.onFailure { Log.e(TAG, "扫描失败", it) }
-                .getOrNull()
+            } catch (e: CancellationException) {
+                // 扫描被新范围/移除目录打断：交给 cancelScan() 收尾，不报错
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "扫描失败", e)
+                null
+            }
 
             if (result == null) {
                 _library.update {
                     it.copy(scanning = false, statusText = "", message = if (auto) "" else "扫描失败，请检查权限后重试")
                 }
+                return@launch
+            }
+
+            // 扫描期间范围/目录又变了（例如用户把最后一个目录也移除了）：结果作废
+            val scopeNow = prefs.scanScope
+            if (scopeNow == ScanScope.UNSET || scopeNow != scopeAtStart) {
+                Log.i(TAG, "扫描结果已过期（$scopeAtStart → $scopeNow），丢弃")
                 return@launch
             }
 
@@ -469,13 +495,53 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
             restoreQueueIfNeeded()
             if (!auto && result.songs.isEmpty()) {
                 pushMessage(
-                    when (_library.value.scanScope) {
+                    when (scopeNow) {
                         ScanScope.FOLDERS -> "所选目录里没有找到音频文件"
                         else -> "没有找到可播放的音频，可授予「所有文件访问权限」后重试，或改为导入指定的音乐目录"
                     }
                 )
             }
         }
+    }
+
+    /**
+     * 取消正在进行的扫描并复位状态。
+     * 目录列表、扫描范围发生任何变化时都要先调用，避免旧扫描把过期结果写回曲库/缓存。
+     */
+    private fun cancelScan() {
+        scanJob?.cancel()
+        scanJob = null
+        _library.update { if (!it.scanning) it else it.copy(scanning = false, statusText = "") }
+    }
+
+    /**
+     * 回到「等待选择扫描范围」：清空曲库与扫描缓存。
+     * 只清本地扫描结果，**不动** WebDAV 云端歌曲与用户数据（收藏/歌单/统计）。
+     */
+    private fun clearLibraryForScopeReset() {
+        PinyinIndex.build(emptyList())
+        currentQueue = emptyList()
+        _library.update {
+            it.copy(
+                scanScope = ScanScope.UNSET,
+                folderCount = prefs.folderUris.size,
+                folderUris = prefs.folderUris,
+                songs = emptyList(),
+                visible = emptyList(),
+                letterIndex = emptyMap(),
+                groups = emptyList(),
+                selectedGroup = null,
+                detailSongs = emptyList(),
+                skippedUnsupported = 0,
+                lyricsCount = 0,
+                scanning = false,
+                statusText = "",
+            )
+        }
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { db.songCacheDao().clear() }
+        }
+        refreshGroups()
     }
 
     /** 应用歌曲列表：信息覆盖 → 排序 → 拼音索引 → 分组 → 状态落库 */
@@ -614,10 +680,12 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
             }
             // 文件夹视图只列真实存在的目录：拿不到目录路径的歌曲（媒体库没给 path）
             // 会被归到「未知目录」，这类分组没有可操作的对象，直接不展示。
+            // 分组键用完整路径（两个同名目录不会被合并），标题只显示**最后一个文件夹名字**
+            // ——全盘扫描下 path 是 /storage/emulated/0/Music/华语，页面上只显示「华语」。
             LibraryView.FOLDER -> songs.groupBy { it.folderLabel }
                 .filterKeys { it != UNKNOWN_FOLDER_LABEL }
                 .map { (k, list) ->
-                    GroupInfo(k, k, "${list.size} 首", list.size, list.first())
+                    GroupInfo(k, folderDisplayName(k), "${list.size} 首", list.size, list.first())
                 }
             else -> emptyList()
         }.sortedWith(compareBy({ PinyinIndex.initialOf(it.title) }, { it.title.lowercase() }))
@@ -1063,6 +1131,7 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
         // 首次导入目录即视为选定「指定目录」范围；用户明确选择「只看指定目录」时也强制切换
         if (folderScopeOnly || prefs.scanScope == ScanScope.UNSET) {
             prefs.scanScope = ScanScope.FOLDERS
+            prefs.scanScopeChosen = true
         }
         _library.update {
             it.copy(
@@ -1074,40 +1143,88 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
         scan()
     }
 
+    /**
+     * 移除一个已导入目录。
+     *
+     * 两条硬规则：
+     *  1. **绝不因为移除目录而自动扫全盘**。以往在「全盘扫描」范围下移除目录会走
+     *     `scan()`，也就是把整块存储重扫一遍，又慢又没道理；现在只更新配置。
+     *  2. 移除最后一个目录时，如果当前范围是「指定目录」，范围回退到「未选择」，
+     *     清空曲库与扫描缓存并提示重新选择（同样不扫描任何位置）。
+     */
     fun removeFolder(uriString: String) {
         val list = prefs.folderUris.toMutableList()
-        list.remove(uriString)
+        if (!list.remove(uriString)) return
         prefs.folderUris = list
-        runCatching { getApplication<Application>().contentResolver.releasePersistableUriPermission(Uri.parse(uriString), Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-        // 目录清空且当前范围就是「指定目录」时，退回等待重新选择（不自动改扫描全盘）
-        if (prefs.folderUris.isEmpty() && prefs.scanScope == ScanScope.FOLDERS) {
-            prefs.scanScope = ScanScope.UNSET
-            PinyinIndex.build(emptyList())
-            currentQueue = emptyList()
-            _library.update {
-                it.copy(
-                    scanScope = ScanScope.UNSET,
-                    folderCount = 0,
-                    folderUris = emptyList(),
-                    songs = emptyList(),
-                    visible = emptyList(),
-                    letterIndex = emptyMap(),
-                    detailSongs = emptyList(),
-                    skippedUnsupported = 0,
-                    lyricsCount = 0,
-                )
-            }
-            refreshGroups()
-            viewModelScope.launch {
-                withContext(Dispatchers.IO) { db.songCacheDao().clear() }
+        runCatching {
+            getApplication<Application>().contentResolver.releasePersistableUriPermission(
+                Uri.parse(uriString),
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+
+        // 目录配置变了：先作废正在跑的扫描，避免它把过期结果写回曲库/缓存
+        cancelScan()
+
+        // 立刻把「这个目录」带来的歌从曲库摘掉（只动应用内数据，不碰存储里的文件）
+        val stale = songsFromTree(uriString)
+        if (stale.isNotEmpty()) dropSongs(stale)
+
+        _library.update { it.copy(folderCount = list.size, folderUris = list) }
+
+        if (list.isEmpty()) {
+            if (prefs.scanScope == ScanScope.FOLDERS) {
+                prefs.scanScope = ScanScope.UNSET
+                prefs.scanScopeChosen = true
+                clearLibraryForScopeReset()
                 pushMessage("已移除全部目录，请重新选择扫描范围")
+            } else {
+                // 全盘扫描范围：曲库由系统媒体库决定，导入的目录只是附加来源，无需重扫
+                pushMessage("已移除全部目录")
             }
             return
         }
-        _library.update {
-            it.copy(folderCount = prefs.folderUris.size, folderUris = prefs.folderUris)
+
+        when (prefs.scanScope) {
+            // 「指定目录」范围里目录就是唯一来源，剩下的目录要重扫（只扫这几个，很快）
+            ScanScope.FOLDERS -> scan()
+            // 「全盘扫描」范围：为了一个目录重扫整块盘不值得，等用户手动重扫
+            else -> pushMessage("已移除目录「${folderDisplayName(uriString)}」")
         }
-        scan()
+    }
+
+    /**
+     * 找出曲库里来自某个 SAF 树目录的歌曲。
+     * 用文档 ID 前缀比对（`primary:Music/a.mp3` 是否在 `primary:Music` 下），
+     * 这样能精确到「这一棵导入的目录树」，不会误伤同名的其他目录。
+     */
+    private fun songsFromTree(treeUri: String): List<Song> {
+        val treeDocId = docIdOf(treeUri) ?: return emptyList()
+        return _library.value.songs.filter { song ->
+            val docId = docIdOf(song.uri.toString())
+            docId != null && (docId == treeDocId || docId.startsWith("$treeDocId/"))
+        }
+    }
+
+    /** 从内存曲库与扫描缓存中摘掉指定歌曲（不删除存储中的文件、不碰收藏/歌单/统计） */
+    private fun dropSongs(removed: List<Song>) {
+        val keys = removed.map { it.stableKey }.toSet()
+        currentQueue = currentQueue.filterNot { it.stableKey in keys }
+        val songs = _library.value.songs.filterNot { it.stableKey in keys }
+        val query = _library.value.query
+        val visible = searchSongs(songs, query)
+        _library.update {
+            it.copy(
+                songs = songs,
+                visible = visible,
+                letterIndex = buildLetterIndex(visible),
+                lyricsCount = songs.count { s -> s.lrcUri != null },
+            )
+        }
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { keys.forEach { db.songCacheDao().delete(it) } }
+        }
+        refreshGroups()
     }
 
     fun folderUris(): List<String> = prefs.folderUris
@@ -2261,6 +2378,21 @@ private fun android.net.Uri.derivedFolderPath(): String? {
     val pathOnly = decoded.substringAfter(':', "")
     return pathOnly.substringBeforeLast('/', "").takeIf { it.isNotEmpty() }
 }
+
+/** 取 content URI 的文档 ID（已解码）；拿不到返回 null */
+private fun docIdOf(uriString: String): String? = runCatching {
+    android.net.Uri.decode(android.net.Uri.parse(uriString).lastPathSegment.orEmpty())
+}.getOrNull()?.takeIf { it.isNotBlank() }
+
+/**
+ * 目录的展示名：只取路径里**最后一个文件夹的名字**。
+ * 「/storage/emulated/0/Music/华语」→「华语」；SAF / WebDAV 传进来的本来就是目录名，原样返回。
+ */
+private fun folderDisplayName(path: String): String =
+    path.trimEnd('/', '\\')
+        .substringAfterLast('/')
+        .substringAfterLast('\\')
+        .ifBlank { path }
 
 /** 文件夹维度标签（分组用） */
 private val Song.folderLabel: String
