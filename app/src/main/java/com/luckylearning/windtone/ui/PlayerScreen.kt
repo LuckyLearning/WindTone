@@ -371,7 +371,12 @@ fun PlayerScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Column(Modifier.weight(1f)) {
+                Column(
+                    // 车机：标题列不占满剩余宽度，红心紧跟在歌名/歌手后面——
+                    // 1707dp 横屏上红心贴屏幕最右端，驾驶时视线要扫一两千像素；
+                    // 手机保持「标题占满 + 红心贴右」（与效果图 ⑫ 一致）。
+                    Modifier.weight(1f, fill = !state.carMode),
+                ) {
                     Text(
                         text = song?.title ?: "未在播放",
                         style = MaterialTheme.typography.titleMedium,

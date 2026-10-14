@@ -115,6 +115,10 @@ fun CarHomeScreen(
     onPrevious: () -> Unit,
     onSeek: (Long) -> Unit,
     onExpandPlayer: () -> Unit,
+    /** 当前歌是否已收藏（底部播放条红心态） */
+    isFavorite: Boolean = false,
+    /** 切换收藏（底部播放条红心） */
+    onToggleFavorite: () -> Unit = {},
 ) {
     val scheme = MaterialTheme.colorScheme
     // 车机上弹软键盘体验差，搜索框做成「点按钮才展开」的两段式，平时不占位置
@@ -253,6 +257,8 @@ fun CarHomeScreen(
             CarNowPlayingBar(
                 player = player,
                 progressFlow = progressFlow,
+                isFavorite = isFavorite,
+                onToggleFavorite = onToggleFavorite,
                 onToggle = onToggle,
                 onNext = onNext,
                 onPrevious = onPrevious,
@@ -757,6 +763,8 @@ private fun CarCardRow(
 private fun CarNowPlayingBar(
     player: PlayerUiState,
     progressFlow: StateFlow<PlaybackProgress>,
+    isFavorite: Boolean = false,
+    onToggleFavorite: () -> Unit = {},
     onToggle: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
@@ -825,6 +833,20 @@ private fun CarNowPlayingBar(
             }
 
             Spacer(Modifier.width(22.dp))
+
+            // ------------------------------------------- 收藏（⏮ 左侧）
+            // 车机驾驶场景里点屏幕右缘费劲，收藏放在控制键簇最左边顺手的位置；
+            // 已收藏用 primary 实心，未收藏用描边（与播放页歌名行红心同款规则）。
+            CarRoundButton(
+                icon = if (isFavorite) AppIcons.Favorite else AppIcons.FavoriteBorder,
+                size = 56.dp,
+                iconSize = 28.dp,
+                container = scheme.surfaceContainerHighest,
+                tint = if (isFavorite) scheme.primary else scheme.onSurface,
+                contentDescription = if (isFavorite) "取消收藏" else "收藏",
+                onClick = onToggleFavorite,
+            )
+            Spacer(Modifier.width(12.dp))
 
             // ------------------------------------------------------ 控制三键
             CarRoundButton(

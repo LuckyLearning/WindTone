@@ -305,6 +305,8 @@ fun MainScreen(vm: MusicViewModel) {
                     onPrevious = vm::previous,
                     onSeek = vm::seekTo,
                     onExpandPlayer = vm::openPlayer,
+                    isFavorite = player.current?.let { it.stableKey in library.favoriteUris } == true,
+                    onToggleFavorite = { player.current?.let(vm::toggleFavorite) },
                 )
             } else Column(
                 Modifier
