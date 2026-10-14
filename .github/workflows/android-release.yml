@@ -143,38 +143,39 @@ jobs:
           retention-days: 90
 
       # ---------------------------------------------------------------- 发布说明
+      # 说明正文来自**固定模板** `.github/release-notes/template.md`，
+      # 发版时只替换 {version} / {version_code} / {date} 三个占位符 —— 不需要每个版本手写。
+      # 特例（如过渡版本）想单独写说明时，放 `.github/release-notes/v{版本}.md` 即可覆盖模板。
       - name: 组装 Release 说明
         id: notes
         env:
           VERSION: ${{ steps.ver.outputs.name }}
+          CODE: ${{ steps.ver.outputs.code }}
         run: |
           OUT="$RUNNER_TEMP/release-body.md"
-          NOTES=".github/release-notes/v${VERSION}.md"
-          if [ -f "$NOTES" ]; then
-            cat "$NOTES" > "$OUT"
-            echo "::notice::使用手写说明 $NOTES"
+          OVERRIDE=".github/release-notes/v${VERSION}.md"
+          TEMPLATE=".github/release-notes/template.md"
+          DATE="$(date -u +%Y-%m-%d)"
+          if [ -f "$OVERRIDE" ]; then
+            SRC="$OVERRIDE"
+            echo "::notice::使用版本专属说明 $OVERRIDE（覆盖固定模板）"
           else
-            # 没写说明时的兜底：用 git log 生成变更列表，并明确提示
-            PREV=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+            SRC="$TEMPLATE"
+            echo "::notice::使用固定模板 $TEMPLATE"
+          fi
+          if [ -f "$SRC" ]; then
+            sed -e "s/{version}/${VERSION}/g" \
+                -e "s/{version_code}/${CODE}/g" \
+                -e "s/{date}/${DATE}/g" \
+                "$SRC" > "$OUT"
+          else
+            # 模板都没了的兜底：至少给出一份能读的说明（正常不该走到这里）
+            echo "::warning::未找到 $TEMPLATE，退化为 git log 生成的说明"
             {
-              echo "WindTone ${VERSION}。"
+              echo "听风 WindTone ${VERSION}。"
               echo
-              echo "# 变更"
-              echo
-              if [ -n "$PREV" ]; then
-                git log --pretty=format:'- %s' "$PREV..$GITHUB_REF_NAME" | grep -v '^- release:' || true
-              else
-                git log -n 20 --pretty=format:'- %s' "$GITHUB_REF_NAME"
-              fi
-              echo
-              echo
-              echo "**适用设备**：Android 7.0（API 24）及以上；手机与车机通用。"
-              echo
-              echo "**安装**：下载与设备架构匹配的包（不确定就下 universal），直接覆盖安装，歌单、收藏、播放统计全部保留。"
-              echo
-              echo "**升级**：也可在应用内「设置 → 更新 → 检查更新」一键升级。"
+              git log -n 20 --pretty=format:'- %s' "$GITHUB_REF_NAME"
             } > "$OUT"
-            echo "::warning::未找到 .github/release-notes/v${VERSION}.md，已用 git log 生成兜底说明"
           fi
           echo "path=$OUT" >> "$GITHUB_OUTPUT"
           cat "$OUT"
