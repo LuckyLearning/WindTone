@@ -100,7 +100,7 @@ class Prefs(context: Context) {
     /**
      * 短音频过滤阈值（秒）。
      * 时长已知且小于该值的音频不会进入曲库（用于滤掉提示音、转场音效等）；
-     * 0 表示不过滤。默认 60 秒。时长未知（如 WebDAV 扫描阶段拿不到时长）的歌曲不受影响。
+     * 0 表示不过滤。默认 60 秒。时长未知的歌曲不受影响。
      */
     var minSongDurationSec: Int
         get() = sp.getInt(KEY_MIN_DURATION_SEC, DEFAULT_MIN_DURATION_SEC)
@@ -300,47 +300,6 @@ class Prefs(context: Context) {
         }.getOrDefault(DownloadRoute.AUTO)
         set(value) = sp.edit().putString(KEY_UPDATE_ROUTE, value.name).apply()
 
-    // ---------------- WebDAV 云盘 ----------------
-
-    /**
-     * WebDAV 服务器地址（如 https://nas.local:5244/dav 或 Alist/OpenList 挂载）。
-     * 为空表示未配置。
-     */
-    var webdavUrl: String
-        get() = sp.getString(KEY_WEBDAV_URL, "").orEmpty()
-        set(value) = sp.edit().putString(KEY_WEBDAV_URL, value.trim()).apply()
-
-    var webdavUser: String
-        get() = sp.getString(KEY_WEBDAV_USER, "").orEmpty()
-        set(value) = sp.edit().putString(KEY_WEBDAV_USER, value).apply()
-
-    /**
-     * WebDAV 密码。Base64 混淆后存储——这不是加密（应用私有目录下
-     * 防的是「一眼明文」，不是逆向），真正的凭证安全要等接入
-     * androidx.security:security-crypto，见 docs/功能规划-第四期-云盘音乐.md §4.1。
-     */
-    var webdavPassword: String
-        get() = runCatching {
-            val raw = sp.getString(KEY_WEBDAV_PASS, "").orEmpty()
-            if (raw.isEmpty()) "" else String(Base64.decode(raw, Base64.DEFAULT), Charsets.UTF_8)
-        }.getOrDefault("")
-        set(value) = sp.edit()
-            .putString(
-                KEY_WEBDAV_PASS,
-                if (value.isEmpty()) "" else Base64.encodeToString(value.toByteArray(Charsets.UTF_8), Base64.NO_WRAP),
-            )
-            .apply()
-
-    /** WebDAV 扫描根路径（"" = 站点根目录） */
-    var webdavRoot: String
-        get() = sp.getString(KEY_WEBDAV_ROOT, "").orEmpty()
-        set(value) = sp.edit().putString(KEY_WEBDAV_ROOT, value.trim().trimEnd('/')).apply()
-
-    /** 是否把 WebDAV 歌曲合并进曲库（配置了服务器后默认合并） */
-    var webdavEnabled: Boolean
-        get() = sp.getBoolean(KEY_WEBDAV_ENABLED, false)
-        set(value) = sp.edit().putBoolean(KEY_WEBDAV_ENABLED, value).apply()
-
     private companion object {
         const val KEY_FOLDERS = "folders"
         /** 有序的目录列表（换行分隔），优先于旧的 Set 存储 */
@@ -381,10 +340,5 @@ class Prefs(context: Context) {
         const val KEY_AUTO_UPDATE = "auto_check_update"
         const val KEY_LAST_UPDATE_CHECK = "last_update_check_at"
         const val KEY_UPDATE_ROUTE = "update_download_route"
-        const val KEY_WEBDAV_URL = "webdav_url"
-        const val KEY_WEBDAV_USER = "webdav_user"
-        const val KEY_WEBDAV_PASS = "webdav_password"
-        const val KEY_WEBDAV_ROOT = "webdav_root"
-        const val KEY_WEBDAV_ENABLED = "webdav_enabled"
     }
 }

@@ -59,7 +59,6 @@ import androidx.compose.ui.unit.sp
 import com.luckylearning.windtone.data.AudioInspector
 import com.luckylearning.windtone.data.ScanScope
 import com.luckylearning.windtone.data.model.Song
-import com.luckylearning.windtone.data.model.SongSource
 import com.luckylearning.windtone.playback.AudioFx
 import com.luckylearning.windtone.playback.SleepTimer
 
@@ -437,7 +436,6 @@ private fun InfoRow(label: String, value: String) {
  *  - 有真实绝对路径（深度扫描 / Android 10 以下媒体库）→ 直接用；
  *  - SAF 文档 URI → 取 `document/` 里的文档 ID（Android 的 Uri 解析已解一次码），
  *    `primary:` 前缀映射为内置存储根 `/storage/emulated/0/`；
- *  - WebDAV 云端 → URL 的 path 部分本身就是解码后的；
  *  - 其余兜底：媒体库相对目录 + 文件名，再不行才回退原始 URI。
  */
 fun songDisplayPath(song: Song): String {
@@ -458,7 +456,6 @@ fun songDisplayPath(song: Song): String {
                 else -> doc
             }
         }
-        song.source == SongSource.WEBDAV -> uri.path?.takeIf { it.isNotBlank() } ?: raw
         song.folderPath != null && song.displayName.isNotBlank() ->
             song.folderPath.trimEnd('/') + "/" + song.displayName
         else -> raw

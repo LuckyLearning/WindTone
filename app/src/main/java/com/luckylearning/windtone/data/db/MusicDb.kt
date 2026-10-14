@@ -58,24 +58,28 @@ data class SongCacheEntity(
         )
     }
 
-    fun toSong(): Song = Song(
-        id = id,
-        uri = android.net.Uri.parse(uri),
-        title = title,
-        artist = artist,
-        album = album,
-        albumId = albumId,
-        durationMs = durationMs,
-        sizeBytes = sizeBytes,
-        mimeType = mimeType,
-        displayName = displayName,
-        path = path,
-        folderPath = folderPath,
-        source = runCatching { SongSource.valueOf(source) }.getOrDefault(SongSource.MEDIA_STORE),
-        trackNo = trackNo,
-        lrcUri = lrcUri?.let { android.net.Uri.parse(it) },
-        dateAdded = dateAdded,
-    )
+    fun toSong(): Song? {
+        // 旧版本缓存里的 WEBDAV 行（功能已移除）：来源无法识别的直接丢弃，避免云端 URI 混进本地曲库
+        val src = runCatching { SongSource.valueOf(source) }.getOrNull() ?: return null
+        return Song(
+            id = id,
+            uri = android.net.Uri.parse(uri),
+            title = title,
+            artist = artist,
+            album = album,
+            albumId = albumId,
+            durationMs = durationMs,
+            sizeBytes = sizeBytes,
+            mimeType = mimeType,
+            displayName = displayName,
+            path = path,
+            folderPath = folderPath,
+            source = src,
+            trackNo = trackNo,
+            lrcUri = lrcUri?.let { android.net.Uri.parse(it) },
+            dateAdded = dateAdded,
+        )
+    }
 }
 
 @Dao
@@ -94,6 +98,48 @@ interface SongCacheDao {
 
     @Query("DELETE FROM songs_cache WHERE uri = :uri")
     suspend fun delete(uri: String)
+}
+
+// ---------------------------------------------------------------- 扫描目录登记
+
+/**
+ * 已扫描目录的登记表。
+ *
+ * 文件夹视图的分组键是「完整目录标识」（SAF 解码文档 ID / 绝对父路径），标题只显示
+ * 最后一个文件夹名 —— 两个不同位置的同名目录会各自成组但标题一样。这张表把每个
+ * 扫描过的目录记录下来（自增 id / 完整路径 / 叶名 / 树 URI），供同名分组消歧与
+ * 后续「目录管理」类功能使用。扫描成功后逐目录 upsert，移除目录时删行。
+ */
+@Entity(
+    tableName = "scanned_folders",
+    indices = [Index(value = ["docId"], unique = true)],
+)
+data class ScannedFolderEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    /** SAF 树 URI；FILE / MEDIA_STORE 来源的目录没有树 URI，存空串 */
+    val treeUri: String,
+    /** 目录唯一标识：SAF 为解码后的文档 ID（如 primary:Music/华语），本地路径为绝对路径 */
+    val docId: String,
+    /** 完整路径（SAF 取冒号后的路径部分）：Music/华语 */
+    val fullPath: String,
+    /** 叶目录名：华语 */
+    val name: String,
+    val addedAt: Long,
+)
+
+@Dao
+interface ScannedFolderDao {
+    @Query("SELECT * FROM scanned_folders ORDER BY addedAt ASC")
+    suspend fun all(): List<ScannedFolderEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(folder: ScannedFolderEntity)
+
+    @Query("DELETE FROM scanned_folders WHERE docId IN (:docIds)")
+    suspend fun deleteByDocIds(docIds: List<String>)
+
+    @Query("DELETE FROM scanned_folders")
+    suspend fun clear()
 }
 
 // ---------------------------------------------------------------- 歌单
@@ -255,17 +301,19 @@ interface SongOverrideDao {
 @Database(
     entities = [
         SongCacheEntity::class,
+        ScannedFolderEntity::class,
         PlaylistEntity::class,
         PlaylistSongEntity::class,
         PlayStatEntity::class,
         SongOverrideEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class MusicDb : RoomDatabase() {
 
     abstract fun songCacheDao(): SongCacheDao
+    abstract fun scannedFolderDao(): ScannedFolderDao
     abstract fun playlistDao(): PlaylistDao
     abstract fun playStatDao(): PlayStatDao
     abstract fun overrideDao(): SongOverrideDao
@@ -281,13 +329,28 @@ abstract class MusicDb : RoomDatabase() {
             }
         }
 
+        /** v2 -> v3：新增 scanned_folders 目录登记表 */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `scanned_folders` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`treeUri` TEXT NOT NULL, `docId` TEXT NOT NULL, `fullPath` TEXT NOT NULL, " +
+                        "`name` TEXT NOT NULL, `addedAt` INTEGER NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_scanned_folders_docId` ON `scanned_folders` (`docId`)",
+                )
+            }
+        }
+
         fun get(context: Context): MusicDb = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext,
                 MusicDb::class.java,
                 "music_player.db",
             )
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .fallbackToDestructiveMigration()
                 .build()
                 .also { instance = it }

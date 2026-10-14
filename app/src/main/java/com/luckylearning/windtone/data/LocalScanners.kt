@@ -21,8 +21,12 @@ class FolderScanner(private val context: Context) {
         var counted = 0
         // 文件夹视图按「用户选择的目录」分组：整棵子树的歌都归到所选目录名下，
         // 子目录不单独显示（用户在系统选择器里挑哪层，哪层就是一个分组）。
-        val rootLabel = root.name ?: "导入目录"
-        walk(root, out, readTags, rootLabel) {
+        // 分组键用**解码后的完整文档 ID**（如 primary:Music/华语）而不是叶名——
+        // 两个不同位置的同名目录各自成组不会撞在一起；页面标题仍取最后一个文件夹名。
+        val treeDocId = runCatching { Uri.decode(treeUri.lastPathSegment.orEmpty()) }
+            .getOrNull()?.takeIf { it.isNotBlank() }
+            ?: (root.name ?: "导入目录")
+        walk(root, out, readTags, treeDocId) {
             counted++
             if (counted % 5 == 0) onProgress(out.size)
         }
@@ -58,7 +62,7 @@ class FolderScanner(private val context: Context) {
                 .mapNotNull { lf -> lf.name?.let { n -> LyricsMatcher.score(n, base).takeIf { it >= 0 }?.let { it to lf } } }
                 .maxByOrNull { it.first }?.second
 
-            // SAF 没有真实文件路径，用「用户所选目录名」作为 folderPath 统一分组
+            // SAF 没有真实文件路径，用「所选目录的完整文档 ID」作为 folderPath 统一分组
             out.add(buildSong(audio, name, lyric?.uri, folderLabel, SongSource.FOLDER, readTags))
         }
 

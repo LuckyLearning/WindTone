@@ -80,7 +80,7 @@ class MusicRepository(
 
         Log.i(TAG, "扫描完成（范围 $scope）：媒体库 $afterMediaStore 首，合计 ${collected.size} 首")
 
-        // 短音频过滤：只剔除「时长已知且过短」的曲目；时长未知（0，如 WebDAV）保留，
+        // 短音频过滤：只剔除「时长已知且过短」的曲目；时长未知（0）的保留，
         // 播放后拿到真实时长，下次扫描自然会被规则接管。
         val minMs = prefs.minSongDurationSec * 1000L
         val kept = if (minMs > 0L) collected.values.filterNot { it.durationMs in 1 until minMs } else collected.values.toList()
@@ -182,7 +182,6 @@ class MusicRepository(
             SongSource.MEDIA_STORE -> "媒体库"
             SongSource.FOLDER -> "导入文件夹"
             SongSource.FILE -> "本地文件"
-            SongSource.WEBDAV -> "WebDAV"
         }
     }
 }

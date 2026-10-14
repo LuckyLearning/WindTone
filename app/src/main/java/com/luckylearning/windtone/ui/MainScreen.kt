@@ -523,14 +523,6 @@ fun MainScreen(vm: MusicViewModel) {
                     onOpenReleasePage = vm::openReleasePage,
                     onIgnoreUpdate = vm::ignoreUpdate,
                     onDismissUpdateDialog = vm::dismissUpdateDialog,
-                    webdavConfigured = library.webdavConfigured,
-                    webdavEnabled = library.webdavEnabled,
-                    webdavScanning = library.webdavScanning,
-                    webdavSongCount = library.webdavSongCount,
-                    webdavMessage = library.webdavMessage,
-                    onWebDavConnect = vm::connectWebDav,
-                    onWebDavScan = vm::scanWebDav,
-                    onWebDavDisconnect = vm::disconnectWebDav,
                 )
             }
 

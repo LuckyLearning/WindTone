@@ -3,8 +3,8 @@ package com.luckylearning.windtone.data.model
 import android.net.Uri
 import androidx.compose.runtime.Immutable
 
-/** 歌曲来源：系统媒体库 / SAF 导入的文件夹 / 直接文件路径（深度扫描）/ WebDAV 云端 */
-enum class SongSource { MEDIA_STORE, FOLDER, FILE, WEBDAV }
+/** 歌曲来源：系统媒体库 / SAF 导入的文件夹 / 直接文件路径（深度扫描） */
+enum class SongSource { MEDIA_STORE, FOLDER, FILE }
 
 /**
  * 标注 @Immutable：本类所有字段都是 val，且 `Uri` 本身不可变，

@@ -112,15 +112,9 @@ class LyricsLoader(private val context: Context) {
             .maxByOrNull { it.first }
             ?.second
 
-    private fun readSidecar(uri: Uri): ByteArray? = when (uri.scheme?.lowercase()) {
-        // WebDAV 等远程歌词：走 HTTP 拉取（凭证由 WebDavClient 统一管理；匿名服务器直接匿名拉）
-        "http", "https" ->
-            com.luckylearning.windtone.data.webdav.WebDavClient.fetchBytes(uri.toString(), maxSidecarBytes)
-
-        else -> runCatching {
-            context.contentResolver.openInputStream(uri)?.use { readLimited(it, maxSidecarBytes) }
-        }.onFailure { Log.w(TAG, "读取歌词文件失败: $uri", it) }.getOrNull()
-    }
+    private fun readSidecar(uri: Uri): ByteArray? = runCatching {
+        context.contentResolver.openInputStream(uri)?.use { readLimited(it, maxSidecarBytes) }
+    }.onFailure { Log.w(TAG, "读取歌词文件失败: $uri", it) }.getOrNull()
 
     private fun readLimited(input: InputStream, limit: Int): ByteArray {
         val out = java.io.ByteArrayOutputStream()
