@@ -926,6 +926,8 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * 移除文件夹视图中某个分组下的全部扫描结果。
      *
+     * 分组按「添加的目录」展示，所以移除时**同步把对应的导入目录从扫描列表移除**
+     * （释放 SAF 持久化权限、更新 folderUris），否则下次扫描同样的歌又会回来。
      * 只从应用内部状态与数据库中清除，**不会删除存储中的原始音频文件**。
      * 会从播放队列、歌单、收藏、播放统计、歌词/封面缓存中一并清理。
      */
@@ -977,7 +979,37 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
             refreshGroups()
             refreshPlaylists()
             refreshStats()
-            pushMessage("已移除「${group.title}」的 ${removed.size} 首歌曲")
+
+            // 4) 分组按「添加的目录」展示：把这些歌所属的导入目录从扫描列表一并移除，
+            //    否则下次扫描（或冷启动自动扫描）同样的歌又会回来。
+            val matchedTrees = prefs.folderUris.filter { tree -> removed.any { it.belongsToTree(tree) } }
+            if (matchedTrees.isNotEmpty()) {
+                val list = prefs.folderUris.toMutableList()
+                matchedTrees.forEach { tree ->
+                    list.remove(tree)
+                    runCatching {
+                        getApplication<Application>().contentResolver.releasePersistableUriPermission(
+                            Uri.parse(tree),
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                        )
+                    }
+                }
+                prefs.folderUris = list
+                // 目录配置变了：作废正在跑的扫描，避免它把刚删掉的结果又写回来
+                cancelScan()
+                if (list.isEmpty() && prefs.scanScope == ScanScope.FOLDERS) {
+                    // 最后一个目录被移除：与 removeFolder 相同的兜底 —— 范围回退「未选择」
+                    prefs.scanScope = ScanScope.UNSET
+                    prefs.scanScopeChosen = true
+                    clearLibraryForScopeReset()
+                    pushMessage("已移除「${group.title}」，导入目录已清空，请重新选择扫描范围")
+                    return@launch
+                }
+                _library.update { it.copy(folderCount = list.size, folderUris = list) }
+            }
+            val dirNote = if (matchedTrees.isEmpty()) ""
+            else "，导入目录「${matchedTrees.joinToString("、") { treeDisplayName(it) }}」已一并移除"
+            pushMessage("已移除「${group.title}」的 ${removed.size} 首歌曲$dirNote")
         }
     }
 
@@ -1206,12 +1238,14 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
      * 用文档 ID 前缀比对（`primary:Music/a.mp3` 是否在 `primary:Music` 下），
      * 这样能精确到「这一棵导入的目录树」，不会误伤同名的其他目录。
      */
-    private fun songsFromTree(treeUri: String): List<Song> {
-        val treeDocId = docIdOf(treeUri) ?: return emptyList()
-        return _library.value.songs.filter { song ->
-            val docId = docIdOf(song.uri.toString())
-            docId != null && (docId == treeDocId || docId.startsWith("$treeDocId/"))
-        }
+    private fun songsFromTree(treeUri: String): List<Song> =
+        _library.value.songs.filter { it.belongsToTree(treeUri) }
+
+    /** 歌曲是否来自某个 SAF 树目录（文档 ID 前缀比对，与 songsFromTree 同口径） */
+    private fun Song.belongsToTree(treeUri: String): Boolean {
+        val treeDocId = docIdOf(treeUri) ?: return false
+        val docId = docIdOf(uri.toString()) ?: return false
+        return docId == treeDocId || docId.startsWith("$treeDocId/")
     }
 
     /** 从内存曲库与扫描缓存中摘掉指定歌曲（不删除存储中的文件、不碰收藏/歌单/统计） */
@@ -2424,3 +2458,7 @@ private val Song.folderLabel: String
         source == com.luckylearning.windtone.data.model.SongSource.FOLDER -> uri.derivedFolderPath()
         else -> null
     } ?: UNKNOWN_FOLDER_LABEL
+
+/** SAF 树目录的展示名：从文档 ID 取冒号后的路径末段（`primary:Music/华语` → `华语`）；解析不出退回原始串 */
+private fun treeDisplayName(treeUri: String): String =
+    docIdOf(treeUri)?.substringAfter(':')?.let(::folderDisplayName) ?: folderDisplayName(treeUri)

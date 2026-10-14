@@ -627,7 +627,8 @@ fun MainScreen(vm: MusicViewModel) {
                         Text(
                             "将从音乐库中移除「${group.title}」下的 ${group.count} 首歌曲，" +
                                 "同时从歌单、播放队列、收藏和播放统计中清理。\n" +
-                                "原始音频文件不会被删除，但重新扫描前这些歌曲不会再出现。",
+                                "该组对应的导入目录也会从扫描列表中移除，重新扫描后这些歌曲不会再出现；" +
+                                "原始音频文件不会被删除。",
                         )
                     },
                     confirmButton = {
@@ -892,7 +893,7 @@ private fun GroupListView(
                                 onDismissRequest = { showMenu = false },
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text("移除扫描结果") },
+                                    text = { Text("移除目录及扫描结果") },
                                     onClick = {
                                         showMenu = false
                                         onRemove(group)
