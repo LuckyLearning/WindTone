@@ -26,6 +26,25 @@ enum class ScanScope(val label: String) {
     FOLDERS("指定目录"),
 }
 
+/**
+ * 更新包下载线路。
+ *
+ * 检查更新永远只访问 GitHub 官方地址（镜像有缓存延迟，会把刚发布的版本当成「已是最新」），
+ * 只有**下载安装包**才允许走第三方加速镜像 —— 该选择由用户决定：
+ *  - [AUTO]：直连优先，起步太慢自动切到镜像（默认，适合大多数网络）；
+ *  - [DIRECT]：只用 GitHub 官方直链（最权威、最及时，但国内可能很慢）；
+ *  - [GHPROXY_NET] / [GH_PROXY_COM]：固定走某条公共加速镜像（镜像只转发字节，不改内容）。
+ *
+ * [prefix] 为 `null` 表示「自动」（直链 + 全部镜像）；空串表示只走直链；
+ * 其余为镜像前缀（给原始 github.com 地址拼前缀即生效）。
+ */
+enum class DownloadRoute(val label: String, val hint: String, val prefix: String?) {
+    AUTO("自动", "直连优先，太慢会自动切换镜像", null),
+    DIRECT("直连 GitHub", "只用官方地址，最及时；国内可能较慢", ""),
+    GHPROXY_NET("ghproxy.net", "公共加速镜像，速度较快", "https://ghproxy.net/"),
+    GH_PROXY_COM("gh-proxy.com", "公共加速镜像，ghproxy 不通时备用", "https://gh-proxy.com/"),
+}
+
 class Prefs(context: Context) {
 
     private val sp: SharedPreferences =
@@ -271,6 +290,16 @@ class Prefs(context: Context) {
         get() = sp.getLong(KEY_LAST_UPDATE_CHECK, 0L)
         set(value) = sp.edit().putLong(KEY_LAST_UPDATE_CHECK, value).apply()
 
+    /**
+     * 下载新版本安装包时使用的线路。默认 [DownloadRoute.AUTO]。
+     * 只影响 APK 下载，不影响「检查更新」（后者永远走 GitHub 官方地址）。
+     */
+    var updateDownloadRoute: DownloadRoute
+        get() = runCatching {
+            DownloadRoute.valueOf(sp.getString(KEY_UPDATE_ROUTE, DownloadRoute.AUTO.name)!!)
+        }.getOrDefault(DownloadRoute.AUTO)
+        set(value) = sp.edit().putString(KEY_UPDATE_ROUTE, value.name).apply()
+
     // ---------------- WebDAV 云盘 ----------------
 
     /**
@@ -351,6 +380,7 @@ class Prefs(context: Context) {
         const val KEY_SKIP_SILENCE = "skip_silence"
         const val KEY_AUTO_UPDATE = "auto_check_update"
         const val KEY_LAST_UPDATE_CHECK = "last_update_check_at"
+        const val KEY_UPDATE_ROUTE = "update_download_route"
         const val KEY_WEBDAV_URL = "webdav_url"
         const val KEY_WEBDAV_USER = "webdav_user"
         const val KEY_WEBDAV_PASS = "webdav_password"

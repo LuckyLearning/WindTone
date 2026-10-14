@@ -16,6 +16,7 @@ import androidx.media3.session.MediaController
 import com.luckylearning.windtone.data.AudioInspector
 import com.luckylearning.windtone.data.CoverRepository
 import com.luckylearning.windtone.data.CrashLog
+import com.luckylearning.windtone.data.DownloadRoute
 import com.luckylearning.windtone.data.LyricsLoader
 import com.luckylearning.windtone.data.MusicRepository
 import com.luckylearning.windtone.data.Prefs
@@ -278,6 +279,8 @@ data class UpdateUiState(
     val readyApkPath: String? = null,
     /** 需要用户先授权「安装未知应用」 */
     val needInstallPermission: Boolean = false,
+    /** 本次下载使用的线路（自动 / 直连 / 指定镜像），用于在弹窗里说明当前走哪条线 */
+    val route: DownloadRoute = DownloadRoute.AUTO,
 )
 
 class MusicViewModel(app: Application) : AndroidViewModel(app) {
@@ -332,7 +335,12 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     val themeSeed: StateFlow<Int?> = _themeSeed.asStateFlow()
 
     /** 应用内更新状态 */
-    private val _update = MutableStateFlow(UpdateUiState(currentVersion = UpdateChecker.currentVersion))
+    private val _update = MutableStateFlow(
+        UpdateUiState(
+            currentVersion = UpdateChecker.currentVersion,
+            route = prefs.updateDownloadRoute,
+        )
+    )
     val update: StateFlow<UpdateUiState> = _update.asStateFlow()
 
     private var controller: MediaController? = null
@@ -2238,6 +2246,8 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     fun downloadUpdate() {
         val info = _update.value.info ?: return
         if (_update.value.downloading) return
+        // 线路在点「下载」这一刻定下来，避免下载中途被设置页的改动影响
+        val route = prefs.updateDownloadRoute
         viewModelScope.launch {
             _update.update {
                 it.copy(
@@ -2248,6 +2258,7 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
                     message = null,
                     readyApkPath = null,
                     needInstallPermission = false,
+                    route = route,
                 )
             }
             val app = getApplication<Application>()
@@ -2255,11 +2266,13 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
                 UpdateChecker.download(
                     app,
                     info,
+                    route = route,
                     onProgress = { done, total ->
                         val pct = if (total > 0) ((done * 100) / total).toInt().coerceIn(0, 100) else -1
                         _update.update { it.copy(progress = pct, downloadedBytes = done, totalBytes = total) }
                     },
                     onLineFallback = { attempt, count ->
+                        // 只有「自动」模式才有多条线路可切
                         _update.update {
                             it.copy(progress = 0, downloadedBytes = 0L, message = "直连太慢，切换镜像线路 $attempt/$count…")
                         }
@@ -2281,7 +2294,7 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
                     it.copy(
                         downloading = false,
                         progress = 0,
-                        message = "下载失败：${t.message ?: "请稍后重试"}",
+                        message = UpdateChecker.describeDownloadFailure(route, t),
                     )
                 }
             }
@@ -2342,6 +2355,15 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun autoCheckUpdateEnabled(): Boolean = prefs.autoCheckUpdate
+
+    /** 下载线路（设置页读到当前值） */
+    fun downloadRoute(): DownloadRoute = prefs.updateDownloadRoute
+
+    /** 切换下载线路（只影响 APK 下载；检查更新永远走 GitHub 官方地址） */
+    fun setDownloadRoute(route: DownloadRoute) {
+        prefs.updateDownloadRoute = route
+        _update.update { it.copy(route = route) }
+    }
 
     /** 浏览器打开 Releases 页面（下载失败或想手动下载时的兜底） */
     fun openReleasePage() {

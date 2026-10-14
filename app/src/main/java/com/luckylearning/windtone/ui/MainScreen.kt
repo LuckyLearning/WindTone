@@ -479,6 +479,8 @@ fun MainScreen(vm: MusicViewModel) {
                 // 用本地 state 兜住显示，回调里同步写回。
                 var dynamicThemeOn by remember { mutableStateOf(vm.dynamicThemeEnabled()) }
                 var autoCheckUpdateOn by remember { mutableStateOf(vm.autoCheckUpdateEnabled()) }
+                // 下载线路同样只存在 SharedPreferences 里，用本地 state 兜住显示
+                var downloadRouteOn by remember { mutableStateOf(vm.downloadRoute()) }
                 SettingsScreen(
                     library = library,
                     player = player,
@@ -516,6 +518,8 @@ fun MainScreen(vm: MusicViewModel) {
                     onInstallUpdate = vm::installUpdate,
                     onGrantInstallPermission = vm::grantInstallPermission,
                     onAutoCheckUpdate = { autoCheckUpdateOn = it; vm.setAutoCheckUpdate(it) },
+                    downloadRoute = downloadRouteOn,
+                    onDownloadRoute = { downloadRouteOn = it; vm.setDownloadRoute(it) },
                     onOpenReleasePage = vm::openReleasePage,
                     onIgnoreUpdate = vm::ignoreUpdate,
                     onDismissUpdateDialog = vm::dismissUpdateDialog,

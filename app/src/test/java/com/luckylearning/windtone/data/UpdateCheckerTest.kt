@@ -138,5 +138,51 @@ class UpdateCheckerTest {
     fun downloadCandidatesSkipMirrorForNonGithubUrl() {
         val url = "https://example.com/self-hosted.apk"
         assertEquals(listOf(url), UpdateChecker.downloadCandidates(url))
+        // 任何线路下都不给非 GitHub 地址套前缀
+        DownloadRoute.values().forEach { route ->
+            assertEquals(listOf(url), UpdateChecker.downloadCandidates(url, route))
+        }
+    }
+
+    @Test
+    fun directRouteNeverUsesMirror() {
+        val url = "https://github.com/LuckyLearning/WindTone/releases/download/v1.0.6/WindTone-v1.0.6.apk"
+        assertEquals(listOf(url), UpdateChecker.downloadCandidates(url, DownloadRoute.DIRECT))
+    }
+
+    @Test
+    fun manualMirrorRouteUsesOnlyThatMirror() {
+        val url = "https://github.com/LuckyLearning/WindTone/releases/download/v1.0.6/WindTone-v1.0.6.apk"
+
+        val ghproxy = UpdateChecker.downloadCandidates(url, DownloadRoute.GHPROXY_NET)
+        assertEquals(listOf("https://ghproxy.net/$url"), ghproxy)
+
+        val ghProxyCom = UpdateChecker.downloadCandidates(url, DownloadRoute.GH_PROXY_COM)
+        assertEquals(listOf("https://gh-proxy.com/$url"), ghProxyCom)
+    }
+
+    @Test
+    fun autoRouteTriesDirectThenMirrors() {
+        val url = "https://github.com/LuckyLearning/WindTone/releases/download/v1.0.6/WindTone-v1.0.6.apk"
+        val candidates = UpdateChecker.downloadCandidates(url, DownloadRoute.AUTO)
+        assertEquals(listOf(url, "https://ghproxy.net/$url", "https://gh-proxy.com/$url"), candidates)
+    }
+
+    // ------------------------------------------------------------ 下载失败文案
+
+    @Test
+    fun manualRouteFailureMentionsRouteAndWhereToChange() {
+        val msg = UpdateChecker.describeDownloadFailure(
+            DownloadRoute.GHPROXY_NET,
+            java.io.IOException("下载失败（HTTP 502）"),
+        )
+        assertTrue("应点明是哪条线路，实际：$msg", msg.contains("ghproxy.net"))
+        assertTrue("应指引去设置换线路，实际：$msg", msg.contains("下载线路"))
+    }
+
+    @Test
+    fun autoRouteFailureSuggestsBrowserFallback() {
+        val msg = UpdateChecker.describeDownloadFailure(DownloadRoute.AUTO, null)
+        assertTrue("应给出兜底建议，实际：$msg", msg.contains("浏览器"))
     }
 }

@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -48,6 +49,7 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import com.luckylearning.windtone.BuildConfig
+import com.luckylearning.windtone.data.DownloadRoute
 import com.luckylearning.windtone.data.UpdateChecker
 
 /**
@@ -63,6 +65,7 @@ fun SettingsScreen(
     update: UpdateUiState,
     dynamicTheme: Boolean,
     autoCheckUpdate: Boolean,
+    downloadRoute: DownloadRoute,
     crashLogCount: Int,
     crashLogText: String?,
     onClose: () -> Unit,
@@ -87,6 +90,7 @@ fun SettingsScreen(
     onInstallUpdate: () -> Unit,
     onGrantInstallPermission: () -> Unit,
     onAutoCheckUpdate: (Boolean) -> Unit,
+    onDownloadRoute: (DownloadRoute) -> Unit,
     onOpenReleasePage: () -> Unit,
     onIgnoreUpdate: () -> Unit,
     onDismissUpdateDialog: () -> Unit,
@@ -109,6 +113,8 @@ fun SettingsScreen(
     var showEq by remember { mutableStateOf(false) }
     // 短音频过滤阈值编辑弹窗
     var showMinDurationDialog by remember { mutableStateOf(false) }
+    // 下载线路选择弹窗
+    var showRouteDialog by remember { mutableStateOf(false) }
     // 用户点过悬浮歌词开关但还没授权 → 展开下方授权指引，授权成功返回后自动收起
     var overlayHintVisible by remember { mutableStateOf(false) }
     LaunchedEffect(canDrawOverlay) {
@@ -443,6 +449,11 @@ fun SettingsScreen(
                     checked = autoCheckUpdate,
                     onCheckedChange = onAutoCheckUpdate,
                 )
+                ActionRow(
+                    title = "下载线路",
+                    subtitle = "${downloadRoute.label} · ${downloadRoute.hint}",
+                    onClick = { showRouteDialog = true },
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     TextButton(onClick = onOpenReleasePage) { Text("打开发布页面") }
                     if (info != null) {
@@ -464,7 +475,8 @@ fun SettingsScreen(
                 Text(
                     "歌单、收藏、播放统计、歌词等全部数据都只保存在本机；" +
                         "歌词优先读取音频同目录的 .lrc / .krc / .yrc 文件，其次读取音频内嵌歌词。\n" +
-                        "联网行为只有两处：「检查更新 / 下载新版本」访问 GitHub Releases；" +
+                        "联网行为只有两处：「检查更新 / 下载新版本」访问 GitHub Releases" +
+                        "（检查更新只走 GitHub 官方地址；下载安装包可选择第三方加速镜像，可在「下载线路」中调整）；" +
                         "配置了 WebDAV 后访问你自己的服务器取音乐和歌词。" +
                         "不采集、不上传任何信息。",
                     style = MaterialTheme.typography.labelSmall,
@@ -513,6 +525,60 @@ fun SettingsScreen(
         )
     }
 
+    // 下载线路选择：检查更新永远走 GitHub 官方地址，这里只管安装包走哪条线
+    if (showRouteDialog) {
+        AlertDialog(
+            onDismissRequest = { showRouteDialog = false },
+            title = { Text("下载线路") },
+            text = {
+                Column {
+                    Text(
+                        "「检查更新」始终访问 GitHub 官方地址；只有下载安装包时可以选择走加速镜像。" +
+                            "镜像有缓存，偶尔会慢或滞后，下载失败时换一条线路再试即可。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    DownloadRoute.values().forEach { route ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    onDownloadRoute(route)
+                                    showRouteDialog = false
+                                }
+                                .padding(vertical = 10.dp, horizontal = 4.dp),
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    route.label,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = if (route == downloadRoute) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurface,
+                                )
+                                Text(
+                                    route.hint,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (route == downloadRoute) {
+                                Icon(
+                                    Icons.Filled.Check,
+                                    contentDescription = "已选择",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showRouteDialog = false }) { Text("完成") } },
+        )
+    }
+
     if (update.dialogVisible && (update.info != null || update.readyApkPath != null)) {
         UpdateDialog(
             update = update,
@@ -550,6 +616,12 @@ private fun UpdateDialog(
             title = { Text("正在下载新版本") },
             text = {
                 Column {
+                    Text(
+                        "下载线路：${update.route.label}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(6.dp))
                     Text(
                         if (update.progress >= 0) "已下载 ${update.progress}%"
                         else "已下载 ${UpdateChecker.formatSize(update.downloadedBytes).ifBlank { "0 MB" }}",
@@ -619,6 +691,11 @@ private fun UpdateDialog(
                             ?.let { " · 新版本 $it" }
                             .orEmpty(),
                     style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    "下载线路：${update.route.label}（可在「设置 → 更新 → 下载线路」中更换）",
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (info.notes.isNotBlank()) {

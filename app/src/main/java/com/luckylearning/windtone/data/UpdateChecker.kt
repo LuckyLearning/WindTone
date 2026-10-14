@@ -68,6 +68,13 @@ sealed interface UpdateCheckResult {
  *
  * API 端点仅作为 Atom 不可用时的降级兜底（例如 Atom 源被中间设备改写）。
  *
+ * ## 关于「镜像 / 代理」（重要）
+ *
+ * **检查更新永远只访问 GitHub 官方地址**（`releases.atom` → `api.github.com/releases/latest`）。
+ * 曾经的实现让检查也走加速镜像，结果镜像缓存了旧内容：刚发布的 1.0.6 在镜像上还不存在，
+ * 客户端就报「已是最新」。因此镜像只用于**下载安装包**，且线路由用户在
+ * 「设置 → 更新 → 下载线路」中决定（[DownloadRoute]，默认自动降级）。
+ *
  * 全流程只在用户点击「检查更新 / 下载」或启动时自动检查（可关闭）时发生，
  * 不上报任何设备信息，也不访问除 GitHub 之外的任何域名。
  */
@@ -103,30 +110,28 @@ object UpdateChecker {
     /**
      * 查询最新版本。永不抛异常，失败一律折成 [UpdateCheckResult.Failed]。
      *
-     * 先用 Atom 源（不受限流），失败再退回 REST API。
+     * **只走 GitHub 官方地址**（Atom 源 → REST API），不用任何镜像/代理：
+     * 镜像有缓存，刚发布的版本在镜像上可能还不存在，会误判成「已是最新」。
+     *
+     * 先用 Atom 源（不受 API 限流），失败再退回 REST API。
      */
     suspend fun checkLatest(current: String = currentVersion): UpdateCheckResult =
         withContext(Dispatchers.IO) {
-            // ---------- 通道 1：Atom 源（首选，无配额；直连失败自动走镜像） ----------
-            var viaAtom: Result<UpdateCheckResult>? = null
-            for (url in downloadCandidates(releasesAtomUrl)) {
-                viaAtom = runCatching { fetchLatestViaAtom(url, current) }
-                when (val r = viaAtom.getOrNull()) {
-                    is UpdateCheckResult.Available,
-                    is UpdateCheckResult.UpToDate -> return@withContext r
+            // ---------- 通道 1：Atom 源（GitHub 官方，无 API 配额） ----------
+            val viaAtom = runCatching { fetchLatestViaAtom(releasesAtomUrl, current) }.getOrNull()
+            when (val r = viaAtom) {
+                is UpdateCheckResult.Available,
+                is UpdateCheckResult.UpToDate -> return@withContext r
 
-                    is UpdateCheckResult.Failed -> {
-                        // Atom 明确报「没有发布版本」时不浪费一次 API 配额
-                        if (r.reason.contains("还没有发布")) return@withContext r
-                    }
-
-                    null -> {
-                        if (verbose) Log.w(TAG, "Atom 源不可用（$url），尝试下一条线路")
-                    }
+                is UpdateCheckResult.Failed -> {
+                    // Atom 明确报「没有发布版本」时不浪费一次 API 配额
+                    if (r.reason.contains("还没有发布")) return@withContext r
                 }
+
+                null -> if (verbose) Log.w(TAG, "Atom 源不可用（$releasesAtomUrl），退回 API")
             }
 
-            // ---------- 通道 2：REST API（降级兜底） ----------
+            // ---------- 通道 2：REST API（同样是 GitHub 官方地址） ----------
             fetchLatestViaApi(current)
         }
 
@@ -302,36 +307,45 @@ object UpdateChecker {
     // ------------------------------------------------------------ 下载
 
     /**
-     * GitHub 资源的候选线路（按优先级排列），检查更新与下载共用。
+     * 下载安装包的候选线路（按优先级排列）。
      *
-     * 国内直连 GitHub 的速度经常只有几 KB/s，所以除了直链外，
-     * 还带上两个公开的 GitHub 加速镜像（给原始 URL 加前缀的代理方式）：
-     *  - ghproxy.net
-     *  - gh-proxy.com
+     * [route] 由用户在「设置 → 更新 → 下载线路」里选择，默认 [DownloadRoute.AUTO]：
+     *  - [DownloadRoute.AUTO]：直链优先，慢/失败时自动落到两个公开镜像；
+     *  - [DownloadRoute.DIRECT]：只走 GitHub 官方直链；
+     *  - 指定镜像：**只走这一条**（用户既然手动选了，就不该偷偷换线，
+     *    失败时界面会提示去哪改）。
      *
-     * 顺序：**直链优先**——有 VPN / 网络好的用户直链最快也最权威；
-     * 直链慢或失败时由调用方自动落到镜像。
      * 镜像只做字节转发，不改动文件内容，且下载后仍有 [verifyApk] 兜底校验。
      * 非 github.com 资源（如自定义直链）不套前缀，原样返回。
      */
-    internal fun downloadCandidates(apkUrl: String): List<String> = buildList {
-        add(apkUrl)
-        MIRROR_PREFIXES.forEach { prefix ->
-            if (apkUrl.startsWith("https://github.com/", ignoreCase = true)) {
-                add(prefix + apkUrl)
+    internal fun downloadCandidates(
+        apkUrl: String,
+        route: DownloadRoute = DownloadRoute.AUTO,
+    ): List<String> = buildList {
+        if (!apkUrl.startsWith("https://github.com/", ignoreCase = true)) return@buildList
+        val prefix = route.prefix
+        when {
+            // 自动：直链 + 全部镜像
+            prefix == null -> {
+                add(apkUrl)
+                MIRROR_PREFIXES.forEach { add(it + apkUrl) }
             }
+            // 手动指定：只给这一条（空前缀 = 直链）
+            else -> add(prefix + apkUrl)
         }
-    }
+    }.ifEmpty { listOf(apkUrl) }
 
     /**
      * 下载 APK 到 `cacheDir/updates/`。
      * 下载前会清空该目录，避免历史版本堆积；先写 `.part` 再做完整性校验后才改名。
      *
-     * **多线路自动降级**：按 [downloadCandidates] 的顺序逐条尝试。
+     * **线路由 [route] 决定**（见 [downloadCandidates]）：自动模式下按顺序逐条尝试，
      * 每条线路开始后监测速度——起步 [STALL_WINDOW_MS] 内低于 [STALL_MIN_BYTES]
-     * 视为「慢线路」，中断并切换下一条（对国内直连 GitHub 的场景这几乎是必然触发）。
+     * 视为「慢线路」，中断并切换下一条（对国内直连 GitHub 的场景这几乎是必然触发）；
+     * 手动指定线路时只用那一条，失败即报错。
      * 全部线路失败时抛最后一次的错误，由界面引导用户浏览器手动下载。
      *
+     * @param route 下载线路（设置页可选，默认自动降级）
      * @param onProgress 参数为 (已下载字节, 总字节)，总字节为 0 时表示长度未知
      * @param onLineFallback 某条线路失败即将切换时回调 (即将尝试的线路序号, 候选总数)，
      *   供界面提示「正在切换镜像」；进度条会从头重新计数
@@ -339,6 +353,7 @@ object UpdateChecker {
     suspend fun download(
         context: Context,
         info: UpdateInfo,
+        route: DownloadRoute = DownloadRoute.AUTO,
         onProgress: (Long, Long) -> Unit = { _, _ -> },
         onLineFallback: (Int, Int) -> Unit = { _, _ -> },
     ): File = withContext(Dispatchers.IO) {
@@ -351,7 +366,7 @@ object UpdateChecker {
         val target = File(dir, safeName)
         val part = File(dir, "$safeName.part")
 
-        val candidates = downloadCandidates(info.apkUrl)
+        val candidates = downloadCandidates(info.apkUrl, route)
         var lastError: Throwable? = null
         for ((index, candidate) in candidates.withIndex()) {
             try {
@@ -371,6 +386,20 @@ object UpdateChecker {
             }
         }
         throw lastError ?: IOException("所有下载线路均失败")
+    }
+
+    /**
+     * 把下载失败翻译成用户可操作的一句话。
+     * 手动指定线路时点明是哪条线、并告诉用户去哪里换。
+     */
+    internal fun describeDownloadFailure(route: DownloadRoute, error: Throwable?): String {
+        val base = error?.message?.ifBlank { null } ?: "网络异常"
+        return if (route == DownloadRoute.AUTO) {
+            "下载失败：$base\n可到「设置 → 更新 → 下载线路」换一条线路，或点「在浏览器中查看发布页」手动下载。"
+        } else {
+            "「${route.label}」线路下载失败：$base\n" +
+                "可到「设置 → 更新 → 下载线路」换成「自动」或其它线路后重试。"
+        }
     }
 
     /** 单条线路的完整下载（连接 → 流式写盘 → 速度监测）。返回响应声明的总字节（未知为 0） */
@@ -406,9 +435,10 @@ object UpdateChecker {
                         onProgress(downloaded, total)
                         // 慢线路判定：起步窗口内几乎没进度 → 中断换线。
                         // 直链在国内常表现为「能连上但只有几 KB/s」，不切会挂 20 分钟。
+                        // 文案保持中性（自动模式会接着换下一条，手动模式则直接失败并提示改线路）。
                         val elapsed = System.currentTimeMillis() - startedAt
                         if (elapsed > STALL_WINDOW_MS && downloaded < STALL_MIN_BYTES) {
-                            throw IOException("线路过慢（${elapsed / 1000}s 仅 ${downloaded / 1024}KB），已自动切换镜像")
+                            throw IOException("线路过慢（${elapsed / 1000}s 仅 ${downloaded / 1024}KB）")
                         }
                         n = input.read(buf)
                     }
@@ -577,7 +607,7 @@ object UpdateChecker {
 
     private const val DIR_NAME = "updates"
 
-    /** GitHub 加速镜像（给原始 URL 加前缀即生效；均为公开代理，只转发字节） */
+    /** GitHub 加速镜像（给原始 URL 加前缀即生效；均为公开代理，只转发字节，仅用于下载安装包） */
     private val MIRROR_PREFIXES = listOf(
         "https://ghproxy.net/",
         "https://gh-proxy.com/",
