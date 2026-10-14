@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # ===================================================================
-#  发版助手：改版本号 → 提交 → 打 tag → 推送
+#  发版助手：跑单测 → 改版本号 → 提交 → 打 tag → 推送
 #  推 tag 后 GitHub Actions 会自动构建签名 APK 并创建 Release。
+#
+#  顺序说明：单测在**改版本号之前**跑。这样测试失败时仓库保持干净，
+#  不会留下「版本号已改但没提交」的状态（否则重跑会让 versionCode 再 +1）。
 #
 #  用法：
 #    bash scripts/release.sh patch          # 1.0.0 → 1.0.1
@@ -42,35 +45,47 @@ if [[ "$DRY" == "--dry" ]]; then
   exit 0
 fi
 
-# 1) 改版本号
-sed -i "s/val appVersionCode = $CUR_CODE/val appVersionCode = $NEW_CODE/" "$GRADLE_FILE"
-sed -i "s/val appVersionName = \"$CUR_NAME\"/val appVersionName = \"$NEW_NAME\"/" "$GRADLE_FILE"
-grep -E 'appVersionName|appVersionCode' "$GRADLE_FILE"
+# 1) 先验证能编译
+#
+# ⚠️ 这一步**故意放在改版本号之前**。反过来的话，单测一旦失败，仓库就会留下
+#    「版本号已改、但没提交」的脏状态；下次直接重跑 release.sh，读到的就是已经
+#    +1 过的 code，于是再 +1（2026-10-14 已踩出过 code 6）。先测后改即可根治。
+echo "→ 先跑一遍单测确认没坏..."
+# Android 构建必须用 JDK 21（temurin/openjdk），不能落到 IntelliJ 自带的 GraalVM ——
+# GraalVM 的 jlink 在处理 android-35 的 core-for-system-modules.jar 时会报
+# JdkImageTransform 失败。
+#
+# ⚠️ 注意：「JAVA_HOME 非空」并不代表可用：本机 shell 的 JAVA_HOME 默认就指向
+#    C:\Users\stu_l\.jdks\graalvm-jdk-21.0.7，只判断空值会直接放行到 GraalVM
+#    （2026-10-14 实际踩中：单测阶段 BUILD FAILED）。所以路径里带 graal 的也要换掉。
+PREFERRED_JDK="C:/Users/stu_l/.jdks/openjdk-21.0.2"
+CUR_JDK="${JAVA_HOME:-}"
+if [[ -d "$PREFERRED_JDK" ]] && { [[ -z "$CUR_JDK" ]] || [[ "$CUR_JDK" == *[Gg]raal* ]]; }; then
+  export JAVA_HOME="$PREFERRED_JDK"
+  echo "  （原 JAVA_HOME=${CUR_JDK:-未设置} 不可用于 Android 构建，已改用 $JAVA_HOME）"
+fi
+echo "  JDK：${JAVA_HOME:-未设置}"
+(cd "$ROOT" && ./gradlew testDebugUnitTest --console=plain -q)
 
-# 1.5) 预览发版说明：固定模板 + 只替换版本号，正文不需要手写/让 AI 生成
+# 2) 预览发版说明：固定模板 + 只替换版本号，正文不需要手写/让 AI 生成
 echo
 echo "→ 本次 Release 说明预览（由 .github/release-notes/ 模板自动渲染）："
 echo "----------------------------------------------------------------"
 bash "$ROOT/scripts/render-release-notes.sh" "$NEW_NAME" "$NEW_CODE"
 echo "----------------------------------------------------------------"
 
-# 2) 本地先验证能编译
-echo "→ 先跑一遍单测确认没坏..."
-# Android 构建必须用 JDK 21（temurin/openjdk），不能落到 IntelliJ 自带的 GraalVM ——
-# GraalVM 的 jlink 在处理 android-35 的 core-for-system-modules.jar 时会报
-# JdkImageTransform 失败。没显式设过 JAVA_HOME 时这里兜一个本机可用的路径。
-if [[ -z "${JAVA_HOME:-}" && -d "C:/Users/stu_l/.jdks/openjdk-21.0.2" ]]; then
-  export JAVA_HOME="C:/Users/stu_l/.jdks/openjdk-21.0.2"
-  echo "  （JAVA_HOME 未设置，已自动使用 $JAVA_HOME）"
-fi
-(cd "$ROOT" && ./gradlew testDebugUnitTest --console=plain -q)
+# 3) 单测通过后才动版本号
+echo "→ 写入版本号..."
+sed -i "s/val appVersionCode = $CUR_CODE/val appVersionCode = $NEW_CODE/" "$GRADLE_FILE"
+sed -i "s/val appVersionName = \"$CUR_NAME\"/val appVersionName = \"$NEW_NAME\"/" "$GRADLE_FILE"
+grep -E 'appVersionName|appVersionCode' "$GRADLE_FILE"
 
-# 3) 提交 + 打 tag
+# 4) 提交 + 打 tag
 git -C "$ROOT" add -A
 git -C "$ROOT" commit -m "release: $TAG"
 git -C "$ROOT" tag "$TAG"
 
-# 4) 推送（走 scripts/push.sh，Token 不落盘到配置里）
+# 5) 推送（走 scripts/push.sh，Token 不落盘到配置里）
 bash "$ROOT/scripts/push.sh" origin "$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)"
 bash "$ROOT/scripts/push.sh" origin "$TAG"
 
