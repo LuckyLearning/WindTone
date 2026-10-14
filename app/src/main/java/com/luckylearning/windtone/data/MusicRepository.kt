@@ -80,7 +80,15 @@ class MusicRepository(
 
         Log.i(TAG, "扫描完成（范围 $scope）：媒体库 $afterMediaStore 首，合计 ${collected.size} 首")
 
-        val songs = sort(collected.values.toList(), prefs.sortOrder)
+        // 短音频过滤：只剔除「时长已知且过短」的曲目；时长未知（0，如 WebDAV）保留，
+        // 播放后拿到真实时长，下次扫描自然会被规则接管。
+        val minMs = prefs.minSongDurationSec * 1000L
+        val kept = if (minMs > 0L) collected.values.filterNot { it.durationMs in 1 until minMs } else collected.values.toList()
+        if (kept.size != collected.size) {
+            Log.i(TAG, "短音频过滤（< ${prefs.minSongDurationSec}s）：剔除 ${collected.size - kept.size} 首")
+        }
+
+        val songs = sort(kept, prefs.sortOrder)
         LibraryResult(
             songs = songs,
             skippedUnsupported = skipped,

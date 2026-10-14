@@ -424,6 +424,18 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     /** 是否已导入过音乐目录 */
     fun hasFolders(): Boolean = prefs.folderUris.isNotEmpty()
 
+    /** 最短时长阈值（秒），0 表示不过滤 */
+    fun minSongDurationSec(): Int = prefs.minSongDurationSec
+
+    /**
+     * 修改短音频过滤阈值并立即重新扫描生效。
+     * 时长未知（0）的歌曲不会被过滤，播放拿到真实时长后由下次扫描接管。
+     */
+    fun setMinSongDurationSec(sec: Int) {
+        prefs.minSongDurationSec = sec
+        if (prefs.scanScope != ScanScope.UNSET) scan()
+    }
+
     fun scan(auto: Boolean = false) {
         if (_library.value.scanning) return
         if (_library.value.scanScope == ScanScope.UNSET) return
@@ -958,9 +970,11 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
             result.onSuccess { r ->
-                webdavSongs = r.songs
+                // 与本地扫描同规则：剔除时长已知且低于最短时长阈值的云端曲目
+                val minMs = prefs.minSongDurationSec * 1000L
+                webdavSongs = if (minMs > 0L) r.songs.filterNot { it.durationMs in 1 until minMs } else r.songs
                 val note = buildString {
-                    append("已找到 ${r.songs.size} 首")
+                    append("已找到 ${webdavSongs.size} 首")
                     if (r.truncated) append("（已达扫描上限）")
                 }
                 _library.update { it.copy(webdavScanning = false, webdavMessage = note) }

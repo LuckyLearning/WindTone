@@ -48,6 +48,15 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_DEEP_SCAN, false)
         set(value) = sp.edit().putBoolean(KEY_DEEP_SCAN, value).apply()
 
+    /**
+     * 短音频过滤阈值（秒）。
+     * 时长已知且小于该值的音频不会进入曲库（用于滤掉提示音、转场音效等）；
+     * 0 表示不过滤。默认 60 秒。时长未知（如 WebDAV 扫描阶段拿不到时长）的歌曲不受影响。
+     */
+    var minSongDurationSec: Int
+        get() = sp.getInt(KEY_MIN_DURATION_SEC, DEFAULT_MIN_DURATION_SEC)
+        set(value) = sp.edit().putInt(KEY_MIN_DURATION_SEC, value.coerceIn(0, 3600)).apply()
+
     var sortOrder: SortOrder
         get() = runCatching { SortOrder.valueOf(sp.getString(KEY_SORT, SortOrder.TITLE.name)!!) }
             .getOrDefault(SortOrder.TITLE)
@@ -277,6 +286,9 @@ class Prefs(context: Context) {
         const val KEY_FOLDERS = "folders"
         const val KEY_SCAN_SCOPE = "scan_scope"
         const val KEY_DEEP_SCAN = "deep_scan"
+        const val KEY_MIN_DURATION_SEC = "min_song_duration_sec"
+        /** 短音频过滤默认阈值：60 秒 */
+        const val DEFAULT_MIN_DURATION_SEC = 60
         const val KEY_SORT = "sort"
         const val KEY_VIEW = "library_view"
         const val KEY_LAST_URI = "last_uri"

@@ -19,7 +19,10 @@ class FolderScanner(private val context: Context) {
         val root = runCatching { DocumentFile.fromTreeUri(context, treeUri) }.getOrNull() ?: return emptyList()
         val out = ArrayList<Song>()
         var counted = 0
-        walk(root, out, readTags, root.name ?: "") {
+        // 文件夹视图按「用户选择的目录」分组：整棵子树的歌都归到所选目录名下，
+        // 子目录不单独显示（用户在系统选择器里挑哪层，哪层就是一个分组）。
+        val rootLabel = root.name ?: "导入目录"
+        walk(root, out, readTags, rootLabel) {
             counted++
             if (counted % 5 == 0) onProgress(out.size)
         }
@@ -30,7 +33,7 @@ class FolderScanner(private val context: Context) {
         dir: DocumentFile,
         out: MutableList<Song>,
         readTags: Boolean,
-        relativePath: String,
+        folderLabel: String,
         tick: () -> Unit,
     ) {
         val children = runCatching { dir.listFiles() }.getOrNull() ?: return
@@ -55,16 +58,14 @@ class FolderScanner(private val context: Context) {
                 .mapNotNull { lf -> lf.name?.let { n -> LyricsMatcher.score(n, base).takeIf { it >= 0 }?.let { it to lf } } }
                 .maxByOrNull { it.first }?.second
 
-            // SAF 没有真实文件路径，用目录树中的相对路径作为 folderPath，
-            // 让文件夹视图能按用户授权目录里的子文件夹正常分组。
-            out.add(buildSong(audio, name, lyric?.uri, relativePath, SongSource.FOLDER, readTags))
+            // SAF 没有真实文件路径，用「用户所选目录名」作为 folderPath 统一分组
+            out.add(buildSong(audio, name, lyric?.uri, folderLabel, SongSource.FOLDER, readTags))
         }
 
         for (child in children) {
             val childName = child.name ?: continue
             if (child.isDirectory && !childName.startsWith(".")) {
-                val childPath = if (relativePath.isEmpty()) childName else "$relativePath/$childName"
-                walk(child, out, readTags, childPath, tick)
+                walk(child, out, readTags, folderLabel, tick)
             }
         }
     }

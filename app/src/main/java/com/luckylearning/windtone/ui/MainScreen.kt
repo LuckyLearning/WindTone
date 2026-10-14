@@ -468,19 +468,24 @@ fun MainScreen(vm: MusicViewModel) {
                 exit = slideOutVertically { it },
                 modifier = Modifier.fillMaxSize(),
             ) {
+                // 这两个偏好只写 SharedPreferences、不走 StateFlow，直接读方法
+                // 拿到的是一次性快照，开关点了 UI 也不动（用户看起来就是"关不掉"）。
+                // 用本地 state 兜住显示，回调里同步写回。
+                var dynamicThemeOn by remember { mutableStateOf(vm.dynamicThemeEnabled()) }
+                var autoCheckUpdateOn by remember { mutableStateOf(vm.autoCheckUpdateEnabled()) }
                 SettingsScreen(
                     library = library,
                     player = player,
                     update = update,
-                    dynamicTheme = vm.dynamicThemeEnabled(),
-                    autoCheckUpdate = vm.autoCheckUpdateEnabled(),
+                    dynamicTheme = dynamicThemeOn,
+                    autoCheckUpdate = autoCheckUpdateOn,
                     crashLogCount = crashLogCount,
                     crashLogText = crashLogText,
                     onClose = {
                         showSettings = false
                         crashLogText = null
                     },
-                    onDynamicTheme = vm::setDynamicTheme,
+                    onDynamicTheme = { dynamicThemeOn = it; vm.setDynamicTheme(it) },
                     onCarMode = vm::setCarMode,
                     onLyricOverlay = vm::setLyricOverlay,
                     onOverlayEditing = vm::setOverlayEditing,
@@ -491,6 +496,8 @@ fun MainScreen(vm: MusicViewModel) {
                     onSpeed = vm::setSpeed,
                     onSkipSilence = vm::setSkipSilence,
                     onClearStats = vm::clearPlayStats,
+                    minSongDurationSec = vm.minSongDurationSec(),
+                    onMinSongDurationSec = vm::setMinSongDurationSec,
                     onLoadCrashLog = { crashLogText = vm.crashLogText() },
                     onExportCrashLog = { crashExportLauncher.launch("music-player-crash-${System.currentTimeMillis()}.txt") },
                     onClearCrashLog = {
@@ -502,7 +509,7 @@ fun MainScreen(vm: MusicViewModel) {
                     onDownloadUpdate = vm::downloadUpdate,
                     onInstallUpdate = vm::installUpdate,
                     onGrantInstallPermission = vm::grantInstallPermission,
-                    onAutoCheckUpdate = vm::setAutoCheckUpdate,
+                    onAutoCheckUpdate = { autoCheckUpdateOn = it; vm.setAutoCheckUpdate(it) },
                     onOpenReleasePage = vm::openReleasePage,
                     onIgnoreUpdate = vm::ignoreUpdate,
                     onDismissUpdateDialog = vm::dismissUpdateDialog,

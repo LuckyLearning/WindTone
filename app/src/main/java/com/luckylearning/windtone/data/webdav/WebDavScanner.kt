@@ -41,6 +41,8 @@ object WebDavScanner {
      */
     suspend fun scan(baseUrl: String, rootPath: String, onProgress: (String) -> Unit = {}): Result =
         withContext(Dispatchers.IO) {
+            // 文件夹视图按「用户配置的扫描根目录」分组，子目录不单独成组
+            val rootLabel = rootPath.trim('/').ifEmpty { "WebDAV 根目录" }
             val audio = ArrayList<Pair<String, WebDavClient.Entry>>() // dirPath -> entry
             val lyrics = ArrayList<Pair<String, WebDavClient.Entry>>()
             var requests = 0
@@ -99,7 +101,7 @@ object WebDavScanner {
                     durationMs = 0L, // HTTP 通道拿不到时长，播放后由 ExoPlayer 回填 UI
                     sizeBytes = e.sizeBytes,
                     displayName = e.name,
-                    folderPath = dir.trim('/').ifEmpty { "WebDAV 根目录" },
+                    folderPath = rootLabel,
                     source = SongSource.WEBDAV,
                     dateAdded = e.lastModified,
                     lrcUri = sidecar?.let {

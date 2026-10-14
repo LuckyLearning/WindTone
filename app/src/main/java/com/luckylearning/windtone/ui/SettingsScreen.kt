@@ -77,6 +77,8 @@ fun SettingsScreen(
     onSpeed: (Float) -> Unit,
     onSkipSilence: (Boolean) -> Unit,
     onClearStats: () -> Unit,
+    minSongDurationSec: Int,
+    onMinSongDurationSec: (Int) -> Unit,
     onLoadCrashLog: () -> Unit,
     onExportCrashLog: () -> Unit,
     onClearCrashLog: () -> Unit,
@@ -105,6 +107,8 @@ fun SettingsScreen(
         }.getOrNull() ?: "—"
     }
     var showEq by remember { mutableStateOf(false) }
+    // 短音频过滤阈值编辑弹窗
+    var showMinDurationDialog by remember { mutableStateOf(false) }
     // 用户点过悬浮歌词开关但还没授权 → 展开下方授权指引，授权成功返回后自动收起
     var overlayHintVisible by remember { mutableStateOf(false) }
     LaunchedEffect(canDrawOverlay) {
@@ -353,6 +357,15 @@ fun SettingsScreen(
                     )
                 }
 
+                // -------------------------------------------------- 音乐库
+                SectionTitle("音乐库")
+                ActionRow(
+                    title = if (minSongDurationSec > 0) "过滤短音频（< ${minSongDurationSec} 秒）" else "过滤短音频（未开启）",
+                    subtitle = "时长已知且低于阈值的音频不会进入曲库（滤掉提示音、转场音效等）。" +
+                        "修改后自动重新扫描；填 0 关闭过滤",
+                    onClick = { showMinDurationDialog = true },
+                )
+
                 // -------------------------------------------------- 数据
                 SectionTitle("数据")
                 val stats = library.playStats
@@ -464,6 +477,41 @@ fun SettingsScreen(
     }
 
     if (showEq) EqSheet(onClose = { showEq = false })
+
+    if (showMinDurationDialog) {
+        var input by remember { mutableStateOf(if (minSongDurationSec > 0) minSongDurationSec.toString() else "") }
+        AlertDialog(
+            onDismissRequest = { showMinDurationDialog = false },
+            title = { Text("过滤短音频") },
+            text = {
+                Column {
+                    Text(
+                        "时长小于该秒数的音频不进入曲库；填 0 关闭过滤。默认 60 秒。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = input,
+                        onValueChange = { input = it.filter(Char::isDigit).take(4) },
+                        label = { Text("最短时长（秒）") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onMinSongDurationSec(input.toIntOrNull()?.coerceIn(0, 3600) ?: 0)
+                        showMinDurationDialog = false
+                    },
+                ) { Text("确定") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMinDurationDialog = false }) { Text("取消") }
+            },
+        )
+    }
 
     if (update.dialogVisible && (update.info != null || update.readyApkPath != null)) {
         UpdateDialog(

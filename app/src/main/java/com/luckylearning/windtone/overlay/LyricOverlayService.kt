@@ -212,9 +212,13 @@ class LyricOverlayService : Service() {
         val savedY = prefs.lyricOverlayY
 
         if (savedX == Int.MIN_VALUE || savedY == Int.MIN_VALUE) {
+            // 从未调整过：水平居中靠上。注意 gravity 用 CENTER_HORIZONTAL 才是真的居中——
+            // 之前注释写着「居中」却仍是 START + x=0，实际贴在左上角。
+            p.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
             p.x = 0
             p.y = dp(TOP_OFFSET_DP)
         } else {
+            p.gravity = Gravity.TOP or Gravity.START
             p.x = savedX.coerceIn(0, screenW)
             p.y = savedY.coerceIn(0, (screenH - dp(MIN_TOUCH_H_DP)).coerceAtLeast(0))
         }
@@ -239,6 +243,14 @@ class LyricOverlayService : Service() {
         val p = layoutParams ?: return@OnTouchListener false
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                // 默认位置用 CENTER_HORIZONTAL 摆放，坐标是「相对屏幕中心的偏移」；
+                // 拖动增量必须基于「绝对左上角」才有正确手感。按下瞬间归一化一次：
+                // 左上角 x = 屏幕中心 + 当前偏移，之后固定用 TOP|START。
+                if (p.gravity and Gravity.HORIZONTAL_GRAVITY_MASK == Gravity.CENTER_HORIZONTAL) {
+                    p.x += resources.displayMetrics.widthPixels / 2
+                    p.gravity = Gravity.TOP or Gravity.START
+                    runCatching { windowManager?.updateViewLayout(container, p) }
+                }
                 // 记下起点，MOVE 时算增量才有参照
                 lastRawX = event.rawX
                 lastRawY = event.rawY
@@ -250,10 +262,14 @@ class LyricOverlayService : Service() {
                 p.y += (event.rawY - lastRawY).roundToInt()
                 lastRawX = event.rawX
                 lastRawY = event.rawY
-                // 夹住，别拖出屏幕就再也抓不回来
+                // 夹住，别拖出屏幕就再也抓不回来。按窗口自身宽高收紧边界，
+                // 只用屏幕宽高会把窗口整个推到边界外（x=screenW 时窗口完全不可见）。
                 val metrics = resources.displayMetrics
-                p.x = p.x.coerceIn(0, metrics.widthPixels)
-                p.y = p.y.coerceIn(0, metrics.heightPixels)
+                val v = container
+                val maxX = (metrics.widthPixels - (v?.width ?: 0)).coerceAtLeast(0)
+                val maxY = (metrics.heightPixels - (v?.height ?: 0)).coerceAtLeast(0)
+                p.x = p.x.coerceIn(0, maxX)
+                p.y = p.y.coerceIn(0, maxY)
                 runCatching { windowManager?.updateViewLayout(container, p) }
                 true
             }
