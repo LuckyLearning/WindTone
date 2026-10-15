@@ -73,6 +73,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -353,6 +354,11 @@ fun MainScreen(
                 )
 
                 Box(Modifier.weight(1f)) {
+                    // 一级列表的滚动位置托管：按视图各存一份，切视图（歌曲↔专辑↔歌手↔
+                    // 文件夹↔歌单）或进详情再返回时，列表都回到用户之前滚动到的位置。
+                    // 必须声明在 when 之外 —— 进详情时下面的 else 分支会离开组合，
+                    // holder 若随之被 forget，存下的位置会一起丢掉。
+                    val listStateHolder = rememberSaveableStateHolder()
                     when {
                         // 首次进入 / 移除全部目录后：等待用户指定扫描范围，不自动扫任何位置
                         library.scanScope == ScanScope.UNSET && library.songs.isEmpty() ->
@@ -386,31 +392,38 @@ fun MainScreen(
                             onSongLongPress = { actionSong = it },
                         )
 
-                        library.view == LibraryView.SONGS -> SongsList(
-                            playerVm = playerVm,
-                            library = library,
-                            player = player,
-                            granted = granted,
-                            onSongLongPress = { actionSong = it },
-                            onImportFolder = importFolder,
-                            onFullScan = requestFullScan,
-                            onOpenScanScope = { showScanScope = true },
-                        )
+                        // 一级列表：用 view 作为 key，每个视图各记一份滚动位置，互不干扰。
+                        // 详情页（PlaylistDetail / GroupDetail）刻意留在这层之外 —— 每次进
+                        // 详情都从顶部开始，符合「打开一个新的分组 / 歌单」的预期。
+                        else -> listStateHolder.SaveableStateProvider(library.view.name) {
+                            when (library.view) {
+                                LibraryView.SONGS -> SongsList(
+                                    playerVm = playerVm,
+                                    library = library,
+                                    player = player,
+                                    granted = granted,
+                                    onSongLongPress = { actionSong = it },
+                                    onImportFolder = importFolder,
+                                    onFullScan = requestFullScan,
+                                    onOpenScanScope = { showScanScope = true },
+                                )
 
-                        library.view == LibraryView.PLAYLIST -> PlaylistListView(
-                            lib = lib,
-                            library = library,
-                            onImportM3U = {
-                                m3uImportLauncher.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "text/plain", "*/*"))
-                            },
-                        )
+                                LibraryView.PLAYLIST -> PlaylistListView(
+                                    lib = lib,
+                                    library = library,
+                                    onImportM3U = {
+                                        m3uImportLauncher.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "text/plain", "*/*"))
+                                    },
+                                )
 
-                        else -> GroupListView(
-                            library = library,
-                            onOpen = lib::openGroup,
-                            canRemove = library.view == LibraryView.FOLDER,
-                            onRemove = { folderRemoveConfirmGroup = it },
-                        )
+                                else -> GroupListView(
+                                    library = library,
+                                    onOpen = lib::openGroup,
+                                    canRemove = library.view == LibraryView.FOLDER,
+                                    onRemove = { folderRemoveConfirmGroup = it },
+                                )
+                            }
+                        }
                     }
                 }
 

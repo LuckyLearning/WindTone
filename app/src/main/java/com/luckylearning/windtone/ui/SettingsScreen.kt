@@ -172,9 +172,22 @@ fun SettingsScreen(
     // 子页里按返回键先回主页面（本处理器在子页才启用，主页面时交给外层关闭设置页）
     BackHandler(enabled = page != SettingsPage.ROOT) { page = SettingsPage.ROOT }
 
-    // 切页时回到顶部，否则从长页面进子页会停在原来的滚动位置
-    val pageScroll = rememberScrollState()
-    LaunchedEffect(page) { pageScroll.scrollTo(0) }
+    // 每个页面各留一份滚动位置：
+    //  - 进子页时从它自己的位置开始（首次进入即顶部，不会继承主页面的滚动偏移）；
+    //  - 从子页返回主页面时，主页面回到用户原来滚动到的位置。
+    // 此前四个页面共用同一个 ScrollState，并在每次切页时无条件 scrollTo(0)：
+    // 「进子页从顶部开始」这个意图，顺带把主页面的位置也一起抹掉了，返回时被顶回最上面。
+    // 拆成各自的 State 后两个诉求可以同时满足 —— 子页天然从 0 开始，主页面不受影响。
+    val rootScroll = rememberScrollState()
+    val libraryScroll = rememberScrollState()
+    val updateScroll = rememberScrollState()
+    val diagnosticsScroll = rememberScrollState()
+    val pageScroll = when (page) {
+        SettingsPage.ROOT -> rootScroll
+        SettingsPage.LIBRARY -> libraryScroll
+        SettingsPage.UPDATE -> updateScroll
+        SettingsPage.DIAGNOSTICS -> diagnosticsScroll
+    }
 
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
         Column(

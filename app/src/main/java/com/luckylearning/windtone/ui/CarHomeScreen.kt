@@ -48,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -172,6 +173,10 @@ fun CarHomeScreen(
                         // 详情态时底部会浮出返回条，列表底部要预留出它的高度，
                         // 否则最后 2~3 首会被盖住点不到。
                         val bottomInset = if (detail) 96.dp else 18.dp
+                        // 一级列表的滚动位置托管（与手机端 MainScreen 同一套做法）：按视图各存
+                        // 一份，切视图或进详情再返回时列表回到原处。必须声明在 when 之外 ——
+                        // 进详情时下面这层会离开组合，holder 若被 forget，位置就一起丢了。
+                        val listStateHolder = rememberSaveableStateHolder()
                         when {
                             // 首次进入 / 移除全部目录后：等待用户指定扫描范围
                             library.scanScope == ScanScope.UNSET && library.songs.isEmpty() ->
@@ -215,31 +220,41 @@ fun CarHomeScreen(
                                 bottomInset = bottomInset,
                             )
 
-                            library.view == LibraryView.SONGS -> CarSongList(
-                                songs = library.visible,
-                                currentKey = player.current?.stableKey,
-                                isPlaying = player.isPlaying,
-                                emptyTitle = if (library.songs.isEmpty()) "还没有音乐" else "没有匹配的结果",
-                                emptySubtitle = if (library.songs.isEmpty()) {
-                                    "在左侧切到「扫描范围」选择全盘或指定目录。"
-                                } else {
-                                    "换个关键词试试，支持拼音首字母（如 zjl）。"
-                                },
-                                onPlay = { i -> onPlay(library.visible, i) },
-                                onLongPress = onSongLongPress,
-                                bottomInset = bottomInset,
-                            )
+                            // 一级列表：以 view 为 key，每个视图各记一份滚动位置。
+                            // 详情列表（歌单 / 分组）留在这层之外，每次进入都从顶部开始。
+                            else -> listStateHolder.SaveableStateProvider(library.view.name) {
+                                when (library.view) {
+                                    LibraryView.SONGS -> CarSongList(
+                                        songs = library.visible,
+                                        currentKey = player.current?.stableKey,
+                                        isPlaying = player.isPlaying,
+                                        emptyTitle = if (library.songs.isEmpty()) "还没有音乐" else "没有匹配的结果",
+                                        emptySubtitle = if (library.songs.isEmpty()) {
+                                            "在左侧切到「扫描范围」选择全盘或指定目录。"
+                                        } else {
+                                            "换个关键词试试，支持拼音首字母（如 zjl）。"
+                                        },
+                                        onPlay = { i -> onPlay(library.visible, i) },
+                                        onLongPress = onSongLongPress,
+                                        bottomInset = bottomInset,
+                                    )
 
-                            library.view == LibraryView.PLAYLIST -> CarPlaylistList(
-                                library = library,
-                                onOpen = onOpenPlaylist,
-                                onNewPlaylist = onNewPlaylist,
-                                onImportM3U = onImportM3U,
-                                onPlay = onPlay,
-                                bottomInset = bottomInset,
-                            )
+                                    LibraryView.PLAYLIST -> CarPlaylistList(
+                                        library = library,
+                                        onOpen = onOpenPlaylist,
+                                        onNewPlaylist = onNewPlaylist,
+                                        onImportM3U = onImportM3U,
+                                        onPlay = onPlay,
+                                        bottomInset = bottomInset,
+                                    )
 
-                            else -> CarGroupList(library = library, onOpen = onOpenGroup, bottomInset = bottomInset)
+                                    else -> CarGroupList(
+                                        library = library,
+                                        onOpen = onOpenGroup,
+                                        bottomInset = bottomInset,
+                                    )
+                                }
+                            }
                         }
 
                         if (detail) {
