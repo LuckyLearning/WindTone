@@ -90,6 +90,7 @@ class LyricOverlayService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        serviceAlive = true
         startForeground(NOTIFICATION_ID, buildNotification())
         windowManager = getSystemService(Context.WINDOW_SERVICE) as? WindowManager
         LyricOverlayBridge.report(LyricOverlayBus.Status.RUNNING, "服务已启动")
@@ -124,6 +125,8 @@ class LyricOverlayService : Service() {
     }
 
     override fun onDestroy() {
+        serviceAlive = false
+        windowAttached = false
         windowJob?.cancel()
         scope.cancel()
         detachWindow()
@@ -182,6 +185,7 @@ class LyricOverlayService : Service() {
             container = box
             lyricView = tv
             layoutParams = params
+            windowAttached = true
             tv.setOnTouchListener(dragListener)
             applyPosition()
             refreshModeChrome()
@@ -192,6 +196,7 @@ class LyricOverlayService : Service() {
             // 这类失败没有可自动恢复的手段，直接停服，免得用户以为开着但什么都看不到。
             // 但必须**留下痕迹**：只进 logcat 的话用户在手机上无从排查，
             // 设置页 → 关于与诊断 → 崩溃日志里能看到这条诊断。
+            windowAttached = false
             val detail = "挂载悬浮窗失败：${t.javaClass.simpleName}: ${t.message}"
             CrashLog.record(this, "LyricOverlay", detail + "\n\n" + t.stackTraceToString())
             LyricOverlayBridge.report(LyricOverlayBus.Status.FAILED, detail)
@@ -443,6 +448,21 @@ class LyricOverlayService : Service() {
     companion object {
         private const val CHANNEL_ID = "lyric_overlay"
         private const val NOTIFICATION_ID = 0x7701
+
+        /**
+         * 服务是否活着。
+         *
+         * 给设置页「悬浮歌词自检」用：进程被 ROM 杀掉 / 服务自己退出的情况下，
+         * 光看开关与授权是发现不了问题的——这正是"手机上没反应"最难查的一环。
+         */
+        @Volatile
+        var serviceAlive: Boolean = false
+            private set
+
+        /** 悬浮窗是否已挂到 WindowManager（服务活着但窗口没挂上 = 挂窗被拒） */
+        @Volatile
+        var windowAttached: Boolean = false
+            private set
 
         /** 悬浮字幕字号：车机屏大、观看距离远，比手机正文大一档 */
         private const val OVERLAY_TEXT_SP = 20f

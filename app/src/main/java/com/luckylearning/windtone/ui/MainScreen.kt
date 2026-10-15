@@ -513,6 +513,7 @@ fun MainScreen(
                     onCarMode = playerVm::setCarMode,
                     onLyricOverlay = playerVm::setLyricOverlay,
                     onOverlayEditing = playerVm::setOverlayEditing,
+                    onOverlayPreview = playerVm::previewOverlay,
                     canDrawOverlay = canDrawOverlay,
                     overlayHealth = overlayHealth,
                     onLyricScale = playerVm::setLyricScale,

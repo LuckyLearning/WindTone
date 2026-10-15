@@ -1,5 +1,7 @@
 package com.luckylearning.windtone.ui
+import com.luckylearning.windtone.overlay.LyricOverlayBridge
 import com.luckylearning.windtone.overlay.LyricOverlayBus
+import com.luckylearning.windtone.overlay.OverlaySnapshot
 import com.luckylearning.windtone.state.LibraryUiState
 import com.luckylearning.windtone.state.PlayerUiState
 import com.luckylearning.windtone.state.UpdateUiState
@@ -52,6 +54,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -96,6 +99,7 @@ fun SettingsScreen(
     onCarMode: (Boolean) -> Unit,
     onLyricOverlay: (Boolean) -> Unit,
     onOverlayEditing: (Boolean) -> Unit,
+    onOverlayPreview: () -> Unit,
     canDrawOverlay: Boolean,
     overlayHealth: LyricOverlayBus.Health,
     onLyricScale: (Float) -> Unit,
@@ -137,8 +141,13 @@ fun SettingsScreen(
     var showRouteDialog by remember { mutableStateOf(false) }
     // 用户点过悬浮歌词开关但还没授权 → 展开下方授权指引，授权成功返回后自动收起
     var overlayHintVisible by remember { mutableStateOf(false) }
+    // 三条跳转路都走不通（ROM 连系统授权页都不给开）→ 指引卡里改显示手动路径
+    var overlayJumpFailed by remember { mutableStateOf(false) }
     LaunchedEffect(canDrawOverlay) {
-        if (canDrawOverlay) overlayHintVisible = false
+        if (canDrawOverlay) {
+            overlayHintVisible = false
+            overlayJumpFailed = false
+        }
     }
 
     // 当前处于哪一层：主页面 / 音乐库 / 更新 / 关于与诊断
@@ -150,6 +159,9 @@ fun SettingsScreen(
     var showClearCrashConfirm by remember { mutableStateOf(false) }
     // 数据维护（诊断子页）：清理失效歌曲 / 清空全部用户数据
     var showCleanupConfirm by remember { mutableStateOf(false) }
+    // 悬浮歌词自检结果
+    var showOverlayCheck by remember { mutableStateOf(false) }
+    var overlayCheck by remember { mutableStateOf<OverlaySnapshot?>(null) }
     var showResetDataConfirm by remember { mutableStateOf(false) }
 
     // 子页里按返回键先回主页面（本处理器在子页才启用，主页面时交给外层关闭设置页）
@@ -266,7 +278,7 @@ fun SettingsScreen(
                     SwitchRow(
                         title = "桌面悬浮歌词",
                         subtitle = if (canDrawOverlay) {
-                            "退到车机桌面 / 导航页后，在屏幕最上层显示当前歌词行（单行字幕，不挡触摸）"
+                            "退到桌面 / 导航页后，在屏幕最上层显示当前歌词行（App 内自动隐藏，开启瞬间有 6 秒预览）"
                         } else {
                             "需要先授予「出现在其他应用上」权限，点击开关会自动跳转授权页"
                         },
@@ -280,15 +292,14 @@ fun SettingsScreen(
                                 // 未授权：先跳系统授权页。授权成功返回后由
                                 // MainActivity 的 onResume 重新对账并自动打开开关，
                                 // 这里不预先置 true，免得界面显示开启却什么都看不到。
-                                context.startActivity(
-                                    Intent(
-                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                        // 带上包名，系统会直接定位到本应用的授权项，
-                                        // 而不是打开应用总列表让用户自己找。
-                                        Uri.parse("package:${context.packageName}"),
-                                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                                )
+                                //
+                                // ⚠️ 各 ROM 对 ACTION_MANAGE_OVERLAY_PERMISSION 的支持并不一致：
+                                // 带 package: 数据在原生系统上会直接定位到本应用，但部分
+                                // HyperOS / MIUI 版本不认这个 data，会打开一个空的应用列表 ——
+                                // 用户视角就是「点了开关什么都没发生」。所以逐级降级，
+                                // 并且三条路都走不通时把手动路径写出来，绝不静默。
                                 overlayHintVisible = true
+                                overlayJumpFailed = !context.startOverlayPermissionPage()
                             }
                         },
                     )
@@ -325,9 +336,16 @@ fun SettingsScreen(
                                 .padding(vertical = 4.dp),
                         ) {
                             Text(
-                                text = "授权路径：设置 → 应用 → 权限 → 出现在其他应用上 → 允许。\n" +
-                                    "部分比亚迪车机（DiLink）需要把本应用加入白名单，或先强停一次应用进程，" +
-                                    "否则授权后界面可能黑屏或歌词不显示。",
+                                text = if (overlayJumpFailed) {
+                                    "未能打开系统授权页（本机 ROM 未提供该入口）。\n" +
+                                        "请手动前往：设置 → 应用 → 听风 → 权限 → " +
+                                        "「显示悬浮窗」或「出现在其他应用上层」→ 允许。\n" +
+                                        "部分系统还需要同时允许「后台弹出界面」，否则授权后仍不显示。"
+                                } else {
+                                    "授权路径：设置 → 应用 → 权限 → 出现在其他应用上 → 允许。\n" +
+                                        "部分比亚迪车机（DiLink）需要把本应用加入白名单，或先强停一次应用进程，" +
+                                        "否则授权后界面可能黑屏或歌词不显示。"
+                                },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(10.dp),
@@ -445,6 +463,20 @@ fun SettingsScreen(
                     TextButton(onClick = { showResetDataConfirm = true }) {
                         Text("清空全部用户数据（保留曲库）")
                     }
+
+                    // ------------------------------------------------ 悬浮歌词自检
+                    // 悬浮歌词链路跨 6 个环节，任何一环断掉用户侧都是同一个「没反应」。
+                    // 这个入口把整条链路一次测完，直接指出断点，省去猜和反复重装。
+                    SectionTitle("悬浮歌词")
+                    ActionRow(
+                        title = "悬浮歌词自检",
+                        subtitle = "逐项检查 授权 → 开关 → 服务 → 窗口 → 内容，指出断在哪一环",
+                        onClick = {
+                            overlayCheck = LyricOverlayBridge.snapshot(context)
+                            showOverlayCheck = true
+                        },
+                        chevron = true,
+                    )
 
                     // ------------------------------------------------ 崩溃日志
                     SectionTitle("崩溃日志")
@@ -624,6 +656,45 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showClearCrashConfirm = false }) { Text("取消") }
+            },
+        )
+    }
+
+    if (showOverlayCheck && overlayCheck != null) {
+        val snap = overlayCheck!!
+        AlertDialog(
+            onDismissRequest = { showOverlayCheck = false },
+            title = { Text("悬浮歌词自检") },
+            text = {
+                Text(
+                    text = snap.report(),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        // 前台预览 6 秒：不退桌面也能验证「窗口到底能不能挂上」
+                        onOverlayPreview()
+                    },
+                ) { Text("显示预览 6 秒") }
+            },
+            dismissButton = {
+                Row {
+                    if (!snap.permissionGranted) {
+                        TextButton(
+                            onClick = { context.startOverlayPermissionPage() },
+                        ) { Text("去授权") }
+                    }
+                    TextButton(
+                        onClick = {
+                            // 重新拉起 = 走一遍开关打开的全流程（落盘 + 起服务 + 预览）
+                            onLyricOverlay(true)
+                            overlayCheck = LyricOverlayBridge.snapshot(context)
+                        },
+                    ) { Text("重新拉起") }
+                    TextButton(onClick = { showOverlayCheck = false }) { Text("关闭") }
+                }
             },
         )
     }
@@ -1077,4 +1148,31 @@ internal fun formatListened(ms: Long): String {
     val h = totalMinutes / 60
     val m = totalMinutes % 60
     return if (h > 0) "$h 小时 $m 分钟" else "$m 分钟"
+}
+
+/**
+ * 打开系统的「显示悬浮窗」授权页，返回是否成功打开。
+ *
+ * 逐级降级的原因：各 ROM 对 `ACTION_MANAGE_OVERLAY_PERMISSION` 的支持并不一致 ——
+ * 带 `package:` 数据在原生系统上会直接定位到本应用的授权项，但部分
+ * HyperOS / MIUI 版本不认这个 data，会打开一个空的应用列表；
+ * 再不行就退到应用详情页（那里一定有权限入口）。三条路都断时返回 false，
+ * 由调用方把手动路径写给用户，绝不静默失败。
+ */
+private fun Context.startOverlayPermissionPage(): Boolean {
+    val pkgUri = Uri.parse("package:$packageName")
+    val candidates = listOf(
+        Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, pkgUri),
+        Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION),
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri),
+    )
+    for (intent in candidates) {
+        try {
+            startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            return true
+        } catch (_: Throwable) {
+            // 换下一个候选
+        }
+    }
+    return false
 }

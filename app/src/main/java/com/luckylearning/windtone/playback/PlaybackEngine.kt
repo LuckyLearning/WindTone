@@ -730,6 +730,18 @@ class PlaybackEngine(
         }
     }
 
+    /**
+     * 重新触发一次前台预览（设置页自检对话框的「显示预览」按钮）。
+     *
+     * 用户报"没反应"时，这一个按钮就能把「窗口到底能不能挂上」与
+     * 「是不是只是被前台隐藏」区分开——不必退到桌面、不必重装。
+     */
+    override fun previewOverlay() {
+        if (!prefs.lyricOverlay) return
+        LyricOverlayBridge.sync(app, true)
+        startOverlayPreview()
+    }
+
     /** 悬浮歌词是否已获得「出现在其他应用上」权限 */
     override fun canDrawOverlay(): Boolean = LyricOverlayBridge.canDraw(app)
 
@@ -1054,6 +1066,7 @@ interface PlayerActions {
     fun setOverlayEditing(editing: Boolean)
     fun setAppForeground(foreground: Boolean)
     fun restoreLyricOverlay()
+    fun previewOverlay()
     fun setDynamicTheme(enabled: Boolean)
     fun dynamicThemeEnabled(): Boolean
     fun inspectAudio(song: Song)
