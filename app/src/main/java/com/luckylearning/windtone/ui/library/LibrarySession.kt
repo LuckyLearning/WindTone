@@ -5,6 +5,7 @@ import com.luckylearning.windtone.MusicApp
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.state.LibraryUiState
 import com.luckylearning.windtone.state.LibraryView
+import com.luckylearning.windtone.ui.defaultSort
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -56,11 +57,15 @@ internal class LibrarySession(app: Application) {
      */
     internal var scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
+    /** 启动时恢复上次停留的浏览视图 */
+    private val initialView = LibraryView.from(prefs.libraryView)
+
     /** 唯一的共享状态流；界面只读导出的 [library]，行为类读写它 */
     internal val _library = MutableStateFlow(
         LibraryUiState(
-            sortOrder = prefs.sortOrder,
-            view = LibraryView.from(prefs.libraryView),
+            // 排序按视图各取一份（v1.1.4 排序下沉）：恢复的视图带着它自己那份排序回来
+            sortOrder = prefs.sortOrder(initialView.name, initialView.defaultSort),
+            view = initialView,
             deepScan = repository.deepScanEnabled(),
             scanScope = prefs.scanScope,
         )

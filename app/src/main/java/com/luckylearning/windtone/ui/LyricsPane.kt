@@ -44,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.lyrics.LyricLine
 import com.luckylearning.windtone.lyrics.Lyrics
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -69,6 +70,13 @@ fun LyricsPane(
     offsetMs: Int,
     scale: Float,
     wordByWord: Boolean = true,
+    /**
+     * 逐字歌词里**已唱部分**的颜色（ARGB）。
+     *
+     * [SettingsDefaults.COLOR_FOLLOW_THEME] = 跟随主题色（默认，会随封面取色一起漂移）；
+     * 其余值按固定色用（v1.1.4 起用户可在「设置 → 歌词」里选预设色或自定义）。
+     */
+    sungColor: Int = SettingsDefaults.COLOR_FOLLOW_THEME,
     onSeekTo: (Long) -> Unit,
     modifier: Modifier = Modifier,
     // 车载模式：字号整体再放大 [CAR_LYRIC_BOOST] 倍。
@@ -99,6 +107,7 @@ fun LyricsPane(
                 offsetMs = offsetMs,
                 scale = effectiveScale,
                 wordByWord = wordByWord,
+                sungColor = sungColor,
                 onSeekTo = onSeekTo,
                 onLineLongPress = onLineLongPress,
             )
@@ -195,6 +204,7 @@ private fun SyncedLyrics(
     offsetMs: Int,
     scale: Float,
     wordByWord: Boolean,
+    sungColor: Int,
     onSeekTo: (Long) -> Unit,
     onLineLongPress: ((Long) -> Unit)?,
 ) {
@@ -265,6 +275,7 @@ private fun SyncedLyrics(
                 offsetMs = offsetMs,
                 scale = scale,
                 wordByWord = wordByWord,
+                sungColor = sungColor,
                 onClick = { if (line.timeMs >= 0) onSeekTo(line.timeMs) },
                 // 没有时间轴的行（`timeMs < 0`）不参与校准：拿它算偏移只会算出一个
                 // 无意义的巨大数字，等于把偏移一次搞坏。
@@ -285,6 +296,7 @@ private fun LyricLineItem(
     offsetMs: Int,
     scale: Float,
     wordByWord: Boolean,
+    sungColor: Int,
     onClick: () -> Unit,
     /** 长按这一行（校准偏移用）；null = 不接管长按 */
     onLongClick: (() -> Unit)? = null,
@@ -312,6 +324,7 @@ private fun LyricLineItem(
                     progressState = progressState,
                     offsetMs = offsetMs,
                     scale = scale,
+                    sungColor = sungColor,
                 )
             } else {
                 Text(
@@ -339,13 +352,14 @@ private fun LyricLineItem(
     }
 }
 
-/** 逐字卡拉OK染色：当前行每个字按时间进度从浅色过渡到主题色 */
+/** 逐字卡拉OK染色：当前行每个字按时间进度从浅色过渡到已唱色 */
 @Composable
 private fun KaraokeText(
     line: LyricLine,
     progressState: State<PlaybackProgress>,
     offsetMs: Int,
     scale: Float,
+    sungColor: Int,
 ) {
     // 只有当前行会读进度，因此也只有这一行会随播放逐帧重组
     val positionMs = progressState.value.positionMs + offsetMs
@@ -360,8 +374,14 @@ private fun KaraokeText(
         progress = wordProgress(line, positionMs)
     }
 
-    val activeColor = MaterialTheme.colorScheme.primary
-    val idleColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
+    // 已唱色：默认跟随主题（随封面取色漂移）；用户在设置里选了固定色就按固定色来。
+    // 未唱色**从已唱色派生**（28% 透明），这样把已唱色改成深色时两者的对比关系仍然成立。
+    val activeColor = if (sungColor == SettingsDefaults.COLOR_FOLLOW_THEME) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        Color(sungColor)
+    }
+    val idleColor = activeColor.copy(alpha = 0.28f)
 
     val annotated = buildAnnotatedString {
         for (word in line.words) {

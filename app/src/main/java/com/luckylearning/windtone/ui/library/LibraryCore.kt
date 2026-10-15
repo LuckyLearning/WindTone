@@ -17,6 +17,7 @@ import com.luckylearning.windtone.data.model.SongSource
 import com.luckylearning.windtone.state.GroupInfo
 import com.luckylearning.windtone.state.LibraryView
 import com.luckylearning.windtone.state.PlayStats
+import com.luckylearning.windtone.ui.defaultSort
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -322,7 +323,10 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
                 album = if (st.overrideAlbum != null) st.overrideAlbum else song.album,
             )
         }
-        val sorted = repository.sort(songs, prefs.sortOrder)
+        // 排序方式按**当前视图**取（v1.1.4 排序下沉）；老用户新键缺失时会继承旧的全局值
+        val view = _library.value.view
+        val currentSort = prefs.sortOrder(view.name, view.defaultSort)
+        val sorted = repository.sort(songs, currentSort)
 
         withContext(Dispatchers.Default) { PinyinIndex.build(sorted) }
 
@@ -340,6 +344,7 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
         _library.update {
             it.copy(
                 songs = sorted,
+                sortOrder = currentSort,
                 visible = visible,
                 letterIndex = letters,
                 scanning = false,
@@ -400,7 +405,9 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
     }
 
     override fun setSort(order: SortOrder) {
-        prefs.sortOrder = order
+        // 只改**当前视图**的排序（v1.1.4 排序下沉）：在专辑里选「按歌手」，
+        // 歌曲列表的「按标题」不受影响。
+        prefs.setSortOrder(_library.value.view.name, order)
         val sorted = repository.sort(_library.value.songs, order)
         val visible = searchSongs(sorted, _library.value.query)
         _library.update {
@@ -419,9 +426,24 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
 
     override fun setView(view: LibraryView) {
         prefs.libraryView = view.name
+        // 每个视图带着自己那份排序进来（v1.1.4 排序下沉）：从「专辑」切回「歌曲」时，
+        // 歌曲列表要按歌曲自己的排序重排，而不是留着专辑刚选的那个。
+        val order = prefs.sortOrder(view.name, view.defaultSort)
+        val sorted = repository.sort(_library.value.songs, order)
+        val visible = searchSongs(sorted, _library.value.query)
         _library.update {
-            it.copy(view = view, selectedGroup = null, selectedPlaylist = null, detailSongs = emptyList())
+            it.copy(
+                view = view,
+                sortOrder = order,
+                songs = sorted,
+                visible = visible,
+                letterIndex = buildLetterIndex(visible),
+                selectedGroup = null,
+                selectedPlaylist = null,
+                detailSongs = emptyList(),
+            )
         }
+        playback.setLibrarySongs(sorted)
         if (view == LibraryView.ALBUM || view == LibraryView.ARTIST || view == LibraryView.FOLDER) {
             refreshGroups()
         }
@@ -461,8 +483,20 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
                 }
             }
             else -> emptyList()
-        }.sortedWith(compareBy({ PinyinIndex.initialOf(it.title) }, { it.title.lowercase() }))
-        _library.update { if (it.groups == groups) it else it.copy(groups = groups) }
+        }
+        // 分组列表的顺序也跟着当前视图走（v1.1.4 排序下沉）。
+        // 「名称类」排序（TITLE / ALBUM / ARTIST）在各自视图下分别表示
+        // 文件夹名 / 专辑名 / 歌手名，统一走拼音首字母序 —— 也正是原来的固定行为，
+        // 所以默认值下这里与重构前完全一致。
+        val order = prefs.sortOrder(view.name, view.defaultSort)
+        val ordered = when (order) {
+            // 文件夹视图：按完整路径排（同名目录靠它才稳定）
+            SortOrder.FOLDER_PATH -> groups.sortedBy { it.key.lowercase() }
+            // 以组内代表曲目的添加时间为准（组内最新一首大致反映这个分组的“新”度）
+            SortOrder.DATE_ADDED -> groups.sortedByDescending { it.sample?.dateAdded ?: 0L }
+            else -> groups.sortedWith(compareBy({ PinyinIndex.initialOf(it.title) }, { it.title.lowercase() }))
+        }
+        _library.update { if (it.groups == ordered) it else it.copy(groups = ordered) }
     }
 
     override fun openGroup(group: GroupInfo) {

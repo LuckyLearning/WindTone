@@ -403,9 +403,12 @@ private val LibraryView.carIcon: ImageVector
     }
 
 /** 排序档位轮换到下一档（车机上用一个大按钮循环切换，比弹菜单省一次点击） */
-internal fun SortOrder.next(): SortOrder {
-    val all = SortOrder.entries
-    return all[(all.indexOf(this) + 1) % all.size]
+internal fun SortOrder.next(view: LibraryView): SortOrder {
+    // 只在该视图**可用**的排序项里轮换（v1.1.4 排序下沉）：否则车机上会切到
+    // 「按歌单内顺序」这种在歌曲列表下讲不通的档位，用户还得自己再切回来。
+    val all = view.sortOptions
+    val i = all.indexOf(this).coerceAtLeast(0)
+    return all[(i + 1) % all.size]
 }
 
 // ================================================================ 顶部工具条
@@ -437,7 +440,7 @@ private fun CarTopBar(
         Spacer(Modifier.weight(1f))
         CarPillButton("重新扫描", onRescan)
         Spacer(Modifier.width(10.dp))
-        CarPillButton(library.sortOrder.label, onSort)
+        CarPillButton(library.sortOrder.labelFor(library.view), onSort)
         Spacer(Modifier.width(10.dp))
         CarPillButton(if (searchOpen) "收起搜索" else "搜索", onToggleSearch)
     }

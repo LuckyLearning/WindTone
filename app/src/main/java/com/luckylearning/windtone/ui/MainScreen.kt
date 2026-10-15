@@ -12,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,6 +51,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -338,7 +340,34 @@ fun MainScreen(
 
     /** 一级列表 + 详情：手机与宽屏左栏共用同一份内容 */
     val listArea: @Composable () -> Unit = {
-        Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                // 右滑手势（v1.1.4）：在内容区**任意位置**向右滑动即可拉出侧边抽屉。
+                //
+                // 刻意不做成「从左边缘往右拖」：边缘手势的起手带只有十几 dp，
+                // 车机上单手够不着；而且屏幕左缘正是系统「返回」手势区，抢不过它。
+                //
+                // 用 `detectHorizontalDragGestures` 而不是自己解 `awaitPointerEvent`：
+                // 它自带水平方向的 touch-slop 判定，纵向滚动（LazyColumn）会自然赢下
+                // 手势竞争，列表照常滚，不会被这里截胡。
+                .pointerInput(drawerOpen, showSettings, player.playerExpanded) {
+                    // 覆盖层（播放页 / 设置页）打开时不再接管；抽屉已开的收起交给遮罩
+                    if (drawerOpen || showSettings || player.playerExpanded) return@pointerInput
+                    var dragged = 0f
+                    val threshold = 72.dp.toPx()
+                    detectHorizontalDragGestures(
+                        onDragStart = { dragged = 0f },
+                        onDragCancel = { dragged = 0f },
+                        onDragEnd = {
+                            // 只认「够长的一次右滑」，避免把普通水平抖动当成手势
+                            if (dragged >= threshold) drawerOpen = true
+                            dragged = 0f
+                        },
+                        onHorizontalDrag = { _, amount -> dragged += amount },
+                    )
+                }
+        ) {
             // 一级列表的滚动位置托管：按视图各存一份，切视图（歌曲↔专辑↔歌手↔
             // 文件夹↔歌单）或进详情再返回时，列表都回到用户之前滚动到的位置。
             // 必须声明在 when 之外 —— 进详情时下面的 else 分支会离开组合，
@@ -428,7 +457,7 @@ fun MainScreen(
                     onSelectView = lib::setView,
                     onOpenSettings = { showSettings = true },
                     onQuery = lib::setQuery,
-                    onSort = { lib.setSort(library.sortOrder.next()) },
+                    onSort = { lib.setSort(library.sortOrder.next(library.view)) },
                     onRescan = { lib.scan() },
                     onPlay = playerVm::playQueue,
                     onSongLongPress = { actionSong = it },
@@ -674,12 +703,16 @@ fun MainScreen(
                     onLyricOverlayAlign = playerVm::setLyricOverlayAlign,
                     onLyricOverlayBackdrop = playerVm::setLyricOverlayBackdrop,
                     onLyricOverlayPauseMode = playerVm::setLyricOverlayPauseMode,
+                    onLyricOverlayWidthPercent = playerVm::setLyricOverlayWidthPercent,
+                    onLyricOverlayTextColor = playerVm::setLyricOverlayTextColor,
+                    onLyricOverlaySungColor = playerVm::setLyricOverlaySungColor,
                     onOverlayEditing = playerVm::setOverlayEditing,
                     onOverlayPreview = playerVm::previewOverlay,
                     canDrawOverlay = canDrawOverlay,
                     overlayHealth = overlayHealth,
                     onLyricScale = playerVm::setLyricScale,
                     onLyricWordByWord = playerVm::setLyricWordByWord,
+                    onLyricSungColor = playerVm::setLyricSungColor,
                     onSpeed = playerVm::setSpeed,
                     onSkipSilence = playerVm::setSkipSilence,
                     onClearStats = lib::clearPlayStats,

@@ -176,6 +176,51 @@ object AudioFx {
         apply(_state.value.enabled)
     }
 
+    /**
+     * 恢复出厂：关掉均衡器、频段全平、三处增强归零（v1.1.4「恢复默认」）。
+     *
+     * 写回的就是**全新安装时那份值** —— 与 `Prefs` 的 `eqEnabled` / `eqPreset` /
+     * `eqBassBoost` / `eqVirtualizer` / `eqLoudness` 默认值一一对应。
+     *
+     * 为什么不是 `usePreset(0)`：平台预设的**名字与曲线各机型不同**，第 0 个
+     * 未必是平直（有的 ROM 上直接就是「Rock」）。直接把频段写 0 才是真的全平，
+     * 顺带把 `eqPreset` 打回 -1（界面显示「自定义」，与实际状态一致）。
+     */
+    fun reset() {
+        prefs?.apply {
+            eqEnabled = false
+            eqPreset = -1
+            eqBassBoost = 0
+            eqVirtualizer = 0
+            eqLoudness = 0
+        }
+
+        val s = _state.value
+        // 播放器还没起来（未开始播放 / 设备不支持）：只落盘，界面保持「不可用」
+        if (!s.available || s.bandCount <= 0) {
+            _state.value = EqState(available = false)
+            return
+        }
+
+        val flat = IntArray(s.bandCount)
+        prefs?.eqBands = encodeBands(flat)
+        equalizer?.let { applyBands(it, flat) }
+        runCatching { bass?.setStrength(0) }
+        runCatching { virtualizer?.setStrength(0) }
+        runCatching { loudness?.setTargetGain(0) }
+        _state.value = s.copy(
+            enabled = false,
+            presetIndex = -1,
+            bandLevels = flat,
+            bassStrength = 0,
+            virtualStrength = 0,
+            loudnessGain = 0,
+        )
+        // 必须放在状态更新**之后**：apply 会读 `_state.value` 里的三处强度
+        // 决定要不要启用对应 effect。
+        apply(false)
+    }
+
     private fun apply(enabled: Boolean) {
         runCatching { equalizer?.enabled = enabled }
         runCatching { bass?.enabled = enabled && _state.value.bassStrength > 0 }

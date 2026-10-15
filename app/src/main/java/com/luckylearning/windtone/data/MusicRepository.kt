@@ -97,7 +97,10 @@ class MusicRepository(
             Log.i(TAG, "短音频过滤（< ${prefs.minSongDurationSec}s）：剔除 ${collected.size - kept.size} 首")
         }
 
-        val songs = sort(kept, prefs.sortOrder)
+        // 扫描结果先按标题排一个**稳定**顺序即可 —— 这里是纯数据层，拿不到「当前在
+        // 哪个浏览视图」；真正的排序由 LibraryCore 按视图决定（v1.1.4 排序下沉），
+        // 它在 applyLibrary 里会把这批数据重排一次。
+        val songs = sort(kept, SortOrder.TITLE)
         LibraryResult(
             songs = songs,
             skippedUnsupported = skipped,
@@ -117,6 +120,9 @@ class MusicRepository(
     }
 
     fun sort(songs: List<Song>, order: SortOrder): List<Song> {
+        // 「歌单内顺序」= 调用方给什么顺序就是什么（M3U 里写死的那个），不能过
+        // sortedWith —— 那会把它重新排掉，用户自己拖出来的顺序就白拖了。
+        if (order == SortOrder.PLAYLIST_ORDER) return songs
         fun text(s: String?): String = s.orEmpty().lowercase()
         val cmp: Comparator<Song> = when (order) {
             SortOrder.TITLE -> Comparator { a, b -> text(a.title).compareTo(text(b.title)) }
@@ -136,6 +142,14 @@ class MusicRepository(
             SortOrder.DURATION -> Comparator { a, b -> b.durationMs.compareTo(a.durationMs) }
             SortOrder.DATE_ADDED -> Comparator { a, b -> b.dateAdded.compareTo(a.dateAdded) }
             SortOrder.FILE_NAME -> Comparator { a, b -> text(a.displayName).compareTo(text(b.displayName)) }
+            // 同目录的排在一起，目录内再按文件名 —— 适合「按文件夹找歌」的习惯
+            SortOrder.FOLDER_PATH -> Comparator { a, b ->
+                var r = text(a.folderPath).compareTo(text(b.folderPath))
+                if (r == 0) r = text(a.displayName).compareTo(text(b.displayName))
+                r
+            }
+            // 已在函数开头提前返回，这里只是让 when 穷尽
+            SortOrder.PLAYLIST_ORDER -> Comparator { _, _ -> 0 }
         }
         return songs.sortedWith(cmp)
     }

@@ -8,10 +8,14 @@ import com.luckylearning.windtone.state.UpdateUiState
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,10 +37,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -57,6 +63,7 @@ import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -67,7 +74,9 @@ import androidx.compose.ui.unit.sp
 import com.luckylearning.windtone.BuildConfig
 import com.luckylearning.windtone.data.DataMaintenance
 import com.luckylearning.windtone.data.DownloadRoute
+import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.data.UpdateChecker
+import kotlin.math.abs
 
 /**
  * 设置页的层级：**一个主页面 + 六个子页**。
@@ -131,12 +140,20 @@ fun SettingsScreen(
     onLyricOverlayAlign: (Int) -> Unit,
     onLyricOverlayBackdrop: (Int) -> Unit,
     onLyricOverlayPauseMode: (Int) -> Unit,
+    /** 悬浮窗宽度：屏幕宽度百分比（1..100）—— v1.1.4 */
+    onLyricOverlayWidthPercent: (Int) -> Unit,
+    /** 悬浮窗正文色（未唱部分）—— v1.1.4 */
+    onLyricOverlayTextColor: (Int) -> Unit,
+    /** 悬浮窗已唱部分的颜色 —— v1.1.4 */
+    onLyricOverlaySungColor: (Int) -> Unit,
     onOverlayEditing: (Boolean) -> Unit,
     onOverlayPreview: () -> Unit,
     canDrawOverlay: Boolean,
     overlayHealth: LyricOverlayBus.Health,
     onLyricScale: (Float) -> Unit,
     onLyricWordByWord: (Boolean) -> Unit,
+    /** 逐字歌词已唱部分的颜色（ARGB）；`SettingsDefaults.COLOR_FOLLOW_THEME` = 跟随主题 */
+    onLyricSungColor: (Int) -> Unit,
     onSpeed: (Float) -> Unit,
     onSkipSilence: (Boolean) -> Unit,
     onClearStats: () -> Unit,
@@ -181,6 +198,9 @@ fun SettingsScreen(
     var showRouteDialog by remember { mutableStateOf(false) }
     // 悬浮歌词的外观选项（行数 / 字号 / 底板 / 暂停行为）共用一个选项弹层
     var overlayChoice by remember { mutableStateOf<OverlayChoice?>(null) }
+    // v1.1.4：三处可配的歌词颜色（播放页已唱色 / 悬浮窗文字色 / 悬浮窗已唱色）
+    // 共用一个选择弹层 —— 它们只是「写回哪个字段」不同，界面完全一样
+    var colorPicker by remember { mutableStateOf<ColorSlot?>(null) }
     // 用户点过悬浮歌词开关但还没授权 → 展开下方授权指引，授权成功返回后自动收起
     var overlayHintVisible by remember { mutableStateOf(false) }
     // 三条跳转路都走不通（ROM 连系统授权页都不给开）→ 指引卡里改显示手动路径
@@ -342,6 +362,9 @@ fun SettingsScreen(
                         subtitle = "从当前歌曲封面提取主色，驱动整个界面的配色",
                         checked = dynamicTheme,
                         onCheckedChange = onDynamicTheme,
+                        onReset = resetAction(dynamicTheme != SettingsDefaults.DYNAMIC_THEME) {
+                            onDynamicTheme(SettingsDefaults.DYNAMIC_THEME)
+                        },
                     )
 
                     // ------------------------------------------------ 车载
@@ -353,6 +376,9 @@ fun SettingsScreen(
                         checked = player.carMode,
                         onCheckedChange = onCarMode,
                         onInfo = { showCarModeInfo = true },
+                        onReset = resetAction(player.carMode != SettingsDefaults.CAR_MODE) {
+                            onCarMode(SettingsDefaults.CAR_MODE)
+                        },
                     )
 
                 }
@@ -369,6 +395,9 @@ fun SettingsScreen(
                         value = player.speed,
                         range = 0.75f..2.0f,
                         onValueChange = onSpeed,
+                        onReset = resetAction(abs(player.speed - SettingsDefaults.SPEED) > 0.001f) {
+                            onSpeed(SettingsDefaults.SPEED)
+                        },
                     )
 
                     // ------------------------------------------------ 播放行为
@@ -378,6 +407,9 @@ fun SettingsScreen(
                         subtitle = "自动跳过录音开头的空白段（对整轨 / 现场录音有效）",
                         checked = player.skipSilence,
                         onCheckedChange = onSkipSilence,
+                        onReset = resetAction(player.skipSilence != SettingsDefaults.SKIP_SILENCE) {
+                            onSkipSilence(SettingsDefaults.SKIP_SILENCE)
+                        },
                     )
                     ActionRow(
                         title = "均衡器与音效",
@@ -403,12 +435,30 @@ fun SettingsScreen(
                         value = player.lyricScale,
                         range = 0.7f..1.6f,
                         onValueChange = onLyricScale,
+                        onReset = resetAction(abs(player.lyricScale - SettingsDefaults.LYRIC_SCALE) > 0.001f) {
+                            onLyricScale(SettingsDefaults.LYRIC_SCALE)
+                        },
                     )
                     SwitchRow(
                         title = "逐字歌词",
                         subtitle = "当前行有逐字时间轴时，按字染色（.krc / .yrc / 增强型 LRC）",
                         checked = player.lyricWordByWord,
                         onCheckedChange = onLyricWordByWord,
+                        onReset = resetAction(player.lyricWordByWord != SettingsDefaults.LYRIC_WORD_BY_WORD) {
+                            onLyricWordByWord(SettingsDefaults.LYRIC_WORD_BY_WORD)
+                        },
+                    )
+                    // v1.1.4：逐字歌词「已唱部分」的颜色。此前写死成 colorScheme.primary，
+                    // 现在允许固定成某个颜色；「跟随主题」保持原样 —— 那是默认，不是特例。
+                    ActionRow(
+                        title = "已唱部分的颜色",
+                        subtitle = "逐字歌词里已经唱过的那一段；默认跟随主题色（随封面取色漂移）",
+                        onClick = { colorPicker = ColorSlot.LYRIC_SUNG },
+                        trailing = LyricsColors.label(player.lyricSungColor),
+                        chevron = true,
+                        onReset = resetAction(
+                            player.lyricSungColor != SettingsDefaults.LYRIC_SUNG_COLOR,
+                        ) { onLyricSungColor(SettingsDefaults.LYRIC_SUNG_COLOR) },
                     )
 
                     // ------------------------------------------------ 桌面悬浮歌词
@@ -440,6 +490,11 @@ fun SettingsScreen(
                                 overlayJumpFailed = !context.startOverlayPermissionPage()
                             }
                         },
+                        // 关掉悬浮歌词是「回到默认」，但这里的 ↺ 只负责把开关拨回默认值，
+                        // 不等同于下面那个「调整位置」——位置是另一件事，不在这里复位。
+                        onReset = resetAction(player.lyricOverlay != SettingsDefaults.LYRIC_OVERLAY) {
+                            onLyricOverlay(SettingsDefaults.LYRIC_OVERLAY)
+                        },
                     )
                     // 悬浮歌词的五个外观选项：行数 / 字号 / 对齐 / 底板 / 暂停行为。
                     // 都紧跟在开关下方，与它绑成一个整体；开关关着也允许**预设**，
@@ -453,6 +508,9 @@ fun SettingsScreen(
                         },
                         onClick = { overlayChoice = OverlayChoice.LINES },
                         chevron = true,
+                        onReset = resetAction(player.lyricOverlayLines != SettingsDefaults.OVERLAY_LINES) {
+                            onLyricOverlayLines(SettingsDefaults.OVERLAY_LINES)
+                        },
                     )
                     ActionRow(
                         title = "悬浮歌词字号",
@@ -460,6 +518,9 @@ fun SettingsScreen(
                         onClick = { overlayChoice = OverlayChoice.TEXT_SCALE },
                         trailing = OVERLAY_TEXT_SCALE_LABELS[player.lyricOverlayTextScale],
                         chevron = true,
+                        onReset = resetAction(
+                            player.lyricOverlayTextScale != SettingsDefaults.OVERLAY_TEXT_SCALE,
+                        ) { onLyricOverlayTextScale(SettingsDefaults.OVERLAY_TEXT_SCALE) },
                     )
                     ActionRow(
                         title = "悬浮歌词对齐",
@@ -471,6 +532,9 @@ fun SettingsScreen(
                         onClick = { overlayChoice = OverlayChoice.ALIGN },
                         trailing = OVERLAY_ALIGN_LABELS[player.lyricOverlayAlign],
                         chevron = true,
+                        onReset = resetAction(player.lyricOverlayAlign != SettingsDefaults.OVERLAY_ALIGN) {
+                            onLyricOverlayAlign(SettingsDefaults.OVERLAY_ALIGN)
+                        },
                     )
                     ActionRow(
                         title = "悬浮歌词底板",
@@ -482,6 +546,9 @@ fun SettingsScreen(
                         onClick = { overlayChoice = OverlayChoice.BACKDROP },
                         trailing = OVERLAY_BACKDROP_LABELS[player.lyricOverlayBackdrop],
                         chevron = true,
+                        onReset = resetAction(
+                            player.lyricOverlayBackdrop != SettingsDefaults.OVERLAY_BACKDROP,
+                        ) { onLyricOverlayBackdrop(SettingsDefaults.OVERLAY_BACKDROP) },
                     )
                     ActionRow(
                         title = "暂停时的悬浮歌词",
@@ -493,6 +560,44 @@ fun SettingsScreen(
                         onClick = { overlayChoice = OverlayChoice.PAUSE },
                         trailing = OVERLAY_PAUSE_LABELS[player.lyricOverlayPauseMode],
                         chevron = true,
+                        onReset = resetAction(
+                            player.lyricOverlayPauseMode != SettingsDefaults.OVERLAY_PAUSE_MODE,
+                        ) { onLyricOverlayPauseMode(SettingsDefaults.OVERLAY_PAUSE_MODE) },
+                    )
+
+                    // v1.1.4 新增三项：宽度滑块 + 两处颜色。都紧跟在五个外观选项之后，仍属「外观」范畴。
+                    // 宽度之所以是滑块而不是档位：屏幕尺寸千差万别，档位永远差一个「刚好」。
+                    SliderRow(
+                        title = "悬浮歌词宽度 ${player.lyricOverlayWidthPercent}%",
+                        subtitle = "屏幕宽度的百分比（1–100%）。窗口越窄，长句折行越早；改了立刻给一次预览",
+                        value = player.lyricOverlayWidthPercent.toFloat(),
+                        range = 1f..100f,
+                        // 拖动时逐帧写回：宽度与屏幕是直接的比例关系，松手才变会让人
+                        // 以为「拖了半天没反应」。引擎侧每次都会重摆窗口，正好当实时预览用。
+                        onValueChange = { onLyricOverlayWidthPercent(it.toInt().coerceIn(1, 100)) },
+                        onReset = resetAction(
+                            player.lyricOverlayWidthPercent != SettingsDefaults.OVERLAY_WIDTH_PERCENT,
+                        ) { onLyricOverlayWidthPercent(SettingsDefaults.OVERLAY_WIDTH_PERCENT) },
+                    )
+                    ActionRow(
+                        title = "悬浮歌词文字颜色",
+                        subtitle = "还没唱到的那部分文字的颜色，默认纯白",
+                        onClick = { colorPicker = ColorSlot.OVERLAY_TEXT },
+                        swatch = player.lyricOverlayTextColor,
+                        chevron = true,
+                        onReset = resetAction(
+                            player.lyricOverlayTextColor != SettingsDefaults.OVERLAY_TEXT_COLOR,
+                        ) { onLyricOverlayTextColor(SettingsDefaults.OVERLAY_TEXT_COLOR) },
+                    )
+                    ActionRow(
+                        title = "悬浮歌词已唱颜色",
+                        subtitle = "逐字高亮里已唱过的那一段，默认暖黄",
+                        onClick = { colorPicker = ColorSlot.OVERLAY_SUNG },
+                        swatch = player.lyricOverlaySungColor,
+                        chevron = true,
+                        onReset = resetAction(
+                            player.lyricOverlaySungColor != SettingsDefaults.OVERLAY_SUNG_COLOR,
+                        ) { onLyricOverlaySungColor(SettingsDefaults.OVERLAY_SUNG_COLOR) },
                     )
                     // 运行状态：开关打开且已授权时显示。这一行是排障的关键 ——
                     // 悬浮窗启动失败（挂窗被 ROM 拒绝 / 前台服务被系统拦）在
@@ -574,6 +679,9 @@ fun SettingsScreen(
                             "修改后自动重新扫描；填 0 关闭过滤",
                         onClick = { showMinDurationDialog = true },
                         chevron = true,
+                        onReset = resetAction(minSongDurationSec != SettingsDefaults.MIN_DURATION_SEC) {
+                            onMinSongDurationSec(SettingsDefaults.MIN_DURATION_SEC)
+                        },
                     )
                 }
 
@@ -765,12 +873,18 @@ fun SettingsScreen(
                         subtitle = "关闭后应用不再发起任何网络请求（在线更新是唯一的联网功能）",
                         checked = autoCheckUpdate,
                         onCheckedChange = onAutoCheckUpdate,
+                        onReset = resetAction(autoCheckUpdate != SettingsDefaults.AUTO_UPDATE) {
+                            onAutoCheckUpdate(SettingsDefaults.AUTO_UPDATE)
+                        },
                     )
                     ActionRow(
                         title = "下载线路",
                         subtitle = "${downloadRoute.label} · ${downloadRoute.hint}",
                         onClick = { showRouteDialog = true },
                         chevron = true,
+                        onReset = resetAction(downloadRoute != SettingsDefaults.UPDATE_ROUTE) {
+                            onDownloadRoute(SettingsDefaults.UPDATE_ROUTE)
+                        },
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         TextButton(onClick = onOpenReleasePage) { Text("打开发布页面") }
@@ -1088,6 +1202,29 @@ fun SettingsScreen(
         )
     }
 
+    // 三处歌词颜色共用同一个选择弹层（效果图 ㉙E）：跟随主题（仅播放页已唱色）/
+    // 预设色板 / 自定义。选中即落盘，悬浮窗那两处还会顺带给一次 6 秒预览。
+    colorPicker?.let { slot ->
+        ColorPickerSheet(
+            title = slot.title,
+            intro = slot.intro,
+            value = when (slot) {
+                ColorSlot.LYRIC_SUNG -> player.lyricSungColor
+                ColorSlot.OVERLAY_TEXT -> player.lyricOverlayTextColor
+                ColorSlot.OVERLAY_SUNG -> player.lyricOverlaySungColor
+            },
+            canFollowTheme = slot.canFollowTheme,
+            onPick = { argb ->
+                when (slot) {
+                    ColorSlot.LYRIC_SUNG -> onLyricSungColor(argb)
+                    ColorSlot.OVERLAY_TEXT -> onLyricOverlayTextColor(argb)
+                    ColorSlot.OVERLAY_SUNG -> onLyricOverlaySungColor(argb)
+                }
+            },
+            onDismiss = { colorPicker = null },
+        )
+    }
+
     // 下载线路选择：检查更新永远走 GitHub 官方地址，这里只管安装包走哪条线
     if (showRouteDialog) {
         AlertDialog(
@@ -1362,6 +1499,17 @@ private fun SectionTitle(text: String) {
     )
 }
 
+/**
+ * 「恢复默认」按钮的判据包装。
+ *
+ * `needsReset` 为真时给出动作，否则返回 `null` —— 行组件见到 `null` 就不画 ↺。
+ * 把「当前值是否偏离出厂默认」和「点下去写回什么」放在同一个表达式里，
+ * 是为了让两处不可能对不上：判据和动作相隔二十行、改一处忘一处，是这类
+ * 「重置按钮把值写歪了」的典型来路。
+ */
+private fun resetAction(needsReset: Boolean, action: () -> Unit): (() -> Unit)? =
+    if (needsReset) action else null
+
 @Composable
 private fun SwitchRow(
     title: String,
@@ -1369,6 +1517,8 @@ private fun SwitchRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     onInfo: (() -> Unit)? = null,
+    /** 非空时在开关左侧画一个 ↺（只在当前值偏离出厂默认时由调用方传入） */
+    onReset: (() -> Unit)? = null,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -1399,6 +1549,10 @@ private fun SwitchRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        if (onReset != null) {
+            ResetButton(onReset)
+            Spacer(Modifier.width(4.dp))
+        }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
@@ -1409,9 +1563,26 @@ private fun SliderRow(
     value: Float,
     range: ClosedFloatingPointRange<Float>,
     onValueChange: (Float) -> Unit,
+    subtitle: String? = null,
+    /** 非空时在标题行右侧画一个 ↺（只在当前值偏离出厂默认时由调用方传入） */
+    onReset: (() -> Unit)? = null,
 ) {
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Text(title, style = MaterialTheme.typography.bodyLarge)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f),
+            )
+            if (onReset != null) ResetButton(onReset)
+        }
+        if (subtitle != null) {
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Slider(
             value = value.coerceIn(range.start, range.endInclusive),
             onValueChange = onValueChange,
@@ -1514,6 +1685,9 @@ private fun CategoryRow(
  *   用户不用进子页就知道里面是什么状况。
  * @param chevron 是否显示右箭头。**只给「点开会进入另一个界面」的行开**（子页入口、
  *   打开弹层/弹窗的行）；就地执行动作（如「检查更新」）或就地展开（如「查看日志」）的行不加。
+ * @param swatch 右侧的当前颜色预览圆点（颜色类设置行专用；`null` 表示不画）。
+ *   「跟随主题」没有固定色，调用方传 `null`，改由 [trailing] 的文字表达。
+ * @param onReset 非空时在右侧画一个 ↺（只在当前值偏离出厂默认时由调用方传入）。
  */
 @Composable
 private fun ActionRow(
@@ -1522,6 +1696,8 @@ private fun ActionRow(
     onClick: () -> Unit,
     trailing: String? = null,
     chevron: Boolean = false,
+    swatch: Int? = null,
+    onReset: (() -> Unit)? = null,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
@@ -1542,6 +1718,22 @@ private fun ActionRow(
                     subtitle,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            // ↺ 也是 clickable，且嵌在本行的 clickable 里。Compose 的点击手势由**最内层**
+            // 拿到并消费，所以点 ↺ 只复位、不会顺带打开本行该进的那个界面。
+            if (onReset != null) {
+                Spacer(Modifier.width(6.dp))
+                ResetButton(onReset)
+            }
+            if (swatch != null) {
+                Spacer(Modifier.width(8.dp))
+                Box(
+                    Modifier
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .background(Color(swatch))
+                        .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
                 )
             }
             if (trailing != null) {
@@ -1596,6 +1788,336 @@ private fun StatCard(rows: List<Pair<String, String>>) {
             }
         }
     }
+}
+
+// ---------------------------------------------------------------- 歌词颜色（v1.1.4）
+
+/**
+ * 三处可配的歌词颜色。
+ *
+ * 三处共用同一个选择弹层 —— 它们的界面完全一样，只有「写回哪个字段」不同，
+ * 复制三份 `ModalBottomSheet` 只会让样式迟早走样。
+ */
+private enum class ColorSlot(
+    val title: String,
+    val intro: String,
+    /** 是否提供「跟随主题」。只有播放页的已唱色能跟随主题（它默认就跟着 primary 走）。 */
+    val canFollowTheme: Boolean,
+) {
+    /** 播放页逐字歌词里「已唱过的那一段」 */
+    LYRIC_SUNG(
+        "已唱部分的颜色",
+        "逐字歌词里已经唱过的那一段。选「跟随主题」就交给封面取色，随歌曲一起变化。",
+        true,
+    ),
+
+    /** 悬浮窗里还没唱到的正文 */
+    OVERLAY_TEXT(
+        "悬浮歌词文字颜色",
+        "桌面悬浮歌词里还没唱到的那部分。悬浮窗是固定色，不跟随主题。",
+        false,
+    ),
+
+    /** 悬浮窗里已唱过的那一段 */
+    OVERLAY_SUNG(
+        "悬浮歌词已唱颜色",
+        "桌面悬浮歌词里当前行已经唱过的那一段。还没唱到的部分由「文字颜色」单独控制。",
+        false,
+    ),
+}
+
+/**
+ * 颜色弹层的预设色板（效果图 ㉙E 里的 8 个 `.swatch`）。
+ *
+ * 刻意不做成枚举：枚举承载不了**用户自定义**的颜色，而这三处的取值
+ * 既可能是预设、也可能是任意 ARGB，还可能是「跟随主题」哨兵。
+ */
+internal object LyricsColors {
+    /** 弹层里自定义滑块的起点色（暖黄，与悬浮窗已唱色的默认值同色系） */
+    const val DEFAULT_SEED = 0xFFFFCD56.toInt()
+
+    data class Preset(val name: String, val argb: Int)
+
+    /** 白 / 暖黄 / 天蓝 / 青绿 / 草绿 / 桃粉 / 橘橙 / 雾紫 */
+    val presets = listOf(
+        Preset("纯白", 0xFFFFFFFF.toInt()),
+        Preset("暖黄", 0xFFFFCD56.toInt()),
+        Preset("天蓝", 0xFF4FC3F7.toInt()),
+        Preset("青绿", 0xFF4DD0E1.toInt()),
+        Preset("草绿", 0xFF81C784.toInt()),
+        Preset("桃粉", 0xFFF06292.toInt()),
+        Preset("橘橙", 0xFFFF7043.toInt()),
+        Preset("雾紫", 0xFFBA68C8.toInt()),
+    )
+
+    /**
+     * 取一个颜色的人话名字：哨兵 →「跟随主题」，预设 → 色名，其余 → `#RRGGBB`。
+     *
+     * 设置行右侧要回答「现在是什么颜色」，直接印 `-12593` 没人看得懂。
+     */
+    fun label(argb: Int): String = when (argb) {
+        SettingsDefaults.COLOR_FOLLOW_THEME -> "跟随主题"
+        else -> presets.firstOrNull { it.argb == argb }?.name ?: hex(argb)
+    }
+
+    /** ARGB → `#RRGGBB`（丢掉 alpha：这三处颜色都是不透明的） */
+    fun hex(argb: Int): String {
+        val rgb = argb and 0xFFFFFF
+        return "#" + rgb.toString(16).uppercase().padStart(6, '0')
+    }
+}
+
+/**
+ * 颜色选择弹层（效果图 ㉙E，三处歌词颜色共用）。
+ *
+ * 三段式 —— **跟随主题 / 预设色板 / 自定义**：
+ *  - 「跟随主题」只对播放页已唱色出现；悬浮窗那两处是固定色，没有这一项。
+ *  - 预设 8 色覆盖「白 / 暖 / 冷 / 亮」几类常见偏好，车机上一点就中。
+ *  - 自定义给色相 / 饱和度 / 亮度三个滑块 + 一条实时预览条。
+ *
+ * **为什么不用色轮**：车机上手指粗、精度差，色轮边缘的色相极难选准；
+ * 三个滑块 + 预览条的组合在大屏上反而更好操作。
+ *
+ * 选中即落盘（[onPick]）——悬浮窗那两处会顺带触发一次 6 秒前台预览，
+ * 不用退到桌面去验证。
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun ColorPickerSheet(
+    title: String,
+    intro: String,
+    value: Int,
+    canFollowTheme: Boolean,
+    onPick: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    // 「跟随主题」没有具体颜色可回填，自定义区从 [LyricsColors.DEFAULT_SEED] 起步 ——
+    // 不从随机色、也不从上一个弹层留下的色相起步，滑块初始位置每次一样。
+    val seed = if (value == SettingsDefaults.COLOR_FOLLOW_THEME) {
+        LyricsColors.DEFAULT_SEED
+    } else {
+        value
+    }
+    // 用 FloatArray 但每次都赋**新数组**：原地改元素不会触发重组，这个坑很安静。
+    var hsv by remember(value) { mutableStateOf(hsvOf(seed)) }
+    val custom = android.graphics.Color.HSVToColor(hsv)
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp),
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                intro,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+
+            if (canFollowTheme) {
+                SectionTitle("跟随主题")
+                PickRow(
+                    title = "跟随主题",
+                    subtitle = "从当前歌曲封面取色，随主题一起变化",
+                    selected = value == SettingsDefaults.COLOR_FOLLOW_THEME,
+                    onClick = {
+                        onPick(SettingsDefaults.COLOR_FOLLOW_THEME)
+                        onDismiss()
+                    },
+                )
+            }
+
+            SectionTitle("预设")
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                LyricsColors.presets.forEach { preset ->
+                    ColorSwatch(
+                        argb = preset.argb,
+                        selected = value == preset.argb,
+                        onClick = {
+                            onPick(preset.argb)
+                            onDismiss()
+                        },
+                    )
+                }
+            }
+
+            SectionTitle("自定义")
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(38.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(custom))
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp)),
+            )
+            // 三个滑块只在**松手**时才写回：拖动时逐帧 setLyricOverlayXxxColor 会连着
+            // 触发预览，把浮动窗口的排版刷成流水；预览条本身逐帧在变，反馈并不缺。
+            HsvSlider(
+                label = "色相",
+                value = hsv[0],
+                range = 0f..360f,
+                onChange = { hsv = floatArrayOf(it, hsv[1], hsv[2]) },
+                onCommit = { onPick(android.graphics.Color.HSVToColor(hsv)) },
+            )
+            HsvSlider(
+                label = "饱和度",
+                value = hsv[1],
+                range = 0f..1f,
+                onChange = { hsv = floatArrayOf(hsv[0], it, hsv[2]) },
+                onCommit = { onPick(android.graphics.Color.HSVToColor(hsv)) },
+            )
+            HsvSlider(
+                label = "亮度",
+                value = hsv[2],
+                range = 0f..1f,
+                onChange = { hsv = floatArrayOf(hsv[0], hsv[1], it) },
+                onCommit = { onPick(android.graphics.Color.HSVToColor(hsv)) },
+            )
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.padding(top = 6.dp),
+            ) {
+                TextButton(onClick = onDismiss) { Text("取消") }
+                TextButton(
+                    onClick = {
+                        onPick(custom)
+                        onDismiss()
+                    },
+                ) { Text("使用这个颜色") }
+            }
+        }
+    }
+}
+
+/** 弹层里「跟随主题」那一行：左标题 + 右 ✓（无箭头，与效果图的 `.row-action` 一致） */
+@Composable
+private fun PickRow(
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
+                )
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (selected) {
+                Text(
+                    "✓",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+    }
+}
+
+/** 预设色板里的一颗色点：34dp 圆，选中时描边加粗并在中心叠一个 ✓ */
+@Composable
+private fun ColorSwatch(argb: Int, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(34.dp)
+            .clip(CircleShape)
+            .background(Color(argb))
+            .border(
+                width = if (selected) 3.dp else 1.dp,
+                color = if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.outline
+                },
+                shape = CircleShape,
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (selected) {
+            Icon(
+                Icons.Filled.Check,
+                contentDescription = "已选择",
+                tint = contrastTint(argb),
+                modifier = Modifier.size(16.dp),
+            )
+        }
+    }
+}
+
+/** 自定义区的一个分量滑块（色相 / 饱和度 / 亮度） */
+@Composable
+private fun HsvSlider(
+    label: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    onChange: (Float) -> Unit,
+    onCommit: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+        Text(label, fontSize = 13.sp)
+        Slider(
+            value = value.coerceIn(range.start, range.endInclusive),
+            onValueChange = onChange,
+            valueRange = range,
+            onValueChangeFinished = onCommit,
+        )
+    }
+}
+
+/**
+ * 在给定底色上叠 ✓ 时该用黑还是白。
+ *
+ * 用 BT.601 的感知亮度而不是 RGB 算术均值：纯黄与纯蓝的算术均值一模一样，
+ * 但人眼看黄的亮度接近白、蓝的亮度接近黑，按算术均值选会正好选反。
+ */
+private fun contrastTint(argb: Int): Color {
+    val r = (argb shr 16) and 0xFF
+    val g = (argb shr 8) and 0xFF
+    val b = argb and 0xFF
+    val luma = 0.299f * r + 0.587f * g + 0.114f * b
+    return if (luma > 150f) Color(0xFF1B1B1B) else Color.White
+}
+
+/** ARGB → `[色相 0..360, 饱和度 0..1, 亮度 0..1]`（自定义滑块的初始位置） */
+private fun hsvOf(argb: Int): FloatArray {
+    val hsv = FloatArray(3)
+    android.graphics.Color.colorToHSV(argb, hsv)
+    return hsv
 }
 
 /** 累计收听时长的友好显示 */

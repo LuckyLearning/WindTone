@@ -1,16 +1,20 @@
 package com.luckylearning.windtone.ui
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.luckylearning.windtone.data.DownloadRoute
+import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.overlay.LyricOverlayBus
 import com.luckylearning.windtone.state.LibraryUiState
 import com.luckylearning.windtone.state.PlayerUiState
 import com.luckylearning.windtone.state.UpdateUiState
 import com.luckylearning.windtone.ui.theme.MusicPlayerTheme
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -41,34 +45,49 @@ class SettingsScreenTest {
     @get:Rule
     val compose = createComposeRule()
 
-    /** SettingsScreen 是「数据进、回调出」的纯展示组件，素状态 + 空回调即可渲染 */
-    private fun render() {
+    /**
+     * settingsScreen 是「数据进、回调出」的纯展示组件，默认素状态 + 空回调即可渲染。
+     *
+     * 参数都带默认值，常见的三个场景（出厂默认 / 某项偏离 / 观察某个回调收到了什么）
+     * 各写一行就够，不必每个测试重复五十个空 lambda。
+     */
+    private fun render(
+        player: PlayerUiState = PlayerUiState(),
+        dynamicTheme: Boolean = SettingsDefaults.DYNAMIC_THEME,
+        onCarMode: (Boolean) -> Unit = {},
+        onLyricScale: (Float) -> Unit = {},
+        onLyricSungColor: (Int) -> Unit = {},
+    ) {
         compose.setContent {
             MusicPlayerTheme {
                 SettingsScreen(
                     library = LibraryUiState(),
-                    player = PlayerUiState(),
+                    player = player,
                     update = UpdateUiState(),
-                    dynamicTheme = true,
+                    dynamicTheme = dynamicTheme,
                     autoCheckUpdate = true,
                     downloadRoute = DownloadRoute.AUTO,
                     crashLogCount = 0,
                     crashLogText = null,
                     onClose = {},
                     onDynamicTheme = {},
-                    onCarMode = {},
+                    onCarMode = onCarMode,
                     onLyricOverlay = {},
                     onLyricOverlayLines = {},
                     onLyricOverlayTextScale = {},
                     onLyricOverlayAlign = {},
                     onLyricOverlayBackdrop = {},
                     onLyricOverlayPauseMode = {},
+                    onLyricOverlayWidthPercent = {},
+                    onLyricOverlayTextColor = {},
+                    onLyricOverlaySungColor = {},
                     onOverlayEditing = {},
                     onOverlayPreview = {},
                     canDrawOverlay = false,
                     overlayHealth = LyricOverlayBus.Health(),
-                    onLyricScale = {},
+                    onLyricScale = onLyricScale,
                     onLyricWordByWord = {},
+                    onLyricSungColor = onLyricSungColor,
                     onSpeed = {},
                     onSkipSilence = {},
                     onClearStats = {},
@@ -138,5 +157,72 @@ class SettingsScreenTest {
         compose.waitForIdle()
         compose.onNodeWithText("关于与诊断").assertIsDisplayed()
         compose.onNodeWithText("播放页歌词").assertDoesNotExist()
+    }
+
+    // ================================================================ v1.1.4 需求 1：恢复默认
+
+    /**
+     * 出厂默认下**一枚 ↺ 都不出现**。
+     *
+     * 「恢复默认」只在偏离默认时才是个可执行的动作。一行都没动过却挂着按钮，
+     * 用户会以为「还得点一下才算生效」，等于把默认状态本身渲染成了一个疑问。
+     */
+    @Test
+    fun resetButtonsStayHiddenAtFactoryDefaults() {
+        render()
+        compose.onNodeWithText("外观").performClick()
+        compose.waitForIdle()
+        compose.onAllNodesWithContentDescription("恢复默认").assertCountEquals(0)
+    }
+
+    /** 偏离默认后 ↺ 出现，点它写回 `SettingsDefaults` —— 也就是「重新装一次会拿到的那份值」 */
+    @Test
+    fun resetButtonAppearsOnDeviationAndWritesBackFactoryDefault() {
+        var carMode: Boolean? = null
+        // 车载模式开着（偏离默认），主题取色仍在默认上 → 全页应当只有**一枚** ↺
+        render(player = PlayerUiState(carMode = true), onCarMode = { carMode = it })
+
+        compose.onNodeWithText("外观").performClick()
+        compose.waitForIdle()
+        compose.onAllNodesWithContentDescription("恢复默认").assertCountEquals(1)
+
+        compose.onNodeWithContentDescription("恢复默认").performClick()
+        compose.waitForIdle()
+        assertEquals(SettingsDefaults.CAR_MODE, carMode)
+    }
+
+    /**
+     * 歌词子页里字号与「已唱部分的颜色」都偏离了默认 → 两枚 ↺，分别写回各自的默认值。
+     *
+     * 下标就是它们在页面里的先后顺序（字号在前、颜色在后）。这里顺带盖住一件事：
+     * ↺ 嵌在整行 `clickable` 里，点它必须**只**复位，不能顺带打开这一行该进的那个界面
+     * ——否则点一次 ↺ 会同时弹出色板，看起来像「复位失败变成了打开设置」。
+     */
+    @Test
+    fun lyricsPageResetsScaleAndSungColorIndependently() {
+        var scale: Float? = null
+        var sungColor: Int? = null
+        render(
+            player = PlayerUiState(lyricScale = 1.3f, lyricSungColor = 0xFF4FC3F7.toInt()),
+            onLyricScale = { scale = it },
+            onLyricSungColor = { sungColor = it },
+        )
+
+        compose.onNodeWithText("歌词").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("已唱部分的颜色").assertIsDisplayed()
+        compose.onAllNodesWithContentDescription("恢复默认").assertCountEquals(2)
+
+        compose.onAllNodesWithContentDescription("恢复默认")[0].performClick()
+        compose.waitForIdle()
+        assertEquals(SettingsDefaults.LYRIC_SCALE, scale)
+        // 点字号的 ↺ 只该动字号：颜色那处的回调一次都不该被叫到
+        assertEquals(null, sungColor)
+        // 也不该顺带把色板弹层（ModalBottomSheet）打开
+        compose.onNodeWithText("预设").assertDoesNotExist()
+
+        compose.onAllNodesWithContentDescription("恢复默认")[1].performClick()
+        compose.waitForIdle()
+        assertEquals(SettingsDefaults.COLOR_FOLLOW_THEME, sungColor)
     }
 }

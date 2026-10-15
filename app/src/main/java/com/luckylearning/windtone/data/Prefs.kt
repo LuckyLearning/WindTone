@@ -3,6 +3,13 @@ package com.luckylearning.windtone.data
 import android.content.Context
 import android.content.SharedPreferences
 
+/**
+ * 歌曲排序方式。
+ *
+ * 注意：这里是**全集**，具体某个浏览视图能用哪几项由
+ * `LibraryView.sortOptions` 裁剪（v1.1.4 起排序下沉到各视图，
+ * 专辑列表不该出现「按时长」这种对它没意义的选项）。
+ */
 enum class SortOrder(val label: String) {
     TITLE("按标题"),
     ARTIST("按歌手"),
@@ -10,6 +17,62 @@ enum class SortOrder(val label: String) {
     DURATION("按时长"),
     DATE_ADDED("按添加时间"),
     FILE_NAME("按文件名"),
+
+    /** 文件夹视图专用：按目录完整路径排（同名目录靠它才能稳定区分） */
+    FOLDER_PATH("按路径"),
+
+    /** 歌单视图专用：保持 M3U 里写死的顺序（用户自己拖出来的那个顺序） */
+    PLAYLIST_ORDER("按歌单内顺序"),
+}
+
+/**
+ * 各设置项的**出厂默认值**，集中放这里。
+ *
+ * 为什么要集中：设置页从 v1.1.4 起每项右侧都有「↺ 恢复默认」，如果默认值散在
+ * `Prefs` 的 getter 和设置页的常量里两处，迟早会出现「重置按钮写回的值」
+ * 与「首次安装拿到的值」不一致 —— 那种 bug 用户很难描述清楚。
+ * **改默认值只改这里**，`Prefs` 的 getter 与设置页的重置都引用它。
+ */
+object SettingsDefaults {
+    /** 「跟随主题」哨兵：颜色设置取这个值表示不指定固定色，交由主题 / 默认色决定 */
+    const val COLOR_FOLLOW_THEME = Int.MIN_VALUE
+
+    const val DYNAMIC_THEME = true
+    const val CAR_MODE = false
+
+    const val SPEED = 1.0f
+    const val SKIP_SILENCE = false
+
+    const val LYRIC_SCALE = 1.0f
+    const val LYRIC_WORD_BY_WORD = true
+
+    /** 播放页逐字歌词「已唱部分」的颜色；[COLOR_FOLLOW_THEME] = 跟随主题色 */
+    const val LYRIC_SUNG_COLOR = COLOR_FOLLOW_THEME
+
+    const val LYRIC_OVERLAY = false
+    const val OVERLAY_LINES = 1
+    const val OVERLAY_TEXT_SCALE = 1
+
+    /** 悬浮歌词水平对齐：0 居中 / 1 居左（取值与 `overlay/OverlayPositioner` 的 ALIGN_* 一致） */
+    const val OVERLAY_ALIGN = 0
+    const val OVERLAY_BACKDROP = 1
+    const val OVERLAY_PAUSE_MODE = 0
+
+    /** 悬浮窗宽度（屏幕宽度的百分比，1..100） */
+    const val OVERLAY_WIDTH_PERCENT = 100
+
+    /** 悬浮窗里未唱部分的文字颜色（纯白） */
+    const val OVERLAY_TEXT_COLOR = 0xFFFFFFFF.toInt()
+
+    /** 悬浮窗里已唱部分的颜色（暖黄） */
+    const val OVERLAY_SUNG_COLOR = 0xFFFFCD56.toInt()
+
+    const val MIN_DURATION_SEC = 60
+    const val AUTO_UPDATE = true
+    val UPDATE_ROUTE = DownloadRoute.AUTO
+
+    /** 悬浮窗宽度百分比的合法区间 */
+    val OVERLAY_WIDTH_RANGE = 1..100
 }
 
 /**
@@ -81,10 +144,30 @@ class Prefs(context: Context) {
         get() = sp.getInt(KEY_MIN_DURATION_SEC, DEFAULT_MIN_DURATION_SEC)
         set(value) = sp.edit().putInt(KEY_MIN_DURATION_SEC, value.coerceIn(0, 3600)).apply()
 
-    var sortOrder: SortOrder
-        get() = runCatching { SortOrder.valueOf(sp.getString(KEY_SORT, SortOrder.TITLE.name)!!) }
-            .getOrDefault(SortOrder.TITLE)
-        set(value) = sp.edit().putString(KEY_SORT, value.name).apply()
+    /**
+     * 某个浏览视图的排序方式 —— **v1.1.4 起按视图各存一份**。
+     *
+     * 之前是全局一份：在「专辑」里改成按歌手，切回「歌曲」也跟着变了。两个视图的
+     * 排序诉求本来就不同（歌曲看标题、专辑看专辑名），共用一份只会互相打架。
+     *
+     * 旧的全局键 [KEY_SORT] 作兼容回落：新键还没写过时读它，老用户既有选择会被各
+     * 视图继承一次，之后各自独立。默认值由调用方按视图给（见 `LibraryView.defaultSort`）。
+     */
+    fun sortOrder(viewName: String, default: SortOrder): SortOrder {
+        val raw = sp.getString(KEY_SORT_PREFIX + viewName, null)
+            ?: sp.getString(KEY_SORT, null)
+            ?: return default
+        return runCatching { SortOrder.valueOf(raw) }.getOrDefault(default)
+    }
+
+    fun setSortOrder(viewName: String, order: SortOrder) {
+        sp.edit().putString(KEY_SORT_PREFIX + viewName, order.name).apply()
+    }
+
+    /** 清掉某个视图的排序覆盖，让它回到 [LibraryView.defaultSort] */
+    fun resetSortOrder(viewName: String) {
+        sp.edit().remove(KEY_SORT_PREFIX + viewName).apply()
+    }
 
     /** 上次停留的浏览视图（歌曲 / 专辑 / 歌手 / 文件夹 / 歌单），重启后恢复 */
     var libraryView: String
@@ -93,13 +176,24 @@ class Prefs(context: Context) {
 
     /** 歌词字号缩放 */
     var lyricScale: Float
-        get() = sp.getFloat(KEY_LYRIC_SCALE, 1.0f)
+        get() = sp.getFloat(KEY_LYRIC_SCALE, SettingsDefaults.LYRIC_SCALE)
         set(value) = sp.edit().putFloat(KEY_LYRIC_SCALE, value).apply()
 
     /** 逐字歌词：当前行有逐字时间轴时按字染色（默认开启） */
     var lyricWordByWord: Boolean
-        get() = sp.getBoolean(KEY_LYRIC_WORD_BY_WORD, true)
+        get() = sp.getBoolean(KEY_LYRIC_WORD_BY_WORD, SettingsDefaults.LYRIC_WORD_BY_WORD)
         set(value) = sp.edit().putBoolean(KEY_LYRIC_WORD_BY_WORD, value).apply()
+
+    /**
+     * 播放页逐字歌词里**已唱部分**的颜色（ARGB）。
+     *
+     * 默认 [SettingsDefaults.COLOR_FOLLOW_THEME] = 跟随主题色（`colorScheme.primary`）——
+     * 主题会随封面取色变化，默认跟随才能跟封面配得上。
+     * 用户显式选了固定色后就用固定色，不再随主题漂移。
+     */
+    var lyricSungColor: Int
+        get() = sp.getInt(KEY_LYRIC_SUNG_COLOR, SettingsDefaults.LYRIC_SUNG_COLOR)
+        set(value) = sp.edit().putInt(KEY_LYRIC_SUNG_COLOR, value).apply()
 
     /**
      * 播放页中部显示的是歌词（true，默认）还是封面（false）。
@@ -204,6 +298,36 @@ class Prefs(context: Context) {
         get() = sp.getInt(KEY_LYRIC_OVERLAY_ALIGN, 0).coerceIn(0, 1)
         set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_ALIGN, value.coerceIn(0, 1)).apply()
 
+    // ---------------- v1.1.4 新增：悬浮窗宽度与歌词颜色 ----------------
+
+    /**
+     * 悬浮歌词窗口的宽度，**按屏幕宽度的百分比**（1..100，默认 100）。
+     *
+     * 此前窗口宽度是 `WRAP_CONTENT`（内容多宽就多宽），长句会一路顶到屏幕边缘、
+     * 短句又只有一小条 —— 同一首歌里宽度不停跳。改成固定百分比后宽度稳定，
+     * 文字超出就折行。
+     *
+     * ⚠️ 宽度变了必须重新摆一次窗口：`OverlayPositioner` 的夹取上限是
+     * 「屏宽 − 窗口宽」，宽窗口留的空间更小（见 `LyricOverlayService.applyAppearance`）。
+     */
+    var lyricOverlayWidthPercent: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_WIDTH, SettingsDefaults.OVERLAY_WIDTH_PERCENT)
+            .coerceIn(SettingsDefaults.OVERLAY_WIDTH_RANGE.first, SettingsDefaults.OVERLAY_WIDTH_RANGE.last)
+        set(value) = sp.edit().putInt(
+            KEY_LYRIC_OVERLAY_WIDTH,
+            value.coerceIn(SettingsDefaults.OVERLAY_WIDTH_RANGE.first, SettingsDefaults.OVERLAY_WIDTH_RANGE.last),
+        ).apply()
+
+    /** 悬浮窗里**未唱部分**的文字颜色（ARGB，默认纯白） */
+    var lyricOverlayTextColor: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_TEXT_COLOR, SettingsDefaults.OVERLAY_TEXT_COLOR)
+        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_TEXT_COLOR, value).apply()
+
+    /** 悬浮窗里**已唱部分**的颜色（ARGB，默认暖黄 `#FFCD56`） */
+    var lyricOverlaySungColor: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_SUNG_COLOR, SettingsDefaults.OVERLAY_SUNG_COLOR)
+        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_SUNG_COLOR, value).apply()
+
     // ---------------- 批次 6 新增 ----------------
 
     /** 跳过音频文件里的静音段（整轨/现场录音常用） */
@@ -285,7 +409,11 @@ class Prefs(context: Context) {
         const val KEY_MIN_DURATION_SEC = "min_song_duration_sec"
         /** 短音频过滤默认阈值：60 秒 */
         const val DEFAULT_MIN_DURATION_SEC = 60
+        /** 旧的**全局**排序键：v1.1.4 起排序按视图各存一份，它只作老数据兼容回落 */
         const val KEY_SORT = "sort"
+
+        /** 各视图的排序键前缀：`sort_SONGS` / `sort_ALBUM` / `sort_ARTIST` / `sort_FOLDER` / `sort_PLAYLIST` */
+        const val KEY_SORT_PREFIX = "sort_"
         const val KEY_VIEW = "library_view"
         const val KEY_LYRIC_SCALE = "lyric_scale"
         const val KEY_LYRIC_WORD_BY_WORD = "lyric_word_by_word"
@@ -299,6 +427,10 @@ class Prefs(context: Context) {
         const val KEY_LYRIC_OVERLAY_BACKDROP = "lyric_overlay_backdrop"
         const val KEY_LYRIC_OVERLAY_PAUSE_MODE = "lyric_overlay_pause_mode"
         const val KEY_LYRIC_OVERLAY_ALIGN = "lyric_overlay_align"
+        const val KEY_LYRIC_OVERLAY_WIDTH = "lyric_overlay_width_percent"
+        const val KEY_LYRIC_OVERLAY_TEXT_COLOR = "lyric_overlay_text_color"
+        const val KEY_LYRIC_OVERLAY_SUNG_COLOR = "lyric_overlay_sung_color"
+        const val KEY_LYRIC_SUNG_COLOR = "lyric_sung_color"
         const val KEY_DYNAMIC_THEME = "dynamic_theme"
         const val KEY_SPEED = "playback_speed"
         const val KEY_EQ_ENABLED = "eq_enabled"

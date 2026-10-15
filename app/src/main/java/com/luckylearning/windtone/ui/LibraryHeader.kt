@@ -56,7 +56,7 @@ import com.luckylearning.windtone.state.LibraryView
  * 曲库页的**顶栏与空态**（原来长在 `MainScreen.kt` 里，见 `LibraryLists.kt` 的说明）。
  */
 
-/** 底部导航用的视图图标 */
+/** 抽屉导航用的视图图标（v1.1.3 起底部五视图导航已改为侧边抽屉） */
 internal val LibraryView.icon: ImageVector
     get() = when (this) {
         LibraryView.SONGS -> AppIcons.MusicNote
@@ -65,6 +65,52 @@ internal val LibraryView.icon: ImageVector
         LibraryView.FOLDER -> AppIcons.Folder
         LibraryView.PLAYLIST -> AppIcons.LibraryMusic
     }
+
+/**
+ * 各浏览视图**默认的**排序方式。
+ *
+ * 用在两处：首次进入某视图、以及用户点「↺ 恢复默认」时。
+ * 默认值与视图的直觉对齐 —— 歌曲 / 文件夹按名称，专辑按专辑名，歌手按歌手名，
+ * 歌单按 M3U 里写死的顺序（用户自己拖出来的那个顺序）。
+ */
+internal val LibraryView.defaultSort: SortOrder
+    get() = when (this) {
+        LibraryView.SONGS -> SortOrder.TITLE
+        LibraryView.ALBUM -> SortOrder.ALBUM
+        LibraryView.ARTIST -> SortOrder.ARTIST
+        LibraryView.FOLDER -> SortOrder.TITLE
+        LibraryView.PLAYLIST -> SortOrder.PLAYLIST_ORDER
+    }
+
+/**
+ * 该视图**能用**的排序项（v1.1.4 排序下沉：「功能按实际情况来」）。
+ *
+ * 每个视图只列在自己身上讲得通的项 —— 专辑列表给「按时长」没有意义，
+ * 歌单列表给「按专辑」也没有意义。列全了只会让菜单变长、还容易选错。
+ */
+internal val LibraryView.sortOptions: List<SortOrder>
+    get() = when (this) {
+        LibraryView.SONGS -> listOf(
+            SortOrder.TITLE,
+            SortOrder.ARTIST,
+            SortOrder.ALBUM,
+            SortOrder.DURATION,
+            SortOrder.DATE_ADDED,
+            SortOrder.FILE_NAME,
+        )
+        LibraryView.ALBUM -> listOf(SortOrder.ALBUM, SortOrder.ARTIST, SortOrder.DATE_ADDED)
+        LibraryView.ARTIST -> listOf(SortOrder.ARTIST, SortOrder.DATE_ADDED)
+        LibraryView.FOLDER -> listOf(SortOrder.TITLE, SortOrder.FOLDER_PATH, SortOrder.DATE_ADDED)
+        LibraryView.PLAYLIST -> listOf(SortOrder.PLAYLIST_ORDER, SortOrder.TITLE, SortOrder.DATE_ADDED)
+    }
+
+/** 排序项在某个视图下的显示名（同一个枚举在不同视图里叫法不同） */
+internal fun SortOrder.labelFor(view: LibraryView): String = when {
+    view == LibraryView.FOLDER && this == SortOrder.TITLE -> "按文件夹名"
+    view == LibraryView.ALBUM && this == SortOrder.ALBUM -> "按专辑名"
+    view == LibraryView.ARTIST && this == SortOrder.ARTIST -> "按歌手名"
+    else -> label
+}
 
 @Composable
 internal fun LibraryHeader(
@@ -133,12 +179,15 @@ internal fun LibraryHeader(
                         tint = MaterialTheme.colorScheme.onBackground,
                     )
                 }
+                // 排序菜单只列**当前视图**讲得通的项，且选中的排序只作用于当前视图
+                // （v1.1.4 排序下沉：歌曲选按标题、专辑选按专辑名，互不影响）。
+                // 文案也跟着视图变，如文件夹视图下 TITLE 显示成「按文件夹名」。
                 DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
-                    SortOrder.entries.forEach { order ->
+                    library.view.sortOptions.forEach { order ->
                         DropdownMenuItem(
                             text = {
                                 Text(
-                                    text = order.label,
+                                    text = order.labelFor(library.view),
                                     fontWeight = if (order == library.sortOrder) FontWeight.Bold
                                     else FontWeight.Normal,
                                     color = if (order == library.sortOrder) MaterialTheme.colorScheme.primary

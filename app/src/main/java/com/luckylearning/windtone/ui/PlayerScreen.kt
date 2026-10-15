@@ -365,6 +365,8 @@ fun PlayerScreen(
                         offsetMs = state.lyricOffsetMs,
                         scale = state.lyricScale,
                         wordByWord = state.lyricWordByWord,
+                        // 逐字已唱色（v1.1.4 可配）：COLOR_FOLLOW_THEME = 跟随主题色
+                        sungColor = state.lyricSungColor,
                         onSeekTo = onSeekTo,
                         carMode = state.carMode,
                         // 长按哪一行就在哪一刻对表：位置在这里取一次快照

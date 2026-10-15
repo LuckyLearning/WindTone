@@ -161,6 +161,15 @@ fun QueueSheet(
 @Composable
 fun EqSheet(onClose: () -> Unit) {
     val state by AudioFx.state.collectAsState()
+    // 只有真的偏离出厂状态才画 ↺（与设置页同一条口径：默认状态下不摆按钮）
+    val customized = state.available && (
+        state.enabled ||
+            state.presetIndex != -1 ||
+            state.bassStrength > 0 ||
+            state.virtualStrength > 0 ||
+            state.loudnessGain > 0 ||
+            state.bandLevels.any { it != 0 }
+        )
     ModalBottomSheet(onDismissRequest = onClose) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -168,6 +177,12 @@ fun EqSheet(onClose: () -> Unit) {
                 Spacer(Modifier.width(8.dp))
                 Text("均衡器与音效", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.weight(1f))
+                // 恢复默认：关掉均衡器 + 频段全平 + 三处增强归零（= 全新安装那份值）。
+                // 均衡器的值没有对应的设置页行（那一行只是弹层入口），所以这里必须有。
+                if (customized) {
+                    ResetButton(onClick = AudioFx::reset)
+                    Spacer(Modifier.width(4.dp))
+                }
                 Switch(checked = state.enabled, onCheckedChange = AudioFx::setEnabled, enabled = state.available)
             }
 

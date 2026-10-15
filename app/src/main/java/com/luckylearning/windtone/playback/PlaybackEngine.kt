@@ -11,6 +11,7 @@ import com.luckylearning.windtone.data.CoverRepository
 import com.luckylearning.windtone.data.HOUR_MS
 import com.luckylearning.windtone.data.LyricsLoader
 import com.luckylearning.windtone.data.MessageBus
+import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.data.SongIndex
 import com.luckylearning.windtone.data.ThemeColorExtractor
@@ -84,6 +85,11 @@ class PlaybackEngine(
             lyricOverlayBackdrop = prefs.lyricOverlayBackdrop,
             lyricOverlayPauseMode = prefs.lyricOverlayPauseMode,
             lyricOverlayAlign = prefs.lyricOverlayAlign,
+            // v1.1.4 新增：逐字已唱色 + 悬浮窗宽度与两处颜色
+            lyricSungColor = prefs.lyricSungColor,
+            lyricOverlayWidthPercent = prefs.lyricOverlayWidthPercent,
+            lyricOverlayTextColor = prefs.lyricOverlayTextColor,
+            lyricOverlaySungColor = prefs.lyricOverlaySungColor,
             // 车载模式：启动直接进播放页（跳过库主页）
             playerExpanded = prefs.carMode,
             speed = prefs.playbackSpeed,
@@ -855,6 +861,47 @@ class PlaybackEngine(
     }
 
     /**
+     * 逐字歌词「已唱部分」的颜色。
+     *
+     * 只影响**播放页**的歌词，跟悬浮窗无关，所以不通知悬浮窗服务 ——
+     * 落盘 + 刷状态就够了，播放页下一帧重组时自然读到新值。
+     */
+    override fun setLyricSungColor(color: Int) {
+        prefs.lyricSungColor = color
+        _player.update { it.copy(lyricSungColor = color) }
+    }
+
+    /**
+     * 悬浮窗宽度（屏幕宽度百分比，1..100）。
+     *
+     * 服务侧在 `applyAppearance` 里改 `LayoutParams.width` 并**重摆一次位置**：
+     * 夹取上限是「屏宽 − 窗口宽」，窗口变宽后能移动的余量会变小。
+     */
+    override fun setLyricOverlayWidthPercent(percent: Int) {
+        val normalized = percent.coerceIn(
+            SettingsDefaults.OVERLAY_WIDTH_RANGE.first,
+            SettingsDefaults.OVERLAY_WIDTH_RANGE.last,
+        )
+        prefs.lyricOverlayWidthPercent = normalized
+        _player.update { it.copy(lyricOverlayWidthPercent = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    /** 悬浮窗正文色（未唱部分） */
+    override fun setLyricOverlayTextColor(color: Int) {
+        prefs.lyricOverlayTextColor = color
+        _player.update { it.copy(lyricOverlayTextColor = color) }
+        previewOverlayAfterConfigChange()
+    }
+
+    /** 悬浮窗已唱部分的颜色 */
+    override fun setLyricOverlaySungColor(color: Int) {
+        prefs.lyricOverlaySungColor = color
+        _player.update { it.copy(lyricOverlaySungColor = color) }
+        previewOverlayAfterConfigChange()
+    }
+
+    /**
      * 外观 / 排版配置改完的统一收尾。
      *
      * 服务是独立存活的，光写 Prefs 它不知道（没有新歌词就不会重绘），
@@ -1232,6 +1279,18 @@ interface PlayerActions {
     fun setLyricOverlayBackdrop(mode: Int)
     fun setLyricOverlayPauseMode(mode: Int)
     fun setLyricOverlayAlign(align: Int)
+
+    /** 逐字歌词已唱部分的颜色（ARGB） */
+    fun setLyricSungColor(color: Int)
+
+    /** 悬浮窗宽度：屏幕宽度百分比（1..100） */
+    fun setLyricOverlayWidthPercent(percent: Int)
+
+    /** 悬浮窗正文色（未唱部分，ARGB） */
+    fun setLyricOverlayTextColor(color: Int)
+
+    /** 悬浮窗已唱部分的颜色（ARGB） */
+    fun setLyricOverlaySungColor(color: Int)
     fun canDrawOverlay(): Boolean
     fun setOverlayEditing(editing: Boolean)
     fun setAppForeground(foreground: Boolean)

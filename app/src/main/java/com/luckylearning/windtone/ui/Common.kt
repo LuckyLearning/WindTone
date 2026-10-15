@@ -770,3 +770,35 @@ internal fun Context.startOverlayPermissionPage(): Boolean {
     }
     return false
 }
+
+/**
+ * 行尾 / 弹层标题栏右侧的「恢复默认」小按钮（v1.1.4，效果图 `.rst`）。
+ *
+ * 放在 Common.kt 而不是设置页里，理由与 [startOverlayPermissionPage] 相同：
+ * 设置页的行组件与均衡器弹层（㉛）都要用它，复制两份迟早会走样。
+ *
+ * 图纸规格：18dp 图标、`onSurfaceVariant` 色（按下时转 `primary`），
+ * 命中区 **28dp** —— 比 `IconButton` 的 48dp 小一号，48dp 比行高还大，
+ * 塞进开关行会把行撑高、把开关挤得离文字更远。
+ *
+ * ⚠️ 调用方负责决定**要不要画**：本项目只在「当前值偏离出厂默认」时画它
+ * （见设置页的 `resetAction`）—— 一行都没动过却挂着按钮，用户会以为
+ * 「还得点一下才算生效」。这里不做判据，判据属于各个设置项自己。
+ */
+@Composable
+internal fun ResetButton(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .clip(CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            AppIcons.Reset,
+            contentDescription = "恢复默认",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp),
+        )
+    }
+}

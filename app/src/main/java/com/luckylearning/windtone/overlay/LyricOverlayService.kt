@@ -134,6 +134,13 @@ class LyricOverlayService : Service() {
     private var appliedPauseMode = -1
     private var appliedAlign = -1
 
+    /** 已应用的窗口宽度百分比（v1.1.4）；-1 = 还没应用过 */
+    private var appliedWidthPercent = -1
+
+    /** 已应用的正文色 / 已唱色（ARGB）；哨兵值 = 还没应用过 */
+    private var appliedTextColor = COLOR_NOT_APPLIED
+    private var appliedSungColor = COLOR_NOT_APPLIED
+
     /** 行切换淡入淡出是否正在进行——动画期间不许别处再改 alpha，否则两处打架 */
     private var fading = false
 
@@ -234,7 +241,9 @@ class LyricOverlayService : Service() {
         if (container != null) return true
 
         val tv = TextView(this).apply {
-            setTextColor(Color.WHITE)
+            // 正文色取自设置（默认纯白）。已唱部分的颜色**不在这里设**——它要按行内
+            // 位置逐段染色，每次渲染都读最新值（见 buildSpanned）。
+            setTextColor(Prefs(this@LyricOverlayService).lyricOverlayTextColor)
             // 投影只是锦上添花的第二重保险；真正的可读性由 box 的深色底板兜底
             // （见 [refreshModeChrome]）。投影半径必须按 dp 换算——写死 6f 时，
             // 在 3x 屏上只有 2dp，亮色壁纸下等于没有。
@@ -265,7 +274,9 @@ class LyricOverlayService : Service() {
             addView(
                 tv,
                 FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    // 宽度铺满窗口（窗口宽 = 屏宽 × 百分比），文字在框内怎么排由
+                    // tv.gravity 决定；高度仍由内容决定。
+                    FrameLayout.LayoutParams.MATCH_PARENT,
                     FrameLayout.LayoutParams.WRAP_CONTENT,
                     Gravity.CENTER,
                 ),
@@ -275,8 +286,10 @@ class LyricOverlayService : Service() {
             visibility = View.INVISIBLE
         }
 
+        // 宽度按**屏幕百分比**固定（v1.1.4）：原先宽高都是 WRAP_CONTENT，长句一路
+        // 顶到屏幕边缘、短句只有窄窄一条，同一首歌里窗口宽度来回跳。高度仍交给内容。
         val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            overlayWidthPx(Prefs(this).lyricOverlayWidthPercent),
             WindowManager.LayoutParams.WRAP_CONTENT,
             // TYPE_APPLICATION_OVERLAY 是 Android 8.0+ 唯一允许第三方应用使用的
             // 系统级悬浮窗类型，需要 SYSTEM_ALERT_WINDOW 授权。
@@ -399,6 +412,17 @@ class LyricOverlayService : Service() {
         }
         val m = resources.displayMetrics
         return m.widthPixels to m.heightPixels
+    }
+
+    /**
+     * 悬浮窗宽度（像素）：屏幕宽度的 [percent]%（1..100）。
+     *
+     * 低于 [MIN_OVERLAY_WIDTH_DP] 时按下限走 —— 1% 在 1080p 屏上只有 10px，
+     * 窗口会小到既看不见也拖不着。
+     */
+    private fun overlayWidthPx(percent: Int): Int {
+        val (screenW, _) = screenSize()
+        return (screenW * percent.coerceIn(1, 100) / 100f).toInt().coerceAtLeast(dp(MIN_OVERLAY_WIDTH_DP))
     }
 
     /** 状态栏高度（像素），拿不到时按 24dp 兜底 */
@@ -596,6 +620,30 @@ class LyricOverlayService : Service() {
      */
     private fun applyAppearance(prefs: Prefs) {
         val tv = lyricView ?: return
+
+        // 窗口宽度：屏幕百分比（v1.1.4 起可调）。宽度一变必须重摆一次位置 ——
+        // OverlayPositioner 的夹取上限是「屏宽 − 窗口宽」，窗口越宽能移动的余量越小。
+        val widthPercent = prefs.lyricOverlayWidthPercent
+        if (appliedWidthPercent != widthPercent) {
+            appliedWidthPercent = widthPercent
+            layoutParams?.let { p ->
+                val w = overlayWidthPx(widthPercent)
+                if (p.width != w) {
+                    p.width = w
+                    windowManager?.updateViewLayout(container, p)
+                    applyPosition()
+                }
+            }
+        }
+
+        // 正文色落到 TextView 上就够了（没被单独染色的文字立即跟着变）；
+        // 已唱色是渲染时逐段写进 Spannable 的，下一帧渲染自然带上新值。
+        val textColor = prefs.lyricOverlayTextColor
+        if (appliedTextColor != textColor) {
+            appliedTextColor = textColor
+            tv.setTextColor(textColor)
+        }
+
         val scale = prefs.lyricOverlayTextScale
         if (appliedScale != scale) {
             appliedScale = scale
@@ -603,10 +651,8 @@ class LyricOverlayService : Service() {
                 TypedValue.COMPLEX_UNIT_SP,
                 OVERLAY_TEXT_SP * TEXT_SCALE_FACTORS[scale.coerceIn(0, 2)],
             )
-            // 顺手把宽度上限压到屏宽的 90%：单行大字号 + 长句在窄屏上会横向溢出屏幕，
-            // 而被裁掉的那半句用户是不知道的。
-            val (screenW, _) = screenSize()
-            tv.maxWidth = (screenW * MAX_WIDTH_RATIO).toInt().coerceAtLeast(dp(120))
+            // 这里不再设 maxWidth：宽度已由窗口（屏宽 × 百分比）统一控制，
+            // 两处都限宽只会让「调了没反应」变得难以解释。
         }
 
         val backdrop = prefs.lyricOverlayBackdrop
@@ -690,6 +736,9 @@ class LyricOverlayService : Service() {
             return only.text
         }
         return SpannableStringBuilder().apply {
+            // 已唱部分的颜色可配（v1.1.4），默认暖黄 —— 与正文色形成节奏感。
+            // 每帧渲染时读一次，设置改完下一帧就生效。
+            val sungColor = Prefs(this@LyricOverlayService).lyricOverlaySungColor
             lines.forEachIndexed { index, line ->
                 if (index > 0) append("\n")
                 val start = length
@@ -697,9 +746,9 @@ class LyricOverlayService : Service() {
                 val end = length
                 when (line.role) {
                     OverlayTextComposer.Role.CURRENT -> if (line.sungChars > 0) {
-                        // 逐字高亮：已唱的部分染成暖色，未唱的部分保持白色
+                        // 逐字高亮：已唱的部分染色（颜色可配），未唱的部分保持正文色
                         setSpan(
-                            ForegroundColorSpan(WORD_SUNG_COLOR),
+                            ForegroundColorSpan(sungColor),
                             start,
                             (start + line.sungChars).coerceAtMost(end),
                             Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
@@ -884,8 +933,24 @@ class LyricOverlayService : Service() {
         /** 字号三档的倍率：小 / 中 / 大。存的是档位不是具体 sp，日后调基准能带上老用户 */
         private val TEXT_SCALE_FACTORS = floatArrayOf(0.82f, 1f, 1.25f)
 
-        /** 窗口宽度上限占屏宽的比例：留出边距，避免大字号长句横向溢出被裁 */
-        private const val MAX_WIDTH_RATIO = 0.9f
+        /**
+         * 「还没应用过」的哨兵，用于缓存上一次的正文色 / 已唱色。
+         * 取 `Int.MIN_VALUE` —— 它是合法 `Int`，但不可能是一个正常的 ARGB 颜色。
+         */
+        private const val COLOR_NOT_APPLIED = Int.MIN_VALUE
+
+        /**
+         * 窗口宽度的下限（dp）。
+         *
+         * 用户可以把宽度调到 1%，那时按屏宽算出来只有几个像素，窗口会小到完全看不见、
+         * 连「拖到哪儿了」都判断不了。留一个下限，让最小档也仍然是一块看得见的字幕。
+         *
+         * 取 **48dp**（标准最小触控边长），而不是 80dp：下限定得越高，滑块低端
+         * 那一整段就越「拖了没反应」—— 80dp 在 1080p / 3x 的机器上已经是屏宽的 22%，
+         * 意味着 1%~22% 全是同一个宽度。48dp 把这段死区压到 13% 以内，
+         * 同时仍然保证「调整位置」时抓得住。
+         */
+        private const val MIN_OVERLAY_WIDTH_DP = 48
 
         /** 窗口最多画几行（含折行）：再多就不是「悬浮字幕」而是一块遮屏的板子了 */
         private const val MAX_LINES_CAP = 8
@@ -927,9 +992,6 @@ class LyricOverlayService : Service() {
 
         /** 配角（上下句、间奏时的主角）的压暗色 */
         private val CONTEXT_TEXT_COLOR = Color.argb(150, 255, 255, 255)
-
-        /** 逐字染色里「已唱过」部分的颜色：暖色，与白色未唱部分形成节奏感 */
-        private val WORD_SUNG_COLOR = Color.rgb(255, 205, 86)
 
         /** 双语副行的字号倍率（相对主角） */
         private const val TRANSLATION_SCALE = 0.82f
