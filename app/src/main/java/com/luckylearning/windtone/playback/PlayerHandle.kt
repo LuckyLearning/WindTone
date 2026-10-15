@@ -12,7 +12,12 @@ import androidx.media3.exoplayer.ExoPlayer
  *
  * 句柄为空表示服务尚未启动或已销毁，此时调用会被安全忽略；
  * 真正的开关状态仍持久化在 Prefs，由 `PlaybackService.onCreate` 在启动时套用。
+ *
+ * `skipSilenceEnabled` / `setSkipSilenceEnabled` 是 Media3 的 `@UnstableApi`：
+ * 构建脚本里的 `-opt-in=...UnstableApi` 只有编译器认，lint 仍报 `UnsafeOptInUsageError`，
+ * 所以这里显式标注（理由同 `PlaybackService`）。
  */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 object PlayerHandle {
 
     @Volatile

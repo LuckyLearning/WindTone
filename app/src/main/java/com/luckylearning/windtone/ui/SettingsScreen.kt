@@ -7,6 +7,7 @@ import com.luckylearning.windtone.state.PlayerUiState
 import com.luckylearning.windtone.state.UpdateUiState
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -41,11 +42,16 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -73,6 +79,17 @@ private enum class SettingsPage(val title: String) {
     UPDATE("更新"),
     DIAGNOSTICS("关于与诊断"),
 }
+
+/**
+ * 四个页面的滚动位置，按 [SettingsPage.ordinal] 排列。
+ *
+ * 存成 `List<Int>` 而不是 `ScrollState`：一个 Int 不受任何对象生命周期影响，
+ * 这是这套机制能成立的全部原因（细节见 `SettingsScreen` 里 `pagePositions` 的注释）。
+ */
+private val PagePositionsSaver = listSaver<MutableList<Int>, Int>(
+    save = { it.toList() },
+    restore = { it.toMutableStateList() },
+)
 
 /**
  * 统一设置页。
@@ -179,21 +196,24 @@ fun SettingsScreen(
     // 子页里按返回键先回主页面（本处理器在子页才启用，主页面时交给外层关闭设置页）
     BackHandler(enabled = page != SettingsPage.ROOT) { page = SettingsPage.ROOT }
 
-    // 每个页面各留一份滚动位置：
-    //  - 进子页时从它自己的位置开始（首次进入即顶部，不会继承主页面的滚动偏移）；
-    //  - 从子页返回主页面时，主页面回到用户原来滚动到的位置。
-    // 此前四个页面共用同一个 ScrollState，并在每次切页时无条件 scrollTo(0)：
-    // 「进子页从顶部开始」这个意图，顺带把主页面的位置也一起抹掉了，返回时被顶回最上面。
-    // 拆成各自的 State 后两个诉求可以同时满足 —— 子页天然从 0 开始，主页面不受影响。
-    val rootScroll = rememberScrollState()
-    val libraryScroll = rememberScrollState()
-    val updateScroll = rememberScrollState()
-    val diagnosticsScroll = rememberScrollState()
-    val pageScroll = when (page) {
-        SettingsPage.ROOT -> rootScroll
-        SettingsPage.LIBRARY -> libraryScroll
-        SettingsPage.UPDATE -> updateScroll
-        SettingsPage.DIAGNOSTICS -> diagnosticsScroll
+    // 每个页面各留一份滚动位置 —— 但**存数字，不存 ScrollState 对象**。
+    //
+    // 上一版是按页面各建一个 rememberScrollState()，用 when 选一个挂到 verticalScroll 上，
+    // 思路是「没挂上去的 state 不会被测量，maxValue / value 都不会被人动，天然保留原值」。
+    // 用户第二次报同一个问题（进子页返回主页，位置又被顶回最上面）后确认这条不成立。
+    // 教训：只要正确性建立在「某个对象在整段导航期间一直活着、而且一直没人动它」上，
+    // 就会在某个看不见的时刻被推翻，还不报任何错。
+    //
+    // 这里改成显式快照：离开某页时把它的滚动位置记进这张表，回到该页时用记下的值建 state。
+    // 存进 rememberSaveable 的是 Int，与 ScrollState 的生死完全无关，旋转屏幕也不丢。
+    // 子页也是各记各的，所以「音乐库」上次滚到哪里，再进去还是那里。
+    val pagePositions = rememberSaveable(saver = PagePositionsSaver) { mutableStateListOf(0, 0, 0, 0) }
+    val pageIndex = page.ordinal
+    val pageScroll = remember(pageIndex) { ScrollState(pagePositions[pageIndex]) }
+    DisposableEffect(pageIndex, pageScroll) {
+        // 切换页面时旧 state 已被 verticalScroll 卸下，不会再被测量 / 夹取，
+        // 此刻读到的一定是用户真正停下的位置。
+        onDispose { pagePositions[pageIndex] = pageScroll.value }
     }
 
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {

@@ -25,7 +25,15 @@ import kotlinx.coroutines.launch
  *  - 通知栏与锁屏播放控制
  *  - 耳机线控 / 蓝牙按键
  *  - 均衡器音效绑定 / 睡眠定时到点暂停 / 桌面小部件状态推送
+ *
+ * **关于 `@OptIn(UnstableApi::class)`**：`ExoPlayer.Builder.setSkipSilenceEnabled`、
+ * `ExoPlayer.audioSessionId`、`Player.Listener.onAudioSessionIdChanged` 都标着 Media3 的
+ * `@UnstableApi`。构建脚本里的 `-opt-in=androidx.media3.common.util.UnstableApi` 只让
+ * **编译器**闭嘴，lint 不认这个开关（`UnsafeOptInUsageError`），所以这里显式标一次。
+ * 类级标注可以覆盖到 `onCreate` 里的匿名 `Player.Listener` —— lint 会往上找最近的标注。
+ * 本应用与 Media3 是紧耦合（整个播放内核就是 ExoPlayer），不是「顺手用了个内部 API」。
  */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class PlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
