@@ -100,6 +100,7 @@ fun SettingsScreen(
     onLyricOverlay: (Boolean) -> Unit,
     onLyricOverlayLines: (Int) -> Unit,
     onLyricOverlayTextScale: (Int) -> Unit,
+    onLyricOverlayAlign: (Int) -> Unit,
     onLyricOverlayBackdrop: (Int) -> Unit,
     onLyricOverlayPauseMode: (Int) -> Unit,
     onOverlayEditing: (Boolean) -> Unit,
@@ -315,9 +316,9 @@ fun SettingsScreen(
                             }
                         },
                     )
-                    // 悬浮歌词的四个外观选项：行数 / 字号 / 底板 / 暂停行为。
+                    // 悬浮歌词的五个外观选项：行数 / 字号 / 对齐 / 底板 / 暂停行为。
                     // 都紧跟在开关下方，与它绑成一个整体；开关关着也允许**预设**，
-                    // 所以不做可见性 gating。四项共用同一个选项弹层，改完立刻给一次 6 秒预览。
+                    // 所以不做可见性 gating。五项共用同一个选项弹层，改完立刻给一次 6 秒预览。
                     ActionRow(
                         title = "悬浮歌词行数",
                         subtitle = if (player.lyricOverlayLines == 3) {
@@ -333,6 +334,17 @@ fun SettingsScreen(
                         subtitle = "大屏与车机上建议调大一档",
                         onClick = { overlayChoice = OverlayChoice.TEXT_SCALE },
                         trailing = OVERLAY_TEXT_SCALE_LABELS[player.lyricOverlayTextScale],
+                        chevron = true,
+                    )
+                    ActionRow(
+                        title = "悬浮歌词对齐",
+                        subtitle = if (player.lyricOverlayAlign == 1) {
+                            "贴屏幕左侧显示，适合长句与固定视线"
+                        } else {
+                            "屏幕水平居中，视线居中时最省力"
+                        },
+                        onClick = { overlayChoice = OverlayChoice.ALIGN },
+                        trailing = OVERLAY_ALIGN_LABELS[player.lyricOverlayAlign],
                         chevron = true,
                     )
                     ActionRow(
@@ -843,12 +855,13 @@ fun SettingsScreen(
         )
     }
 
-    // 悬浮歌词的四个外观选项共用同一个弹层：标题 / 说明 / 选项列表都由 [OverlayChoice] 提供，
+    // 悬浮歌词的五个外观选项共用同一个弹层：标题 / 说明 / 选项列表都由 [OverlayChoice] 提供，
     // 选中项右侧打 ✓，点任意一项即生效并关闭（改完引擎会给一次 6 秒前台预览）。
     overlayChoice?.let { choice ->
         val selected = when (choice) {
             OverlayChoice.LINES -> player.lyricOverlayLines
             OverlayChoice.TEXT_SCALE -> player.lyricOverlayTextScale
+            OverlayChoice.ALIGN -> player.lyricOverlayAlign
             OverlayChoice.BACKDROP -> player.lyricOverlayBackdrop
             OverlayChoice.PAUSE -> player.lyricOverlayPauseMode
         }
@@ -873,6 +886,7 @@ fun SettingsScreen(
                                     when (choice) {
                                         OverlayChoice.LINES -> onLyricOverlayLines(option.value)
                                         OverlayChoice.TEXT_SCALE -> onLyricOverlayTextScale(option.value)
+                                        OverlayChoice.ALIGN -> onLyricOverlayAlign(option.value)
                                         OverlayChoice.BACKDROP -> onLyricOverlayBackdrop(option.value)
                                         OverlayChoice.PAUSE -> onLyricOverlayPauseMode(option.value)
                                     }
@@ -1115,9 +1129,9 @@ private fun UpdateDialog(
 private data class OverlayOption(val value: Int, val label: String, val hint: String)
 
 /**
- * 悬浮歌词四个外观选项（行数 / 字号 / 底板 / 暂停表现）。
+ * 悬浮歌词五个外观选项（行数 / 字号 / 对齐 / 底板 / 暂停表现）。
  *
- * 把「标题 + 说明 + 选项列表」一起收进枚举，是为了让四个设置项共用同一个弹层实现——
+ * 把「标题 + 说明 + 选项列表」一起收进枚举，是为了让五个设置项共用同一个弹层实现——
  * 每多一个选项就多复制一份 `AlertDialog` 是不可维护的，而且样式迟早会走样。
  */
 private enum class OverlayChoice(
@@ -1142,6 +1156,16 @@ private enum class OverlayChoice(
             OverlayOption(2, "大", "约正文的 1.25 倍"),
         ),
     ),
+    ALIGN(
+        "悬浮歌词对齐",
+        "字幕水平摆在屏幕的哪个位置（纵向仍由「调整悬浮歌词位置」拖动微调）。" +
+            "居中适合视线在屏幕中央时；居左更适合长句——每行都从同一条竖线起排，" +
+            "读起来比居中的参差边缘省力。",
+        listOf(
+            OverlayOption(0, "居中", "屏幕水平居中，默认"),
+            OverlayOption(1, "居左", "贴屏幕左侧显示，每行左对齐"),
+        ),
+    ),
     BACKDROP(
         "悬浮歌词底板",
         "字幕下面垫什么。亮色壁纸上「无底板的白字」会看不清——投影在高分屏上几乎等于没有。",
@@ -1163,6 +1187,7 @@ private enum class OverlayChoice(
 
 /** 设置页行尾摘要用的短标签（与弹层选项一一对应，按档位下标取） */
 private val OVERLAY_TEXT_SCALE_LABELS = listOf("小", "中", "大")
+private val OVERLAY_ALIGN_LABELS = listOf("居中", "居左")
 private val OVERLAY_BACKDROP_LABELS = listOf("无底板", "半透明", "深色实底")
 private val OVERLAY_PAUSE_LABELS = listOf("淡出", "隐藏")
 

@@ -194,6 +194,8 @@ data class PlayerUiState(
     val lyricOverlayBackdrop: Int = 1,
     /** 悬浮歌词暂停时：0 淡出 / 1 隐藏 */
     val lyricOverlayPauseMode: Int = 0,
+    /** 悬浮歌词水平对齐：0 居中 / 1 居左 */
+    val lyricOverlayAlign: Int = 0,
     /** 悬浮歌词是否处于「调整位置」模式（临时可拖动，会话级，不落盘） */
     val overlayEditing: Boolean = false,
     val playerExpanded: Boolean = false,

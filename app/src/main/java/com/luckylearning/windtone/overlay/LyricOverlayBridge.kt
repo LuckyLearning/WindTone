@@ -135,6 +135,7 @@ object LyricOverlayBridge {
             appearance = buildString {
                 append(if (prefs.lyricOverlayLines == 3) "3 行" else "1 行")
                 append(" / 字号").append(listOf("小", "中", "大").getOrElse(prefs.lyricOverlayTextScale) { "中" })
+                append(" / 对齐").append(if (prefs.lyricOverlayAlign == 1) "居左" else "居中")
                 append(" / 底板").append(listOf("无", "半透明", "实底").getOrElse(prefs.lyricOverlayBackdrop) { "半透明" })
                 append(" / 暂停").append(if (prefs.lyricOverlayPauseMode == 1) "隐藏" else "淡出")
                 append(" / 逐字").append(if (prefs.lyricWordByWord) "开" else "关")

@@ -80,6 +80,7 @@ class PlaybackEngine(
             lyricOverlayTextScale = prefs.lyricOverlayTextScale,
             lyricOverlayBackdrop = prefs.lyricOverlayBackdrop,
             lyricOverlayPauseMode = prefs.lyricOverlayPauseMode,
+            lyricOverlayAlign = prefs.lyricOverlayAlign,
             // 车载模式：启动直接进播放页（跳过库主页）
             playerExpanded = prefs.carMode,
             speed = prefs.playbackSpeed,
@@ -763,6 +764,20 @@ class PlaybackEngine(
     }
 
     /**
+     * 悬浮歌词水平对齐：0 居中 / 1 居左。
+     *
+     * 与其它外观项的区别：它同时改**文字对齐**与**窗口重心**，所以服务侧
+     * 收到外观版本号后还会顺带重摆一次窗口位置（见 `applyAppearance`）。
+     * 服务每帧自己读 Prefs，这里只负责通知 + 预览。
+     */
+    override fun setLyricOverlayAlign(align: Int) {
+        val normalized = align.coerceIn(0, 1)
+        prefs.lyricOverlayAlign = normalized
+        _player.update { it.copy(lyricOverlayAlign = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    /**
      * 外观 / 排版配置改完的统一收尾。
      *
      * 服务是独立存活的，光写 Prefs 它不知道（没有新歌词就不会重绘），
@@ -1110,6 +1125,7 @@ interface PlayerActions {
     fun setLyricOverlayTextScale(scale: Int)
     fun setLyricOverlayBackdrop(mode: Int)
     fun setLyricOverlayPauseMode(mode: Int)
+    fun setLyricOverlayAlign(align: Int)
     fun canDrawOverlay(): Boolean
     fun setOverlayEditing(editing: Boolean)
     fun setAppForeground(foreground: Boolean)

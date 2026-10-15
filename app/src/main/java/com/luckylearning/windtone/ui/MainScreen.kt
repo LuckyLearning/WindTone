@@ -530,6 +530,7 @@ fun MainScreen(
                     onLyricOverlay = playerVm::setLyricOverlay,
                     onLyricOverlayLines = playerVm::setLyricOverlayLines,
                     onLyricOverlayTextScale = playerVm::setLyricOverlayTextScale,
+                    onLyricOverlayAlign = playerVm::setLyricOverlayAlign,
                     onLyricOverlayBackdrop = playerVm::setLyricOverlayBackdrop,
                     onLyricOverlayPauseMode = playerVm::setLyricOverlayPauseMode,
                     onOverlayEditing = playerVm::setOverlayEditing,
