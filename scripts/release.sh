@@ -85,10 +85,60 @@ git -C "$ROOT" add -A
 git -C "$ROOT" commit -m "release: $TAG"
 git -C "$ROOT" tag "$TAG"
 
-# 5) 推送（走 scripts/push.sh，Token 不落盘到配置里）
-bash "$ROOT/scripts/push.sh" origin "$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)"
-bash "$ROOT/scripts/push.sh" origin "$TAG"
+# 5) 推送 + 推后查证
+#
+# 2026-10-16 之前的六次发版（v1.0.6 ~ v1.1.4）tag 推送全数静默失败，根因链：
+#   mktemp 返回盘符路径 → 沙箱 safe-delete 拒删 → push.sh 的 EXIT trap 里 rm
+#   失败 → trap 覆盖退出码 → push 成功却返回 1 → 本脚本的 set -e 在推完 main
+#   后当场中止，tag 那行永远执行不到。
+# push.sh 已根治退出码问题，但这里仍然**不信任推送方的返回值**：以
+# 「REST 实查远端」为准 —— main 查远端 SHA 是否等于本地 HEAD，tag 查引用是否存在。
+# 查不到就补推一次，仍查不到就大声失败（退出码非零、给出手动补救命令）。
+# ⚠️ 也不要用 `release.sh | tail` 判断成败——管道会吃掉退出码，以输出里的
+#    「✓ 已推送 vX.Y.Z（远端已确认）」为准。
+BRANCH="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)"
+HEAD_SHA="$(git -C "$ROOT" rev-parse HEAD)"
+REPO_SLUG="$(git -C "$ROOT" remote get-url origin | sed -n 's#.*github\.com[:/]\(.*\)\.git$#\1#p')"
+TOKEN="$(grep -oE '(ghp_|github_pat_)[A-Za-z0-9_]+' "$ROOT/.github-token" | head -1)"
+
+api_code() { # $1 = API 路径；stdout = HTTP 状态码
+  curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" \
+    "https://api.github.com/repos/$REPO_SLUG/$1"
+}
+
+branch_on_remote() { # 远端分支存在且指向本地 HEAD 才算成功
+  [[ -n "$TOKEN" ]] || return 1
+  [[ "$(api_code "git/refs/heads/$BRANCH")" == "200" ]] || return 1
+  local remote_sha
+  remote_sha="$(curl -s -H "Authorization: Bearer $TOKEN" \
+    "https://api.github.com/repos/$REPO_SLUG/git/refs/heads/$BRANCH" \
+    | grep -o '"sha": *"[0-9a-f]\{40\}"' | head -1 | grep -o '[0-9a-f]\{40\}')"
+  [[ "$remote_sha" == "$HEAD_SHA" ]]
+}
+
+tag_on_remote() {
+  [[ -n "$TOKEN" ]] || return 1
+  [[ "$(api_code "git/refs/tags/$TAG")" == "200" ]]
+}
+
+push_and_confirm() { # $1 = ref 名称, $2 = 校验函数名, $3 = 成功提示
+  local ref="$1" check="$2" ok_msg="$3" attempt
+  for attempt in 1 2; do
+    if (( attempt == 2 )); then
+      echo "  → 第 1 次推送后远端查不到 $ref，补推一次..."
+    fi
+    bash "$ROOT/scripts/push.sh" origin "$ref" || echo "  （push.sh 返回非零：$?，以下一次远端实查为准）"
+    if "$check"; then
+      echo "$ok_msg"
+      return 0
+    fi
+  done
+  echo "✗ $ref 推送后远端实查两次都不通过 —— 请手动执行：bash scripts/push.sh origin $ref" >&2
+  return 1
+}
+
+push_and_confirm "$BRANCH" branch_on_remote "✓ main 已推送（远端 SHA 确认为 ${HEAD_SHA:0:7}）"
+push_and_confirm "$TAG" tag_on_remote "✓ 已推送 $TAG（远端已确认）"
 
 echo
-echo "✓ 已推送 $TAG"
 echo "  Release 构建进度： https://github.com/LuckyLearning/WindTone/actions/workflows/android-release.yml"
