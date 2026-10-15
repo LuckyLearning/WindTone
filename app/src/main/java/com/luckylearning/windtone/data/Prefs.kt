@@ -229,9 +229,9 @@ class Prefs(context: Context) {
     /**
      * 悬浮歌词的横向偏移（像素，相对屏幕左边缘）。
      *
-     * ⚠️ **已废弃（2026-10-15 起不再参与定位）**：水平位置改由 [lyricOverlayAlign]
-     * 单独决定（居中 / 居左）。存这个键与保留属性只为不破坏老数据，
-     * 「重置位置」仍会把它清成 `Int.MIN_VALUE`。
+     * 2026-10-16 起重新启用：窗口位置完全由拖动决定（此前横向曾归
+     * [lyricOverlayAlign] 管、此键一度废弃）。`Int.MIN_VALUE` 表示未拖过，
+     * 走默认的水平居中。
      */
     var lyricOverlayX: Int
         get() = sp.getInt(KEY_LYRIC_OVERLAY_X, Int.MIN_VALUE)
@@ -284,15 +284,11 @@ class Prefs(context: Context) {
         set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_PAUSE_MODE, value.coerceIn(0, 1)).apply()
 
     /**
-     * 悬浮歌词的水平对齐：0 居中（默认）/ 1 居左。
+     * 悬浮歌词窗内文字的对齐：0 居中（默认）/ 1 居左。
      *
-     * 水平位置**只由这一项决定**，不再沿用拖动坐标（[lyricOverlayX] 已废弃）：
-     * 一旦允许「拖动覆盖对齐」，设置里写着「居左」而窗口停在中右部，
-     * 就成了一个用户无法自己解释的状态。纵向仍可拖动微调（[lyricOverlayY]）。
-     *
-     * 居左时窗口贴屏幕左沿 + 8dp 边距（`LyricOverlayService.LEFT_MARGIN_DP`）；
-     * 居中走 `gravity = TOP|CENTER_HORIZONTAL`，是真居中（不是 `x=0` 贴左上角）。
-     * 摆放计算收在纯函数 `overlay/OverlayPositioner` 里，有单测覆盖。
+     * 2026-10-16 起语义收窄：**只管歌词文字在窗口内部怎么排**
+     * （居中 = 折行后各行也居中；居左 = 每行从左沿同一条竖线起排），
+     * 与窗口摆在屏幕哪儿无关 —— 窗口位置完全由拖动决定（[lyricOverlayX] / [lyricOverlayY]）。
      */
     var lyricOverlayAlign: Int
         get() = sp.getInt(KEY_LYRIC_OVERLAY_ALIGN, 0).coerceIn(0, 1)

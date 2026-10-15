@@ -363,12 +363,10 @@ class LyricOverlayService : Service() {
     /**
      * 把窗口摆到当前位置。
      *
-     * **横向与纵向分属两套规则**：
-     * - 横向：由设置项「对齐方式」单独决定 —— 居中走 `TOP|CENTER_HORIZONTAL`
-     *   （真居中，`x = 0` 是相对屏幕中心的偏移）；居左走 `TOP|START` + 左沿边距。
-     *   **不读也不写 `lyricOverlayX`**：拖动一旦能改横向，设置里写着「居左」
-     *   而窗口停在中右部，就成了用户无法自己解释的状态。
-     * - 纵向：拖动微调，存 `lyricOverlayY`；从未调过则「状态栏下方 + 64dp」。
+     * **窗口位置完全由拖动决定**（2026-10-16 用户拍板，推翻「横向归对齐」）：
+     * 横向存 `lyricOverlayX`、纵向存 `lyricOverlayY`，都没拖过时
+     * 横向水平居中、纵向「状态栏下方 64dp」。设置里的「对齐」只管
+     * 歌词文字在窗口内部怎么排，与窗口位置无关。
      *
      * 所有坐标都要夹取到屏幕内（防止换分辨率后跑出屏幕）。
      * 夹取必须用「屏幕尺寸 − 窗口自身尺寸」：只用屏幕尺寸的话，
@@ -384,14 +382,13 @@ class LyricOverlayService : Service() {
         val (screenW, screenH) = screenSize()
         val placed = OverlayPositioner.place(
             OverlayPositioner.Params(
-                align = prefs.lyricOverlayAlign,
+                savedX = prefs.lyricOverlayX,
                 savedY = prefs.lyricOverlayY,
                 screenW = screenW,
                 screenH = screenH,
                 windowW = container?.width ?: 0,
                 windowH = container?.height ?: 0,
                 defaultY = statusBarHeight() + dp(TOP_OFFSET_DP),
-                leftMargin = dp(LEFT_MARGIN_DP),
             ),
         )
 
@@ -465,27 +462,21 @@ class LyricOverlayService : Service() {
 
     // ------------------------------------------------------------------ 拖动
 
-    /** 拖动基准：记录上一次手指的纵向原始坐标，用「增量」而非「绝对定位」推动窗口 */
+    /** 拖动基准：记录上一次手指的原始坐标，用「增量」而非「绝对定位」推动窗口 */
+    private var lastRawX = 0f
     private var lastRawY = 0f
 
     /** 本次触摸里是否真的移动过窗口；只有真移动过才允许把坐标写进 Prefs */
     private var pendingPositionSave = false
 
     /**
-     * 拖动把手 —— **只跟纵轴**。
-     *
-     * 横向位置归「对齐方式」设置管（居中 / 居左），拖动不参与：
-     * 若拖动也能改横向，松手后必然与设置打架 —— 要么当场被拉回去
-     * （用户看到「拖完自己跳回来」），要么设置里写着「居左」而窗口停在中右部
-     * （用户无法自己解释的状态）。所以这里干脆不接管横轴，只做纵向微调。
-     *
-     * 只有 [editing] 为真时窗口才会收到触摸事件——非编辑态窗口带着
-     * `FLAG_NOT_TOUCHABLE`，系统根本不会把事件派发到这里。
+     * 拖动把手 —— **横纵两轴都可拖**（2026-10-16 用户拍板：悬浮窗就该能自由拖动；
+     * 设置里的「对齐」只管歌词文字在窗口内部怎么排，与窗口位置无关）。
      *
      * 位移按「手指位移量」累加，而不是「手指绝对位置 = 窗口位置」——
      * 后者会让窗口在按下瞬间跳到手指中心，手感很突兀。
      *
-     * **只有真正拖动过才落盘**（[pendingPositionSave]）。曾经的做法是
+     * 只有真正拖动过才落盘（[pendingPositionSave]）。曾经的做法是
      * `ACTION_DOWN` 一律归一化坐标 + `ACTION_UP` 一律落盘，结果是
      * 「进调整模式随手点一下、什么都没拖」也会把坐标存下来，
      * 而那个坐标算错了半屏，窗口就此被推到屏幕右侧之外再也看不见。
@@ -496,18 +487,23 @@ class LyricOverlayService : Service() {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 // 记下起点，MOVE 时算增量才有参照
+                lastRawX = event.rawX
                 lastRawY = event.rawY
                 pendingPositionSave = false
                 true
             }
 
             MotionEvent.ACTION_MOVE -> {
+                p.x += (event.rawX - lastRawX).roundToInt()
                 p.y += (event.rawY - lastRawY).roundToInt()
+                lastRawX = event.rawX
                 lastRawY = event.rawY
-                // 夹住，别拖出屏幕就再也抓不回来。按窗口自身高度收紧边界，
-                // 只用屏幕高度会把窗口整个推到边界外。
-                val (_, screenH) = screenSize()
+                // 夹住，别拖出屏幕就再也抓不回来。按窗口自身尺寸收紧边界，
+                // 只用屏幕尺寸会把窗口整个推到边界外。
+                val (screenW, screenH) = screenSize()
+                val maxX = (screenW - (container?.width ?: 0)).coerceAtLeast(0)
                 val maxY = (screenH - (container?.height ?: 0)).coerceAtLeast(0)
+                p.x = p.x.coerceIn(0, maxX)
                 p.y = p.y.coerceIn(0, maxY)
                 pendingPositionSave = true
                 runCatching { windowManager?.updateViewLayout(container, p) }
@@ -517,7 +513,10 @@ class LyricOverlayService : Service() {
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 // 只有真拖过才落盘，下次启动沿用；没拖过就保持原有偏好
-                if (pendingPositionSave) Prefs(this).lyricOverlayY = p.y
+                if (pendingPositionSave) {
+                    Prefs(this).lyricOverlayX = p.x
+                    Prefs(this).lyricOverlayY = p.y
+                }
                 true
             }
 
@@ -550,11 +549,11 @@ class LyricOverlayService : Service() {
                     if (editing != isEditing) {
                         editing = isEditing
                         if (!isEditing) {
-                            // 退出编辑态时固化纵向坐标——但只在本次真的拖动过时。
+                            // 退出编辑态时固化坐标——但只在本次真的拖动过时。
                             // 没拖过就落盘的话，等于「随手点一下就改了位置」。
-                            // 横向不落盘：它归「对齐方式」设置管。
                             if (pendingPositionSave) {
                                 layoutParams?.let { p ->
+                                    Prefs(this@LyricOverlayService).lyricOverlayX = p.x
                                     Prefs(this@LyricOverlayService).lyricOverlayY = p.y
                                 }
                             }
@@ -663,15 +662,15 @@ class LyricOverlayService : Service() {
             refreshModeChrome()
         }
 
-        // 对齐方式同时管「文字在框内怎么排」与「窗口摆在屏幕哪儿」，
-        // 所以除改 tv.gravity 外还要重摆一次位置 —— 只改 gravity 的话，
-        // 切到居左会出现「文字左对齐了，窗口还在屏幕中间」的半截效果。
+        // 对齐方式现在**只管文字在窗口内部怎么排**（2026-10-16 用户拍板）；
+        // 窗口在屏幕上的位置完全由拖动决定（applyPosition 读 savedX/savedY），
+        // 所以这里只改 tv.gravity，绝不能顺手重摆窗口 —— 否则用户拖好的位置
+        // 会在切换对齐档位时被悄悄拉回去。
         val align = prefs.lyricOverlayAlign
         if (appliedAlign != align) {
             appliedAlign = align
             tv.gravity = if (align == OverlayPositioner.ALIGN_LEFT) Gravity.START or Gravity.CENTER_VERTICAL
             else Gravity.CENTER
-            applyPosition()
         }
     }
 
@@ -964,14 +963,6 @@ class LyricOverlayService : Service() {
          */
         private const val TOP_OFFSET_DP = 64
 
-        /**
-         * 居左时窗口距屏幕左沿的边距（对齐档位常量在 [OverlayPositioner.ALIGN_LEFT]）。
-         *
-         * 给得很小是因为文字 View 自身已有 18dp 横向内边距 —— 再叠一个大边距，
-         * 字幕会离屏幕左侧太远，「居左」看起来就不像贴边了。
-         */
-        private const val LEFT_MARGIN_DP = 8
-
         /** 暂停时的不透明度：不隐藏，方便看清唱到哪一句 */
         private const val PAUSED_ALPHA = 0.55f
 
@@ -1010,7 +1001,7 @@ class LyricOverlayService : Service() {
 
         /** 调整态 / 预览态在无歌词时显示的提示行 */
         private val HINT_EDITING =
-            OverlayTextComposer.StyledLine("上下拖动调整高度，松手即保存", OverlayTextComposer.Role.CONTEXT)
+            OverlayTextComposer.StyledLine("拖动到合适位置，松手即保存", OverlayTextComposer.Role.CONTEXT)
         private val HINT_PREVIEW =
             OverlayTextComposer.StyledLine("悬浮歌词已开启，退到桌面后持续显示", OverlayTextComposer.Role.CONTEXT)
 
@@ -1018,11 +1009,11 @@ class LyricOverlayService : Service() {
         fun canDrawOverlay(context: Context): Boolean = Settings.canDrawOverlays(context)
 
         /**
-         * 清掉存下来的坐标并让服务回到默认位置（状态栏下方 + 当前对齐方式）。
+         * 清掉存下来的坐标并让服务回到默认位置（横向水平居中 + 状态栏下方）。
          *
          * 用于「窗口被推到屏幕外，用户根本抓不到」这种死局：
          * 桌面上摸不到窗口，设置页的「调整位置」也就无从下手。
-         * 顺带清掉已废弃的 `lyric_overlay_x`，把老数据收拾干净。
+         * 横纵两个坐标都清（2026-10-16 起两轴都是拖动坐标）。
          */
         fun resetPosition(context: Context) {
             Prefs(context).apply {

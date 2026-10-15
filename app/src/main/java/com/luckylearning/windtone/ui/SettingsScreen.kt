@@ -525,9 +525,9 @@ fun SettingsScreen(
                     ActionRow(
                         title = "悬浮歌词对齐",
                         subtitle = if (player.lyricOverlayAlign == 1) {
-                            "贴屏幕左侧显示，适合长句与固定视线"
+                            "歌词在窗内靠左排，适合长句与固定视线"
                         } else {
-                            "屏幕水平居中，视线居中时最省力"
+                            "歌词在窗内水平居中（窗口位置由拖动决定）"
                         },
                         onClick = { overlayChoice = OverlayChoice.ALIGN },
                         trailing = OVERLAY_ALIGN_LABELS[player.lyricOverlayAlign],
@@ -654,7 +654,7 @@ fun SettingsScreen(
                         ActionRow(
                             title = if (player.overlayEditing) "完成调整" else "调整悬浮歌词位置",
                             subtitle = if (player.overlayEditing) {
-                                "拖动屏幕上的歌词到合适位置，然后点这里锁定（锁定后点击穿透）"
+                                "拖动屏幕上的歌词（横竖都可以）到合适位置，然后点这里锁定（锁定后点击穿透）"
                             } else {
                                 "临时解锁，把歌词拖到想要的位置；位置会记住，锁定后不挡触摸"
                             },
@@ -1455,12 +1455,12 @@ private enum class OverlayChoice(
     ),
     ALIGN(
         "悬浮歌词对齐",
-        "字幕水平摆在屏幕的哪个位置（纵向仍由「调整悬浮歌词位置」拖动微调）。" +
-            "居中适合视线在屏幕中央时；居左更适合长句——每行都从同一条竖线起排，" +
+        "歌词文字在悬浮窗**内部**怎么排（窗口在屏幕上的位置由「调整悬浮歌词位置」自由拖动，与此无关）。" +
+            "居中适合每句都不长的歌词；居左更适合长句——每行都从同一条竖线起排，" +
             "读起来比居中的参差边缘省力。",
         listOf(
-            OverlayOption(0, "居中", "屏幕水平居中，默认"),
-            OverlayOption(1, "居左", "贴屏幕左侧显示，每行左对齐"),
+            OverlayOption(0, "居中", "窗内每行居中，默认"),
+            OverlayOption(1, "居左", "窗内每行从左沿起排"),
         ),
     ),
     BACKDROP(

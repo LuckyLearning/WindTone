@@ -23,7 +23,16 @@ object LrcParser {
         var album: String? = null
         var offsetMs = 0
 
-        data class Stamp(val ms: Long, val text: String, val words: List<LyricWord>)
+        data class Stamp(val ms: Long, val text: String, val words: List<LyricWord>) {
+            /**
+             * 行时长（逐字染色用）：末字唱完的时刻 − 行起点。
+             * 增强型 LRC 的标签本身不含行时长（KRC/YRC 的 [start,duration] 才有），
+             * 必须自己算 —— 漏了它渲染层的归一化分母就是 0，
+             * 整行要么全灰要么瞬间全亮，逐字动画完全不存在（v1.1.4 实测踩中）。
+             */
+            val lineDurationMs: Long
+                get() = words.lastOrNull()?.let { it.startMs + it.durationMs - ms } ?: 0L
+        }
 
         val timestamped = ArrayList<Stamp>(256)
         val plain = ArrayList<String>(256)
@@ -110,11 +119,12 @@ object LrcParser {
                             text = cur.text,
                             translation = next.text,
                             words = cur.words,
+                            lineDurationMs = cur.lineDurationMs,
                         )
                     )
                     i += 2
                 } else {
-                    merged.add(LyricLine(cur.ms, cur.text, words = cur.words))
+                    merged.add(LyricLine(cur.ms, cur.text, words = cur.words, lineDurationMs = cur.lineDurationMs))
                     i += 1
                 }
             }

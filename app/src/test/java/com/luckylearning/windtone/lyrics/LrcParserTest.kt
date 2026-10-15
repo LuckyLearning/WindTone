@@ -92,6 +92,10 @@ class LrcParserTest {
         assertEquals(12_500L, line.words[1].startMs)
         assertEquals("好", line.words[1].text)
         assertTrue(lyrics.hasWordTiming)
+        // 行时长必须算出来：末字唱完（12500 + 400）− 行起点（12000）= 900。
+        // 漏了它渲染层逐字染色的归一化分母就是 0，整行要么全灰要么瞬间全亮——
+        // 逐字动画完全不存在（v1.1.4 实测踩中后才补的断言）。
+        assertEquals(900L, line.lineDurationMs)
     }
 
     @Test
