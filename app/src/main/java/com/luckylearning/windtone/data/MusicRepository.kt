@@ -140,12 +140,6 @@ class MusicRepository(
         return songs.sortedWith(cmp)
     }
 
-    fun search(songs: List<Song>, query: String): List<Song> {
-        val q = query.trim().lowercase()
-        if (q.isEmpty()) return songs
-        return songs.filter { matches(it, q) }
-    }
-
     /** 单曲文本匹配（标题/歌手/专辑/文件名），供拼音搜索组合使用 */
     fun matches(song: Song, queryLower: String): Boolean {
         if (queryLower.isEmpty()) return false

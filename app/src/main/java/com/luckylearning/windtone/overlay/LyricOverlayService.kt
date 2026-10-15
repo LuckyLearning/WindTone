@@ -129,7 +129,6 @@ class LyricOverlayService : Service() {
      * 服务不随设置页刷新（它是独立存活的），所以每帧读一次 Prefs 并和自己记的比，
      * 变了就地重绘。用 Int 比较，开销可以忽略。
      */
-    private var appliedLines = -1
     private var appliedScale = -1
     private var appliedBackdrop = -1
     private var appliedPauseMode = -1
@@ -137,7 +136,6 @@ class LyricOverlayService : Service() {
 
     /** 行切换淡入淡出是否正在进行——动画期间不许别处再改 alpha，否则两处打架 */
     private var fading = false
-    private var appliedWordByWord: Boolean? = null
 
     /**
      * 灭屏广播：灭屏即隐藏，亮屏即恢复。

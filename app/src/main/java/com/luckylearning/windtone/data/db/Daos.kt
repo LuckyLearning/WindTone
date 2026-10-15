@@ -54,9 +54,6 @@ interface SongDao {
     @Update
     suspend fun update(row: SongEntity)
 
-    @Update
-    suspend fun updateAll(rows: List<SongEntity>)
-
     /**
      * 本轮扫描没有见到的歌：置为「暂不可见」而不是删除。
      * 收藏 / 歌单 / 播放统计因此全部保留，文件回来后自动恢复。
@@ -221,20 +218,11 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlist_songs WHERE playlistId = :id ORDER BY position ASC")
     suspend fun songsOf(id: Long): List<PlaylistSongEntity>
 
-    @Query("SELECT COUNT(*) FROM playlist_songs WHERE playlistId = :id")
-    suspend fun countOf(id: Long): Int
-
-    @Query("SELECT COUNT(*) FROM playlist_songs WHERE songId = :songId")
-    suspend fun playlistCountOf(songId: Long): Int
-
     @Query("SELECT COALESCE(MAX(position), -1) FROM playlist_songs WHERE playlistId = :id")
     suspend fun maxPosition(id: Long): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSong(row: PlaylistSongEntity)
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertSongs(rows: List<PlaylistSongEntity>)
 
     @Query("DELETE FROM playlist_songs WHERE playlistId = :playlistId AND songId = :songId")
     suspend fun removeSong(playlistId: Long, songId: Long)

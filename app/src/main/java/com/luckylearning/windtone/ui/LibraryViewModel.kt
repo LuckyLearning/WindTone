@@ -2,44 +2,22 @@ package com.luckylearning.windtone.ui
 
 import android.app.Application
 import android.content.Intent
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
-import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
-import android.widget.Toast
-import androidx.compose.runtime.Immutable
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.media3.common.Player
-import androidx.media3.session.MediaController
 import androidx.room.withTransaction
 import com.luckylearning.windtone.MusicApp
-import com.luckylearning.windtone.data.AudioInspector
 import com.luckylearning.windtone.data.CoverRepository
-import com.luckylearning.windtone.data.CrashLog
-import com.luckylearning.windtone.data.DataMaintenance
-import com.luckylearning.windtone.data.DownloadRoute
-import com.luckylearning.windtone.data.LyricsLoader
-import com.luckylearning.windtone.data.MusicRepository
 import com.luckylearning.windtone.data.PinyinIndex
-import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.data.ScanScope
 import com.luckylearning.windtone.data.SongDeleter
 import com.luckylearning.windtone.data.SortOrder
-import com.luckylearning.windtone.data.ThemeColorExtractor
-import com.luckylearning.windtone.data.UpdateCheckResult
-import com.luckylearning.windtone.data.UpdateChecker
-import com.luckylearning.windtone.data.UpdateInfo
 import com.luckylearning.windtone.data.db.FolderEntity
-import com.luckylearning.windtone.data.db.MusicDb
-import com.luckylearning.windtone.data.db.PlayerStateEntity
 import com.luckylearning.windtone.data.db.PlaylistEntity
 import com.luckylearning.windtone.data.db.PlaylistSongEntity
-import com.luckylearning.windtone.data.db.QueueSongEntity
-import com.luckylearning.windtone.data.db.SongEntity
-import com.luckylearning.windtone.data.db.SongStateEntity
 import com.luckylearning.windtone.data.db.toEntity
 import com.luckylearning.windtone.data.db.toSong
 import com.luckylearning.windtone.data.derivedFolderPath
@@ -49,23 +27,12 @@ import com.luckylearning.windtone.data.folderDisplayName
 import com.luckylearning.windtone.data.folderParentHint
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.data.treeDisplayName
-import com.luckylearning.windtone.lyrics.Lyrics
-import com.luckylearning.windtone.overlay.LyricOverlayBridge
-import com.luckylearning.windtone.playback.AudioFx
-import com.luckylearning.windtone.playback.PlaybackConnection
-import com.luckylearning.windtone.playback.PlayerHandle
 import com.luckylearning.windtone.state.GroupInfo
 import com.luckylearning.windtone.state.LibraryUiState
 import com.luckylearning.windtone.state.LibraryView
-import com.luckylearning.windtone.state.PlayMode
 import com.luckylearning.windtone.state.PlayStats
-import com.luckylearning.windtone.state.PlaybackProgress
-import com.luckylearning.windtone.state.PlayerUiState
 import com.luckylearning.windtone.state.PlaylistInfo
-import com.luckylearning.windtone.state.QueueEntry
-import com.luckylearning.windtone.state.UpdateUiState
 import com.luckylearning.windtone.state.VirtualPlaylist
-import com.luckylearning.windtone.state.playModeOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -108,7 +75,6 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
             sortOrder = prefs.sortOrder,
             view = LibraryView.from(prefs.libraryView),
             deepScan = repository.deepScanEnabled(),
-            hasAudioPermission = false,
             scanScope = prefs.scanScope,
         )
     )
@@ -193,9 +159,6 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
         }
         if (scope != ScanScope.UNSET) scan() else clearLibraryForScopeReset()
     }
-
-    /** 是否已导入过音乐目录 */
-    fun hasFolders(): Boolean = folders.isNotEmpty()
 
     private fun folderUriList(): List<String> = folders.map { it.treeUri }
 
@@ -390,7 +353,6 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
                 visible = visible,
                 letterIndex = letters,
                 scanning = false,
-                scannedOnce = true,
                 skippedUnsupported = skipped,
                 lyricsCount = sorted.count { s -> s.lrcUri != null },
                 deepScan = repository.deepScanEnabled(),
@@ -1030,13 +992,6 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
                 data = Uri.fromParts("package", getApplication<Application>().packageName, null)
             }
         } else null
-
-    fun hasAllFilesAccess(): Boolean = repository.deepScanEnabled()
-
-    fun setAudioPermission(granted: Boolean) {
-        _library.update { it.copy(hasAudioPermission = granted) }
-    }
-
     /** 用户拒绝音频读取权限时的提示（不影响「指定目录」方式） */
     fun notifyScanPermissionDenied() {
         pushMessage("没有读取音频的权限。可以改为「选择音乐目录」，用文件选择器授权指定文件夹。")

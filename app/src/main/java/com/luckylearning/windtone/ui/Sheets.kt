@@ -31,7 +31,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -629,31 +628,6 @@ fun PlaylistActionsMenu(
         DropdownMenuItem(text = { Text("重命名…") }, onClick = { onDismiss(); onRename() })
         DropdownMenuItem(text = { Text("导出为 M3U…") }, onClick = { onDismiss(); onExport() })
         DropdownMenuItem(text = { Text("删除歌单") }, onClick = { onDismiss(); onDelete() })
-    }
-}
-
-/** 歌单头部条（封面 + 播放全部） */
-@Composable
-fun PlaylistHeader(
-    info: PlaylistInfo,
-    actions: @Composable () -> Unit = {},
-) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.primaryContainer,
-            modifier = Modifier.size(56.dp),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(AppIcons.QueueMusic, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-            }
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(info.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("${info.songCount} 首", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        actions()
     }
 }
 

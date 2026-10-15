@@ -9,8 +9,6 @@ import androidx.media3.session.SessionToken
 import com.luckylearning.windtone.data.model.Song
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /**
  * 与 PlaybackService 的 MediaController 连接（播放状态与 UI 的唯一桥梁）。

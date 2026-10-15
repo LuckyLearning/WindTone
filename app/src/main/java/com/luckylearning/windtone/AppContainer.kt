@@ -36,7 +36,7 @@ class AppContainer(private val app: Application) {
     val lyricsLoader: LyricsLoader by lazy { LyricsLoader(app) }
 
     /** `uri ↔ 主键` 与每曲状态的内存索引，曲库域与播放域共用 */
-    val songIndex: SongIndex by lazy { SongIndex(db) }
+    val songIndex: SongIndex by lazy { SongIndex() }
 
     /** 全局一次性提示总线（替代原先借道 `LibraryUiState.message` 的做法） */
     val messages: MessageBus by lazy { MessageBus() }

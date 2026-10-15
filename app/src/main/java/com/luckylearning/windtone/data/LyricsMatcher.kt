@@ -1,7 +1,5 @@
 package com.luckylearning.windtone.data
 
-import com.luckylearning.windtone.data.model.Song
-
 /**
  * 同目录歌词文件匹配规则。
  * 支持：歌名.lrc / 歌名 - 歌手.lrc / 歌名.zh.lrc / 歌名.sc.lrc / 歌名.txt
@@ -10,18 +8,10 @@ object LyricsMatcher {
 
     private val LYRIC_EXT = setOf("lrc", "txt", "krc", "yrc")
 
-    /** 逐字歌词扩展名 */
-    val WORD_EXT = setOf("krc", "yrc")
-
-    fun isWordLyricFile(name: String): Boolean =
-        name.substringAfterLast('.', "").lowercase() in WORD_EXT
-
     fun isLyricFile(name: String): Boolean {
         val ext = name.substringAfterLast('.', "").lowercase()
         return ext in LYRIC_EXT
     }
-
-    fun isLrcFile(name: String): Boolean = name.substringAfterLast('.', "").lowercase() == "lrc"
 
     fun matches(fileName: String, baseName: String): Boolean {
         if (!isLyricFile(fileName)) return false
@@ -50,6 +40,4 @@ object LyricsMatcher {
         }
         return s
     }
-
-    fun baseNameOf(song: Song): String = song.baseName
 }

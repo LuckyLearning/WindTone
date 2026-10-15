@@ -7,7 +7,6 @@ import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.lyrics.BinaryReader
 import com.luckylearning.windtone.lyrics.EmbeddedTags
 import com.luckylearning.windtone.lyrics.LrcParser
-import com.luckylearning.windtone.lyrics.LyricLine
 import com.luckylearning.windtone.lyrics.LyricSource
 import com.luckylearning.windtone.lyrics.Lyrics
 import com.luckylearning.windtone.lyrics.TextCodec

@@ -29,8 +29,6 @@ object SleepTimer {
     @Volatile
     var fireAction: (() -> Unit)? = null
 
-    val running: Boolean get() = _remainingMs.value > 0
-
     fun start(durationMs: Long) {
         job?.cancel()
         _remainingMs.value = durationMs.coerceAtLeast(0L)

@@ -14,8 +14,6 @@ import java.nio.channels.FileChannel
 internal class BinaryReader(private val channel: FileChannel) : Closeable {
 
     private val buf1 = ByteBuffer.allocate(1)
-    private val buf4 = ByteBuffer.allocate(4)
-    private val buf8 = ByteBuffer.allocate(8)
 
     val size: Long get() = channel.size()
 
@@ -54,13 +52,6 @@ internal class BinaryReader(private val channel: FileChannel) : Closeable {
         if (b.size < 4) return -1
         return ((b[0].toLong() and 0xFF) shl 24) or ((b[1].toLong() and 0xFF) shl 16) or
             ((b[2].toLong() and 0xFF) shl 8) or (b[3].toLong() and 0xFF)
-    }
-
-    fun readUInt32LE(): Long {
-        val b = readBytes(4) ?: return -1
-        if (b.size < 4) return -1
-        return ((b[3].toLong() and 0xFF) shl 24) or ((b[2].toLong() and 0xFF) shl 16) or
-            ((b[1].toLong() and 0xFF) shl 8) or (b[0].toLong() and 0xFF)
     }
 
     fun readUInt24BE(): Int {

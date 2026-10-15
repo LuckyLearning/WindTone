@@ -2,7 +2,6 @@ package com.luckylearning.windtone.data
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Base64
 
 enum class SortOrder(val label: String) {
     TITLE("按标题"),
@@ -201,14 +200,6 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_SKIP_SILENCE, false)
         set(value) = sp.edit().putBoolean(KEY_SKIP_SILENCE, value).apply()
 
-    // ---------------- 权限 ----------------
-
-    /** 存储权限是否已被用户拒绝过一次（用于提示去设置页） */
-
-    var permissionAsked: Boolean
-        get() = sp.getBoolean(KEY_PERM_ASKED, false)
-        set(value) = sp.edit().putBoolean(KEY_PERM_ASKED, value).apply()
-
     // ---------------- 批次 2/3 新增 ----------------
 
     /** 主题是否跟随封面取色 */
@@ -310,7 +301,6 @@ class Prefs(context: Context) {
         const val KEY_LYRIC_OVERLAY_BACKDROP = "lyric_overlay_backdrop"
         const val KEY_LYRIC_OVERLAY_PAUSE_MODE = "lyric_overlay_pause_mode"
         const val KEY_LYRIC_OVERLAY_ALIGN = "lyric_overlay_align"
-        const val KEY_PERM_ASKED = "perm_asked"
         const val KEY_DYNAMIC_THEME = "dynamic_theme"
         const val KEY_SPEED = "playback_speed"
         const val KEY_EQ_ENABLED = "eq_enabled"

@@ -496,16 +496,6 @@ class PlaybackEngine(
         }
     }
 
-    override fun seekBy(deltaMs: Long) {
-        val c = controller ?: return
-        seekTo((c.currentPosition + deltaMs).coerceAtLeast(0L))
-    }
-
-    /** 相对当前进度微调（歌词面板的快退/快进按钮用） */
-    override fun seekRelative(deltaMs: Long) {
-        seekTo((_progress.value.positionMs + deltaMs).coerceAtLeast(0L))
-    }
-
     /**
      * 播放模式轮换：顺序 → 列表循环 → 单曲循环 → 随机 → 顺序。
      *
@@ -629,8 +619,6 @@ class PlaybackEngine(
     }
 
     override fun cancelSleep() = SleepTimer.cancel()
-
-    override fun setLoudness(gainMb: Int) = AudioFx.setLoudnessGain(gainMb)
 
     override fun setSkipSilence(enabled: Boolean) {
         prefs.skipSilence = enabled
@@ -1099,8 +1087,6 @@ interface PlayerActions {
     fun next()
     fun previous()
     fun seekTo(ms: Long)
-    fun seekBy(deltaMs: Long)
-    fun seekRelative(deltaMs: Long)
     fun cyclePlayMode()
     fun playNext(song: Song)
     fun refreshQueue()
@@ -1111,7 +1097,6 @@ interface PlayerActions {
     fun sleepAfter(minutes: Int)
     fun sleepEndOfSong()
     fun cancelSleep()
-    fun setLoudness(gainMb: Int)
     fun setSkipSilence(enabled: Boolean)
     fun openPlayer()
     fun closePlayer()

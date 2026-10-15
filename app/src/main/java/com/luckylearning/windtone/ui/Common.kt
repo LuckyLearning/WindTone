@@ -30,7 +30,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -75,7 +74,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.luckylearning.windtone.data.CoverRepository
 import com.luckylearning.windtone.data.model.Song
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.withContext
 
 /**
  * 时长格式化。

@@ -1,6 +1,5 @@
 package com.luckylearning.windtone.data
 
-import com.luckylearning.windtone.data.db.MusicDb
 import com.luckylearning.windtone.data.db.SongStateEntity
 import com.luckylearning.windtone.data.model.Song
 
@@ -17,7 +16,7 @@ import com.luckylearning.windtone.data.model.Song
  * 线程约定：`idByUri` 只在主线程改（曲库刷新/删歌都在主线程发起），
  * `states` 用整表替换（`@Volatile`）保证读侧永远看到一致快照。
  */
-class SongIndex(@Suppress("unused") private val db: MusicDb) {
+class SongIndex {
 
     private val idByUri = HashMap<String, Long>()
 

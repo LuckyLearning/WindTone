@@ -71,8 +71,6 @@ data class LibraryUiState(
     val skippedUnsupported: Int = 0,
     val lyricsCount: Int = 0,
     val deepScan: Boolean = false,
-    val hasAudioPermission: Boolean = false,
-    val scannedOnce: Boolean = false,
     /** 扫描范围：未选择（首次安装）时不自动扫描，等待用户指定全盘或目录 */
     val scanScope: ScanScope = ScanScope.UNSET,
     /** 已导入的目录数量 */

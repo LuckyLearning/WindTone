@@ -77,7 +77,6 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -137,7 +136,6 @@ fun MainScreen(
     ) { result ->
         val ok = result[audioPermission] == true || hasPermission(context, audioPermission)
         granted = ok
-        lib.setAudioPermission(ok)
         // 只有在用户主动选择「扫描全盘」后才会走到这里
         if (ok) lib.startFullScan() else lib.notifyScanPermissionDenied()
     }

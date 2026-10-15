@@ -77,7 +77,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.media3.common.Player
 import com.luckylearning.windtone.data.model.Song
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
