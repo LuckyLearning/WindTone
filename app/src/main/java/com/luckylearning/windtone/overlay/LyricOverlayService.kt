@@ -6,8 +6,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.PixelFormat
@@ -16,6 +18,7 @@ import android.graphics.drawable.GradientDrawable
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
+import android.text.style.RelativeSizeSpan
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
@@ -36,39 +39,50 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
- * 桌面悬浮歌词服务（车机用）。
+ * 桌面悬浮歌词服务。
  *
  * ## 形态
- * 一行纯文字，配一层半透明深色圆角底板。
+ * 一至三行文字（外加可选的「双语副行」），配一层底板。
  *
  * 底板不是装饰，而是**可读性保险**。最初的设计是「纯白字 + 深色投影」，
  * 假设投影足以在亮色桌面上把字托起来。实测在亮色壁纸 / 桌面白色搜索框上，
  * 白字直接糊掉——投影半径按像素算，高密度屏上几乎看不见，
  * 于是用户侧的表现就是「服务在跑、窗口挂着、就是什么都看不到」。
- * 一层半透明黑底板在任何壁纸上都稳，代价只是稍微不那么「干净」。
+ * 现在底板可配（无 / 半透明 / 实底），默认半透明。
  *
  * ## 两种模式
  *  - **锁定态（日常）**：`FLAG_NOT_TOUCHABLE`，手指划过去直接穿透到桌面，
  *    不会误挡导航操作。这是绝大多数时间的状态。
  *  - **调整态（拖动）**：从设置页点「调整位置」进入。此时摘掉 `NOT_TOUCHABLE`，
- *    窗口吃触摸，可拖动到任意位置；四周显示虚线边框提示「现在可以拖了」。
+ *    窗口吃触摸，可拖动到任意位置；四周显示蓝色描边提示「现在可以拖了」。
  *    点设置页的「完成」退出，位置落盘，窗口恢复穿透。
+ *    ⚠️ **超时会自动锁定**（[EDITING_TIMEOUT_MS]）：用户在桌面上拖动后忘了回去点
+ *    「完成」的话，窗口会一直吃触摸、挡桌面操作。超时后由服务发一条
+ *    [LyricOverlayBus.requestExitEditing] 让播放域把状态收回去。
  *
  * ## 显示时机
  * **只在 App 退到后台时显示**。App 在前台时（用户正看着播放页歌词），
- * 桌面字幕纯属重复，直接隐藏。两个例外：设置页的「调整位置」模式，
- * 以及刚打开开关时的几秒前台预览（否则用户在设置页点完开关看不到任何变化）。
+ * 桌面字幕纯属重复，直接隐藏。三个例外：设置页的「调整位置」模式、
+ * 刚打开开关时的几秒前台预览、以及改外观设置后的即时预览。
+ * 灭屏时也直接隐藏（看不见还画是白耗电，见 [screenReceiver]）。
  *
  * ## 失败必须留痕
  * 挂窗失败 / 前台服务被系统拒绝都会被 catch 到。这类失败没有可自动恢复的手段，
  * 但**不能静默**：否则用户侧就是「开关开了、什么都没发生」，无从排查。
  * 失败时统一走 [CrashLog.record] + [LyricOverlayBus.report] 两条路：
  * 前者落到设置页 → 关于与诊断 → 崩溃日志，后者让设置页直接显示原因并回退开关。
+ *
+ * ## 内容由谁决定
+ * 服务**不做任何歌词判断**——「该显示哪一句、有没有上下文、是不是间奏」
+ * 全部由 [com.luckylearning.windtone.lyrics.OverlayContentResolver] 算好后经
+ * [LyricOverlayBus] 送进来；这里只把 [OverlayTextComposer] 组装出的几行画出来。
+ * 这样「显示什么」可单测，「怎么画」可调样式，两件事不相干。
  *
  * ## 为什么用 `WindowManager` 手搓 View 而不是 Compose
  * 悬浮窗不需要 Compose 运行时，一个 [TextView] 足够，省掉 `ComposeView` 的
@@ -94,17 +108,75 @@ class LyricOverlayService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var windowJob: Job? = null
 
+    /** 调整态的超时任务：长时间没人动，就请播放域把「调整位置」收回去 */
+    private var editingTimeoutJob: Job? = null
+
     /** 当前是否处于调整（拖动）模式；拖动逻辑里高频读，用普通字段 */
     private var editing = false
 
+    /** 屏幕是否亮着。灭屏时窗口整体隐藏——看不见还继续画纯属白耗电。 */
+    private var screenInteractive = true
+
+    /** 上一次算出来的「该不该显示」，亮屏 / 前台切换时据此立刻恢复，不必等下一句歌词 */
+    private var desiredVisible = false
+
     /** 窗口首次测量完成后是否需要补一次位置夹取（挂载瞬间拿不到自身宽高） */
     private var pendingMeasureClamp = false
+
+    /**
+     * 已应用的外观档位。
+     *
+     * 服务不随设置页刷新（它是独立存活的），所以每帧读一次 Prefs 并和自己记的比，
+     * 变了就地重绘。用 Int 比较，开销可以忽略。
+     */
+    private var appliedLines = -1
+    private var appliedScale = -1
+    private var appliedBackdrop = -1
+    private var appliedPauseMode = -1
+
+    /** 行切换淡入淡出是否正在进行——动画期间不许别处再改 alpha，否则两处打架 */
+    private var fading = false
+    private var appliedWordByWord: Boolean? = null
+
+    /**
+     * 灭屏广播：灭屏即隐藏，亮屏即恢复。
+     *
+     * `ACTION_SCREEN_OFF` 只能在代码里注册（清单里注册收不到），所以跟着服务的
+     * 生命周期走。为什么值得做：车机导航时经常整段灭屏，而悬浮窗的可见性判断
+     * 只看「App 在不在前台」——灭屏时播放还在继续，窗口会一直被绘制。
+     */
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                Intent.ACTION_SCREEN_OFF -> {
+                    screenInteractive = false
+                    applyVisibility()
+                }
+                Intent.ACTION_SCREEN_ON -> {
+                    screenInteractive = true
+                    applyVisibility()
+                }
+            }
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
         serviceAlive = true
         startForeground(NOTIFICATION_ID, buildNotification())
         windowManager = getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+        // 灭屏 / 亮屏：只在代码里注册才收得到（清单注册 Android 不会派发）
+        runCatching {
+            val filter = IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(Intent.ACTION_SCREEN_ON)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(screenReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                registerReceiver(screenReceiver, filter)
+            }
+        }
         LyricOverlayBridge.report(LyricOverlayBus.Status.RUNNING, "服务已启动")
         observeState()
     }
@@ -147,6 +219,8 @@ class LyricOverlayService : Service() {
         windowVisible = false
         windowGeometry = "未挂载"
         windowJob?.cancel()
+        editingTimeoutJob?.cancel()
+        runCatching { unregisterReceiver(screenReceiver) }
         scope.cancel()
         detachWindow()
         LyricOverlayBus.clear()
@@ -455,18 +529,22 @@ class LyricOverlayService : Service() {
     private fun observeState() {
         windowJob?.cancel()
         windowJob = scope.launch {
-            // 内容 + 编辑态 + 前台态 + 预览态四路合并：任一变化都重新决定「显不显示 / 长什么样」
+            // 内容 + 编辑态 + 前台态 + 预览态 + 外观版本 五路合并：
+            // 任一变化都重新决定「显不显示 / 长什么样」。
+            // 外观那一路是给设置页用的——服务独立存活，改完字号得有人把它叫醒。
             combine(
                 LyricOverlayBus.content,
                 LyricOverlayBus.editing,
                 LyricOverlayBus.foreground,
                 LyricOverlayBus.preview,
-            ) { content, isEditing, isForeground, isPreview ->
+                LyricOverlayBus.appearance,
+            ) { content, isEditing, isForeground, isPreview, _ ->
                 OverlayVisualState(content, isEditing, isForeground, isPreview)
             }
                 .collect { (content, isEditing, isForeground, isPreview) ->
                     val box = container ?: return@collect
                     val tv = lyricView ?: return@collect
+                    val prefs = Prefs(this@LyricOverlayService)
 
                     if (editing != isEditing) {
                         editing = isEditing
@@ -483,70 +561,217 @@ class LyricOverlayService : Service() {
                                 }
                             }
                             pendingPositionSave = false
+                            editingTimeoutJob?.cancel()
+                        } else {
+                            armEditingTimeout()
                         }
                         refreshModeChrome()
                     }
+
+                    // 外观（字号 / 底板 / 暂停表现 / 逐字）每帧对一次账：
+                    // 用户改完设置，下一帧就生效，不必重启服务、也不必等下一句歌词。
+                    applyAppearance(prefs)
 
                     // 调整 / 预览两种模式下即使 App 在前台、即使没歌词，也要显示——
                     // 调整模式下用户此刻正站在设置页点「调整位置」；
                     // 预览模式是刚打开开关的那几秒，得让用户看见「它确实开了」。
                     // 这是「仅后台显示」规则的唯二例外。
                     val showOverride = isEditing || isPreview
-                    val visible = (showOverride || !isForeground) && (content.visible || showOverride)
+                    val pauseMode = prefs.lyricOverlayPauseMode
+                    val hideOnPause = !content.playing && !showOverride && pauseMode == PAUSE_HIDE
+                    val visible = !hideOnPause && screenInteractive &&
+                        (showOverride || !isForeground) && (content.visible || showOverride)
+                    desiredVisible = visible
                     if (!visible) {
-                        box.visibility = View.INVISIBLE
-                        windowVisible = false
+                        applyVisibility()
                         return@collect
                     }
 
-                    // 行数由设置项决定，与「车载模式」无关（1 行 / 3 行）。
-                    // 服务直接读 Prefs——它独立于界面存活，用户在设置页改完，
-                    // 下一行歌词刷新时窗口自己就变了，不需要重启服务。
-                    val multiLine = Prefs(this@LyricOverlayService).lyricOverlayLines == 3
-                    val maxLines = if (multiLine) MULTI_MAX_LINES else SINGLE_MAX_LINES
+                    val lines = when {
+                        content.visible -> OverlayTextComposer.compose(
+                            resolved = content.resolved,
+                            multiLine = prefs.lyricOverlayLines == 3,
+                            positionMs = content.positionMs,
+                            wordByWord = prefs.lyricWordByWord,
+                            // 双语副行不设开关：它是**同一句**的翻译，属于内容完整性
+                            // 而不是排版选择——能拿到双语歌词的用户本来就想要它。
+                            showTranslation = true,
+                        )
+                        isEditing -> listOf(HINT_EDITING)
+                        else -> listOf(HINT_PREVIEW)
+                    }
+                    // 行数上限按实际要画的行数放宽（每行都可能折成两行），
+                    // 上限 8：再多就不是「悬浮字幕」而是一块遮屏的板子了。
+                    val maxLines = (lines.size * 2).coerceIn(2, MAX_LINES_CAP)
                     if (tv.maxLines != maxLines) {
                         tv.maxLines = maxLines
                         tv.ellipsize = android.text.TextUtils.TruncateAt.END
                     }
-
-                    val text = when {
-                        content.visible -> buildDisplay(content, multiLine)
-                        isEditing -> "拖动到想要的位置"
-                        isPreview -> "悬浮歌词已开启，退到桌面后持续显示"
-                        else -> ""
-                    }
-                    if (tv.text.toString() != text.toString()) tv.text = text
-                    tv.alpha = if (content.playing || showOverride) 1f else PAUSED_ALPHA
-                    if (box.visibility != View.VISIBLE) box.visibility = View.VISIBLE
-                    windowVisible = true
+                    renderLines(tv, lines, content.playing || showOverride)
+                    applyVisibility()
                     updateGeometryReport()
                 }
         }
     }
 
     /**
-     * 组装悬浮窗实际显示的文字。
+     * 应用外观配置里「和上一次不同才动手」的那几项。
      *
-     * 单行模式只显示当前行（超长时折行，见 [SINGLE_MAX_LINES]）；
-     * 多行模式把上下文行一起排进来，形成「3 行歌词」的窗口：
-     * 当前行用默认白色，上一行 / 下一行压暗成半透明白，视线自然落在当前行上。
+     * 每帧调用，所以每一步都要先和自己记的值比一次——不然每帧重建
+     * `GradientDrawable` 会造成无谓的分配与重排。
      */
-    private fun buildDisplay(content: LyricOverlayBus.Content, multiLine: Boolean): CharSequence {
-        if (!multiLine) return content.text
+    private fun applyAppearance(prefs: Prefs) {
+        val tv = lyricView ?: return
+        val scale = prefs.lyricOverlayTextScale
+        if (appliedScale != scale) {
+            appliedScale = scale
+            tv.setTextSize(
+                TypedValue.COMPLEX_UNIT_SP,
+                OVERLAY_TEXT_SP * TEXT_SCALE_FACTORS[scale.coerceIn(0, 2)],
+            )
+            // 顺手把宽度上限压到屏宽的 90%：单行大字号 + 长句在窄屏上会横向溢出屏幕，
+            // 而被裁掉的那半句用户是不知道的。
+            val (screenW, _) = screenSize()
+            tv.maxWidth = (screenW * MAX_WIDTH_RATIO).toInt().coerceAtLeast(dp(120))
+        }
+
+        val backdrop = prefs.lyricOverlayBackdrop
+        val pauseMode = prefs.lyricOverlayPauseMode
+        if (appliedBackdrop != backdrop || appliedPauseMode != pauseMode) {
+            appliedBackdrop = backdrop
+            appliedPauseMode = pauseMode
+            refreshModeChrome()
+        }
+    }
+
+    /**
+     * 把组装好的几行画到 [TextView] 上。
+     *
+     * 三种角色的样式只在这里定义：
+     *  - 主角：最亮（默认白）；
+     *  - 配角（上下句、间奏时的主角）：压暗；
+     *  - 双语副行：压暗 + 小一号。
+     * 逐字染色（`sungChars >= 0`）在主角行上再叠一段高亮色。
+     *
+     * 行切换时做一次短促的淡入淡出——长句之间硬切会有「跳一下」的突兀感。
+     * 动画期间不再手动改 alpha（[fading] 挡住），否则两处会互相打架。
+     */
+    private fun renderLines(
+        tv: TextView,
+        lines: List<OverlayTextComposer.StyledLine>,
+        opaque: Boolean,
+    ) {
+        val targetAlpha = if (opaque) 1f else PAUSED_ALPHA
+        val spanned = buildSpanned(lines)
+        val sameText = tv.text.toString() == spanned.toString()
+
+        if (!sameText) {
+            tv.animate().cancel()
+            if (!fading && container?.visibility == View.VISIBLE) {
+                fading = true
+                tv.animate()
+                    .alpha(0f)
+                    .setDuration(FADE_OUT_MS)
+                    .withEndAction {
+                        tv.text = spanned
+                        tv.animate()
+                            .alpha(targetAlpha)
+                            .setDuration(FADE_IN_MS)
+                            .withEndAction { fading = false }
+                            .start()
+                    }
+                    .start()
+            } else {
+                tv.text = spanned
+                tv.alpha = targetAlpha
+            }
+        } else if (!fading && tv.alpha != targetAlpha) {
+            // 暂停 / 恢复：只改透明度，不动文字
+            tv.animate().cancel()
+            tv.alpha = targetAlpha
+        }
+    }
+
+    /**
+     * 组装可绘制文本。
+     *
+     * 单行、主角、无逐字时走纯字符串快路径——那是最常见的情形，
+     * 没必要每帧造一个 `SpannableStringBuilder`。
+     */
+    private fun buildSpanned(lines: List<OverlayTextComposer.StyledLine>): CharSequence {
+        if (lines.isEmpty()) return ""
+        val only = lines.singleOrNull()
+        if (only != null && only.role == OverlayTextComposer.Role.CURRENT && only.sungChars < 0) {
+            return only.text
+        }
         return SpannableStringBuilder().apply {
-            if (content.prevLine.isNotBlank()) {
+            lines.forEachIndexed { index, line ->
+                if (index > 0) append("\n")
                 val start = length
-                append(content.prevLine)
-                setSpan(ForegroundColorSpan(CONTEXT_TEXT_COLOR), start, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                append("\n")
+                append(line.text)
+                val end = length
+                when (line.role) {
+                    OverlayTextComposer.Role.CURRENT -> if (line.sungChars > 0) {
+                        // 逐字高亮：已唱的部分染成暖色，未唱的部分保持白色
+                        setSpan(
+                            ForegroundColorSpan(WORD_SUNG_COLOR),
+                            start,
+                            (start + line.sungChars).coerceAtMost(end),
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                        )
+                    }
+                    OverlayTextComposer.Role.CONTEXT ->
+                        setSpan(
+                            ForegroundColorSpan(CONTEXT_TEXT_COLOR),
+                            start,
+                            end,
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                        )
+                    OverlayTextComposer.Role.TRANSLATION -> {
+                        setSpan(
+                            ForegroundColorSpan(CONTEXT_TEXT_COLOR),
+                            start,
+                            end,
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                        )
+                        setSpan(
+                            RelativeSizeSpan(TRANSLATION_SCALE),
+                            start,
+                            end,
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                        )
+                    }
+                }
             }
-            append(content.text)
-            if (content.nextLine.isNotBlank()) {
-                append("\n")
-                val start = length
-                append(content.nextLine)
-                setSpan(ForegroundColorSpan(CONTEXT_TEXT_COLOR), start, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
+        }
+    }
+
+    /**
+     * 把「该不该显示」落到 View 上。
+     *
+     * 与前台 / 灭屏两件事统一在这里判定：窗口在灭屏时依旧会被系统合成，
+     * 看不见还继续画是纯浪费——车机导航整段灭屏时这点电费是要省的。
+     */
+    private fun applyVisibility() {
+        val box = container ?: return
+        val show = desiredVisible && screenInteractive
+        val target = if (show) View.VISIBLE else View.INVISIBLE
+        if (box.visibility != target) box.visibility = target
+        windowVisible = show
+    }
+
+    /**
+     * 给「调整位置」装上超时。
+     *
+     * 调整态窗口是**吃触摸**的：用户拖完忘了点「完成调整」就退到桌面的话，
+     * 屏幕上会留一条挡操作的横条，而且桌面上的点击落在哪儿都说不清。
+     * 服务只能判定「该收了」，状态归播放域所有，所以发一条请求让它来收。
+     */
+    private fun armEditingTimeout() {
+        editingTimeoutJob?.cancel()
+        editingTimeoutJob = scope.launch {
+            delay(EDITING_TIMEOUT_MS)
+            if (editing) LyricOverlayBus.requestExitEditing()
         }
     }
 
@@ -559,7 +784,6 @@ class LyricOverlayService : Service() {
     private fun refreshModeChrome() {
         val p = layoutParams ?: return
         val box = container ?: return
-        val tv = lyricView ?: return
 
         p.flags = if (editing) {
             baseFlags()
@@ -568,14 +792,27 @@ class LyricOverlayService : Service() {
         }
         runCatching { windowManager?.updateViewLayout(box, p) }
 
-        // 两种状态都要底板，区别只在编辑态多一圈蓝色描边（明确告诉用户「现在这块能拖」）。
-        // 锁定态曾经是「完全透明 + 只靠投影」，实测在高密度屏 + 亮色壁纸下
-        // 白字根本立不起来，用户看到的就是「什么都没有」。
+        // 底板三档：0 无 / 1 半透明（默认）/ 2 实底。
+        // 默认给底板而不是「纯白字 + 投影」：后者在亮色壁纸上被真机证实过看不清
+        // （投影半径按像素算，高密度屏上几乎等于没有），这是踩过的坑，不是审美偏好。
+        // 编辑态无论如何都有底 + 蓝描边：此刻用户需要看清「这块能拖」的边界。
         // （GradientDrawable 不支持声明式虚线间隔，圆角实线框已足够表达「可拖」）
-        box.background = GradientDrawable().apply {
-            setColor(Color.argb(if (editing) 150 else 140, 0, 0, 0))
-            if (editing) setStroke(dp(2), Color.argb(220, 88, 166, 255))
-            cornerRadius = dp(14).toFloat()
+        val backdrop = Prefs(this).lyricOverlayBackdrop
+        box.background = when {
+            editing -> GradientDrawable().apply {
+                setColor(EDIT_BACKDROP_COLOR)
+                setStroke(dp(2), EDIT_STROKE_COLOR)
+                cornerRadius = dp(14).toFloat()
+            }
+            backdrop == BACKDROP_NONE -> null
+            backdrop == BACKDROP_SOLID -> GradientDrawable().apply {
+                setColor(SOLID_BACKDROP_COLOR)
+                cornerRadius = dp(14).toFloat()
+            }
+            else -> GradientDrawable().apply {
+                setColor(TRANSLUCENT_BACKDROP_COLOR)
+                cornerRadius = dp(14).toFloat()
+            }
         }
     }
 
@@ -656,8 +893,17 @@ class LyricOverlayService : Service() {
         var windowVisible: Boolean = false
             private set
 
-        /** 悬浮字幕字号：车机屏大、观看距离远，比手机正文大一档 */
+        /** 悬浮字幕基准字号（中档）：车机屏大、观看距离远，比手机正文大一档 */
         private const val OVERLAY_TEXT_SP = 20f
+
+        /** 字号三档的倍率：小 / 中 / 大。存的是档位不是具体 sp，日后调基准能带上老用户 */
+        private val TEXT_SCALE_FACTORS = floatArrayOf(0.82f, 1f, 1.25f)
+
+        /** 窗口宽度上限占屏宽的比例：留出边距，避免大字号长句横向溢出被裁 */
+        private const val MAX_WIDTH_RATIO = 0.9f
+
+        /** 窗口最多画几行（含折行）：再多就不是「悬浮字幕」而是一块遮屏的板子了 */
+        private const val MAX_LINES_CAP = 8
 
         /**
          * 默认位置：状态栏高度再往下让这么多 dp。
@@ -671,17 +917,47 @@ class LyricOverlayService : Service() {
         /** 暂停时的不透明度：不隐藏，方便看清唱到哪一句 */
         private const val PAUSED_ALPHA = 0.55f
 
-        /**
-         * 单行模式最多折到 2 行：一行放不下时折行显示完整歌词，
-         * 再长才用省略号（窗口宽度上限就是屏幕宽，不折行只能砍字）。
-         */
-        private const val SINGLE_MAX_LINES = 2
+        /** 暂停表现：隐藏（另一档是淡出） */
+        private const val PAUSE_HIDE = 1
 
-        /** 多行模式上限：上一行 + 当前行（自身可能折行）+ 下一行 */
-        private const val MULTI_MAX_LINES = 6
+        /** 底板档位：无底板 / 深色实底（另一档是半透明，默认） */
+        private const val BACKDROP_NONE = 0
+        private const val BACKDROP_SOLID = 2
 
-        /** 多行模式下上下文行（上一行 / 下一行）的压暗色 */
+        /** 锁定态底板：半透明（默认档）与实底 */
+        private val TRANSLUCENT_BACKDROP_COLOR = Color.argb(140, 0, 0, 0)
+        private val SOLID_BACKDROP_COLOR = Color.argb(228, 0, 0, 0)
+
+        /** 编辑态底板与描边：此刻要明确告诉用户「这块能拖」 */
+        private val EDIT_BACKDROP_COLOR = Color.argb(150, 0, 0, 0)
+        private val EDIT_STROKE_COLOR = Color.argb(220, 88, 166, 255)
+
+        /** 配角（上下句、间奏时的主角）的压暗色 */
         private val CONTEXT_TEXT_COLOR = Color.argb(150, 255, 255, 255)
+
+        /** 逐字染色里「已唱过」部分的颜色：暖色，与白色未唱部分形成节奏感 */
+        private val WORD_SUNG_COLOR = Color.rgb(255, 205, 86)
+
+        /** 双语副行的字号倍率（相对主角） */
+        private const val TRANSLATION_SCALE = 0.82f
+
+        /** 行切换的淡出 / 淡入时长；再长就会觉得「字幕卡了」 */
+        private const val FADE_OUT_MS = 90L
+        private const val FADE_IN_MS = 160L
+
+        /**
+         * 「调整位置」多久没人动就自动锁定。
+         *
+         * 60 秒：足够拖到任何位置并反复微调，又不至于让用户忘了点「完成」之后
+         * 长时间有一条吃触摸的横条挡在桌面上。
+         */
+        private const val EDITING_TIMEOUT_MS = 60_000L
+
+        /** 调整态 / 预览态在无歌词时显示的提示行 */
+        private val HINT_EDITING =
+            OverlayTextComposer.StyledLine("拖动到想要的位置，松手即保存", OverlayTextComposer.Role.CONTEXT)
+        private val HINT_PREVIEW =
+            OverlayTextComposer.StyledLine("悬浮歌词已开启，退到桌面后持续显示", OverlayTextComposer.Role.CONTEXT)
 
         /** 是否已获得「出现在其他应用上」授权 */
         fun canDrawOverlay(context: Context): Boolean = Settings.canDrawOverlays(context)

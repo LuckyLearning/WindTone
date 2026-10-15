@@ -481,6 +481,9 @@ fun MainScreen(
                     // 用 stableKey 做集合查找，和长按菜单保持一致。
                     isFavorite = player.current?.let { it.stableKey in library.favoriteUris } == true,
                     onToggleFavorite = lib::toggleFavorite,
+                    // 播放设置弹层里的悬浮歌词快捷开关（与设置页同一个开关、同一套授权逻辑）
+                    canDrawOverlay = canDrawOverlay,
+                    onLyricOverlay = playerVm::setLyricOverlay,
                 )
             }
 
@@ -513,13 +516,15 @@ fun MainScreen(
                     onCarMode = playerVm::setCarMode,
                     onLyricOverlay = playerVm::setLyricOverlay,
                     onLyricOverlayLines = playerVm::setLyricOverlayLines,
+                    onLyricOverlayTextScale = playerVm::setLyricOverlayTextScale,
+                    onLyricOverlayBackdrop = playerVm::setLyricOverlayBackdrop,
+                    onLyricOverlayPauseMode = playerVm::setLyricOverlayPauseMode,
                     onOverlayEditing = playerVm::setOverlayEditing,
                     onOverlayPreview = playerVm::previewOverlay,
                     canDrawOverlay = canDrawOverlay,
                     overlayHealth = overlayHealth,
                     onLyricScale = playerVm::setLyricScale,
                     onLyricWordByWord = playerVm::setLyricWordByWord,
-                    onNotifyLyrics = playerVm::setNotifyLyrics,
                     onSpeed = playerVm::setSpeed,
                     onSkipSilence = playerVm::setSkipSilence,
                     onClearStats = lib::clearPlayStats,

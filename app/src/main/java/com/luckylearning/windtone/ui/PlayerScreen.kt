@@ -116,6 +116,14 @@ fun PlayerScreen(
     onSpeed: (Float) -> Unit,
     onExportLyrics: (android.net.Uri) -> Unit,
     onShowAudioInfo: () -> Unit = {},
+    /**
+     * 悬浮歌词的快捷入口（播放设置弹层 → 歌词分组）。
+     *
+     * 原先只有「设置 → 歌词 → 桌面悬浮歌词」一个入口，藏在三级菜单里——
+     * 功能再好，用户找不到就等于没有。这里给一个顺手就能碰到的地方。
+     */
+    canDrawOverlay: Boolean = false,
+    onLyricOverlay: (Boolean) -> Unit = {},
     // 车载沉浸态下常驻歌名行右侧的红心需要自己知道收藏状态并触发切换，
     // 手机版歌名在顶栏、不带红心，这两个参数在手机模式下不会被用到。
     isFavorite: Boolean = false,
@@ -590,6 +598,19 @@ fun PlayerScreen(
                 lyricsExportLauncher.launch("${song?.baseName ?: "歌词"}.lrc")
             },
             onAudioInfo = { showOptions = false; onShowAudioInfo() },
+            lyricOverlay = state.lyricOverlay,
+            canDrawOverlay = canDrawOverlay,
+            onToggleLyricOverlay = {
+                when {
+                    // 已开 → 直接关
+                    state.lyricOverlay -> onLyricOverlay(false)
+                    // 未授权 → 先跳系统授权页；授权返回后由 MainActivity 的 onResume
+                    // 重新对账并自动打开开关（与设置页那套完全一致，这里不预置 true，
+                    // 免得界面显示「已开启」而桌面上什么都没有）
+                    canDrawOverlay -> onLyricOverlay(true)
+                    else -> appContext.startOverlayPermissionPage()
+                }
+            },
             onDismiss = { showOptions = false },
         )
     }

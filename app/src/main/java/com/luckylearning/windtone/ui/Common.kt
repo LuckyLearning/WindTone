@@ -1,7 +1,11 @@
 package com.luckylearning.windtone.ui
 import com.luckylearning.windtone.state.PlaybackProgress
 
+import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -717,4 +721,34 @@ fun CountPill(text: String) {
             modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
         )
     }
+}
+
+/**
+ * 打开系统的「显示悬浮窗」授权页，逐级降级。
+ *
+ * ⚠️ 各 ROM 对 `ACTION_MANAGE_OVERLAY_PERMISSION` 支持并不一致：
+ * 带 `package:` 数据在原生系统上会直接定位到本应用，但部分 HyperOS / MIUI 版本
+ * 不认这个 data，会打开一个空的应用列表——用户视角就是「点了什么都没发生」。
+ * 所以这里按「带包名的授权页 → 不带包名的授权页 → 本应用详情页」三级降级，
+ * 三条都不通时返回 false，由调用方把**手动路径**写出来，绝不静默。
+ *
+ * 放在 Common.kt 而不是设置页里，是因为播放设置弹层（⑱ 屏）也要用它——
+ * 悬浮歌词的开关入口在播放页和设置页各有一个。
+ */
+internal fun Context.startOverlayPermissionPage(): Boolean {
+    val pkgUri = Uri.parse("package:$packageName")
+    val candidates = listOf(
+        Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, pkgUri),
+        Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION),
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri),
+    )
+    for (intent in candidates) {
+        try {
+            startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            return true
+        } catch (_: Throwable) {
+            // 换下一个候选
+        }
+    }
+    return false
 }

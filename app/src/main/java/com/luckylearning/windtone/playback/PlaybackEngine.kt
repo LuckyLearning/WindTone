@@ -18,8 +18,10 @@ import com.luckylearning.windtone.data.db.PlayerStateEntity
 import com.luckylearning.windtone.data.db.QueueSongEntity
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.lyrics.Lyrics
+import com.luckylearning.windtone.lyrics.OverlayContentResolver
 import com.luckylearning.windtone.overlay.LyricOverlayBridge
 import com.luckylearning.windtone.overlay.LyricOverlayBus
+import com.luckylearning.windtone.overlay.LyricOverlayService
 import com.luckylearning.windtone.state.PlayMode
 import com.luckylearning.windtone.state.PlaybackProgress
 import com.luckylearning.windtone.state.PlayerUiState
@@ -75,10 +77,12 @@ class PlaybackEngine(
             carMode = prefs.carMode,
             lyricOverlay = prefs.lyricOverlay,
             lyricOverlayLines = prefs.lyricOverlayLines,
+            lyricOverlayTextScale = prefs.lyricOverlayTextScale,
+            lyricOverlayBackdrop = prefs.lyricOverlayBackdrop,
+            lyricOverlayPauseMode = prefs.lyricOverlayPauseMode,
             // 车载模式：启动直接进播放页（跳过库主页）
             playerExpanded = prefs.carMode,
             speed = prefs.playbackSpeed,
-            notifyLyrics = prefs.notifyLyrics,
             skipSilence = prefs.skipSilence,
         )
     )
@@ -120,12 +124,12 @@ class PlaybackEngine(
     private var listenAccumMs = 0L
     private var lastTickAt = 0L
 
-    // 通知栏歌词：记录已推送的行号，避免重复刷新媒体项
-    private var lastPushedLyricIndex = Int.MIN_VALUE
-
     // 播放计数去重
     private var lastCountedMediaId: String? = null
     private var lastCountedAt = 0L
+
+    /** 上一次尝试把悬浮窗服务拉回来的时间，用于 30 秒节流（见 [reviveOverlayIfNeeded]） */
+    private var lastOverlayReviveAt = 0L
 
     init {
         AudioFx.init(app)
@@ -142,6 +146,17 @@ class PlaybackEngine(
                 if (h.status == LyricOverlayBus.Status.FAILED) {
                     if (prefs.lyricOverlay) setLyricOverlay(false)
                     messages.post("桌面悬浮歌词启动失败：${h.detail}")
+                }
+            }
+        }
+        // 悬浮窗服务请求「退出调整态」（长时间无操作，见 LyricOverlayService.armEditingTimeout）。
+        // 状态归播放域所有，所以由服务发请求、这里来收——顺手提示一句，
+        // 否则用户会以为是自己点错了什么。
+        scope.launch {
+            LyricOverlayBridge.exitEditingRequests.collect {
+                if (_player.value.overlayEditing) {
+                    setOverlayEditing(false)
+                    messages.post("悬浮歌词已自动锁定位置，需要再调整可重新点「调整悬浮歌词位置」")
                 }
             }
         }
@@ -255,7 +270,7 @@ class PlaybackEngine(
     /**
      * 是否把这次曲目切换计为一次播放。
      *
-     * `replaceMediaItem`（回填封面 / 下发通知栏歌词）同样会触发 onMediaItemTransition，
+     * `replaceMediaItem`（回填封面）同样会触发 onMediaItemTransition，
      * 若不加判别，每首歌会被多计若干次播放。同一首歌在 15 秒内的重复切换视为非用户行为。
      */
     private fun shouldCountPlay(mediaId: String): Boolean {
@@ -623,17 +638,6 @@ class PlaybackEngine(
         PlayerHandle.setSkipSilence(enabled)
     }
 
-    /** 通知栏 / 锁屏滚动显示当前歌词行（默认关闭） */
-    override fun setNotifyLyrics(enabled: Boolean) {
-        prefs.notifyLyrics = enabled
-        _player.update { it.copy(notifyLyrics = enabled) }
-        lastPushedLyricIndex = Int.MIN_VALUE
-        if (!enabled) {
-            // 关掉时把当前媒体项上残留的歌词行擦掉，否则通知会一直显示最后一句
-            restoreNotificationMetadata()
-        }
-    }
-
     // ---------------------------------------------------------------- 播放界面
 
     override fun openPlayer() {
@@ -685,6 +689,9 @@ class PlaybackEngine(
     override fun setLyricWordByWord(enabled: Boolean) {
         prefs.lyricWordByWord = enabled
         _player.update { it.copy(lyricWordByWord = enabled) }
+        // 逐字开关同时管着桌面悬浮歌词的逐字染色——服务独立存活，
+        // 得敲它一下才知道要重绘（顺带给一次预览，当场能看出区别）。
+        previewOverlayAfterConfigChange()
     }
 
     /** 车载模式：启动直进播放页 + 播放页 5 秒无操作进入沉浸态 */
@@ -728,11 +735,46 @@ class PlaybackEngine(
         val normalized = if (lines == 3) 3 else 1
         prefs.lyricOverlayLines = normalized
         _player.update { it.copy(lyricOverlayLines = normalized) }
-        if (prefs.lyricOverlay) {
-            val c = controller
-            if (c != null) publishLyricToOverlay(c.currentPosition.coerceAtLeast(0L), c.isPlaying)
-            startOverlayPreview()
-        }
+        previewOverlayAfterConfigChange()
+    }
+
+    /** 悬浮歌词字号档位：0 小 / 1 中 / 2 大 */
+    override fun setLyricOverlayTextScale(scale: Int) {
+        val normalized = scale.coerceIn(0, 2)
+        prefs.lyricOverlayTextScale = normalized
+        _player.update { it.copy(lyricOverlayTextScale = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    /** 悬浮歌词底板：0 无 / 1 半透明 / 2 深色实底 */
+    override fun setLyricOverlayBackdrop(mode: Int) {
+        val normalized = mode.coerceIn(0, 2)
+        prefs.lyricOverlayBackdrop = normalized
+        _player.update { it.copy(lyricOverlayBackdrop = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    /** 暂停时的表现：0 淡出 / 1 隐藏 */
+    override fun setLyricOverlayPauseMode(mode: Int) {
+        val normalized = mode.coerceIn(0, 1)
+        prefs.lyricOverlayPauseMode = normalized
+        _player.update { it.copy(lyricOverlayPauseMode = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    /**
+     * 外观 / 排版配置改完的统一收尾。
+     *
+     * 服务是独立存活的，光写 Prefs 它不知道（没有新歌词就不会重绘），
+     * 所以这里做两件事：通知重绘 + 给一次前台预览。
+     * 用户改完字号 / 底板 / 行数能**当场**看到效果，不用退到桌面去验证。
+     */
+    private fun previewOverlayAfterConfigChange() {
+        LyricOverlayBridge.bumpAppearance()
+        if (!prefs.lyricOverlay) return
+        val c = controller
+        if (c != null) publishLyricToOverlay(c.currentPosition.coerceAtLeast(0L), c.isPlaying)
+        startOverlayPreview()
     }
 
     /**
@@ -843,7 +885,6 @@ class PlaybackEngine(
         flushListen()
         saveQueue()
         currentLyricsSong = mediaId
-        lastPushedLyricIndex = Int.MIN_VALUE
         _player.update {
             it.copy(
                 current = song,
@@ -927,10 +968,12 @@ class PlaybackEngine(
                 }
 
                 accumulateListening(c.currentMediaItem?.mediaId, playing)
-                if (playing) maybePushLyricToNotification(pos)
                 // 悬浮歌词：与进度同频驱动，内部按「行文字是否变化」去重，
                 // 未开启开关时是纯字段比较，开销可忽略。
                 publishLyricToOverlay(pos, playing)
+                // 顺便看一眼服务还在不在（进程被 ROM 杀掉的情况）——内部带 30 秒节流，
+                // 正常情况下就是读一个 volatile boolean。
+                reviveOverlayIfNeeded()
 
                 if (!playing && !appForeground) break
                 // 播放中 200ms 刷新，暂停时降到 1s，避免空转耗电
@@ -964,81 +1007,52 @@ class PlaybackEngine(
     /**
      * 把当前歌词行送到桌面悬浮窗。
      *
-     * 与 [maybePushLyricToNotification] 的区别：
-     *  - 后者只在行号变化时才 `replaceMediaItem`，因为改媒体项是有代价的；
-     *  - 这里**每 tick 都推**，去重放在 [LyricOverlayBridge] 内部按内容比对完成。
-     *    这样暂停 / 恢复播放导致的透明度变化也能立刻反映到悬浮窗上，
-     *    而纯文字不变时不会真的去动 View。
+     * 「该显示哪一句」交给 [OverlayContentResolver]——前奏回落歌名、间奏回溯上一句、
+     * 上下文行、双语副行都由它一次算清；这里只负责把播放位置和曲目信息喂进去。
+     * 好处是那段最容易出错、也最需要测试的逻辑，终于能在 JVM 单测里跑。
      *
-     * 上下文行（上一行 / 下一行）一并下发：手机模式忽略，车载模式用来渲染
-     * 「3 行窗口、高亮当前行」。无歌词（纯音乐 / 未匹配到）时不推送空行，
-     * 悬浮窗会保持上次内容或隐藏。
+     * **每 tick 都推**，去重放在 [LyricOverlayBridge] 内部按内容比对完成。这样暂停 /
+     * 恢复播放导致的透明度变化也能立刻反映到悬浮窗上，而纯文字不变时不会真的去动 View。
+     *
+     * 无歌词（纯音乐 / 未匹配到）时不会推送空内容——resolver 会回落成歌名，
+     * 真的连歌名都没有时才算「没东西可显示」，窗口保持隐藏。
      */
     private fun publishLyricToOverlay(positionMs: Long, playing: Boolean) {
         if (!prefs.lyricOverlay) return
         val state = _player.value
-        val lyrics = state.lyrics
-        if (!lyrics.isEmpty && lyrics.synced) {
-            val i = lyrics.indexAt(positionMs + state.lyricOffsetMs)
-            val text = lyrics.lines.getOrNull(i)?.text.orEmpty()
-            val prev = lyrics.lines.getOrNull(i - 1)?.text.orEmpty()
-            val next = lyrics.lines.getOrNull(i + 1)?.text.orEmpty()
-            LyricOverlayBridge.publish(text, playing, prev, next)
-        } else {
-            // 无时间轴歌词（纯文本）没法跟着走，显示标题更有用
-            LyricOverlayBridge.publish(state.current?.title.orEmpty(), playing)
-        }
-    }
-
-    /** 把当前歌词行下发到通知栏 / 锁屏（默认关闭，见设置页） */
-    private fun maybePushLyricToNotification(positionMs: Long) {
-        if (!prefs.notifyLyrics) return
-        val c = controller ?: return
-        val state = _player.value
-        val lyrics = state.lyrics
-        if (lyrics.isEmpty || !lyrics.synced) return
-        val i = lyrics.indexAt(positionMs + state.lyricOffsetMs)
-        if (i < 0 || i == lastPushedLyricIndex) return
-        val itemIndex = c.currentMediaItemIndex
-        if (itemIndex < 0 || itemIndex >= c.mediaItemCount) return
-        val line = lyrics.lines.getOrNull(i) ?: return
-        lastPushedLyricIndex = i
-        val item = c.getMediaItemAt(itemIndex)
-        runCatching {
-            c.replaceMediaItem(
-                itemIndex,
-                item.buildUpon()
-                    .setMediaMetadata(
-                        item.mediaMetadata.buildUpon()
-                            .setSubtitle(line.text.ifBlank { " " })
-                            .build()
-                    )
-                    .build(),
-            )
-        }
+        val resolved = OverlayContentResolver.resolve(
+            lyrics = state.lyrics,
+            positionMs = positionMs,
+            offsetMs = state.lyricOffsetMs,
+            title = state.current?.title.orEmpty(),
+        )
+        // 位置只在启用逐字染色时才下发：否则它每 200ms 变一次，
+        // 会把「内容不变就不重组」的去重彻底废掉。
+        LyricOverlayBridge.publish(
+            resolved = resolved,
+            playing = playing,
+            positionMs = if (prefs.lyricWordByWord) positionMs + state.lyricOffsetMs else 0L,
+        )
     }
 
     /**
-     * 擦掉当前媒体项上的歌词行（关闭「通知栏显示歌词」时调用）。
+     * 悬浮窗服务被系统杀掉之后把它拉回来。
      *
-     * 歌词只写在 `MediaMetadata.subtitle` 上，`title`/`artist` 原样保留 ——
-     * 队列抽屉和桌面小组件都读 `artist`，不能被歌词污染。
+     * 为什么必须有：`START_STICKY` 在 Android 12+ 的后台限制下并不可靠，
+     * 而 `sync()` 原先只在「App 启动 / 开关切换 / 自检 / 预览」四处被调用——
+     * 于是长途导航途中服务一旦被杀，用户侧就是「开关明明开着，字幕再也没出现过」，
+     * 且没有任何自救路径。
+     *
+     * 节流 30 秒是必须的：ROM 若持续拒绝挂窗，无节流会退化成「每切一首歌重启一次服务」
+     * 的死循环，反而更费电。
      */
-    private fun restoreNotificationMetadata() {
-        val c = controller ?: return
-        val itemIndex = c.currentMediaItemIndex
-        if (itemIndex < 0 || itemIndex >= c.mediaItemCount) return
-        val item = c.getMediaItemAt(itemIndex)
-        val md = item.mediaMetadata
-        if (md.subtitle.isNullOrBlank()) return
-        runCatching {
-            c.replaceMediaItem(
-                itemIndex,
-                item.buildUpon()
-                    .setMediaMetadata(md.buildUpon().setSubtitle(null).build())
-                    .build(),
-            )
-        }
+    private fun reviveOverlayIfNeeded() {
+        if (!prefs.lyricOverlay) return
+        if (LyricOverlayService.serviceAlive) return
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastOverlayReviveAt < OVERLAY_REVIVE_INTERVAL_MS) return
+        lastOverlayReviveAt = now
+        LyricOverlayBridge.sync(app, true)
     }
 
     companion object {
@@ -1046,6 +1060,14 @@ class PlaybackEngine(
 
         /** 开启桌面悬浮歌词后的前台预览时长：够用户看清「确实开了」，又不至于碍事 */
         private const val OVERLAY_PREVIEW_MS = 6_000L
+
+        /**
+         * 悬浮窗服务被系统杀掉后的重建节流间隔。
+         *
+         * 有节流才敢在 ticker 里无脑调用：ROM 若持续拒绝挂窗（比如授权被悄悄撤销），
+         * 没有节流会退化成「每 200ms 尝试启动一次前台服务」的灾难。
+         */
+        private const val OVERLAY_REVIVE_INTERVAL_MS = 30_000L
     }
 }
 
@@ -1076,7 +1098,6 @@ interface PlayerActions {
     fun cancelSleep()
     fun setLoudness(gainMb: Int)
     fun setSkipSilence(enabled: Boolean)
-    fun setNotifyLyrics(enabled: Boolean)
     fun openPlayer()
     fun closePlayer()
     fun setLyricOffset(deltaMs: Int)
@@ -1086,6 +1107,9 @@ interface PlayerActions {
     fun setCarMode(enabled: Boolean)
     fun setLyricOverlay(enabled: Boolean)
     fun setLyricOverlayLines(lines: Int)
+    fun setLyricOverlayTextScale(scale: Int)
+    fun setLyricOverlayBackdrop(mode: Int)
+    fun setLyricOverlayPauseMode(mode: Int)
     fun canDrawOverlay(): Boolean
     fun setOverlayEditing(editing: Boolean)
     fun setAppForeground(foreground: Boolean)

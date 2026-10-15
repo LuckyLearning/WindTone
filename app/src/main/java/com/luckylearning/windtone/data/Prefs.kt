@@ -152,12 +152,33 @@ class Prefs(context: Context) {
         get() = sp.getInt(KEY_LYRIC_OVERLAY_Y, Int.MIN_VALUE)
         set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_Y, value).apply()
 
-    // ---------------- 批次 6 新增 ----------------
+    /**
+     * 悬浮歌词字号档位：0 小 / 1 中（默认）/ 2 大。
+     *
+     * 存档位而不是存裸的 sp 值，是为了**改基准字号时老用户跟着走**——
+     * 裸值一旦存下来，日后调整基准就只对新用户生效了。
+     */
+    var lyricOverlayTextScale: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_TEXT_SCALE, 1).coerceIn(0, 2)
+        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_TEXT_SCALE, value.coerceIn(0, 2)).apply()
 
-    /** 通知栏/锁屏是否滚动显示当前歌词行（默认关闭） */
-    var notifyLyrics: Boolean
-        get() = sp.getBoolean(KEY_NOTIFY_LYRICS, false)
-        set(value) = sp.edit().putBoolean(KEY_NOTIFY_LYRICS, value).apply()
+    /**
+     * 悬浮歌词底板：0 无底板 / 1 半透明深色（默认）/ 2 深色实底。
+     *
+     * 默认为 1 而不是 0：锁定态曾经是「纯白字 + 投影、无底板」，
+     * 在亮色壁纸 / 桌面白色搜索框上白字直接糊掉——那是被真机证实过的坑。
+     * 允许选 0 是尊重「壁纸很干净、不想有块底色」的需求，但设置页要写明代价。
+     */
+    var lyricOverlayBackdrop: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_BACKDROP, 1).coerceIn(0, 2)
+        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_BACKDROP, value.coerceIn(0, 2)).apply()
+
+    /** 暂停时的表现：0 淡出（默认，保留最后一句便于看清唱到哪）/ 1 隐藏 */
+    var lyricOverlayPauseMode: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_PAUSE_MODE, 0).coerceIn(0, 1)
+        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_PAUSE_MODE, value.coerceIn(0, 1)).apply()
+
+    // ---------------- 批次 6 新增 ----------------
 
     /** 跳过音频文件里的静音段（整轨/现场录音常用） */
     var skipSilence: Boolean
@@ -269,6 +290,9 @@ class Prefs(context: Context) {
         const val KEY_LYRIC_OVERLAY_X = "lyric_overlay_x"
         const val KEY_LYRIC_OVERLAY_Y = "lyric_overlay_y"
         const val KEY_LYRIC_OVERLAY_LINES = "lyric_overlay_lines"
+        const val KEY_LYRIC_OVERLAY_TEXT_SCALE = "lyric_overlay_text_scale"
+        const val KEY_LYRIC_OVERLAY_BACKDROP = "lyric_overlay_backdrop"
+        const val KEY_LYRIC_OVERLAY_PAUSE_MODE = "lyric_overlay_pause_mode"
         const val KEY_PERM_ASKED = "perm_asked"
         const val KEY_DYNAMIC_THEME = "dynamic_theme"
         const val KEY_SPEED = "playback_speed"
@@ -278,7 +302,6 @@ class Prefs(context: Context) {
         const val KEY_EQ_BASS = "eq_bass"
         const val KEY_EQ_VIRTUAL = "eq_virtual"
         const val KEY_EQ_LOUDNESS = "eq_loudness"
-        const val KEY_NOTIFY_LYRICS = "notify_lyrics"
         const val KEY_SKIP_SILENCE = "skip_silence"
         const val KEY_AUTO_UPDATE = "auto_check_update"
         const val KEY_LAST_UPDATE_CHECK = "last_update_check_at"

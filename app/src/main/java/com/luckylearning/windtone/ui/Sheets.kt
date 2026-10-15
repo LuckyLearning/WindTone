@@ -828,6 +828,11 @@ fun PlayerOptionsSheet(
     onOpenSleep: () -> Unit,
     onExportLyrics: () -> Unit,
     onAudioInfo: () -> Unit,
+    /** 悬浮歌词开关（右侧 ✓ 表示已开启） */
+    lyricOverlay: Boolean,
+    /** 是否已拿到「显示悬浮窗」授权；未授权时点击会去系统授权页 */
+    canDrawOverlay: Boolean,
+    onToggleLyricOverlay: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -866,6 +871,19 @@ fun PlayerOptionsSheet(
             SpeedControl(speed = speed, onSpeed = onSpeed)
 
             SectionLabel("歌词")
+            // 悬浮歌词放在「歌词」分组第一位：它是这首歌「往哪儿显示」最常用的一个选择，
+            // 比导出歌词高频得多。右侧 ✓ 即"已开启"，与 OptionRow 的规范一致（不带箭头）。
+            OptionRow(
+                icon = AppIcons.Lyrics,
+                title = "桌面悬浮歌词",
+                subtitle = when {
+                    lyricOverlay -> "已开启 · 退到桌面 / 导航页后显示在屏幕最上层"
+                    !canDrawOverlay -> "需要系统「显示悬浮窗」授权，点击后自动跳转"
+                    else -> "在桌面最上层显示当前歌词行（App 内自动隐藏）"
+                },
+                selected = lyricOverlay,
+                onClick = onToggleLyricOverlay,
+            )
             LyricScaleControl(scale = lyricScale, onScale = onLyricScale)
             LyricOffsetControl(
                 offsetMs = lyricOffsetMs,

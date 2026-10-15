@@ -188,6 +188,12 @@ data class PlayerUiState(
     val lyricOverlay: Boolean = false,
     /** 悬浮歌词显示行数：1 = 只显示当前行；3 = 当前行 + 上下各一行上下文 */
     val lyricOverlayLines: Int = 1,
+    /** 悬浮歌词字号档位：0 小 / 1 中 / 2 大 */
+    val lyricOverlayTextScale: Int = 1,
+    /** 悬浮歌词底板：0 无 / 1 半透明 / 2 深色实底 */
+    val lyricOverlayBackdrop: Int = 1,
+    /** 悬浮歌词暂停时：0 淡出 / 1 隐藏 */
+    val lyricOverlayPauseMode: Int = 0,
     /** 悬浮歌词是否处于「调整位置」模式（临时可拖动，会话级，不落盘） */
     val overlayEditing: Boolean = false,
     val playerExpanded: Boolean = false,
@@ -197,7 +203,6 @@ data class PlayerUiState(
     val queue: List<QueueEntry> = emptyList(),
     val audioInfo: AudioInspector.Info? = null,
     val audioInfoLoading: Boolean = false,
-    val notifyLyrics: Boolean = false,
     val skipSilence: Boolean = false,
 )
 

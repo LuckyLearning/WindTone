@@ -1,16 +1,13 @@
 package com.luckylearning.windtone.playback
 
 import android.app.PendingIntent
-import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
-import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.luckylearning.windtone.MainActivity
@@ -36,12 +33,6 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
-
-        // 「通知栏/锁屏显示歌词」的落点。Media3 的默认实现里，
-        // 通知正文只取 MediaMetadata.artist（反编译可见：getNotificationContentText
-        // 就是一句 getfield artist），写进 subtitle 的歌词行永远看不见 ——
-        // 这就是那个开关此前完全无效的原因。详见 [LyricNotificationProvider]。
-        setMediaNotificationProvider(LyricNotificationProvider(this))
 
         val player = ExoPlayer.Builder(this)
             .setAudioAttributes(
@@ -146,26 +137,5 @@ class PlaybackService : MediaSessionService() {
         }
         mediaSession = null
         super.onDestroy()
-    }
-}
-
-/**
- * 让媒体通知的第二行能显示歌词。
- *
- * Media3 默认的通知 provider 取正文时只认 [MediaMetadata.artist]
- * （`DefaultMediaNotificationProvider.getNotificationContentText()` 的字节码里
- * 只有一句 `getfield artist`），所以写进 `subtitle` 的歌词行在通知里根本看不见 ——
- * 「通知栏/锁屏显示歌词」开关因此从未生效。这里把取值顺序改成「有歌词用歌词，否则用歌手」。
- *
- * 为什么不反过来把歌词写进 `artist`：`artist` 还被播放队列抽屉
- * （`PlaybackEngine.refreshQueue`）与桌面小组件（[pushWidget]）消费，
- * 覆盖成歌词会让那两处显示错信息。`subtitle` 目前只有这一个消费点，改它最干净。
- */
-private class LyricNotificationProvider(context: Context) : DefaultMediaNotificationProvider(context) {
-
-    override fun getNotificationContentText(mediaMetadata: MediaMetadata): CharSequence? {
-        val lyric = mediaMetadata.subtitle
-        if (!lyric.isNullOrBlank()) return lyric
-        return mediaMetadata.artist
     }
 }

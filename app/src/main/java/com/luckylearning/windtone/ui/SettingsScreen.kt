@@ -99,13 +99,15 @@ fun SettingsScreen(
     onCarMode: (Boolean) -> Unit,
     onLyricOverlay: (Boolean) -> Unit,
     onLyricOverlayLines: (Int) -> Unit,
+    onLyricOverlayTextScale: (Int) -> Unit,
+    onLyricOverlayBackdrop: (Int) -> Unit,
+    onLyricOverlayPauseMode: (Int) -> Unit,
     onOverlayEditing: (Boolean) -> Unit,
     onOverlayPreview: () -> Unit,
     canDrawOverlay: Boolean,
     overlayHealth: LyricOverlayBus.Health,
     onLyricScale: (Float) -> Unit,
     onLyricWordByWord: (Boolean) -> Unit,
-    onNotifyLyrics: (Boolean) -> Unit,
     onSpeed: (Float) -> Unit,
     onSkipSilence: (Boolean) -> Unit,
     onClearStats: () -> Unit,
@@ -140,8 +142,8 @@ fun SettingsScreen(
     var showMinDurationDialog by remember { mutableStateOf(false) }
     // 下载线路选择弹窗
     var showRouteDialog by remember { mutableStateOf(false) }
-    // 桌面悬浮歌词的行数选择弹窗（1 行 / 3 行）
-    var showOverlayLinesDialog by remember { mutableStateOf(false) }
+    // 悬浮歌词的外观选项（行数 / 字号 / 底板 / 暂停行为）共用一个选项弹层
+    var overlayChoice by remember { mutableStateOf<OverlayChoice?>(null) }
     // 用户点过悬浮歌词开关但还没授权 → 展开下方授权指引，授权成功返回后自动收起
     var overlayHintVisible by remember { mutableStateOf(false) }
     // 三条跳转路都走不通（ROM 连系统授权页都不给开）→ 指引卡里改显示手动路径
@@ -257,8 +259,8 @@ fun SettingsScreen(
                     )
 
                     // ------------------------------------------------ 歌词
-                    // 「歌词往哪儿显示」的三件事（逐字 / 通知栏 / 桌面悬浮）此前被拆在
-                    // 「外观」与「歌词」两组里，现在统一收到这里。
+                    // 歌词相关设置（字号 / 逐字 / 桌面悬浮）统一收在这里，
+                    // 不再散落在「外观」组里。
                     SectionTitle("歌词")
                     SliderRow(
                         title = "歌词字号 ${"%.1f".format(player.lyricScale)}x",
@@ -271,12 +273,6 @@ fun SettingsScreen(
                         subtitle = "当前行有逐字时间轴时，按字染色（.krc / .yrc / 增强型 LRC）",
                         checked = player.lyricWordByWord,
                         onCheckedChange = onLyricWordByWord,
-                    )
-                    SwitchRow(
-                        title = "通知栏 / 锁屏显示歌词",
-                        subtitle = "把当前歌词行显示在媒体通知的第二行（关闭后恢复显示歌手）",
-                        checked = player.notifyLyrics,
-                        onCheckedChange = onNotifyLyrics,
                     )
                     SwitchRow(
                         title = "桌面悬浮歌词",
@@ -306,8 +302,9 @@ fun SettingsScreen(
                             }
                         },
                     )
-                    // 行数：1 行 / 3 行。放在开关正下方，与悬浮歌词绑定成一个整体；
-                    // 开关关着也允许预设，所以不做可见性 gating。
+                    // 悬浮歌词的四个外观选项：行数 / 字号 / 底板 / 暂停行为。
+                    // 都紧跟在开关下方，与它绑成一个整体；开关关着也允许**预设**，
+                    // 所以不做可见性 gating。四项共用同一个选项弹层，改完立刻给一次 6 秒预览。
                     ActionRow(
                         title = "悬浮歌词行数",
                         subtitle = if (player.lyricOverlayLines == 3) {
@@ -315,7 +312,36 @@ fun SettingsScreen(
                         } else {
                             "1 行：只显示当前歌词行（一行放不下时自动折行）"
                         },
-                        onClick = { showOverlayLinesDialog = true },
+                        onClick = { overlayChoice = OverlayChoice.LINES },
+                        chevron = true,
+                    )
+                    ActionRow(
+                        title = "悬浮歌词字号",
+                        subtitle = "大屏与车机上建议调大一档",
+                        onClick = { overlayChoice = OverlayChoice.TEXT_SCALE },
+                        trailing = OVERLAY_TEXT_SCALE_LABELS[player.lyricOverlayTextScale],
+                        chevron = true,
+                    )
+                    ActionRow(
+                        title = "悬浮歌词底板",
+                        subtitle = if (player.lyricOverlayBackdrop == 0) {
+                            "无底板最干净，但亮色壁纸上白字可能看不清"
+                        } else {
+                            "垫一层底色，任何壁纸上都读得清"
+                        },
+                        onClick = { overlayChoice = OverlayChoice.BACKDROP },
+                        trailing = OVERLAY_BACKDROP_LABELS[player.lyricOverlayBackdrop],
+                        chevron = true,
+                    )
+                    ActionRow(
+                        title = "暂停时的悬浮歌词",
+                        subtitle = if (player.lyricOverlayPauseMode == 1) {
+                            "暂停即隐藏，恢复播放时再出现"
+                        } else {
+                            "淡出到半透明，方便看清唱到哪一句"
+                        },
+                        onClick = { overlayChoice = OverlayChoice.PAUSE },
+                        trailing = OVERLAY_PAUSE_LABELS[player.lyricOverlayPauseMode],
                         chevron = true,
                     )
                     // 运行状态：开关打开且已授权时显示。这一行是排障的关键 ——
@@ -804,52 +830,60 @@ fun SettingsScreen(
         )
     }
 
-    // 悬浮歌词行数：1 行 / 3 行（会话无关的偏好，改完立刻预览一次）
-    if (showOverlayLinesDialog) {
+    // 悬浮歌词的四个外观选项共用同一个弹层：标题 / 说明 / 选项列表都由 [OverlayChoice] 提供，
+    // 选中项右侧打 ✓，点任意一项即生效并关闭（改完引擎会给一次 6 秒前台预览）。
+    overlayChoice?.let { choice ->
+        val selected = when (choice) {
+            OverlayChoice.LINES -> player.lyricOverlayLines
+            OverlayChoice.TEXT_SCALE -> player.lyricOverlayTextScale
+            OverlayChoice.BACKDROP -> player.lyricOverlayBackdrop
+            OverlayChoice.PAUSE -> player.lyricOverlayPauseMode
+        }
         AlertDialog(
-            onDismissRequest = { showOverlayLinesDialog = false },
-            title = { Text("悬浮歌词行数") },
+            onDismissRequest = { overlayChoice = null },
+            title = { Text(choice.title) },
             text = {
                 Column {
                     Text(
-                        "桌面悬浮歌词一次显示几行。3 行模式当前行高亮、上下两行压暗，大屏与车机上更好读；" +
-                            "1 行模式下这一行放不下时会自动折行。改完立刻给一次 6 秒预览。",
+                        choice.intro,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(6.dp))
-                    listOf(
-                        Triple(1, "1 行", "只显示当前歌词行，放不下时自动折行"),
-                        Triple(3, "3 行", "上一行 / 当前行 / 下一行，当前行高亮"),
-                    ).forEach { (value, label, hint) ->
+                    choice.options.forEach { option ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(10.dp))
                                 .clickable {
-                                    onLyricOverlayLines(value)
-                                    showOverlayLinesDialog = false
+                                    when (choice) {
+                                        OverlayChoice.LINES -> onLyricOverlayLines(option.value)
+                                        OverlayChoice.TEXT_SCALE -> onLyricOverlayTextScale(option.value)
+                                        OverlayChoice.BACKDROP -> onLyricOverlayBackdrop(option.value)
+                                        OverlayChoice.PAUSE -> onLyricOverlayPauseMode(option.value)
+                                    }
+                                    overlayChoice = null
                                 }
                                 .padding(vertical = 10.dp, horizontal = 4.dp),
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text(
-                                    label,
+                                    option.label,
                                     style = MaterialTheme.typography.bodyLarge,
-                                    color = if (value == player.lyricOverlayLines) {
+                                    color = if (option.value == selected) {
                                         MaterialTheme.colorScheme.primary
                                     } else {
                                         MaterialTheme.colorScheme.onSurface
                                     },
                                 )
                                 Text(
-                                    hint,
+                                    option.hint,
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            if (value == player.lyricOverlayLines) {
+                            if (option.value == selected) {
                                 Icon(
                                     Icons.Filled.Check,
                                     contentDescription = "已选择",
@@ -862,7 +896,7 @@ fun SettingsScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showOverlayLinesDialog = false }) { Text("关闭") }
+                TextButton(onClick = { overlayChoice = null }) { Text("关闭") }
             },
         )
     }
@@ -1064,6 +1098,61 @@ private fun UpdateDialog(
 
 // ---------------------------------------------------------------- 小组件
 
+/** 选项弹层里的一项 */
+private data class OverlayOption(val value: Int, val label: String, val hint: String)
+
+/**
+ * 悬浮歌词四个外观选项（行数 / 字号 / 底板 / 暂停表现）。
+ *
+ * 把「标题 + 说明 + 选项列表」一起收进枚举，是为了让四个设置项共用同一个弹层实现——
+ * 每多一个选项就多复制一份 `AlertDialog` 是不可维护的，而且样式迟早会走样。
+ */
+private enum class OverlayChoice(
+    val title: String,
+    val intro: String,
+    val options: List<OverlayOption>,
+) {
+    LINES(
+        "悬浮歌词行数",
+        "桌面悬浮歌词一次显示几行。选中后立刻给一次 6 秒预览。",
+        listOf(
+            OverlayOption(1, "1 行", "只显示当前歌词行，放不下时自动折行"),
+            OverlayOption(3, "3 行", "上一行 / 当前行 / 下一行，当前行高亮"),
+        ),
+    ),
+    TEXT_SCALE(
+        "悬浮歌词字号",
+        "以正文为基准。大屏与车机建议调大一档；一行放不下会自动折行，不会横向溢出屏幕。",
+        listOf(
+            OverlayOption(0, "小", "约正文的 0.8 倍"),
+            OverlayOption(1, "中", "默认，与播放页歌词接近"),
+            OverlayOption(2, "大", "约正文的 1.25 倍"),
+        ),
+    ),
+    BACKDROP(
+        "悬浮歌词底板",
+        "字幕下面垫什么。亮色壁纸上「无底板的白字」会看不清——投影在高分屏上几乎等于没有。",
+        listOf(
+            OverlayOption(0, "无底板", "最干净，需要壁纸足够深"),
+            OverlayOption(1, "半透明", "默认，任何壁纸上都读得清"),
+            OverlayOption(2, "深色实底", "对比最强，适合花哨壁纸"),
+        ),
+    ),
+    PAUSE(
+        "暂停时的悬浮歌词",
+        "暂停之后字幕怎么处理。",
+        listOf(
+            OverlayOption(0, "淡出", "默认，保留最后一句便于回看唱到哪"),
+            OverlayOption(1, "隐藏", "暂停即消失，桌面更干净"),
+        ),
+    ),
+}
+
+/** 设置页行尾摘要用的短标签（与弹层选项一一对应，按档位下标取） */
+private val OVERLAY_TEXT_SCALE_LABELS = listOf("小", "中", "大")
+private val OVERLAY_BACKDROP_LABELS = listOf("无底板", "半透明", "深色实底")
+private val OVERLAY_PAUSE_LABELS = listOf("淡出", "隐藏")
+
 @Composable
 private fun SectionTitle(text: String) {
     Text(
@@ -1242,20 +1331,5 @@ internal fun formatListened(ms: Long): String {
  * 再不行就退到应用详情页（那里一定有权限入口）。三条路都断时返回 false，
  * 由调用方把手动路径写给用户，绝不静默失败。
  */
-private fun Context.startOverlayPermissionPage(): Boolean {
-    val pkgUri = Uri.parse("package:$packageName")
-    val candidates = listOf(
-        Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, pkgUri),
-        Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION),
-        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri),
-    )
-    for (intent in candidates) {
-        try {
-            startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            return true
-        } catch (_: Throwable) {
-            // 换下一个候选
-        }
-    }
-    return false
-}
+// 系统授权页的跳转（三级降级 + 手动路径兜底）已提到 Common.kt：
+// 播放设置弹层（⑱ 屏）与设置页都要用它，不能只留在这一处。
