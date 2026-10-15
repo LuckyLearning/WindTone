@@ -70,6 +70,8 @@ internal val LibraryView.icon: ImageVector
 internal fun LibraryHeader(
     library: LibraryUiState,
     granted: Boolean,
+    /** 打开左侧抽屉（v1.1.3 起取代底部五视图导航，见 `LibraryDrawer.kt`） */
+    onOpenDrawer: () -> Unit,
     onQuery: (String) -> Unit,
     onSort: (SortOrder) -> Unit,
     onRequestPermission: () -> Unit,
@@ -92,6 +94,17 @@ internal fun LibraryHeader(
 
     Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // 汉堡按钮：抽屉的唯一入口，放在标题之前（效果图 ①C 的 `.tb-row` 顺序
+            // = 汉堡 → 库标题 → 首数胶囊 → 弹性空隙 → 搜索 / 排序 / 更多）。
+            // 它出现在**所有**曲库状态下（首次进入、扫描中、搜索态都渲染本组件），
+            // 所以「扫描中也能拉开抽屉切视图」是天然成立的。
+            IconButton(onClick = onOpenDrawer) {
+                Icon(
+                    imageVector = AppIcons.Menu,
+                    contentDescription = "打开侧边抽屉",
+                    tint = MaterialTheme.colorScheme.onBackground,
+                )
+            }
             Text(
                 text = "本地音乐",
                 style = MaterialTheme.typography.headlineSmall,

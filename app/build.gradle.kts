@@ -259,4 +259,9 @@ dependencies {
     // Robolectric：让 Room（真实 SQLite）能在 JVM 单测里跑，用于 DAO / CASCADE 回归测试
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
+    // Compose UI 冒烟测试：Robolectric + compose rule → 不需要模拟器就能
+    // 断言「某块界面渲染出来了」「点某个按钮触发了哪个回调」
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    // createComposeRule() 需要一个空壳 ComponentActivity，由它提供（只进 debug 变体）
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

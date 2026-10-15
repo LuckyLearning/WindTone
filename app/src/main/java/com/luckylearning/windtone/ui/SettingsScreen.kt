@@ -10,6 +10,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -30,6 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -55,33 +57,46 @@ import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.luckylearning.windtone.BuildConfig
 import com.luckylearning.windtone.data.DataMaintenance
 import com.luckylearning.windtone.data.DownloadRoute
 import com.luckylearning.windtone.data.UpdateChecker
 
 /**
- * 设置页的层级：一个主页面 + 三个子页。
+ * 设置页的层级：**一个主页面 + 六个子页**。
  *
- * 分层的理由见 docs/ui/index.html「四、设置页」：主页面只放**会反复改的开关 / 滑块**，
- * 一次性配置（短音频过滤）、只读信息（统计 / 版本 / 隐私）和排障工具
- * （崩溃日志 / 下载线路）各自收进子页 —— 它们平铺在同一条滚动里时，改一个开关要滚过
- * 六组无关内容。子页里按返回键先回主页面，不回退整个设置页。
+ * v1.1.3 二次重构（效果图 ㉙ 与其后的 ㉙B/C/D）：
+ *  - 主页面**只放六张二级分类入口卡**（[CategoryRow]），一屏放下、任何设置最多两层直达；
+ *  - 外观 / 播放 / 歌词 从「平铺在主页面上的三组」下沉为子页 —— 起因是桌面悬浮歌词的
+ *    五个外观选项加入后，「歌词」一组独占两屏，主页又开始长回去；
+ *  - 子页里按系统返回键先回主页面，回主页后再按才关闭整个设置页。
+ *
+ * 分层与 chevron 规范见 docs/ui/index.html「四、设置页」：只有 [CategoryRow] 与
+ * [ActionRow] 能带右箭头，[OptionRow]（弹层行）依旧是「左侧图标 + 选中 ✓、无箭头」。
  */
 private enum class SettingsPage(val title: String) {
     ROOT("设置"),
+
+    // v1.1.3 二次重构：主页只放六张二级分类入口卡，原来平铺在主页的
+    // 「外观 / 播放 / 歌词」三组各自下沉成子页（顺序与主页卡片顺序一致）。
+    APPEARANCE("外观"),
+    PLAYBACK("播放"),
+    LYRICS("歌词"),
+
     LIBRARY("音乐库"),
     UPDATE("更新"),
     DIAGNOSTICS("关于与诊断"),
 }
 
 /**
- * 四个页面的滚动位置，按 [SettingsPage.ordinal] 排列。
+ * 各页面的滚动位置，按 [SettingsPage.ordinal] 排列。
  *
  * 存成 `List<Int>` 而不是 `ScrollState`：一个 Int 不受任何对象生命周期影响，
  * 这是这套机制能成立的全部原因（细节见 `SettingsScreen` 里 `pagePositions` 的注释）。
@@ -207,7 +222,11 @@ fun SettingsScreen(
     // 这里改成显式快照：离开某页时把它的滚动位置记进这张表，回到该页时用记下的值建 state。
     // 存进 rememberSaveable 的是 Int，与 ScrollState 的生死完全无关，旋转屏幕也不丢。
     // 子页也是各记各的，所以「音乐库」上次滚到哪里，再进去还是那里。
-    val pagePositions = rememberSaveable(saver = PagePositionsSaver) { mutableStateListOf(0, 0, 0, 0) }
+    // ⚠️ 长度必须等于 SettingsPage 的项数（现为 7），否则 index 越界；
+    // 以后加子页记得一起加一个 0。
+    val pagePositions = rememberSaveable(saver = PagePositionsSaver) {
+        mutableStateListOf(0, 0, 0, 0, 0, 0, 0)
+    }
     val pageIndex = page.ordinal
     val pageScroll = remember(pageIndex) { ScrollState(pagePositions[pageIndex]) }
     DisposableEffect(pageIndex, pageScroll) {
@@ -256,18 +275,77 @@ fun SettingsScreen(
                     .align(Alignment.CenterHorizontally)
                     .padding(horizontal = if (player.carMode) 32.dp else 18.dp),
             ) {
-                // ================================================== 主设置页
-                // 只放会反复改的开关 / 滑块；一次性配置、只读信息与排障工具都在三个子页里。
+                // ================================================== 主设置页（六张二级分类卡）
+                // v1.1.3 二次重构：主页**只放分类入口卡**，一张卡一个分类 ——
+                // 左侧语义图标（40dp 圆角 12 容器、secondaryContainer 底）+ 分类名
+                // + 一行摘要 + 右箭头。此前「外观 / 播放 / 歌词」三组平铺在主页，
+                // 悬浮歌词五个外观选项加入后「歌词」一组独占两屏，主页又长回去了；
+                // 现在三组各自下沉成子页，主页回到**一屏六张卡**、任何设置最多两层直达。
+                //
+                // 与子页里 ActionRow 的区别（效果图《子页入口行与分类卡的区别》）：
+                // ActionRow 是「某一类设置里的一条」，无图标；CategoryRow 是
+                // 「一整类设置的门面」，带图标 + 摘要 —— 两层信息密度不同，不会混淆。
                 if (page == SettingsPage.ROOT) {
+                    CategoryRow(
+                        title = "外观",
+                        subtitle = "主题取色 · 车载模式",
+                        icon = AppIcons.Palette,
+                        onClick = { page = SettingsPage.APPEARANCE },
+                    )
+                    CategoryRow(
+                        title = "播放",
+                        subtitle = "速度 ${"%.2f".format(player.speed)}x · 跳过静音 · 均衡器与音效",
+                        icon = Icons.Filled.PlayArrow,
+                        onClick = { page = SettingsPage.PLAYBACK },
+                    )
+                    CategoryRow(
+                        title = "歌词",
+                        subtitle = "字号 ${"%.1f".format(player.lyricScale)}x · 逐字 · 悬浮歌词",
+                        icon = AppIcons.LyricsBubble,
+                        onClick = { page = SettingsPage.LYRICS },
+                    )
+                    CategoryRow(
+                        title = "音乐库",
+                        // 效果图把「过滤 < 60 秒」放在摘要里（而不是右侧值），照做
+                        subtitle = if (minSongDurationSec > 0) {
+                            "过滤 < ${minSongDurationSec} 秒"
+                        } else {
+                            "未开启短音频过滤"
+                        },
+                        icon = AppIcons.LibraryMusic,
+                        onClick = { page = SettingsPage.LIBRARY },
+                    )
+                    CategoryRow(
+                        title = "更新",
+                        subtitle = "检查更新 · 自动检查 · 下载线路",
+                        icon = AppIcons.Cloud,
+                        onClick = { page = SettingsPage.UPDATE },
+                        trailing = if (update.info != null) "有新版本" else "v${update.currentVersion}",
+                    )
+                    CategoryRow(
+                        title = "关于与诊断",
+                        subtitle = "版本信息 · 播放统计 · 崩溃日志 · 隐私说明",
+                        icon = AppIcons.Info,
+                        onClick = { page = SettingsPage.DIAGNOSTICS },
+                    )
+                }
 
-                    // ------------------------------------------------ 外观
-                    SectionTitle("外观")
+                // ================================================== 子页：外观
+                // 这一组是「界面长什么样」的总开关，改动频率低；
+                // 留在主页只会让六张分类卡之外又开始长第三层内容。
+                if (page == SettingsPage.APPEARANCE) {
+
+                    // ------------------------------------------------ 主题
+                    SectionTitle("主题")
                     SwitchRow(
                         title = "主题跟随封面取色",
                         subtitle = "从当前歌曲封面提取主色，驱动整个界面的配色",
                         checked = dynamicTheme,
                         onCheckedChange = onDynamicTheme,
                     )
+
+                    // ------------------------------------------------ 车载
+                    SectionTitle("车载")
                     // 副标题原文 180 字，一条设置项就占掉大半屏；详细说明移到标题旁的「?」弹窗
                     SwitchRow(
                         title = "车载模式",
@@ -277,14 +355,24 @@ fun SettingsScreen(
                         onInfo = { showCarModeInfo = true },
                     )
 
-                    // ------------------------------------------------ 播放
-                    SectionTitle("播放")
+                }
+
+                // ================================================== 子页：播放
+                // 速度滑块与「跳过静音」就地生效（无箭头）；「均衡器与音效」
+                // 打开的是底部弹层，属于「点开会进入另一个界面」，带箭头。
+                if (page == SettingsPage.PLAYBACK) {
+
+                    // ------------------------------------------------ 速度
+                    SectionTitle("速度")
                     SliderRow(
                         title = "默认播放速度 ${"%.2f".format(player.speed)}x",
                         value = player.speed,
                         range = 0.75f..2.0f,
                         onValueChange = onSpeed,
                     )
+
+                    // ------------------------------------------------ 播放行为
+                    SectionTitle("播放行为")
                     SwitchRow(
                         title = "跳过静音",
                         subtitle = "自动跳过录音开头的空白段（对整轨 / 现场录音有效）",
@@ -298,10 +386,18 @@ fun SettingsScreen(
                         chevron = true,
                     )
 
-                    // ------------------------------------------------ 歌词
-                    // 歌词相关设置（字号 / 逐字 / 桌面悬浮）统一收在这里，
-                    // 不再散落在「外观」组里。
-                    SectionTitle("歌词")
+                }
+
+                // ================================================== 子页：歌词
+                // 内容与 v1.0.7 主页的「歌词」组完全一致，只是整体挪进子页 ——
+                // 歌词字号 → 逐字歌词 → 桌面悬浮歌词 → 五个外观选项 + 调整入口。
+                //
+                // 降级不降可达性：播放页「播放设置」弹层的「歌词」分组里仍有
+                // 「桌面悬浮歌词」开关（见 Sheets.kt），听歌时顺手就能开，不必钻两层设置。
+                if (page == SettingsPage.LYRICS) {
+
+                    // ------------------------------------------------ 播放页歌词
+                    SectionTitle("播放页歌词")
                     SliderRow(
                         title = "歌词字号 ${"%.1f".format(player.lyricScale)}x",
                         value = player.lyricScale,
@@ -314,6 +410,9 @@ fun SettingsScreen(
                         checked = player.lyricWordByWord,
                         onCheckedChange = onLyricWordByWord,
                     )
+
+                    // ------------------------------------------------ 桌面悬浮歌词
+                    SectionTitle("桌面悬浮歌词")
                     SwitchRow(
                         title = "桌面悬浮歌词",
                         subtitle = if (canDrawOverlay) {
@@ -458,31 +557,9 @@ fun SettingsScreen(
                         )
                     }
 
-                    // ------------------------------------------------ 子页入口
-                    // 右侧摘要把状态前置：不用进子页就知道有没有新版本。
-                    // 右箭头是全 App 唯一使用 chevron 的地方，只标注「点开会进入另一个界面」。
-                    Spacer(Modifier.height(6.dp))
-                    ActionRow(
-                        title = "音乐库",
-                        subtitle = "短音频过滤",
-                        onClick = { page = SettingsPage.LIBRARY },
-                        trailing = if (minSongDurationSec > 0) "过滤 < ${minSongDurationSec} 秒" else "未开启",
-                        chevron = true,
-                    )
-                    ActionRow(
-                        title = "更新",
-                        subtitle = "检查更新 · 自动检查 · 下载线路",
-                        onClick = { page = SettingsPage.UPDATE },
-                        trailing = if (update.info != null) "有新版本" else "v${update.currentVersion}",
-                        chevron = true,
-                    )
-                    ActionRow(
-                        title = "关于与诊断",
-                        subtitle = "版本信息 · 播放统计 · 崩溃日志 · 隐私说明",
-                        onClick = { page = SettingsPage.DIAGNOSTICS },
-                        trailing = "v$version",
-                        chevron = true,
-                    )
+                    // v1.1.3：三个子页入口行已升级为主页的六张分类卡（见本文件开头的
+                    // SettingsPage.ROOT 分支）—— 原来这里只有音乐库 / 更新 / 关于与诊断
+                    // 三条 ActionRow，现在外观 / 播放 / 歌词也各自成了分类卡。
                 }
 
                 // ================================================== 子页：音乐库
@@ -1340,6 +1417,93 @@ private fun SliderRow(
             onValueChange = onValueChange,
             valueRange = range,
         )
+    }
+}
+
+/**
+ * 设置主页的**二级分类入口卡**（v1.1.3 新增，效果图 ㉙ 的 `.cat-row`）。
+ *
+ * 与 [ActionRow] 的分工（效果图原话：「子页入口行与分类卡的区别」）：
+ *  - [CategoryRow] = **一整类设置的门面**，带左侧语义图标 + 摘要，只出现在设置主页；
+ *  - [ActionRow] = **某一类设置里的一条**，无图标，出现在子页里。
+ *
+ * 规格：40dp 图标容器（圆角 12、secondaryContainer 底）+ 标题 15sp/600 +
+ * 摘要 11sp + 可选右侧值（11sp、primary）+ 18dp chevron；卡片圆角 14dp、
+ * 内边距 11×14、卡间距 8dp。chevron 规范自 v1.1.3 起放宽一档 ——
+ * **只有 CategoryRow 与 ActionRow** 可带箭头，`OptionRow`（弹层行）不变。
+ */
+@Composable
+private fun CategoryRow(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    trailing: String? = null,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            // .cat-row{margin-top:8px} —— 卡与卡之间靠它分隔，不加 SectionTitle
+            .padding(top = 8.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+        ) {
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.size(40.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Text(
+                    text = subtitle,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            if (trailing != null) {
+                Spacer(Modifier.width(14.dp))
+                Text(
+                    text = trailing,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    textAlign = TextAlign.End,
+                    maxLines = 2,
+                    modifier = Modifier.widthIn(max = 96.dp),
+                )
+            }
+            Spacer(Modifier.width(14.dp))
+            Icon(
+                AppIcons.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
+        }
     }
 }
 

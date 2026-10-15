@@ -209,4 +209,42 @@ object AppIcons {
     val BarChart: ImageVector by lazy {
         build("BarChart", "M5 9.2h3V19H5V9.2zM10.6 5h2.8v14h-2.8V5zm5.6 8H19v6h-2.8v-6z")
     }
+
+    // ================================================================ v1.1.3：抽屉与设置分类卡
+    // 路径逐字取自 docs/ui/index.html 的 <symbol>，改图标前先改效果图（UI 唯一视觉真源）。
+
+    /** 顶栏汉堡按钮：打开侧边抽屉（效果图 `#i-menu`） */
+    val Menu: ImageVector by lazy {
+        build("Menu", "M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z")
+    }
+
+    /** 设置主页「外观」分类卡（效果图 `#i-palette`） */
+    val Palette: ImageVector by lazy {
+        build(
+            "Palette",
+            "M12 2a10 10 0 000 20c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.4A4.6 " +
+                "4.6 0 0022 11.1C21.9 6.1 17.4 2 12 2zM6.5 12a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm3-4a1.5 " +
+                "1.5 0 110-3 1.5 1.5 0 010 3zm5 0a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm3 4a1.5 1.5 0 110-3 " +
+                "1.5 1.5 0 010 3z",
+        )
+    }
+
+    /** 设置主页「更新」分类卡 / 抽屉「检查更新」项（效果图 `#i-cloud`） */
+    val Cloud: ImageVector by lazy {
+        build("Cloud", "M19.4 10a7.5 7.5 0 00-14.3-1.6A5 5 0 006 18h13a4 4 0 00.4-8z")
+    }
+
+    /**
+     * 设置主页「歌词」分类卡（效果图 `#i-lyrics`：气泡 + 两行文字）。
+     *
+     * ⚠️ 刻意与 [Lyrics]（四行文字块）并存：两者在效果图里是不同的符号 ——
+     * [Lyrics] 用在导航与播放页的「歌词/封面」切换键上，这个只用在设置分类卡。
+     * 想合并成一个之前，先确认效果图把两处改成同一个符号了。
+     */
+    val LyricsBubble: ImageVector by lazy {
+        build(
+            "LyricsBubble",
+            "M4 4h16a2 2 0 012 2v9a2 2 0 01-2 2H8l-6 5V6a2 2 0 012-2zm3 4v2h10V8H7zm0 4v2h7v-2H7z",
+        )
+    }
 }

@@ -34,8 +34,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -178,6 +176,9 @@ fun MainScreen(
     var showSettings by remember { mutableStateOf(false) }
     var showReport by remember { mutableStateOf(false) }
     var showDuplicates by remember { mutableStateOf(false) }
+    // 侧边抽屉开合（v1.1.3：取代底部五视图导航）。只在曲库页出现，
+    // 播放页 / 设置页这类全屏覆盖层在效果图里各有自己的返回按钮，没有汉堡入口。
+    var drawerOpen by remember { mutableStateOf(false) }
     var crashLogText by remember { mutableStateOf<String?>(null) }
     var crashLogCount by remember { mutableStateOf(0) }
 
@@ -332,6 +333,8 @@ fun MainScreen(
     }
     BackHandler(enabled = showReport) { showReport = false }
     BackHandler(enabled = showDuplicates) { showDuplicates = false }
+    // 抽屉最后注册 = 优先级最高：抽屉开着时返回键只收抽屉，不会顺带退出别的层。
+    BackHandler(enabled = drawerOpen) { drawerOpen = false }
 
     /** 一级列表 + 详情：手机与宽屏左栏共用同一份内容 */
     val listArea: @Composable () -> Unit = {
@@ -459,6 +462,7 @@ fun MainScreen(
                         LibraryHeader(
                             library = library,
                             granted = granted,
+                            onOpenDrawer = { drawerOpen = true },
                             onQuery = lib::setQuery,
                             onSort = lib::setSort,
                             onRequestPermission = { permissionLauncher.launch(arrayOf(audioPermission)) },
@@ -508,22 +512,8 @@ fun MainScreen(
                                 onPrevious = playerVm::previous,
                                 onSeek = playerVm::seekTo,
                             )
-                            NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
-                                LibraryView.entries.forEach { view ->
-                                    NavigationBarItem(
-                                        selected = library.view == view,
-                                        onClick = { lib.setView(view) },
-                                        icon = {
-                                            Icon(
-                                                imageVector = view.icon,
-                                                contentDescription = view.label,
-                                                modifier = Modifier.size(22.dp),
-                                            )
-                                        },
-                                        label = { Text(view.label, fontSize = 11.sp) },
-                                    )
-                                }
-                            }
+                            // v1.1.3：底部五视图导航已整体移除（见 LibraryDrawer.kt），
+                            // 宽屏这一侧同样只留迷你播放条，视图切换走顶栏汉堡。
                         }
                     }
                     VerticalDivider(
@@ -551,6 +541,7 @@ fun MainScreen(
                     LibraryHeader(
                         library = library,
                         granted = granted,
+                        onOpenDrawer = { drawerOpen = true },
                         onQuery = lib::setQuery,
                         onSort = lib::setSort,
                         onRequestPermission = { permissionLauncher.launch(arrayOf(audioPermission)) },
@@ -605,28 +596,31 @@ fun MainScreen(
                             onSeek = playerVm::seekTo,
                         )
 
-                        // 五视图切换：从顶部一排 FilterChip 改为底部导航栏，单手可达
-                        NavigationBar(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        ) {
-                            LibraryView.entries.forEach { view ->
-                                NavigationBarItem(
-                                    selected = library.view == view,
-                                    onClick = { lib.setView(view) },
-                                    icon = {
-                                        Icon(
-                                            imageVector = view.icon,
-                                            contentDescription = view.label,
-                                            modifier = Modifier.size(22.dp),
-                                        )
-                                    },
-                                    label = { Text(view.label, fontSize = 11.sp) },
-                                )
-                            }
-                        }
+                        // v1.1.3：底部五视图导航整体移除，五个浏览视图收进左侧抽屉
+                        // （顶栏汉堡按钮开合，见 LibraryDrawer.kt）。列表因此多出
+                        // 一整条导航栏的纵向空间 —— 这是这次重构的直接收益。
                     }
                 }
             }
+
+            // 侧边抽屉：盖住曲库内容与迷你播放条（遮罩吃掉下层触摸）。
+            // 挂在 when 之外、且放在播放页与设置页**之前** —— 那两个是全屏覆盖层，
+            // 各有自己的返回按钮，抽屉不该压在其上（效果图里它们也没有汉堡入口）。
+            // statusBarsPadding：效果图的抽屉在状态栏**之下**（.app 的坐标系起点），
+            // 不是盖住状态栏。
+            LibraryDrawer(
+                open = drawerOpen,
+                currentView = library.view,
+                onSelectView = lib::setView,
+                onOpenScanScope = { showScanScope = true },
+                onCheckUpdate = {
+                    updateVm.checkUpdate()
+                    snackbarHostState.currentSnackbarData?.dismiss()
+                },
+                onOpenSettings = { showSettings = true },
+                onClose = { drawerOpen = false },
+                modifier = Modifier.statusBarsPadding(),
+            )
 
             // 播放页 / 设置页 / 报告 / 重复清理覆盖在最上层（宽屏双栏时播放页已在右栏，不再全屏覆盖）
             AnimatedVisibility(
