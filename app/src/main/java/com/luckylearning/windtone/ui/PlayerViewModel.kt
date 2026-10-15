@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.luckylearning.windtone.MusicApp
+import com.luckylearning.windtone.overlay.LyricOverlayBus
 import com.luckylearning.windtone.playback.PlayerActions
 import com.luckylearning.windtone.state.PlaybackProgress
 import com.luckylearning.windtone.state.PlayerUiState
@@ -32,6 +33,9 @@ class PlayerViewModel(private val app: Application) :
 
     /** 封面主色（动态主题的种子色）；未开启动态主题时为 null */
     val themeSeed: StateFlow<Int?> = engine.themeSeed
+
+    /** 桌面悬浮窗的运行状态：设置页据此显示「运行中 / 启动失败原因」 */
+    val overlayHealth: StateFlow<LyricOverlayBus.Health> = container.playback.overlayHealth
 
     /** 把当前歌词导出成 LRC 文件（带翻译行的双语歌词会同时导出） */
     fun exportLyrics(target: Uri) {

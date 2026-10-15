@@ -26,6 +26,7 @@ import android.widget.TextView
 import androidx.core.app.NotificationCompat
 import com.luckylearning.windtone.MainActivity
 import com.luckylearning.windtone.R
+import com.luckylearning.windtone.data.CrashLog
 import com.luckylearning.windtone.data.Prefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -51,7 +52,14 @@ import kotlin.math.roundToInt
  *
  * ## 显示时机
  * **只在 App 退到后台时显示**。App 在前台时（用户正看着播放页歌词），
- * 桌面字幕纯属重复，直接隐藏。
+ * 桌面字幕纯属重复，直接隐藏。两个例外：设置页的「调整位置」模式，
+ * 以及刚打开开关时的几秒前台预览（否则用户在设置页点完开关看不到任何变化）。
+ *
+ * ## 失败必须留痕
+ * 挂窗失败 / 前台服务被系统拒绝都会被 catch 到。这类失败没有可自动恢复的手段，
+ * 但**不能静默**：否则用户侧就是「开关开了、什么都没发生」，无从排查。
+ * 失败时统一走 [CrashLog.record] + [LyricOverlayBus.report] 两条路：
+ * 前者落到设置页 → 关于与诊断 → 崩溃日志，后者让设置页直接显示原因并回退开关。
  *
  * ## 为什么用 `WindowManager` 手搓 View 而不是 Compose
  * 悬浮窗不需要 Compose 运行时，一个 [TextView] 足够，省掉 `ComposeView` 的
@@ -84,13 +92,21 @@ class LyricOverlayService : Service() {
         super.onCreate()
         startForeground(NOTIFICATION_ID, buildNotification())
         windowManager = getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+        LyricOverlayBridge.report(LyricOverlayBus.Status.RUNNING, "服务已启动")
         observeState()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // 每次被拉起都对齐一次开关状态：关闭了就地退出，打开着就补挂窗口。
         val enabled = OverlayPrefs.enabled(this)
-        if (!enabled || !canDraw()) {
+        if (!enabled) {
+            LyricOverlayBridge.report(LyricOverlayBus.Status.IDLE, "开关已关闭")
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        if (!canDraw()) {
+            // 授权被系统撤掉：开关由播放域回置，这里只负责把原因说清楚
+            LyricOverlayBridge.report(LyricOverlayBus.Status.FAILED, "未获得「出现在其他应用上」权限")
             stopSelf()
             return START_NOT_STICKY
         }
@@ -112,6 +128,7 @@ class LyricOverlayService : Service() {
         scope.cancel()
         detachWindow()
         LyricOverlayBus.clear()
+        LyricOverlayBridge.report(LyricOverlayBus.Status.IDLE, "服务已停止")
         super.onDestroy()
     }
 
@@ -168,10 +185,18 @@ class LyricOverlayService : Service() {
             tv.setOnTouchListener(dragListener)
             applyPosition()
             refreshModeChrome()
+            LyricOverlayBridge.report(LyricOverlayBus.Status.RUNNING, "窗口已显示")
             true
         } catch (t: Throwable) {
             // 授权被撤销 / 厂商 ROM 拦白名单时会走到这里。
             // 这类失败没有可自动恢复的手段，直接停服，免得用户以为开着但什么都看不到。
+            // 但必须**留下痕迹**：只进 logcat 的话用户在手机上无从排查，
+            // 设置页 → 关于与诊断 → 崩溃日志里能看到这条诊断。
+            val detail = "挂载悬浮窗失败：${t.javaClass.simpleName}: ${t.message}"
+            CrashLog.record(this, "LyricOverlay", detail + "\n\n" + t.stackTraceToString())
+            LyricOverlayBridge.report(LyricOverlayBus.Status.FAILED, detail)
+            // 同步把开关关掉，别让设置页显示「已开启」而桌面什么都没有
+            Prefs(this).lyricOverlay = false
             stopSelf()
             false
         }
@@ -292,13 +317,16 @@ class LyricOverlayService : Service() {
     private fun observeState() {
         windowJob?.cancel()
         windowJob = scope.launch {
-            // 内容 + 编辑态 + 前台态三路合并：任一变化都重新决定「显不显示 / 长什么样」
+            // 内容 + 编辑态 + 前台态 + 预览态四路合并：任一变化都重新决定「显不显示 / 长什么样」
             combine(
                 LyricOverlayBus.content,
                 LyricOverlayBus.editing,
                 LyricOverlayBus.foreground,
-            ) { content, isEditing, isForeground -> Triple(content, isEditing, isForeground) }
-                .collect { (content, isEditing, isForeground) ->
+                LyricOverlayBus.preview,
+            ) { content, isEditing, isForeground, isPreview ->
+                OverlayVisualState(content, isEditing, isForeground, isPreview)
+            }
+                .collect { (content, isEditing, isForeground, isPreview) ->
                     val box = container ?: return@collect
                     val tv = lyricView ?: return@collect
 
@@ -316,11 +344,12 @@ class LyricOverlayService : Service() {
                         refreshModeChrome()
                     }
 
-                    // 调整模式下即使 App 在前台、即使没歌词，也要显示——
-                    // 用户此刻正站在设置页点「调整位置」，窗口若被前台抑制藏起来就没法拖了。
-                    // 这是「仅后台显示」规则的唯一例外，且只在调整模式的短暂几秒内生效。
-                    val showForEdit = isEditing
-                    val visible = (showForEdit || !isForeground) && (content.visible || showForEdit)
+                    // 调整 / 预览两种模式下即使 App 在前台、即使没歌词，也要显示——
+                    // 调整模式下用户此刻正站在设置页点「调整位置」；
+                    // 预览模式是刚打开开关的那几秒，得让用户看见「它确实开了」。
+                    // 这是「仅后台显示」规则的唯二例外。
+                    val showOverride = isEditing || isPreview
+                    val visible = (showOverride || !isForeground) && (content.visible || showOverride)
                     if (!visible) {
                         box.visibility = View.INVISIBLE
                         return@collect
@@ -328,11 +357,12 @@ class LyricOverlayService : Service() {
 
                     val text = when {
                         content.visible -> content.text
-                        showForEdit -> "拖动到想要的位置"
+                        isEditing -> "拖动到想要的位置"
+                        isPreview -> "悬浮歌词已开启，退到桌面后持续显示"
                         else -> ""
                     }
                     if (tv.text.toString() != text) tv.text = text
-                    tv.alpha = if (content.playing || showForEdit) 1f else PAUSED_ALPHA
+                    tv.alpha = if (content.playing || showOverride) 1f else PAUSED_ALPHA
                     if (box.visibility != View.VISIBLE) box.visibility = View.VISIBLE
                 }
         }
@@ -440,15 +470,24 @@ class LyricOverlayService : Service() {
             if (!enabled || !canDrawOverlay(context)) {
                 runCatching { context.stopService(intent) }
                 LyricOverlayBus.setEditing(false)
+                LyricOverlayBus.setPreview(false)
                 LyricOverlayBus.clear()
                 return
             }
-            runCatching {
+            try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(intent)
                 } else {
                     context.startService(intent)
                 }
+            } catch (t: Throwable) {
+                // Android 12+ 禁止后台应用起前台服务；厂商 ROM 也可能直接拒绝。
+                // 这种失败原先被 runCatching 吞掉，用户侧就是「开关开了但什么都没发生」。
+                val detail = "启动悬浮窗服务失败：${t.javaClass.simpleName}: ${t.message}"
+                CrashLog.record(context, "LyricOverlay", detail + "\n\n" + t.stackTraceToString())
+                LyricOverlayBus.report(LyricOverlayBus.Status.FAILED, detail)
+                runCatching { context.stopService(intent) }
+                LyricOverlayBus.setPreview(false)
             }
         }
     }
@@ -464,3 +503,11 @@ class LyricOverlayService : Service() {
 internal object OverlayPrefs {
     fun enabled(context: Context): Boolean = Prefs(context).lyricOverlay
 }
+
+/** [LyricOverlayService.observeState] 合并四路状态后的快照（`kotlinx` 的 Quadruple 是 internal 的） */
+private data class OverlayVisualState(
+    val content: LyricOverlayBus.Content,
+    val editing: Boolean,
+    val foreground: Boolean,
+    val preview: Boolean,
+)

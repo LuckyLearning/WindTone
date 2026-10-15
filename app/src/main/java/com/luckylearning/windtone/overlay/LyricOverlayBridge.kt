@@ -42,4 +42,14 @@ object LyricOverlayBridge {
 
     /** 会话级的调整模式标志（用于设置页按钮文案联动） */
     val editing get() = LyricOverlayBus.editing
+
+    /** 悬浮窗运行状态（设置页展示 + 播放域失败回退） */
+    val health get() = LyricOverlayBus.health
+
+    /** 进入 / 退出「前台预览」窗口期（刚打开开关时用） */
+    fun setPreview(value: Boolean) = LyricOverlayBus.setPreview(value)
+
+    /** 上报运行状态 */
+    fun report(status: LyricOverlayBus.Status, detail: String = "") =
+        LyricOverlayBus.report(status, detail)
 }

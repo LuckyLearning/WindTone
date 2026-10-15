@@ -196,6 +196,9 @@ fun MainScreen(
     // 会重新读取一次（见下方 ON_RESUME），设置页据此决定开关能否打开。
     var canDrawOverlay by remember { mutableStateOf(playerVm.canDrawOverlay()) }
 
+    // 桌面悬浮窗的运行状态：服务起没起来、失败在哪一步（见 LyricOverlayService 的上报）
+    val overlayHealth by playerVm.overlayHealth.collectAsStateWithLifecycle()
+
     LaunchedEffect(showSettings) {
         if (showSettings) crashLogCount = settings.crashLogCount()
     }
@@ -511,6 +514,7 @@ fun MainScreen(
                     onLyricOverlay = playerVm::setLyricOverlay,
                     onOverlayEditing = playerVm::setOverlayEditing,
                     canDrawOverlay = canDrawOverlay,
+                    overlayHealth = overlayHealth,
                     onLyricScale = playerVm::setLyricScale,
                     onLyricWordByWord = playerVm::setLyricWordByWord,
                     onNotifyLyrics = playerVm::setNotifyLyrics,

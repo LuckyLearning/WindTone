@@ -19,6 +19,12 @@ import kotlinx.coroutines.flow.update
  *  - [setEditing]：是否处于「调整位置」模式。此模式下窗口临时恢复触摸能力、可拖动；
  *  - [setForeground]：App 是否在前台。前台时窗口整体隐藏——此时用户正看着
  *    播放页的歌词，再叠一层桌面字幕纯属重复。
+ *
+ * 以及 [preview] 与 [health] 两个**排障用**状态：
+ *  - [setPreview]：刚打开开关时的几秒「前台预览」。不预览的话，用户在设置页
+ *    点完开关什么变化都没有（按设计前台就该隐藏），会直接判定功能坏了；
+ *  - [report]：悬浮窗起没起来、失败在哪一步。没有它，`addView` 失败被
+ *    catch 吞掉后用户侧是彻底的静默，只能靠猜。
  */
 object LyricOverlayBus {
 
@@ -32,6 +38,18 @@ object LyricOverlayBus {
         val visible: Boolean get() = text.isNotBlank()
     }
 
+    /** 悬浮窗的运行状态（供设置页展示，也供播放域做失败回退） */
+    enum class Status { IDLE, RUNNING, FAILED }
+
+    /**
+     * @param status 当前状态
+     * @param detail 给人看的一句话说明（失败原因 / 当前环节）
+     */
+    data class Health(
+        val status: Status = Status.IDLE,
+        val detail: String = "",
+    )
+
     private val _content = MutableStateFlow(Content())
     val content: StateFlow<Content> = _content.asStateFlow()
 
@@ -43,6 +61,10 @@ object LyricOverlayBus {
     private val _editing = MutableStateFlow(false)
     val editing: StateFlow<Boolean> = _editing.asStateFlow()
 
+    /** 是否处于「刚打开开关的前台预览」窗口期（见 [setPreview]） */
+    private val _preview = MutableStateFlow(false)
+    val preview: StateFlow<Boolean> = _preview.asStateFlow()
+
     /**
      * App 是否在前台。
      *
@@ -51,6 +73,10 @@ object LyricOverlayBus {
      */
     private val _foreground = MutableStateFlow(false)
     val foreground: StateFlow<Boolean> = _foreground.asStateFlow()
+
+    /** 悬浮窗健康状态；服务在关键节点上报，界面与播放域据此反馈/回退 */
+    private val _health = MutableStateFlow(Health())
+    val health: StateFlow<Health> = _health.asStateFlow()
 
     /** ViewModel 侧调用：把当前歌词行送进悬浮窗 */
     fun publish(text: String, playing: Boolean) {
@@ -65,14 +91,25 @@ object LyricOverlayBus {
         if (_editing.value != value) _editing.value = value
     }
 
+    /** 进入 / 退出「前台预览」窗口期 */
+    fun setPreview(value: Boolean) {
+        if (_preview.value != value) _preview.value = value
+    }
+
     /** App 前后台切换时调用 */
     fun setForeground(value: Boolean) {
         if (_foreground.value != value) _foreground.value = value
     }
 
+    /** 服务在启动 / 挂窗成功 / 失败等节点调用 */
+    fun report(status: Status, detail: String = "") {
+        _health.value = Health(status, detail)
+    }
+
     /** 服务停止 / 功能关闭时清空，避免残留上一句 */
     fun clear() {
         _editing.value = false
+        _preview.value = false
         if (_content.value.text.isEmpty()) return
         _content.value = Content()
         _revision.update { it + 1 }

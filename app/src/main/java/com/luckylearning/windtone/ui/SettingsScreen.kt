@@ -1,4 +1,5 @@
 package com.luckylearning.windtone.ui
+import com.luckylearning.windtone.overlay.LyricOverlayBus
 import com.luckylearning.windtone.state.LibraryUiState
 import com.luckylearning.windtone.state.PlayerUiState
 import com.luckylearning.windtone.state.UpdateUiState
@@ -96,6 +97,7 @@ fun SettingsScreen(
     onLyricOverlay: (Boolean) -> Unit,
     onOverlayEditing: (Boolean) -> Unit,
     canDrawOverlay: Boolean,
+    overlayHealth: LyricOverlayBus.Health,
     onLyricScale: (Float) -> Unit,
     onLyricWordByWord: (Boolean) -> Unit,
     onNotifyLyrics: (Boolean) -> Unit,
@@ -257,7 +259,7 @@ fun SettingsScreen(
                     )
                     SwitchRow(
                         title = "通知栏 / 锁屏显示歌词",
-                        subtitle = "把当前歌词行下发到媒体通知（部分系统可能不显示副标题）",
+                        subtitle = "把当前歌词行显示在媒体通知的第二行（关闭后恢复显示歌手）",
                         checked = player.notifyLyrics,
                         onCheckedChange = onNotifyLyrics,
                     )
@@ -290,6 +292,30 @@ fun SettingsScreen(
                             }
                         },
                     )
+                    // 运行状态：开关打开且已授权时显示。这一行是排障的关键 ——
+                    // 悬浮窗启动失败（挂窗被 ROM 拒绝 / 前台服务被系统拦）在
+                    // 旧版本里是完全静默的，用户只看到「开关开了但什么都没发生」。
+                    if (player.lyricOverlay && canDrawOverlay) {
+                        val failed = overlayHealth.status == LyricOverlayBus.Status.FAILED
+                        Text(
+                            text = when (overlayHealth.status) {
+                                LyricOverlayBus.Status.RUNNING ->
+                                    "运行中：${overlayHealth.detail}，退到桌面即可看到歌词行"
+                                LyricOverlayBus.Status.FAILED ->
+                                    "启动失败：${overlayHealth.detail}。" +
+                                        "可到 设置 → 应用 → 显示悬浮窗（部分系统叫「后台弹出界面」）确认，" +
+                                        "详情见 关于与诊断 → 崩溃日志"
+                                LyricOverlayBus.Status.IDLE -> "悬浮窗未启动"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (failed) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            modifier = Modifier.padding(top = 2.dp, bottom = 6.dp),
+                        )
+                    }
                     if (overlayHintVisible && !canDrawOverlay) {
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceVariant,

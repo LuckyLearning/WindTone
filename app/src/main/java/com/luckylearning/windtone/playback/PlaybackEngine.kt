@@ -19,6 +19,7 @@ import com.luckylearning.windtone.data.db.QueueSongEntity
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.lyrics.Lyrics
 import com.luckylearning.windtone.overlay.LyricOverlayBridge
+import com.luckylearning.windtone.overlay.LyricOverlayBus
 import com.luckylearning.windtone.state.PlayMode
 import com.luckylearning.windtone.state.PlaybackProgress
 import com.luckylearning.windtone.state.PlayerUiState
@@ -90,6 +91,9 @@ class PlaybackEngine(
     private val _themeSeed = MutableStateFlow<Int?>(null)
     val themeSeed: StateFlow<Int?> = _themeSeed.asStateFlow()
 
+    /** 桌面悬浮窗运行状态（设置页展示；失败时由 init 里的收集器做回退） */
+    val overlayHealth: StateFlow<LyricOverlayBus.Health> = LyricOverlayBridge.health
+
     // ------------------------------------------------------------------ 内部状态
 
     private var controller: MediaController? = null
@@ -103,6 +107,7 @@ class PlaybackEngine(
     private var lyricsJob: Job? = null
     private var artworkJob: Job? = null
     private var positionJob: Job? = null
+    private var previewJob: Job? = null
     private var currentLyricsSong: String? = null
     private var consecutiveErrors = 0
 
@@ -126,6 +131,17 @@ class PlaybackEngine(
         scope.launch {
             SleepTimer.remainingMs.collect { ms ->
                 _player.update { it.copy(sleepRemainingMs = ms) }
+            }
+        }
+        // 悬浮窗起不来时（挂窗被 ROM 拒绝 / 前台服务被系统拦）：
+        // 回置开关与状态，别让设置页显示「已开启」而桌面什么都没有，
+        // 并用一次性提示把原因说出来（详见 LyricOverlayService 的失败上报）。
+        scope.launch {
+            LyricOverlayBridge.health.collect { h ->
+                if (h.status == LyricOverlayBus.Status.FAILED) {
+                    if (prefs.lyricOverlay) setLyricOverlay(false)
+                    messages.post("桌面悬浮歌词启动失败：${h.detail}")
+                }
             }
         }
     }
@@ -611,6 +627,10 @@ class PlaybackEngine(
         prefs.notifyLyrics = enabled
         _player.update { it.copy(notifyLyrics = enabled) }
         lastPushedLyricIndex = Int.MIN_VALUE
+        if (!enabled) {
+            // 关掉时把当前媒体项上残留的歌词行擦掉，否则通知会一直显示最后一句
+            restoreNotificationMetadata()
+        }
     }
 
     // ---------------------------------------------------------------- 播放界面
@@ -678,6 +698,11 @@ class PlaybackEngine(
      * 落盘 + 更新界面状态 + 同步起停悬浮窗服务。
      * 若用户开着开关但尚未授权「出现在其他应用上」，`sync` 内部会拒绝启动，
      * 设置页据此把开关弹回并提示去授权。
+     *
+     * 刚打开时会启动一段**前台预览**（见 [startOverlayPreview]）：
+     * 按设计悬浮窗只在 App 退到后台时显示，而在设置页里打开的这一刻
+     * App 恰恰在前台 —— 没有预览的话用户点完开关看不到任何变化，
+     * 会直接把功能判定为「没有效果」。
      */
     override fun setLyricOverlay(enabled: Boolean) {
         prefs.lyricOverlay = enabled
@@ -687,6 +712,21 @@ class PlaybackEngine(
             // 刚打开时立刻按当前进度填一行，不必等下一个 tick
             val c = controller
             if (c != null) publishLyricToOverlay(c.currentPosition.coerceAtLeast(0L), c.isPlaying)
+            startOverlayPreview()
+        }
+    }
+
+    /**
+     * 前台预览：开启开关后让悬浮窗在前台也显示一小段时间。
+     *
+     * 与「调整位置」复用同一条可见性豁免，只是不进入可拖动状态。
+     */
+    private fun startOverlayPreview() {
+        previewJob?.cancel()
+        LyricOverlayBridge.setPreview(true)
+        previewJob = scope.launch {
+            delay(OVERLAY_PREVIEW_MS)
+            LyricOverlayBridge.setPreview(false)
         }
     }
 
@@ -943,8 +983,34 @@ class PlaybackEngine(
         }
     }
 
+    /**
+     * 擦掉当前媒体项上的歌词行（关闭「通知栏显示歌词」时调用）。
+     *
+     * 歌词只写在 `MediaMetadata.subtitle` 上，`title`/`artist` 原样保留 ——
+     * 队列抽屉和桌面小组件都读 `artist`，不能被歌词污染。
+     */
+    private fun restoreNotificationMetadata() {
+        val c = controller ?: return
+        val itemIndex = c.currentMediaItemIndex
+        if (itemIndex < 0 || itemIndex >= c.mediaItemCount) return
+        val item = c.getMediaItemAt(itemIndex)
+        val md = item.mediaMetadata
+        if (md.subtitle.isNullOrBlank()) return
+        runCatching {
+            c.replaceMediaItem(
+                itemIndex,
+                item.buildUpon()
+                    .setMediaMetadata(md.buildUpon().setSubtitle(null).build())
+                    .build(),
+            )
+        }
+    }
+
     companion object {
         private const val TAG = "PlaybackEngine"
+
+        /** 开启桌面悬浮歌词后的前台预览时长：够用户看清「确实开了」，又不至于碍事 */
+        private const val OVERLAY_PREVIEW_MS = 6_000L
     }
 }
 
