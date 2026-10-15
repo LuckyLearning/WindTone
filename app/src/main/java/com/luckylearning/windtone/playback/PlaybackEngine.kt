@@ -74,6 +74,7 @@ class PlaybackEngine(
             lyricWordByWord = prefs.lyricWordByWord,
             carMode = prefs.carMode,
             lyricOverlay = prefs.lyricOverlay,
+            lyricOverlayLines = prefs.lyricOverlayLines,
             // 车载模式：启动直接进播放页（跳过库主页）
             playerExpanded = prefs.carMode,
             speed = prefs.playbackSpeed,
@@ -717,6 +718,24 @@ class PlaybackEngine(
     }
 
     /**
+     * 桌面悬浮歌词一次显示几行：1 = 只显示当前行，3 = 当前行 + 上下各一行上下文。
+     *
+     * 只改配置，不重启服务：服务每次收到新歌词时自己读 Prefs 决定排版，
+     * 所以下一次歌词刷新（最多几十毫秒）就会按新行数显示，
+     * 顺便给一次前台预览让用户当场看见效果。
+     */
+    override fun setLyricOverlayLines(lines: Int) {
+        val normalized = if (lines == 3) 3 else 1
+        prefs.lyricOverlayLines = normalized
+        _player.update { it.copy(lyricOverlayLines = normalized) }
+        if (prefs.lyricOverlay) {
+            val c = controller
+            if (c != null) publishLyricToOverlay(c.currentPosition.coerceAtLeast(0L), c.isPlaying)
+            startOverlayPreview()
+        }
+    }
+
+    /**
      * 前台预览：开启开关后让悬浮窗在前台也显示一小段时间。
      *
      * 与「调整位置」复用同一条可见性豁免，只是不进入可拖动状态。
@@ -947,24 +966,28 @@ class PlaybackEngine(
      *
      * 与 [maybePushLyricToNotification] 的区别：
      *  - 后者只在行号变化时才 `replaceMediaItem`，因为改媒体项是有代价的；
-     *  - 这里**每 tick 都推**，去重放在 [LyricOverlayBridge] 内部按文字比对完成。
+     *  - 这里**每 tick 都推**，去重放在 [LyricOverlayBridge] 内部按内容比对完成。
      *    这样暂停 / 恢复播放导致的透明度变化也能立刻反映到悬浮窗上，
      *    而纯文字不变时不会真的去动 View。
      *
-     * 无歌词（纯音乐 / 未匹配到）时不推送空行，悬浮窗会保持上次内容或隐藏。
+     * 上下文行（上一行 / 下一行）一并下发：手机模式忽略，车载模式用来渲染
+     * 「3 行窗口、高亮当前行」。无歌词（纯音乐 / 未匹配到）时不推送空行，
+     * 悬浮窗会保持上次内容或隐藏。
      */
     private fun publishLyricToOverlay(positionMs: Long, playing: Boolean) {
         if (!prefs.lyricOverlay) return
         val state = _player.value
         val lyrics = state.lyrics
-        val text = if (!lyrics.isEmpty && lyrics.synced) {
+        if (!lyrics.isEmpty && lyrics.synced) {
             val i = lyrics.indexAt(positionMs + state.lyricOffsetMs)
-            lyrics.lines.getOrNull(i)?.text.orEmpty()
+            val text = lyrics.lines.getOrNull(i)?.text.orEmpty()
+            val prev = lyrics.lines.getOrNull(i - 1)?.text.orEmpty()
+            val next = lyrics.lines.getOrNull(i + 1)?.text.orEmpty()
+            LyricOverlayBridge.publish(text, playing, prev, next)
         } else {
             // 无时间轴歌词（纯文本）没法跟着走，显示标题更有用
-            state.current?.title.orEmpty()
+            LyricOverlayBridge.publish(state.current?.title.orEmpty(), playing)
         }
-        LyricOverlayBridge.publish(text, playing)
     }
 
     /** 把当前歌词行下发到通知栏 / 锁屏（默认关闭，见设置页） */
@@ -1062,6 +1085,7 @@ interface PlayerActions {
     fun setLyricWordByWord(enabled: Boolean)
     fun setCarMode(enabled: Boolean)
     fun setLyricOverlay(enabled: Boolean)
+    fun setLyricOverlayLines(lines: Int)
     fun canDrawOverlay(): Boolean
     fun setOverlayEditing(editing: Boolean)
     fun setAppForeground(foreground: Boolean)

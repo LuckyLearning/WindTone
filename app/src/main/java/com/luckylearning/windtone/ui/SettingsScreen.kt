@@ -98,6 +98,7 @@ fun SettingsScreen(
     onDynamicTheme: (Boolean) -> Unit,
     onCarMode: (Boolean) -> Unit,
     onLyricOverlay: (Boolean) -> Unit,
+    onLyricOverlayLines: (Int) -> Unit,
     onOverlayEditing: (Boolean) -> Unit,
     onOverlayPreview: () -> Unit,
     canDrawOverlay: Boolean,
@@ -139,6 +140,8 @@ fun SettingsScreen(
     var showMinDurationDialog by remember { mutableStateOf(false) }
     // 下载线路选择弹窗
     var showRouteDialog by remember { mutableStateOf(false) }
+    // 桌面悬浮歌词的行数选择弹窗（1 行 / 3 行）
+    var showOverlayLinesDialog by remember { mutableStateOf(false) }
     // 用户点过悬浮歌词开关但还没授权 → 展开下方授权指引，授权成功返回后自动收起
     var overlayHintVisible by remember { mutableStateOf(false) }
     // 三条跳转路都走不通（ROM 连系统授权页都不给开）→ 指引卡里改显示手动路径
@@ -302,6 +305,18 @@ fun SettingsScreen(
                                 overlayJumpFailed = !context.startOverlayPermissionPage()
                             }
                         },
+                    )
+                    // 行数：1 行 / 3 行。放在开关正下方，与悬浮歌词绑定成一个整体；
+                    // 开关关着也允许预设，所以不做可见性 gating。
+                    ActionRow(
+                        title = "悬浮歌词行数",
+                        subtitle = if (player.lyricOverlayLines == 3) {
+                            "3 行：上一行 / 当前行 / 下一行，当前行高亮"
+                        } else {
+                            "1 行：只显示当前歌词行（一行放不下时自动折行）"
+                        },
+                        onClick = { showOverlayLinesDialog = true },
+                        chevron = true,
                     )
                     // 运行状态：开关打开且已授权时显示。这一行是排障的关键 ——
                     // 悬浮窗启动失败（挂窗被 ROM 拒绝 / 前台服务被系统拦）在
@@ -785,6 +800,69 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showMinDurationDialog = false }) { Text("取消") }
+            },
+        )
+    }
+
+    // 悬浮歌词行数：1 行 / 3 行（会话无关的偏好，改完立刻预览一次）
+    if (showOverlayLinesDialog) {
+        AlertDialog(
+            onDismissRequest = { showOverlayLinesDialog = false },
+            title = { Text("悬浮歌词行数") },
+            text = {
+                Column {
+                    Text(
+                        "桌面悬浮歌词一次显示几行。3 行模式当前行高亮、上下两行压暗，大屏与车机上更好读；" +
+                            "1 行模式下这一行放不下时会自动折行。改完立刻给一次 6 秒预览。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    listOf(
+                        Triple(1, "1 行", "只显示当前歌词行，放不下时自动折行"),
+                        Triple(3, "3 行", "上一行 / 当前行 / 下一行，当前行高亮"),
+                    ).forEach { (value, label, hint) ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    onLyricOverlayLines(value)
+                                    showOverlayLinesDialog = false
+                                }
+                                .padding(vertical = 10.dp, horizontal = 4.dp),
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    label,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = if (value == player.lyricOverlayLines) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    },
+                                )
+                                Text(
+                                    hint,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (value == player.lyricOverlayLines) {
+                                Icon(
+                                    Icons.Filled.Check,
+                                    contentDescription = "已选择",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showOverlayLinesDialog = false }) { Text("关闭") }
             },
         )
     }

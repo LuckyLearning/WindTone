@@ -184,8 +184,10 @@ data class PlayerUiState(
     val lyricWordByWord: Boolean = true,
     /** 车载模式：启动直进播放页 + 播放页 5 秒无操作进入沉浸态 */
     val carMode: Boolean = false,
-    /** 桌面悬浮歌词：车机上退到桌面后仍在最上层显示当前歌词行 */
+    /** 桌面悬浮歌词：退到桌面后仍在最上层显示当前歌词行 */
     val lyricOverlay: Boolean = false,
+    /** 悬浮歌词显示行数：1 = 只显示当前行；3 = 当前行 + 上下各一行上下文 */
+    val lyricOverlayLines: Int = 1,
     /** 悬浮歌词是否处于「调整位置」模式（临时可拖动，会话级，不落盘） */
     val overlayEditing: Boolean = false,
     val playerExpanded: Boolean = false,

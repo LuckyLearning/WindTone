@@ -28,11 +28,18 @@ import kotlinx.coroutines.flow.update
  */
 object LyricOverlayBus {
 
-    /** 一条要显示的悬浮歌词 */
+    /**
+     * 一条要显示的悬浮歌词。
+     *
+     * @param text 当前歌词行；空串表示暂无可显示内容（窗口应隐藏）
+     * @param prevLine 上一行（车载模式显示成暗色上下文，手机模式忽略）
+     * @param nextLine 下一行（同上）
+     * @param playing 歌曲是否在播放；暂停时淡出，不直接消失，方便用户看清最后一句
+     */
     data class Content(
-        /** 当前歌词行文字；空串表示暂无可显示内容（窗口应隐藏） */
         val text: String = "",
-        /** 歌曲是否在播放；暂停时淡出，不直接消失，方便用户看清最后一句 */
+        val prevLine: String = "",
+        val nextLine: String = "",
         val playing: Boolean = false,
     ) {
         val visible: Boolean get() = text.isNotBlank()
@@ -78,11 +85,11 @@ object LyricOverlayBus {
     private val _health = MutableStateFlow(Health())
     val health: StateFlow<Health> = _health.asStateFlow()
 
-    /** ViewModel 侧调用：把当前歌词行送进悬浮窗 */
-    fun publish(text: String, playing: Boolean) {
-        val normalized = text.trim()
-        val changed = normalized != _content.value.text
-        _content.update { it.copy(text = normalized, playing = playing) }
+    /** ViewModel 侧调用：把当前歌词行（及上下文行）送进悬浮窗 */
+    fun publish(text: String, playing: Boolean, prevLine: String = "", nextLine: String = "") {
+        val newContent = Content(text.trim(), prevLine.trim(), nextLine.trim(), playing)
+        val changed = newContent != _content.value
+        _content.value = newContent
         if (changed) _revision.update { it + 1 }
     }
 

@@ -133,6 +133,17 @@ class Prefs(context: Context) {
         set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_X, value).apply()
 
     /**
+     * 桌面悬浮歌词一次显示几行：1（默认，只显示当前行）或 3（上下各带一行上下文）。
+     *
+     * 3 行模式下当前行白色高亮、上下两行压暗，视线自然落在当前行——
+     * 车机 / 大屏上尤其有用，不必等下一句冒出来才知道上下文。
+     * 只存 1 或 3 两个值，其它值一律按 1 处理（防旧数据 / 手改）。
+     */
+    var lyricOverlayLines: Int
+        get() = if (sp.getInt(KEY_LYRIC_OVERLAY_LINES, 1) == 3) 3 else 1
+        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_LINES, if (value == 3) 3 else 1).apply()
+
+    /**
      * 悬浮歌词的纵向偏移（像素，相对屏幕顶端）。
      *
      * `Int.MIN_VALUE` 表示未调整过，走默认的「距顶 48dp 让开状态栏」。
@@ -257,6 +268,7 @@ class Prefs(context: Context) {
         const val KEY_LYRIC_OVERLAY = "lyric_overlay"
         const val KEY_LYRIC_OVERLAY_X = "lyric_overlay_x"
         const val KEY_LYRIC_OVERLAY_Y = "lyric_overlay_y"
+        const val KEY_LYRIC_OVERLAY_LINES = "lyric_overlay_lines"
         const val KEY_PERM_ASKED = "perm_asked"
         const val KEY_DYNAMIC_THEME = "dynamic_theme"
         const val KEY_SPEED = "playback_speed"

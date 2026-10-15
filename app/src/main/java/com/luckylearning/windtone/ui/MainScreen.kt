@@ -512,6 +512,7 @@ fun MainScreen(
                     onDynamicTheme = { dynamicThemeOn = it; playerVm.setDynamicTheme(it) },
                     onCarMode = playerVm::setCarMode,
                     onLyricOverlay = playerVm::setLyricOverlay,
+                    onLyricOverlayLines = playerVm::setLyricOverlayLines,
                     onOverlayEditing = playerVm::setOverlayEditing,
                     onOverlayPreview = playerVm::previewOverlay,
                     canDrawOverlay = canDrawOverlay,

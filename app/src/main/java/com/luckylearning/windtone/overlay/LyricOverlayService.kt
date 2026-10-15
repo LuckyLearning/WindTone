@@ -13,6 +13,9 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
@@ -166,8 +169,9 @@ class LyricOverlayService : Service() {
             setPadding(dp(18), dp(8), dp(18), dp(8))
             includeFontPadding = false
             gravity = Gravity.CENTER
-            maxLines = 1
-            ellipsize = android.text.TextUtils.TruncateAt.END
+            // 行数与省略策略由 observeState 按模式决定（手机 2 行 / 车载 6 行），
+            // 这里只给多行留好行距——单行时它不产生任何效果。
+            setLineSpacing(dp(2).toFloat(), 1f)
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, OVERLAY_TEXT_SP)
             // ⚠️ 这里**不能**设 INVISIBLE：显隐只由 observeState 切外层 box，
@@ -495,18 +499,54 @@ class LyricOverlayService : Service() {
                         return@collect
                     }
 
+                    // 行数由设置项决定，与「车载模式」无关（1 行 / 3 行）。
+                    // 服务直接读 Prefs——它独立于界面存活，用户在设置页改完，
+                    // 下一行歌词刷新时窗口自己就变了，不需要重启服务。
+                    val multiLine = Prefs(this@LyricOverlayService).lyricOverlayLines == 3
+                    val maxLines = if (multiLine) MULTI_MAX_LINES else SINGLE_MAX_LINES
+                    if (tv.maxLines != maxLines) {
+                        tv.maxLines = maxLines
+                        tv.ellipsize = android.text.TextUtils.TruncateAt.END
+                    }
+
                     val text = when {
-                        content.visible -> content.text
+                        content.visible -> buildDisplay(content, multiLine)
                         isEditing -> "拖动到想要的位置"
                         isPreview -> "悬浮歌词已开启，退到桌面后持续显示"
                         else -> ""
                     }
-                    if (tv.text.toString() != text) tv.text = text
+                    if (tv.text.toString() != text.toString()) tv.text = text
                     tv.alpha = if (content.playing || showOverride) 1f else PAUSED_ALPHA
                     if (box.visibility != View.VISIBLE) box.visibility = View.VISIBLE
                     windowVisible = true
                     updateGeometryReport()
                 }
+        }
+    }
+
+    /**
+     * 组装悬浮窗实际显示的文字。
+     *
+     * 单行模式只显示当前行（超长时折行，见 [SINGLE_MAX_LINES]）；
+     * 多行模式把上下文行一起排进来，形成「3 行歌词」的窗口：
+     * 当前行用默认白色，上一行 / 下一行压暗成半透明白，视线自然落在当前行上。
+     */
+    private fun buildDisplay(content: LyricOverlayBus.Content, multiLine: Boolean): CharSequence {
+        if (!multiLine) return content.text
+        return SpannableStringBuilder().apply {
+            if (content.prevLine.isNotBlank()) {
+                val start = length
+                append(content.prevLine)
+                setSpan(ForegroundColorSpan(CONTEXT_TEXT_COLOR), start, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                append("\n")
+            }
+            append(content.text)
+            if (content.nextLine.isNotBlank()) {
+                append("\n")
+                val start = length
+                append(content.nextLine)
+                setSpan(ForegroundColorSpan(CONTEXT_TEXT_COLOR), start, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
         }
     }
 
@@ -630,6 +670,18 @@ class LyricOverlayService : Service() {
 
         /** 暂停时的不透明度：不隐藏，方便看清唱到哪一句 */
         private const val PAUSED_ALPHA = 0.55f
+
+        /**
+         * 单行模式最多折到 2 行：一行放不下时折行显示完整歌词，
+         * 再长才用省略号（窗口宽度上限就是屏幕宽，不折行只能砍字）。
+         */
+        private const val SINGLE_MAX_LINES = 2
+
+        /** 多行模式上限：上一行 + 当前行（自身可能折行）+ 下一行 */
+        private const val MULTI_MAX_LINES = 6
+
+        /** 多行模式下上下文行（上一行 / 下一行）的压暗色 */
+        private val CONTEXT_TEXT_COLOR = Color.argb(150, 255, 255, 255)
 
         /** 是否已获得「出现在其他应用上」授权 */
         fun canDrawOverlay(context: Context): Boolean = Settings.canDrawOverlays(context)

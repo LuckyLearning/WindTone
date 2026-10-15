@@ -80,8 +80,9 @@ object LyricOverlayBridge {
     /** 按开关状态起停悬浮窗服务（幂等） */
     fun sync(context: Context, enabled: Boolean) = LyricOverlayService.sync(context, enabled)
 
-    /** 把当前歌词行推给悬浮窗 */
-    fun publish(text: String, playing: Boolean) = LyricOverlayBus.publish(text, playing)
+    /** 把当前歌词行（及上下文行）推给悬浮窗 */
+    fun publish(text: String, playing: Boolean, prevLine: String = "", nextLine: String = "") =
+        LyricOverlayBus.publish(text, playing, prevLine, nextLine)
 
     /** 清空悬浮窗内容 */
     fun clear() = LyricOverlayBus.clear()
