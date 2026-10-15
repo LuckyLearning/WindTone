@@ -7,6 +7,7 @@ import android.os.Build
 import com.luckylearning.windtone.data.CoverRepository
 import com.luckylearning.windtone.data.CrashLog
 import com.luckylearning.windtone.data.Prefs
+import com.luckylearning.windtone.data.UpdateChecker
 import com.luckylearning.windtone.overlay.LyricOverlayBridge
 
 class MusicApp : Application() {
@@ -20,6 +21,13 @@ class MusicApp : Application() {
         CoverRepository.attach(this)
         ensureNotificationChannel()
         restoreLyricOverlay()
+
+        // 调试日志开关（2026-10-15 补上的一处「挂了账」）：
+        // 这个调用此前一直缺失，`UpdateChecker.verbose` 恒为 false，五处
+        // `if (verbose) Log.w(...)` 从来不输出 —— 而它们记录的恰恰是
+        // 「Atom 源不可用 / 检查更新失败 / 下载线路切换 / 拉起安装器失败 / 解析失败」
+        // 这些排障时最需要的线索。Debug 包打开，Release 包保持关闭（不刷用户 logcat）。
+        UpdateChecker.setVerbose(BuildConfig.DEBUG)
     }
 
     /**

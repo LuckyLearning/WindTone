@@ -113,6 +113,14 @@ fun SettingsScreen(
     onCleanupMissingSongs: () -> Unit,
     onClearCoverCache: () -> Unit,
     onResetUserData: () -> Unit,
+    /** 清空曲库与导入目录（保留收藏 / 统计 / 歌单）——与 [onResetUserData] 方向相反 */
+    onResetLibrary: () -> Unit,
+    /** 取消全部「移出曲库」的排除标记并重扫 */
+    onRestoreExcluded: () -> Unit,
+    /** 打开收听报告（批次 10.1） */
+    onOpenReport: () -> Unit,
+    /** 打开重复歌曲清理（批次 10.2） */
+    onOpenDuplicates: () -> Unit,
     minSongDurationSec: Int,
     onMinSongDurationSec: (Int) -> Unit,
     onLoadCrashLog: () -> Unit,
@@ -165,6 +173,8 @@ fun SettingsScreen(
     var showOverlayCheck by remember { mutableStateOf(false) }
     var overlayCheck by remember { mutableStateOf<OverlaySnapshot?>(null) }
     var showResetDataConfirm by remember { mutableStateOf(false) }
+    // 清空曲库（与「清空全部用户数据」方向相反，同样不可撤销）
+    var showResetLibraryConfirm by remember { mutableStateOf(false) }
 
     // 子页里按返回键先回主页面（本处理器在子页才启用，主页面时交给外层关闭设置页）
     BackHandler(enabled = page != SettingsPage.ROOT) { page = SettingsPage.ROOT }
@@ -486,6 +496,12 @@ fun SettingsScreen(
                             "收藏" to "${stats.favorites} 首",
                         )
                     )
+                    ActionRow(
+                        title = "收听报告",
+                        subtitle = "按天曲线 · 时段分布 · 最常播放 / 最长收听榜（全部来自本地记录）",
+                        onClick = onOpenReport,
+                        chevron = true,
+                    )
                     Spacer(Modifier.height(8.dp))
                     // 不可撤销 → 二次确认
                     TextButton(onClick = { showClearStatsConfirm = true }) {
@@ -500,6 +516,7 @@ fun SettingsScreen(
                         rows = listOf(
                             "曲库歌曲" to if (maintenance == null) "—" else "${maintenance.songs} 首",
                             "暂不可见" to if (maintenance == null) "—" else "${maintenance.missing} 首",
+                            "已移出曲库" to if (maintenance == null) "—" else "${maintenance.excluded} 首",
                             "导入目录" to if (maintenance == null) "—" else "${maintenance.folders} 个",
                             "歌单" to if (maintenance == null) "—" else "${maintenance.playlists} 个",
                             "封面缓存" to (maintenance?.coverSizeText ?: "—"),
@@ -515,6 +532,23 @@ fun SettingsScreen(
                         },
                         onClick = { showCleanupConfirm = true },
                     )
+                    // 「移出曲库」是这个应用里唯一一个"歌还在、但被用户主动藏起来"的状态：
+                    // 不给恢复入口的话，用户误点一次就再也找不回来（重扫也不会收）。
+                    ActionRow(
+                        title = "恢复已移出曲库的歌曲",
+                        subtitle = if ((maintenance?.excluded ?: 0) > 0) {
+                            "${maintenance!!.excluded} 首被「移出曲库」，恢复后会重新扫描一次"
+                        } else {
+                            "没有歌被移出曲库（长按歌曲 → 移出曲库 会记在这里）"
+                        },
+                        onClick = onRestoreExcluded,
+                    )
+                    ActionRow(
+                        title = "重复歌曲清理",
+                        subtitle = "按「标题 + 歌手 + 时长」找重复，每组留一首，其余移出曲库（不删文件）",
+                        onClick = onOpenDuplicates,
+                        chevron = true,
+                    )
                     ActionRow(
                         title = "清空封面缓存",
                         subtitle = "只删掉本地可重新生成的封面图，不影响收藏与歌单",
@@ -524,6 +558,9 @@ fun SettingsScreen(
                     // 不可撤销 → 二次确认
                     TextButton(onClick = { showResetDataConfirm = true }) {
                         Text("清空全部用户数据（保留曲库）")
+                    }
+                    TextButton(onClick = { showResetLibraryConfirm = true }) {
+                        Text("清空曲库与导入目录（保留收藏与统计）")
                     }
 
                     // ------------------------------------------------ 悬浮歌词自检
@@ -812,6 +849,36 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showResetDataConfirm = false }) { Text("取消") }
+            },
+        )
+    }
+
+    // 清空曲库：与「清空全部用户数据」互为镜像 —— 一个清数据留曲库，一个清曲库留数据。
+    // 因为「留数据」这一半很容易被误解成"什么都没删"，文案必须写清双方各自保住了什么。
+    if (showResetLibraryConfirm) {
+        AlertDialog(
+            onDismissRequest = { showResetLibraryConfirm = false },
+            title = { Text("清空曲库与导入目录？") },
+            text = {
+                Text(
+                    "会移除曲库里的全部歌曲记录与导入的目录（含已排出的目录），" +
+                        "下次启动停在「请选择扫描范围」，需要重新选择要扫描的位置。\n\n" +
+                        "收藏、播放统计、歌单与逐曲歌词偏移会保留 —— " +
+                        "重扫到同一批文件时它们会自动接上。\n\n" +
+                        "存储中的音频文件不会被删除。该操作不可撤销。",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onResetLibrary()
+                        showResetLibraryConfirm = false
+                    },
+                ) { Text("清空曲库") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetLibraryConfirm = false }) { Text("取消") }
             },
         )
     }

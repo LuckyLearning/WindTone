@@ -26,17 +26,21 @@ data class StatsSummary(
 @Dao
 interface SongDao {
 
-    /** 曲库里当前可用的歌（软删的行不返回） */
-    @Query("SELECT * FROM songs WHERE missingSince = 0")
+    /** 曲库里当前可用的歌（软删的行与被排除的行都不返回） */
+    @Query("SELECT * FROM songs WHERE missingSince = 0 AND excluded = 0")
     suspend fun visible(): List<SongEntity>
 
-    /** 全量（含软删），维护与自检用 */
+    /** 全量（含软删 / 已排除），维护与自检用 */
     @Query("SELECT * FROM songs")
     suspend fun all(): List<SongEntity>
 
     /** 一次性取回 id ↔ uri 映射，供扫描落库与队列保存批量换算 */
     @Query("SELECT id, uri FROM songs")
     suspend fun allIdUri(): List<IdUri>
+
+    /** 被用户主动「移出曲库」的 uri：扫描时据此跳过，让排除在重扫后依然生效 */
+    @Query("SELECT uri FROM songs WHERE excluded = 1")
+    suspend fun excludedUris(): List<String>
 
     @Query("SELECT id FROM songs WHERE uri = :uri")
     suspend fun idOf(uri: String): Long?
@@ -57,9 +61,14 @@ interface SongDao {
     /**
      * 本轮扫描没有见到的歌：置为「暂不可见」而不是删除。
      * 收藏 / 歌单 / 播放统计因此全部保留，文件回来后自动恢复。
+     * 已被用户排除（[SongEntity.excluded]）的行跳过——否则它们会被误标成「文件不见了」。
      */
-    @Query("UPDATE songs SET missingSince = :now WHERE missingSince = 0 AND lastSeenAt < :scanStart")
+    @Query("UPDATE songs SET missingSince = :now WHERE missingSince = 0 AND excluded = 0 AND lastSeenAt < :scanStart")
     suspend fun markMissing(scanStart: Long, now: Long): Int
+
+    /** 用户主动「移出曲库 / 放回曲库」（批量，多选态与重复清理共用） */
+    @Query("UPDATE songs SET excluded = :excluded WHERE id IN (:ids)")
+    suspend fun setExcluded(ids: List<Long>, excluded: Boolean)
 
     @Query("DELETE FROM songs WHERE id = :id")
     suspend fun deleteById(id: Long)
@@ -73,13 +82,16 @@ interface SongDao {
     @Query("DELETE FROM songs")
     suspend fun clear()
 
-    @Query("SELECT COUNT(*) FROM songs WHERE missingSince = 0")
+    @Query("SELECT COUNT(*) FROM songs WHERE missingSince = 0 AND excluded = 0")
     suspend fun countVisible(): Int
 
     @Query("SELECT COUNT(*) FROM songs WHERE missingSince > 0")
     suspend fun countMissing(): Int
 
-    @Query("SELECT folderId, COUNT(*) AS songCount FROM songs WHERE missingSince = 0 AND folderId IS NOT NULL GROUP BY folderId")
+    @Query("SELECT COUNT(*) FROM songs WHERE excluded = 1")
+    suspend fun countExcluded(): Int
+
+    @Query("SELECT folderId, COUNT(*) AS songCount FROM songs WHERE missingSince = 0 AND excluded = 0 AND folderId IS NOT NULL GROUP BY folderId")
     suspend fun countsByFolder(): List<FolderCount>
 }
 
@@ -105,6 +117,10 @@ interface FolderDao {
 
     @Query("UPDATE folders SET songCount = :count WHERE id = :id")
     suspend fun setSongCount(id: Long, count: Int)
+
+    /** 排除 / 取消排除某目录（扫描时跳过它，但保留已导入的歌） */
+    @Query("UPDATE folders SET excluded = :excluded WHERE docId = :docId")
+    suspend fun setExcluded(docId: String, excluded: Boolean)
 
     @Query("DELETE FROM folders WHERE docId IN (:docIds)")
     suspend fun deleteByDocIds(docIds: List<String>)
@@ -227,6 +243,25 @@ interface PlaylistDao {
     @Query("DELETE FROM playlist_songs WHERE playlistId = :playlistId AND songId = :songId")
     suspend fun removeSong(playlistId: Long, songId: Long)
 
+    /** 一次移除多首（歌单去重 / 批量移除用） */
+    @Query("DELETE FROM playlist_songs WHERE playlistId = :playlistId AND songId IN (:songIds)")
+    suspend fun removeSongs(playlistId: Long, songIds: List<Long>)
+
+    @Query("UPDATE playlist_songs SET position = :position WHERE playlistId = :playlistId AND songId = :songId")
+    suspend fun setPosition(playlistId: Long, songId: Long, position: Int)
+
+    /**
+     * 按给定顺序重排歌单（拖动排序落盘）。
+     *
+     * 一次事务里逐行 UPDATE position：歌单是几十到几百首的量级，
+     * 逐行写的开销远小于「清空重插」——后者会连带丢掉 addedAt，
+     * 且中途失败会把歌单留在空表状态。
+     */
+    @Transaction
+    suspend fun reorder(playlistId: Long, orderedSongIds: List<Long>) {
+        orderedSongIds.forEachIndexed { i, songId -> setPosition(playlistId, songId, i) }
+    }
+
     @Query("DELETE FROM playlist_songs WHERE playlistId = :playlistId")
     suspend fun deleteSongsOf(playlistId: Long)
 
@@ -323,5 +358,41 @@ interface SearchHistoryDao {
     suspend fun trim(keep: Int)
 
     @Query("DELETE FROM search_history")
+    suspend fun clear()
+}
+
+// ---------------------------------------------------------------- 收听日志
+
+@Dao
+interface ListenLogDao {
+
+    /** 取回从某个小时起的全部桶（升序），收听报告据此聚合出日曲线与时段分布 */
+    @Query("SELECT * FROM listen_log WHERE hourEpoch >= :fromHour ORDER BY hourEpoch ASC")
+    suspend fun since(fromHour: Long): List<ListenLogEntity>
+
+    /** 该小时是否已有桶（没有则先建一个空的，避免 UPDATE 匹配不到行） */
+    @Query("INSERT OR IGNORE INTO listen_log (hourEpoch, ms) VALUES (:hour, 0)")
+    suspend fun ensureHour(hour: Long)
+
+    @Query("UPDATE listen_log SET ms = ms + :delta WHERE hourEpoch = :hour")
+    suspend fun addMs(hour: Long, delta: Long)
+
+    /**
+     * 累加一段收听到当前小时桶。
+     *
+     * 不用内联 upsert：Android 各版本 SQLite 对 `ON CONFLICT DO UPDATE` 支持不一，
+     * 「插入忽略 + 更新」两步在事务里等价且处处可用（与搜索历史同口径）。
+     */
+    @Transaction
+    suspend fun add(hour: Long, delta: Long) {
+        if (delta <= 0L) return
+        ensureHour(hour)
+        addMs(hour, delta)
+    }
+
+    @Query("DELETE FROM listen_log WHERE hourEpoch < :beforeHour")
+    suspend fun prune(beforeHour: Long): Int
+
+    @Query("DELETE FROM listen_log")
     suspend fun clear()
 }

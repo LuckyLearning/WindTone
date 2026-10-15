@@ -6,12 +6,13 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 /**
- * 应用数据库（v4）。
+ * 应用数据库（v5）。
  *
- * 八张表分三类（详见 docs/数据库设计-MusicDb.md）：
+ * 九张表分三类（详见 docs/数据库设计-MusicDb.md）：
  *  - **曲库**：[SongEntity]、[FolderEntity] —— 扫描得来的数据，可由重扫重建；
  *  - **用户数据**：[SongStateEntity]、[PlaylistEntity]、[PlaylistSongEntity]、
- *    [QueueSongEntity]、[PlayerStateEntity]、[SearchHistoryEntity] —— 不可再生，删歌时随外键级联清理；
+ *    [QueueSongEntity]、[PlayerStateEntity]、[SearchHistoryEntity]、[ListenLogEntity]
+ *    —— 不可再生，删歌时随外键级联清理（收听日志无外键，见实体注释）；
  *  - 派生缓存（封面）不入库，放 `cacheDir/covers`。
  *
  * ⚠️ **本版不保留任何历史迁移路径**（产品口径：不做跨版本兼容，安装即全新）。
@@ -31,8 +32,9 @@ import androidx.room.RoomDatabase
         QueueSongEntity::class,
         PlayerStateEntity::class,
         SearchHistoryEntity::class,
+        ListenLogEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class MusicDb : RoomDatabase() {
@@ -44,6 +46,7 @@ abstract class MusicDb : RoomDatabase() {
     abstract fun queueDao(): QueueDao
     abstract fun playerStateDao(): PlayerStateDao
     abstract fun searchHistoryDao(): SearchHistoryDao
+    abstract fun listenLogDao(): ListenLogDao
 
     companion object {
         const val DB_NAME = "music_player.db"

@@ -102,6 +102,17 @@ class Prefs(context: Context) {
         set(value) = sp.edit().putBoolean(KEY_LYRIC_WORD_BY_WORD, value).apply()
 
     /**
+     * 播放页中部显示的是歌词（true，默认）还是封面（false）。
+     *
+     * 落盘而不是用 `remember`：播放页是覆盖层，收起后整棵子树离开组合，
+     * `remember` 的状态会一起丢——用户每次打开播放页都被拨回歌词态，
+     * 对习惯"封面党"的人来说就是每次都要多点一下。
+     */
+    var lyricsPaneVisible: Boolean
+        get() = sp.getBoolean(KEY_LYRICS_PANE, true)
+        set(value) = sp.edit().putBoolean(KEY_LYRICS_PANE, value).apply()
+
+    /**
      * 车载模式（默认关闭）。
      * 开启后：启动直进播放页；播放页 5 秒无操作收起全部控件只留歌词与进度。
      */
@@ -265,21 +276,7 @@ class Prefs(context: Context) {
         }.getOrDefault(DownloadRoute.AUTO)
         set(value) = sp.edit().putString(KEY_UPDATE_ROUTE, value.name).apply()
 
-    // ================================================================ 变更通知（P4）
-
-    /**
-     * 注册一个「偏好项发生变化」的监听，返回取消函数。
-     *
-     * 需要实时响应的界面用它替代轮询；不需要的继续同步读属性即可（SharedPreferences
-     * 读本身极轻，这里只解决「另一处改了值，这一处要跟着更新」的场景）。
-     */
-    fun onChanged(listener: (key: String) -> Unit): () -> Unit {
-        val l = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key != null) listener(key)
-        }
-        sp.registerOnSharedPreferenceChangeListener(l)
-        return { sp.unregisterOnSharedPreferenceChangeListener(l) }
-    }
+    // ================================================================ 私有
 
     private companion object {
         const val KEY_SCAN_SCOPE = "scan_scope"
@@ -292,6 +289,7 @@ class Prefs(context: Context) {
         const val KEY_VIEW = "library_view"
         const val KEY_LYRIC_SCALE = "lyric_scale"
         const val KEY_LYRIC_WORD_BY_WORD = "lyric_word_by_word"
+        const val KEY_LYRICS_PANE = "lyrics_pane_visible"
         const val KEY_CAR_MODE = "car_mode"
         const val KEY_LYRIC_OVERLAY = "lyric_overlay"
         const val KEY_LYRIC_OVERLAY_X = "lyric_overlay_x"

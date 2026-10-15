@@ -8,11 +8,13 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import com.luckylearning.windtone.data.AudioInspector
 import com.luckylearning.windtone.data.CoverRepository
+import com.luckylearning.windtone.data.HOUR_MS
 import com.luckylearning.windtone.data.LyricsLoader
 import com.luckylearning.windtone.data.MessageBus
 import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.data.SongIndex
 import com.luckylearning.windtone.data.ThemeColorExtractor
+import com.luckylearning.windtone.data.db.ListenLogEntity
 import com.luckylearning.windtone.data.db.MusicDb
 import com.luckylearning.windtone.data.db.PlayerStateEntity
 import com.luckylearning.windtone.data.db.QueueSongEntity
@@ -74,6 +76,7 @@ class PlaybackEngine(
         PlayerUiState(
             lyricScale = prefs.lyricScale,
             lyricWordByWord = prefs.lyricWordByWord,
+            lyricsPaneVisible = prefs.lyricsPaneVisible,
             carMode = prefs.carMode,
             lyricOverlay = prefs.lyricOverlay,
             lyricOverlayLines = prefs.lyricOverlayLines,
@@ -137,6 +140,9 @@ class PlaybackEngine(
         scope.launch {
             SleepTimer.remainingMs.collect { ms ->
                 _player.update { it.copy(sleepRemainingMs = ms) }
+                // 到点前的淡出：兜住「进度计时器没在跑」的情况（暂停态 / 刚切后台），
+                // 正常播放中则由 200ms 的 ticker 负责把曲线走得更细。
+                applySleepFade(ms)
             }
         }
         // 悬浮窗起不来时（挂窗被 ROM 拒绝 / 前台服务被系统拦）：
@@ -309,6 +315,9 @@ class PlaybackEngine(
         listenAccumMs = 0L
         if (ms < 1000L) return
         val songId = index.idOf(key) ?: return
+        // 收听报告的小时桶按**本次结算时刻**归属（一次累计最多 30 秒，
+        // 恰好跨整点的情况误差可以忽略）
+        val hour = System.currentTimeMillis() / HOUR_MS
         scope.launch {
             val now = System.currentTimeMillis()
             withContext(Dispatchers.IO) {
@@ -316,6 +325,10 @@ class PlaybackEngine(
                     val dao = db.songStateDao()
                     dao.ensure(songId, now)
                     dao.addPlayedMs(songId, ms, now)
+                    // 收听日志：记进小时桶，并顺手裁掉保留期之外的桶（表大小恒定有界）
+                    val log = db.listenLogDao()
+                    log.add(hour, ms)
+                    log.prune(hour - ListenLogEntity.RETENTION_DAYS * 24L)
                 }
             }
             index.bump(songId) { it.copy(playedMs = it.playedMs + ms) }
@@ -447,9 +460,31 @@ class PlaybackEngine(
     // ================================================================ 播放动作
 
     override fun playQueue(queue: List<Song>, startIndex: Int) {
+        startQueue(queue, startIndex, shuffled = false)
+    }
+
+    /**
+     * 随机播放一整批歌（桌面启动器快捷方式「随机播放」）。
+     *
+     * 与 [playQueue] 只差一件事：**先**把「随机 + 列表循环」两个开关落定，再起播。
+     * 不能写成 `playQueue(...)` 之后另起一个协程去改模式——两个协程谁先跑完不确定，
+     * 用户会听到"第一首按原顺序播、之后才乱序"的半随机状态。
+     *
+     * 起始下标交给 `setMediaItems` 的 shuffle 逻辑处理（Media3 会在乱序后
+     * 记住当前项），这里仍传 0，避免我们自己再算一遍顺序反而和播放器不一致。
+     */
+    override fun playShuffled(songs: List<Song>) {
+        startQueue(songs, 0, shuffled = true)
+    }
+
+    private fun startQueue(queue: List<Song>, startIndex: Int, shuffled: Boolean) {
         scope.launch {
             val c = ensureController() ?: return@launch
             if (queue.isEmpty()) return@launch
+            if (shuffled) {
+                c.repeatMode = Player.REPEAT_MODE_ALL
+                c.shuffleModeEnabled = true
+            }
             val i = startIndex.coerceIn(0, queue.size - 1)
             currentQueue = queue
             c.setMediaItems(queue.map { PlaybackConnection.toMediaItem(it) }, i, 0L)
@@ -457,7 +492,16 @@ class PlaybackEngine(
             c.play()
             if (prefs.playbackSpeed != 1f) c.setPlaybackSpeed(prefs.playbackSpeed)
             _progress.value = PlaybackProgress(0L, queue[i].durationMs, 0L)
-            _player.update { it.copy(queueSize = queue.size) }
+            _player.update {
+                it.copy(
+                    queueSize = queue.size,
+                    // 显式写回：`onShuffleModeEnabledChanged` 只有真的变化时才回调，
+                    // 「本来就是随机 + 用户又点了一次随机播放」时不会触发，界面上的
+                    // 模式图标就会停在上一档。
+                    repeatMode = c.repeatMode,
+                    shuffle = c.shuffleModeEnabled,
+                )
+            }
             saveQueue()
             syncCurrentSong(force = true)
             startPositionTicker()
@@ -544,6 +588,30 @@ class PlaybackEngine(
             _player.update { it.copy(queueSize = c.mediaItemCount) }
             saveQueue()
             messages.post("已加入播放队列：${song.title}")
+        }
+    }
+
+    /**
+     * 批量追加到播放队列（多选态的「加入队列」）。
+     *
+     * 已在队列里的歌**跳过**：批量操作最容易踩的坑就是连点两次之后队列里
+     * 出现一堆重复条目，用户还得逐个删。队列为空时顺带把第一首变成当前曲目
+     * （否则用户加了歌却按不动播放）。
+     */
+    override fun enqueue(songs: List<Song>) {
+        if (songs.isEmpty()) return
+        scope.launch {
+            val c = ensureController() ?: return@launch
+            val existing = (0 until c.mediaItemCount).map { c.getMediaItemAt(it).mediaId }.toSet()
+            val fresh = songs.filterNot { it.stableKey in existing }
+            if (fresh.isEmpty()) {
+                messages.post("所选歌曲都在播放队列里了")
+                return@launch
+            }
+            c.addMediaItems(fresh.map { PlaybackConnection.toMediaItem(it) })
+            _player.update { it.copy(queueSize = c.mediaItemCount) }
+            saveQueue()
+            refreshQueue()
         }
     }
 
@@ -653,6 +721,21 @@ class PlaybackEngine(
         _player.update { it.copy(lyricOffsetMs = 0) }
     }
 
+    /**
+     * 把当前曲的歌词偏移直接设为某个值（「以本行为准」）。
+     *
+     * 与 [setLyricOffset]（增量）的区别：用户长按某一行说"我唱到这句了"时，
+     * 依据是「该行时间戳」与「当前播放位置」两个绝对值，直接算出偏移比
+     * 让他自己按十几次 ±100ms 靠谱得多。偏移定义见 `Lyrics.indexAt(position + offset)`。
+     */
+    override fun setLyricOffsetAbsolute(offsetMs: Int) {
+        val song = _player.value.current ?: return
+        val songId = index.idOf(song) ?: return
+        val next = offsetMs.coerceIn(-20_000, 20_000)
+        persistLyricOffset(songId, next)
+        _player.update { it.copy(lyricOffsetMs = next) }
+    }
+
     /** 逐曲歌词偏移：写进 `song_state`（旧实现是 Prefs 里按 hashCode 拼的散列键） */
     private fun persistLyricOffset(songId: Long, offsetMs: Int) {
         index.bump(songId) { it.copy(lyricOffsetMs = offsetMs) }
@@ -681,6 +764,12 @@ class PlaybackEngine(
         // 逐字开关同时管着桌面悬浮歌词的逐字染色——服务独立存活，
         // 得敲它一下才知道要重绘（顺带给一次预览，当场能看出区别）。
         previewOverlayAfterConfigChange()
+    }
+
+    /** 播放页展示歌词还是封面：落盘，下次进播放页保持这一状态 */
+    override fun setLyricsPaneVisible(visible: Boolean) {
+        prefs.lyricsPaneVisible = visible
+        _player.update { it.copy(lyricsPaneVisible = visible) }
     }
 
     /** 车载模式：启动直进播放页 + 播放页 5 秒无操作进入沉浸态 */
@@ -910,6 +999,26 @@ class PlaybackEngine(
         }
     }
 
+    /**
+     * 睡眠定时的「渐弱收尾」。
+     *
+     * 文档一直承诺「淡出渐弱」，而历史实现是到点直接 `pause` —— 睡着前最后一秒
+     * 声音被硬生生掐断，在安静环境里很突兀。这里在到点前 [SLEEP_FADE_MS]
+     * 内把 [Player.volume] 线性压到 0，再交给 `SleepTimer.fireAction` 暂停，
+     * 暂停后剩余时间归零 → 音量自动回到 1（否则下一次手动播放会**全程静音**）。
+     *
+     * 音量是纯播放域概念：全工程只有这里写 `volume`，不存在与用户设置的「系统音量」打架。
+     */
+    private fun applySleepFade(remainingMs: Long) {
+        val c = controller ?: return
+        val target = when {
+            remainingMs <= 0L -> 1f
+            remainingMs >= SLEEP_FADE_MS -> 1f
+            else -> remainingMs.toFloat() / SLEEP_FADE_MS
+        }
+        if (c.volume != target) c.volume = target
+    }
+
     /** 把封面字节塞进通知栏/锁屏的媒体元数据（只替换元数据，不打断播放），并做主题取色 */
     private fun loadArtwork(song: Song) {
         artworkJob?.cancel()
@@ -971,6 +1080,9 @@ class PlaybackEngine(
                 }
 
                 accumulateListening(c.currentMediaItem?.mediaId, playing)
+                // 睡眠定时淡出：与进度同频（播放中 200ms）把音量拉下来，比 500ms 一档的
+                // 剩余时间流更细腻；定时未开启时只是一个常数比较。
+                applySleepFade(SleepTimer.remainingMs.value)
                 // 悬浮歌词：与进度同频驱动，内部按「行文字是否变化」去重，
                 // 未开启开关时是纯字段比较，开销可忽略。
                 publishLyricToOverlay(pos, playing)
@@ -1071,6 +1183,9 @@ class PlaybackEngine(
          * 没有节流会退化成「每 200ms 尝试启动一次前台服务」的灾难。
          */
         private const val OVERLAY_REVIVE_INTERVAL_MS = 30_000L
+
+        /** 睡眠定时到点前的渐弱时长：10 秒内线性降为 0（文档承诺的「淡出渐弱」） */
+        private const val SLEEP_FADE_MS = 10_000L
     }
 }
 
@@ -1083,12 +1198,16 @@ class PlaybackEngine(
 interface PlayerActions {
     fun restoreQueueIfNeeded()
     fun playQueue(queue: List<Song>, startIndex: Int)
+
+    /** 随机播放一整批歌（先切成「随机 + 列表循环」再起播），见 [PlaybackEngine.playShuffled] */
+    fun playShuffled(songs: List<Song>)
     fun togglePlay()
     fun next()
     fun previous()
     fun seekTo(ms: Long)
     fun cyclePlayMode()
     fun playNext(song: Song)
+    fun enqueue(songs: List<Song>)
     fun refreshQueue()
     fun jumpToQueue(index: Int)
     fun removeQueueItem(index: Int)
@@ -1102,8 +1221,10 @@ interface PlayerActions {
     fun closePlayer()
     fun setLyricOffset(deltaMs: Int)
     fun resetLyricOffset()
+    fun setLyricOffsetAbsolute(offsetMs: Int)
     fun setLyricScale(scale: Float)
     fun setLyricWordByWord(enabled: Boolean)
+    fun setLyricsPaneVisible(visible: Boolean)
     fun setCarMode(enabled: Boolean)
     fun setLyricOverlay(enabled: Boolean)
     fun setLyricOverlayLines(lines: Int)

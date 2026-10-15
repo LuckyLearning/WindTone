@@ -12,6 +12,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.luckylearning.windtone.MainActivity
 import com.luckylearning.windtone.R
+import com.luckylearning.windtone.ui.AppShortcut
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -68,12 +69,25 @@ class MusicWidgetProvider : AppWidgetProvider() {
                 if (snap.playing) R.drawable.ic_widget_pause else R.drawable.ic_widget_play,
             )
 
+            // 整块信息区的兜底：普通地打开应用首页
             val openApp = PendingIntent.getActivity(
                 context, 0,
                 Intent(context, MainActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
+
+            // 三块可点区域各去不同去处（批次 9.5-①③）：
+            //   封面 → 播放页；歌名 → 曲库歌曲列表；歌手 → 歌单列表。
+            // 以前整块信息区都只进首页，"点哪里都一样"等于三个按钮里有两个是废的。
+            //
+            // requestCode 必须各不相同：PendingIntent 的身份是
+            // (requestCode, Intent) 的组合，但 `FLAG_UPDATE_CURRENT` 在
+            // requestCode 相同时会用后一个覆盖前一个，最终三个区域全变成同一个跳转。
+            views.setOnClickPendingIntent(R.id.widget_cover, entry(context, 21, AppShortcut.OPEN_PLAYER))
+            views.setOnClickPendingIntent(R.id.widget_title, entry(context, 22, AppShortcut.OPEN_LIBRARY))
+            views.setOnClickPendingIntent(R.id.widget_artist, entry(context, 23, AppShortcut.OPEN_PLAYLISTS))
+            // 信息区的空白部分保留「打开应用」的兜底，避免标题很短时右侧一片死区
             views.setOnClickPendingIntent(R.id.widget_info, openApp)
 
             fun btn(action: String, requestCode: Int, viewId: Int) {
@@ -89,6 +103,23 @@ class MusicWidgetProvider : AppWidgetProvider() {
             btn(ACTION_NEXT, 13, R.id.widget_next)
             return views
         }
+
+        /**
+         * 小组件的深链 Intent。
+         *
+         * 复用启动器快捷方式那条通道（`AppShortcut.ACTION` + `EXTRA`），
+         * 这样"待处理动作"只有一处消费逻辑 —— 否则小组件与快捷方式各有一套
+         * 解析，迟早会出现一个能跳一个不能跳。
+         */
+        private fun entry(context: Context, requestCode: Int, action: String): PendingIntent =
+            PendingIntent.getActivity(
+                context, requestCode,
+                Intent(context, MainActivity::class.java)
+                    .setAction(AppShortcut.ACTION)
+                    .putExtra(AppShortcut.EXTRA, action)
+                    .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
 
         private fun sendPlayerCommand(context: Context, action: (MediaController) -> Unit) {
             val scope = CoroutineScope(Dispatchers.Main.immediate)

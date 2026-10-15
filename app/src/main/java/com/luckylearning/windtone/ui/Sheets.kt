@@ -62,6 +62,7 @@ import com.luckylearning.windtone.data.ScanScope
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.playback.AudioFx
 import com.luckylearning.windtone.playback.SleepTimer
+import com.luckylearning.windtone.state.FolderItem
 
 // ================================================================ 播放队列
 
@@ -72,6 +73,7 @@ fun QueueSheet(
     onJump: (Int) -> Unit,
     onRemove: (Int) -> Unit,
     onMove: (Int, Int) -> Unit,
+    onSaveAsPlaylist: () -> Unit = {},
 ) {
     ModalBottomSheet(onDismissRequest = onClose) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
@@ -85,7 +87,13 @@ fun QueueSheet(
                     "播放队列 · ${queue.size} 首",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
                 )
+                // 队列是"临时排序"，用户攒出一份满意的队列后往往想存下来长期用
+                TextButton(
+                    onClick = onSaveAsPlaylist,
+                    enabled = queue.isNotEmpty(),
+                ) { Text("存为歌单") }
             }
             Spacer(Modifier.height(8.dp))
             LazyColumn(Modifier.height(420.dp)) {
@@ -482,7 +490,13 @@ private fun SheetAction(label: String, color: Color = Color.Unspecified, onClick
 @Composable
 fun AddToPlaylistSheet(
     playlists: List<PlaylistInfo>,
-    song: Song,
+    /**
+     * 单曲加入时的来源。多选批量加入时传 null —— 同时传 song 和 count
+     * 会出现「把『晴天』加入歌单」这类只说了一半的标题。
+     */
+    song: Song?,
+    /** 多选批量加入的歌曲数（[song] 为 null 时用它生成标题） */
+    count: Int = 0,
     onDismiss: () -> Unit,
     onPick: (PlaylistInfo) -> Unit,
     onCreateNew: (String) -> Unit,
@@ -492,7 +506,7 @@ fun AddToPlaylistSheet(
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
             Text(
-                "把「${song.title}」加入歌单",
+                song?.let { "把「${it.title}」加入歌单" } ?: "把所选的 $count 首加入歌单",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(horizontal = 8.dp),
@@ -623,9 +637,14 @@ fun PlaylistActionsMenu(
     onRename: () -> Unit,
     onDelete: () -> Unit,
     onExport: () -> Unit,
+    onDedupe: () -> Unit = {},
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         DropdownMenuItem(text = { Text("重命名…") }, onClick = { onDismiss(); onRename() })
+        DropdownMenuItem(
+            text = { Text("移除重复歌曲") },
+            onClick = { onDismiss(); onDedupe() },
+        )
         DropdownMenuItem(text = { Text("导出为 M3U…") }, onClick = { onDismiss(); onExport() })
         DropdownMenuItem(text = { Text("删除歌单") }, onClick = { onDismiss(); onDelete() })
     }
@@ -637,17 +656,21 @@ fun PlaylistActionsMenu(
  * 扫描范围选择抽屉。
  *
  * 应用默认不扫描全盘，用户在这里明确决定：扫全盘，还是只看指定目录。
+ * 目录行上除了「移除」，还多了一个「排除」开关——它只阻止以后扫描这棵树，
+ * **不会**把已经导入的歌清掉（与移除目录的区别见 `LibraryUiState.folderUris` 注释）。
  */
 @Composable
 fun ScanScopeSheet(
     current: ScanScope,
-    folders: List<String>,
+    folders: List<FolderItem>,
     onFullScan: () -> Unit,
     onPickFolder: () -> Unit,
     onUseFolders: () -> Unit,
     onRemoveFolder: (String) -> Unit,
+    onToggleExcluded: (String, Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val activeCount = folders.count { !it.excluded }
     val folderCount = folders.size
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
@@ -671,11 +694,12 @@ fun ScanScopeSheet(
             SectionLabel("指定目录")
             OptionRow(
                 icon = AppIcons.Folder,
-                title = if (folderCount > 0) "只看已导入的目录" else "选择音乐目录…",
-                subtitle = if (folderCount > 0) "当前已导入 $folderCount 个目录"
+                title = if (activeCount > 0) "只看已导入的目录" else "选择音乐目录…",
+                subtitle = if (activeCount > 0) "当前参与扫描 $activeCount 个目录"
+                else if (folderCount > 0) "所有目录都被排除了，先取消排除或导入新目录"
                 else "通过系统文件选择器指定一个或多个音乐文件夹",
-                selected = current == ScanScope.FOLDERS && folderCount > 0,
-                onClick = { if (folderCount > 0) onUseFolders() else onPickFolder() },
+                selected = current == ScanScope.FOLDERS && activeCount > 0,
+                onClick = { if (activeCount > 0) onUseFolders() else onPickFolder() },
             )
             OptionRow(
                 icon = AppIcons.Folder,
@@ -686,7 +710,7 @@ fun ScanScopeSheet(
 
             if (folderCount > 0) {
                 SectionLabel("已导入的目录")
-                folders.forEach { uriString ->
+                folders.forEach { item ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
@@ -695,23 +719,30 @@ fun ScanScopeSheet(
                             // 主标题只显示最后一个文件夹名字；父路径降为次要小字，
                             // 避免两个同名目录（如 Music/华语 与 Download/华语）分不清
                             Text(
-                                folderName(uriString),
+                                item.name,
                                 style = MaterialTheme.typography.bodyMedium,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
+                                color = if (item.excluded) MaterialTheme.colorScheme.onSurfaceVariant
+                                else MaterialTheme.colorScheme.onSurface,
                             )
-                            val parent = folderParentPath(uriString)
-                            if (parent.isNotEmpty()) {
-                                Text(
-                                    parent,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
+                            Text(
+                                buildString {
+                                    if (item.fullPath.isNotEmpty()) append(item.fullPath).append(" · ")
+                                    append(if (item.excluded) "已排除，不再扫描" else "${item.songCount} 首")
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
-                        IconButton(onClick = { onRemoveFolder(uriString) }) {
+                        Switch(
+                            checked = item.excluded,
+                            onCheckedChange = { onToggleExcluded(item.treeUri, it) },
+                            modifier = Modifier.padding(end = 4.dp),
+                        )
+                        IconButton(onClick = { onRemoveFolder(item.treeUri) }) {
                             Icon(
                                 Icons.Filled.Close,
                                 contentDescription = "移除该目录",
@@ -720,27 +751,17 @@ fun ScanScopeSheet(
                         }
                     }
                 }
+                Text(
+                    "「排除」只停止以后扫描该目录，已导入的歌曲仍留在曲库里；" +
+                        "「✕ 移除」则会把目录和已导入的歌曲一起摘掉。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
             }
             Spacer(Modifier.height(24.dp))
         }
     }
-}
-
-/** 把 SAF 树 URI 转成人类可读的目录路径（如 `primary:Music/流行` → `Music/流行`） */
-private fun folderLabel(uriString: String): String {
-    val decoded = runCatching { android.net.Uri.decode(uriString) }.getOrDefault(uriString)
-    val tail = decoded.substringAfterLast("tree/", decoded)
-    return tail.substringAfterLast(':').ifBlank { tail }
-}
-
-/** 目录展示名：只取最后一个文件夹名字（`Music/华语` → `华语`） */
-private fun folderName(uriString: String): String =
-    folderLabel(uriString).trimEnd('/').substringAfterLast('/').ifBlank { folderLabel(uriString) }
-
-/** 目录的父路径（`Music/华语` → `Music`）；已在存储根目录时为空 */
-private fun folderParentPath(uriString: String): String {
-    val label = folderLabel(uriString).trimEnd('/')
-    return if ('/' in label) label.substringBeforeLast('/') else ""
 }
 
 /** 扫描范围胶囊标签 */

@@ -77,6 +77,26 @@ class SettingsViewModel(private val app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * 清空曲库与导入目录，**保留收藏 / 播放统计 / 歌单**。
+     *
+     * 与 [resetAllUserData] 恰好互补：那个是「留曲库、清数据」，这个是「清曲库、留数据」。
+     * 收藏与统计按 `stableKey` 与歌关联，所以重扫同一批文件后红心、播放次数、
+     * 歌单条目会自动接上——换了一批音乐时不必再手工点一遍。
+     *
+     * 「移出曲库」的排除标记随整表清空一并消失（否则重扫后会有歌莫名不出现）。
+     *
+     * 调用方随后应调 [LibraryViewModel.onLibraryCleared] 而不是 `reloadAll()`：
+     * 后者会在扫描范围仍是「全盘」时立刻重扫，把刚清空的曲库又填满。
+     */
+    fun resetLibrary() {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { runCatching { maintenance.resetLibrary() } }
+            refreshMaintenanceReport()
+            messages.post("已清空曲库与导入目录，请重新选择扫描范围")
+        }
+    }
+
     // ---------------------------------------------------------------- 崩溃日志
 
     fun crashLogCount(): Int = CrashLog.count(app)

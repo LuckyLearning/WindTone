@@ -2,4 +2,18 @@
 <resources>
     <!-- 中文语境下的应用名：听风 -->
     <string name="app_name" translatable="false">听风</string>
+
+    <string name="tile_label">音乐播放</string>
+    <string name="tile_next">下一首</string>
+    <string name="tile_idle">未在播放</string>
+    <string name="tile_empty">曲库为空</string>
+    <string name="tile_playing">正在播放</string>
+    <string name="tile_paused">已暂停</string>
+
+    <string name="shortcut_play_all_short">播放全部</string>
+    <string name="shortcut_play_all_long">播放全部歌曲</string>
+    <string name="shortcut_shuffle_short">随机播放</string>
+    <string name="shortcut_shuffle_long">随机播放全部歌曲</string>
+    <string name="shortcut_favorites_short">我的收藏</string>
+    <string name="shortcut_favorites_long">打开我的收藏</string>
 </resources>

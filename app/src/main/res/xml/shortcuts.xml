@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  静态启动器快捷方式（批次 9.4）。
+
+  三个 intent 的 action / extra 必须与 `AppShortcut.ACTION` / `AppShortcut.EXTRA`
+  以及各自的取值逐字一致 —— 三处（这里、Kotlin 常量、MainActivity 的读取）任意一处
+  拼错，表现都是"点了快捷方式只是普通地打开了应用"，不会有任何报错。
+
+  targetPackage 故意不写：按文档，省略时默认就是本应用自己的包名。
+  写死包名反而会在 debug（applicationId 带 .debug 后缀）下指向正式版包。
+-->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_play_all"
+        android:shortcutId="play_all"
+        android:shortcutLongLabel="@string/shortcut_play_all_long"
+        android:shortcutShortLabel="@string/shortcut_play_all_short">
+        <intent
+            android:action="com.luckylearning.windtone.SHORTCUT"
+            android:targetClass="com.luckylearning.windtone.MainActivity">
+            <extra
+                android:name="shortcut"
+                android:value="play_all" />
+        </intent>
+    </shortcut>
+
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_shuffle"
+        android:shortcutId="shuffle"
+        android:shortcutLongLabel="@string/shortcut_shuffle_long"
+        android:shortcutShortLabel="@string/shortcut_shuffle_short">
+        <intent
+            android:action="com.luckylearning.windtone.SHORTCUT"
+            android:targetClass="com.luckylearning.windtone.MainActivity">
+            <extra
+                android:name="shortcut"
+                android:value="shuffle" />
+        </intent>
+    </shortcut>
+
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_favorite"
+        android:shortcutId="favorites"
+        android:shortcutLongLabel="@string/shortcut_favorites_long"
+        android:shortcutShortLabel="@string/shortcut_favorites_short">
+        <intent
+            android:action="com.luckylearning.windtone.SHORTCUT"
+            android:targetClass="com.luckylearning.windtone.MainActivity">
+            <extra
+                android:name="shortcut"
+                android:value="favorites" />
+        </intent>
+    </shortcut>
+
+</shortcuts>

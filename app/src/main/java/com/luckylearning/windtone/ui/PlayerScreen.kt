@@ -39,6 +39,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -46,6 +47,7 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -107,6 +109,26 @@ fun PlayerScreen(
     onCyclePlayMode: () -> Unit,
     onLyricOffset: (Int) -> Unit,
     onResetLyricOffset: () -> Unit,
+    /**
+     * 长按歌词行校准偏移（批次 10.4-②）。
+     *
+     * 用户听到「现在正唱这一句」时直接长按那一行，由「该行时间戳 − 当前播放位置」
+     * 反算出需要的偏移**绝对值**，一次到位；比让他自己按十几次 ±100ms 靠谱得多。
+     * 增量的 [onLyricOffset] 留着做微调（弹层里那对按钮）。
+     */
+    onLyricOffsetAbsolute: (Int) -> Unit = {},
+    /**
+     * 播放页中部显示歌词（true）还是封面（false）。
+     *
+     * 这个状态由引擎持有并落盘（批次 10.4-③）：以前是 `remember`，每次进播放页
+     * 都重置回歌词态，切到封面后退出再进来又变回歌词——用户会以为开关坏了。
+     */
+    onLyricsPaneVisible: (Boolean) -> Unit = {},
+    /**
+     * true = 作为宽屏右栏的**面板**（平板双栏）；false = 手机上的全屏覆盖层。
+     * 面板态没有「收起播放页」这回事——它本来就不是盖上去的，箭头点了没反应。
+     */
+    pane: Boolean = false,
     onLyricScale: (Float) -> Unit,
     onShowQueue: () -> Unit,
     onSleep: (Int) -> Unit,
@@ -128,10 +150,15 @@ fun PlayerScreen(
     isFavorite: Boolean = false,
     onToggleFavorite: (Song) -> Unit = {},
 ) {
-    var showLyrics by remember { mutableStateOf(true) }
+    // 歌词 / 封面二选一：状态在引擎里（落盘，跨会话保留），这里只是个只读视图 + 回调。
+    val showLyrics = state.lyricsPaneVisible
     var showOptions by remember { mutableStateOf(false) }
     var showEq by remember { mutableStateOf(false) }
     var showSleep by remember { mutableStateOf(false) }
+    // 长按歌词行校准偏移：存「该行时间戳 to 按下时的播放位置」。
+    // 刻意在按下瞬间把位置**快照**下来，而不是让弹窗每 250ms 读一次进度——
+    // 否则用户盯着弹窗读数字的那几秒里，"当前要设成多少"一直在跳。
+    var offsetCalibrate by remember { mutableStateOf<Pair<Long, Long>?>(null) }
 
     // 播放模式（顺序 / 列表循环 / 单曲循环 / 随机）—— 4 个档位共用下面控制区的一个按钮
     val playMode = playModeOf(state.repeatMode, state.shuffle)
@@ -295,17 +322,21 @@ fun PlayerScreen(
             // 「歌词 + 歌名行（含红心）+ 进度条 + 时间」，歌名行是常驻的。
             if (!immersive) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { keepAwake(); onClose() }) {
-                        Icon(
-                            Icons.Filled.KeyboardArrowDown,
-                            contentDescription = "收起播放页",
-                            tint = scheme.onSurface,
-                        )
+                    // 面板态（平板右栏）不显示收起箭头：播放页不是盖上去的，
+                    // 点了也没有"收起来"这回事，留着只会让人以为按钮坏了。
+                    if (!pane) {
+                        IconButton(onClick = { keepAwake(); onClose() }) {
+                            Icon(
+                                Icons.Filled.KeyboardArrowDown,
+                                contentDescription = "收起播放页",
+                                tint = scheme.onSurface,
+                            )
+                        }
                     }
                     // 顶栏中间留空 —— 歌名 / 歌手在顶栏下方的常驻歌名行里
                     // （效果图 ⑫ 的 p-nowrow），这里不重复显示。
                     Spacer(Modifier.weight(1f))
-                    IconButton(onClick = { keepAwake(); showLyrics = !showLyrics }) {
+                    IconButton(onClick = { keepAwake(); onLyricsPaneVisible(!showLyrics) }) {
                         Icon(
                             imageVector = if (showLyrics) AppIcons.Album else AppIcons.Lyrics,
                             contentDescription = if (showLyrics) "切换为封面" else "切换为歌词",
@@ -336,6 +367,11 @@ fun PlayerScreen(
                         wordByWord = state.lyricWordByWord,
                         onSeekTo = onSeekTo,
                         carMode = state.carMode,
+                        // 长按哪一行就在哪一刻对表：位置在这里取一次快照
+                        onLineLongPress = { lineMs ->
+                            keepAwake()
+                            offsetCalibrate = lineMs to progressState.value.positionMs
+                        },
                     )
                 } else {
                     CoverPane(
@@ -620,6 +656,68 @@ fun PlayerScreen(
         onEndOfSong = { onSleepEndOfSong(); showSleep = false },
         onCancel = { onCancelSleep(); showSleep = false },
     )
+
+    // ---------------------------------------------- 长按歌词行 → 校准偏移（10.4-②）
+    //
+    // 偏移的定义是 `indexAt(position + offset)`：要让这一行"刚好唱到"，
+    // 就需要 `position + offset ≈ lineMs`，即 `offset = lineMs − position`。
+    // 两个都是绝对值，一次相减就够，不必让用户按 ±100ms 的按钮试十几次。
+    offsetCalibrate?.let { (lineMs, positionMs) ->
+        val suggested = (lineMs - positionMs).coerceIn(-20_000L, 20_000L).toInt()
+        AlertDialog(
+            onDismissRequest = { offsetCalibrate = null },
+            title = { Text("校准歌词偏移") },
+            text = {
+                Column {
+                    Text(
+                        "把这一刻正在唱的这一句对准。当前播放位置 " +
+                            "${formatDuration(positionMs)}，" +
+                            "该行时间戳 ${formatDuration(lineMs)}。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "将把这首歌的歌词偏移设为 ${suggested} ms" +
+                            if (state.lyricOffsetMs != 0) {
+                                "（当前 ${state.lyricOffsetMs} ms）"
+                            } else {
+                                ""
+                            } + "。",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "偏移只作用于这首歌，逐曲记住。没对准时再长按一次即可重设；" +
+                            "想微调用播放设置里的 ±100ms。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = scheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onLyricOffsetAbsolute(suggested)
+                        offsetCalibrate = null
+                    },
+                ) { Text("就唱到这句") }
+            },
+            dismissButton = {
+                Row {
+                    if (state.lyricOffsetMs != 0) {
+                        TextButton(
+                            onClick = {
+                                onResetLyricOffset()
+                                offsetCalibrate = null
+                            },
+                        ) { Text("重置为 0") }
+                    }
+                    TextButton(onClick = { offsetCalibrate = null }) { Text("取消") }
+                }
+            },
+        )
+    }
 }
 
 // ================================================================ 自定义进度条

@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -184,6 +185,8 @@ fun SongRow(
     onMore: (() -> Unit)? = null,
     onRemove: (() -> Unit)? = null,
     large: Boolean = false,
+    /** 非 null 时进入多选视觉：左侧出现勾选框，选中行整体高亮 */
+    selected: Boolean? = null,
 ) {
     val haptic = LocalHapticFeedback.current
     val scheme = MaterialTheme.colorScheme
@@ -191,9 +194,14 @@ fun SongRow(
     val coverSize = if (large) 64.dp else 48.dp
     val textGap = if (large) 18.dp else 12.dp
     val padV = if (large) 12.dp else 8.dp
+    val checked = selected == true
 
     Surface(
-        color = if (isCurrent) scheme.primaryContainer.copy(alpha = 0.55f) else scheme.surfaceContainerLow,
+        color = when {
+            checked -> scheme.primaryContainer.copy(alpha = 0.75f)
+            isCurrent -> scheme.primaryContainer.copy(alpha = 0.55f)
+            else -> scheme.surfaceContainerLow
+        },
         shape = MaterialTheme.shapes.medium,
         modifier = Modifier
             .fillMaxWidth()
@@ -201,9 +209,13 @@ fun SongRow(
             .clip(MaterialTheme.shapes.medium)
             .combinedClickable(
                 onClick = onClick,
-                onLongClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onLongClick?.invoke()
+                // onLongClick 传 null 时**必须**让 combinedClickable 也拿到 null：
+                // 否则它依旧会侦测并消费长按手势，上层「长按拖动排序」就永远收不到事件。
+                onLongClick = onLongClick?.let { cb ->
+                    {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        cb()
+                    }
                 },
             ),
     ) {
@@ -211,6 +223,14 @@ fun SongRow(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(start = 10.dp, end = 4.dp, top = padV, bottom = padV),
         ) {
+            if (selected != null) {
+                Checkbox(
+                    checked = checked,
+                    onCheckedChange = { onClick() },
+                    modifier = Modifier.size(if (large) 40.dp else 34.dp),
+                )
+                Spacer(Modifier.width(if (large) 10.dp else 6.dp))
+            }
             CoverArt(song = song, size = coverSize, cornerRadius = if (large) 14.dp else 10.dp)
             Spacer(Modifier.width(textGap))
             Column(Modifier.weight(1f)) {

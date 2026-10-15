@@ -4,7 +4,7 @@ import com.luckylearning.windtone.state.PlaybackProgress
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -76,6 +76,13 @@ fun LyricsPane(
     // 1707dp 宽屏上会显得又小又空，瞄一眼读不清。这里直接折叠进 scale，
     // 内部所有字号 / 行距计算一行都不用改。
     carMode: Boolean = false,
+    /**
+     * 长按某一行：回调该行的**时间戳**（纯文本歌词没有时间轴，不会触发）。
+     *
+     * 用来做「就唱到这句」的偏移校准（批次 10.4-②）——用户听到唱到哪一句时
+     * 直接长按那一行，比在设置里按 ±100ms 试错直观得多。传 null 关闭该手势。
+     */
+    onLineLongPress: ((Long) -> Unit)? = null,
 ) {
     val effectiveScale = if (carMode) scale * CAR_LYRIC_BOOST else scale
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -93,6 +100,7 @@ fun LyricsPane(
                 scale = effectiveScale,
                 wordByWord = wordByWord,
                 onSeekTo = onSeekTo,
+                onLineLongPress = onLineLongPress,
             )
         }
     }
@@ -188,6 +196,7 @@ private fun SyncedLyrics(
     scale: Float,
     wordByWord: Boolean,
     onSeekTo: (Long) -> Unit,
+    onLineLongPress: ((Long) -> Unit)?,
 ) {
     val listState = rememberLazyListState()
     val density = LocalDensity.current
@@ -257,11 +266,17 @@ private fun SyncedLyrics(
                 scale = scale,
                 wordByWord = wordByWord,
                 onClick = { if (line.timeMs >= 0) onSeekTo(line.timeMs) },
+                // 没有时间轴的行（`timeMs < 0`）不参与校准：拿它算偏移只会算出一个
+                // 无意义的巨大数字，等于把偏移一次搞坏。
+                onLongClick = onLineLongPress
+                    ?.takeIf { line.timeMs >= 0 }
+                    ?.let { cb -> { cb(line.timeMs) } },
             )
         }
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun LyricLineItem(
     line: LyricLine,
@@ -271,6 +286,8 @@ private fun LyricLineItem(
     scale: Float,
     wordByWord: Boolean,
     onClick: () -> Unit,
+    /** 长按这一行（校准偏移用）；null = 不接管长按 */
+    onLongClick: (() -> Unit)? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     val alpha by animateFloatAsState(
@@ -284,7 +301,7 @@ private fun LyricLineItem(
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(if (active) scheme.primary.copy(alpha = 0.10f) else Color.Transparent)
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 14.dp, vertical = 9.dp),
         contentAlignment = Alignment.Center,
     ) {

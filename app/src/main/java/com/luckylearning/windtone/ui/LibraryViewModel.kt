@@ -11,10 +11,13 @@ import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
 import com.luckylearning.windtone.MusicApp
 import com.luckylearning.windtone.data.CoverRepository
+import com.luckylearning.windtone.data.HOUR_MS
+import com.luckylearning.windtone.data.ListenBucket
 import com.luckylearning.windtone.data.PinyinIndex
 import com.luckylearning.windtone.data.ScanScope
 import com.luckylearning.windtone.data.SongDeleter
 import com.luckylearning.windtone.data.SortOrder
+import com.luckylearning.windtone.data.buildListeningReport
 import com.luckylearning.windtone.data.db.FolderEntity
 import com.luckylearning.windtone.data.db.PlaylistEntity
 import com.luckylearning.windtone.data.db.PlaylistSongEntity
@@ -23,15 +26,20 @@ import com.luckylearning.windtone.data.db.toSong
 import com.luckylearning.windtone.data.derivedFolderPath
 import com.luckylearning.windtone.data.docIdFullPath
 import com.luckylearning.windtone.data.docIdOf
+import com.luckylearning.windtone.data.findDuplicateGroups
 import com.luckylearning.windtone.data.folderDisplayName
 import com.luckylearning.windtone.data.folderParentHint
 import com.luckylearning.windtone.data.model.Song
+import com.luckylearning.windtone.data.model.SongSource
 import com.luckylearning.windtone.data.treeDisplayName
+import com.luckylearning.windtone.state.FolderItem
 import com.luckylearning.windtone.state.GroupInfo
 import com.luckylearning.windtone.state.LibraryUiState
 import com.luckylearning.windtone.state.LibraryView
 import com.luckylearning.windtone.state.PlayStats
 import com.luckylearning.windtone.state.PlaylistInfo
+import com.luckylearning.windtone.state.ReportUiState
+import com.luckylearning.windtone.state.TopSong
 import com.luckylearning.windtone.state.VirtualPlaylist
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -101,6 +109,29 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * 「清空曲库」之后的对账（设置页 → 关于与诊断 → 数据维护）。
+     *
+     * 为什么不能只调 [reloadAll]：曲库清了但扫描范围还是「全盘」的话，
+     * `loadFromCacheThenScan()` 会立刻 `scan(auto = true)` 把整个磁盘再扫一遍 ——
+     * 用户刚清空的曲库转眼又满上，看起来就像那个按钮根本没生效。
+     * 所以这里必须把范围一并退回「未选择」，让界面停在「请选择扫描范围」。
+     *
+     * 收藏 / 播放统计 / 歌单**故意保留**：它们按 stableKey 与歌关联，
+     * 重扫到同一批文件时红心与播放次数会自动对上，不用用户再点一遍。
+     */
+    fun onLibraryCleared() {
+        cancelScan()
+        prefs.scanScope = ScanScope.UNSET
+        prefs.scanScopeChosen = true
+        folders = emptyList()
+        _library.update { it.copy(folderCount = 0, folderUris = emptyList(), folders = emptyList()) }
+        clearLibraryForScopeReset()
+        refreshGroups()
+        refreshPlaylists()
+        refreshStats()
+    }
+
     // ================================================================ 音乐库
 
     /** 冷启动：先展示曲库缓存（秒开），再按已选范围后台刷新；未选范围则完全不扫描 */
@@ -150,17 +181,57 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
      * [ScanScope.FOLDERS] 需要至少有一个已导入目录，否则界面应先去选目录。
      */
     fun setScanScope(scope: ScanScope) {
-        if (scope == ScanScope.FOLDERS && folders.isEmpty()) return
+        if (scope == ScanScope.FOLDERS && folderUriList().isEmpty()) return
         prefs.scanScope = scope
         prefs.scanScopeChosen = true
         cancelScan()
         _library.update {
-            it.copy(scanScope = scope, folderCount = folders.size, folderUris = folderUriList())
+            it.copy(
+                scanScope = scope,
+                folderCount = folders.size,
+                folderUris = folderUriList(),
+                folders = folderItemList(),
+            )
         }
         if (scope != ScanScope.UNSET) scan() else clearLibraryForScopeReset()
     }
 
-    private fun folderUriList(): List<String> = folders.map { it.treeUri }
+    private fun folderUriList(): List<String> = folders.filterNot { it.excluded }.map { it.treeUri }
+
+    /** 目录明细（设置页展示与「排除」开关用；被排除的目录也在列表里，只是带标记） */
+    private fun folderItemList(): List<FolderItem> = folders.map {
+        FolderItem(
+            treeUri = it.treeUri,
+            name = it.name,
+            fullPath = it.fullPath,
+            songCount = it.songCount,
+            excluded = it.excluded,
+        )
+    }
+
+    /**
+     * 排除 / 取消排除某个导入目录。
+     *
+     * 与「移除目录」的区别：
+     *  - 移除目录：连同已经导入的歌一起从曲库摘掉；
+     *  - 排除目录：**保留已导入的歌**，只是以后不再扫这棵树。
+     * 所以这里只写一个标记（外加刷新界面），不做任何删歌动作。
+     */
+    fun setFolderExcluded(treeUri: String, excluded: Boolean) {
+        val target = folders.firstOrNull { it.treeUri == treeUri } ?: return
+        if (target.excluded == excluded) return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                docIdOf(treeUri)?.let { db.folderDao().setExcluded(it, excluded) }
+                reloadFolders()
+            }
+            pushMessage(
+                if (excluded) "已排除「${target.name}」：以后不再扫描，已导入的 ${target.songCount} 首仍在曲库"
+                else "已取消排除「${target.name}」，下次扫描会重新收录"
+            )
+            if (!excluded) scan()
+        }
+    }
 
     /** 最短时长阈值（秒），0 表示不过滤 */
     fun minSongDurationSec(): Int = prefs.minSongDurationSec
@@ -187,8 +258,9 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
                 it.copy(
                     scanning = true,
                     statusText = "准备扫描…",
-                    folderCount = urisAtStart.size,
+                    folderCount = folders.size,
                     folderUris = urisAtStart,
+                    folders = folderItemList(),
                 )
             }
             // 本轮扫描的时间戳：写进每首歌的 lastSeenAt，扫完据此把"没见到的"标记为暂不可见
@@ -247,11 +319,15 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
         val dao = db.songDao()
         val folderIdByDocId = folders.associate { it.docId to it.id }
         val existing = dao.allIdUri().associate { it.uri to it.id }
+        // 用户主动「移出曲库」的歌：整行跳过，既不更新也不重置排除标记，
+        // 于是重扫之后它们仍然不会回到曲库（这正是与「软删」的区别所在）。
+        val excluded = dao.excludedUris().toSet()
         val now = System.currentTimeMillis()
         val out = ArrayList<Song>(raw.size)
 
         db.withTransaction {
             for (song in raw) {
+                if (song.stableKey in excluded) continue
                 val folderId = song.folderPath?.let { folderIdByDocId[it] }
                 val oldId = existing[song.stableKey]
                 val row = song.toEntity(oldId ?: 0L, folderId).copy(lastSeenAt = scanStart, missingSince = 0L)
@@ -299,6 +375,7 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
                 scanScope = ScanScope.UNSET,
                 folderCount = folders.size,
                 folderUris = folderUriList(),
+                folders = folderItemList(),
                 songs = emptyList(),
                 visible = emptyList(),
                 letterIndex = emptyMap(),
@@ -359,6 +436,7 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
                 scanScope = prefs.scanScope,
                 folderCount = folders.size,
                 folderUris = folderUriList(),
+                folders = folderItemList(),
                 statusText = "",
                 favoriteUris = favs,
             )
@@ -526,11 +604,18 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
             .take(100)
             .mapNotNull { songsById[it.songId] }
             .toList()
+        // 「我的收藏」虚拟歌单：有收藏就列出全部，最近听过的排前面
+        val favorites = index.allStates().asSequence()
+            .filter { it.favorite }
+            .sortedByDescending { it.lastPlayedAt }
+            .mapNotNull { songsById[it.songId] }
+            .toList()
         _library.update {
             it.copy(
                 playlists = infos,
                 extraRecent = recent,
                 extraMostPlayed = most,
+                extraFavorites = favorites,
             )
         }
         refreshStats()
@@ -541,6 +626,7 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
             val songs: List<Song> = when {
                 playlist.virtual && playlist.id == VirtualPlaylist.RECENT -> _library.value.extraRecent
                 playlist.virtual && playlist.id == VirtualPlaylist.MOST_PLAYED -> _library.value.extraMostPlayed
+                playlist.virtual && playlist.id == VirtualPlaylist.FAVORITES -> _library.value.extraFavorites
                 else -> {
                     val rows = withContext(Dispatchers.IO) { db.playlistDao().songsOf(playlist.id) }
                     val byId = _library.value.songs.associateBy { it.dbId }
@@ -615,6 +701,353 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
     private fun idOf(song: Song): Long? =
         index.idOf(song)
 
+    /**
+     * 歌单内拖动排序落盘。
+     *
+     * 只写 `playlist_songs.position`，一次事务逐行更新——不重建行，因此
+     * `addedAt` 与「同一首歌只出现一次」的主键约束都不会被破坏。
+     */
+    fun reorderPlaylist(playlistId: Long, orderedSongIds: List<Long>) {
+        if (orderedSongIds.isEmpty()) return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { db.playlistDao().reorder(playlistId, orderedSongIds) }
+            // 内存里先按新顺序排好，界面立刻跟上（避免等一次完整重查）
+            val byId = _library.value.playlistSongs.associateBy { it.dbId }
+            val reordered = orderedSongIds.mapNotNull { byId[it] }
+            if (reordered.size == _library.value.playlistSongs.size) {
+                _library.update { it.copy(playlistSongs = reordered) }
+            }
+            refreshPlaylists()
+        }
+    }
+
+    /**
+     * 歌单一键去重：同标题 + 同歌手 + 同时长视为重复，只保留最值得留的那一首。
+     *
+     * 只影响**这个歌单的关联行**，不动曲库、不动文件——用户想清理曲库级的重复
+     * 应该去「查找重复歌曲」（那个才会移出曲库）。
+     */
+    fun dedupePlaylist(playlistId: Long) {
+        viewModelScope.launch {
+            val current = _library.value.playlistSongs
+            if (current.size < 2) {
+                pushMessage("歌单里没有重复歌曲")
+                return@launch
+            }
+            val remove = findDuplicateGroups(current).flatMap { it.duplicates }
+            if (remove.isEmpty()) {
+                pushMessage("歌单里没有重复歌曲")
+                return@launch
+            }
+            val ids = remove.mapNotNull { idOf(it) }
+            withContext(Dispatchers.IO) {
+                if (ids.isNotEmpty()) db.playlistDao().removeSongs(playlistId, ids)
+            }
+            val removedKeys = remove.map { it.stableKey }.toSet()
+            _library.update {
+                it.copy(playlistSongs = it.playlistSongs.filterNot { s -> s.stableKey in removedKeys })
+            }
+            refreshPlaylists()
+            pushMessage("已从歌单移除 ${remove.size} 首重复歌曲")
+        }
+    }
+
+    /**
+     * 把当前播放队列存成一个新歌单（队列抽屉里的入口）。
+     *
+     * 调用方传的是队列里的 stableKey（`QueueEntry.mediaId`）而不是 Song：
+     * 队列可能包含**已不在曲库**的条目（刚被移出 / 删掉的歌），
+     * 这里按曲库现况过滤一遍，保证存出来的是一个能正常播放的歌单。
+     */
+    fun createPlaylistFromQueue(name: String, queueKeys: List<String>) {
+        if (queueKeys.isEmpty()) {
+            pushMessage("播放队列是空的")
+            return
+        }
+        val byKey = _library.value.songs.associateBy { it.stableKey }
+        val songs = queueKeys.mapNotNull { byKey[it] }
+        if (songs.isEmpty()) {
+            pushMessage("队列里的歌曲已不在曲库中")
+            return
+        }
+        createPlaylist(name, songs)
+        val skipped = queueKeys.size - songs.size
+        if (skipped > 0) pushMessage("（已跳过 $skipped 首不在曲库中的条目）")
+    }
+
+    // ---------------------------------------------------------- 批量操作（多选）
+
+    /** 进入多选态并选中这一首（长按歌曲行触发） */
+    fun enterSelection(song: Song) {
+        _library.update { it.copy(selecting = true, selection = it.selection + song.stableKey) }
+    }
+
+    /** 多选态下点行 = 勾选 / 取消勾选 */
+    fun toggleSelected(song: Song) {
+        val key = song.stableKey
+        _library.update {
+            it.copy(selection = if (key in it.selection) it.selection - key else it.selection + key)
+        }
+    }
+
+    /** 全选**当前列表**（搜索过滤后看到的那批，而不是整库） */
+    fun selectAllVisible() {
+        _library.update {
+            it.copy(selecting = true, selection = it.visible.map { s -> s.stableKey }.toSet())
+        }
+    }
+
+    /** 反选当前列表 */
+    fun invertSelection() {
+        _library.update {
+            val visibleKeys = it.visible.map { s -> s.stableKey }.toSet()
+            it.copy(selecting = true, selection = visibleKeys - it.selection)
+        }
+    }
+
+    /** 退出多选态（清空勾选） */
+    fun exitSelection() = _library.update { it.copy(selecting = false, selection = emptySet()) }
+
+    /** 勾选集合对应的 Song（按曲库顺序返回，顺序稳定） */
+    private fun selectedSongs(): List<Song> {
+        val keys = _library.value.selection
+        if (keys.isEmpty()) return emptyList()
+        return _library.value.songs.filter { it.stableKey in keys }
+    }
+
+    /** 批量加入歌单 */
+    fun bulkAddToPlaylist(playlistId: Long, playlistName: String) {
+        val songs = selectedSongs()
+        if (songs.isEmpty()) return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                val dao = db.playlistDao()
+                var pos = dao.maxPosition(playlistId) + 1
+                val now = System.currentTimeMillis()
+                songs.forEach { s ->
+                    idOf(s)?.let { dao.insertSong(PlaylistSongEntity(playlistId, it, pos++, now)) }
+                }
+            }
+            refreshPlaylists()
+            _library.value.selectedPlaylist?.takeIf { it.id == playlistId }?.let { openPlaylist(it) }
+            pushMessage("已把 ${songs.size} 首加入「$playlistName」")
+            exitSelection()
+        }
+    }
+
+    /** 批量收藏 / 批量取消收藏 */
+    fun bulkSetFavorite(favorite: Boolean) {
+        val songs = selectedSongs()
+        if (songs.isEmpty()) return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                val dao = db.songStateDao()
+                val now = System.currentTimeMillis()
+                songs.forEach { s ->
+                    idOf(s)?.let { id ->
+                        dao.ensure(id, now)
+                        dao.setFavorite(id, favorite, now)
+                        index.bump(id) { it.copy(favorite = favorite) }
+                    }
+                }
+            }
+            _library.update {
+                it.copy(
+                    favoriteUris = if (favorite) it.favoriteUris + songs.map { s -> s.stableKey }
+                    else it.favoriteUris - songs.map { s -> s.stableKey }.toSet(),
+                )
+            }
+            refreshPlaylists()
+            pushMessage(if (favorite) "已收藏 ${songs.size} 首" else "已取消收藏 ${songs.size} 首")
+            exitSelection()
+        }
+    }
+
+    /** 批量加入播放队列（追加到队尾；已在队列里的会跳过，避免重复条目） */
+    fun bulkAddToQueue() {
+        val songs = selectedSongs()
+        if (songs.isEmpty()) return
+        playback.enqueue(songs)
+        pushMessage("已把 ${songs.size} 首加入播放队列")
+        exitSelection()
+    }
+
+    /**
+     * 批量「移出曲库」：只打排除标记，**不删文件、不删收藏与统计**。
+     * 重扫也不会再收进来，直到用户在设置里恢复。
+     */
+    fun bulkRemoveFromLibrary(songs: List<Song> = selectedSongs()) {
+        if (songs.isEmpty()) return
+        viewModelScope.launch {
+            val ids = songs.mapNotNull { idOf(it) }
+            withContext(Dispatchers.IO) {
+                if (ids.isNotEmpty()) db.songDao().setExcluded(ids, true)
+            }
+            playback.removeFromQueue(songs)
+            applyRemovedFromMemory(songs)
+            pushMessage("已把 ${songs.size} 首移出曲库（文件与收藏都还在，可在设置里恢复）")
+            exitSelection()
+        }
+    }
+
+    /** 恢复全部「移出曲库」的歌并重扫一次 */
+    fun restoreExcludedSongs() {
+        viewModelScope.launch {
+            val n = withContext(Dispatchers.IO) {
+                val dao = db.songDao()
+                val ids = dao.all().filter { it.excluded }.map { it.id }
+                if (ids.isEmpty()) 0 else {
+                    dao.setExcluded(ids, false)
+                    ids.size
+                }
+            }
+            if (n == 0) {
+                pushMessage("没有被移出曲库的歌曲")
+                return@launch
+            }
+            pushMessage("已恢复 $n 首，正在重新扫描…")
+            scan()
+        }
+    }
+
+    // ---------------------------------------------------------- 收听报告（10.1）
+
+    /**
+     * 载入收听报告。
+     *
+     * 曲线与时段分布来自 `listen_log` 的小时桶；两个榜单来自 `song_state` 的累计统计。
+     * 全部是本地查询 + 纯函数聚合，没有网络请求。
+     */
+    fun loadReport(days: Int = _library.value.report?.days ?: DEFAULT_REPORT_DAYS) {
+        val span = days.coerceIn(7, 365)
+        _library.update {
+            it.copy(
+                report = (it.report ?: ReportUiState(days = span)).copy(days = span, loading = true),
+            )
+        }
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val fromHour = now / HOUR_MS - span * 24L
+            val buckets = withContext(Dispatchers.IO) {
+                runCatching {
+                    db.listenLogDao().since(fromHour).map { ListenBucket(it.hourEpoch, it.ms) }
+                }.getOrDefault(emptyList())
+            }
+            val byId = _library.value.songs.associateBy { it.dbId }
+            val states = index.allStates()
+            val topPlayed = states.asSequence()
+                .filter { it.playCount > 0 }
+                .sortedByDescending { it.playCount }
+                .take(TOP_LIMIT)
+                .mapNotNull { st -> byId[st.songId]?.let { topSong(st.songId, it, st.playCount, st.playedMs) } }
+                .toList()
+            val topListened = states.asSequence()
+                .filter { it.playedMs > 0 }
+                .sortedByDescending { it.playedMs }
+                .take(TOP_LIMIT)
+                .mapNotNull { st -> byId[st.songId]?.let { topSong(st.songId, it, st.playCount, st.playedMs) } }
+                .toList()
+            val report = withContext(Dispatchers.Default) {
+                buildListeningReport(buckets, now, span)
+            }
+            _library.update {
+                it.copy(
+                    report = ReportUiState(
+                        days = span,
+                        report = report,
+                        topPlayed = topPlayed,
+                        topListened = topListened,
+                        loading = false,
+                    )
+                )
+            }
+        }
+    }
+
+    fun setReportDays(days: Int) = loadReport(days)
+
+    private fun topSong(songId: Long, song: Song, plays: Int, ms: Long) = TopSong(
+        songId = songId,
+        stableKey = song.stableKey,
+        title = song.title,
+        artist = song.artistOrUnknown,
+        playCount = plays,
+        listenedMs = ms,
+        cover = song,
+    )
+
+    // ---------------------------------------------------------- 重复歌曲清理（10.2）
+
+    /** 按「标题 + 歌手 + 时长」找重复；结果只放在内存里等用户确认，不自动动手 */
+    fun scanDuplicates() {
+        _library.update { it.copy(duplicatesScanning = true) }
+        viewModelScope.launch {
+            val groups = withContext(Dispatchers.Default) { findDuplicateGroups(_library.value.songs) }
+            _library.update {
+                it.copy(duplicates = groups, duplicatesScanning = false, duplicatesScanned = true)
+            }
+            pushMessage(
+                if (groups.isEmpty()) "没有发现重复歌曲"
+                else "发现 ${groups.size} 组重复，共 ${groups.sumOf { g -> g.duplicates.size }} 首可移出曲库"
+            )
+        }
+    }
+
+    /**
+     * 执行重复清理：每组留一首，其余**移出曲库**（排除标记，不删文件、不删收藏与统计）。
+     * 这是不可逆感受很强的一步，所以界面上必须二次确认，且明确写出「不删文件」。
+     */
+    fun cleanDuplicates() {
+        val dupes = _library.value.duplicates.flatMap { it.duplicates }
+        if (dupes.isEmpty()) return
+        viewModelScope.launch {
+            val ids = dupes.mapNotNull { idOf(it) }
+            withContext(Dispatchers.IO) {
+                if (ids.isNotEmpty()) db.songDao().setExcluded(ids, true)
+            }
+            playback.removeFromQueue(dupes)
+            applyRemovedFromMemory(dupes)
+            _library.update { it.copy(duplicates = emptyList(), duplicatesScanned = false) }
+            pushMessage("已移出 ${dupes.size} 首重复歌曲（文件未删除，可在设置里恢复）")
+        }
+    }
+
+    fun clearDuplicateScan() = _library.update {
+        it.copy(duplicates = emptyList(), duplicatesScanned = false, duplicatesScanning = false)
+    }
+
+    /**
+     * 把一批歌从**内存状态**里摘掉（曲库列表、详情、歌单、队列、最近/最常/收藏）。
+     *
+     * 三处调用者（删文件 / 移除目录 / 移出曲库）对数据库做的事不同，但对内存做的事
+     * 完全一样——以前这段逻辑抄了三遍，任何一处漏了 "extraFavorites" 之类的新字段
+     * 就会出现"删了歌但收藏页还挂着"的幽灵行。
+     */
+    private fun applyRemovedFromMemory(removed: List<Song>) {
+        val keys = removed.map { it.stableKey }.toSet()
+        if (keys.isEmpty()) return
+        playback.onSongsRemoved(removed)
+        val songs = _library.value.songs.filterNot { it.stableKey in keys }
+        val query = _library.value.query
+        val visible = searchSongs(songs, query)
+        _library.update {
+            it.copy(
+                songs = songs,
+                visible = visible,
+                letterIndex = buildLetterIndex(visible),
+                lyricsCount = songs.count { s -> s.lrcUri != null },
+                detailSongs = it.detailSongs.filterNot { s -> s.stableKey in keys },
+                playlistSongs = it.playlistSongs.filterNot { s -> s.stableKey in keys },
+                extraRecent = it.extraRecent.filterNot { s -> s.stableKey in keys },
+                extraMostPlayed = it.extraMostPlayed.filterNot { s -> s.stableKey in keys },
+                extraFavorites = it.extraFavorites.filterNot { s -> s.stableKey in keys },
+                selection = it.selection - keys,
+            )
+        }
+        refreshGroups()
+        refreshPlaylists()
+    }
+
     // ---------------------------------------------------------- 删除歌曲文件
 
     /** 等待系统删除确认（Android 11+ 媒体库文件）结果的挂起歌曲 */
@@ -650,6 +1083,92 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
         if (song != null) afterDelete(song, resultOk)
     }
 
+    /** 等待系统**批量**删除确认（Android 11+ 媒体库文件）的挂起歌曲 */
+    private var pendingBulkDelete: List<Song> = emptyList()
+
+    /**
+     * 批量删除文件（多选态的「删除文件」）。
+     *
+     * 与单选删除是同一条通道，区别在媒体库文件可以**一次请求带多个 URI**：
+     * Android 11+ 只弹一个确认框，用户点一下就删完（见
+     * [SongDeleter.prepareSystemConfirmMany]）。第一次实现里逐首调
+     * `prepareSystemConfirm`，结果是要用户连点 N 次确认，中途取消还会留下"删了一半"。
+     *
+     * 混合来源（媒体库 + SAF + 深度扫描路径）时，系统只管媒体库那部分，
+     * 剩下的在系统确认返回后自己删——见 [onSystemBulkDeleteResult]。
+     */
+    fun bulkDeleteFiles(
+        songs: List<Song> = selectedSongs(),
+        launchSystemConfirm: (android.content.IntentSender) -> Unit,
+    ) {
+        if (songs.isEmpty()) return
+        val app = getApplication<Application>()
+        viewModelScope.launch {
+            val sender = withContext(Dispatchers.IO) {
+                runCatching { SongDeleter.prepareSystemConfirmMany(app, songs) }.getOrNull()
+            }
+            if (sender != null) {
+                pendingBulkDelete = songs
+                launchSystemConfirm(sender)
+            } else {
+                val deleted = withContext(Dispatchers.IO) { songs.filter { SongDeleter.deleteNow(app, it) } }
+                afterBulkDelete(songs, deleted)
+            }
+        }
+    }
+
+    /** 批量系统确认框关闭后的回调 */
+    fun onSystemBulkDeleteResult(resultOk: Boolean) {
+        val songs = pendingBulkDelete
+        pendingBulkDelete = emptyList()
+        if (songs.isEmpty()) return
+        if (!resultOk) {
+            pushMessage("已取消删除")
+            exitSelection()
+            return
+        }
+        val app = getApplication<Application>()
+        viewModelScope.launch {
+            // 系统代删的只有媒体库文件；SAF 文档与深度扫描路径它管不到，这里补上。
+            val rest = withContext(Dispatchers.IO) {
+                songs.filter { it.source != SongSource.MEDIA_STORE }
+                    .filter { SongDeleter.deleteNow(app, it) }
+            }
+            afterBulkDelete(songs, songs.filter { it.source == SongSource.MEDIA_STORE } + rest)
+        }
+    }
+
+    /**
+     * 批量文件删除收尾：已删掉的从库里连根清掉，未删成的保留（很可能就是权限被拒）。
+     *
+     * 无论成败都**退出多选态**——刚做完一次批量删除还留着勾选，很容易让人以为
+     * 还得再点一次，或者顺手把已删的歌再操作一遍。
+     */
+    private fun afterBulkDelete(attempted: List<Song>, deleted: List<Song>) {
+        viewModelScope.launch {
+            if (deleted.isNotEmpty()) {
+                playback.removeFromQueue(deleted)
+                val ids = deleted.mapNotNull { idOf(it) }
+                withContext(Dispatchers.IO) {
+                    if (ids.isNotEmpty()) db.songDao().deleteByIds(ids)
+                    deleted.forEach { CoverRepository.evict(it) }
+                }
+                index.removeUris(deleted.map { it.stableKey })
+                index.dropStates(ids.toSet())
+                applyRemovedFromMemory(deleted)
+            }
+            exitSelection()
+            pushMessage(
+                when {
+                    deleted.isEmpty() -> "删除失败：存储拒绝了该操作"
+                    deleted.size < attempted.size ->
+                        "已删除 ${deleted.size} 个文件，${attempted.size - deleted.size} 个被存储拒绝"
+                    else -> "已删除 ${deleted.size} 个文件"
+                }
+            )
+        }
+    }
+
     /** 文件已删（或删除失败）后：清播放队列、清缓存与统计联动、更新界面 */
     private fun afterDelete(song: Song, ok: Boolean) {
         if (!ok) {
@@ -670,23 +1189,7 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
             index.removeUri(key)
             if (songId != null) index.dropStates(listOf(songId))
             // 3) 更新内存状态（songs 本身已排序，过滤后顺序不变，无需重排）
-            val songs = _library.value.songs.filterNot { it.stableKey == key }
-            playback.onSongsRemoved(listOf(song))
-            val query = _library.value.query
-            val visible = searchSongs(songs, query)
-            _library.update {
-                it.copy(
-                    songs = songs,
-                    visible = visible,
-                    letterIndex = buildLetterIndex(visible),
-                    detailSongs = it.detailSongs.filterNot { s -> s.stableKey == key },
-                    playlistSongs = it.playlistSongs.filterNot { s -> s.stableKey == key },
-                    extraRecent = it.extraRecent.filterNot { s -> s.stableKey == key },
-                    extraMostPlayed = it.extraMostPlayed.filterNot { s -> s.stableKey == key },
-                )
-            }
-            refreshGroups()
-            refreshPlaylists()
+            applyRemovedFromMemory(listOf(song))
             pushMessage("已删除「${song.title}」")
         }
     }
@@ -715,26 +1218,9 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
             }
             index.removeUris(removed.map { it.stableKey })
             index.dropStates(removedIds.toSet())
-            // 3) 更新内存状态
-            val removedKeys = removed.map { it.stableKey }.toSet()
-            val songs = _library.value.songs.filterNot { it.stableKey in removedKeys }
-            playback.onSongsRemoved(removed)
-            val query = _library.value.query
-            val visible = searchSongs(songs, query)
-            _library.update {
-                it.copy(
-                    songs = songs,
-                    visible = visible,
-                    letterIndex = buildLetterIndex(visible),
-                    selectedGroup = if (it.selectedGroup?.key == key) null else it.selectedGroup,
-                    detailSongs = if (it.selectedGroup?.key == key) emptyList() else it.detailSongs.filterNot { s -> s.stableKey in removedKeys },
-                    playlistSongs = it.playlistSongs.filterNot { s -> s.stableKey in removedKeys },
-                    extraRecent = it.extraRecent.filterNot { s -> s.stableKey in removedKeys },
-                    extraMostPlayed = it.extraMostPlayed.filterNot { s -> s.stableKey in removedKeys },
-                )
-            }
-            refreshGroups()
-            refreshPlaylists()
+            // 3) 更新内存状态（移除的正是当前打开的分组时，顺手把详情页关掉）
+            if (_library.value.selectedGroup?.key == key) closeGroup()
+            applyRemovedFromMemory(removed)
             refreshStats()
 
             // 4) 分组按「添加的目录」展示：把这些歌所属的导入目录从扫描列表一并移除，
@@ -824,6 +1310,7 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
                     scanScope = prefs.scanScope,
                     folderCount = folders.size,
                     folderUris = folderUriList(),
+                    folders = folderItemList(),
                 )
             }
             scan()
@@ -858,7 +1345,13 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
     /** 重新装载目录列表（表 → 内存 → 界面状态） */
     private suspend fun reloadFolders() {
         folders = withContext(Dispatchers.IO) { db.folderDao().all() }
-        _library.update { it.copy(folderCount = folders.size, folderUris = folderUriList()) }
+        _library.update {
+            it.copy(
+                folderCount = folders.size,
+                folderUris = folderUriList(),
+                folders = folderItemList(),
+            )
+        }
     }
 
     /** 扫描后刷新目录的内存副本（目录的歌曲数在这一步重算） */
@@ -941,26 +1434,13 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 从内存曲库与数据库中摘掉指定歌曲（不删除存储中的文件；收藏/歌单/统计随曲库行级联清理） */
     private fun dropSongs(removed: List<Song>) {
-        val keys = removed.map { it.stableKey }.toSet()
-        playback.onSongsRemoved(removed)
-        val songs = _library.value.songs.filterNot { it.stableKey in keys }
-        val query = _library.value.query
-        val visible = searchSongs(songs, query)
-        _library.update {
-            it.copy(
-                songs = songs,
-                visible = visible,
-                letterIndex = buildLetterIndex(visible),
-                lyricsCount = songs.count { s -> s.lrcUri != null },
-            )
-        }
+        applyRemovedFromMemory(removed)
         viewModelScope.launch {
             val ids = removed.mapNotNull { idOf(it) }
             withContext(Dispatchers.IO) { if (ids.isNotEmpty()) db.songDao().deleteByIds(ids) }
             index.removeUris(removed.map { it.stableKey })
             index.dropStates(ids.toSet())
         }
-        refreshGroups()
     }
 
     fun folderUris(): List<String> = folderUriList()
@@ -1026,9 +1506,14 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             // 先丢弃还没落库的累计时长，否则它会在重置之后又被写回去
             playback.resetListenAccumulator()
-            withContext(Dispatchers.IO) { db.songStateDao().resetStats() }
+            withContext(Dispatchers.IO) {
+                db.songStateDao().resetStats()
+                // 收听报告的小时桶也必须一起清，否则"已清空统计"之后报告还在
+                db.listenLogDao().clear()
+            }
             index.transformStates { it.copy(playCount = 0, lastPlayedAt = 0L, playedMs = 0L) }
             refreshPlaylists()
+            loadReport()
             pushMessage("播放统计已清空（收藏保留）")
         }
     }
@@ -1190,6 +1675,10 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
         private const val TAG = "LibraryViewModel"
         /** 搜索历史保留条数 */
         private const val SEARCH_HISTORY_LIMIT = 10
+        /** 收听报告默认看多少天 */
+        private const val DEFAULT_REPORT_DAYS = 30
+        /** 收听报告的榜单长度（播放次数榜 / 收听时长榜） */
+        private const val TOP_LIMIT = 10
     }
 }
 

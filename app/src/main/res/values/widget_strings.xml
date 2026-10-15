@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="widget_description">显示当前曲目并提供播放控制</string>
+    <!-- 桌面小组件在「添加小组件」列表里的说明。默认英文，中文见 values-zh -->
+    <string name="widget_description">Shows the current track with playback controls</string>
 </resources>

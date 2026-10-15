@@ -37,6 +37,25 @@ object SongDeleter {
         }.getOrNull()
     }
 
+    /**
+     * 批量版本的 [prepareSystemConfirm]。
+     *
+     * `MediaStore.createDeleteRequest` 本身就接受 **URI 列表**（Android 11+），
+     * 一次请求只弹**一个**系统确认框——所以多选删除不能退化成"逐首请求"，
+     * 那会让用户点 N 次确认，还会在两次确认之间留下半删状态。
+     *
+     * 只在列表里确实有媒体库文件时才返回非 null；全是 SAF / 绝对路径的话
+     * 系统确认框帮不上忙，调用方走 [deleteNow] 逐个删。
+     */
+    fun prepareSystemConfirmMany(context: Context, songs: List<Song>): IntentSender? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
+        val uris = songs.filter { it.source == SongSource.MEDIA_STORE }.map { it.uri }
+        if (uris.isEmpty()) return null
+        return runCatching {
+            MediaStore.createDeleteRequest(context.contentResolver, uris).intentSender
+        }.getOrNull()
+    }
+
     /** 直接执行删除（阻塞，需在 IO 线程调用）。返回是否删除成功。 */
     fun deleteNow(context: Context, song: Song): Boolean {
         val ok = runCatching {

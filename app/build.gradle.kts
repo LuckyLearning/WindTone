@@ -221,13 +221,11 @@ dependencies {
     // 这里只写 libs.xxx 访问器 —— 任何字面版本号出现在本块都算破坏约定。
 
     implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.appcompat)
     implementation(libs.androidx.activity.compose)
 
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
-    implementation(libs.androidx.lifecycle.service)
 
     implementation(libs.androidx.documentfile)
 

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 桌面快捷方式「播放全部」的图标。
+     快捷方式图标必须是单色矢量（启动器会套自己的圆形底板），所以这里不用主题色。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path
+        android:fillColor="#1B1B21"
+        android:pathData="M4 6h11v2H4zM4 11h11v2H4zM4 16h7v2H4zM17 7v10l5-5z" />
+</vector>

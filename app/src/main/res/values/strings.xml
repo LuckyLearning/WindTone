@@ -1,5 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 英文/其他语言下的应用名：WindTone；中文见 values-zh/strings.xml -->
+    <!--
+      默认（非中文）资源一律写英文：`values` 是所有语言未命中时的兜底桶，
+      写中文会让海外用户在不该看到中文的地方看到中文。
+      中文文案统一放 values-zh（见 res/values-zh/strings.xml）。
+      ——批次 9.3 的第一步：先把**框架层可见**的文案（应用名 / 磁贴 / 快捷方式 /
+      小组件）分语言；Compose 里硬编码的界面文案抽资源是第二步，见文档「批次 9 遗留」。
+    -->
     <string name="app_name" translatable="false">WindTone</string>
+
+    <!-- 快捷设置磁贴（下拉通知栏那一排小方块的标题） -->
+    <string name="tile_label">Music</string>
+    <string name="tile_next">Next track</string>
+    <string name="tile_idle">Not playing</string>
+    <string name="tile_empty">Library is empty</string>
+    <string name="tile_playing">Playing</string>
+    <string name="tile_paused">Paused</string>
+
+    <!-- 桌面长按图标的静态快捷方式。短标签 ≤ 10 字、长标签 ≤ 25 字（系统会截断） -->
+    <string name="shortcut_play_all_short">Play all</string>
+    <string name="shortcut_play_all_long">Play all songs</string>
+    <string name="shortcut_shuffle_short">Shuffle</string>
+    <string name="shortcut_shuffle_long">Shuffle all songs</string>
+    <string name="shortcut_favorites_short">Favorites</string>
+    <string name="shortcut_favorites_long">Open my favorites</string>
 </resources>

@@ -60,14 +60,33 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!--
+              桌面长按图标 → 播放全部 / 随机播放 / 我的收藏（批次 9.4）。
+              intent 的 action / extra 定义见 res/xml/shortcuts.xml，
+              解析在 AppShortcut.kt，三处的字符串必须逐字一致。
+            -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
 
+        <!--
+          播放服务。两个 intent-filter 是**并列**的，不是一个里放两个 action：
+            · MediaSessionService —— 本应用自己的 MediaController 通过它连接；
+            · MediaBrowserService —— Android Auto / 车机系统媒体面板通过它拿浏览树。
+          合在一个 filter 里会被系统按 action 分别匹配，但分成两个更贴近
+          Media3 官方文档的写法，也便于日后单独摘掉其中一个。
+        -->
         <service
             android:name=".playback.PlaybackService"
             android:exported="true"
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
 
@@ -115,7 +134,22 @@
             android:name=".tile.PlaybackTileService"
             android:exported="true"
             android:icon="@drawable/ic_widget_play"
-            android:label="音乐播放"
+            android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <!--
+          「下一首」磁贴（批次 9.5-②）。一个 TileService 只承载一个点击动作，
+          所以它必须独立成服务；用户想加就加，不想要就不加。
+        -->
+        <service
+            android:name=".tile.NextTrackTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_widget_next"
+            android:label="@string/tile_next"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />

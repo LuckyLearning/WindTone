@@ -1,5 +1,6 @@
 package com.luckylearning.windtone
 
+import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -9,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.luckylearning.windtone.data.Prefs
+import com.luckylearning.windtone.ui.AppShortcut
 import com.luckylearning.windtone.ui.LibraryViewModel
 import com.luckylearning.windtone.ui.MainScreen
 import com.luckylearning.windtone.ui.PlayerViewModel
@@ -20,6 +22,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // 桌面快捷方式（批次 9.4）只把意图记下来，真正的执行在 MainScreen 里 ——
+        // 曲库此时还没装载完，这里直接调 playQueue 只会拿到空列表。
+        AppShortcut.put(AppShortcut.from(intent))
 
         // 车载模式（设置 → 外观 → 车载模式）：
         //  · 仅 `persistent=true`（用户主动选择的车机安装）时主动请求横屏，
@@ -50,5 +56,18 @@ class MainActivity : ComponentActivity() {
                 MainScreen(lib = lib, playerVm = playerVm, updateVm = updateVm, settings = settings)
             }
         }
+    }
+
+    /**
+     * 应用已经活着（前台或后台）时再点桌面快捷方式。
+     *
+     * 必须重新把意图交给 [AppShortcut]：`launchMode="singleTop"` 下系统不会新建实例，
+     * 只会把 Intent 送到这里，`onCreate` 里那次读取早就过去了。
+     * `setIntent` 也是必需的——不替换的话 `getIntent()` 一直是首次启动那个。
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        AppShortcut.put(AppShortcut.from(intent))
     }
 }

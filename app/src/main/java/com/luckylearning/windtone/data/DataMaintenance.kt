@@ -23,6 +23,8 @@ class DataMaintenance(
         val songs: Int,
         /** 文件在本机暂不可见（软删）的歌 */
         val missing: Int,
+        /** 被用户主动「移出曲库」的歌（重扫也不会回来，但数据保留） */
+        val excluded: Int,
         val folders: Int,
         val playlists: Int,
         val favorites: Int,
@@ -50,6 +52,7 @@ class DataMaintenance(
         return Report(
             songs = runCatching { songDao.countVisible() }.getOrDefault(0),
             missing = runCatching { songDao.countMissing() }.getOrDefault(0),
+            excluded = runCatching { songDao.countExcluded() }.getOrDefault(0),
             folders = runCatching { db.folderDao().all().size }.getOrDefault(0),
             playlists = runCatching { db.playlistDao().all().size }.getOrDefault(0),
             favorites = summary?.favorites ?: 0,
@@ -80,10 +83,18 @@ class DataMaintenance(
         db.playerStateDao().clear()
         db.searchHistoryDao().clear()
         db.playlistDao().clearAll()
+        db.listenLogDao().clear()
         CoverRepository.clear()
     }
 
-    /** 清空曲库与导入目录（等同于"重新开始"），保留用户数据（收藏等仍在库里，重扫到同一文件即可复用） */
+    /**
+     * 清空曲库与导入目录（等同于"重新开始"），**保留用户数据**
+     * （收藏 / 统计 / 歌单 / 收听日志仍在库里，重扫到同一文件即可复用）。
+     *
+     * 与 [resetUserData] 正好互补：那个是"留曲库、清数据"，这个是"清曲库、留数据"。
+     * 「移出曲库」的排除标记一并清除——整库都清空了，排除名单自然失去意义，
+     * 留着只会让重扫后某些歌莫名其妙不出现。
+     */
     suspend fun resetLibrary() {
         db.songDao().clear()
         db.folderDao().clear()

@@ -4,9 +4,12 @@ import androidx.compose.runtime.Immutable
 import androidx.media3.common.Player
 import com.luckylearning.windtone.data.AudioInspector
 import com.luckylearning.windtone.data.DownloadRoute
+import com.luckylearning.windtone.data.DuplicateGroup
+import com.luckylearning.windtone.data.ListeningReport
 import com.luckylearning.windtone.data.ScanScope
 import com.luckylearning.windtone.data.SortOrder
 import com.luckylearning.windtone.data.UpdateInfo
+import com.luckylearning.windtone.data.buildListeningReport
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.lyrics.Lyrics
 
@@ -44,7 +47,7 @@ data class GroupInfo(
     val sample: Song?,
 )
 
-/** 歌单条目（含两个固定的虚拟歌单：最近播放 / 最常播放） */
+/** 歌单条目（含三个固定的虚拟歌单：最近播放 / 最常播放 / 我的收藏） */
 @Immutable
 data class PlaylistInfo(
     val id: Long,
@@ -58,7 +61,25 @@ data class PlaylistInfo(
 object VirtualPlaylist {
     const val RECENT = -1L
     const val MOST_PLAYED = -2L
+    const val FAVORITES = -3L
 }
+
+/**
+ * 设置页「扫描范围」里的一行目录。
+ *
+ * 为什么不是裸的 treeUri：用户要在这一行上做「排除 / 取消排除」的判断，
+ * 得看到**目录名、路径、歌曲数与排除状态**，只给一串 `content://...` 说明不了任何事。
+ * [treeUri] 仍是操作时用的键（扫描、移除、释放权限都按它走）。
+ */
+@Immutable
+data class FolderItem(
+    val treeUri: String,
+    val name: String,
+    val fullPath: String,
+    val songCount: Int,
+    /** 已排除：扫描时跳过这棵树，但**保留已导入的歌** */
+    val excluded: Boolean = false,
+)
 
 @Immutable
 data class LibraryUiState(
@@ -73,10 +94,12 @@ data class LibraryUiState(
     val deepScan: Boolean = false,
     /** 扫描范围：未选择（首次安装）时不自动扫描，等待用户指定全盘或目录 */
     val scanScope: ScanScope = ScanScope.UNSET,
-    /** 已导入的目录数量 */
+    /** 已导入的目录数量（含被排除的） */
     val folderCount: Int = 0,
-    /** 已导入的目录（SAF 树 URI），用于范围抽屉里的目录管理 */
+    /** **参与扫描**的目录（SAF 树 URI）；被排除的目录不在这里 */
     val folderUris: List<String> = emptyList(),
+    /** 目录明细（设置页展示与「排除」开关用） */
+    val folders: List<FolderItem> = emptyList(),
     val view: LibraryView = LibraryView.SONGS,
     val groups: List<GroupInfo> = emptyList(),
     val selectedGroup: GroupInfo? = null,
@@ -87,9 +110,27 @@ data class LibraryUiState(
     val favoriteUris: Set<String> = emptySet(),
     val extraRecent: List<Song> = emptyList(),
     val extraMostPlayed: List<Song> = emptyList(),
+    val extraFavorites: List<Song> = emptyList(),
     val letterIndex: Map<Char, Int> = emptyMap(),
     val searchHistory: List<String> = emptyList(),
     val playStats: PlayStats = PlayStats(),
+    // ---------------- 多选（批次 8.3） ----------------
+    /**
+     * 是否处于多选态。
+     *
+     * 与 [selection] 分开是必要的：用户「全部取消勾选」之后仍然在多选态里
+     * （底部操作栏要留着，方便他重新选），此时 selection 为空但 selecting 为 true。
+     */
+    val selecting: Boolean = false,
+    /** 已勾选的歌曲（stableKey / uri） */
+    val selection: Set<String> = emptySet(),
+    // ---------------- 收听报告（批次 10.1） ----------------
+    val report: ReportUiState? = null,
+    // ---------------- 重复清理（批次 10.2） ----------------
+    /** 已扫描出的重复分组；空列表表示「没有重复」或「还没扫过」 */
+    val duplicates: List<DuplicateGroup> = emptyList(),
+    val duplicatesScanned: Boolean = false,
+    val duplicatesScanning: Boolean = false,
 )
 
 /** 播放统计概览（设置页展示与「数据与存储」快照用） */
@@ -102,6 +143,36 @@ data class PlayStats(
     val totalListenedMs: Long = 0L,
     val favorites: Int = 0,
 )
+
+/** 榜单条目（收听报告用）：只带展示需要的字段，不背整个 Song */
+@Immutable
+data class TopSong(
+    val songId: Long,
+    val stableKey: String,
+    val title: String,
+    val artist: String,
+    val playCount: Int,
+    val listenedMs: Long,
+    val cover: Song?,
+)
+
+/**
+ * 收听报告页的状态。
+ *
+ * [days] 变化时整份重算（切换 7 天 / 30 天）；曲线与时段分布来自 `listen_log` 的小时桶，
+ * 榜单来自 `song_state` 的累计统计——两者都只读本地库，不产生任何网络请求。
+ */
+@Immutable
+data class ReportUiState(
+    val days: Int = 30,
+    val report: ListeningReport = EMPTY_REPORT,
+    val topPlayed: List<TopSong> = emptyList(),
+    val topListened: List<TopSong> = emptyList(),
+    val loading: Boolean = false,
+)
+
+/** 报告尚未加载时的占位（30 天空曲线），避免界面到处判空 */
+val EMPTY_REPORT: ListeningReport = buildListeningReport(emptyList(), 0L, 1)
 
 // ---------------------------------------------------------------- 播放
 
@@ -180,6 +251,8 @@ data class PlayerUiState(
     val lyricOffsetMs: Int = 0,
     val lyricScale: Float = 1f,
     val lyricWordByWord: Boolean = true,
+    /** 播放页中部显示歌词（true）还是封面（false）；跨会话保留 */
+    val lyricsPaneVisible: Boolean = true,
     /** 车载模式：启动直进播放页 + 播放页 5 秒无操作进入沉浸态 */
     val carMode: Boolean = false,
     /** 桌面悬浮歌词：退到桌面后仍在最上层显示当前歌词行 */
