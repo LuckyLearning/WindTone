@@ -41,7 +41,13 @@ import kotlin.math.roundToInt
  * 桌面悬浮歌词服务（车机用）。
  *
  * ## 形态
- * 一行纯文字，无背景板、无按钮。文字带深色投影，亮色 / 暗色桌面都能看清。
+ * 一行纯文字，配一层半透明深色圆角底板。
+ *
+ * 底板不是装饰，而是**可读性保险**。最初的设计是「纯白字 + 深色投影」，
+ * 假设投影足以在亮色桌面上把字托起来。实测在亮色壁纸 / 桌面白色搜索框上，
+ * 白字直接糊掉——投影半径按像素算，高密度屏上几乎看不见，
+ * 于是用户侧的表现就是「服务在跑、窗口挂着、就是什么都看不到」。
+ * 一层半透明黑底板在任何壁纸上都稳，代价只是稍微不那么「干净」。
  *
  * ## 两种模式
  *  - **锁定态（日常）**：`FLAG_NOT_TOUCHABLE`，手指划过去直接穿透到桌面，
@@ -88,6 +94,9 @@ class LyricOverlayService : Service() {
     /** 当前是否处于调整（拖动）模式；拖动逻辑里高频读，用普通字段 */
     private var editing = false
 
+    /** 窗口首次测量完成后是否需要补一次位置夹取（挂载瞬间拿不到自身宽高） */
+    private var pendingMeasureClamp = false
+
     override fun onCreate() {
         super.onCreate()
         serviceAlive = true
@@ -112,6 +121,11 @@ class LyricOverlayService : Service() {
             return START_NOT_STICKY
         }
         if (container == null) attachWindow()
+        if (intent?.action == ACTION_RESET_POSITION) {
+            // 自检里的「重置位置」：清掉存下来的坐标，回到默认位置
+            pendingPositionSave = false
+            applyPosition()
+        }
         return START_STICKY
     }
 
@@ -120,13 +134,15 @@ class LyricOverlayService : Service() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         // 横竖屏切换后屏幕宽度变了，已存的绝对坐标可能落到屏幕外，
-        // 直接按新尺寸重新夹取一次最省事。
-        if (container != null) applyPosition()
+        // 直接按新尺寸重新夹取一次最省事。拖动中不打扰——那会把窗口弹回旧坐标。
+        if (container != null && !editing) applyPosition()
     }
 
     override fun onDestroy() {
         serviceAlive = false
         windowAttached = false
+        windowVisible = false
+        windowGeometry = "未挂载"
         windowJob?.cancel()
         scope.cancel()
         detachWindow()
@@ -143,9 +159,10 @@ class LyricOverlayService : Service() {
 
         val tv = TextView(this).apply {
             setTextColor(Color.WHITE)
-            // 投影是这里唯一的「可读性保险」：车机桌面可能是浅色也可能是深色，
-            // 加一层黑色投影后白字在两种底上都能立起来，比铺半透明背景板干净得多。
-            setShadowLayer(6f, 0f, 2f, Color.argb(200, 0, 0, 0))
+            // 投影只是锦上添花的第二重保险；真正的可读性由 box 的深色底板兜底
+            // （见 [refreshModeChrome]）。投影半径必须按 dp 换算——写死 6f 时，
+            // 在 3x 屏上只有 2dp，亮色壁纸下等于没有。
+            setShadowLayer(dp(3).toFloat(), 0f, dp(1).toFloat(), Color.argb(220, 0, 0, 0))
             setPadding(dp(18), dp(8), dp(18), dp(8))
             includeFontPadding = false
             gravity = Gravity.CENTER
@@ -186,9 +203,24 @@ class LyricOverlayService : Service() {
             lyricView = tv
             layoutParams = params
             windowAttached = true
+            pendingMeasureClamp = true
             tv.setOnTouchListener(dragListener)
             applyPosition()
             refreshModeChrome()
+            // 窗口要量过一遍才知道自己多宽多高，而「夹取到屏幕内」依赖这个尺寸。
+            // 挂载瞬间 width/height 还是 0，所以布局完成后再补夹一次。
+            //
+            // 注意这里**不能无条件调 applyPosition**：它读的是 Prefs 里的坐标，
+            // 而拖动过程中坐标只在内存里，布局回调会把窗口一次次弹回旧位置，
+            // 表现为「拖不动 / 拖了又跳回去」。所以只做一次性的「测量后补夹」。
+            box.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+                if (pendingMeasureClamp && box.width > 0 && box.height > 0) {
+                    pendingMeasureClamp = false
+                    applyPosition()
+                }
+                updateGeometryReport()
+            }
+            box.post { updateGeometryReport() }
             LyricOverlayBridge.report(LyricOverlayBus.Status.RUNNING, "窗口已显示")
             true
         } catch (t: Throwable) {
@@ -230,34 +262,97 @@ class LyricOverlayService : Service() {
      *
      * - 从未调整过（Prefs 里是 `Int.MIN_VALUE`）→ 默认「贴状态栏下沿、水平居中」；
      * - 调整过 → 用存的绝对坐标，并夹取到屏幕范围内（防止换分辨率后跑出屏幕）。
+     *
+     * 夹取必须用「屏幕尺寸 − 窗口自身尺寸」：只用屏幕尺寸的话，
+     * `x = screenW` 会让窗口完全落在屏幕右侧之外，用户看到的就是一片空白
+     * ——这正是「自检全绿却看不到任何东西」的头号嫌疑。
+     *
+     * 只有参数真的变了才 `updateViewLayout`：本方法会被布局回调反过来调用，
+     * 无条件更新会构成「布局 → 更新 → 布局」的死循环。
      */
     private fun applyPosition() {
         val p = layoutParams ?: return
         val prefs = Prefs(this)
-        val metrics = resources.displayMetrics
-        val screenW = metrics.widthPixels
-        val screenH = metrics.heightPixels
+        val (screenW, screenH) = screenSize()
+        val winW = container?.width ?: 0
+        val winH = container?.height ?: 0
 
         val savedX = prefs.lyricOverlayX
         val savedY = prefs.lyricOverlayY
 
+        val gravity: Int
+        val x: Int
+        val y: Int
         if (savedX == Int.MIN_VALUE || savedY == Int.MIN_VALUE) {
-            // 从未调整过：水平居中靠上。注意 gravity 用 CENTER_HORIZONTAL 才是真的居中——
-            // 之前注释写着「居中」却仍是 START + x=0，实际贴在左上角。
-            p.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            p.x = 0
-            p.y = dp(TOP_OFFSET_DP)
+            // 从未调整过：水平居中、贴在状态栏下方。
+            // 用 CENTER_HORIZONTAL 才是真的居中；用 START + x=0 会贴到左上角。
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            x = 0
+            y = statusBarHeight() + dp(TOP_OFFSET_DP)
         } else {
-            p.gravity = Gravity.TOP or Gravity.START
-            p.x = savedX.coerceIn(0, screenW)
-            p.y = savedY.coerceIn(0, (screenH - dp(MIN_TOUCH_H_DP)).coerceAtLeast(0))
+            gravity = Gravity.TOP or Gravity.START
+            x = savedX.coerceIn(0, (screenW - winW).coerceAtLeast(0))
+            y = savedY.coerceIn(0, (screenH - winH).coerceAtLeast(0))
         }
+
+        if (p.gravity == gravity && p.x == x && p.y == y) return
+        p.gravity = gravity
+        p.x = x
+        p.y = y
         runCatching { windowManager?.updateViewLayout(container, p) }
+        updateGeometryReport()
     }
+
+    /** 屏幕真实尺寸（像素）。优先用 WindowMetrics，避免 displayMetrics 在部分机型上偏小。 */
+    private fun screenSize(): Pair<Int, Int> {
+        val wm = windowManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && wm != null) {
+            val b = runCatching { wm.currentWindowMetrics.bounds }.getOrNull()
+            if (b != null && b.width() > 0 && b.height() > 0) return b.width() to b.height()
+        }
+        val m = resources.displayMetrics
+        return m.widthPixels to m.heightPixels
+    }
+
+    /** 状态栏高度（像素），拿不到时按 24dp 兜底 */
+    private fun statusBarHeight(): Int {
+        val id = resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (id > 0) resources.getDimensionPixelSize(id) else dp(24)
+    }
+
+    /**
+     * 记录窗口的真实几何，供设置页「悬浮歌词自检」读取。
+     *
+     * 为什么自检需要它：`addView` 成功只说明**挂上了**，不代表**看得见**。
+     * 窗口被推到屏幕外、尺寸量成 0，都会让用户看到「什么都没有」而各项检查全绿。
+     */
+    private fun updateGeometryReport() {
+        val box = container
+        if (box == null) {
+            windowGeometry = "未挂载"
+            return
+        }
+        if (box.width <= 0 || box.height <= 0) {
+            windowGeometry = "尚未完成测量"
+            return
+        }
+        val loc = IntArray(2)
+        runCatching { box.getLocationOnScreen(loc) }
+        val (screenW, screenH) = screenSize()
+        val onScreen = loc[0] + box.width > 0 && loc[0] < screenW &&
+            loc[1] + box.height > 0 && loc[1] < screenH
+        windowGeometry = "x=${loc[0]} y=${loc[1]} 尺寸 ${box.width}x${box.height} " +
+            "/ 屏幕 ${screenW}x${screenH}${if (onScreen) "" else " ← 已超出屏幕"}"
+    }
+
+    // ------------------------------------------------------------------ 拖动
 
     /** 拖动基准：记录上一次手指的原始坐标，用「增量」而非「绝对定位」推动窗口 */
     private var lastRawX = 0f
     private var lastRawY = 0f
+
+    /** 本次触摸里是否真的移动过窗口；只有真移动过才允许把坐标写进 Prefs */
+    private var pendingPositionSave = false
 
     /**
      * 拖动把手。
@@ -267,6 +362,11 @@ class LyricOverlayService : Service() {
      *
      * 位移按「手指位移量」累加，而不是「手指绝对位置 = 窗口位置」——
      * 后者会让窗口在按下瞬间跳到手指中心，手感很突兀。
+     *
+     * **只有真正拖动过才落盘**（[pendingPositionSave]）。曾经的做法是
+     * `ACTION_DOWN` 一律归一化坐标 + `ACTION_UP` 一律落盘，结果是
+     * 「进调整模式随手点一下、什么都没拖」也会把归一化后的坐标存下来，
+     * 而那个坐标算错了半屏，窗口就此被推到屏幕右侧之外再也看不见。
      */
     @SuppressLint("ClickableViewAccessibility")
     private val dragListener = View.OnTouchListener { _, event ->
@@ -274,16 +374,29 @@ class LyricOverlayService : Service() {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 // 默认位置用 CENTER_HORIZONTAL 摆放，坐标是「相对屏幕中心的偏移」；
-                // 拖动增量必须基于「绝对左上角」才有正确手感。按下瞬间归一化一次：
-                // 左上角 x = 屏幕中心 + 当前偏移，之后固定用 TOP|START。
+                // 拖动增量必须基于「绝对左上角」才有正确手感。按下瞬间归一化一次。
+                // 取窗口在屏幕上的真实左上角，而不是拿「屏幕宽 / 2」去推算——
+                // 后者无视窗口自身宽度，会把窗口整体右移半个屏幕。
                 if (p.gravity and Gravity.HORIZONTAL_GRAVITY_MASK == Gravity.CENTER_HORIZONTAL) {
-                    p.x += resources.displayMetrics.widthPixels / 2
+                    val loc = IntArray(2)
+                    val box = container
+                    runCatching { box?.getLocationOnScreen(loc) }
+                    val (screenW, screenH) = screenSize()
+                    val winW = box?.width ?: 0
+                    val winH = box?.height ?: 0
+                    val left = if (loc[0] in 0 until screenW) loc[0]
+                    else ((screenW - winW) / 2).coerceAtLeast(0)
+                    val top = if (loc[1] in 0 until screenH) loc[1] else p.y
                     p.gravity = Gravity.TOP or Gravity.START
+                    p.x = left
+                    p.y = top
                     runCatching { windowManager?.updateViewLayout(container, p) }
+                    updateGeometryReport()
                 }
                 // 记下起点，MOVE 时算增量才有参照
                 lastRawX = event.rawX
                 lastRawY = event.rawY
+                pendingPositionSave = false
                 true
             }
 
@@ -294,21 +407,25 @@ class LyricOverlayService : Service() {
                 lastRawY = event.rawY
                 // 夹住，别拖出屏幕就再也抓不回来。按窗口自身宽高收紧边界，
                 // 只用屏幕宽高会把窗口整个推到边界外（x=screenW 时窗口完全不可见）。
-                val metrics = resources.displayMetrics
+                val (screenW, screenH) = screenSize()
                 val v = container
-                val maxX = (metrics.widthPixels - (v?.width ?: 0)).coerceAtLeast(0)
-                val maxY = (metrics.heightPixels - (v?.height ?: 0)).coerceAtLeast(0)
+                val maxX = (screenW - (v?.width ?: 0)).coerceAtLeast(0)
+                val maxY = (screenH - (v?.height ?: 0)).coerceAtLeast(0)
                 p.x = p.x.coerceIn(0, maxX)
                 p.y = p.y.coerceIn(0, maxY)
+                pendingPositionSave = true
                 runCatching { windowManager?.updateViewLayout(container, p) }
+                updateGeometryReport()
                 true
             }
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                // 落盘，下次启动沿用
-                Prefs(this).apply {
-                    lyricOverlayX = p.x
-                    lyricOverlayY = p.y
+                // 只有真拖过才落盘，下次启动沿用；没拖过就保持原有偏好
+                if (pendingPositionSave) {
+                    Prefs(this).apply {
+                        lyricOverlayX = p.x
+                        lyricOverlayY = p.y
+                    }
                 }
                 true
             }
@@ -338,13 +455,18 @@ class LyricOverlayService : Service() {
                     if (editing != isEditing) {
                         editing = isEditing
                         if (!isEditing) {
-                            // 退出编辑态时把当前坐标固化，避免只有拖动过才记得住
-                            layoutParams?.let { p ->
-                                Prefs(this@LyricOverlayService).apply {
-                                    lyricOverlayX = p.x
-                                    lyricOverlayY = p.y
+                            // 退出编辑态时固化坐标——但只在本次真的拖动过时。
+                            // 没拖过就落盘的话，会把 ACTION_DOWN 归一化出来的坐标
+                            // 一并存下，等于「随手点一下就改了位置」。
+                            if (pendingPositionSave) {
+                                layoutParams?.let { p ->
+                                    Prefs(this@LyricOverlayService).apply {
+                                        lyricOverlayX = p.x
+                                        lyricOverlayY = p.y
+                                    }
                                 }
                             }
+                            pendingPositionSave = false
                         }
                         refreshModeChrome()
                     }
@@ -357,6 +479,7 @@ class LyricOverlayService : Service() {
                     val visible = (showOverride || !isForeground) && (content.visible || showOverride)
                     if (!visible) {
                         box.visibility = View.INVISIBLE
+                        windowVisible = false
                         return@collect
                     }
 
@@ -369,6 +492,8 @@ class LyricOverlayService : Service() {
                     if (tv.text.toString() != text) tv.text = text
                     tv.alpha = if (content.playing || showOverride) 1f else PAUSED_ALPHA
                     if (box.visibility != View.VISIBLE) box.visibility = View.VISIBLE
+                    windowVisible = true
+                    updateGeometryReport()
                 }
         }
     }
@@ -391,17 +516,14 @@ class LyricOverlayService : Service() {
         }
         runCatching { windowManager?.updateViewLayout(box, p) }
 
-        // 编辑态给一层圆角描边 + 淡底，明确告诉用户「现在这块能拖」；
-        // 锁定态把底板完全去掉，回到纯投影的字幕。
+        // 两种状态都要底板，区别只在编辑态多一圈蓝色描边（明确告诉用户「现在这块能拖」）。
+        // 锁定态曾经是「完全透明 + 只靠投影」，实测在高密度屏 + 亮色壁纸下
+        // 白字根本立不起来，用户看到的就是「什么都没有」。
         // （GradientDrawable 不支持声明式虚线间隔，圆角实线框已足够表达「可拖」）
-        box.background = if (editing) {
-            GradientDrawable().apply {
-                setColor(Color.argb(70, 0, 0, 0))
-                setStroke(dp(2), Color.argb(220, 88, 166, 255))
-                cornerRadius = dp(10).toFloat()
-            }
-        } else {
-            null
+        box.background = GradientDrawable().apply {
+            setColor(Color.argb(if (editing) 150 else 140, 0, 0, 0))
+            if (editing) setStroke(dp(2), Color.argb(220, 88, 166, 255))
+            cornerRadius = dp(14).toFloat()
         }
     }
 
@@ -449,6 +571,9 @@ class LyricOverlayService : Service() {
         private const val CHANNEL_ID = "lyric_overlay"
         private const val NOTIFICATION_ID = 0x7701
 
+        /** 复位悬浮窗位置的 Intent action（见 [resetPosition]） */
+        private const val ACTION_RESET_POSITION = "com.luckylearning.windtone.RESET_OVERLAY_POSITION"
+
         /**
          * 服务是否活着。
          *
@@ -464,20 +589,54 @@ class LyricOverlayService : Service() {
         var windowAttached: Boolean = false
             private set
 
+        /**
+         * 窗口的真实几何（`x=.. y=.. 尺寸 .. / 屏幕 ..`）。
+         *
+         * 供自检回答那个最要命的问题：**挂上了，可它到底在屏幕的哪个位置？**
+         * `addView` 成功 ≠ 用户看得见——窗口被推到屏幕外时各项检查照样全绿。
+         */
+        @Volatile
+        var windowGeometry: String = "未挂载"
+            private set
+
+        /** 窗口 View 当前是否处于 VISIBLE（前台时按设计为 false，不要据此判断故障） */
+        @Volatile
+        var windowVisible: Boolean = false
+            private set
+
         /** 悬浮字幕字号：车机屏大、观看距离远，比手机正文大一档 */
         private const val OVERLAY_TEXT_SP = 20f
 
-        /** 默认距屏幕顶部的距离（dp）；正好让开状态栏 */
-        private const val TOP_OFFSET_DP = 48
+        /** 默认位置：状态栏高度再往下让这么多 dp，避开状态栏与挖孔 */
+        private const val TOP_OFFSET_DP = 16
 
         /** 暂停时的不透明度：不隐藏，方便看清唱到哪一句 */
         private const val PAUSED_ALPHA = 0.55f
 
-        /** 纵向夹取时预留的高度，保证窗口不会整个跑出屏幕底 */
-        private const val MIN_TOUCH_H_DP = 60
-
         /** 是否已获得「出现在其他应用上」授权 */
         fun canDrawOverlay(context: Context): Boolean = Settings.canDrawOverlays(context)
+
+        /**
+         * 清掉存下来的坐标并让服务回到默认位置（状态栏下方、水平居中）。
+         *
+         * 用于「窗口被推到屏幕外，用户根本抓不到」这种死局：
+         * 桌面上摸不到窗口，设置页的「调整位置」也就无从下手。
+         */
+        fun resetPosition(context: Context) {
+            Prefs(context).apply {
+                lyricOverlayX = Int.MIN_VALUE
+                lyricOverlayY = Int.MIN_VALUE
+            }
+            val intent = Intent(context, LyricOverlayService::class.java)
+                .setAction(ACTION_RESET_POSITION)
+            runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            }
+        }
 
         /**
          * 按当前开关 + 授权状态同步服务的起停。

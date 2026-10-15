@@ -27,7 +27,12 @@ data class OverlaySnapshot(
     val contentText: String,
     /** 当前歌曲是否在播放 */
     val contentPlaying: Boolean,
+    /** 窗口在屏幕上的真实几何（挂上 ≠ 看得见） */
+    val windowGeometry: String,
 ) {
+    /** 窗口是否被判定为「几何上跑出屏幕」 */
+    private val offScreen: Boolean get() = windowGeometry.contains("超出屏幕")
+
     /** 转成给人看的多行诊断报告 */
     fun report(): String = buildString {
         appendLine("① 系统授权：${if (permissionGranted) "已授权" else "未授权 ← 断点"}")
@@ -37,6 +42,7 @@ data class OverlaySnapshot(
         appendLine("⑤ 最近上报：${health.status}${if (health.detail.isNotBlank()) "（${health.detail}）" else ""}")
         appendLine("⑥ App 前后台：${if (appForeground) "前台（此时按设计隐藏）" else "后台"}")
         appendLine("⑦ 歌词内容：${if (contentText.isBlank()) "空（无歌词且无标题可显示）" else "「$contentText」"}")
+        appendLine("⑧ 窗口位置：$windowGeometry")
         appendLine()
         appendLine(
             when {
@@ -47,7 +53,8 @@ data class OverlaySnapshot(
                     "多半是系统在限制本应用的后台服务，请看崩溃日志里的 LyricOverlay 记录。"
                 !windowAttached -> "结论：服务活着但窗口没挂上，即挂窗被系统拒绝。" +
                     "这是厂商 ROM 的悬浮窗白名单问题，需在系统设置里放行；详情见崩溃日志。"
-                appForeground -> "结论：前 6 项都正常。按设计，App 在前台时字幕是隐藏的——" +
+                offScreen -> "结论：窗口挂上了但**跑到屏幕外**了。点下面的「重置位置」把它拉回来。"
+                appForeground -> "结论：前 7 项都正常。按设计，App 在前台时字幕是隐藏的——" +
                     "退到桌面（或点「显示预览」）即可看到。"
                 contentText.isBlank() -> "结论：链路正常，但没有可显示的文字。" +
                     "播放一首有 .lrc 歌词的歌，或保持播放状态（无歌词时会显示歌名）。"
@@ -89,7 +96,16 @@ object LyricOverlayBridge {
         appForeground = LyricOverlayBus.foreground.value,
         contentText = LyricOverlayBus.content.value.text,
         contentPlaying = LyricOverlayBus.content.value.playing,
+        windowGeometry = LyricOverlayService.windowGeometry,
     )
+
+    /**
+     * 把悬浮窗位置重置回默认（状态栏下方、水平居中）。
+     *
+     * 存在的意义：窗口一旦被推到屏幕外，用户在桌面上根本抓不到它，
+     * 「调整位置」也就无从谈起——只能给一个不看位置也能点的复位入口。
+     */
+    fun resetPosition(context: Context) = LyricOverlayService.resetPosition(context)
 
     // ---------------------------------------------------------------- 调整位置
 

@@ -666,25 +666,19 @@ fun SettingsScreen(
             onDismissRequest = { showOverlayCheck = false },
             title = { Text("悬浮歌词自检") },
             text = {
-                Text(
-                    text = snap.report(),
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        // 前台预览 6 秒：不退桌面也能验证「窗口到底能不能挂上」
-                        onOverlayPreview()
-                    },
-                ) { Text("显示预览 6 秒") }
-            },
-            dismissButton = {
-                Row {
-                    if (!snap.permissionGranted) {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        text = snap.report(),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    // 动作按「能否直接解决问题」排；全部就地执行，不关弹窗，
+                    // 方便用户一件事做完立刻回到这里看数字有没有变。
+                    TextButton(onClick = onOverlayPreview) { Text("显示预览 6 秒") }
+                    if (!snap.permissionGranted || !snap.windowAttached) {
                         TextButton(
                             onClick = { context.startOverlayPermissionPage() },
-                        ) { Text("去授权") }
+                        ) { Text("去系统设置授权") }
                     }
                     TextButton(
                         onClick = {
@@ -692,9 +686,20 @@ fun SettingsScreen(
                             onLyricOverlay(true)
                             overlayCheck = LyricOverlayBridge.snapshot(context)
                         },
-                    ) { Text("重新拉起") }
-                    TextButton(onClick = { showOverlayCheck = false }) { Text("关闭") }
+                    ) { Text("重新拉起服务") }
+                    TextButton(
+                        onClick = {
+                            // 窗口跑到屏幕外时的唯一出路：桌面上根本抓不到它，
+                            // 只能从这儿复位，并顺手给一次预览确认位置对不对。
+                            LyricOverlayBridge.resetPosition(context)
+                            onOverlayPreview()
+                            overlayCheck = LyricOverlayBridge.snapshot(context)
+                        },
+                    ) { Text("重置位置并预览") }
                 }
+            },
+            confirmButton = {
+                TextButton(onClick = { showOverlayCheck = false }) { Text("关闭") }
             },
         )
     }
