@@ -170,7 +170,10 @@ class LyricOverlayService : Service() {
             ellipsize = android.text.TextUtils.TruncateAt.END
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, OVERLAY_TEXT_SP)
-            visibility = View.INVISIBLE
+            // ⚠️ 这里**不能**设 INVISIBLE：显隐只由 observeState 切外层 box，
+            // 子 View 一旦被设成 INVISIBLE 就再也没人把它设回来——
+            // 结果是底板（画在 box 上）照常出现、文字（画在 tv 上）永远消失，
+            // 用户看到的就是「有窗口没字」。这个 bug 从第一版起就在。
         }
 
         val box = FrameLayout(this).apply {
@@ -182,6 +185,8 @@ class LyricOverlayService : Service() {
                     Gravity.CENTER,
                 ),
             )
+            // 只藏外层：父 View INVISIBLE 时子 View 一并不可见，
+            // 挂载到第一次状态收集之间不会闪出空底板。
             visibility = View.INVISIBLE
         }
 
@@ -324,11 +329,13 @@ class LyricOverlayService : Service() {
      * 记录窗口的真实几何，供设置页「悬浮歌词自检」读取。
      *
      * 为什么自检需要它：`addView` 成功只说明**挂上了**，不代表**看得见**。
-     * 窗口被推到屏幕外、尺寸量成 0，都会让用户看到「什么都没有」而各项检查全绿。
+     * 窗口被推到屏幕外、尺寸量成 0、子 View 被藏起来，都会让用户看到
+     * 「什么都没有」而各项检查全绿——所以外层窗口和文字 View **各自**都要报。
      */
     private fun updateGeometryReport() {
         val box = container
-        if (box == null) {
+        val tv = lyricView
+        if (box == null || tv == null) {
             windowGeometry = "未挂载"
             return
         }
@@ -341,8 +348,13 @@ class LyricOverlayService : Service() {
         val (screenW, screenH) = screenSize()
         val onScreen = loc[0] + box.width > 0 && loc[0] < screenW &&
             loc[1] + box.height > 0 && loc[1] < screenH
-        windowGeometry = "x=${loc[0]} y=${loc[1]} 尺寸 ${box.width}x${box.height} " +
-            "/ 屏幕 ${screenW}x${screenH}${if (onScreen) "" else " ← 已超出屏幕"}"
+        val textState = when {
+            tv.visibility != View.VISIBLE -> "文字View被隐藏 ← 异常"
+            tv.width <= 0 || tv.height <= 0 -> "文字View未测量 ← 异常"
+            else -> "文字View ${tv.width}x${tv.height}"
+        }
+        windowGeometry = "x=${loc[0]} y=${loc[1]} 窗口 ${box.width}x${box.height}，" +
+            "$textState / 屏幕 ${screenW}x${screenH}${if (onScreen) "" else " ← 已超出屏幕"}"
     }
 
     // ------------------------------------------------------------------ 拖动
@@ -607,8 +619,14 @@ class LyricOverlayService : Service() {
         /** 悬浮字幕字号：车机屏大、观看距离远，比手机正文大一档 */
         private const val OVERLAY_TEXT_SP = 20f
 
-        /** 默认位置：状态栏高度再往下让这么多 dp，避开状态栏与挖孔 */
-        private const val TOP_OFFSET_DP = 16
+        /**
+         * 默认位置：状态栏高度再往下让这么多 dp。
+         *
+         * 16dp 曾正好撞上荣耀/Honor 桌面顶部的「媒体胶囊」条（播放时才出现，
+         * 而悬浮歌词恰恰只在播放时显示）——文字会整个叠在胶囊上看不清。
+         * 64dp 实测能让开胶囊底沿；各机型可拖动微调，这里只管默认观感。
+         */
+        private const val TOP_OFFSET_DP = 64
 
         /** 暂停时的不透明度：不隐藏，方便看清唱到哪一句 */
         private const val PAUSED_ALPHA = 0.55f
