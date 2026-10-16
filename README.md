@@ -35,7 +35,7 @@ Android 原生本地音乐播放器 —— Kotlin + Jetpack Compose，**数据�
 | 文档 | 内容 |
 |---|---|
 | [功能说明](https://luckylearning.github.io/WindTone/功能说明.html) | 音乐库 / 格式支持 / 歌词 / 播放 / 桌面组件 / 设置页 |
-| [界面效果图](https://luckylearning.github.io/WindTone/ui/) | 46 屏设计基准（手机 + 车机），改动 UI 前必读 |
+| [界面效果图](https://luckylearning.github.io/WindTone/ui/) | 51 屏设计基准（手机 + 车机），改动 UI 前必读 |
 | [权限与更新](https://luckylearning.github.io/WindTone/权限与更新.html) | 权限清单、`.lrc` 获取条件、应用内更新机制、已知限制 |
 | [版本历史](https://luckylearning.github.io/WindTone/版本历史.html) | 每个版本改了什么 |
 | [AI 开发指南](https://luckylearning.github.io/WindTone/AI开发指南.html) | 项目约定、架构分层与踩坑记录 |

@@ -137,7 +137,7 @@ a:hover{text-decoration:underline}
     <span>开始</span>
     <a href="{{ '/' | relative_url }}"{% if u == '/' or u == '/index.html' %} class="active"{% endif %}>首页</a>
     <a href="{{ '/功能说明.html' | relative_url }}"{% if u == '/功能说明.html' %} class="active"{% endif %}>功能说明</a>
-    <a href="{{ '/ui/' | relative_url }}">界面效果图</a>
+    <a href="{{ '/ui/' | relative_url }}"{% if u contains '/ui/' %} class="active"{% endif %}>界面效果图 ↗</a>
     <a href="{{ '/权限与更新.html' | relative_url }}"{% if u == '/权限与更新.html' %} class="active"{% endif %}>权限与更新</a>
     <a href="{{ '/版本历史.html' | relative_url }}"{% if u == '/版本历史.html' %} class="active"{% endif %}>版本历史</a>
   </nav>
@@ -149,6 +149,7 @@ a:hover{text-decoration:underline}
     <a href="{{ '/数据层重构规划.html' | relative_url }}"{% if u == '/数据层重构规划.html' %} class="active"{% endif %}>数据层重构规划</a>
     <a href="{{ '/发版规范-Release说明与多平台产物.html' | relative_url }}"{% if u == '/发版规范-Release说明与多平台产物.html' %} class="active"{% endif %}>发版规范</a>
     <a href="{{ '/悬浮歌词完善方案.html' | relative_url }}"{% if u == '/悬浮歌词完善方案.html' %} class="active"{% endif %}>悬浮歌词完善方案</a>
+    <a href="{{ '/ui/README.html' | relative_url }}"{% if u == '/ui/README.html' %} class="active"{% endif %}>效果图维护约定</a>
     <a href="{{ '/代码审计-2026-10-15.html' | relative_url }}"{% if u == '/代码审计-2026-10-15.html' %} class="active"{% endif %}>死代码审计</a>
   </nav>
 

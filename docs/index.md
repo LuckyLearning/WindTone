@@ -20,7 +20,7 @@ Android 原生本地音乐播放器。**数据全部留在本机**，只在你�
 
 <div class="cards">
 <a class="card" href="功能说明.html"><b>功能说明</b><span>音乐库、歌词、播放、桌面组件与设置页的完整说明</span></a>
-<a class="card" href="ui/"><b>界面效果图</b><span>46 屏设计基准，手机与车机两套布局</span></a>
+<a class="card" href="ui/"><b>界面效果图</b><span>51 屏设计基准，手机与车机两套布局</span></a>
 <a class="card" href="权限与更新.html"><b>权限与更新</b><span>申请哪些权限、什么时候申请；应用内更新怎么工作</span></a>
 <a class="card" href="版本历史.html"><b>版本历史</b><span>从 1.0.0 到现在，每个版本改了什么</span></a>
 </div>
