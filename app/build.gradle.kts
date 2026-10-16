@@ -17,8 +17,8 @@ plugins {
  * `.github/release-notes` 渲染器都用 `grep` 按这个固定文本格式解析它们，
  * 搬到 TOML 会连带改掉整条发版链路。第三方依赖版本在 catalog 里，产品版本在这里。
  */
-val appVersionName = "1.1.11"
-val appVersionCode = 21
+val appVersionName = "1.1.12"
+val appVersionCode = 22
 
 /**
  * ABI 分包开关。
