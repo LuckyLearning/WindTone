@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android Auto 能力声明（被 AndroidManifest 的 com.google.android.gms.car.application 引用）。
+
+  `<uses name="media" />` = 本应用是一个「媒体应用」：Android Auto 会把它列进
+  车机的媒体面板，并通过 PlaybackService 的 MediaLibraryService 拿浏览树
+  （歌单 → 歌曲，见 playback/LibraryBrowser.kt）。
+
+  注意：这里只是「声明能力」。Android Auto 只认从 Play 商店安装的版本，
+  侧载包需要开启 Android Auto 的开发者模式才能在车机上出现——
+  国内车机（DiLink 等）不看这份描述，而是按 MediaBrowserService action 枚举。
+-->
+<automotiveApp xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses name="media" />
+</automotiveApp>

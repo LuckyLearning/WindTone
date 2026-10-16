@@ -48,6 +48,16 @@ interface SongDao {
     @Query("SELECT * FROM songs WHERE uri = :uri")
     suspend fun byUri(uri: String): SongEntity?
 
+    /**
+     * 按主键批量取行（一次 SQL），**不保证返回顺序**——顺序由调用方按自己的 id 列表还原。
+     *
+     * 车机浏览树用它一次取回一个歌单 / 一个虚拟歌单的全部曲目：
+     * 逐首查（N+1）在这个场景下会随歌单长度线性变慢。
+     * 软删与已排除的行照样过滤掉——它们不该出现在车机面板上。
+     */
+    @Query("SELECT * FROM songs WHERE id IN (:ids) AND missingSince = 0 AND excluded = 0")
+    suspend fun byIds(ids: List<Long>): List<SongEntity>
+
     @Insert
     suspend fun insert(row: SongEntity): Long
 
@@ -148,6 +158,30 @@ interface SongStateDao {
 
     @Query("SELECT songId FROM song_state WHERE favorite = 1")
     suspend fun favoriteIds(): List<Long>
+
+    // ------------------------------------------------------------
+    // 车机浏览树（`playback/LibraryBrowser.kt`）用的有序 id 列表。
+    //
+    // 三个虚拟歌单在 App 内的口径是「内存里排好序再取前 100」，
+    // 车机面板没有那份内存索引，因此这里把排序下沉到 SQL（走 favorite /
+    // lastPlayedAt 上的索引），语义与 `ui/library/PlaylistStore.kt` 保持一致。
+    // ------------------------------------------------------------
+
+    /** 「我的收藏」：最近听过的排前面（与 App 内虚拟歌单一一致） */
+    @Query("SELECT songId FROM song_state WHERE favorite = 1 ORDER BY lastPlayedAt DESC")
+    suspend fun favoriteIdsByRecent(): List<Long>
+
+    /** 「最近播放」：按最后播放时间倒序 */
+    @Query("SELECT songId FROM song_state WHERE lastPlayedAt > 0 ORDER BY lastPlayedAt DESC LIMIT :limit")
+    suspend fun recentIds(limit: Int): List<Long>
+
+    /** 「最常播放」：按播放次数倒序 */
+    @Query("SELECT songId FROM song_state WHERE playCount > 0 ORDER BY playCount DESC LIMIT :limit")
+    suspend fun mostPlayedIds(limit: Int): List<Long>
+
+    /** 按歌曲主键批量取状态行（车机浏览树合并标签覆盖用） */
+    @Query("SELECT * FROM song_state WHERE songId IN (:songIds)")
+    suspend fun bySongIds(songIds: List<Long>): List<SongStateEntity>
 
     /**
      * 确保行存在。

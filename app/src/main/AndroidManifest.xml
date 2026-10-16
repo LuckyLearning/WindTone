@@ -39,6 +39,11 @@
     -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!--
+      `tools:ignore` 挂在 `<application>` 上而不是 meta-data 上：
+      `MissingIntentFilterForMediaSearch` 这条 lint 的报错位置就是 `<application>`（见 2026-10-16 实测），
+      挂在 meta-data 上不生效。忽略的理由写在下面那段 meta-data 注释里。
+    -->
     <application
         android:name=".MusicApp"
         android:allowBackup="true"
@@ -47,7 +52,23 @@
         android:requestLegacyExternalStorage="true"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="false"
-        android:theme="@style/Theme.MusicPlayer">
+        android:theme="@style/Theme.MusicPlayer"
+        tools:ignore="MissingIntentFilterForMediaSearch">
+
+        <!--
+          Android Auto：声明本应用提供「媒体」能力。
+          没有这份描述，Android Auto 不会把应用列进车机的媒体面板，
+          浏览树再完整也没人看（车机自带的 DiLink 面板不走这条，靠上面的 service action 发现）。
+
+          上面那条 `tools:ignore` 的理由：lint 的 `MissingIntentFilterForMediaSearch` 要求
+          同时声明 `android.media.action.MEDIA_PLAY_FROM_SEARCH`（车机语音搜索「放周杰伦」的入口）。
+          本应用的浏览树**只做歌单层级，不含搜索**（口径见《权限与更新》「已知限制」），
+          所以刻意不声明该 action —— 显式忽略，而不是声明了却什么都不做
+          （那会让语音搜索落到一个空实现上，比不支持更糟）。
+        -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
 
         <activity
             android:name=".MainActivity"
@@ -72,16 +93,22 @@
         </activity>
 
         <!--
-          播放服务。两个 intent-filter 是**并列**的，不是一个里放两个 action：
-            · MediaSessionService —— 本应用自己的 MediaController 通过它连接；
-            · MediaBrowserService —— Android Auto / 车机系统媒体面板通过它拿浏览树。
-          合在一个 filter 里会被系统按 action 分别匹配，但分成两个更贴近
-          Media3 官方文档的写法，也便于日后单独摘掉其中一个。
+          播放服务。三个 action 是**并列**的，不是一个里塞三个：
+            · MediaLibraryService —— 车机 / 外部浏览器（Android Auto、车机自带媒体面板）
+              通过它拿到浏览树（歌单层级），见 playback/LibraryBrowser.kt；
+            · MediaSessionService —— 本应用自己的 MediaController 通过它连接
+              （实际按组件名 SessionToken 建连，不依赖这个 action，留着是为了兼容
+               仍按 action 枚举媒体应用的旧实现）；
+            · MediaBrowserService —— Android Auto / 车机系统媒体面板的发现入口。
+          MediaLibraryService 是 MediaSessionService 的子类，前两者共存不冲突。
         -->
         <service
             android:name=".playback.PlaybackService"
             android:exported="true"
             android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaLibraryService" />
+            </intent-filter>
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaSessionService" />
             </intent-filter>

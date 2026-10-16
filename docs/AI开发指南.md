@@ -39,7 +39,7 @@ LibraryViewModel   PlayerViewModel    UpdateViewModel    SettingsViewModel
  MusicRepository  PlaybackEngine  UpdateRepository  DataMaintenance
  （扫描/排序/搜索）（Media3+队列+统计）（检查/下载/安装） （快照/清理）
    ↓                    ↓
- MediaStoreScanner   PlaybackService (MediaSessionService)
+ MediaStoreScanner   PlaybackService (MediaLibraryService)
  FolderScanner/FileScanner
 
  两个跨域共享件：SongIndex（uri↔dbId + 每曲状态）· MessageBus（一次性提示）
@@ -66,7 +66,7 @@ LibraryViewModel   PlayerViewModel    UpdateViewModel    SettingsViewModel
 | APK 产物名 | `WindTone-v1.1.3.apk`（debug：`WindTone-v1.1.3-debug.apk`）—— 版本号随发版变化 |
 | 应用显示名 | 英文 `WindTone` / 中文 `听风`（`values/` 与 `values-zh/`） |
 | 数据库 | `music_player.db`，Room **v5**，9 张表（schema 快照在 `app/schemas/`） |
-| 单元测试 | **143 个**：`lyrics/` / `UpdateChecker` / `PlayMode` 为纯 JVM；`db/` 走 Robolectric（真实 SQLite）；`ui/` 是 Compose 界面冒烟（见 §11.13） |
+| 单元测试 | **193 个**：`lyrics/` / `UpdateChecker` / `PlayMode` 为纯 JVM；`db/` 与 `playback/` 走 Robolectric（真实 SQLite）；`ui/` 是 Compose 界面冒烟（见 §11.13） |
 
 ### ⚠️ 兼容口径（2026-10-14 起，务必先读）
 
@@ -273,7 +273,8 @@ playback/                 ── 播放层 ──
   PlaybackEngine.kt       ⭐ 播放域持有者（约 1000 行，**应用级单例**）：player / progress / themeSeed
                           三个流 + 队列持久化与恢复 + 播放统计 + 歌词装载 + 全部播放动作
                           （文件尾声明 `interface PlayerActions`，37 个方法）
-  PlaybackService.kt      MediaSessionService（前台服务，通知栏与锁屏控制）
+  PlaybackService.kt      MediaLibraryService（前台服务：通知栏与锁屏控制 + 车机浏览树回调）
+  LibraryBrowser.kt       车机 / 外部浏览器的歌单层级浏览树（只读 Room，无缓存，见 §6.9）
   PlaybackConnection.kt   客户端侧：建立/复用 MediaController
   PlayerHandle.kt         全局持有 ExoPlayer 实例（供小组件/磁贴直接操作）
   AudioFx.kt              均衡器/低音/虚拟环绕/响度增强（AudioEffect 封装，单例）
@@ -373,7 +374,7 @@ val update:    StateFlow<UpdateUiState>     // 更新检查 / 下载 / 安装
 UI 调 playerVm.playQueue(songs, index)      // PlayerViewModel 用接口委托整体转给 PlaybackEngine
   → ensureController()（PlaybackConnection.connect() 懒连接）
   → controller.setMediaItems(...) / prepare() / play()
-  → PlaybackService（MediaSessionService）持有真正的 ExoPlayer
+  → PlaybackService（MediaLibraryService）持有真正的 ExoPlayer
   → 回调 → engine 更新 player / progress 流
   → AudioFx 在拿到 audioSessionId 后 attach，挂上音效
 ```
@@ -575,7 +576,9 @@ install()
 
 ### 6.3 播放与音频
 
-- `PlaybackService : MediaSessionService`，Manifest 里 `foregroundServiceType="mediaPlayback"`。通知渠道 ID `local_music_player_playback`（**遗留名，勿改**）。
+- `PlaybackService : MediaLibraryService`（**2026-10-16 起**，此前是 `MediaSessionService`——它是前者的父类，
+  换过来是为了给车机媒体面板提供歌单浏览树，见 §6.9），Manifest 里 `foregroundServiceType="mediaPlayback"`。
+  通知渠道 ID `local_music_player_playback`（**遗留名，勿改**）。
 - `AudioFx` 单例：`init(context)` → `attach(audioSessionId)` 后才生效；换曲导致 sessionId 变化需重新 attach。
 - `SleepTimer` 单例：`start(ms)` / `startEndOfSong(pos, dur)` / `cancel()`，`remainingMs` 是 StateFlow。
 - `PlayerHandle`：给小组件/磁贴用的进程内播放器把手。
@@ -660,6 +663,45 @@ Kotlin 规定「重写不能声明默认值」，而接口上的默认值表达�
 
 ---
 
+### 6.9 车机浏览树（`playback/LibraryBrowser.kt`，2026-10-16）
+
+**要解决的问题**：`MediaSessionService` 只能把「当前播放项」交给系统，车机面板因此永远只有一个
+播放卡片，看不到任何歌单层级。补法是换 `MediaLibraryService`（`MediaSessionService` 的子类，
+播放侧能力一个不少）并实现 `MediaLibrarySession.Callback`。
+
+```
+MediaLibrarySession.Callback            LibraryBrowser（只读 Room，无缓存）
+   onGetLibraryRoot   ──► 根节点「听风」
+   onGetChildren      ──► 根 → 我的收藏 / 最近播放 / 最常播放 ＋ 自建歌单
+                          歌单 → 该歌单曲目（按 position / lastPlayedAt / playCount 排序）
+   onGetItem          ──► 单个节点（认不出的 id 回 ERROR_BAD_VALUE，不抛异常）
+   onAddMediaItems / onSetMediaItems ──► 把节点变成能播的项（见下）
+```
+
+⚠ **三条不变量**（改这块之前先读）：
+
+1. **歌曲节点的 `mediaId` 就是音频 URI**（= `Song.stableKey`），与播放页 / 队列 / 封面缓存同一套 id。
+   分类节点统一用 `wt:` 前缀（`BrowseIds`），因为音频 URI 一定是 `content://` / `file://` / 绝对路径，
+   不可能以 `wt:` 开头——「这是分类节点还是歌」只看前缀，不加额外字段。
+2. **跨 Binder 会丢 URI**：`MediaItem` 过 Binder 只保留 `mediaId` 与 metadata，`LocalConfiguration` 没了。
+   所以 `onAddMediaItems` / `onSetMediaItems` 必须自己把 URI 写回去，否则车机上「点了不出声」。
+   展开歌单会把 1 项变 N 项，此时原来的 `startIndex` / 起播位置失效，`onSetMediaItems` 里显式重置。
+3. **回调必须立刻返回 Future**：binder 线程不能等 Room。统一走 `SettableFuture` + `browseScope`（IO），
+   失败写 `CrashLog`（TAG `WindToneBrowse`）并回错误码——不留静默失败
+   （口径见《第五期规划》§八「诊断可观测性」）。
+
+**浏览树只做一层下钻**（歌单 → 歌曲），刻意不做专辑 / 歌手 / 文件夹与车机侧搜索：
+车机面板的屏幕与操作方式只适合「选一个歌单，从头放」，把五个视图原样搬上去没人翻得完。
+要加视图，先在 `BrowseIds` 里加节点，再在 `LibraryBrowser.childrenOf` 里补一条分支，
+最后补 `LibraryBrowserTest` 的用例。
+
+**相关 Manifest 项**：`PlaybackService` 挂三个并列 intent-filter
+（`MediaLibraryService` / `MediaSessionService` / `MediaBrowserService`），
+`<application>` 下有 `com.google.android.gms.car.application` → `res/xml/automotive_app_desc.xml`
+（`<uses name="media"/>`，Android Auto 的能力声明；车机自带面板不走这条）。
+
+---
+
 ## 7. 构建与开发环境
 
 ### 7.1 本机环境（当前开发机）
@@ -684,7 +726,7 @@ export JAVA_HOME="/c/Users/stu_l/.jdks/openjdk-21.0.2"
 # 看某条配置实际解析出的版本（改完 catalog 后核对依赖有没有按预期落位）
 ./gradlew :app:dependencies --configuration debugRuntimeClasspath --offline
 
-# 单元测试（143 个；lyrics / UpdateChecker / PlayMode 纯 JVM 秒级，db/ 与 ui/ 走 Robolectric，首跑要下 android-all）
+# 单元测试（193 个；lyrics / UpdateChecker / PlayMode 纯 JVM 秒级，db/ 与 playback/ 及 ui/ 走 Robolectric，首跑要下 android-all）
 ./gradlew testDebugUnitTest --offline --console=plain
 
 # Debug 包（快）
@@ -1480,7 +1522,7 @@ class XxxTest { @get:Rule val compose = createComposeRule() ... }
 | 项 | 现状 | 影响 / 建议 |
 |---|---|---|
 | `MainScreen.kt` 1152 行 | ✅ 2026-10-15 已按 §8.6 拆过一轮：列表区抽成 `LibraryHeader.kt`（424 行）+ `LibraryLists.kt`（742 行），`MainScreen` 只留编排（双栏 / 抽屉 / 播放页挂载 / 深链消费） | 下一个偏大的文件是 `ui/library/LibraryCore.kt`（778 行，见 §6 的拆分结构） |
-| 测试覆盖 | **143 个**（`db/` 有 Robolectric 用例，`ui/` 是 Compose 界面冒烟） | 已覆盖 CASCADE / 软删 / 排除 / 统计 / 队列 / 搜索历史 / 歌词解析 / 悬浮歌词内容解析与排版（32 项）/ 悬浮窗摆放与夹取（14 项）/ 更新检查（19 项）/ 收听报告日历聚合（15 项）/ 重复歌曲指纹（13 项）/ 侧边抽屉行为（6 项）/ 设置页一主六子导航（3 项）；仍缺 `MusicRepository` 的排序 / 搜索，以及 ViewModel 层的行为测试 |
+| 测试覆盖 | **193 个**（`db/`、`playback/` 有 Robolectric 用例，`ui/` 是 Compose 界面冒烟） | 已覆盖 CASCADE / 软删 / 排除 / 统计 / 队列 / 搜索历史 / 歌词解析 / 悬浮歌词内容解析与排版（32 项）/ 悬浮窗摆放与夹取（14 项）/ 更新检查（19 项）/ 收听报告日历聚合（15 项）/ 重复歌曲指纹（13 项）/ 侧边抽屉行为（6 项）/ 设置页一主六子导航（3 项）/ 车机浏览树（12 项，见 §6.9）；仍缺 `MusicRepository` 的排序 / 搜索，以及 ViewModel 层的行为测试 |
 | **`java.time` 不能用**（`minSdk = 24`） | `isCoreLibraryDesugaringEnabled = false` 是**有意**的 | `java.time` / `java.util.stream` / `Optional` 都要 **API 26**，低版本上直接 `NoClassDefFoundError`（不是降级，是崩）。要日历运算走 `java.util.Calendar` + `TimeZone`（见 `data/ListeningReport.kt` 的实现与注释），日期加减用 `Calendar.add(DAY_OF_MONTH, ±n)` 而不是加减 86_400_000 毫秒。真要引入 `java.time`，先开脱糖并加 `desugar_jdk_libs`（会全局影响构建，别为一个小功能开） |
 | **lint 的 `abortOnError = false`** | 2026-10-15 收尾时已把 **Error 清到 0**（warnings 仍在，不阻塞构建） | 也就是说"构建成功"≠"lint 干净"。改完代码别只看 `BUILD SUCCESSFUL`，要扫一眼 `app/build/reports/lint-results-debug.xml` 里的 **Error** 级条目。当天共三次收敛：**32 → 5**（21 条 `java.time` 的 `NewApi` 见上一行，5 条 `Tile.setSubtitle` 的 `NewApi` 见 `tile/TileCompat.kt`，`StartActivityAndCollapseDeprecated` 改显式 `@Suppress` 并写明理由），再 **5 → 0**（5 条 `UnsafeOptInUsageError`：`kotlinOptions.freeCompilerArgs` 里的 `-opt-in=...UnstableApi` 编译器认、lint 不认，改为在 `PlaybackService` / `PlayerHandle` 上挂 `@androidx.annotation.OptIn`）。⚠️ 注意 `w:` 开头的 `-opt-in ... is not an opt-in requirement marker` 是**历史告警**，Kotlin 编译期就带着，不是新引入的 |
 | 无迁移 = 无版本兼容 | 已定口径：重装即可 | 需要保住老用户数据时，得补 `addMigrations(...)` 并配迁移回归测试（见 §5.1 末）。**v1.0.6（DB v2）→ v1.1.0（DB v4）就是按这条走的：覆盖安装会整库重建** |
