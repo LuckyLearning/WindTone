@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import com.luckylearning.windtone.data.DownloadRoute
 import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.overlay.LyricOverlayBus
@@ -56,7 +57,7 @@ class SettingsScreenTest {
         dynamicTheme: Boolean = SettingsDefaults.DYNAMIC_THEME,
         onCarMode: (Boolean) -> Unit = {},
         onLyricScale: (Float) -> Unit = {},
-        onLyricSungColor: (Int) -> Unit = {},
+        onLyricOverlayTextColor: (Int) -> Unit = {},
     ) {
         compose.setContent {
             MusicPlayerTheme {
@@ -79,15 +80,12 @@ class SettingsScreenTest {
                     onLyricOverlayBackdrop = {},
                     onLyricOverlayPauseMode = {},
                     onLyricOverlayWidthPercent = {},
-                    onLyricOverlayTextColor = {},
-                    onLyricOverlaySungColor = {},
+                    onLyricOverlayTextColor = onLyricOverlayTextColor,
                     onOverlayEditing = {},
                     onOverlayPreview = {},
                     canDrawOverlay = false,
                     overlayHealth = LyricOverlayBus.Health(),
                     onLyricScale = onLyricScale,
-                    onLyricWordByWord = {},
-                    onLyricSungColor = onLyricSungColor,
                     onSpeed = {},
                     onPitch = {},
                     onSkipSilence = {},
@@ -193,37 +191,48 @@ class SettingsScreenTest {
     }
 
     /**
-     * 歌词子页里字号与「已唱部分的颜色」都偏离了默认 → 两枚 ↺，分别写回各自的默认值。
+     * 歌词子页里字号与悬浮歌词文字颜色都偏离了默认 → 两枚 ↺，各自只复位自己那一项。
      *
-     * 下标就是它们在页面里的先后顺序（字号在前、颜色在后）。这里顺带盖住一件事：
-     * ↺ 嵌在整行 `clickable` 里，点它必须**只**复位，不能顺带打开这一行该进的那个界面
-     * ——否则点一次 ↺ 会同时弹出色板，看起来像「复位失败变成了打开设置」。
+     * 刻意盖住两件事：
+     *  ① ↺ 嵌在整行 `clickable` 里，点它必须**只**复位，不能顺带打开这一行该进的那个界面
+     *     ——否则点一次 ↺ 会同时弹出色板，看起来像「复位失败变成了打开设置」；
+     *  ② ↺ 必须**先滚进视口再点**：这一页比 800dp 的测试窗口长，页尾那枚 ↺ 的底边实测在
+     *     1662px，而窗口只有 1600px —— 点击坐标落到窗口外时会**静默落空**（回调一次都
+     *     不被叫到，看着像功能坏了），既不报错也不抛异常，只能靠断言抓到。
      */
     @Test
-    fun lyricsPageResetsScaleAndSungColorIndependently() {
+    fun lyricsPageResetsScaleAndOverlayTextColorIndependently() {
         var scale: Float? = null
-        var sungColor: Int? = null
+        var textColor: Int? = null
         render(
-            player = PlayerUiState(lyricScale = 1.3f, lyricSungColor = 0xFF4FC3F7.toInt()),
+            player = PlayerUiState(
+                lyricScale = 1.3f,
+                lyricOverlayTextColor = 0xFF4FC3F7.toInt(),
+            ),
             onLyricScale = { scale = it },
-            onLyricSungColor = { sungColor = it },
+            onLyricOverlayTextColor = { textColor = it },
         )
 
         compose.onNodeWithText("歌词").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText("已唱部分的颜色").assertIsDisplayed()
         compose.onAllNodesWithContentDescription("恢复默认").assertCountEquals(2)
 
-        compose.onAllNodesWithContentDescription("恢复默认")[0].performClick()
+        // 下标 = 页面里的先后顺序：0 是「歌词字号」（页首），1 是「悬浮歌词文字颜色」（页尾）
+        compose.onNodeWithText("悬浮歌词文字颜色").performScrollTo()
         compose.waitForIdle()
-        assertEquals(SettingsDefaults.LYRIC_SCALE, scale)
-        // 点字号的 ↺ 只该动字号：颜色那处的回调一次都不该被叫到
-        assertEquals(null, sungColor)
-        // 也不该顺带把色板弹层（ModalBottomSheet）打开
+        compose.onAllNodesWithContentDescription("恢复默认")[1].performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals(
+            "点「悬浮歌词文字颜色」行的 ↺ 应当写回 OVERLAY_TEXT_COLOR",
+            SettingsDefaults.OVERLAY_TEXT_COLOR,
+            textColor,
+        )
+        // 它只该动颜色：字号那处的回调不该被叫到；也不该顺带把色板弹层打开
+        assertEquals(null, scale)
         compose.onNodeWithText("预设").assertDoesNotExist()
 
-        compose.onAllNodesWithContentDescription("恢复默认")[1].performClick()
+        compose.onAllNodesWithContentDescription("恢复默认")[0].performScrollTo().performClick()
         compose.waitForIdle()
-        assertEquals(SettingsDefaults.COLOR_FOLLOW_THEME, sungColor)
+        assertEquals(SettingsDefaults.LYRIC_SCALE, scale)
     }
 }

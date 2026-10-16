@@ -144,18 +144,13 @@ fun SettingsScreen(
     onLyricOverlayPauseMode: (Int) -> Unit,
     /** 悬浮窗宽度：屏幕宽度百分比（1..100）—— v1.1.4 */
     onLyricOverlayWidthPercent: (Int) -> Unit,
-    /** 悬浮窗正文色（未唱部分）—— v1.1.4 */
+    /** 悬浮窗歌词文字颜色 —— v1.1.4 */
     onLyricOverlayTextColor: (Int) -> Unit,
-    /** 悬浮窗已唱部分的颜色 —— v1.1.4 */
-    onLyricOverlaySungColor: (Int) -> Unit,
     onOverlayEditing: (Boolean) -> Unit,
     onOverlayPreview: () -> Unit,
     canDrawOverlay: Boolean,
     overlayHealth: LyricOverlayBus.Health,
     onLyricScale: (Float) -> Unit,
-    onLyricWordByWord: (Boolean) -> Unit,
-    /** 逐字歌词已唱部分的颜色（ARGB）；`SettingsDefaults.COLOR_FOLLOW_THEME` = 跟随主题 */
-    onLyricSungColor: (Int) -> Unit,
     onSpeed: (Float) -> Unit,
     /** 变调：半音（-12..+12，0 = 原调） */
     onPitch: (Int) -> Unit,
@@ -303,8 +298,6 @@ fun SettingsScreen(
                         canDrawOverlay = canDrawOverlay,
                         overlayHealth = overlayHealth,
                         onLyricScale = onLyricScale,
-                        onLyricWordByWord = onLyricWordByWord,
-                        onLyricSungColor = onLyricSungColor,
                         onLyricOverlay = onLyricOverlay,
                         onLyricOverlayLines = onLyricOverlayLines,
                         onLyricOverlayTextScale = onLyricOverlayTextScale,
@@ -313,7 +306,6 @@ fun SettingsScreen(
                         onLyricOverlayPauseMode = onLyricOverlayPauseMode,
                         onLyricOverlayWidthPercent = onLyricOverlayWidthPercent,
                         onLyricOverlayTextColor = onLyricOverlayTextColor,
-                        onLyricOverlaySungColor = onLyricOverlaySungColor,
                         onOverlayEditing = onOverlayEditing,
                         onOverlayPreview = onOverlayPreview,
                     )

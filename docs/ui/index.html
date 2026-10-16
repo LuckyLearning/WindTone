@@ -324,11 +324,9 @@ a{color:inherit;text-decoration:none}
 .carlyric{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;
   gap:26px;text-align:center;padding:0 10px}
 .carlyric .cl{font-size:26px;line-height:1.5;color:var(--on-bg);opacity:.42;font-weight:400}
-.carlyric .cl.cur{font-size:32px;font-weight:600;opacity:1;color:var(--on-bg);
+.carlyric .cl.cur{font-size:32px;font-weight:600;opacity:1;color:var(--primary);
   background:var(--lyr-cur-bg);border-radius:14px;padding:8px 16px;position:relative}
 /* 当前行不加竖线指示条（用户明确要求去掉，只靠底色 + 字号 + 颜色区分） */
-.carlyric .cl .sung{color:var(--primary);font-weight:800}
-.carlyric .cl .idle{color:var(--primary);opacity:.28}
 .carlyric .cl .tr{display:block;font-size:19px;font-weight:400;color:var(--on-surface-variant);margin-top:6px}
 .carlyric .cl.cur .tr{color:var(--primary);opacity:.85}
 /* 车机进度条：更粗、滑块更大 */
@@ -349,10 +347,8 @@ a{color:inherit;text-decoration:none}
 .p-mid{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;position:relative}
 .lyr{display:flex;flex-direction:column;justify-content:center;gap:16px;text-align:center;padding:0 4px}
 .lyr-line{font-size:15.5px;line-height:1.55;color:var(--on-bg);opacity:.42;font-weight:400}
-.lyr-line.cur{font-size:17.5px;font-weight:600;color:var(--on-bg);opacity:1;background:var(--lyr-cur-bg);
+.lyr-line.cur{font-size:17.5px;font-weight:600;color:var(--primary);opacity:1;background:var(--lyr-cur-bg);
   border-radius:8px;padding:6px 10px;position:relative}
-.lyr-line.cur .sung{color:var(--primary);font-weight:800}
-.lyr-line.cur .idle{color:var(--primary);opacity:.28}
 .lyr-line .tr{display:block;font-size:13px;font-weight:400;color:var(--on-surface-variant);margin-top:4px}
 .lyr-line.cur .tr{color:var(--primary);opacity:.85}
 /* 车载模式：歌词整体放大一号，占满更多空间 */
@@ -1499,7 +1495,7 @@ a{color:inherit;text-decoration:none}
           <div class="lyr">
             <div class="lyr-line">一群嗜血的蚂蚁 被腐肉所吸引</div>
             <div class="lyr-line">我面无表情 看孤独的风景</div>
-            <div class="lyr-line cur"><span class="sung">失去你 爱恨</span><span class="idle">开始分明</span><span class="tr">Without you, love and hate start to blur</span></div>
+            <div class="lyr-line cur">失去你 爱恨 开始分明<span class="tr">Without you, love and hate start to blur</span></div>
             <div class="lyr-line">失去你 还有什么事好关心</div>
             <div class="lyr-line">当鸽子不再象征和平</div>
             <div class="lyr-line">我终于被提醒 广场上喂食的是秃鹰</div>
@@ -1526,7 +1522,7 @@ a{color:inherit;text-decoration:none}
           <div class="slot end"><button class="ibtn" title="播放队列"><svg class="ic"><use href="#i-queue"/></svg></button></div>
         </div>
         <div class="p-status">
-          <span class="chip-lsrc">内嵌同步歌词</span><span class="chip-lsrc">逐字</span>
+          <span class="chip-lsrc">内嵌同步歌词</span>
           <span class="right"><span>导入文件夹</span><span>队列 500 首</span></span>
         </div>
       </div>
@@ -1535,11 +1531,12 @@ a{color:inherit;text-decoration:none}
   <p class="note"><b>关键点：</b>背景为不透明垂直渐变（lerp(background, primary, .32) → .10 → background）；<br>
   顶栏 = 收起箭头 + 歌词↔封面切换 / 播放设置（歌名/歌手已下移到进度条上方）；<br>
   歌词：当前行 17.5sp primary 加粗 + primary 10% 底（无竖线指示条），非当前行 15.5sp alpha .42；<br>
-  <b>逐字歌词（设置里可关）</b>：当前行按字染色 —— 已唱部分 primary 600 字重，未唱部分 primary 28% 透明，中间按字符切分推进（`KaraokeText`，220ms tween）；
-  <b>v1.1.5 起不再要求歌词文件自带逐字数据</b>：普通 LRC 没有 `<mm:ss.xx>` 标签，`WordTimingSynth` 在加载层按行时长 + 字符权重派生一条逐字时间轴（真数据优先，派生只补空缺行），所以任何同步歌词都有扫过效果；<br>
-  关闭「逐字歌词」后当前行退化为整行 primary 加粗，其余不变；<br>
+  <b>当前行的强调只靠「颜色 / 字号 / 字重 / 底色」四件事</b>（v1.1.8 起）—— 原先还有一条逐字卡拉OK分支，
+  它要按播放位置逐字染色，已经整体移除；现在这一行不再随进度重组，只在换行时重画；<br>
+  <b>KRC / YRC / 增强 LRC 仍然照读</b>：行内的字级标签（`&lt;mm:ss.xx&gt;` / `&lt;start,dur,0&gt;`）会被剥离干净，
+  只取行首时间戳，按行滚动高亮 —— 直接把这几种文件丢进同目录即可，不必事先转成 `.lrc`；<br>
   双语副行 13sp（当前行 primary 80%）；空文本行显示「♪」；点击某行可跳转，手动滚动后停止跟随 4 秒；<br>
-  底部状态行：歌词来源 chip（无歌词 / 本地歌词文件 / 本地文本歌词 / 本地逐字歌词 / 内嵌同步歌词 / 内嵌歌词）+「偏移 Xms」+「逐字」+「睡眠 M:SS」，右侧歌曲来源「导入文件夹」与「队列 N 首」。</p>
+  底部状态行：歌词来源 chip（无歌词 / 本地歌词文件 / 本地文本歌词 / 内嵌同步歌词 / 内嵌歌词）+「偏移 Xms」+「睡眠 M:SS」，右侧歌曲来源「导入文件夹」与「队列 N 首」。</p>
 </figure>
 
 <figure class="fig" id="scr-player-car">
@@ -1552,7 +1549,7 @@ a{color:inherit;text-decoration:none}
           <div class="lyr carlyr">
             <div class="lyr-line">一群嗜血的蚂蚁 被腐肉所吸引</div>
             <div class="lyr-line">我面无表情 看孤独的风景</div>
-            <div class="lyr-line cur"><span class="sung">失去你 爱恨</span><span class="idle">开始分明</span><span class="tr">Without you, love and hate start to blur</span></div>
+            <div class="lyr-line cur">失去你 爱恨 开始分明<span class="tr">Without you, love and hate start to blur</span></div>
             <div class="lyr-line">失去你 还有什么事好关心</div>
             <div class="lyr-line">当鸽子不再象征和平</div>
             <div class="lyr-line">我终于被提醒 广场上喂食的是秃鹰</div>
@@ -1579,7 +1576,7 @@ a{color:inherit;text-decoration:none}
   任意触摸（点按钮、拖进度条、滑歌词、按返回键——返回键此时先恢复界面而不是退出播放页）立即退出沉浸态并重新计时 5 秒。<br>
   进入沉浸态时内容区最大宽度限制（760dp）解除，歌词铺满整屏宽度。<br>
   车载模式歌词整体放大 <b>1.5 倍</b>（在用户「歌词大小」缩放基础上再乘：正文 15.5sp→约 23sp、当前行 17.5sp→约 26sp），
-  行距与逐字染色规则与普通模式一致——车机屏离驾驶位 60~70cm，手机字号瞄一眼读不清。<br>
+  行距与「颜色 / 字号 / 字重 / 底色」的强调规则与普通模式一致（普通模式另见 ⑫）——车机屏离驾驶位 60~70cm，手机字号瞄一眼读不清。<br>
   触发前提：设置 → 外观 →「车载模式」开启（启动直接进播放页、锁横屏）；车机横屏的独立两栏布局另见第六节 ㊱~㊳，本屏是播放页自身的沉浸态。</p>
 </figure>
 
@@ -2267,7 +2264,7 @@ a{color:inherit;text-decoration:none}
           <div class="cat-main"><div class="cat-t">播放</div><div class="cat-s">速度 1.00x · 变调 原调 · 跳过静音 · 均衡器与音效</div></div>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
         <div class="cat-row"><span class="cat-ic"><svg class="ic"><use href="#i-lyrics"/></svg></span>
-          <div class="cat-main"><div class="cat-t">歌词</div><div class="cat-s">字号 1.1x · 逐字 · 悬浮歌词</div></div>
+          <div class="cat-main"><div class="cat-t">歌词</div><div class="cat-s">字号 1.1x · 悬浮歌词</div></div>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
         <div class="cat-row"><span class="cat-ic"><svg class="ic"><use href="#i-library"/></svg></span>
           <div class="cat-main"><div class="cat-t">音乐库</div><div class="cat-s">过滤 &lt; 60 秒</div></div>
@@ -2284,7 +2281,7 @@ a{color:inherit;text-decoration:none}
   </div>
   <p class="note"><b>分层原则（v1.1.3 二次重构）</b>：主页面<b>只放二级分类入口卡</b>，一张卡一个分类——左侧<b>语义图标</b>（40dp 圆角 12 容器、secondaryContainer 底）+ 分类名 + 一行摘要 + 右箭头，<b>摘要把子页里最重要的状态前置</b>（「过滤 &lt; 60 秒」「v1.0.6」「速度 1.00x」），不进子页就能看到大概。<br>
   &nbsp;&nbsp;v1.0.7 曾把主页压到「外观 / 播放 / 歌词三组平铺 + 三个子页入口」（约 1.3 屏）；但悬浮歌词五个外观选项加入后，「歌词」一组独占两屏，主页又开始长回去——本次把 <b>外观 / 播放 / 歌词</b> 三组也各自下沉成子页，主页回到<b>一屏六张卡</b>，任何设置最多两层直达。<br>
-  &nbsp;&nbsp;六个分类的归属：①<b>外观</b>——主题跟随封面取色、车载模式；②<b>播放</b>——默认播放速度、跳过静音、均衡器与音效；③<b>歌词</b>——字号、逐字歌词、桌面悬浮歌词及其五个外观选项；④<b>音乐库</b>——短音频过滤（一次性配置）；⑤<b>更新</b>——检查更新 / 自动检查 / 下载线路；⑥<b>关于与诊断</b>——播放统计、崩溃日志、版本与隐私。<br>
+  &nbsp;&nbsp;六个分类的归属：①<b>外观</b>——主题跟随封面取色、车载模式；②<b>播放</b>——默认播放速度、跳过静音、均衡器与音效；③<b>歌词</b>——歌词字号、桌面悬浮歌词及其外观选项；④<b>音乐库</b>——短音频过滤（一次性配置）；⑤<b>更新</b>——检查更新 / 自动检查 / 下载线路；⑥<b>关于与诊断</b>——播放统计、崩溃日志、版本与隐私。<br>
   <b>设置页从底部滑入覆盖全屏</b>（不是新 Activity）；子页是同一个 <code>SettingsScreen</code> 内部的页面状态（<code>SettingsPage</code> 枚举），<b>不新建 Activity、不引入导航库</b>；子页里按系统返回键先回主页面，回主页后再按才关闭设置页。<br>
   <b>分类入口卡 = 图标 + 摘要 + 右箭头</b>：v1.0.7 起「全 App 不存在 chevron」的规范放宽为「只有 ActionRow 能带 chevron」；v1.1.3 起再放宽一档——<b>设置主页的二级分类入口卡（<code>CategoryRow</code>）也带 chevron 和左侧图标</b>（参考通用播放器设置主页的二级菜单结构），其余位置不变：<code>OptionRow</code>（弹层行）依旧左侧图标 + 选中 ✓、无箭头；子页内的 <code>ActionRow</code> 依旧左侧无图标、箭头只给「点开会进入另一个界面」的行（子页入口、打开弹层 / 弹窗的行），就地执行动作（「检查更新」）或就地展开（「查看日志」）的行不加。<br>
   <b>子页入口行与分类卡的区别</b>：子页里的 <code>ActionRow</code>（如「均衡器与音效」「过滤短音频」）是<b>某一类设置里的一条</b>，无图标；主页的 <code>CategoryRow</code> 是<b>一整类设置的门面</b>，带图标 + 摘要——两层信息密度不同，不会混淆。<br>
@@ -2353,7 +2350,7 @@ a{color:inherit;text-decoration:none}
 </figure>
 
 <figure class="fig" id="scr-settings-lyrics">
-  <div class="cap"><b>㉙D 设置页 · 歌词子页</b><em>SettingsScreen.kt · 字号 / 逐字歌词 / 桌面悬浮歌词及五个外观选项</em></div>
+  <div class="cap"><b>㉙D 设置页 · 歌词子页</b><em>SettingsScreen.kt · 歌词字号 / 桌面悬浮歌词及其外观选项</em></div>
   <div class="phone">
     <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
     <div class="app">
@@ -2367,14 +2364,6 @@ a{color:inherit;text-decoration:none}
             <div style="flex:1;font-size:15px">歌词字号 1.1x</div>
             <svg class="ic ic-18 rst"><use href="#i-reset"/></svg></div>
           <div class="slider" style="margin:12px 0 4px"><span class="fill" style="width:44%"></span><span class="knob" style="left:44%"></span></div></div>
-        <div class="sw-row"><div class="sw-main"><div class="sw-t">逐字歌词</div>
-          <div class="sw-s">当前行随播放逐字点亮；无逐字时间轴的歌词按行时长自动派生</div></div><span class="switch"><i></i></span></div>
-        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:8px;margin-top:6px">
-          <div style="flex:1"><div style="font-size:15px">已唱部分的颜色</div>
-            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">逐字歌词里已经唱过的那一段；默认跟随主题色（随封面取色漂移）</div></div>
-          <span style="font-size:11px;color:var(--primary);text-align:right">跟随主题</span>
-          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
-        </div>
         <div class="section-label" style="padding:0;margin:14px 0 4px">桌面悬浮歌词</div>
         <div class="sw-row"><div class="sw-main"><div class="sw-t">桌面悬浮歌词</div>
           <div class="sw-s">退到车机桌面 / 导航页后，在屏幕最上层显示当前歌词行（App 内自动隐藏，开启瞬间有 6 秒预览）</div></div><span class="switch off"><i></i></span></div>
@@ -2407,9 +2396,10 @@ a{color:inherit;text-decoration:none}
           <span style="font-size:11px;color:var(--primary);text-align:right">淡出</span>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
         </div>
-        <!-- v1.1.4 新增三项：宽度滑块 + 两处颜色。都紧跟在五个外观选项之后，仍属「外观」范畴。
+        <!-- v1.1.4 新增：宽度滑块 + 颜色。都紧跟在五个外观选项之后，仍属「外观」范畴。
              ⚠️ 这一行的默认值是 80% 而不是 100%：窗口宽度与「横向能拖多远」是同一件事
-             （可移动量 = 屏宽 − 窗宽），100% 时正好为 0，悬浮窗会被钉死在最左边。 -->
+             （可移动量 = 屏宽 − 窗宽），100% 时正好为 0，悬浮窗会被钉死在最左边。
+             ⚠️ v1.1.8 起颜色只剩下面这一处：那两处「已唱色」随逐字染色一起删了。 -->
         <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;margin-top:6px">
           <div style="display:flex;align-items:center;gap:8px">
             <div style="flex:1;font-size:15px">悬浮歌词宽度 80%</div>
@@ -2420,14 +2410,8 @@ a{color:inherit;text-decoration:none}
         </div>
         <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:8px;margin-top:6px">
           <div style="flex:1"><div style="font-size:15px">悬浮歌词文字颜色</div>
-            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">还没唱到的那部分文字的颜色，默认纯白</div></div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">悬浮窗是固定色，不跟随主题；当前行与上下句靠明暗区分</div></div>
           <span style="width:16px;height:16px;border-radius:50%;background:#fff;border:1px solid var(--outline);flex:none"></span>
-          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
-        </div>
-        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:8px;margin-top:6px">
-          <div style="flex:1"><div style="font-size:15px">悬浮歌词已唱颜色</div>
-            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">逐字高亮里已唱过的那一段，默认暖黄</div></div>
-          <span style="width:16px;height:16px;border-radius:50%;background:#FFCD56;border:1px solid var(--outline);flex:none"></span>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
         </div>
         <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-top:6px">
@@ -2438,33 +2422,28 @@ a{color:inherit;text-decoration:none}
       </div>
     </div>
   </div>
-  <p class="note"><b>关键点：</b>内容与 v1.0.7 主页的「歌词」组完全一致，只是挪进子页——歌词字号 → 逐字歌词（默认开）→ 桌面悬浮歌词（默认关）→ 悬浮歌词五个外观选项 + 调整入口。<br>
-  「逐字歌词」关闭后播放页当前行退化为整行染色（primary 加粗），<b>同时管着桌面悬浮歌词的逐字染色</b>（两处共用一个开关）。<br>
+  <p class="note"><b>关键点：</b>「播放页歌词」段只剩 <b>歌词字号</b> 一项；「桌面悬浮歌词」段 = 开关（默认关）+ 行数 / 字号 / 对齐 / 底板 / 暂停表现五个外观选项 + 宽度 / 文字颜色 + 调整位置入口。<br>
   悬浮歌词五个外观选项（行数 / 字号 / 对齐 / 底板 / 暂停表现）：<b>开关关着也允许预设</b>（不做可见性 gating），五项共用同一个选项弹层（<code>OverlayChoice</code>），点任意一项即生效并给一次 6 秒前台预览；三种实际状态与「对齐 / 位置」的完整规范见 ㊴ 屏。<br>
   <b>降级不降可达性</b>：播放页「播放设置」弹层的「歌词」分组里仍有「桌面悬浮歌词」开关（见 ⑱）——听歌时顺手就能开，不必钻两层设置。<br>
-  <b>v1.1.4 新增四项</b>：「已唱部分的颜色」（播放页逐字歌词）与悬浮歌词的「宽度 / 文字颜色 / 已唱颜色」。前两者原先分别是写死的主题色、写死的纯白 / 暖黄，现在全部提到设置里。三项颜色共用一个选择弹层（见 ㉙E）；宽度滑块改完立刻给一次 6 秒预览。<br>
+  <b>v1.1.4 提到设置里的歌词颜色共三项</b>（播放页已唱色 / 悬浮窗文字色 / 悬浮窗已唱色）。⚠️ <b>v1.1.8 起后两项已随逐字染色整体移除</b>，本屏只剩「悬浮歌词文字颜色」这一处 —— 它现在是整窗唯一的颜色，主角与上下句靠<b>明暗 / 字重 / 字号</b>区分，不再有「已唱色」；颜色弹层见 ㉙E。<br>
+  <b>宽度滑块改完立刻给一次 6 秒预览</b>。<br>
   <b>宽度两端的两条口径</b>：①滑块范围就是 <b>1–100%</b>（用户要的语义），拖动时<b>逐帧</b>写回——宽度与屏宽是直接的比例关系，松手才变会让人以为「拖了半天没反应」，引擎每次都会重摆窗口，正好当实时预览用。②服务侧对像素宽度留了 <b>48dp 下限</b>（标准最小触控边长）：1% 在 1080p 屏上只有 10px，窗口会小到既看不见也拖不着。下限不能再往上抬——抬到 80dp 时，1080p / 3x 的机器上滑块 <b>1%~22% 全是同一个宽度</b>，低端那一整段等于失灵；48dp 把这段死区压到 13% 以内。</p>
 </figure>
 
 <figure class="fig" id="scr-settings-colorpicker">
-  <div class="cap"><b>㉙E 颜色选择弹层</b><em>SettingsScreen.kt · ColorPickerSheet（播放页已唱色 / 悬浮窗文字色 / 悬浮窗已唱色 三处共用）</em></div>
+  <div class="cap"><b>㉙E 颜色选择弹层</b><em>SettingsScreen.kt · ColorPickerSheet（v1.1.8 起只剩「悬浮歌词文字颜色」一处调用）</em></div>
   <div class="phone">
     <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
     <div class="app">
       <div class="detail-hd" style="padding:4px 10px 8px">
         <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
-        <div class="dh-main"><div class="detail-title">已唱部分的颜色</div></div>
+        <div class="dh-main"><div class="detail-title">悬浮歌词文字颜色</div></div>
       </div>
       <div class="list" style="padding:4px 18px 12px">
-        <div class="row-action" style="background:var(--surface-variant);border-radius:12px;padding:12px 14px">
-          <div class="ra-main"><div class="ra-title">跟随主题</div>
-            <div class="ra-sub">从当前歌曲封面取色，随主题一起变化</div></div>
-          <span style="font-size:13px;color:var(--primary);font-weight:700">✓</span>
-        </div>
         <div class="section-label" style="padding:0;margin:14px 0 0">预设</div>
         <div class="swatches">
-          <div class="swatch" style="background:#fff"></div>
-          <div class="swatch on" style="background:#FFCD56"></div>
+          <div class="swatch on" style="background:#fff"></div>
+          <div class="swatch" style="background:#FFCD56"></div>
           <div class="swatch" style="background:#4FC3F7"></div>
           <div class="swatch" style="background:#4DD0E1"></div>
           <div class="swatch" style="background:#81C784"></div>
@@ -2483,11 +2462,12 @@ a{color:inherit;text-decoration:none}
       </div>
     </div>
   </div>
-  <p class="note"><b>关键点：</b>三段式 —— <b>跟随主题 / 预设色板 / 自定义</b>。<br>
-  「跟随主题」只对<b>播放页已唱色</b>出现（它默认就跟着 <code>colorScheme.primary</code> 走）；悬浮窗那两处是固定色，没有这一项。<br>
-  <b>未唱色不是独立设置</b>：它始终从已唱色派生（28% 透明），这样把已唱色改成深色时，两者的对比关系仍然成立 —— 两个颜色各配各的很容易配出「看不清」的组合。<br>
+  <p class="note"><b>关键点：</b>两段式 —— <b>预设色板 / 自定义</b>。<br>
+  <b>v1.1.8 起这里没有「跟随主题」</b>：它原先是播放页<b>已唱色</b>专用的（默认跟着 <code>colorScheme.primary</code> 走）。逐字染色整体移除后已唱色没了，仅剩的「悬浮歌词文字颜色」是**固定色**，弹层也就去掉了这一段。<br>
+  选中的是<b>纯白</b> —— 它就是 <code>SettingsDefaults.OVERLAY_TEXT_COLOR</code>。⚠️ 默认值必须真的在色板里，否则用户点开弹层找不到默认色，「恢复默认」就成了界面上不可达的一步（<code>LyricsColorsTest</code> 钉着这条）。<br>
+  自定义区从<b>暖黄</b>起步（<code>LyricsColors.DEFAULT_SEED</code>，也是色板里的一颗），所以预览条与三个滑块的初始位置每次都一样，不随上一个弹层留下的色相漂移。<br>
   <b>为什么不用色轮</b>：车机上手指粗、精度差，色轮边缘的色相极难选准；三个滑块 + 一块实时预览条的组合在大屏上反而更好操作。<br>
-  选完立刻落盘并给一次预览（悬浮窗那两处），不必退到桌面验证。</p>
+  选完立刻落盘并给一次 6 秒悬浮窗预览，不必退到桌面验证。三个滑块<b>松手才写回</b>——逐帧写回会连着触发预览，把浮动窗口刷成流水。</p>
 </figure>
 
 <figure class="fig" id="scr-settings-2">
@@ -3007,7 +2987,7 @@ a{color:inherit;text-decoration:none}
         <div class="carlyric">
           <div class="cl">一群嗜血的蚂蚁 被腐肉所吸引</div>
           <div class="cl">我面无表情 看孤独的风景</div>
-          <div class="cl cur"><span class="sung">失去你 爱恨</span><span class="idle">开始分明</span><span class="tr">Without you, love and hate start to blur</span></div>
+          <div class="cl cur">失去你 爱恨 开始分明<span class="tr">Without you, love and hate start to blur</span></div>
           <div class="cl">失去你 还有什么事好关心</div>
           <div class="cl">当鸽子不再象征和平</div>
         </div>
@@ -3036,7 +3016,7 @@ a{color:inherit;text-decoration:none}
   与手机版唯一的差别是<b>限宽 760dp 后水平居中</b>——车机横屏 1707dp 若让竖屏版式铺满，返回键与设置键会被拉到
   屏幕两端、视线来回扫一两千像素，歌词一行也会长到需要扭头读；限宽后版式与手机同构，只是更宽松。<br>
   <b>歌名行红心紧跟在歌名/歌手后面</b>（车机版式，标题列不占满剩余宽度；手机版标题占满、红心贴右）——
-  1707dp 宽屏上红心贴最右缘驾驶时够不着也看不清。</p>
+  1707dp 宽屏上红心贴最右缘驾驶时够不着也看不清。<br>
   歌词字号：车载模式在用户设定的 [lyricScale] 上<b>再乘 1.5</b>（正文 15.5 → 约 23sp，当前行 17.5 → 约 26sp），
   因为车机离驾驶位约 60~70cm，手机那套字号瞄一眼读不清。<br>
   沉浸态：5 秒无触摸后收起顶栏 / 控制键 / 状态行，<b>保留歌名行（含红心）+ 歌词区 + 进度条 + 时间</b>；
@@ -3266,7 +3246,7 @@ a{color:inherit;text-decoration:none}
 
   <p class="note"><b>关键点：</b>用户可在 ㊳ 车机设置 / ㉙ 设置页 →「歌词」→「桌面悬浮歌词」里开关（默认关）；播放页「播放设置」弹层的歌词分组里也有同一个开关（不必钻进三级菜单）。<br>  <b>只在 App 退到后台时显示</b>：回到本应用界面（正在看播放页歌词）自动隐藏，离开前台再放出来——避免和播放页歌词重复。判定用 Activity 的 <code>ON_START</code> / <code>ON_STOP</code>（不是 RESUME/PAUSE，后者会让系统权限弹窗等短暂遮挡闪一下）。<b>另外灭屏也隐藏</b>（<code>ACTION_SCREEN_OFF</code>：看不见还继续画是白耗电，导航整段灭屏时这点电要省）。<b>三个例外</b>：调整模式下、开启开关后的 6 秒前台预览、改外观设置后的即时预览。<br>
   <b>形态</b>：1~3 行文字，外加「当前行有翻译时」的一行双语副行。锁定态<b>默认有一层半透明深色圆角底板</b>——早期是「纯白字 + 黑色投影、无底板」，实机在亮色壁纸 / 桌面白色搜索框上完全看不清（投影半径按像素算，3x 屏上只有 2dp），这是踩过的坑，不是审美偏好。底板可切成「无 / 半透明 / 深色实底」三档。<br>
-  字号 20sp 基准、小 / 中 / 大三档，宽度夹在屏宽 90% 以内（大字号 + 长句不会横向溢出被裁）；暂停时淡出到 55% 或隐藏（可配）；行切换带 120ms 淡入淡出；开启「逐字歌词」时当前行按字染色。<br>
+  字号 20sp 基准、小 / 中 / 大三档，宽度夹在屏宽 90% 以内（大字号 + 长句不会横向溢出被裁）；暂停时淡出到 55% 或隐藏（可配）；行切换带 120ms 淡入淡出；当前行靠「颜色 / 字号 / 字重 / 亮度」四件事突出，<b>不随播放进度变化</b>（v1.1.8 起整窗只有「文字颜色」一处可调）。<br>
   <b>窗内文字对齐可配</b>（居中 / 居左，默认居中）：对齐<b>只管歌词文字在窗口内部怎么排</b>——居中 = 折行后各行也居中；居左 = 文字 <code>gravity</code> 切到 <code>START</code>，每行从同一条竖线起排。<b>与窗口摆在屏幕哪儿无关</b>：窗口位置完全由拖动决定（2026-10-16 用户拍板，推翻「横向归对齐」，见下方「位置记忆」）。<br>
   <b>窗口宽度决定横向可拖多远</b>：可移动量 = <code>屏宽 − 窗宽</code>，所以「悬浮歌词宽度」既是换行上限、也是横向活动余量；<b>默认 80%</b>（100% 时余量归零，窗口只能上下移动）。宽度行右侧的 ↺ 可一键回到 80%。<br>
   <b>前奏 / 间奏不会让字幕整体消失</b>（这是修过的真实缺陷）：前奏（还没到第一句）回落显示<b>歌名</b>并把第一句作为「下一句」预告；间奏（LRC 里带时间戳的空行）<b>停在上一句并压暗</b>。判定逻辑收在 <code>OverlayContentResolver</code>（纯函数，有单测覆盖）。<br>
@@ -3310,17 +3290,13 @@ a{color:inherit;text-decoration:none}
     </table>
     <br><b>收藏红心（--fav）</b>：深色 #FF7A8A / 浅色 #D93852；已收藏实心、未收藏 2px 描边。出现位置三处：① 手机迷你播放条（标题右侧）；② 播放页歌名行——<b>手机版</b>标题占满剩余宽度、红心贴最右；<b>车机版</b>红心紧跟歌名/歌手之后（1707dp 横屏上不至于要扭头看屏幕右缘）；③ <b>车机两栏主页底部播放条</b>，收藏键位于控制键簇最左（⏮ 左侧），56dp。<br>
     <b>字号</b>：库标题 headlineSmall(24) · 分组/详情标题 19 · 歌曲标题 bodyLarge(15) · 副标题 bodySmall(12) · 时间 labelMedium(12) · 徽标 9 · chip 10~11 · 抽屉项 14 / 分类卡标题 15 · 歌词正文 15.5×scale / 当前行 17.5×scale。<br>
-    <b>逐字歌词</b>：仅当前行按字染色，已唱 primary（SemiBold）/ 未唱 primary 28% 透明。
-    <b>数据来源</b>：真逐字时间轴（.krc / .yrc / 增强型 LRC）优先 —— 加载层
-    <code>WordTimingSynth.withDerivedWordTiming()</code> 对**没有**逐字数据的同步行按「行时长 + 字符权重（中文 1 / 西文 0.55）」派生一条，
-    所以普通 .lrc 也有扫过效果（v1.1.5 修复「逐字完全没效果」——根因不是渲染，是绝大多数歌词文件压根没有逐字数据）。
-    派生行的演唱窗口 = 「到下一行的间隔」与「权重估算时长（权重×420ms）」对账：间隔 ≤ 估算 × 2.5 时用间隔
-    （一句扫完正好接上下一句、不早停），间隔远大于估算（后面是间奏）时用估算，整体再以 12s 封顶。
-    设置里开关文案固定为「逐字歌词」，副标题「当前行随播放逐字点亮；无逐字时间轴的歌词按行时长自动派生」，默认开启；关闭时当前行整行染色。<br>
+    <b>当前行高亮 = 颜色 × 字号 × 字重 × 底色四件事叠加</b>：颜色 <code>primary</code>（非当前行 <code>onSurface</code>）、字号 17.5×scale（非当前行 15.5×scale）、字重 SemiBold（非当前行 Normal）、底色 primary 10%。<br>
+    <b>歌词精度只有「逐行」一种</b>（v1.1.8 起）：KRC（酷狗）/ YRC（网易云）/ 增强 LRC 三种格式<b>照读不误</b>，但行内的字级标签（<code>&lt;start,dur,0&gt;</code> / <code>(start,dur,0)</code> / <code>&lt;mm:ss.xx&gt;</code>）一律<b>剥离干净</b>、时间轴只取行首，播放时按行滚动高亮 —— 直接把这几类文件丢进同目录即可，不必事先转成 <code>.lrc</code>。
+    ⚠️ <b>不要在这里加回字级数据</b>：那要同时改「解析产出」与「渲染消费」两端（外加设置项），只做一半就是「有数据但没人消费」的死代码，而且不会报任何错。<br>
     <b>车载模式</b>：设置 → 外观 →「车载模式」开关（默认关）。开启后：① 启动应用直接进播放页（跳过库主页）并锁横屏；② 播放页歌词态 5 秒无触摸收起<b>顶栏 + 控制键行 + 底部状态行</b>，<b>保留歌名行（含红心）+ 歌词 + 进度条 + 时间</b>，触摸即恢复全部控件并重新计时；<b>封面态不收起</b>（封面本身是主要视觉）；③ 歌词字号放大：在用户设定的 scale 上再乘 <b>1.5</b>（正文 15.5→约 23sp、当前行 17.5→约 26sp）；④ 播放页限宽 760dp 居中，沉浸态取消限宽。见 ⑫D / ㊲ 屏。<br>
     <b>桌面悬浮歌词</b>：设置 → 歌词 →「桌面悬浮歌词」开关（默认关），播放页「播放设置」弹层的歌词分组里也有同一个开关。开启后由 <code>LyricOverlayService</code>（<b>前台服务</b>，<code>foregroundServiceType="mediaPlayback"</code>）在屏幕最上层挂一个 <code>TYPE_APPLICATION_OVERLAY</code> 窗口。<br>
     &nbsp;&nbsp;<b>只在 App 退到后台时显示</b>（前台自动隐藏，避免与播放页歌词重复）；<b>灭屏也隐藏</b>（看不见还画是白耗电）。三个例外：调整位置、开启开关后的 6 秒预览、以及改外观设置后的即时预览。<br>
-    &nbsp;&nbsp;<b>内容与排版</b>：行数 1 / 3 行（3 行模式带上下句上下文，当前行白、上下句压暗）；窗内文字对齐<b>居中 / 居左</b>可配（居中默认；居左 = 每行左对齐起排）；<b>只有该行有翻译时</b>额外紧跟一行双语副行（小一号、同样压暗）；逐字歌词开关打开时按字染色（已唱暖色）。行切换带 120ms 淡入淡出。<br>
+    &nbsp;&nbsp;<b>内容与排版</b>：行数 1 / 3 行（3 行模式带上下句上下文，当前行白、上下句压暗）；窗内文字对齐<b>居中 / 居左</b>可配（居中默认；居左 = 每行左对齐起排）；<b>只有该行有翻译时</b>额外紧跟一行双语副行（小一号、同样压暗）；<b>主角与上下句只靠「明暗 / 字重 / 字号」区分</b>（整窗只有「文字颜色」一处可调，v1.1.8 起没有「已唱色」）。行切换带 120ms 淡入淡出。<br>
     &nbsp;&nbsp;<b>前奏 / 间奏不会让字幕消失</b>：「还没到第一句」时回落显示<b>歌名</b>并把第一句作为下一句预告；遇到带时间戳的空行（间奏标记）时<b>停在上一句并压暗</b>——整窗消失会让用户以为功能坏了，这是被真机证实过的老问题。<br>
     &nbsp;&nbsp;<b>外观三档</b>：字号 小 / 中 / 大（基准 20sp，最终宽度夹在屏宽 90% 以内）；底板 无 / 半透明 / 深色实底（<b>默认半透明</b>——「纯白字 + 投影无底板」在亮色壁纸上被证实看不清）；暂停时 淡出 / 隐藏。见 ㊴ 屏。<br>
     &nbsp;&nbsp;<b>两种模式</b>：<b>锁定态</b>（日常）带 <code>FLAG_NOT_TOUCHABLE</code>，点击完全穿透；<b>调整态</b>（设置页「调整悬浮歌词位置」进入）摘掉该 flag 可拖动，2dp 蓝色圆角描边提示，松手落盘横纵坐标，点「完成调整」锁回穿透。<b>调整态 60 秒无操作自动锁定</b>并弹提示（否则用户忘了点「完成」会在桌面上一直留一条吃触摸的横条）。位置存 Prefs：<b>横 <code>lyric_overlay_x</code> / 纵 <code>lyric_overlay_y</code> 都由拖动决定</b>，默认横向居中、纵向「状态栏下方 + 64dp」（64dp 是实测让开荣耀桌面顶部媒体胶囊的值）。<br>

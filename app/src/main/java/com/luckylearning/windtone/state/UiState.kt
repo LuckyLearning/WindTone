@@ -251,7 +251,6 @@ data class PlayerUiState(
     val lyricsLoading: Boolean = false,
     val lyricOffsetMs: Int = 0,
     val lyricScale: Float = 1f,
-    val lyricWordByWord: Boolean = true,
     /** 播放页中部显示歌词（true）还是封面（false）；跨会话保留 */
     val lyricsPaneVisible: Boolean = true,
     /** 车载模式：启动直进播放页 + 播放页 5 秒无操作进入沉浸态 */
@@ -268,17 +267,10 @@ data class PlayerUiState(
     val lyricOverlayPauseMode: Int = 0,
     /** 悬浮歌词水平对齐：0 居中 / 1 居左 */
     val lyricOverlayAlign: Int = 0,
-    /**
-     * 逐字歌词里**已唱部分**的颜色（ARGB）。
-     * `SettingsDefaults.COLOR_FOLLOW_THEME` = 跟随主题色（默认，随封面取色漂移）。
-     */
-    val lyricSungColor: Int = SettingsDefaults.COLOR_FOLLOW_THEME,
     /** 悬浮窗宽度：屏幕宽度的百分比（1..100，v1.1.4 起可调） */
     val lyricOverlayWidthPercent: Int = SettingsDefaults.OVERLAY_WIDTH_PERCENT,
-    /** 悬浮窗里未唱部分的文字颜色（ARGB，默认纯白） */
+    /** 悬浮窗里的歌词文字颜色（ARGB，默认纯白） */
     val lyricOverlayTextColor: Int = SettingsDefaults.OVERLAY_TEXT_COLOR,
-    /** 悬浮窗里已唱部分的颜色（ARGB，默认暖黄） */
-    val lyricOverlaySungColor: Int = SettingsDefaults.OVERLAY_SUNG_COLOR,
     /** 悬浮歌词是否处于「调整位置」模式（临时可拖动，会话级，不落盘） */
     val overlayEditing: Boolean = false,
     val playerExpanded: Boolean = false,

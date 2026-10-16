@@ -30,7 +30,6 @@ object OverlayContentResolver {
      * @param translation 当前行的双语副行（无则空串）
      * @param prev / next 主角的上下句（3 行模式用），已跳过空行
      * @param idle 当前**没有正在演唱的歌词**（前奏、间奏、无歌词）——渲染侧据此压暗主角
-     * @param words / lineStartMs / lineDurationMs 逐字染色（卡拉OK）所需的时间轴
      */
     data class Resolved(
         val current: String = "",
@@ -38,9 +37,6 @@ object OverlayContentResolver {
         val prev: String = "",
         val next: String = "",
         val idle: Boolean = false,
-        val words: List<LyricWord> = emptyList(),
-        val lineStartMs: Long = 0L,
-        val lineDurationMs: Long = 0L,
     ) {
         /** 有没有东西可显示；空则表示窗口应当隐藏 */
         val visible: Boolean get() = current.isNotBlank()
@@ -85,9 +81,6 @@ object OverlayContentResolver {
             // 真正的下一句在空行之后，而不是 anchor 之后。
             next = indexOfNonBlank(lines, maxOf(i, anchor) + 1, 1)?.let { lines[it].text }.orEmpty(),
             idle = anchor != i,
-            words = line.words,
-            lineStartMs = line.timeMs,
-            lineDurationMs = line.lineDurationMs,
         )
     }
 

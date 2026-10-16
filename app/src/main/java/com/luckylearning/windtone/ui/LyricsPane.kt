@@ -38,13 +38,10 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.lyrics.LyricLine
 import com.luckylearning.windtone.lyrics.Lyrics
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -53,7 +50,6 @@ import kotlinx.coroutines.flow.filterNotNull
 /**
  * 歌词面板：
  *  - 有时间轴 -> 自动居中滚动 + 当前行高亮 + 点击某行跳转
- *  - 逐字时间轴 -> 当前卡拉OK染色
  *  - 双语 -> 主行下显示翻译副行
  *  - 纯文本 -> 普通滚动
  *  - 无歌词 -> 给出获取歌词的提示
@@ -69,14 +65,6 @@ fun LyricsPane(
     progressState: State<PlaybackProgress>,
     offsetMs: Int,
     scale: Float,
-    wordByWord: Boolean = true,
-    /**
-     * 逐字歌词里**已唱部分**的颜色（ARGB）。
-     *
-     * [SettingsDefaults.COLOR_FOLLOW_THEME] = 跟随主题色（默认，会随封面取色一起漂移）；
-     * 其余值按固定色用（v1.1.4 起用户可在「设置 → 歌词」里选预设色或自定义）。
-     */
-    sungColor: Int = SettingsDefaults.COLOR_FOLLOW_THEME,
     onSeekTo: (Long) -> Unit,
     modifier: Modifier = Modifier,
     // 车载模式：字号整体再放大 [CAR_LYRIC_BOOST] 倍。
@@ -106,8 +94,6 @@ fun LyricsPane(
                 progressState = progressState,
                 offsetMs = offsetMs,
                 scale = effectiveScale,
-                wordByWord = wordByWord,
-                sungColor = sungColor,
                 onSeekTo = onSeekTo,
                 onLineLongPress = onLineLongPress,
             )
@@ -203,8 +189,6 @@ private fun SyncedLyrics(
     progressState: State<PlaybackProgress>,
     offsetMs: Int,
     scale: Float,
-    wordByWord: Boolean,
-    sungColor: Int,
     onSeekTo: (Long) -> Unit,
     onLineLongPress: ((Long) -> Unit)?,
 ) {
@@ -271,11 +255,7 @@ private fun SyncedLyrics(
             LyricLineItem(
                 line = line,
                 active = index == currentIndex,
-                progressState = progressState,
-                offsetMs = offsetMs,
                 scale = scale,
-                wordByWord = wordByWord,
-                sungColor = sungColor,
                 onClick = { if (line.timeMs >= 0) onSeekTo(line.timeMs) },
                 // 没有时间轴的行（`timeMs < 0`）不参与校准：拿它算偏移只会算出一个
                 // 无意义的巨大数字，等于把偏移一次搞坏。
@@ -292,11 +272,7 @@ private fun SyncedLyrics(
 private fun LyricLineItem(
     line: LyricLine,
     active: Boolean,
-    progressState: State<PlaybackProgress>,
-    offsetMs: Int,
     scale: Float,
-    wordByWord: Boolean,
-    sungColor: Int,
     onClick: () -> Unit,
     /** 长按这一行（校准偏移用）；null = 不接管长按 */
     onLongClick: (() -> Unit)? = null,
@@ -318,25 +294,18 @@ private fun LyricLineItem(
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            if (wordByWord && line.hasWords && active) {
-                KaraokeText(
-                    line = line,
-                    progressState = progressState,
-                    offsetMs = offsetMs,
-                    scale = scale,
-                    sungColor = sungColor,
-                )
-            } else {
-                Text(
-                    text = line.text.ifEmpty { "♪" },
-                    modifier = Modifier.alpha(alpha),
-                    color = if (active) scheme.primary else scheme.onSurface,
-                    fontSize = (if (active) 17.5f * scale else 15.5f * scale).sp,
-                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                    lineHeight = (25 * scale).sp,
-                    textAlign = TextAlign.Center,
-                )
-            }
+            // 当前行的强调**只靠颜色 / 字号 / 字重 / 底色**（v1.1.8 起）。
+            // 这里原本还有一条逐字卡拉OK分支，它需要每帧读播放位置 ——
+            // 移除后这一行不再随进度重组，只有换行时才重画。
+            Text(
+                text = line.text.ifEmpty { "♪" },
+                modifier = Modifier.alpha(alpha),
+                color = if (active) scheme.primary else scheme.onSurface,
+                fontSize = (if (active) 17.5f * scale else 15.5f * scale).sp,
+                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                lineHeight = (25 * scale).sp,
+                textAlign = TextAlign.Center,
+            )
             line.translation?.let { tr ->
                 Spacer(Modifier.height(3.dp))
                 Text(
@@ -350,94 +319,6 @@ private fun LyricLineItem(
             }
         }
     }
-}
-
-/** 逐字卡拉OK染色：当前行每个字按时间进度从浅色过渡到已唱色 */
-@Composable
-private fun KaraokeText(
-    line: LyricLine,
-    progressState: State<PlaybackProgress>,
-    offsetMs: Int,
-    scale: Float,
-    sungColor: Int,
-) {
-    // 只有当前行会读进度，因此也只有这一行会随播放逐帧重组
-    val positionMs = progressState.value.positionMs + offsetMs
-
-    var progress by remember(line) { mutableStateOf(0f) }
-    val animated by animateFloatAsState(
-        targetValue = progress,
-        animationSpec = tween(220),
-        label = "karaoke",
-    )
-    LaunchedEffect(positionMs, line) {
-        progress = wordProgress(line, positionMs)
-    }
-
-    // 已唱色：默认跟随主题（随封面取色漂移）；用户在设置里选了固定色就按固定色来。
-    // 未唱色**从已唱色派生**（28% 透明），这样把已唱色改成深色时两者的对比关系仍然成立。
-    val activeColor = if (sungColor == SettingsDefaults.COLOR_FOLLOW_THEME) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        Color(sungColor)
-    }
-    val idleColor = activeColor.copy(alpha = 0.28f)
-
-    val annotated = buildAnnotatedString {
-        for (word in line.words) {
-            val start = word.startMs
-            val end = start + word.durationMs.coerceAtLeast(1L)
-            val wStartF = wordFraction(line, start)
-            val wEndF = wordFraction(line, end)
-            // 该字已着色的比例
-            val filled = ((animated - wStartF) / (wEndF - wStartF).coerceAtLeast(1e-6f)).coerceIn(0f, 1f)
-            if (filled >= 1f) {
-                pushStyle(SpanStyle(color = activeColor, fontWeight = FontWeight.SemiBold))
-                append(word.text)
-                pop()
-            } else if (filled <= 0f) {
-                pushStyle(SpanStyle(color = idleColor))
-                append(word.text)
-                pop()
-            } else {
-                // 按字符细分染色
-                val chars = word.text.toCharArray()
-                val cut = (filled * chars.size).toInt()
-                if (cut > 0) {
-                    pushStyle(SpanStyle(color = activeColor, fontWeight = FontWeight.SemiBold))
-                    append(String(chars, 0, cut))
-                    pop()
-                }
-                if (cut < chars.size) {
-                    pushStyle(SpanStyle(color = idleColor))
-                    append(String(chars, cut, chars.size - cut))
-                    pop()
-                }
-            }
-        }
-    }
-
-    Text(
-        text = annotated,
-        fontSize = (17.5 * scale).sp,
-        lineHeight = (25 * scale).sp,
-        textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth(),
-    )
-}
-
-/** 词时间 -> 行内归一化进度（0..1） */
-private fun wordFraction(line: LyricLine, ms: Long): Float {
-    val total = line.lineDurationMs.coerceAtLeast(1L)
-    return ((ms - line.timeMs).toFloat() / total).coerceIn(0f, 1f)
-}
-
-/** 当前行整体完成度（相对行起点的时间比例） */
-private fun wordProgress(line: LyricLine, positionMs: Long): Float {
-    val rel = positionMs - line.timeMs
-    if (rel < 0) return 0f
-    val total = line.lineDurationMs.coerceAtLeast(1L)
-    return (rel.toFloat() / total).coerceIn(0f, 1f)
 }
 
 /** 简单的歌词来源提示条 */

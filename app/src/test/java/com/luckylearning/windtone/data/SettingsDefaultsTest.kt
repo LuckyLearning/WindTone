@@ -67,8 +67,6 @@ class SettingsDefaultsTest {
 
         // 播放页歌词
         check("lyricScale", prefs.lyricScale, SettingsDefaults.LYRIC_SCALE)
-        check("lyricWordByWord", prefs.lyricWordByWord, SettingsDefaults.LYRIC_WORD_BY_WORD)
-        check("lyricSungColor", prefs.lyricSungColor, SettingsDefaults.LYRIC_SUNG_COLOR)
 
         // 桌面悬浮歌词
         check("lyricOverlay", prefs.lyricOverlay, SettingsDefaults.LYRIC_OVERLAY)
@@ -79,7 +77,6 @@ class SettingsDefaultsTest {
         check("lyricOverlayPauseMode", prefs.lyricOverlayPauseMode, SettingsDefaults.OVERLAY_PAUSE_MODE)
         check("lyricOverlayWidthPercent", prefs.lyricOverlayWidthPercent, SettingsDefaults.OVERLAY_WIDTH_PERCENT)
         check("lyricOverlayTextColor", prefs.lyricOverlayTextColor, SettingsDefaults.OVERLAY_TEXT_COLOR)
-        check("lyricOverlaySungColor", prefs.lyricOverlaySungColor, SettingsDefaults.OVERLAY_SUNG_COLOR)
 
         // 音乐库 / 更新
         check("minSongDurationSec", prefs.minSongDurationSec, SettingsDefaults.MIN_DURATION_SEC)

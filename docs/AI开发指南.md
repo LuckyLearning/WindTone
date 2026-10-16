@@ -100,7 +100,7 @@ LibraryViewModel   PlayerViewModel    UpdateViewModel    SettingsViewModel
 |---|---|
 | **音乐库** | 三种来源（系统媒体库 / SAF 目录 / 文件路径深度扫描）；五视图（歌曲·专辑·歌手·文件夹·歌单）；拼音与首字母搜索（`pinyin4j`）；6 种排序；字母悬浮索引 |
 | **扫描** | **默认不扫全盘**（`ScanScope.UNSET`），首次进入停在「选择音乐位置」页；可选全盘 / 指定目录；扫描结果落 **`songs` 曲库**（增量 upsert + 软删），二次启动直接读曲库 |
-| **歌词** | 同名 `.lrc`/`.txt` 旁挂、音频内嵌标签、逐字歌词（卡拉OK）、双语（原文+翻译）、逐曲偏移（±20s）、字号缩放、桌面悬浮歌词（1·3 行 / 字号 / 对齐 / 底板 / 双语副行 / 逐字染色） |
+| **歌词** | 同名 `.lrc`/`.krc`/`.yrc`/`.txt` 旁挂、音频内嵌标签、双语（原文+翻译）、逐曲偏移（±20s）、字号缩放、桌面悬浮歌词（1·3 行 / 字号 / 对齐 / 底板 / 颜色 / 双语副行） |
 | **播放** | Media3 ExoPlayer + MediaSessionService；后台播放、耳机/蓝牙控制；播放队列整队列持久化（`queue_songs` 表）；变速（0.5x–2.0x）；跳过静音；睡眠定时（定时/播完当前曲）；响度增强 |
 | **音效** | 5 段均衡器 + 预设、低音增强、虚拟环绕（`AudioFx`，基于系统 `AudioEffect`） |
 | **歌单/收藏** | 自建歌单（增删改、排序）、收藏、最近播放、最常播放、播放统计（次数/累计时长） |
@@ -262,10 +262,9 @@ data/                     ── 数据与 IO 层 ──
   db/SongMapping.kt       SongEntity ↔ Song 映射（含标签覆盖合并）
 
 lyrics/                   ── 纯 JVM 逻辑，可单测 ──
-  Lyrics.kt               Lyrics / LyricLine / LyricWord / LyricSource 模型
-  LrcParser.kt            LRC 解析（时间轴、翻译行合并）
-  WordLyricsParser.kt     逐字歌词解析（KRC / YRC 明文标签）
-  WordTimingSynth.kt      逐字时间轴派生（普通 LRC 的逐字兜底，见 §11.9）
+  Lyrics.kt               Lyrics / LyricLine / LyricSource 模型
+  LrcParser.kt            LRC 解析（时间轴、翻译行合并、增强标签剥离）
+  KrcParser.kt            KRC / YRC 解析（解密解压后**只保留行时间轴**，行内标签剥离）
   TextCodec.kt            文本编码探测（UTF-8/GBK/BIG5 等），歌词乱码就找它
   EmbeddedTags.kt         音频容器内嵌歌词标签解析（ID3 USLT / FLAC VORBIS / MP4 ©lyr）
   BinaryReader.kt         二进制读取工具
@@ -304,7 +303,7 @@ ui/                       ── 展示层 ──
   SettingsViewModel.kt    ⭐ 维护域：诊断快照 / 清理失效歌曲 / 重置用户数据 / 崩溃日志
   MainScreen.kt           主界面（列表 / 分组 / 歌单 / 扫描引导）—— 把分域 VM **按需**传给子组件
   PlayerScreen.kt         全屏播放页（**手机与车机共用**；改它之前务必先读 docs/ui/index.html 核对两版）
-  LyricsPane.kt           歌词面板（滚动居中、逐字高亮、偏移调节）
+  LyricsPane.kt           歌词面板（滚动居中、当前行高亮、偏移调节）
   Sheets.kt               各类抽屉与弹窗（队列、播放设置、编辑信息、添加到歌单……）
   SettingsScreen.kt       设置页（一主三子：播放 / 更新 / 关于与诊断；诊断子页含「数据与存储」）
   Common.kt               通用组件（封面、歌曲行、空态、骨架屏……）
@@ -411,16 +410,22 @@ lib.scan(auto) 或 lib.startFullScan() / lib.setScanScope(scope)
 
 ```
 engine.loadLyrics(song)
-  → LyricsLoader.load()
-      1) EmbeddedTags：从音频容器内嵌标签取（ID3 USLT / VORBIS / MP4 ©lyr）
-      2) 同名旁挂文件：LyricsMatcher 匹配 → TextCodec 探测编码 → 解码文本
-      3) 都没有 → Lyrics.EMPTY
-  → WordTimingSynth.withDerivedWordTiming()：没有逐字数据的同步行按行时长派生
-  → 判断是否逐字：LyricLine.hasWords → 走逐字渲染，否则整行渲染
+  → LyricsLoader.load()            ← **唯一加载漏斗**，全应用的歌词都从这一处出去
+      1) 同名旁挂文件：LyricsMatcher 匹配 → 按扩展名分派
+           .krc → KrcParser.parseKrc（XOR 解密 + zlib 解压）
+           .yrc → KrcParser.parseText（明文）
+           其余 → TextCodec 探测编码 → 有行时间轴走 LrcParser.parse，否则 plainText
+      2) 音频内嵌同步歌词 SYLT
+      3) 音频内嵌歌词 USLT / Vorbis LYRICS / ©lyr（再按有无行时间轴分派）
+      4) 都没有 → Lyrics.EMPTY
   → 应用 song_state.lyricOffsetMs 逐曲偏移（改偏移写回该列）
 ```
 
-**歌词乱码**一律先看 `TextCodec.kt`；**逐字歌词错位**看 `WordLyricsParser`；**旁挂找不到**看 `LyricsMatcher` 的候选名规则。
+**全应用只有「逐行」一种精度**（v1.1.8 起）：KRC / YRC / 增强 LRC 的行内字级标签一律**剥离干净**，时间轴只取行首。这条决定了 `LyricLine` 不再需要字级字段，也让渲染端不需要再关心播放位置。
+
+⚠️ 历史上这个出口还挂过 `WordTimingSynth.withDerivedWordTiming()`（给只有行时间轴的普通 LRC 派生字级时间轴）。那套机制已整体移除 —— **要恢复必须同时恢复「数据产出」与「渲染消费」两端**，只加一头就是「有数据但没人消费」的死代码，而且不会报任何错。
+
+**歌词乱码**一律先看 `TextCodec.kt`；**KRC / YRC 读不出内容**看 `KrcParser`（先确认是不是被当成普通文本读了）；**旁挂找不到**看 `LyricsMatcher` 的候选名规则。
 
 ---
 
@@ -478,19 +483,16 @@ SharedPreferences 文件 `music_player_prefs`（**勿改名**）。v4 之后只�
 | `sort_<视图名>` | String | 按视图 | 各视图自己的排序（`sort_SONGS` / `sort_ALBUM` / `sort_ARTIST` / `sort_FOLDER` / `sort_PLAYLIST`）。默认值由 `LibraryView.defaultSort` 给，不走 Prefs |
 | `library_view` | String | `SONGS` | 上次停留视图，重启恢复 |
 | `lyric_scale` | Float | 1.0 | 歌词字号缩放 |
-| `lyric_word_by_word` | Bool | true | 逐字歌词 |
-| `lyric_sung_color` | Int | `Int.MIN_VALUE` | **播放页**逐字歌词「已唱部分」的颜色；哨兵 `SettingsDefaults.COLOR_FOLLOW_THEME` = 跟随主题取色（v1.1.4 新增） |
 | `lyrics_pane_visible` | Bool | true | 播放页显示歌词还是封面（v5 新增，**持久化**，不再每次进页面重置） |
 | `car_mode` | Bool | false | 车载模式（开机自启 + 直进播放页） |
-| `lyric_overlay` / `_y` | Bool/Int | false | 桌面悬浮歌词开关与其纵向位置（`_y` 为 `Int.MIN_VALUE` 表示未调过） |
+| `lyric_overlay` / `_x` / `_y` | Bool/Int | false | 桌面悬浮歌词开关与其窗口位置（`_x` / `_y` 为 `Int.MIN_VALUE` 表示没拖过） |
 | `lyric_overlay_lines` | Int | 1 | 悬浮歌词行数（1 / 3） |
 | `lyric_overlay_text_scale` | Int | 1 | 悬浮歌词字号档位（0 小 / 1 中 / 2 大） |
-| `lyric_overlay_align` | Int | 0 | 悬浮歌词水平对齐（0 居中 / 1 居左）。**横向位置的唯一来源** |
+| `lyric_overlay_align` | Int | 0 | 悬浮歌词水平对齐（0 居中 / 1 居左）。**只管窗内文字排版**，不参与窗口摆放（窗口位置见 `lyric_overlay_x` / `_y`） |
 | `lyric_overlay_backdrop` | Int | 1 | 悬浮歌词底板（0 无 / 1 半透明 / 2 实底） |
 | `lyric_overlay_pause_mode` | Int | 0 | 暂停时悬浮歌词（0 淡出 / 1 隐藏） |
 | `lyric_overlay_width_percent` | Int | 80 | 悬浮窗宽度（屏宽百分比 1..100，v1.1.4 新增）。服务侧另有 48dp 像素下限。**默认不是 100%**：窗口宽度决定横向可移动量（`屏宽 − 窗宽`），100% 时归零、悬浮窗只能上下拖 |
-| `lyric_overlay_text_color` | Int | `0xFFFFFFFF` | 悬浮窗正文（**未唱**部分）颜色，v1.1.4 新增 |
-| `lyric_overlay_sung_color` | Int | `0xFFFFCD56` | 悬浮窗**已唱**部分颜色，v1.1.4 新增 |
+| `lyric_overlay_text_color` | Int | `0xFFFFFFFF` | 悬浮窗歌词文字颜色（v1.1.4 新增）。v1.1.8 起是**整窗唯一的颜色** —— 主角与上下句靠明暗 / 字重区分，不再有「已唱色」 |
 | `skip_silence` | Bool | false | 跳过静音 |
 | `dynamic_theme` | Bool | **true** | 封面主色动态主题 |
 | `playback_speed` | Float | 1.0 | 播放速度 |
@@ -498,6 +500,10 @@ SharedPreferences 文件 `music_player_prefs`（**勿改名**）。v4 之后只�
 | `auto_check_update` | Bool | **true** | 启动自动检查更新（唯一联网开关） |
 | `last_update_check_at` | Long | 0 | 自动检查限频时间戳 |
 | `update_download_route` | String | `AUTO` | 下载线路（自动/直连/镜像） |
+
+> ⚠️ **三个「死键」**：`lyric_word_by_word` / `lyric_sung_color` / `lyric_overlay_sung_color` 在 v1.1.8
+> 随逐字染色一起删掉了读写代码，但**刻意不清理**老用户 SharedPreferences 里的残留值 ——
+> 清它没有收益，只多一次写盘和一类可能崩的地方。**看到这三个键别当 bug 排查。**
 
 **不再存在的键（勿再引入）**：目录列表（`folders` / `folders_ordered`）、队列（`queue_keys` / `queue_index`）、
 播放位置（`last_uri` / `last_pos` / `shuffle`）、逐曲歌词偏移（`lyric_offset_song_*`）、
@@ -1117,9 +1123,11 @@ bash scripts/release.sh minor     # 或 patch / major / 具体版本号
 `startForegroundService` 带 `ACTION_RESET_POSITION`，服务收到后就地重排）。
 
 **内容决策在纯函数层，不在服务里**：`lyrics/OverlayContentResolver.resolve(lyrics, positionMs, offsetMs, title)`
-→ `Resolved(current, translation, prev, next, idle, words, …)`；排版组装在 `overlay/OverlayTextComposer.compose(...)`
-→ `List<StyledLine(text, role, sungChars)>`。服务只把 `StyledLine` 转成 `SpannableStringBuilder` 画出来——
-**「显示什么」可单测（32 项），「怎么画」可调样式**。要加新的内容规则就改 resolver，**别在服务里加 `if`**。
+→ `Resolved(current, translation, prev, next, idle)`；排版组装在 `overlay/OverlayTextComposer.compose(...)`
+→ `List<StyledLine(text, role)>`。服务只把 `StyledLine` 转成 `SpannableStringBuilder` 画出来——
+**「显示什么」可单测，「怎么画」可调样式**。要加新的内容规则就改 resolver，**别在服务里加 `if`**。
+⚠️ `Resolved` / `StyledLine` 里**不许出现播放位置**：它们要被拿去比较去重（内容不变就不重组），
+带上每 200ms 变一次的位置会把去重彻底废掉。
 
 ### 悬浮歌词的内容规则（三个曾让字幕「整体消失」的情形，别再踩）
 
@@ -1170,23 +1178,30 @@ bash scripts/release.sh minor     # 或 patch / major / 具体版本号
 **为什么服务每帧读 Prefs、而不是由界面推**：服务独立于界面存活，界面可能在改完设置后就被切走了。
 读的是 SharedPreferences 内存缓存，开销可忽略；`LyricOverlayBus.appearance` 版本号只是「叫它醒一次」的触发点。
 
-**逐字染色复用「逐字歌词」开关**（`lyricWordByWord`），不新增一个名字几乎一样的设置项。
-`positionMs` 只在启用逐字时才下发 —— 否则它每 200ms 变一次，会把「内容不变就不重组」的去重彻底废掉。
-⚠️ **`LyricLine.lineDurationMs` 是逐字染色的命门**（v1.1.4 实测踩中）：增强型 LRC 的标签本身不含
-行时长，`LrcParser` 必须自己算（末字唱完时刻 − 行起点）；漏了它，播放页 `KaraokeText` 的归一化
-分母就是 0，整行要么全灰要么瞬间全亮，「逐字完全没有效果」。悬浮窗侧 `OverlayTextComposer.sungChars`
-按「已开始的词数文字长度」计数、不依赖行时长，所以没受影响 —— 两处实现口径不同，改一处时想想另一处。
+悬浮窗的「内容 / 排版 / 位置」三层分工（v1.1.8 定稿）：
+- **内容**：`OverlayContentResolver.resolve()` → `Resolved(current / translation / prev / next / idle)`。
+  它**只回答「这一刻该显示哪一行」**，不含任何播放位置数值。
+- **排版**：`OverlayTextComposer.compose()` → `List<StyledLine(text, role)>`。主角与上下文只靠
+  `Role`（`CURRENT` / `CONTEXT` / `TRANSLATION`）区分，渲染侧把主角画得最亮最粗、其余压暗。
+- **位置**：`OverlayPositioner`（纯函数）决定窗口摆在屏幕哪里。
 
-⚠️ **「逐字还是没效果」的真正根因是数据不存在，不是渲染**（v1.1.5 定位）：真逐字时间轴只有
-`.krc` / `.yrc` / 增强型 LRC（`<mm:ss.xx>`）三种来源，而本地曲库里的歌词**绝大多数是普通 LRC**
-（只有行时间轴）→ `LyricLine.hasWords == false` → 渲染层整行变色。修法是在**唯一加载漏斗**
-`LyricsLoader.load()` 出口统一调 `WordTimingSynth.withDerivedWordTiming()`：对没有逐字数据的
-同步行，按「到下一行的间隔」与「字符权重估算（权重×420ms）」对账摊出逐字时间轴 ——
-间隔 ≤ 估算 × 2.5 用间隔（不早停），间隔远大于估算（间奏）用估算，整体 12s 封顶；
-中文逐字、西文成段，权重 中文 1 / 西文 0.55 / 空白 0.12 / 标点 0.25。
-并强制让 `lineDurationMs` 与末字唱完时刻**严格相等**（真逐字行也兜底：行时长为 0 或比逐字末端短时按末端修正）。
-真数据永远优先、派生幂等（已有 `words` 的行不重建），因此两个消费方（播放页 / 悬浮窗）同时受益。
-⚠️ **新增歌词来源时必须走这个出口**：绕过它 = 新来源没有逐字效果，且不会报任何错。
+⚠️ **`positionMs` 绝不能进 `Resolved`**：它每 200ms 变一次，而 `LyricOverlayBus` 的去重比的是
+`Resolved` 的**值相等** —— 参数一旦带上位置，「内容不变就不重组」立刻彻底失效。
+`OverlayContentResolverTest.resolvedIsPositionIndependentWithinSameLine` 钉着这条。
+
+⚠️ **曾经有一整套「逐字染色」，2026-10-16 已按「彻底删除」的产品口径整体移除。**
+记在这里**不是**为了复述它的实现，而是为了「万一要恢复时别只恢复一半」——它由四段组成，
+缺任何一段都会**静默失效**（不报错、不崩溃，只是什么都没发生）：
+  ① **数据**：`.krc` / `.yrc` / 增强 LRC 三种真字级来源，外加给普通 LRC 派生字级时间轴的
+     `WordTimingSynth.withDerivedWordTiming()`（v1.1.5 加的，因为本地歌词绝大多数只有行时间轴）；
+  ② **数据模型**：`LyricLine.words` 与 `lineDurationMs`（后者是播放页染色归一化的分母，
+     漏了它整行要么全灰要么瞬间全亮 —— v1.1.4 真机实测踩中）；
+  ③ **渲染**：播放页 `LyricsPane.KaraokeText`（按「行时长归一化」染色）与悬浮窗
+     `OverlayTextComposer.sungChars`（按「已开始的词数」计数）—— **两个消费者口径不同，
+     改一处必须同时想另一处**，这是它维护成本高的根源；
+  ④ **设置项**：`lyric_word_by_word` 开关 + 两处「已唱颜色」（`lyric_sung_color` /
+     `lyric_overlay_sung_color`）+ 播放页的「逐字」来源徽标。
+剩余部分（KRC / YRC / 增强 LRC 的**解析**）全部保留：行内字级标签被剥离，按行时间轴正常显示。
 
 **字号与宽度**：基准 20sp × 档位倍率（0.82 / 1 / 1.25）。窗口宽度 v1.1.4 起按屏幕百分比固定
 （**默认 80%**，见 §11.14 ④），文字不再需要 `maxWidth` 夹横向溢出。窗口的横向可移动量
@@ -1426,18 +1441,21 @@ class XxxTest { @get:Rule val compose = createComposeRule() ... }
 - 切视图（`LibraryCore.setView`）要**重排歌曲列表**并把新排序带进去 —— 每个视图带着自己那份进来。
 - `SortOrderPrefsTest` 钉住三级回落、视图隔离与「每个视图的菜单里必须有它自己的默认项」。
 
-#### ③ 歌词颜色三处可配
+#### ③ 歌词颜色（v1.1.8 起只剩「悬浮窗文字颜色」一处）
 
-- 三处 = **播放页逐字已唱色**（`lyric_sung_color`）/ **悬浮窗正文色** / **悬浮窗已唱色**，
-  共用一个 `ColorPickerSheet`（效果图 ㉙E）：跟随主题（**仅**播放页已唱色有）/ 预设 8 色 / 自定义 HSV。
-- **「跟随主题」是哨兵 `SettingsDefaults.COLOR_FOLLOW_THEME = Int.MIN_VALUE`**，不是颜色。
-  `LyricsColors.label()` 必须先认出哨兵，否则会印成 `#000000` —— 而用户看到的明明在跟着封面变色，
-  界面在说谎。`LyricsColorsTest` 守着这条顺序。
-- **预设色板不能做成枚举**：它要同时承载预设、任意 ARGB 与哨兵三种取值。
-- **未唱色不是独立设置**：它从已唱色**派生**（28% 透明），这样把已唱色改成深色时对比关系仍然成立。
+- v1.1.4 曾让**三处**歌词颜色共用一个 `ColorPickerSheet`（效果图 ㉙E）：播放页逐字已唱色 /
+  悬浮窗正文色 / 悬浮窗已唱色。逐字染色移除后（v1.1.8）只剩 `lyric_overlay_text_color`，
+  弹层也从「一个 `ColorSlot` 枚举决定写回哪个字段」收敛成「调用点直接传标题 / 说明 / 当前值」。
+- ⚠️ **别再给悬浮窗加「已唱色」**：没有逐字进度可染，而整窗两种颜色会让「谁是主角」失去信号 ——
+  主角与上下句现在**只靠明暗 / 字重 / 字号**区分。
+- **预设色板不能做成枚举**：它承载的是用户拖滑块拖出来的任意 ARGB，枚举表达不了。
+  同理，色板也不再需要色名（效果图 ㉙E 里的色点只有颜色没有文字），`presets` 就是一组色值。
+- ⚠️ **默认值必须真的在色板里**：`SettingsDefaults.OVERLAY_TEXT_COLOR`（纯白）若不在
+  `LyricsColors.presets` 中，用户点开弹层找不到默认色，「恢复默认」在界面上就成了不可达的一步。
+  `LyricsColorsTest` 守着这条。
 - **为什么不用色轮**：车机手指粗、精度差，色轮边缘的色相极难选准；三个滑块 + 一块实时预览条更好操作。
-- 自定义滑块**松手才写回**（`onValueChangeFinished`）：逐帧 `setLyricOverlayXxxColor` 会连着触发
-  悬浮窗预览，把浮动窗口刷成流水；预览条本身逐帧在变，反馈并不缺。
+- 自定义滑块**松手才写回**（`onValueChangeFinished`）：逐帧写回会连着触发悬浮窗预览，
+  把浮动窗口刷成流水；预览条本身逐帧在变，反馈并不缺。
 
 #### ④ 悬浮窗宽度（屏宽百分比）
 

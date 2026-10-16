@@ -123,7 +123,7 @@ internal fun SettingsRootPage(
     )
     CategoryRow(
         title = "歌词",
-        subtitle = "字号 ${"%.1f".format(player.lyricScale)}x · 逐字 · 悬浮歌词",
+        subtitle = "字号 ${"%.1f".format(player.lyricScale)}x · 悬浮歌词",
         icon = AppIcons.LyricsBubble,
         onClick = { onNavigate(SettingsPage.LYRICS) },
     )

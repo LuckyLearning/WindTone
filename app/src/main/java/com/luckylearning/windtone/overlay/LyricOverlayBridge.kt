@@ -37,7 +37,7 @@ data class OverlaySnapshot(
     val contentPlaying: Boolean,
     /** 窗口与文字 View 的真实几何（挂上 ≠ 看得见） */
     val windowGeometry: String,
-    /** 外观配置摘要（行数 / 字号 / 底板 / 暂停 / 逐字） */
+    /** 外观配置摘要（行数 / 字号 / 对齐 / 底板 / 暂停） */
     val appearance: String,
 ) {
     /** 窗口是否被判定为「几何上跑出屏幕」 */
@@ -66,7 +66,6 @@ data class OverlaySnapshot(
                     if (resolved.prev.isNotBlank()) append("  ↑「${resolved.prev}」")
                     if (resolved.translation.isNotBlank()) append("  ⇩双语「${resolved.translation}」")
                     if (resolved.next.isNotBlank()) append("  ↓「${resolved.next}」")
-                    if (resolved.words.isNotEmpty()) append("  ·逐字${resolved.words.size}词")
                 }
             },
         )
@@ -112,8 +111,8 @@ object LyricOverlayBridge {
     fun sync(context: Context, enabled: Boolean) = LyricOverlayService.sync(context, enabled)
 
     /** 把解析好的当前内容推给悬浮窗 */
-    fun publish(resolved: OverlayContentResolver.Resolved, playing: Boolean, positionMs: Long) =
-        LyricOverlayBus.publish(resolved, playing, positionMs)
+    fun publish(resolved: OverlayContentResolver.Resolved, playing: Boolean) =
+        LyricOverlayBus.publish(resolved, playing)
 
     /** 清空悬浮窗内容 */
     fun clear() = LyricOverlayBus.clear()
@@ -138,7 +137,6 @@ object LyricOverlayBridge {
                 append(" / 对齐").append(if (prefs.lyricOverlayAlign == 1) "居左" else "居中")
                 append(" / 底板").append(listOf("无", "半透明", "实底").getOrElse(prefs.lyricOverlayBackdrop) { "半透明" })
                 append(" / 暂停").append(if (prefs.lyricOverlayPauseMode == 1) "隐藏" else "淡出")
-                append(" / 逐字").append(if (prefs.lyricWordByWord) "开" else "关")
             },
         )
     }

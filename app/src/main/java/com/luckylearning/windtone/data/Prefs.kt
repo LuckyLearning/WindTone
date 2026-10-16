@@ -34,9 +34,6 @@ enum class SortOrder(val label: String) {
  * **改默认值只改这里**，`Prefs` 的 getter 与设置页的重置都引用它。
  */
 object SettingsDefaults {
-    /** 「跟随主题」哨兵：颜色设置取这个值表示不指定固定色，交由主题 / 默认色决定 */
-    const val COLOR_FOLLOW_THEME = Int.MIN_VALUE
-
     const val DYNAMIC_THEME = true
     const val CAR_MODE = false
 
@@ -48,10 +45,6 @@ object SettingsDefaults {
     const val SKIP_SILENCE = false
 
     const val LYRIC_SCALE = 1.0f
-    const val LYRIC_WORD_BY_WORD = true
-
-    /** 播放页逐字歌词「已唱部分」的颜色；[COLOR_FOLLOW_THEME] = 跟随主题色 */
-    const val LYRIC_SUNG_COLOR = COLOR_FOLLOW_THEME
 
     const val LYRIC_OVERLAY = false
     const val OVERLAY_LINES = 1
@@ -73,11 +66,14 @@ object SettingsDefaults {
      */
     const val OVERLAY_WIDTH_PERCENT = 80
 
-    /** 悬浮窗里未唱部分的文字颜色（纯白） */
+    /**
+     * 悬浮窗里的歌词文字颜色（纯白）。
+     *
+     * ⚠️ 这里原先是「**未唱**部分的文字颜色」，与「已唱部分的颜色」成对存在。
+     * 逐字染色移除后（v1.1.8）它就是悬浮窗文字的唯一颜色 ——
+     * 当前行与其它行的区分交给「最亮最粗 vs 压暗」，不再靠颜色。
+     */
     const val OVERLAY_TEXT_COLOR = 0xFFFFFFFF.toInt()
-
-    /** 悬浮窗里已唱部分的颜色（暖黄） */
-    const val OVERLAY_SUNG_COLOR = 0xFFFFCD56.toInt()
 
     const val MIN_DURATION_SEC = 60
     const val AUTO_UPDATE = true
@@ -190,22 +186,6 @@ class Prefs(context: Context) {
     var lyricScale: Float
         get() = sp.getFloat(KEY_LYRIC_SCALE, SettingsDefaults.LYRIC_SCALE)
         set(value) = sp.edit().putFloat(KEY_LYRIC_SCALE, value).apply()
-
-    /** 逐字歌词：当前行有逐字时间轴时按字染色（默认开启） */
-    var lyricWordByWord: Boolean
-        get() = sp.getBoolean(KEY_LYRIC_WORD_BY_WORD, SettingsDefaults.LYRIC_WORD_BY_WORD)
-        set(value) = sp.edit().putBoolean(KEY_LYRIC_WORD_BY_WORD, value).apply()
-
-    /**
-     * 播放页逐字歌词里**已唱部分**的颜色（ARGB）。
-     *
-     * 默认 [SettingsDefaults.COLOR_FOLLOW_THEME] = 跟随主题色（`colorScheme.primary`）——
-     * 主题会随封面取色变化，默认跟随才能跟封面配得上。
-     * 用户显式选了固定色后就用固定色，不再随主题漂移。
-     */
-    var lyricSungColor: Int
-        get() = sp.getInt(KEY_LYRIC_SUNG_COLOR, SettingsDefaults.LYRIC_SUNG_COLOR)
-        set(value) = sp.edit().putInt(KEY_LYRIC_SUNG_COLOR, value).apply()
 
     /**
      * 播放页中部显示的是歌词（true，默认）还是封面（false）。
@@ -326,15 +306,10 @@ class Prefs(context: Context) {
             value.coerceIn(SettingsDefaults.OVERLAY_WIDTH_RANGE.first, SettingsDefaults.OVERLAY_WIDTH_RANGE.last),
         ).apply()
 
-    /** 悬浮窗里**未唱部分**的文字颜色（ARGB，默认纯白） */
+    /** 悬浮窗里的歌词文字颜色（ARGB，默认纯白） */
     var lyricOverlayTextColor: Int
         get() = sp.getInt(KEY_LYRIC_OVERLAY_TEXT_COLOR, SettingsDefaults.OVERLAY_TEXT_COLOR)
         set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_TEXT_COLOR, value).apply()
-
-    /** 悬浮窗里**已唱部分**的颜色（ARGB，默认暖黄 `#FFCD56`） */
-    var lyricOverlaySungColor: Int
-        get() = sp.getInt(KEY_LYRIC_OVERLAY_SUNG_COLOR, SettingsDefaults.OVERLAY_SUNG_COLOR)
-        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_SUNG_COLOR, value).apply()
 
     // ---------------- 批次 6 新增 ----------------
 
@@ -443,7 +418,10 @@ class Prefs(context: Context) {
         const val KEY_SORT_PREFIX = "sort_"
         const val KEY_VIEW = "library_view"
         const val KEY_LYRIC_SCALE = "lyric_scale"
-        const val KEY_LYRIC_WORD_BY_WORD = "lyric_word_by_word"
+        // ⚠️ 逐字歌词移除后（v1.1.8）有三个键不再读写：`lyric_word_by_word` /
+        //    `lyric_sung_color` / `lyric_overlay_sung_color`。它们仍留在老用户的
+        //    SharedPreferences 里，**刻意不做清理** —— 为三个死键写迁移代码不划算，
+        //    且新装用户根本不会产生它们。看到它们别再当 bug 排查。
         const val KEY_LYRICS_PANE = "lyrics_pane_visible"
         const val KEY_CAR_MODE = "car_mode"
         const val KEY_LYRIC_OVERLAY = "lyric_overlay"
@@ -456,8 +434,6 @@ class Prefs(context: Context) {
         const val KEY_LYRIC_OVERLAY_ALIGN = "lyric_overlay_align"
         const val KEY_LYRIC_OVERLAY_WIDTH = "lyric_overlay_width_percent"
         const val KEY_LYRIC_OVERLAY_TEXT_COLOR = "lyric_overlay_text_color"
-        const val KEY_LYRIC_OVERLAY_SUNG_COLOR = "lyric_overlay_sung_color"
-        const val KEY_LYRIC_SUNG_COLOR = "lyric_sung_color"
         const val KEY_DYNAMIC_THEME = "dynamic_theme"
         const val KEY_SPEED = "playback_speed"
         const val KEY_PITCH = "playback_pitch_semitones"

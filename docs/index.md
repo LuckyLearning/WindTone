@@ -7,7 +7,7 @@ title: 项目文档
 
 Android 原生本地音乐播放器。**数据全部留在本机**，只在你主动（或开启自动检查时）才访问 GitHub Releases 查询新版本。
 
-支持 MP3 / FLAC / WAV / M4A / OGG / Opus 等常见格式；同时支持「独立歌词文件」与「音频内嵌歌词」两种来源，包含 KRC / YRC 逐字歌词与双语歌词。
+支持 MP3 / FLAC / WAV / M4A / OGG / Opus 等常见格式；同时支持「独立歌词文件」与「音频内嵌歌词」两种来源，兼容 KRC / YRC（酷狗 / 网易云）格式，并支持原文 + 翻译的双语歌词。
 
 [![Android CI](https://github.com/LuckyLearning/WindTone/actions/workflows/android-ci.yml/badge.svg)](https://github.com/LuckyLearning/WindTone/actions/workflows/android-ci.yml)
 [![Release APK](https://github.com/LuckyLearning/WindTone/actions/workflows/android-release.yml/badge.svg)](https://github.com/LuckyLearning/WindTone/actions/workflows/android-release.yml)

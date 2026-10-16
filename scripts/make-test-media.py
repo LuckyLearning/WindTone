@@ -15,7 +15,7 @@
   用于验证「重复歌曲清理」的指纹识别与保留最优打分。
 - 01_tide.lrc 是普通 LRC（只有行时间轴）→ 验证加载层的逐字时间轴派生。
 - 02_ebb.lrc 是增强 LRC（行内带 <mm:ss.xx> 字级标签）且以 GBK 编码存盘
-  → 同时验证 WordLyricsParser 与 TextCodec 的编码嗅探。
+  → 同时验证 KrcParser 与 TextCodec 的编码嗅探。
 - 01_night_flight 内嵌 USLT 歌词 → 验证内嵌歌词通道。
 - 07_untagged 不带任何标签 → 验证未知艺术家 / 未知专辑的兜底分组。
 """

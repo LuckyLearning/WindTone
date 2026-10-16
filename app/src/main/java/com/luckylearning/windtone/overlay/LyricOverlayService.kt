@@ -137,9 +137,8 @@ class LyricOverlayService : Service() {
     /** 已应用的窗口宽度百分比（v1.1.4）；-1 = 还没应用过 */
     private var appliedWidthPercent = -1
 
-    /** 已应用的正文色 / 已唱色（ARGB）；哨兵值 = 还没应用过 */
+    /** 已应用的正文色（ARGB）；哨兵值 = 还没应用过 */
     private var appliedTextColor = COLOR_NOT_APPLIED
-    private var appliedSungColor = COLOR_NOT_APPLIED
 
     /** 行切换淡入淡出是否正在进行——动画期间不许别处再改 alpha，否则两处打架 */
     private var fading = false
@@ -565,7 +564,7 @@ class LyricOverlayService : Service() {
                         refreshModeChrome()
                     }
 
-                    // 外观（字号 / 底板 / 暂停表现 / 逐字）每帧对一次账：
+                    // 外观（字号 / 底板 / 暂停表现）每帧对一次账：
                     // 用户改完设置，下一帧就生效，不必重启服务、也不必等下一句歌词。
                     applyAppearance(prefs)
 
@@ -588,8 +587,6 @@ class LyricOverlayService : Service() {
                         content.visible -> OverlayTextComposer.compose(
                             resolved = content.resolved,
                             multiLine = prefs.lyricOverlayLines == 3,
-                            positionMs = content.positionMs,
-                            wordByWord = prefs.lyricWordByWord,
                             // 双语副行不设开关：它是**同一句**的翻译，属于内容完整性
                             // 而不是排版选择——能拿到双语歌词的用户本来就想要它。
                             showTranslation = true,
@@ -635,8 +632,8 @@ class LyricOverlayService : Service() {
             }
         }
 
-        // 正文色落到 TextView 上就够了（没被单独染色的文字立即跟着变）；
-        // 已唱色是渲染时逐段写进 Spannable 的，下一帧渲染自然带上新值。
+        // 正文色落到 TextView 上就够了 —— 整窗只有这一种颜色，主角与上下句靠
+        // 明暗 / 字重区分（v1.1.8 移除逐字染色后不再有「已唱色」）。
         val textColor = prefs.lyricOverlayTextColor
         if (appliedTextColor != textColor) {
             appliedTextColor = textColor
@@ -678,10 +675,9 @@ class LyricOverlayService : Service() {
      * 把组装好的几行画到 [TextView] 上。
      *
      * 三种角色的样式只在这里定义：
-     *  - 主角：最亮（默认白）；
+     *  - 主角：最亮（默认白，即 [Prefs.lyricOverlayTextColor]）；
      *  - 配角（上下句、间奏时的主角）：压暗；
      *  - 双语副行：压暗 + 小一号。
-     * 逐字染色（`sungChars >= 0`）在主角行上再叠一段高亮色。
      *
      * 行切换时做一次短促的淡入淡出——长句之间硬切会有「跳一下」的突兀感。
      * 动画期间不再手动改 alpha（[fading] 挡住），否则两处会互相打架。
@@ -725,34 +721,25 @@ class LyricOverlayService : Service() {
     /**
      * 组装可绘制文本。
      *
-     * 单行、主角、无逐字时走纯字符串快路径——那是最常见的情形，
-     * 没必要每帧造一个 `SpannableStringBuilder`。
+     * 单行 && 主角时走纯字符串快路径：主角**不需要任何 span**（它的颜色由
+     * TextView 的文字色决定，本来就是最亮的那一行），而 1 行模式正是最常见的
+     * 情形，没必要每帧造一个 `SpannableStringBuilder`。
      */
     private fun buildSpanned(lines: List<OverlayTextComposer.StyledLine>): CharSequence {
         if (lines.isEmpty()) return ""
         val only = lines.singleOrNull()
-        if (only != null && only.role == OverlayTextComposer.Role.CURRENT && only.sungChars < 0) {
+        if (only != null && only.role == OverlayTextComposer.Role.CURRENT) {
             return only.text
         }
         return SpannableStringBuilder().apply {
-            // 已唱部分的颜色可配（v1.1.4），默认暖黄 —— 与正文色形成节奏感。
-            // 每帧渲染时读一次，设置改完下一帧就生效。
-            val sungColor = Prefs(this@LyricOverlayService).lyricOverlaySungColor
             lines.forEachIndexed { index, line ->
                 if (index > 0) append("\n")
                 val start = length
                 append(line.text)
                 val end = length
                 when (line.role) {
-                    OverlayTextComposer.Role.CURRENT -> if (line.sungChars > 0) {
-                        // 逐字高亮：已唱的部分染色（颜色可配），未唱的部分保持正文色
-                        setSpan(
-                            ForegroundColorSpan(sungColor),
-                            start,
-                            (start + line.sungChars).coerceAtMost(end),
-                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                        )
-                    }
+                    // 主角不加 span：文字色由 TextView 决定，不需要再叠一层
+                    OverlayTextComposer.Role.CURRENT -> Unit
                     OverlayTextComposer.Role.CONTEXT ->
                         setSpan(
                             ForegroundColorSpan(CONTEXT_TEXT_COLOR),

@@ -7,7 +7,7 @@ import org.junit.Test
 
 /**
  * LRC 歌词解析器单元测试（纯 JVM，无需设备）。
- * 覆盖：时间轴、多标签、元信息、offset、增强逐字标签、双语合并、纯文本回落。
+ * 覆盖：时间轴、多标签、元信息、offset、增强标签剥离、双语合并、纯文本回落。
  */
 class LrcParserTest {
 
@@ -82,20 +82,28 @@ class LrcParserTest {
     }
 
     @Test
-    fun parsesEnhancedWordTags() {
+    fun stripsEnhancedWordTagsButKeepsLineTimeline() {
         val lyrics = LrcParser.parse("[00:12.00]<00:12.00>你<00:12.50>好", LyricSource.SIDECAR_LRC)
+        assertTrue(lyrics.synced)
+        assertEquals(1, lyrics.lines.size)
         val line = lyrics.lines[0]
+        // 标签必须剥离干净，否则会把 "<00:12.00>" 原样显示给用户
         assertEquals("你好", line.text)
-        assertEquals(2, line.words.size)
-        assertEquals(12_000L, line.words[0].startMs)
-        assertEquals("你", line.words[0].text)
-        assertEquals(12_500L, line.words[1].startMs)
-        assertEquals("好", line.words[1].text)
-        assertTrue(lyrics.hasWordTiming)
-        // 行时长必须算出来：末字唱完（12500 + 400）− 行起点（12000）= 900。
-        // 漏了它渲染层逐字染色的归一化分母就是 0，整行要么全灰要么瞬间全亮——
-        // 逐字动画完全不存在（v1.1.4 实测踩中后才补的断言）。
-        assertEquals(900L, line.lineDurationMs)
+        // 时间轴取行首标签，不是行内的字级标签
+        assertEquals(12_000L, line.timeMs)
+    }
+
+    @Test
+    fun stripsEnhancedTagsInUntimedLines() {
+        // 增强 LRC 偶尔写成一行里多个字级标签但只有一个行首时间戳；只要行首有
+        // 时间轴就不会走纯文本分支，正文仍须干净。
+        val lyrics = LrcParser.parse(
+            "[00:01.00]<00:01.00>Hello <00:01.40>world",
+            LyricSource.SIDECAR_LRC,
+        )
+        assertEquals(1, lyrics.lines.size)
+        assertEquals("Hello world", lyrics.lines[0].text)
+        assertEquals(1_000L, lyrics.lines[0].timeMs)
     }
 
     @Test

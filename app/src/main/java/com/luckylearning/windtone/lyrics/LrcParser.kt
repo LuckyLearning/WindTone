@@ -6,14 +6,20 @@ package com.luckylearning.windtone.lyrics
  *  - 标准时间轴 [mm:ss.xx] / [mm:ss.xxx] / [mm:ss] / [mm:ss:xx]
  *  - 一行多个时间标签 [00:12.00][01:20.00]歌词
  *  - 元信息 [ti:] [ar:] [al:] [by:] [offset:] [length:]
- *  - 增强型逐字标签 <mm:ss.xx>：解析为逐字时间轴（ karaoke 渲染）
+ *  - 增强型 LRC 的字级标签 <mm:ss.xx>：**只剥离、不解析**（见下）
  *  - 双语歌词：同一时间戳（±50ms）连续两行，第二行并入第一行的翻译副行
  *  - 无时间轴的纯文本歌词（返回 synced = false）
+ *
+ * ⚠️ **v1.1.8 起不再解析字级时间轴** —— 逐字歌词功能已整体移除。增强型 LRC 仍被
+ * 完整支持，只是当普通同步歌词用：行内的 `<mm:ss.xx>` 必须**剥离干净**（漏了的话
+ * 歌词正文会直接把时间标签显示给用户），时间轴取行首的 `[mm:ss.xx]`。
  */
 object LrcParser {
 
     private val TIME_TAG = Regex("\\[(\\d{1,4}):(\\d{1,2})(?:[.:](\\d{1,3}))?]")
     private val META_TAG = Regex("\\[(ti|ar|al|by|offset|length|re|ve|au|kana):([^]]*)]", RegexOption.IGNORE_CASE)
+
+    /** 增强 LRC 的字级标签：只用于从正文里剥离，不再产出时间轴 */
     private val WORD_TAG = Regex("<(\\d{1,4}):(\\d{1,2})(?:[.:](\\d{1,3}))?>")
     private val ANY_BRACKET = Regex("\\[[^]]*]")
 
@@ -23,16 +29,7 @@ object LrcParser {
         var album: String? = null
         var offsetMs = 0
 
-        data class Stamp(val ms: Long, val text: String, val words: List<LyricWord>) {
-            /**
-             * 行时长（逐字染色用）：末字唱完的时刻 − 行起点。
-             * 增强型 LRC 的标签本身不含行时长（KRC/YRC 的 [start,duration] 才有），
-             * 必须自己算 —— 漏了它渲染层的归一化分母就是 0，
-             * 整行要么全灰要么瞬间全亮，逐字动画完全不存在（v1.1.4 实测踩中）。
-             */
-            val lineDurationMs: Long
-                get() = words.lastOrNull()?.let { it.startMs + it.durationMs - ms } ?: 0L
-        }
+        data class Stamp(val ms: Long, val text: String)
 
         val timestamped = ArrayList<Stamp>(256)
         val plain = ArrayList<String>(256)
@@ -66,35 +63,14 @@ object LrcParser {
             var text = line
             for (t in times) text = text.replace(t.value, "")
 
-            // 逐字标签（增强 LRC）：<mm:ss.xx>文本 …
-            val wordMatches = WORD_TAG.findAll(text).toList()
-            val words = ArrayList<LyricWord>(16)
-            if (wordMatches.isNotEmpty()) {
-                for (i in wordMatches.indices) {
-                    val m = wordMatches[i]
-                    val wStart = toMillis(m.groupValues[1], m.groupValues[2], m.groupValues[3]) ?: continue
-                    val from = m.range.last + 1
-                    val to = if (i + 1 < wordMatches.size) wordMatches[i + 1].range.first else text.length
-                    val wText = if (from in text.indices && to <= text.length && from <= to)
-                        text.substring(from, to).trim() else ""
-                    val nextStart = if (i + 1 < wordMatches.size)
-                        toMillis(
-                            wordMatches[i + 1].groupValues[1],
-                            wordMatches[i + 1].groupValues[2],
-                            wordMatches[i + 1].groupValues[3],
-                        ) ?: (wStart + 400)
-                    else wStart + 400
-                    words.add(LyricWord(wStart, (nextStart - wStart).coerceAtLeast(0L), wText.ifEmpty { " " }))
-                }
-            }
-
+            // 增强 LRC 的字级标签：剥离即可，不再解析成时间轴
             text = WORD_TAG.replace(text, "")
             text = ANY_BRACKET.replace(text, "")
             text = text.trim()
 
             for (t in times) {
                 val ms = toMillis(t.groupValues[1], t.groupValues[2], t.groupValues[3]) ?: continue
-                timestamped.add(Stamp(ms, text, words))
+                timestamped.add(Stamp(ms, text))
             }
         }
 
@@ -103,7 +79,7 @@ object LrcParser {
         if (synced) {
             val adjusted = timestamped.map { s ->
                 val t = s.ms - offsetMs
-                Stamp(if (t < 0) 0L else t, s.text, s.words)
+                Stamp(if (t < 0) 0L else t, s.text)
             }.sortedBy { it.ms }
 
             // 双语合并：相邻且时间差 <= 50ms 的两行，后者作为前者的翻译副行
@@ -113,18 +89,10 @@ object LrcParser {
                 val cur = adjusted[i]
                 val next = adjusted.getOrNull(i + 1)
                 if (next != null && next.ms - cur.ms in 1..50 && cur.text.isNotEmpty() && next.text.isNotEmpty()) {
-                    merged.add(
-                        LyricLine(
-                            timeMs = cur.ms,
-                            text = cur.text,
-                            translation = next.text,
-                            words = cur.words,
-                            lineDurationMs = cur.lineDurationMs,
-                        )
-                    )
+                    merged.add(LyricLine(timeMs = cur.ms, text = cur.text, translation = next.text))
                     i += 2
                 } else {
-                    merged.add(LyricLine(cur.ms, cur.text, words = cur.words, lineDurationMs = cur.lineDurationMs))
+                    merged.add(LyricLine(cur.ms, cur.text))
                     i += 1
                 }
             }

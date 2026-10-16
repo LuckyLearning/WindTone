@@ -61,99 +61,58 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luckylearning.windtone.BuildConfig
 import com.luckylearning.windtone.data.DataMaintenance
 import com.luckylearning.windtone.data.DownloadRoute
-import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.data.UpdateChecker
 import com.luckylearning.windtone.playback.Pitch
 import kotlin.math.abs
 
-internal enum class ColorSlot(
-    val title: String,
-    val intro: String,
-    /** 是否提供「跟随主题」。只有播放页的已唱色能跟随主题（它默认就跟着 primary 走）。 */
-    val canFollowTheme: Boolean,
-) {
-    /** 播放页逐字歌词里「已唱过的那一段」 */
-    LYRIC_SUNG(
-        "已唱部分的颜色",
-        "逐字歌词里已经唱过的那一段。选「跟随主题」就交给封面取色，随歌曲一起变化。",
-        true,
-    ),
-
-    /** 悬浮窗里还没唱到的正文 */
-    OVERLAY_TEXT(
-        "悬浮歌词文字颜色",
-        "桌面悬浮歌词里还没唱到的那部分。悬浮窗是固定色，不跟随主题。",
-        false,
-    ),
-
-    /** 悬浮窗里已唱过的那一段 */
-    OVERLAY_SUNG(
-        "悬浮歌词已唱颜色",
-        "桌面悬浮歌词里当前行已经唱过的那一段。还没唱到的部分由「文字颜色」单独控制。",
-        false,
-    ),
-}
-
 /**
  * 颜色弹层的预设色板（效果图 ㉙E 里的 8 个 `.swatch`）。
  *
- * 刻意不做成枚举：枚举承载不了**用户自定义**的颜色，而这三处的取值
- * 既可能是预设、也可能是任意 ARGB，还可能是「跟随主题」哨兵。
+ * 刻意不做成枚举：枚举承载不了**用户自定义**的颜色，而这里的取值
+ * 既可能是预设、也可能是任意 ARGB。
  */
 internal object LyricsColors {
-    /** 弹层里自定义滑块的起点色（暖黄，与悬浮窗已唱色的默认值同色系） */
+    /** 弹层里自定义滑块的起点色（暖黄） */
     const val DEFAULT_SEED = 0xFFFFCD56.toInt()
 
-    data class Preset(val name: String, val argb: Int)
-
-    /** 白 / 暖黄 / 天蓝 / 青绿 / 草绿 / 桃粉 / 橘橙 / 雾紫 */
+    /** 白 / 暖黄 / 天蓝 / 青绿 / 草绿 / 桃粉 / 橘橙 / 雾紫（顺序即弹层里的排列） */
     val presets = listOf(
-        Preset("纯白", 0xFFFFFFFF.toInt()),
-        Preset("暖黄", 0xFFFFCD56.toInt()),
-        Preset("天蓝", 0xFF4FC3F7.toInt()),
-        Preset("青绿", 0xFF4DD0E1.toInt()),
-        Preset("草绿", 0xFF81C784.toInt()),
-        Preset("桃粉", 0xFFF06292.toInt()),
-        Preset("橘橙", 0xFFFF7043.toInt()),
-        Preset("雾紫", 0xFFBA68C8.toInt()),
+        0xFFFFFFFF.toInt(),
+        0xFFFFCD56.toInt(),
+        0xFF4FC3F7.toInt(),
+        0xFF4DD0E1.toInt(),
+        0xFF81C784.toInt(),
+        0xFFF06292.toInt(),
+        0xFFFF7043.toInt(),
+        0xFFBA68C8.toInt(),
     )
 
-    /**
-     * 取一个颜色的人话名字：哨兵 →「跟随主题」，预设 → 色名，其余 → `#RRGGBB`。
-     *
-     * 设置行右侧要回答「现在是什么颜色」，直接印 `-12593` 没人看得懂。
-     */
-    fun label(argb: Int): String = when (argb) {
-        SettingsDefaults.COLOR_FOLLOW_THEME -> "跟随主题"
-        else -> presets.firstOrNull { it.argb == argb }?.name ?: hex(argb)
-    }
-
-    /** ARGB → `#RRGGBB`（丢掉 alpha：这三处颜色都是不透明的） */
-    fun hex(argb: Int): String {
-        val rgb = argb and 0xFFFFFF
-        return "#" + rgb.toString(16).uppercase().padStart(6, '0')
-    }
+    // ⚠️ 这个对象原先还有两样东西，都随逐字染色一起删了：
+    //  1. `Preset(name, argb)` 的色名 —— 效果图 ㉙E 里的色点只有颜色、没有文字，
+    //     而唯一读它的是下面那对函数，所以色板退化成一个纯色值列表就够了；
+    //  2. `label(argb)` / `hex(argb)` —— 在设置行右侧印出「当前是什么颜色」
+    //     （哨兵 →「跟随主题」、预设 → 色名、其余 → #RRGGBB）。它们唯一的调用方
+    //     是「已唱部分的颜色」行；现在仅剩的「悬浮歌词文字颜色」行用色块
+    //     （`ActionRow` 的 `swatch`）表达，不需要文字标签。
 }
 
 /**
- * 颜色选择弹层（效果图 ㉙E，三处歌词颜色共用）。
+ * 颜色选择弹层（效果图 ㉙E）。
  *
- * 三段式 —— **跟随主题 / 预设色板 / 自定义**：
- *  - 「跟随主题」只对播放页已唱色出现；悬浮窗那两处是固定色，没有这一项。
+ * 两段式 —— **预设色板 / 自定义**：
  *  - 预设 8 色覆盖「白 / 暖 / 冷 / 亮」几类常见偏好，车机上一点就中。
  *  - 自定义给色相 / 饱和度 / 亮度三个滑块 + 一条实时预览条。
  *
  * **为什么不用色轮**：车机上手指粗、精度差，色轮边缘的色相极难选准；
  * 三个滑块 + 预览条的组合在大屏上反而更好操作。
  *
- * 选中即落盘（[onPick]）——悬浮窗那两处会顺带触发一次 6 秒前台预览，
+ * 选中即落盘（[onPick]）——悬浮窗会顺带触发一次 6 秒前台预览，
  * 不用退到桌面去验证。
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -162,19 +121,13 @@ internal fun ColorPickerSheet(
     title: String,
     intro: String,
     value: Int,
-    canFollowTheme: Boolean,
     onPick: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    // 「跟随主题」没有具体颜色可回填，自定义区从 [LyricsColors.DEFAULT_SEED] 起步 ——
-    // 不从随机色、也不从上一个弹层留下的色相起步，滑块初始位置每次一样。
-    val seed = if (value == SettingsDefaults.COLOR_FOLLOW_THEME) {
-        LyricsColors.DEFAULT_SEED
-    } else {
-        value
-    }
+    // 自定义区从当前值起步；不从随机色、也不从上一个弹层留下的色相起步，
+    // 滑块初始位置每次一样。
     // 用 FloatArray 但每次都赋**新数组**：原地改元素不会触发重组，这个坑很安静。
-    var hsv by remember(value) { mutableStateOf(hsvOf(seed)) }
+    var hsv by remember(value) { mutableStateOf(hsvOf(value)) }
     val custom = android.graphics.Color.HSVToColor(hsv)
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -196,30 +149,17 @@ internal fun ColorPickerSheet(
                 modifier = Modifier.padding(top = 4.dp),
             )
 
-            if (canFollowTheme) {
-                SectionTitle("跟随主题")
-                PickRow(
-                    title = "跟随主题",
-                    subtitle = "从当前歌曲封面取色，随主题一起变化",
-                    selected = value == SettingsDefaults.COLOR_FOLLOW_THEME,
-                    onClick = {
-                        onPick(SettingsDefaults.COLOR_FOLLOW_THEME)
-                        onDismiss()
-                    },
-                )
-            }
-
             SectionTitle("预设")
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                LyricsColors.presets.forEach { preset ->
+                LyricsColors.presets.forEach { argb ->
                     ColorSwatch(
-                        argb = preset.argb,
-                        selected = value == preset.argb,
+                        argb = argb,
+                        selected = value == argb,
                         onClick = {
-                            onPick(preset.argb)
+                            onPick(argb)
                             onDismiss()
                         },
                     )
@@ -270,54 +210,6 @@ internal fun ColorPickerSheet(
                         onDismiss()
                     },
                 ) { Text("使用这个颜色") }
-            }
-        }
-    }
-}
-
-/** 弹层里「跟随主题」那一行：左标题 + 右 ✓（无箭头，与效果图的 `.row-action` 一致） */
-@Composable
-private fun PickRow(
-    title: String,
-    subtitle: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = if (selected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    },
-                )
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (selected) {
-                Text(
-                    "✓",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
             }
         }
     }

@@ -41,7 +41,7 @@ object LyricOverlayBus {
     /**
      * 一条要显示的悬浮歌词。
      *
-     * 内容侧的所有决策（前奏回落歌名、间奏回溯上一句、上下文行、双语副行、逐字时间轴）
+     * 内容侧的所有决策（前奏回落歌名、间奏回溯上一句、上下文行、双语副行）
      * 都由 [OverlayContentResolver] 算好，这里只负责搬运——**服务不做任何歌词判断**，
      * 它只决定「怎么画」。
      */
@@ -49,14 +49,6 @@ object LyricOverlayBus {
         val resolved: OverlayContentResolver.Resolved = OverlayContentResolver.Resolved(),
         /** 歌曲是否在播放；暂停时淡出（或按设置隐藏），方便用户看清最后一句 */
         val playing: Boolean = false,
-        /**
-         * 播放位置：逐字染色（卡拉OK）用。
-         *
-         * 只有在启用逐字时才由播放域填入真实值，否则恒为 0——
-         * 因为它是每 200ms 就变的，填真实值会让「值相等的状态」永远不相等，
-         * 白白触发每帧重组。
-         */
-        val positionMs: Long = 0L,
     ) {
         val visible: Boolean get() = resolved.visible
     }
@@ -116,14 +108,17 @@ object LyricOverlayBus {
     val exitEditingRequests: SharedFlow<Unit> = _exitEditingRequests.asSharedFlow()
 
     /** 播放域侧调用：把解析好的当前内容送进悬浮窗 */
-    fun publish(resolved: OverlayContentResolver.Resolved, playing: Boolean, positionMs: Long) {
+    fun publish(resolved: OverlayContentResolver.Resolved, playing: Boolean) {
         val old = _content.value
-        if (old.resolved == resolved && old.playing == playing && old.positionMs == positionMs) return
-        // 只有「内容真的变了」才算一次修订；纯位置推进（逐字染色）不算，
-        // 免得依赖 revision 的消费者被每 200ms 叫醒一次。
-        val contentChanged = old.resolved != resolved || old.playing != playing
-        _content.value = Content(resolved, playing, positionMs)
-        if (contentChanged) _revision.update { it + 1 }
+        if (old.resolved == resolved && old.playing == playing) return
+        // 内容（或播放态）变了才算一次修订。
+        //
+        // ⚠️ 这里原先有一条「纯位置推进（逐字染色）不算修订」的特殊分支 ——
+        // 位置在 v1.1.8 随逐字染色一起移除，于是**任何**变化都是内容变化，
+        // 那条分支自然消失。新增高频字段进 [Content] 前想清楚这一点：
+        // 只要它每 200ms 变一次，依赖 revision 的消费者就会被叫醒 5 次/秒。
+        _content.value = Content(resolved, playing)
+        _revision.update { it + 1 }
     }
 
     /** 进入 / 退出「调整位置」模式 */

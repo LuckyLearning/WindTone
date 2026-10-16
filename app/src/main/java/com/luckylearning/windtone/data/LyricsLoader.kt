@@ -6,12 +6,11 @@ import android.util.Log
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.lyrics.BinaryReader
 import com.luckylearning.windtone.lyrics.EmbeddedTags
+import com.luckylearning.windtone.lyrics.KrcParser
 import com.luckylearning.windtone.lyrics.LrcParser
 import com.luckylearning.windtone.lyrics.LyricSource
 import com.luckylearning.windtone.lyrics.Lyrics
 import com.luckylearning.windtone.lyrics.TextCodec
-import com.luckylearning.windtone.lyrics.WordLyricsParser
-import com.luckylearning.windtone.lyrics.WordTimingSynth.withDerivedWordTiming
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -19,19 +18,20 @@ import java.io.InputStream
 
 /**
  * 歌词加载器。
- * 优先级：同目录 .lrc 文件 > 同目录 .txt 歌词 > 音频内嵌同步歌词(SYLT) > 音频内嵌歌词(USLT / Vorbis LYRICS / ©lyr)
+ * 优先级：同目录 .lrc / .krc / .yrc 文件 > 同目录 .txt 歌词 > 音频内嵌同步歌词(SYLT)
+ * > 音频内嵌歌词(USLT / Vorbis LYRICS / ©lyr)
  *
- * ⚠️ 所有出口都过一遍 [WordTimingSynth.withDerivedWordTiming]：只有 .krc / .yrc /
- * 增强型 LRC 才自带逐字时间轴，普通 LRC 没有 → 不派生的话「逐字歌词」对绝大多数
- * 用户的歌词文件都等于没效果（2026-10-16 定位）。这里是全应用歌词的唯一入口，
- * 在这一层补齐，播放页与桌面悬浮歌词两个消费方同时受益。
+ * ⚠️ **精度只有「逐行」一种**（v1.1.8 起）。全应用的歌词都从这一处出去，
+ * 所以在这一层确认：没有任何一条路径会产出字级时间轴。
+ * 历史上这里是逐字时间轴派生的唯一出口，那套机制已整体移除 —— 需要恢复时
+ * 必须同时恢复「数据产出」与「渲染消费」两端，别只加一头。
  */
 class LyricsLoader(private val context: Context) {
 
     private val maxSidecarBytes = 2 * 1024 * 1024
 
     suspend fun load(song: Song): Lyrics = withContext(Dispatchers.IO) {
-        loadRaw(song).withDerivedWordTiming()
+        loadRaw(song)
     }
 
     private suspend fun loadRaw(song: Song): Lyrics {
@@ -42,8 +42,8 @@ class LyricsLoader(private val context: Context) {
             if (bytes != null && bytes.isNotEmpty()) {
                 val ext = sidecarUri.lastPathSegment?.substringAfterLast('.', "")?.lowercase().orEmpty()
                 val parsed = when {
-                    ext == "krc" -> WordLyricsParser.parseKrc(bytes, LyricSource.SIDECAR_KRC)
-                    ext == "yrc" -> WordLyricsParser.parseWordText(
+                    ext == "krc" -> KrcParser.parseKrc(bytes, LyricSource.SIDECAR_KRC)
+                    ext == "yrc" -> KrcParser.parseText(
                         TextCodec.decode(bytes), LyricSource.SIDECAR_KRC,
                     )
                     else -> {

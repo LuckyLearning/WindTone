@@ -2,7 +2,7 @@ package com.luckylearning.windtone.data
 
 /**
  * 同目录歌词文件匹配规则。
- * 支持：歌名.lrc / 歌名 - 歌手.lrc / 歌名.zh.lrc / 歌名.sc.lrc / 歌名.txt
+ * 支持：歌名.lrc / 歌名 - 歌手.lrc / 歌名.zh.lrc / 歌名.sc.lrc / 歌名.txt / 歌名.krc / 歌名.yrc
  */
 object LyricsMatcher {
 
@@ -26,7 +26,7 @@ object LyricsMatcher {
         return false
     }
 
-    /** 匹配优先级：完全同名 > .lrc > .txt */
+    /** 匹配优先级：完全同名（100）> 带后缀的变体（50）；同档里 `.krc`/`.yrc`(15) > `.lrc`(10) > `.txt`(0) */
     fun score(fileName: String, baseName: String): Int {
         if (!matches(fileName, baseName)) return -1
         val stem = fileName.substringBeforeLast('.').lowercase()

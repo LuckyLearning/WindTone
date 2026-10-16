@@ -108,8 +108,6 @@ internal fun SettingsLyricsPage(
     canDrawOverlay: Boolean,
     overlayHealth: LyricOverlayBus.Health,
     onLyricScale: (Float) -> Unit,
-    onLyricWordByWord: (Boolean) -> Unit,
-    onLyricSungColor: (Int) -> Unit,
     onLyricOverlay: (Boolean) -> Unit,
     onLyricOverlayLines: (Int) -> Unit,
     onLyricOverlayTextScale: (Int) -> Unit,
@@ -118,16 +116,15 @@ internal fun SettingsLyricsPage(
     onLyricOverlayPauseMode: (Int) -> Unit,
     onLyricOverlayWidthPercent: (Int) -> Unit,
     onLyricOverlayTextColor: (Int) -> Unit,
-    onLyricOverlaySungColor: (Int) -> Unit,
     onOverlayEditing: (Boolean) -> Unit,
     onOverlayPreview: () -> Unit,
 ) {
     val context = LocalContext.current
     // 悬浮歌词的外观选项（行数 / 字号 / 对齐 / 底板 / 暂停行为）共用一个选项弹层
     var overlayChoice by remember { mutableStateOf<OverlayChoice?>(null) }
-    // v1.1.4：三处可配的歌词颜色（播放页已唱色 / 悬浮窗文字色 / 悬浮窗已唱色）
-    // 共用一个选择弹层 —— 它们只是「写回哪个字段」不同，界面完全一样
-    var colorPicker by remember { mutableStateOf<ColorSlot?>(null) }
+    // 歌词颜色选择弹层是否打开（v1.1.8 起只剩「悬浮窗文字颜色」一处，
+    // 原先用 ColorSlot 区分三处颜色，现在一个布尔量就够）
+    var colorPickerShown by remember { mutableStateOf(false) }
     var overlayHintVisible by remember { mutableStateOf(false) }
     // 三条跳转路都走不通（ROM 连系统授权页都不给开）→ 指引卡里改显示手动路径
     var overlayJumpFailed by remember { mutableStateOf(false) }
@@ -150,27 +147,11 @@ internal fun SettingsLyricsPage(
             onLyricScale(SettingsDefaults.LYRIC_SCALE)
         },
     )
-    SwitchRow(
-        title = "逐字歌词",
-        subtitle = "当前行随播放逐字点亮；无逐字时间轴的歌词按行时长自动派生",
-        checked = player.lyricWordByWord,
-        onCheckedChange = onLyricWordByWord,
-        onReset = resetAction(player.lyricWordByWord != SettingsDefaults.LYRIC_WORD_BY_WORD) {
-            onLyricWordByWord(SettingsDefaults.LYRIC_WORD_BY_WORD)
-        },
-    )
-    // v1.1.4：逐字歌词「已唱部分」的颜色。此前写死成 colorScheme.primary，
-    // 现在允许固定成某个颜色；「跟随主题」保持原样 —— 那是默认，不是特例。
-    ActionRow(
-        title = "已唱部分的颜色",
-        subtitle = "逐字歌词里已经唱过的那一段；默认跟随主题色（随封面取色漂移）",
-        onClick = { colorPicker = ColorSlot.LYRIC_SUNG },
-        trailing = LyricsColors.label(player.lyricSungColor),
-        chevron = true,
-        onReset = resetAction(
-            player.lyricSungColor != SettingsDefaults.LYRIC_SUNG_COLOR,
-        ) { onLyricSungColor(SettingsDefaults.LYRIC_SUNG_COLOR) },
-    )
+    // ⚠️ 这里原先还有两项：「逐字歌词」开关与「已唱部分的颜色」（v1.1.8 移除）。
+    //    逐字染色（含给普通 LRC 派生字级时间轴、以及它专用的已唱色）已整体删除，
+    //    播放页现在只有「当前行整行高亮」——靠主题色 + 字号 + 字重区分，没有可调项。
+    //    重开后两个键（`lyric_word_by_word` / `lyric_sung_color`）会留在老用户
+    //    的 SharedPreferences 里，是刻意不清理的死键，别再当 bug 排查。
 
     // ------------------------------------------------ 桌面悬浮歌词
     SectionTitle("桌面悬浮歌词")
@@ -276,7 +257,7 @@ internal fun SettingsLyricsPage(
         ) { onLyricOverlayPauseMode(SettingsDefaults.OVERLAY_PAUSE_MODE) },
     )
 
-    // v1.1.4 新增三项：宽度滑块 + 两处颜色。都紧跟在五个外观选项之后，仍属「外观」范畴。
+    // v1.1.4 新增：宽度滑块 + 颜色。都紧跟在五个外观选项之后，仍属「外观」范畴。
     // 宽度之所以是滑块而不是档位：屏幕尺寸千差万别，档位永远差一个「刚好」。
     SliderRow(
         title = "悬浮歌词宽度 ${player.lyricOverlayWidthPercent}%",
@@ -299,23 +280,13 @@ internal fun SettingsLyricsPage(
     )
     ActionRow(
         title = "悬浮歌词文字颜色",
-        subtitle = "还没唱到的那部分文字的颜色，默认纯白",
-        onClick = { colorPicker = ColorSlot.OVERLAY_TEXT },
+        subtitle = "悬浮窗是固定色，不跟随主题；当前行与上下句靠明暗区分",
+        onClick = { colorPickerShown = true },
         swatch = player.lyricOverlayTextColor,
         chevron = true,
         onReset = resetAction(
             player.lyricOverlayTextColor != SettingsDefaults.OVERLAY_TEXT_COLOR,
         ) { onLyricOverlayTextColor(SettingsDefaults.OVERLAY_TEXT_COLOR) },
-    )
-    ActionRow(
-        title = "悬浮歌词已唱颜色",
-        subtitle = "逐字高亮里已唱过的那一段，默认暖黄",
-        onClick = { colorPicker = ColorSlot.OVERLAY_SUNG },
-        swatch = player.lyricOverlaySungColor,
-        chevron = true,
-        onReset = resetAction(
-            player.lyricOverlaySungColor != SettingsDefaults.OVERLAY_SUNG_COLOR,
-        ) { onLyricOverlaySungColor(SettingsDefaults.OVERLAY_SUNG_COLOR) },
     )
     // 运行状态：开关打开且已授权时显示。这一行是排障的关键 ——
     // 悬浮窗启动失败（挂窗被 ROM 拒绝 / 前台服务被系统拦）在
@@ -457,26 +428,15 @@ internal fun SettingsLyricsPage(
         )
     }
 
-    // 三处歌词颜色共用同一个选择弹层（效果图 ㉙E）：跟随主题（仅播放页已唱色）/
-    // 预设色板 / 自定义。选中即落盘，悬浮窗那两处还会顺带给一次 6 秒预览。
-    colorPicker?.let { slot ->
+    // 歌词颜色选择弹层（效果图 ㉙E）：预设色板 / 自定义。
+    // 选中即落盘，悬浮窗还会顺带给一次 6 秒预览。
+    if (colorPickerShown) {
         ColorPickerSheet(
-            title = slot.title,
-            intro = slot.intro,
-            value = when (slot) {
-                ColorSlot.LYRIC_SUNG -> player.lyricSungColor
-                ColorSlot.OVERLAY_TEXT -> player.lyricOverlayTextColor
-                ColorSlot.OVERLAY_SUNG -> player.lyricOverlaySungColor
-            },
-            canFollowTheme = slot.canFollowTheme,
-            onPick = { argb ->
-                when (slot) {
-                    ColorSlot.LYRIC_SUNG -> onLyricSungColor(argb)
-                    ColorSlot.OVERLAY_TEXT -> onLyricOverlayTextColor(argb)
-                    ColorSlot.OVERLAY_SUNG -> onLyricOverlaySungColor(argb)
-                }
-            },
-            onDismiss = { colorPicker = null },
+            title = "悬浮歌词文字颜色",
+            intro = "桌面悬浮歌词里那句话的颜色。悬浮窗固定不跟随主题。",
+            value = player.lyricOverlayTextColor,
+            onPick = { argb -> onLyricOverlayTextColor(argb) },
+            onDismiss = { colorPickerShown = false },
         )
     }
 }

@@ -9,7 +9,7 @@ import org.junit.Test
  * 悬浮歌词内容解析器单元测试（纯 JVM，无需设备）。
  *
  * 覆盖的是「字幕该显示哪一句」这条最容易出错、也最难在真机上复现的链路：
- * 前奏、间奏空行、首尾边界、歌词偏移、双语副行、逐字时间轴、以及最后的歌名回落。
+ * 前奏、间奏空行、首尾边界、歌词偏移、双语副行、以及最后的歌名回落。
  *
  * 这些用例的存在是有代价换来的——「字幕在前奏 / 间奏整体消失」曾是一个
  * 长期存在、自检全绿也发现不了的缺陷，只因为那段逻辑没法测试。
@@ -179,7 +179,7 @@ class OverlayContentResolverTest {
         assertEquals("第一句", r.current)
     }
 
-    // ------------------------------------------------------------ 双语与逐字
+    // ------------------------------------------------------------ 双语
 
     @Test
     fun carriesTranslationOfCurrentLine() {
@@ -204,15 +204,13 @@ class OverlayContentResolverTest {
     }
 
     @Test
-    fun carriesWordTimelineAndLineWindow() {
-        val words = listOf(LyricWord(10_000L, 500L, "你"), LyricWord(10_500L, 500L, "好"))
-        val lyrics = Lyrics(
-            lines = listOf(LyricLine(timeMs = 10_000L, text = "你好", words = words, lineDurationMs = 1_500L)),
-            synced = true,
-        )
-        val r = OverlayContentResolver.resolve(lyrics, positionMs = 10_200L, offsetMs = 0, title = "歌名")
-        assertEquals(2, r.words.size)
-        assertEquals(10_000L, r.lineStartMs)
-        assertEquals(1_500L, r.lineDurationMs)
+    fun resolvedIsPositionIndependentWithinSameLine() {
+        // v1.1.8 去掉了位置参数：只要还停在同一句歌词上，两次解析结果必须完全相等。
+        // 这是「内容不变就不重组」的底线——若结果里混进了播放位置，悬浮窗会每
+        // 200ms 重组一次，去重彻底失效。
+        val lyrics = synced(line(10, "第一句"), line(20, "第二句"))
+        val a = OverlayContentResolver.resolve(lyrics, positionMs = 20_000L, offsetMs = 0, title = "歌名")
+        val b = OverlayContentResolver.resolve(lyrics, positionMs = 29_999L, offsetMs = 0, title = "歌名")
+        assertEquals(a, b)
     }
 }

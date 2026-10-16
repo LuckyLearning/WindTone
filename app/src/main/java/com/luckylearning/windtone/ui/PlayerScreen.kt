@@ -367,9 +367,6 @@ fun PlayerScreen(
                         progressState = progressState,
                         offsetMs = state.lyricOffsetMs,
                         scale = state.lyricScale,
-                        wordByWord = state.lyricWordByWord,
-                        // 逐字已唱色（v1.1.4 可配）：COLOR_FOLLOW_THEME = 跟随主题色
-                        sungColor = state.lyricSungColor,
                         onSeekTo = onSeekTo,
                         carMode = state.carMode,
                         // 长按哪一行就在哪一刻对表：位置在这里取一次快照
@@ -560,10 +557,6 @@ fun PlayerScreen(
                     if (state.lyricOffsetMs != 0) {
                         Spacer(Modifier.width(6.dp))
                         LyricSourceChip(label = "偏移 ${state.lyricOffsetMs}ms")
-                    }
-                    if (state.lyrics.hasWordTiming) {
-                        Spacer(Modifier.width(6.dp))
-                        LyricSourceChip(label = "逐字")
                     }
                     if (state.sleepRemainingMs > 0) {
                         Spacer(Modifier.width(6.dp))

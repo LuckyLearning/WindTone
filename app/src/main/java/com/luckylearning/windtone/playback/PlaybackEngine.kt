@@ -77,7 +77,6 @@ class PlaybackEngine(
     private val _player = MutableStateFlow(
         PlayerUiState(
             lyricScale = prefs.lyricScale,
-            lyricWordByWord = prefs.lyricWordByWord,
             lyricsPaneVisible = prefs.lyricsPaneVisible,
             carMode = prefs.carMode,
             lyricOverlay = prefs.lyricOverlay,
@@ -86,11 +85,9 @@ class PlaybackEngine(
             lyricOverlayBackdrop = prefs.lyricOverlayBackdrop,
             lyricOverlayPauseMode = prefs.lyricOverlayPauseMode,
             lyricOverlayAlign = prefs.lyricOverlayAlign,
-            // v1.1.4 新增：逐字已唱色 + 悬浮窗宽度与两处颜色
-            lyricSungColor = prefs.lyricSungColor,
+            // v1.1.4 新增：悬浮窗宽度与文字颜色
             lyricOverlayWidthPercent = prefs.lyricOverlayWidthPercent,
             lyricOverlayTextColor = prefs.lyricOverlayTextColor,
-            lyricOverlaySungColor = prefs.lyricOverlaySungColor,
             // 车载模式：启动直接进播放页（跳过库主页）
             playerExpanded = prefs.carMode,
             speed = prefs.playbackSpeed,
@@ -823,15 +820,6 @@ class PlaybackEngine(
         _player.update { it.copy(lyricScale = s) }
     }
 
-    /** 逐字歌词：当前行有逐字时间轴时按字染色（默认开启） */
-    override fun setLyricWordByWord(enabled: Boolean) {
-        prefs.lyricWordByWord = enabled
-        _player.update { it.copy(lyricWordByWord = enabled) }
-        // 逐字开关同时管着桌面悬浮歌词的逐字染色——服务独立存活，
-        // 得敲它一下才知道要重绘（顺带给一次预览，当场能看出区别）。
-        previewOverlayAfterConfigChange()
-    }
-
     /** 播放页展示歌词还是封面：落盘，下次进播放页保持这一状态 */
     override fun setLyricsPaneVisible(visible: Boolean) {
         prefs.lyricsPaneVisible = visible
@@ -921,17 +909,6 @@ class PlaybackEngine(
     }
 
     /**
-     * 逐字歌词「已唱部分」的颜色。
-     *
-     * 只影响**播放页**的歌词，跟悬浮窗无关，所以不通知悬浮窗服务 ——
-     * 落盘 + 刷状态就够了，播放页下一帧重组时自然读到新值。
-     */
-    override fun setLyricSungColor(color: Int) {
-        prefs.lyricSungColor = color
-        _player.update { it.copy(lyricSungColor = color) }
-    }
-
-    /**
      * 悬浮窗宽度（屏幕宽度百分比，1..100）。
      *
      * 服务侧在 `applyAppearance` 里改 `LayoutParams.width` 并**重摆一次位置**：
@@ -947,17 +924,10 @@ class PlaybackEngine(
         previewOverlayAfterConfigChange()
     }
 
-    /** 悬浮窗正文色（未唱部分） */
+    /** 悬浮窗歌词文字颜色 */
     override fun setLyricOverlayTextColor(color: Int) {
         prefs.lyricOverlayTextColor = color
         _player.update { it.copy(lyricOverlayTextColor = color) }
-        previewOverlayAfterConfigChange()
-    }
-
-    /** 悬浮窗已唱部分的颜色 */
-    override fun setLyricOverlaySungColor(color: Int) {
-        prefs.lyricOverlaySungColor = color
-        _player.update { it.copy(lyricOverlaySungColor = color) }
         previewOverlayAfterConfigChange()
     }
 
@@ -1248,13 +1218,9 @@ class PlaybackEngine(
             offsetMs = state.lyricOffsetMs,
             title = state.current?.title.orEmpty(),
         )
-        // 位置只在启用逐字染色时才下发：否则它每 200ms 变一次，
-        // 会把「内容不变就不重组」的去重彻底废掉。
-        LyricOverlayBridge.publish(
-            resolved = resolved,
-            playing = playing,
-            positionMs = if (prefs.lyricWordByWord) positionMs + state.lyricOffsetMs else 0L,
-        )
+        // 不再下发播放位置：它唯一的用途是逐字染色（v1.1.8 已移除）。位置每 200ms
+        // 变一次，下发它会把「内容不变就不重组」的去重彻底废掉。
+        LyricOverlayBridge.publish(resolved = resolved, playing = playing)
     }
 
     /**
@@ -1336,7 +1302,6 @@ interface PlayerActions {
     fun resetLyricOffset()
     fun setLyricOffsetAbsolute(offsetMs: Int)
     fun setLyricScale(scale: Float)
-    fun setLyricWordByWord(enabled: Boolean)
     fun setLyricsPaneVisible(visible: Boolean)
     fun setCarMode(enabled: Boolean)
     fun setLyricOverlay(enabled: Boolean)
@@ -1346,17 +1311,12 @@ interface PlayerActions {
     fun setLyricOverlayPauseMode(mode: Int)
     fun setLyricOverlayAlign(align: Int)
 
-    /** 逐字歌词已唱部分的颜色（ARGB） */
-    fun setLyricSungColor(color: Int)
-
     /** 悬浮窗宽度：屏幕宽度百分比（1..100） */
     fun setLyricOverlayWidthPercent(percent: Int)
 
-    /** 悬浮窗正文色（未唱部分，ARGB） */
+    /** 悬浮窗歌词文字颜色（ARGB） */
     fun setLyricOverlayTextColor(color: Int)
 
-    /** 悬浮窗已唱部分的颜色（ARGB） */
-    fun setLyricOverlaySungColor(color: Int)
     fun canDrawOverlay(): Boolean
     fun setOverlayEditing(editing: Boolean)
     fun setAppForeground(foreground: Boolean)

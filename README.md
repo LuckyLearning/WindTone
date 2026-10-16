@@ -2,7 +2,7 @@
 
 Android 原生本地音乐播放器 —— Kotlin + Jetpack Compose，**数据全部留在本机**。
 
-支持 MP3 / FLAC / WAV / M4A / OGG / Opus 等常见格式；歌词支持独立 `.lrc` 文件与音频内嵌标签，含 KRC / YRC 逐字歌词与双语歌词。
+支持 MP3 / FLAC / WAV / M4A / OGG / Opus 等常见格式；歌词支持独立 `.lrc` 文件与音频内嵌标签，兼容 KRC / YRC（酷狗 / 网易云）格式，并支持原文 + 翻译的双语歌词。
 
 [![Android CI](https://github.com/LuckyLearning/WindTone/actions/workflows/android-ci.yml/badge.svg)](https://github.com/LuckyLearning/WindTone/actions/workflows/android-ci.yml)
 [![Release APK](https://github.com/LuckyLearning/WindTone/actions/workflows/android-release.yml/badge.svg)](https://github.com/LuckyLearning/WindTone/actions/workflows/android-release.yml)
@@ -86,8 +86,8 @@ WindTone/
 
 | 模块 | 关键文件 | 说明 |
 |---|---|---|
-| 歌词解析 | `lyrics/LrcParser.kt` · `WordLyricsParser.kt` · `EmbeddedTags.kt` · `TextCodec.kt` | LRC / KRC / YRC、内嵌标签、编码嗅探 |
-| 歌词装配 | `lyrics/LyricsLoader.kt` · `WordTimingSynth.kt` | **唯一加载漏斗**：取词优先级 + 无逐字数据时派生时间轴 |
+| 歌词解析 | `lyrics/LrcParser.kt` · `KrcParser.kt` · `EmbeddedTags.kt` · `TextCodec.kt` | LRC / KRC / YRC、内嵌标签、编码嗅探 |
+| 歌词装配 | `lyrics/LyricsLoader.kt` | **唯一加载漏斗**：旁挂 / 内嵌多来源的取词优先级 |
 | 音乐库聚合 | `data/MusicRepository.kt` | 按扫描范围分流、三来源合并去重 |
 | 数据库 | `data/db/MusicDb.kt` | Room：9 表（曲库 / 目录 / 每曲状态 / 歌单 / 歌单曲目 / 队列 / 播放态 / 搜索历史 / 收听日志） |
 | 应用内更新 | `data/UpdateChecker.kt` | GitHub Releases 查询、APK 下载校验、FileProvider 安装 |
