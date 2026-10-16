@@ -263,7 +263,7 @@ internal fun SettingsPlaybackPage(
     )
     ActionRow(
         title = "均衡器与音效",
-        subtitle = "均衡器 / 低音增强 / 环绕声 / 响度增强（需先开始播放）",
+        subtitle = "预设 / 频段曲线 / 低音增强 / 环绕声 / 响度增强 / 混响（需先开始播放）",
         onClick = { showEq = true },
         chevron = true,
     )

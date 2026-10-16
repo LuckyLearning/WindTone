@@ -3,6 +3,7 @@ package com.luckylearning.windtone.playback
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
 import android.media.audiofx.LoudnessEnhancer
+import android.media.audiofx.PresetReverb
 import android.media.audiofx.Virtualizer
 import com.luckylearning.windtone.data.Prefs
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,6 +36,16 @@ object AudioFx {
         /** 响度增强目标增益（mB，0 表示关闭） */
         val loudnessGain: Int = 0,
         val loudnessMax: Int = 1500,
+        /** 当前混响 id（[ReverbPresets.byId]）；空串 = 未选过（= 关闭） */
+        val reverbId: String = "",
+        /**
+         * 本机是否有可用的混响效果器。
+         *
+         * 与 [available] **分开报**：均衡器可用但混响不可用的机器是存在的
+         * （效果器是各自独立的 `AudioEffect`，AOSP 之外的 ROM 常裁剪混响），
+         * 混成一个布尔会让整页在那种机器上消失。
+         */
+        val reverbAvailable: Boolean = false,
     ) {
         override fun equals(other: Any?): Boolean = this === other
         override fun hashCode(): Int = System.identityHashCode(this)
@@ -48,6 +59,7 @@ object AudioFx {
     private var bass: BassBoost? = null
     private var virtualizer: Virtualizer? = null
     private var loudness: LoudnessEnhancer? = null
+    private var reverb: PresetReverb? = null
     private var sessionId: Int = 0
 
     fun init(context: android.content.Context) {
@@ -66,6 +78,8 @@ object AudioFx {
             val bassMax = runCatching { BassBoost(0, sessionId) }.getOrNull()
             val virt = runCatching { Virtualizer(0, sessionId) }.getOrNull()
             val loud = runCatching { LoudnessEnhancer(sessionId) }.getOrNull()
+            // 混响单独 runCatching：拿不到就只少一档功能，不能连带把均衡器整页判成不可用
+            val rev = runCatching { PresetReverb(0, sessionId) }.getOrNull()
 
             val bandCount = eq.numberOfBands.toInt()
             val min: Int = eq.bandLevelRange[0].toInt()
@@ -89,10 +103,15 @@ object AudioFx {
             virt?.setStrength(p.eqVirtualizer.coerceIn(0, 1000).toShort())
             runCatching { loud?.setTargetGain(p.eqLoudness.coerceIn(0, 1500)) }
 
+            // 混响：存的是 id，平台要的是档位；存下来的 id 认不出来就退回「关闭」
+            val reverbPreset = ReverbPresets.byId(p.eqReverbId) ?: ReverbPresets.OFF
+            runCatching { rev?.setPreset(reverbPreset.platform) }
+
             equalizer = eq
             bass = bassMax
             virtualizer = virt
             loudness = loud
+            reverb = rev
 
             _state.value = EqState(
                 available = true,
@@ -108,6 +127,8 @@ object AudioFx {
                 virtualStrength = p.eqVirtualizer,
                 bassMax = 1000,
                 loudnessGain = p.eqLoudness,
+                reverbId = p.eqReverbId,
+                reverbAvailable = rev != null,
             )
             apply(p.eqEnabled)
         }.onFailure {
@@ -126,10 +147,12 @@ object AudioFx {
         runCatching { bass?.release() }
         runCatching { virtualizer?.release() }
         runCatching { loudness?.release() }
+        runCatching { reverb?.release() }
         equalizer = null
         bass = null
         virtualizer = null
         loudness = null
+        reverb = null
     }
 
     // ------------------------------------------------------------- UI 入口
@@ -191,14 +214,30 @@ object AudioFx {
     }
 
     /**
-     * 恢复出厂：关掉均衡器、频段全平、三处增强归零（v1.1.4「恢复默认」）。
+     * 选择混响档位（[ReverbPresets] 的 id）。
+     *
+     * 与均衡器预设的差别：混响**没有滑块**，档位完全由平台效果器给死，
+     * 所以这里只有「换一档」这一种交互，`ReverbPresets.OFF` 即关闭。
+     * 本机没有混响效果器时（`reverb` 为 null）只落盘，界面照常记住选择。
+     */
+    fun setReverbPreset(id: String) {
+        val preset = ReverbPresets.byId(id) ?: ReverbPresets.OFF
+        prefs?.eqReverbId = preset.id
+        runCatching { reverb?.setPreset(preset.platform) }
+        _state.value = _state.value.copy(reverbId = preset.id)
+        apply(_state.value.enabled)
+    }
+
+    /**
+     * 恢复出厂：关掉均衡器、频段全平、三处增强归零、混响回到关闭（v1.1.4「恢复默认」）。
      *
      * 写回的就是**全新安装时那份值** —— 与 `Prefs` 的 `eqEnabled` / `eqPresetId` /
-     * `eqBassBoost` / `eqVirtualizer` / `eqLoudness` 默认值一一对应。
+     * `eqBands` / `eqBassBoost` / `eqVirtualizer` / `eqLoudness` / `eqReverbId`
+     * 默认值一一对应。
      *
      * 为什么不是应用 [EqPresets.FLAT] 预设：恢复默认的语义是「什么都没选过」，
      * 界面应显示「自定义 + 全平」，而不是停在「原声」预设上。直接把频段写 0
-     * 并把 `eqPresetId` 清空，与实际状态一致。
+     * 并把 `eqPresetId` 清空，与实际状态一致。混响同理：回到「关闭」而不是某一档。
      */
     fun reset() {
         prefs?.apply {
@@ -207,6 +246,7 @@ object AudioFx {
             eqBassBoost = 0
             eqVirtualizer = 0
             eqLoudness = 0
+            eqReverbId = ""
         }
 
         val s = _state.value
@@ -222,12 +262,15 @@ object AudioFx {
         runCatching { bass?.setStrength(0) }
         runCatching { virtualizer?.setStrength(0) }
         runCatching { loudness?.setTargetGain(0) }
+        runCatching { reverb?.setPreset(ReverbPresets.OFF.platform) }
         _state.value = s.copy(
             enabled = false,
             presetId = "",
-            bandLevels = flat,            bassStrength = 0,
+            bandLevels = flat,
+            bassStrength = 0,
             virtualStrength = 0,
             loudnessGain = 0,
+            reverbId = "",
         )
         // 必须放在状态更新**之后**：apply 会读 `_state.value` 里的三处强度
         // 决定要不要启用对应 effect。
@@ -239,6 +282,11 @@ object AudioFx {
         runCatching { bass?.enabled = enabled && _state.value.bassStrength > 0 }
         runCatching { virtualizer?.enabled = enabled && _state.value.virtualStrength > 0 }
         runCatching { loudness?.enabled = enabled && _state.value.loudnessGain > 0 }
+        // 混响：off 档不使能效果器（`setPreset(PRESET_NONE)` 之后也没必要再开着这条链）
+        runCatching {
+            val preset = ReverbPresets.byId(_state.value.reverbId)
+            reverb?.enabled = enabled && preset != null && preset != ReverbPresets.OFF
+        }
     }
 
     private fun applyBands(eq: Equalizer, levels: IntArray) {
@@ -257,6 +305,4 @@ object AudioFx {
     }
 
     private fun encodeBands(levels: IntArray): String = levels.joinToString(",")
-
-    private fun IntArray.toShortArray(): ShortArray = ShortArray(size) { this[it].toShort() }
 }

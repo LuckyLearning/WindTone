@@ -35,7 +35,7 @@ Android 原生本地音乐播放器 —— Kotlin + Jetpack Compose，**数据�
 | 文档 | 内容 |
 |---|---|
 | [功能说明](https://luckylearning.github.io/WindTone/功能说明.html) | 音乐库 / 格式支持 / 歌词 / 播放 / 桌面组件 / 设置页 |
-| [界面效果图](https://luckylearning.github.io/WindTone/ui/) | 51 屏设计基准（手机 + 车机），改动 UI 前必读 |
+| [界面效果图](https://luckylearning.github.io/WindTone/ui/) | 52 屏设计基准（手机 + 车机），改动 UI 前必读 |
 | [权限与更新](https://luckylearning.github.io/WindTone/权限与更新.html) | 权限清单、`.lrc` 获取条件、应用内更新机制、已知限制 |
 | [版本历史](https://luckylearning.github.io/WindTone/版本历史.html) | 每个版本改了什么 |
 | [AI 开发指南](https://luckylearning.github.io/WindTone/AI开发指南.html) | 项目约定、架构分层与踩坑记录 |
@@ -56,7 +56,7 @@ Android 原生本地音乐播放器 —— Kotlin + Jetpack Compose，**数据�
 | 最低版本 | Android 7.0（API 24），compileSdk / targetSdk 35 |
 | 架构 | 分域 ViewModel（播放 / 曲库 / 设置 / 更新）+ 手写服务定位器 `AppContainer`，无 Hilt / Koin |
 | 网络 | **只有**一个用途 —— 访问 `api.github.com` 检查更新；不引入 OkHttp / Gson |
-| 单元测试 | 205 项（JVM + Robolectric），lint Error 级 0 |
+| 单元测试 | 206 项（JVM + Robolectric），lint Error 级 0 |
 
 ---
 
@@ -77,7 +77,7 @@ WindTone/
 │  ├─ ui/                       Compose 界面与四个分域 ViewModel
 │  ├─ overlay/ widget/ tile/    悬浮歌词 / 桌面小部件 / 快捷磁贴
 │  └─ MusicApp.kt MainActivity.kt
-├─ app/src/test/                205 个单元测试
+├─ app/src/test/                206 个单元测试
 ├─ docs/                        文档站源目录（GitHub Pages 发布目录）
 ├─ scripts/                     图标生成、本地 SDK 引导、发版与推送助手
 ├─ gradle/                      Wrapper + `libs.versions.toml`（依赖与插件版本唯一来源）
@@ -92,7 +92,7 @@ WindTone/
 | 数据库 | `data/db/MusicDb.kt` | Room：9 表（曲库 / 目录 / 每曲状态 / 歌单 / 歌单曲目 / 队列 / 播放态 / 搜索历史 / 收听日志） |
 | 应用内更新 | `data/UpdateChecker.kt` | GitHub Releases 查询、APK 下载校验、FileProvider 安装 |
 | 播放引擎 | `playback/PlaybackEngine.kt` | 应用级单例：队列持久化与恢复、播放统计、歌词装载、全部播放动作（尾随 `PlayerActions` 接口） |
-| 音效 / 变调 / 定时 | `playback/AudioFx.kt` · `Pitch.kt` · `SleepTimer.kt` | 均衡器与音效、半音↔倍率换算、三档睡眠定时 |
+| 音效 / 变调 / 定时 | `playback/AudioFx.kt` · `EqPresets.kt` · `ReverbPresets.kt` · `Pitch.kt` · `SleepTimer.kt` | 均衡器（16 个内置预设 + 自定义频段）与增强音效（低音 / 环绕 / 响度 / 混响）、半音↔倍率换算、三档睡眠定时；弹层在 `ui/EqSheet.kt` |
 | 设置页 | `ui/SettingsScreen.kt` + `SettingsPages / SettingsLyricsPage / SettingsSystemPages / SettingsRows / SettingsColors / SettingsDialogs` | 顶层编排（一主六子）+ 各子页正文 / 行组件 / 歌词配色 / 对话框 |
 
 ---

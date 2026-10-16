@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -59,8 +58,6 @@ import androidx.compose.ui.unit.sp
 import com.luckylearning.windtone.data.AudioInspector
 import com.luckylearning.windtone.data.ScanScope
 import com.luckylearning.windtone.data.model.Song
-import com.luckylearning.windtone.playback.AudioFx
-import com.luckylearning.windtone.playback.EqPresets
 import com.luckylearning.windtone.playback.Pitch
 import com.luckylearning.windtone.playback.SleepTimer
 import com.luckylearning.windtone.state.FolderItem
@@ -154,138 +151,6 @@ fun QueueSheet(
                 }
             }
             Spacer(Modifier.height(16.dp))
-        }
-    }
-}
-
-// ================================================================ 均衡器
-
-@Composable
-fun EqSheet(onClose: () -> Unit) {
-    val state by AudioFx.state.collectAsState()
-    // 只有真的偏离出厂状态才画 ↺（与设置页同一条口径：默认状态下不摆按钮）
-    val customized = state.available && (
-        state.enabled ||
-            state.presetId.isNotEmpty() ||
-            state.bassStrength > 0 ||
-            state.virtualStrength > 0 ||
-            state.loudnessGain > 0 ||
-            state.bandLevels.any { it != 0 }
-        )
-    ModalBottomSheet(onDismissRequest = onClose) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(AppIcons.Tune, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(8.dp))
-                Text("均衡器与音效", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.weight(1f))
-                // 恢复默认：关掉均衡器 + 频段全平 + 三处增强归零（= 全新安装那份值）。
-                // 均衡器的值没有对应的设置页行（那一行只是弹层入口），所以这里必须有。
-                if (customized) {
-                    ResetButton(onClick = AudioFx::reset)
-                    Spacer(Modifier.width(4.dp))
-                }
-                Switch(checked = state.enabled, onCheckedChange = AudioFx::setEnabled, enabled = state.available)
-            }
-
-            if (!state.available) {
-                Text(
-                    "当前设备不可用或播放器尚未启动。\n开始播放任意一首歌曲后即可调节。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = 24.dp),
-                )
-            } else {
-                // 预设：两组并行——「听感」（新手友好）与「流派」（老用户习惯），
-                // tab 切组 + 横向滚动 chips，选中的预设下方给一句描述。
-                // 不用平台预设（各 ROM 名字不一致且无法本地化），曲线全部内置（EqPresets）。
-                var presetGroup by remember { mutableStateOf(EqPresets.Group.FEEL) }
-                val currentPreset = EqPresets.byId(state.presetId)
-                Column(Modifier.padding(top = 8.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        EqPresets.Group.entries.forEach { g ->
-                            FilterChip(
-                                selected = presetGroup == g,
-                                onClick = { presetGroup = g },
-                                label = { Text(g.label) },
-                            )
-                        }
-                    }
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.padding(top = 8.dp),
-                    ) {
-                        items(EqPresets.group(presetGroup)) { p ->
-                            FilterChip(
-                                selected = state.presetId == p.id,
-                                onClick = { AudioFx.setPreset(p.id) },
-                                label = { Text(p.name) },
-                            )
-                        }
-                    }
-                    Text(
-                        currentPreset?.desc ?: "自定义曲线 · 拖动下方频段滑块微调",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 6.dp),
-                    )
-                }
-
-                Spacer(Modifier.height(14.dp))
-                // 频段
-                state.bandLevels.forEachIndexed { band, level ->
-                    val max = state.bandMaxMb.coerceAtLeast(1)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            state.centerFreqs.getOrElse(band) { "" },
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.width(46.dp),
-                        )
-                        Slider(
-                            value = level.toFloat(),
-                            onValueChange = { AudioFx.setBandLevel(band, it.toInt()) },
-                            valueRange = state.bandMinMb.toFloat()..state.bandMaxMb.toFloat(),
-                            modifier = Modifier.weight(1f),
-                        )
-                        Text(
-                            if (level == 0) "0.0" else "%+.1f".format(level / 100.0),
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.width(34.dp),
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(6.dp))
-                Text("低音增强", style = MaterialTheme.typography.labelMedium)
-                Slider(
-                    value = state.bassStrength.toFloat(),
-                    onValueChange = { AudioFx.setBassStrength(it.toInt()) },
-                    valueRange = 0f..state.bassMax.toFloat(),
-                )
-                Text("环绕声", style = MaterialTheme.typography.labelMedium)
-                Slider(
-                    value = state.virtualStrength.toFloat(),
-                    onValueChange = { AudioFx.setVirtualStrength(it.toInt()) },
-                    valueRange = 0f..1000f,
-                )
-                Text(
-                    "响度增强 " + if (state.loudnessGain > 0) "+${state.loudnessGain} mB" else "关闭",
-                    style = MaterialTheme.typography.labelMedium,
-                )
-                Slider(
-                    value = state.loudnessGain.toFloat(),
-                    onValueChange = { AudioFx.setLoudnessGain(it.toInt()) },
-                    valueRange = 0f..state.loudnessMax.toFloat(),
-                )
-                Text(
-                    "响度增强用于把音量偏小的录音拉到统一响度，过大易削波，建议不超过 +600 mB。",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Spacer(Modifier.height(20.dp))
         }
     }
 }
@@ -902,7 +767,7 @@ fun PlayerOptionsSheet(
             OptionRow(
                 icon = AppIcons.Tune,
                 title = "均衡器与音效",
-                subtitle = "均衡器 / 低音增强 / 环绕声 / 响度增强",
+                subtitle = "预设 / 频段曲线 / 低音增强 / 环绕声 / 响度增强 / 混响",
                 onClick = onOpenEq,
             )
 
@@ -956,8 +821,15 @@ fun PlayerOptionsSheet(
     }
 }
 
+/**
+ * 弹层里的小节标题（`labelMedium` + primary 色）。
+ *
+ * `internal` 而不是 `private`：均衡器弹层拆到 `EqSheet.kt` 之后也要用它
+ * （同包可见，不必 import）—— 与 [ResetButton] 落在 Common.kt 是同一条理由，
+ * 别在第二个文件里再复制一份。
+ */
 @Composable
-private fun SectionLabel(text: String) {
+internal fun SectionLabel(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.labelMedium,

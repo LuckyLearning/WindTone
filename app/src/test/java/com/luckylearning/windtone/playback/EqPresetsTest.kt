@@ -61,12 +61,32 @@ class EqPresetsTest {
         }
     }
 
+    /**
+     * 两组各 8 个、合计 16 个，且 id / 名字都不重复。
+     *
+     * 数字写死是有意的：预设表是**用户能直接感知**的功能面，
+     * 少一个多一个都该在评审时被看见，而不是被 forEach 悄悄放过。
+     */
     @Test
-    fun `两组共九个预设且 id 唯一`() {
-        assertEquals(5, EqPresets.group(EqPresets.Group.FEEL).size)
-        assertEquals(4, EqPresets.group(EqPresets.Group.GENRE).size)
+    fun `两组各八个预设且 id 与名字唯一`() {
+        assertEquals(8, EqPresets.group(EqPresets.Group.FEEL).size)
+        assertEquals(8, EqPresets.group(EqPresets.Group.GENRE).size)
+        assertEquals(16, EqPresets.ALL.size)
         assertEquals(EqPresets.ALL.size, EqPresets.ALL.map { it.id }.distinct().size)
         assertEquals(EqPresets.ALL.size, EqPresets.ALL.map { it.name }.distinct().size)
+    }
+
+    /**
+     * 「温暖 / 明亮 / 通透 / 电子」这四条 id 必须**一直在**。
+     *
+     * 它们最早出现在 v1.1.5 的发版公告里，但当时只写了文案没写代码（公告里没有的预设
+     * 用户找不到）。2026-10-17 补齐后钉一条测试，防止哪天被当成"没用的预设"删掉又退回那个坑。
+     */
+    @Test
+    fun `v1_1_5公告里承诺过的四条预设已补齐`() {
+        listOf("warm", "bright", "transparent", "electronic").forEach {
+            assertTrue("预设 $it 缺失", EqPresets.byId(it) != null)
+        }
     }
 
     @Test
@@ -81,5 +101,34 @@ class EqPresetsTest {
         EqPresets.ALL.forEach { preset ->
             assertTrue("预设 ${preset.id} 缺描述", preset.desc.isNotBlank())
         }
+    }
+
+    // ================================================================ 曲线预览归一化
+
+    @Test
+    fun `预览高度以设备量程归一化且全平曲线落在中线`() {
+        // 量程 ±1500、频段全 0 → 五个点全在 0.5（中线）
+        val flat = EqPresets.previewHeights(IntArray(5), -1500, 1500)
+        assertEquals(5, flat.size)
+        flat.forEach { assertEquals(0.5f, it, 1e-6f) }
+    }
+
+    @Test
+    fun `预览高度把量程端点映射到 0 与 1`() {
+        assertEquals(listOf(0f), EqPresets.previewHeights(intArrayOf(-1500), -1500, 1500))
+        assertEquals(listOf(1f), EqPresets.previewHeights(intArrayOf(1500), -1500, 1500))
+    }
+
+    @Test
+    fun `预览高度对超量程的值夹取而不是溢出`() {
+        // 设备量程比 ±1500 窄时（少数机器是 ±1200），越界的增益必须夹住，
+        // 否则折线会画到画布外面去
+        val heights = EqPresets.previewHeights(intArrayOf(-2000, 0, 2000), -1200, 1200)
+        assertEquals(listOf(0f, 0.5f, 1f), heights)
+    }
+
+    @Test
+    fun `空频段返回空预览而不是崩`() {
+        assertEquals(emptyList<Float>(), EqPresets.previewHeights(IntArray(0)))
     }
 }

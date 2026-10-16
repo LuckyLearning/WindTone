@@ -375,6 +375,17 @@ class Prefs(context: Context) {
         get() = sp.getInt(KEY_EQ_LOUDNESS, 0)
         set(value) = sp.edit().putInt(KEY_EQ_LOUDNESS, value.coerceIn(0, 1500)).apply()
 
+    /**
+     * 混响档位 = [com.luckylearning.windtone.playback.ReverbPresets] 的 id。
+     *
+     * 空串 = 从未选过（等价于「关闭」），与 [eqPresetId] 的「空串 = 没选过 / 自定义」同一口径：
+     * 出厂的语义是「什么都没选过」，而不是「选了关闭这一档」。
+     * 界面读到空串时把「关闭」显示成选中，写回时一律写具体 id。
+     */
+    var eqReverbId: String
+        get() = sp.getString(KEY_EQ_REVERB_ID, "").orEmpty()
+        set(value) = sp.edit().putString(KEY_EQ_REVERB_ID, value).apply()
+
     // ---------------- 应用内更新 ----------------
 
     /**
@@ -443,6 +454,7 @@ class Prefs(context: Context) {
         const val KEY_EQ_BASS = "eq_bass"
         const val KEY_EQ_VIRTUAL = "eq_virtual"
         const val KEY_EQ_LOUDNESS = "eq_loudness"
+        const val KEY_EQ_REVERB_ID = "eq_reverb_id"
         const val KEY_SKIP_SILENCE = "skip_silence"
         const val KEY_AUTO_UPDATE = "auto_check_update"
         const val KEY_LAST_UPDATE_CHECK = "last_update_check_at"

@@ -602,8 +602,8 @@ a{color:inherit;text-decoration:none}
   <div class="bh-row">
     <a class="backdocs" href="https://luckylearning.github.io/WindTone/">← 文档站</a>
     <div class="bh-title">听风 WindTone · UI 效果图<small>设计基准 / Design Source of Truth</small></div>
-    <span class="bh-badge"><span id="screenCount">51</span> 屏 · Material 3 · 手机 360dp / 车机 1707×1067dp</span>
-    <span class="bh-badge">对齐 v1.1.6 · 含侧边抽屉 / 设置二级分类 / 速度与变调</span>
+    <span class="bh-badge"><span id="screenCount">52</span> 屏 · Material 3 · 手机 360dp / 车机 1707×1067dp</span>
+    <span class="bh-badge">对齐 v1.1.10 · 含侧边抽屉 / 设置二级分类 / 均衡器与音效（⑲/⑲B）</span>
     <button class="tgl" id="themeBtn">🌙 深色主题</button>
   </div>
   <nav class="bh-nav">
@@ -1859,7 +1859,7 @@ a{color:inherit;text-decoration:none}
 </div>
           <div class="section-label">音效</div>
           <div class="row-action"><svg class="ic" style="color:var(--primary)"><use href="#i-tune"/></svg>
-            <div class="ra-main"><div class="ra-title">均衡器与音效</div><div class="ra-sub">均衡器 / 低音增强 / 环绕声 / 响度增强</div></div>
+            <div class="ra-main"><div class="ra-title">均衡器与音效</div><div class="ra-sub">预设 / 频段曲线 / 低音增强 / 环绕声 / 响度增强 / 混响</div></div>
 </div>
           <div class="section-label">睡眠定时</div>
           <div class="row-action"><svg class="ic" style="color:var(--primary)"><use href="#i-bed"/></svg>
@@ -1907,7 +1907,7 @@ a{color:inherit;text-decoration:none}
 </figure>
 
 <figure class="fig" id="scr-eq">
-  <div class="cap"><b>⑲ 均衡器与音效</b><em>Sheets.kt · EqSheet（需先开始播放，否则提示不可用）</em></div>
+  <div class="cap"><b>⑲ 均衡器与音效 · 上半屏</b><em>ui/EqSheet.kt · EqSheet（需先开始播放，否则提示不可用）</em></div>
   <div class="phone">
     <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
     <div class="app">
@@ -1920,48 +1920,127 @@ a{color:inherit;text-decoration:none}
       <div class="sheet">
         <div class="handle"></div>
         <div class="sheet-title" style="justify-content:space-between">均衡器与音效<span style="display:flex;align-items:center;gap:8px"><svg class="ic ic-18 rst"><use href="#i-reset"/></svg><span class="switch"><i></i></span></span></div>
-        <div style="display:flex;gap:6px;margin-top:10px">
+
+        <div class="section-label">预设</div>
+        <div style="display:flex;gap:6px">
           <span class="fchip on" style="padding:7px 16px">听感</span>
           <span class="fchip" style="padding:7px 16px">流派</span>
         </div>
-        <div style="display:flex;gap:6px;margin-top:8px;overflow-x:auto">
-          <span class="fchip on" style="padding:7px 14px">原声</span>
-          <span class="fchip" style="padding:7px 14px">低音增强</span>
-          <span class="fchip" style="padding:7px 14px">高音增强</span>
-          <span class="fchip" style="padding:7px 14px">人声清晰</span>
-          <span class="fchip" style="padding:7px 14px">动感</span>
+        <div style="font-size:11px;color:var(--on-surface-variant);margin-top:4px">按听感命名，不必懂流派</div>
+        <div class="chips">
+          <span class="fchip">原声</span>
+          <span class="fchip on">低音增强</span>
+          <span class="fchip">高音增强</span>
+          <span class="fchip">人声清晰</span>
+          <span class="fchip">动感</span>
+          <span class="fchip">温暖</span>
+          <span class="fchip">明亮</span>
+          <span class="fchip">通透</span>
         </div>
-        <div style="font-size:11px;color:var(--on-surface-variant);margin-top:6px">所有频段不做修饰，原汁原味</div>
-        <div style="margin-top:14px">
-          <div style="display:flex;align-items:center;gap:10px"><span style="width:46px;font-size:10px;color:var(--on-surface-variant)">60Hz</span><div class="slider" style="flex:1"><span class="fill" style="width:58%"></span><span class="knob" style="left:58%"></span></div><span style="width:28px;font-size:10px;text-align:right">2.4</span></div>
-          <div style="display:flex;align-items:center;gap:10px"><span style="width:46px;font-size:10px;color:var(--on-surface-variant)">230Hz</span><div class="slider" style="flex:1"><span class="fill" style="width:52%"></span><span class="knob" style="left:52%"></span></div><span style="width:28px;font-size:10px;text-align:right">0.6</span></div>
-          <div style="display:flex;align-items:center;gap:10px"><span style="width:46px;font-size:10px;color:var(--on-surface-variant)">910Hz</span><div class="slider" style="flex:1"><span class="fill" style="width:50%"></span><span class="knob" style="left:50%"></span></div><span style="width:28px;font-size:10px;text-align:right">0.0</span></div>
-          <div style="display:flex;align-items:center;gap:10px"><span style="width:46px;font-size:10px;color:var(--on-surface-variant)">3kHz</span><div class="slider" style="flex:1"><span class="fill" style="width:56%"></span><span class="knob" style="left:56%"></span></div><span style="width:28px;font-size:10px;text-align:right">1.8</span></div>
-          <div style="display:flex;align-items:center;gap:10px"><span style="width:46px;font-size:10px;color:var(--on-surface-variant)">14kHz</span><div class="slider" style="flex:1"><span class="fill" style="width:61%"></span><span class="knob" style="left:61%"></span></div><span style="width:28px;font-size:10px;text-align:right">3.2</span></div>
+        <div style="background:var(--secondary-container);color:var(--on-secondary-container);border-radius:12px;padding:10px 12px;margin-top:10px">
+          <div style="font-size:13px;font-weight:700">低音增强</div>
+          <div style="font-size:11px;margin-top:2px;line-height:1.5">显著增强低频，更有冲击感</div>
         </div>
-        <div style="margin-top:16px;font-size:13px;color:var(--on-bg)">低音增强</div>
-        <div class="slider"><span class="fill" style="width:35%"></span><span class="knob" style="left:35%"></span></div>
-        <div style="font-size:13px;color:var(--on-bg)">环绕声</div>
-        <div class="slider"><span class="fill" style="width:20%"></span><span class="knob" style="left:20%"></span></div>
-        <div style="font-size:13px;color:var(--on-bg)">响度增强 +380 mB</div>
-        <div class="slider"><span class="fill" style="width:26%"></span><span class="knob" style="left:26%"></span></div>
-        <div style="font-size:11px;line-height:1.55;color:var(--on-surface-variant);margin-top:2px">响度增强用于把音量偏小的录音拉到统一响度，过大易削波，建议不超过 +600 mB。</div>
+
+        <div class="section-label">频段</div>
+        <div style="font-size:11px;color:var(--on-surface-variant)">拖动任一频段即离开预设，进入自定义</div>
+        <div style="height:76px;margin-top:8px;border-radius:12px;background:var(--c)">
+          <svg viewBox="0 0 324 76" preserveAspectRatio="none" style="display:block;width:100%;height:100%">
+            <line x1="0" y1="38" x2="324" y2="38" stroke="var(--outline)" stroke-opacity="0.55" stroke-width="1" stroke-dasharray="8 8"/>
+            <path d="M0,24.1 L81,29.1 L162,36.7 L243,40.5 L324,41.8 L324,38 L0,38 Z" fill="var(--primary)" fill-opacity="0.16"/>
+            <polyline points="0,24.1 81,29.1 162,36.7 243,40.5 324,41.8" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="0" cy="24.1" r="3" fill="var(--primary)"/>
+            <circle cx="81" cy="29.1" r="3" fill="var(--primary)"/>
+            <circle cx="162" cy="36.7" r="3" fill="var(--primary)"/>
+            <circle cx="243" cy="40.5" r="3" fill="var(--primary)"/>
+            <circle cx="324" cy="41.8" r="3" fill="var(--primary)"/>
+          </svg>
+        </div>
+        <div style="margin-top:6px">
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:46px;font-size:10px;color:var(--on-surface-variant)">60Hz</span><div class="slider" style="flex:1;margin:6px 0"><span class="fill" style="width:68%"></span><span class="knob" style="left:68%"></span></div><span style="width:38px;font-size:10px;text-align:right">+5.5</span></div>
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:46px;font-size:10px;color:var(--on-surface-variant)">230Hz</span><div class="slider" style="flex:1;margin:6px 0"><span class="fill" style="width:62%"></span><span class="knob" style="left:62%"></span></div><span style="width:38px;font-size:10px;text-align:right">+3.5</span></div>
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:46px;font-size:10px;color:var(--on-surface-variant)">910Hz</span><div class="slider" style="flex:1;margin:6px 0"><span class="fill" style="width:52%"></span><span class="knob" style="left:52%"></span></div><span style="width:38px;font-size:10px;text-align:right">+0.5</span></div>
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:46px;font-size:10px;color:var(--on-surface-variant)">3kHz</span><div class="slider" style="flex:1;margin:6px 0"><span class="fill" style="width:47%"></span><span class="knob" style="left:47%"></span></div><span style="width:38px;font-size:10px;text-align:right">-1.0</span></div>
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:46px;font-size:10px;color:var(--on-surface-variant)">14kHz</span><div class="slider" style="flex:1;margin:6px 0"><span class="fill" style="width:45%"></span><span class="knob" style="left:45%"></span></div><span style="width:38px;font-size:10px;text-align:right">-1.5</span></div>
+        </div>
       </div>
     </div>
   </div>
-  <p class="note"><b>关键点：</b>标题行右侧是总开关；设备不可用 / 播放器未启动时整片替换为提示「当前设备不可用或播放器尚未启动。开始播放任意一首歌曲后即可调节。」；
-  每频段 = 频率标签（46dp）+ 滑块 + 带符号数值（dB，如 <code>+2.4</code> / <code>0.0</code>）。<br>
-  <b>v1.1.5 预设体系重做（两组并行，参考三星 One UI 6.1.1）</b>：<b>不再用平台预设</b>
+  <p class="note"><b>关键点：</b>标题行右侧是总开关；设备不可用 / 播放器未启动时整片替换为提示「当前设备不可用或播放器尚未启动。开始播放任意一首歌曲后即可调节。」<br>
+  <b>2026-10-17 重排：三段＝决策顺序（先选预设 → 再看曲线调频段 → 最后加增强音效）</b>。<br>
+  &nbsp;&nbsp;① <b>预设</b>——「听感 / 流派」两组 tab + <b>自动换行</b>的预设网 + <b>选中项说明卡</b>（预设名 + 一句话，看描述就能做决定，不必懂频段）。
+  原先是一组横向滚动 chips，一组 8 个片时最后两个永远在屏幕外，「有没有我想要的」本身就得靠滑一下才知道；换行之后整组一屏看全。
+  听感组 8 个：原声 / 低音增强 / 高音增强 / 人声清晰 / 动感 / <b>温暖 / 明亮 / 通透</b>；
+  流派组 8 个：流行 / 摇滚 / 古典 / 爵士 / <b>电子 / 民谣 / 嘻哈 / 舞曲</b>。
+  <b>手动拖频段滑块 = 离开预设进入「自定义」</b>（预设 id 清空，说明卡随之换成「自定义」）。<br>
+  &nbsp;&nbsp;② <b>频段</b>——先把当前曲线画出来（折线 + 零点虚线 + 折点圆点），再给频段滑块。曲线高度按<b>设备量程</b>归一化，
+  <b>形状可信、绝对高度不代表真实增益</b>（真实数值看滑块右侧的 dB 标签）。每频段 = 频率标签（46dp）+ 滑块 + 带符号数值（如 <code>+5.5</code> / <code>0.0</code>）。<br>
+  &nbsp;&nbsp;③ <b>增强音效</b>——低音 / 环绕 / 响度 / <b>混响</b>，见 ⑲B。<br>
+  &nbsp;&nbsp;整页<b>可滚动</b>（内容上限 560dp），小屏上不会把底部几项挤出屏幕。<br>
+  <b>预设体系（v1.1.5 起，参考三星 One UI 6.1.1）</b>：<b>不再用平台预设</b>
   （<code>Equalizer.usePreset</code> 的名字是英文、各 ROM 不一致、无法本地化），改为内置曲线
-  <code>EqPresets</code>——每个预设给一组「锚点频率 → 增益」，在 log 频率轴上对设备实际频段中心频率插值，
-  5/6/10 段机器都能落到合理曲线上。UI = 「听感 / 流派」两组 tab + 横向滚动 chips + <b>选中预设下方一句描述</b>
-  （用户看描述就能做决定，不必懂频段）。听感组：原声 / 低音增强 / 高音增强 / 人声清晰 / 动感；
-  流派组：流行 / 摇滚 / 古典 / 爵士。手动拖频段滑块 = 离开预设进入「自定义」（预设 id 清空）。<br>
-  <b>v1.1.4：标题行有 ↺</b>（在总开关左侧，与设置页同一条口径：<b>只在偏离出厂状态时出现</b>——开了开关、选了预设、任意频段非 0、三处增强非 0 才算偏离）。
-  点一下写回 <code>AudioFx.reset()</code> = <b>关掉均衡器 + 频段全平 + 三处增强归零</b>，也就是全新安装那份值
+  <code>EqPresets</code>——每个预设给一组「锚点频率 → 增益」（60 / 230 / 910 / 3600 / 14000 Hz，五段机的中心频率正好就是这五个点），
+  在 log 频率轴上对设备实际频段中心频率插值，5/6/10 段机器都能落到合理曲线上。
+  预设 id 持久化在 <code>eq_preset_id</code>（String）；旧的平台预设索引 key <code>eq_preset</code>（Int）废弃不再读取。<br>
+  <b>v1.1.4：标题行有 ↺</b>（在总开关左侧，与设置页同一条口径：<b>只在偏离出厂状态时出现</b>——开了开关、选了预设、任意频段非 0、四项增强有一项非默认才算偏离）。
+  点一下写回 <code>AudioFx.reset()</code> = <b>关掉均衡器 + 频段全平 + 低音/环绕/响度归零 + 混响回到关闭</b>，也就是全新安装那份值
   （注意：恢复默认是「什么都没选过」的语义，显示「自定义 + 全平」，<b>不</b>停在「原声」预设上）。
-  这里必须有这一枚：均衡器的值<b>没有对应的设置页行</b>（设置页那一行只是弹层入口），少了它整块参数就没有复位路径。
-  预设 id 持久化在 <code>eq_preset_id</code>（String）；旧的平台预设索引 key <code>eq_preset</code>（Int）废弃不再读取。</p>
+  这里必须有这一枚：均衡器的值<b>没有对应的设置页行</b>（设置页那一行只是弹层入口），少了它整块参数就没有复位路径。</p>
+</figure>
+
+<figure class="fig" id="scr-eq-fx">
+  <div class="cap"><b>⑲B 均衡器与音效 · 下半屏</b><em>ui/EqSheet.kt · 同一页向下滚：增强音效（低音 / 环绕 / 响度 / 混响）</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="player"><div class="p-top">
+        <button class="ibtn"><svg class="ic"><use href="#i-down"/></svg></button>
+        <div class="t-main"><div class="sp"></div></div>
+        <button class="ibtn"><svg class="ic"><use href="#i-tune"/></svg></button>
+      </div><div class="p-mid"></div></div>
+      <div class="dim"></div>
+      <div class="sheet">
+        <div class="handle"></div>
+        <div class="section-label" style="margin-top:0">增强音效</div>
+
+        <div style="margin-top:4px">
+          <div style="display:flex;align-items:center"><span style="flex:1;font-size:14px;color:var(--on-bg)">低音增强</span><span style="font-size:11px;color:var(--on-surface-variant)">35%</span></div>
+          <div class="slider"><span class="fill" style="width:35%"></span><span class="knob" style="left:35%"></span></div>
+        </div>
+        <div style="margin-top:10px">
+          <div style="display:flex;align-items:center"><span style="flex:1;font-size:14px;color:var(--on-bg)">环绕声</span><span style="font-size:11px;color:var(--on-surface-variant)">20%</span></div>
+          <div class="slider"><span class="fill" style="width:20%"></span><span class="knob" style="left:20%"></span></div>
+        </div>
+        <div style="margin-top:10px">
+          <div style="display:flex;align-items:center"><span style="flex:1;font-size:14px;color:var(--on-bg)">响度增强</span><span style="font-size:11px;color:var(--on-surface-variant)">+380 mB</span></div>
+          <div class="slider"><span class="fill" style="width:26%"></span><span class="knob" style="left:26%"></span></div>
+          <div style="font-size:11px;line-height:1.55;color:var(--on-surface-variant)">把音量偏小的录音拉到统一响度，过大易削波，建议不超过 +600 mB。</div>
+        </div>
+
+        <div style="display:flex;align-items:center;margin-top:12px"><span style="flex:1;font-size:14px;color:var(--on-bg)">混响</span><span style="font-size:11px;color:var(--on-surface-variant)">中房间</span></div>
+        <div class="chips">
+          <span class="fchip">关闭</span>
+          <span class="fchip">小房间</span>
+          <span class="fchip on">中房间</span>
+          <span class="fchip">大房间</span>
+          <span class="fchip">中厅</span>
+          <span class="fchip">大厅</span>
+          <span class="fchip">板式</span>
+        </div>
+        <div style="font-size:11px;color:var(--on-surface-variant);margin-top:4px">明显的房间感，流行与人声都合适</div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>四项增强各占一块，<b>每项一行「标题 + 右侧当前值」</b>——原先滑块下面没有任何数字，「拖到哪儿算大」只能靠猜。
+  低音 / 环绕按百分比显示（<code>0..1000</code> 映射为 <code>0%..100%</code>），响度按 <code>mB</code> 显示（0 = 关闭）。<br>
+  <b>混响：2026-10-17 新增的第四种音效</b>。档位由平台效果器 <code>PresetReverb</code> 给死
+  （<code>PRESET_NONE / SMALLROOM / MEDIUMROOM / LARGEROOM / MEDIUMHALL / LARGEHALL / PLATE</code>），
+  <b>没有连续量，所以用一排片而不是滑块</b>——与均衡器预设同一套交互。中文名与一句话描述内置在 <code>playback/ReverbPresets</code>
+  （纯数据、不 import 平台类，可单测），落盘用稳定 id（<code>eq_reverb_id</code>，String）而不是平台档位数字：
+  <b>空串 = 从未选过</b>，界面把「关闭」显示成选中，与 <code>eq_preset_id</code> 的空串语义一致。<br>
+  <b>设备不支持混响时</b>（效果器创建失败）：这一块换成一行说明「本机不支持混响效果，选择会保留但不会生效」，
+  <b>不把整页判成不可用</b> —— 几个效果器是各自独立的 <code>AudioEffect</code>，均衡器可用而混响不可用的机器是存在的，
+  混成一个布尔会让整页在那种机器上整个消失。</p>
 </figure>
 
 <figure class="fig" id="scr-sleep">
@@ -2332,7 +2411,7 @@ a{color:inherit;text-decoration:none}
           <div class="sw-s">自动跳过录音开头的空白段（对整轨 / 现场录音有效）</div></div><span class="switch off"><i></i></span></div>
         <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-top:6px">
           <div style="flex:1"><div style="font-size:15px">均衡器与音效</div>
-            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">均衡器 / 低音增强 / 环绕声 / 响度增强（需先开始播放）</div></div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">预设 / 频段曲线 / 低音增强 / 环绕声 / 响度增强 / 混响（需先开始播放）</div></div>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
         </div>
       </div>

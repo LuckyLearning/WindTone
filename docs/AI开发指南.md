@@ -102,7 +102,7 @@ LibraryViewModel   PlayerViewModel    UpdateViewModel    SettingsViewModel
 | **扫描** | **默认不扫全盘**（`ScanScope.UNSET`），首次进入停在「选择音乐位置」页；可选全盘 / 指定目录；扫描结果落 **`songs` 曲库**（增量 upsert + 软删），二次启动直接读曲库 |
 | **歌词** | 同名 `.lrc`/`.krc`/`.yrc`/`.txt` 旁挂、音频内嵌标签、双语（原文+翻译）、逐曲偏移（±20s）、字号缩放、桌面悬浮歌词（1·3 行 / 字号 / 对齐 / 底板 / 颜色 / 双语副行） |
 | **播放** | Media3 ExoPlayer + MediaSessionService；后台播放、耳机/蓝牙控制；播放队列整队列持久化（`queue_songs` 表）；变速（0.5x–2.0x）；跳过静音；睡眠定时（定时/播完当前曲）；响度增强 |
-| **音效** | 5 段均衡器 + 预设、低音增强、虚拟环绕（`AudioFx`，基于系统 `AudioEffect`） |
+| **音效** | 均衡器（16 个内置预设 + 5/6/10 段自定义）、低音增强、虚拟环绕、响度增强、**混响**（`AudioFx`，基于系统 `AudioEffect`，见 §6.10） |
 | **歌单/收藏** | 自建歌单（增删改、排序）、收藏、最近播放、最常播放、播放统计（次数/累计时长） |
 | **数据维护** | 诊断页「数据与存储」：曲库/目录/歌单/缓存占用快照、清理失效歌曲、清空封面缓存、重置用户数据（保留曲库） |
 | **个性化** | 封面主色动态主题、Material 3 色板、浮动迷你条、封面上下滑调音量、迷你条拖拽跳转 |
@@ -277,7 +277,10 @@ playback/                 ── 播放层 ──
   LibraryBrowser.kt       车机 / 外部浏览器的歌单层级浏览树（只读 Room，无缓存，见 §6.9）
   PlaybackConnection.kt   客户端侧：建立/复用 MediaController
   PlayerHandle.kt         全局持有 ExoPlayer 实例（供小组件/磁贴直接操作）
-  AudioFx.kt              均衡器/低音/虚拟环绕/响度增强（AudioEffect 封装，单例）
+  AudioFx.kt              均衡器/低音/虚拟环绕/响度增强/混响（AudioEffect 封装，单例，见 §6.10）
+  EqPresets.kt            16 个内置均衡器预设曲线（听感 8 / 流派 8）+ log 轴插值 + 曲线预览归一化
+  ReverbPresets.kt        7 档内置混响（关闭 / 小房间…板式）→ 平台 PresetReverb 档位的纯数据映射
+  Pitch.kt                变调：半音 ↔ 倍率换算
   SleepTimer.kt           睡眠定时（单例，StateFlow 暴露剩余时间）
 
 overlay/                  ── 悬浮窗歌词（活在与界面无关的生命周期里）──
@@ -305,8 +308,9 @@ ui/                       ── 展示层 ──
   MainScreen.kt           主界面（列表 / 分组 / 歌单 / 扫描引导）—— 把分域 VM **按需**传给子组件
   PlayerScreen.kt         全屏播放页（**手机与车机共用**；改它之前务必先读 docs/ui/index.html 核对两版）
   LyricsPane.kt           歌词面板（滚动居中、当前行高亮、偏移调节）
-  Sheets.kt               各类抽屉与弹窗（队列、播放设置、编辑信息、添加到歌单……）
-  SettingsScreen.kt       设置页（一主三子：播放 / 更新 / 关于与诊断；诊断子页含「数据与存储」）
+  Sheets.kt               各类抽屉与弹窗（队列、播放设置、扫描范围、睡眠定时、歌曲操作……）
+  EqSheet.kt              「均衡器与音效」弹层（预设网 / 曲线预览 / 频段 / 增强音效，见 §6.10）
+  SettingsScreen.kt       设置页（一主六子：外观 / 播放 / 歌词 / 音乐库 / 更新 / 关于与诊断）
   Common.kt               通用组件（封面、歌曲行、空态、骨架屏……）
   AppIcons.kt             图标封装
   theme/Theme.kt          Material 3 主题、色板生成
@@ -497,7 +501,7 @@ SharedPreferences 文件 `music_player_prefs`（**勿改名**）。v4 之后只�
 | `skip_silence` | Bool | false | 跳过静音 |
 | `dynamic_theme` | Bool | **true** | 封面主色动态主题 |
 | `playback_speed` | Float | 1.0 | 播放速度 |
-| `eq_enabled` / `eq_preset` / `eq_bands` / `eq_bass` / `eq_virtual` / `eq_loudness` | — | — | 音效状态 |
+| `eq_enabled` / `eq_preset_id` / `eq_bands` / `eq_bass` / `eq_virtual` / `eq_loudness` / `eq_reverb_id` | — | — | 音效状态（`eq_preset_id` = 内置预设 id，空串 = 自定义；`eq_reverb_id` = 混响 id，空串 = 从未选过 = 关闭。见 §6.10） |
 | `auto_check_update` | Bool | **true** | 启动自动检查更新（唯一联网开关） |
 | `last_update_check_at` | Long | 0 | 自动检查限频时间戳 |
 | `update_download_route` | String | `AUTO` | 下载线路（自动/直连/镜像） |
@@ -699,6 +703,49 @@ MediaLibrarySession.Callback            LibraryBrowser（只读 Room，无缓存
 （`MediaLibraryService` / `MediaSessionService` / `MediaBrowserService`），
 `<application>` 下有 `com.google.android.gms.car.application` → `res/xml/automotive_app_desc.xml`
 （`<uses name="media"/>`，Android Auto 的能力声明；车机自带面板不走这条）。
+
+---
+
+### 6.10 音效链（`playback/AudioFx.kt`，2026-10-17 补全）
+
+四个效果器都挂在**同一个 `audioSessionId`** 上，由 `PlaybackService` 在
+`Player.Listener.onAudioSessionIdChanged` 里调 `AudioFx.attach(sessionId)` 重新装一遍
+（切歌换会话就换一批效果器实例，所以**任何状态都必须先落盘、再在 attach 时重放**）。
+
+```
+AudioFx（进程内单例，UI 与服务同进程直连）
+  state: StateFlow<EqState>     ← UI 只读它；所有写入口都是 AudioFx 上的方法
+  ├─ Equalizer      频段 ±1500 mB，段数由设备决定（5 / 6 / 10 段都见过）
+  ├─ BassBoost      0..1000
+  ├─ Virtualizer    0..1000（⚠️ 平台类已标记 @Deprecated，暂留；换实现要连 UI 一起改）
+  ├─ LoudnessEnhancer 0..1500 mB
+  └─ PresetReverb   7 档（关闭 / 小房间 / 中房间 / 大房间 / 中厅 / 大厅 / 板式）
+```
+
+⚠ **四条不变量**（改这一块之前先读）：
+
+1. **均衡器曲线不用平台预设**。`Equalizer.usePreset` 的名字是英文、**各 ROM 不一致**（第 0 个有的叫
+   Normal、有的直接是 Rock），且无法本地化。改为自研曲线：`EqPresets` 里每个预设是
+   一组「锚点频率 → 增益」，在 **log 频率轴**上对设备实际频段中心频率插值
+   （线性插值会让低频曲线形状随设备分段方式漂移），越界取端点、不外推。
+   锚点频率 60 / 230 / 910 / 3600 / 14000 Hz **正好是常见五段机的中心频率**，
+   所以五段机上曲线精确落在锚点上（测试钉着这条）。
+2. **`EqState` 的 `equals` 是引用相等**（`this === other` + `identityHashCode`）：它带 `IntArray`，
+   结构相等既慢又容易在"内容没变"时漏掉重组。每个新实例都算"变了"，这是有意的 —— 别改成 data class 自动生成。
+3. **`available` 与 `reverbAvailable` 分开报**。几个效果器是各自独立的 `AudioEffect`，
+   **均衡器可用而混响不可用的机器是存在的**（ROM 常裁剪混响）。混成一个布尔会让整页在那种机器上整个消失。
+   每个效果器各自 `runCatching`，拿不到就只少一档功能。
+4. **恢复默认 = "什么都没选过"**，不是"选了一个默认档"：`AudioFx.reset()` 写回
+   `eqEnabled=false` + `eqPresetId=""` + 频段全平 + 三项增强归零 + `eqReverbId=""`，
+   界面显示「自定义 + 全平」而**不是**停在「原声」预设上。写回值与 `Prefs` 各 getter 的默认值一一对应，
+   新增一项时**两处都要动**（`SettingsDefaultsTest` 只覆盖了 `SettingsDefaults` 里登记过的键，
+   音效这一组没登记，所以这里靠人工比对 + `AudioFx.reset()` 的注释）。
+
+**页面侧**（`ui/EqSheet.kt`，效果图 ⑲ / ⑲B）按**决策顺序**分三段：预设 → 频段（先画曲线再拖滑块）→ 增强音效。
+两处口径沿用既有约定：**手动拖频段滑块 = 离开预设进入「自定义」**（`presetId` 清空）；
+标题行的 ↺ **只在偏离出厂状态时出现**（判据含混响）。曲线预览的高度用
+`EqPresets.previewHeights` 按**设备量程**归一化 —— 形状可信、绝对高度不代表真实增益，
+真实数值看滑块右侧的 dB 标签。
 
 ---
 
@@ -1000,7 +1047,7 @@ WindTone-v{版本}-universal.apk      # 拿不准架构时的兜底
 9. **本地资料写 `docs/`**（已 gitignore，不会外泄）。
 10. **敏感值绝不硬编码**：token、口令一律走「本地 gitignore 文件 + CI Secrets」。
 11. **版本号只在用户主动要求发版时才改**：日常功能开发不动 `appVersionName` / `appVersionCode`；只有当用户明确说「发个版本」/「release」时才用 `scripts/release.sh` 改版本号、打 tag、触发 CI。
-12. **改 UI 先改效果图（硬约定）**：`docs/ui/index.html` 是全部 UI 的设计真源（47 屏，单文件自包含，深/浅主题可切换）。任何 UI 改动的顺序固定为：先改 `docs/ui/index.html` 对应屏并预览确认 → 再按该屏标注的 Compose 位置改 `ui/*.kt` → 出包核对。改配色先改文件顶部的 CSS 设计令牌，再同步 `Theme.kt`。新屏/新组件要在效果图里补位，编号顺延。维护细则见 `docs/ui/README.md`。
+12. **改 UI 先改效果图（硬约定）**：`docs/ui/index.html` 是全部 UI 的设计真源（52 屏，单文件自包含，深/浅主题可切换）。任何 UI 改动的顺序固定为：先改 `docs/ui/index.html` 对应屏并预览确认 → 再按该屏标注的 Compose 位置改 `ui/*.kt` → 出包核对。改配色先改文件顶部的 CSS 设计令牌，再同步 `Theme.kt`。新屏/新组件要在效果图里补位，编号顺延（同一屏的另一种状态用字母后缀，如 ⑲/⑲B，不占新号）。维护细则见 `docs/ui/README.md`。
 13. **设置页是「一主六子」结构（v1.1.3 二次重构）**：主页面**只放六张二级分类入口卡**（`CategoryRow`，一屏放下）；外观 / 播放 / 歌词 / 音乐库 / 更新 / 关于与诊断各成一个子页。
     - v1.0.7 起曾是「主页面平铺外观 / 播放 / 歌词三组 + 三条子页入口」，**v1.1.3 把三组也下沉成子页** —— 起因是桌面悬浮歌词的五个外观选项加入后「歌词」一组独占两屏，主页又开始长回去。
     - 子页是 `SettingsScreen` 内部的 `SettingsPage` 枚举状态（**7 项**，`pagePositions` 数组长度必须同步），**不新建 Activity、不引导航库**；子页里返回键先回主页面。
@@ -1471,7 +1518,7 @@ class XxxTest { @get:Rule val compose = createComposeRule() ... }
 - **↺ 嵌在整行 clickable 里是安全的**：Compose 的点击手势由最内层消费，点 ↺ 不会顺带打开
   这一行该进的界面。`SettingsScreenTest` 有一条专门守着（点字号的 ↺，断言色板弹层没被打开）。
 - **值藏在弹层里的设置项，↺ 跟着弹层走**：均衡器那一行只是入口，它的 ↺ 在 `EqSheet` 标题行
-  （`AudioFx.reset()`：关掉均衡器 + 频段全平 + 三处增强归零）。频段**不要**用 `usePreset(0)`
+  （`AudioFx.reset()`：关掉均衡器 + 频段全平 + 低音/环绕/响度归零 + 混响回到关闭，见 §6.10）。频段**不要**用 `usePreset(0)`
   —— 平台预设的名字与曲线各 ROM 不同，第 0 个未必是平直，有的直接是「Rock」。
 - **不复位的两处**（有意）：均衡器那一行本身（见上）、悬浮歌词的位置（属「调整位置」路径，
   自检里有「重置位置并预览」）。
@@ -1526,7 +1573,7 @@ class XxxTest { @get:Rule val compose = createComposeRule() ... }
 | 项 | 现状 | 影响 / 建议 |
 |---|---|---|
 | `MainScreen.kt` 1152 行 | ✅ 2026-10-15 已按 §8.6 拆过一轮：列表区抽成 `LibraryHeader.kt`（424 行）+ `LibraryLists.kt`（742 行），`MainScreen` 只留编排（双栏 / 抽屉 / 播放页挂载 / 深链消费） | 下一个偏大的文件是 `ui/library/LibraryCore.kt`（778 行，见 §6 的拆分结构） |
-| 测试覆盖 | **193 个**（`db/`、`playback/` 有 Robolectric 用例，`ui/` 是 Compose 界面冒烟） | 已覆盖 CASCADE / 软删 / 排除 / 统计 / 队列 / 搜索历史 / 歌词解析 / 悬浮歌词内容解析与排版（32 项）/ 悬浮窗摆放与夹取（14 项）/ 更新检查（19 项）/ 收听报告日历聚合（15 项）/ 重复歌曲指纹（13 项）/ 侧边抽屉行为（6 项）/ 设置页一主六子导航（3 项）/ 车机浏览树（12 项，见 §6.9）；仍缺 `MusicRepository` 的排序 / 搜索，以及 ViewModel 层的行为测试 |
+| 测试覆盖 | **206 个**（`db/`、`playback/` 有 Robolectric 用例，`ui/` 是 Compose 界面冒烟） | 已覆盖 CASCADE / 软删 / 排除 / 统计 / 队列 / 搜索历史 / 歌词解析 / 悬浮歌词内容解析与排版（32 项）/ 悬浮窗摆放与夹取（14 项）/ 更新检查（19 项）/ 收听报告日历聚合（15 项）/ 重复歌曲指纹（13 项）/ 侧边抽屉行为（6 项）/ 设置页一主六子导航（3 项）/ 车机浏览树（12 项，见 §6.9）/ 均衡器预设曲线与预览归一化（14 项）+ 混响档位表（7 项，见 §6.10）；仍缺 `MusicRepository` 的排序 / 搜索，以及 ViewModel 层的行为测试 |
 | **`java.time` 不能用**（`minSdk = 24`） | `isCoreLibraryDesugaringEnabled = false` 是**有意**的 | `java.time` / `java.util.stream` / `Optional` 都要 **API 26**，低版本上直接 `NoClassDefFoundError`（不是降级，是崩）。要日历运算走 `java.util.Calendar` + `TimeZone`（见 `data/ListeningReport.kt` 的实现与注释），日期加减用 `Calendar.add(DAY_OF_MONTH, ±n)` 而不是加减 86_400_000 毫秒。真要引入 `java.time`，先开脱糖并加 `desugar_jdk_libs`（会全局影响构建，别为一个小功能开） |
 | **lint 的 `abortOnError = false`** | 2026-10-15 收尾时已把 **Error 清到 0**（warnings 仍在，不阻塞构建） | 也就是说"构建成功"≠"lint 干净"。改完代码别只看 `BUILD SUCCESSFUL`，要扫一眼 `app/build/reports/lint-results-debug.xml` 里的 **Error** 级条目。当天共三次收敛：**32 → 5**（21 条 `java.time` 的 `NewApi` 见上一行，5 条 `Tile.setSubtitle` 的 `NewApi` 见 `tile/TileCompat.kt`，`StartActivityAndCollapseDeprecated` 改显式 `@Suppress` 并写明理由），再 **5 → 0**（5 条 `UnsafeOptInUsageError`：`kotlinOptions.freeCompilerArgs` 里的 `-opt-in=...UnstableApi` 编译器认、lint 不认，改为在 `PlaybackService` / `PlayerHandle` 上挂 `@androidx.annotation.OptIn`）。⚠️ 注意 `w:` 开头的 `-opt-in ... is not an opt-in requirement marker` 是**历史告警**，Kotlin 编译期就带着，不是新引入的 |
 | 无迁移 = 无版本兼容 | 已定口径：重装即可 | 需要保住老用户数据时，得补 `addMigrations(...)` 并配迁移回归测试（见 §5.1 末）。**v1.0.6（DB v2）→ v1.1.0（DB v4）就是按这条走的：覆盖安装会整库重建** |
