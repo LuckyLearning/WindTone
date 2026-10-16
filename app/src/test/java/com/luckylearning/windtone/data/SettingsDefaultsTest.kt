@@ -62,6 +62,7 @@ class SettingsDefaultsTest {
 
         // 播放
         check("playbackSpeed", prefs.playbackSpeed, SettingsDefaults.SPEED)
+        check("playbackPitchSemitones", prefs.playbackPitchSemitones, SettingsDefaults.PITCH_SEMITONES)
         check("skipSilence", prefs.skipSilence, SettingsDefaults.SKIP_SILENCE)
 
         // 播放页歌词

@@ -284,6 +284,8 @@ data class PlayerUiState(
     val playerExpanded: Boolean = false,
     val queueSize: Int = 0,
     val speed: Float = 1f,
+    /** 变调：半音（-12..+12，0 = 原调）。倍率换算见 `playback/Pitch` */
+    val pitchSemitones: Int = SettingsDefaults.PITCH_SEMITONES,
     val sleepRemainingMs: Long = 0L,
     val queue: List<QueueEntry> = emptyList(),
     val audioInfo: AudioInspector.Info? = null,

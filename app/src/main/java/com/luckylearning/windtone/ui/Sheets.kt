@@ -61,8 +61,10 @@ import com.luckylearning.windtone.data.ScanScope
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.playback.AudioFx
 import com.luckylearning.windtone.playback.EqPresets
+import com.luckylearning.windtone.playback.Pitch
 import com.luckylearning.windtone.playback.SleepTimer
 import com.luckylearning.windtone.state.FolderItem
+import kotlin.math.roundToInt
 
 // ================================================================ 播放队列
 
@@ -291,7 +293,13 @@ fun EqSheet(onClose: () -> Unit) {
 // ================================================================ 睡眠定时
 
 @Composable
-fun SleepSheet(onClose: () -> Unit, onSet: (Int) -> Unit, onEndOfSong: () -> Unit, onCancel: () -> Unit) {
+fun SleepSheet(
+    onClose: () -> Unit,
+    onSet: (Int) -> Unit,
+    onEndOfSong: () -> Unit,
+    onEndOfAlbum: () -> Unit,
+    onCancel: () -> Unit,
+) {
     val remaining by SleepTimer.remainingMs.collectAsState()
     ModalBottomSheet(onDismissRequest = onClose) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
@@ -324,6 +332,18 @@ fun SleepSheet(onClose: () -> Unit, onSet: (Int) -> Unit, onEndOfSong: () -> Uni
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
                     .clickable { onEndOfSong() }
+                    .padding(vertical = 12.dp, horizontal = 8.dp),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            // 三期规划里承诺过三种模式，此前只落地了两种（倒计时 / 播完当前曲）。
+            // 这一档适合「整张专辑听完」的场景：专辑里的曲目在队列里连排，等最后
+            // 一首放完才停；没有专辑信息时按「播完当前曲」处理（见 PlaybackEngine）。
+            Text(
+                "播完当前专辑暂停",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { onEndOfAlbum() }
                     .padding(vertical = 12.dp, horizontal = 8.dp),
                 style = MaterialTheme.typography.bodyLarge,
             )
@@ -845,10 +865,13 @@ fun ScanScopeChip(
 @Composable
 fun PlayerOptionsSheet(
     speed: Float,
+    /** 变调：半音（-12..+12，0 = 原调） */
+    pitchSemitones: Int,
     lyricScale: Float,
     lyricOffsetMs: Int,
     sleepRemainingMs: Long,
     onSpeed: (Float) -> Unit,
+    onPitch: (Int) -> Unit,
     onLyricScale: (Float) -> Unit,
     onLyricOffset: (Int) -> Unit,
     onResetOffset: () -> Unit,
@@ -895,8 +918,11 @@ fun PlayerOptionsSheet(
                 onClick = onOpenSleep,
             )
 
-            SectionLabel("播放速度")
+            // v1.1.6：变调并入本组。两者在播放器里是同一个 `PlaybackParameters`，
+            // 界面上分开摆反而会让人以为它们互不影响（实际会互相覆盖，见 PlaybackEngine）。
+            SectionLabel("速度与变调")
             SpeedControl(speed = speed, onSpeed = onSpeed)
+            PitchControl(semitones = pitchSemitones, onPitch = onPitch)
 
             SectionLabel("歌词")
             // 悬浮歌词放在「歌词」分组第一位：它是这首歌「往哪儿显示」最常用的一个选择，
@@ -1017,6 +1043,56 @@ private fun SpeedControl(speed: Float, onSpeed: (Float) -> Unit) {
                     selected = kotlin.math.abs(sp - speed) < 0.01f,
                     onClick = { onSpeed(sp) },
                     label = { Text("${sp}x", fontSize = 12.sp) },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 变调：滑块 + 常用档位快捷片，单位是**半音**而不是倍率。
+ *
+ * 为什么不用倍率：`0.89x` 没人看得懂，而「降两个半音」是唱歌的人一看就明白的。
+ * 换算在 `playback/Pitch` 里，界面只认半音。
+ *
+ * 拖动过程只改本地值、松手才落盘 —— 与速度一致：这个参数会触发跨进程调用，
+ * 逐帧写回会在拖动时打满播放服务的消息队列。
+ */
+@Composable
+private fun PitchControl(semitones: Int, onPitch: (Int) -> Unit) {
+    var local by remember(semitones) { mutableFloatStateOf(semitones.toFloat()) }
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("变调", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Text(
+                Pitch.labelOf(local.roundToInt()),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Slider(
+            value = local,
+            onValueChange = { local = it },
+            onValueChangeFinished = { onPitch(local.roundToInt()) },
+            valueRange = Pitch.MIN_SEMITONES.toFloat()..Pitch.MAX_SEMITONES.toFloat(),
+            // 每个半音一档：24 段之间 23 个刻度，滑块自动吸附到整半音
+            steps = Pitch.MAX_SEMITONES - Pitch.MIN_SEMITONES - 1,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(-12, -6, 0, 6, 12).forEach { n ->
+                FilterChip(
+                    selected = n == semitones,
+                    onClick = { onPitch(n) },
+                    label = {
+                        Text(
+                            when {
+                                n == 0 -> "原调"
+                                n > 0 -> "+$n"
+                                else -> "$n"
+                            },
+                            fontSize = 12.sp,
+                        )
+                    },
                 )
             }
         }

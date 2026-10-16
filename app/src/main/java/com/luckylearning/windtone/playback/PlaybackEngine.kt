@@ -4,6 +4,7 @@ import android.app.Application
 import android.os.SystemClock
 import android.util.Log
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import com.luckylearning.windtone.data.AudioInspector
@@ -93,6 +94,7 @@ class PlaybackEngine(
             // 车载模式：启动直接进播放页（跳过库主页）
             playerExpanded = prefs.carMode,
             speed = prefs.playbackSpeed,
+            pitchSemitones = prefs.playbackPitchSemitones,
             skipSilence = prefs.skipSilence,
         )
     )
@@ -400,6 +402,7 @@ class PlaybackEngine(
                 it.addListener(playerListener)
                 // 服务刚起来时套用一次持久化的开关
                 PlayerHandle.setSkipSilence(prefs.skipSilence)
+                applyPlaybackParams(it)
                 _player.update { s ->
                     s.copy(
                         isPlaying = it.isPlaying,
@@ -496,7 +499,7 @@ class PlaybackEngine(
             c.setMediaItems(queue.map { PlaybackConnection.toMediaItem(it) }, i, 0L)
             c.prepare()
             c.play()
-            if (prefs.playbackSpeed != 1f) c.setPlaybackSpeed(prefs.playbackSpeed)
+            applyPlaybackParams(c)
             _progress.value = PlaybackProgress(0L, queue[i].durationMs, 0L)
             _player.update {
                 it.copy(
@@ -679,7 +682,35 @@ class PlaybackEngine(
         val s = speed.coerceIn(0.5f, 2.0f)
         prefs.playbackSpeed = s
         _player.update { it.copy(speed = s) }
-        scope.launch { ensureController()?.setPlaybackSpeed(s) }
+        scope.launch { ensureController()?.let { applyPlaybackParams(it) } }
+    }
+
+    /**
+     * 变调：半音（-12..+12，0 = 原调）。
+     *
+     * 与变速共用同一条 `PlaybackParameters` 写入路径 —— 见 [applyPlaybackParams] 的注释：
+     * 这两个参数在播放器里是**一个整体**，分别写会互相覆盖。
+     */
+    override fun setPitchSemitones(semitones: Int) {
+        val n = semitones.coerceIn(Pitch.MIN_SEMITONES, Pitch.MAX_SEMITONES)
+        prefs.playbackPitchSemitones = n
+        _player.update { it.copy(pitchSemitones = n) }
+        scope.launch { ensureController()?.let { applyPlaybackParams(it) } }
+    }
+
+    /**
+     * 把「速度 + 变调」一次性写进播放器。
+     *
+     * ⚠️ 必须用 `setPlaybackParameters` 整体替换：Media3 的 `Player.setPlaybackSpeed()` 内部
+     * 就是 `setPlaybackParameters(PlaybackParameters(speed, 1f))` —— **只调它会悄悄把变调打回原调**。
+     * 表现是「调好的变调，一拖速度就弹回原调」，且不报错、不留日志。
+     * 两者都为默认时直接返回，省掉一次跨进程调用。
+     */
+    private fun applyPlaybackParams(c: Player) {
+        val speed = prefs.playbackSpeed
+        val pitch = Pitch.factorOf(prefs.playbackPitchSemitones)
+        if (speed == 1f && pitch == 1f) return
+        c.setPlaybackParameters(PlaybackParameters(speed, pitch))
     }
 
     override fun sleepAfter(minutes: Int) = SleepTimer.start(minutes * 60_000L)
@@ -690,6 +721,35 @@ class PlaybackEngine(
         val position = c?.currentPosition ?: _progress.value.positionMs
         val duration = c?.duration?.takeIf { it > 0 } ?: _progress.value.durationMs
         SleepTimer.startEndOfSong(position, duration)
+    }
+
+    /**
+     * 「播完当前专辑」：把当前曲的剩余时长 + 队列里**后续同专辑**曲目的时长加起来。
+     *
+     * 为什么按 playlist 顺序「走到不同专辑为止」而不是全队列扫描：专辑内的曲目在队列里
+     * 天然连排（用户从专辑详情页点「播放全部」时就是连续的），一旦遇到不同专辑说明这张
+     * 专辑已经放完了。扫全队列会把"后面偶然又出现同一张专辑"也算进来，反而把定时拉长。
+     *
+     * 兜底：拿不到专辑信息（曲库里没有专辑标签的散装歌）时退化成「播完当前曲」——
+     * 与其悄悄按一个错的时长定时，不如退回语义明确的那一档。
+     */
+    override fun sleepEndOfAlbum() {
+        val c = controller
+        val playlist = currentQueue
+        val idx = c?.currentMediaItemIndex ?: -1
+        val album = playlist.getOrNull(idx)?.album
+        if (c == null || idx < 0 || album.isNullOrBlank()) {
+            sleepEndOfSong()
+            return
+        }
+        SleepTimer.start(
+            SleepTimer.albumRemainingMs(
+                playlist = playlist,
+                index = idx,
+                positionMs = c.currentPosition.coerceAtLeast(0L),
+                durationMs = c.duration.takeIf { it > 0 } ?: _progress.value.durationMs,
+            ),
+        )
     }
 
     override fun cancelSleep() = SleepTimer.cancel()
@@ -1260,8 +1320,14 @@ interface PlayerActions {
     fun removeQueueItem(index: Int)
     fun moveQueueItem(from: Int, to: Int)
     fun setSpeed(speed: Float)
+
+    /** 变调：半音（-12..+12，0 = 原调），见 `playback/Pitch` */
+    fun setPitchSemitones(semitones: Int)
     fun sleepAfter(minutes: Int)
     fun sleepEndOfSong()
+
+    /** 播完当前专辑（当前曲剩余 + 队列里后续同专辑曲目） */
+    fun sleepEndOfAlbum()
     fun cancelSleep()
     fun setSkipSilence(enabled: Boolean)
     fun openPlayer()

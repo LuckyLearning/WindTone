@@ -76,7 +76,9 @@ import com.luckylearning.windtone.data.DataMaintenance
 import com.luckylearning.windtone.data.DownloadRoute
 import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.data.UpdateChecker
+import com.luckylearning.windtone.playback.Pitch
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * 设置页的层级：**一个主页面 + 六个子页**。
@@ -155,6 +157,8 @@ fun SettingsScreen(
     /** 逐字歌词已唱部分的颜色（ARGB）；`SettingsDefaults.COLOR_FOLLOW_THEME` = 跟随主题 */
     onLyricSungColor: (Int) -> Unit,
     onSpeed: (Float) -> Unit,
+    /** 变调：半音（-12..+12，0 = 原调） */
+    onPitch: (Int) -> Unit,
     onSkipSilence: (Boolean) -> Unit,
     onClearStats: () -> Unit,
     maintenance: DataMaintenance.Report?,
@@ -314,7 +318,7 @@ fun SettingsScreen(
                     )
                     CategoryRow(
                         title = "播放",
-                        subtitle = "速度 ${"%.2f".format(player.speed)}x · 跳过静音 · 均衡器与音效",
+                        subtitle = "速度 ${"%.2f".format(player.speed)}x · 变调 ${Pitch.labelOf(player.pitchSemitones)} · 跳过静音 · 均衡器与音效",
                         icon = Icons.Filled.PlayArrow,
                         onClick = { page = SettingsPage.PLAYBACK },
                     )
@@ -388,8 +392,10 @@ fun SettingsScreen(
                 // 打开的是底部弹层，属于「点开会进入另一个界面」，带箭头。
                 if (page == SettingsPage.PLAYBACK) {
 
-                    // ------------------------------------------------ 速度
-                    SectionTitle("速度")
+                    // ------------------------------------------------ 速度与变调
+                    // 两者在播放器里是同一个 `PlaybackParameters`（见 PlaybackEngine
+                    // 的 applyPlaybackParams），界面上也放在同一组里。
+                    SectionTitle("速度与变调")
                     SliderRow(
                         title = "默认播放速度 ${"%.2f".format(player.speed)}x",
                         value = player.speed,
@@ -397,6 +403,16 @@ fun SettingsScreen(
                         onValueChange = onSpeed,
                         onReset = resetAction(abs(player.speed - SettingsDefaults.SPEED) > 0.001f) {
                             onSpeed(SettingsDefaults.SPEED)
+                        },
+                    )
+                    SliderRow(
+                        title = "变调 ${Pitch.labelOf(player.pitchSemitones)}",
+                        subtitle = "升降调不改速度（±12 半音 = 一个八度）",
+                        value = player.pitchSemitones.toFloat(),
+                        range = Pitch.MIN_SEMITONES.toFloat()..Pitch.MAX_SEMITONES.toFloat(),
+                        onValueChange = { onPitch(it.roundToInt()) },
+                        onReset = resetAction(!Pitch.isDefault(player.pitchSemitones)) {
+                            onPitch(SettingsDefaults.PITCH_SEMITONES)
                         },
                     )
 

@@ -41,6 +41,10 @@ object SettingsDefaults {
     const val CAR_MODE = false
 
     const val SPEED = 1.0f
+
+    /** 变调默认 = 原调（半音）。合法区间见 `playback/Pitch` */
+    const val PITCH_SEMITONES = 0
+
     const val SKIP_SILENCE = false
 
     const val LYRIC_SCALE = 1.0f
@@ -351,6 +355,17 @@ class Prefs(context: Context) {
         get() = sp.getFloat(KEY_SPEED, 1.0f)
         set(value) = sp.edit().putFloat(KEY_SPEED, value).apply()
 
+    /**
+     * 变调（半音，-12..+12；0 = 原调）。
+     *
+     * 存半音而不是倍率：界面上用户看到的、能理解的单位就是「半音」，
+     * 倍率只在写进 `PlaybackParameters` 那一刻由 [com.luckylearning.windtone.playback.Pitch] 换算。
+     * 存倍率的话，界面每次都要反算 `12*log2(f)`，浮点误差会让「+0 半音」显示成「-0 半音」。
+     */
+    var playbackPitchSemitones: Int
+        get() = sp.getInt(KEY_PITCH, 0)
+        set(value) = sp.edit().putInt(KEY_PITCH, value).apply()
+
     // 均衡器
     var eqEnabled: Boolean
         get() = sp.getBoolean(KEY_EQ_ENABLED, false)
@@ -445,6 +460,7 @@ class Prefs(context: Context) {
         const val KEY_LYRIC_SUNG_COLOR = "lyric_sung_color"
         const val KEY_DYNAMIC_THEME = "dynamic_theme"
         const val KEY_SPEED = "playback_speed"
+        const val KEY_PITCH = "playback_pitch_semitones"
         const val KEY_EQ_ENABLED = "eq_enabled"
         const val KEY_EQ_PRESET_ID = "eq_preset_id"
         const val KEY_EQ_BANDS = "eq_bands"

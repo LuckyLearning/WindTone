@@ -89,6 +89,7 @@ class SettingsScreenTest {
                     onLyricWordByWord = {},
                     onLyricSungColor = onLyricSungColor,
                     onSpeed = {},
+                    onPitch = {},
                     onSkipSilence = {},
                     onClearStats = {},
                     maintenance = null,

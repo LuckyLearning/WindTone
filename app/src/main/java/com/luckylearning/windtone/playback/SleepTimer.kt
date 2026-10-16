@@ -1,5 +1,6 @@
 package com.luckylearning.windtone.playback
 
+import com.luckylearning.windtone.data.model.Song
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -51,6 +52,31 @@ object SleepTimer {
     fun startEndOfSong(positionMs: Long, durationMs: Long) {
         val remain = (durationMs - positionMs).coerceAtLeast(0L)
         start(remain)
+    }
+
+    /**
+     * 「播完当前专辑」要等多久：当前曲剩余 + 队列里**后续同专辑**曲目的时长。
+     *
+     * 纯函数（只依赖 `Song` 数据类），单独拎出来是为了能直接进 JVM 单测 ——
+     * 时长算错的表现是「到点没停」或「提前停」，本机没有真机，靠跑 App 发现不了。
+     *
+     * 走到第一首不同专辑的曲目就停：专辑内曲目在队列里天然连排（从专辑详情页
+     * 「播放全部」起播时就是连续的），遇到别的专辑说明这张已经放完。扫全队列反而会把
+     * 「后面偶然又出现同一张专辑」算进来，把定时拉长。
+     *
+     * 没有专辑信息（散装歌 / 曲库缺标签）时退化为「播完当前曲」。
+     */
+    fun albumRemainingMs(playlist: List<Song>, index: Int, positionMs: Long, durationMs: Long): Long {
+        val current = (durationMs - positionMs).coerceAtLeast(0L)
+        val album = playlist.getOrNull(index)?.album
+        if (album.isNullOrBlank()) return current
+        var total = current
+        var i = index + 1
+        while (i < playlist.size && playlist[i].album == album) {
+            total += playlist[i].durationMs.coerceAtLeast(0L)
+            i++
+        }
+        return total
     }
 
     fun cancel() {

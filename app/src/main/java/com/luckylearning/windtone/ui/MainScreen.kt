@@ -714,6 +714,7 @@ fun MainScreen(
                     onLyricWordByWord = playerVm::setLyricWordByWord,
                     onLyricSungColor = playerVm::setLyricSungColor,
                     onSpeed = playerVm::setSpeed,
+                    onPitch = playerVm::setPitchSemitones,
                     onSkipSilence = playerVm::setSkipSilence,
                     onClearStats = lib::clearPlayStats,
                     maintenance = maintenanceReport,
@@ -1032,8 +1033,10 @@ private fun PlayerPane(
             onShowQueue = onShowQueue,
             onSleep = playerVm::sleepAfter,
             onSleepEndOfSong = playerVm::sleepEndOfSong,
+            onSleepEndOfAlbum = playerVm::sleepEndOfAlbum,
             onCancelSleep = playerVm::cancelSleep,
             onSpeed = playerVm::setSpeed,
+            onPitch = playerVm::setPitchSemitones,
             onExportLyrics = onExportLyrics ?: { playerVm.exportLyrics(it) },
             onShowAudioInfo = onShowAudioInfo,
             // 车载沉浸态常驻歌名行的红心：收藏状态存在 LibraryUiState 里，

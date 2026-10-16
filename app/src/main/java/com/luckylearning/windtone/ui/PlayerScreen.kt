@@ -133,8 +133,11 @@ fun PlayerScreen(
     onShowQueue: () -> Unit,
     onSleep: (Int) -> Unit,
     onSleepEndOfSong: () -> Unit,
+    onSleepEndOfAlbum: () -> Unit,
     onCancelSleep: () -> Unit,
     onSpeed: (Float) -> Unit,
+    /** 变调：半音（-12..+12，0 = 原调） */
+    onPitch: (Int) -> Unit,
     onExportLyrics: (android.net.Uri) -> Unit,
     onShowAudioInfo: () -> Unit = {},
     /**
@@ -621,10 +624,12 @@ fun PlayerScreen(
     if (showOptions) {
         PlayerOptionsSheet(
             speed = state.speed,
+            pitchSemitones = state.pitchSemitones,
             lyricScale = state.lyricScale,
             lyricOffsetMs = state.lyricOffsetMs,
             sleepRemainingMs = state.sleepRemainingMs,
             onSpeed = onSpeed,
+            onPitch = onPitch,
             onLyricScale = onLyricScale,
             onLyricOffset = onLyricOffset,
             onResetOffset = onResetLyricOffset,
@@ -656,6 +661,7 @@ fun PlayerScreen(
         onClose = { showSleep = false },
         onSet = { onSleep(it); showSleep = false },
         onEndOfSong = { onSleepEndOfSong(); showSleep = false },
+        onEndOfAlbum = { onSleepEndOfAlbum(); showSleep = false },
         onCancel = { onCancelSleep(); showSleep = false },
     )
 
