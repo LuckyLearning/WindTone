@@ -356,9 +356,17 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_EQ_ENABLED, false)
         set(value) = sp.edit().putBoolean(KEY_EQ_ENABLED, value).apply()
 
-    var eqPreset: Int
-        get() = sp.getInt(KEY_EQ_PRESET, -1)
-        set(value) = sp.edit().putInt(KEY_EQ_PRESET, value).apply()
+    /**
+     * 当前均衡器预设 = [com.luckylearning.windtone.playback.EqPresets] 的 id。
+     * 空串 = 自定义（用户手动拖过频段滑块）。
+     *
+     * 2026-10-16 起不再是平台预设的索引（Int）：平台预设名各 ROM 不一致且无法
+     * 本地化，改为内置曲线（[EqPresets]）。旧 key `eq_preset`（Int）残留在
+     * SharedPreferences 里，不再读取。
+     */
+    var eqPresetId: String
+        get() = sp.getString(KEY_EQ_PRESET_ID, "").orEmpty()
+        set(value) = sp.edit().putString(KEY_EQ_PRESET_ID, value).apply()
 
     var eqBands: String
         get() = sp.getString(KEY_EQ_BANDS, "").orEmpty()
@@ -438,7 +446,7 @@ class Prefs(context: Context) {
         const val KEY_DYNAMIC_THEME = "dynamic_theme"
         const val KEY_SPEED = "playback_speed"
         const val KEY_EQ_ENABLED = "eq_enabled"
-        const val KEY_EQ_PRESET = "eq_preset"
+        const val KEY_EQ_PRESET_ID = "eq_preset_id"
         const val KEY_EQ_BANDS = "eq_bands"
         const val KEY_EQ_BASS = "eq_bass"
         const val KEY_EQ_VIRTUAL = "eq_virtual"

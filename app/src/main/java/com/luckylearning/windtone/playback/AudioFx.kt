@@ -25,8 +25,10 @@ object AudioFx {
         val bandMaxMb: Int = 1500,
         val bandLevels: IntArray = IntArray(0),
         val centerFreqs: List<String> = emptyList(),
-        val presetNames: List<String> = emptyList(),
-        val presetIndex: Int = -1,
+        /** 各频段中心频率（Hz），供内置预设曲线插值用 */
+        val bandCenterHz: List<Int> = emptyList(),
+        /** 当前内置预设 id（[EqPresets.byId]）；空串 = 自定义 */
+        val presetId: String = "",
         val bassStrength: Int = 0,
         val virtualStrength: Int = 0,
         val bassMax: Int = 1000,
@@ -72,9 +74,15 @@ object AudioFx {
                 val hz = eq.getCenterFreq(i.toShort()) / 100 // -> Hz
                 if (hz >= 1000) "${hz / 1000}kHz" else "${hz}Hz"
             }
-            val presets = (0 until eq.numberOfPresets.toInt()).map { eq.getPresetName(it.toShort()) }
+            val centerHz = (0 until bandCount).map { i -> eq.getCenterFreq(i.toShort()) / 100 }
 
-            val bands = decodeBands(p.eqBands, bandCount, min, max)
+            // 选中了内置预设 → 直接把曲线写到频段上；否则用用户自定义值
+            val preset = EqPresets.byId(p.eqPresetId)
+            val bands = if (preset != null) {
+                EqPresets.curveFor(preset, centerHz)
+            } else {
+                decodeBands(p.eqBands, bandCount, min, max)
+            }
             applyBands(eq, bands)
 
             bassMax?.setStrength(p.eqBassBoost.coerceIn(0, 1000).toShort())
@@ -94,8 +102,8 @@ object AudioFx {
                 bandMaxMb = max,
                 bandLevels = bands,
                 centerFreqs = centers,
-                presetNames = presets,
-                presetIndex = p.eqPreset,
+                bandCenterHz = centerHz,
+                presetId = preset?.id.orEmpty(),
                 bassStrength = p.eqBassBoost,
                 virtualStrength = p.eqVirtualizer,
                 bassMax = 1000,
@@ -138,19 +146,25 @@ object AudioFx {
         val clamped = levelMb.coerceIn(s.bandMinMb, s.bandMaxMb)
         val levels = s.bandLevels.copyOf().also { it[band] = clamped }
         applyBands(eq, levels)
-        prefs?.eqPreset = -1
+        // 手动拖滑块 = 离开预设，进入自定义
+        prefs?.eqPresetId = ""
         prefs?.eqBands = encodeBands(levels)
-        _state.value = s.copy(bandLevels = levels, presetIndex = -1)
+        _state.value = s.copy(bandLevels = levels, presetId = "")
     }
 
-    fun setPreset(index: Int) {
+    /**
+     * 应用内置预设：按设备实际频段中心频率插值出曲线，直接写频段
+     * （不再走 [Equalizer.usePreset]——平台预设名各 ROM 不同且无法本地化）。
+     */
+    fun setPreset(id: String) {
         val eq = equalizer ?: return
         val s = _state.value
-        runCatching { eq.usePreset(index.toShort()) }
-        val levels = (0 until s.bandCount).map { eq.getBandLevel(it.toShort()).toInt() }.toIntArray()
-        prefs?.eqPreset = index
+        val preset = EqPresets.byId(id) ?: return
+        val levels = EqPresets.curveFor(preset, s.bandCenterHz)
+        applyBands(eq, levels)
+        prefs?.eqPresetId = preset.id
         prefs?.eqBands = encodeBands(levels)
-        _state.value = s.copy(presetIndex = index, bandLevels = levels)
+        _state.value = s.copy(presetId = preset.id, bandLevels = levels)
     }
 
     fun setBassStrength(strength: Int) {
@@ -179,17 +193,17 @@ object AudioFx {
     /**
      * 恢复出厂：关掉均衡器、频段全平、三处增强归零（v1.1.4「恢复默认」）。
      *
-     * 写回的就是**全新安装时那份值** —— 与 `Prefs` 的 `eqEnabled` / `eqPreset` /
+     * 写回的就是**全新安装时那份值** —— 与 `Prefs` 的 `eqEnabled` / `eqPresetId` /
      * `eqBassBoost` / `eqVirtualizer` / `eqLoudness` 默认值一一对应。
      *
-     * 为什么不是 `usePreset(0)`：平台预设的**名字与曲线各机型不同**，第 0 个
-     * 未必是平直（有的 ROM 上直接就是「Rock」）。直接把频段写 0 才是真的全平，
-     * 顺带把 `eqPreset` 打回 -1（界面显示「自定义」，与实际状态一致）。
+     * 为什么不是应用 [EqPresets.FLAT] 预设：恢复默认的语义是「什么都没选过」，
+     * 界面应显示「自定义 + 全平」，而不是停在「原声」预设上。直接把频段写 0
+     * 并把 `eqPresetId` 清空，与实际状态一致。
      */
     fun reset() {
         prefs?.apply {
             eqEnabled = false
-            eqPreset = -1
+            eqPresetId = ""
             eqBassBoost = 0
             eqVirtualizer = 0
             eqLoudness = 0
@@ -210,9 +224,8 @@ object AudioFx {
         runCatching { loudness?.setTargetGain(0) }
         _state.value = s.copy(
             enabled = false,
-            presetIndex = -1,
-            bandLevels = flat,
-            bassStrength = 0,
+            presetId = "",
+            bandLevels = flat,            bassStrength = 0,
             virtualStrength = 0,
             loudnessGain = 0,
         )

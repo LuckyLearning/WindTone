@@ -6,7 +6,6 @@ import com.luckylearning.windtone.state.QueueEntry
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -26,7 +26,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -61,6 +60,7 @@ import com.luckylearning.windtone.data.AudioInspector
 import com.luckylearning.windtone.data.ScanScope
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.playback.AudioFx
+import com.luckylearning.windtone.playback.EqPresets
 import com.luckylearning.windtone.playback.SleepTimer
 import com.luckylearning.windtone.state.FolderItem
 
@@ -164,7 +164,7 @@ fun EqSheet(onClose: () -> Unit) {
     // 只有真的偏离出厂状态才画 ↺（与设置页同一条口径：默认状态下不摆按钮）
     val customized = state.available && (
         state.enabled ||
-            state.presetIndex != -1 ||
+            state.presetId.isNotEmpty() ||
             state.bassStrength > 0 ||
             state.virtualStrength > 0 ||
             state.loudnessGain > 0 ||
@@ -194,22 +194,39 @@ fun EqSheet(onClose: () -> Unit) {
                     modifier = Modifier.padding(vertical = 24.dp),
                 )
             } else {
-                // 预设
-                var presetMenu by remember { mutableStateOf(false) }
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-                    Button(onClick = { presetMenu = true }) {
-                        Text(if (state.presetIndex in state.presetNames.indices) state.presetNames[state.presetIndex] else "自定义")
-                    }
-                    Box {
-                        DropdownMenu(expanded = presetMenu, onDismissRequest = { presetMenu = false }) {
-                            state.presetNames.forEachIndexed { i, name ->
-                                DropdownMenuItem(
-                                    text = { Text(name) },
-                                    onClick = { AudioFx.setPreset(i); presetMenu = false },
-                                )
-                            }
+                // 预设：两组并行——「听感」（新手友好）与「流派」（老用户习惯），
+                // tab 切组 + 横向滚动 chips，选中的预设下方给一句描述。
+                // 不用平台预设（各 ROM 名字不一致且无法本地化），曲线全部内置（EqPresets）。
+                var presetGroup by remember { mutableStateOf(EqPresets.Group.FEEL) }
+                val currentPreset = EqPresets.byId(state.presetId)
+                Column(Modifier.padding(top = 8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        EqPresets.Group.entries.forEach { g ->
+                            FilterChip(
+                                selected = presetGroup == g,
+                                onClick = { presetGroup = g },
+                                label = { Text(g.label) },
+                            )
                         }
                     }
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(top = 8.dp),
+                    ) {
+                        items(EqPresets.group(presetGroup)) { p ->
+                            FilterChip(
+                                selected = state.presetId == p.id,
+                                onClick = { AudioFx.setPreset(p.id) },
+                                label = { Text(p.name) },
+                            )
+                        }
+                    }
+                    Text(
+                        currentPreset?.desc ?: "自定义曲线 · 拖动下方频段滑块微调",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
                 }
 
                 Spacer(Modifier.height(14.dp))
@@ -230,9 +247,10 @@ fun EqSheet(onClose: () -> Unit) {
                             modifier = Modifier.weight(1f),
                         )
                         Text(
-                            "${level / 100}", fontSize = 10.sp,
+                            if (level == 0) "0.0" else "%+.1f".format(level / 100.0),
+                            fontSize = 10.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.width(28.dp),
+                            modifier = Modifier.width(34.dp),
                         )
                     }
                 }
