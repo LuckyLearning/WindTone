@@ -70,6 +70,17 @@ class OverlayPositionerTest {
         assertEquals(0, p.x)
     }
 
+    @Test
+    fun `窗口宽度等于屏幕宽度时横向锁死在 0`() {
+        // 用户 2026-10-16 报「悬浮窗只能上下移动」的直接原因，值得单独钉一条：
+        // 悬浮窗宽度默认曾是 100% → 窗口宽 = 屏宽 → 夹取上限 = 屏宽 − 窗宽 = 0
+        // → 拖动的横向接线哪怕完全正确，x 也永远只能是 0。
+        // 所以「宽度」这个设置与「能拖多远」是同一件事的两面，
+        // SettingsDefaults.OVERLAY_WIDTH_PERCENT 默认走 80%。
+        val p = OverlayPositioner.place(params(savedX = 400, screenW = 1080, windowW = 1080))
+        assertEquals(0, p.x)
+    }
+
     // ---------------------------------------------------------------- 纵向
 
     @Test

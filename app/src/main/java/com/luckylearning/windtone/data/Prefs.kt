@@ -58,8 +58,16 @@ object SettingsDefaults {
     const val OVERLAY_BACKDROP = 1
     const val OVERLAY_PAUSE_MODE = 0
 
-    /** 悬浮窗宽度（屏幕宽度的百分比，1..100） */
-    const val OVERLAY_WIDTH_PERCENT = 100
+    /**
+     * 悬浮窗宽度（屏幕宽度的百分比，1..100）。
+     *
+     * ⚠️ **默认给 80% 而不是 100%** —— 窗口宽度与「横向能拖多远」是同一枚硬币的两面：
+     * `OverlayPositioner` 的横向夹取上限是「屏宽 − 窗口宽」，**100% 时这个上限正好是 0**，
+     * 窗口在横向上被钉死在最左边。哪怕拖动接线完全正确，用户看到的也只会是
+     * 「悬浮窗只能上下移动」—— 这不是 bug，是几何必然（2026-10-16 被用户当作 bug 报回来）。
+     * 留出这 20% 才让「拖到屏幕任意位置」这件事成立。
+     */
+    const val OVERLAY_WIDTH_PERCENT = 80
 
     /** 悬浮窗里未唱部分的文字颜色（纯白） */
     const val OVERLAY_TEXT_COLOR = 0xFFFFFFFF.toInt()

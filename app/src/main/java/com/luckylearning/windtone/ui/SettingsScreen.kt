@@ -569,7 +569,14 @@ fun SettingsScreen(
                     // 宽度之所以是滑块而不是档位：屏幕尺寸千差万别，档位永远差一个「刚好」。
                     SliderRow(
                         title = "悬浮歌词宽度 ${player.lyricOverlayWidthPercent}%",
-                        subtitle = "屏幕宽度的百分比（1–100%）。窗口越窄，长句折行越早；改了立刻给一次预览",
+                        // 宽度与「横向能拖多远」是同一件事的两面，到了 100% 就直接说破，
+                        // 否则用户会像 2026-10-16 那样把「拖不动」当 bug 报回来。
+                        subtitle = if (player.lyricOverlayWidthPercent >= 100) {
+                            "已占满屏宽，悬浮窗无法左右移动；调小一点即可拖到屏幕任意位置"
+                        } else {
+                            "屏幕宽度的百分比（1–100%）。窗口越窄，能左右移动的范围越大；" +
+                                "窗口越宽，长句折行越晚"
+                        },
                         value = player.lyricOverlayWidthPercent.toFloat(),
                         range = 1f..100f,
                         // 拖动时逐帧写回：宽度与屏幕是直接的比例关系，松手才变会让人
