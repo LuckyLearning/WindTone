@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% if page.title and page.title != site.title %}{{ page.title }} · {% endif %}{{ site.title }}</title>
+<meta name="description" content="{{ site.description }}">
+<meta name="color-scheme" content="light dark">
+<style>
+:root{
+  --bg:#ffffff; --bg-soft:#f7f8fa; --bg-code:#f2f3f5;
+  --fg:#1c1f23; --fg-soft:#5b6470; --fg-faint:#8b95a1;
+  --line:#e6e8eb; --line-soft:#eef0f2;
+  --accent:#4f63e0; --accent-soft:#eef0fd;
+  --radius:10px;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#16181d; --bg-soft:#1c1f25; --bg-code:#22262d;
+    --fg:#e6e8ec; --fg-soft:#a6adb8; --fg-faint:#7c848f;
+    --line:#2c3138; --line-soft:#242830;
+    --accent:#8b9bff; --accent-soft:#242a45;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font-family:var(--sans); font-size:15px; line-height:1.75;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--accent); text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* ---------------- 布局 ---------------- */
+.shell{display:flex; align-items:flex-start}
+.sidebar{
+  position:sticky; top:0; flex:0 0 264px; height:100vh; overflow-y:auto;
+  background:var(--bg-soft); border-right:1px solid var(--line);
+  padding:22px 0 40px;
+}
+.main{flex:1 1 auto; min-width:0; display:flex; justify-content:center; padding:0 32px 96px}
+.wrap{width:100%; max-width:880px}
+
+/* ---------------- 侧栏 ---------------- */
+.brand{display:block; padding:0 22px 18px; color:var(--fg); font-size:16px; font-weight:650; letter-spacing:.2px}
+.brand:hover{text-decoration:none}
+.brand small{display:block; margin-top:3px; font-size:11.5px; font-weight:400; color:var(--fg-faint); letter-spacing:0}
+.nav-group{margin:18px 0 0}
+.nav-group>span{
+  display:block; padding:0 22px 6px; font-size:11px; font-weight:600;
+  letter-spacing:.09em; text-transform:uppercase; color:var(--fg-faint);
+}
+.nav-group a{
+  display:block; padding:6px 22px 6px 22px; font-size:13.5px; color:var(--fg-soft);
+  border-left:2px solid transparent;
+}
+.nav-group a:hover{background:var(--bg-code); color:var(--fg); text-decoration:none}
+.nav-group a.active{color:var(--accent); background:var(--accent-soft); border-left-color:var(--accent); font-weight:600}
+.sidebar-foot{padding:22px; margin-top:14px; font-size:11.5px; color:var(--fg-faint); border-top:1px solid var(--line)}
+.sidebar-foot a{color:var(--fg-faint)}
+
+/* ---------------- 正文 ---------------- */
+.main h1{font-size:29px; line-height:1.35; font-weight:700; letter-spacing:-.3px; margin:44px 0 20px}
+.main h2{font-size:21px; font-weight:650; letter-spacing:-.2px; margin:44px 0 14px; padding-bottom:8px; border-bottom:1px solid var(--line)}
+.main h3{font-size:17px; font-weight:650; margin:32px 0 10px}
+.main h4{font-size:15px; font-weight:650; margin:24px 0 8px; color:var(--fg-soft)}
+.main h1:first-child,.main h2:first-child,.main h3:first-child{margin-top:36px}
+.main p{margin:12px 0}
+.main ul,.main ol{padding-left:22px; margin:12px 0}
+.main li{margin:5px 0}
+.main li>ul,.main li>ol{margin:5px 0}
+.main strong{font-weight:650}
+.main hr{border:0; border-top:1px solid var(--line); margin:40px 0}
+.main img{max-width:100%; height:auto; border-radius:var(--radius)}
+
+.main code{
+  font-family:var(--mono); font-size:.875em; background:var(--bg-code);
+  padding:.16em .42em; border-radius:5px; word-break:break-word;
+}
+.main pre{
+  background:var(--bg-code); border:1px solid var(--line-soft); border-radius:var(--radius);
+  padding:14px 16px; overflow-x:auto; line-height:1.6;
+}
+.main pre code{background:none; padding:0; font-size:12.8px; word-break:normal}
+
+.main blockquote{
+  margin:16px 0; padding:2px 18px; border-left:3px solid var(--accent);
+  background:var(--accent-soft); border-radius:0 var(--radius) var(--radius) 0; color:var(--fg-soft);
+}
+.main blockquote p{margin:10px 0}
+
+.main table{
+  width:100%; border-collapse:collapse; margin:16px 0; font-size:13.5px;
+  display:block; overflow-x:auto;
+}
+.main th,.main td{border:1px solid var(--line); padding:8px 12px; text-align:left; vertical-align:top}
+.main th{background:var(--bg-soft); font-weight:650; white-space:nowrap}
+.main tbody tr:nth-child(even){background:var(--bg-soft)}
+
+/* 首页专用：卡片网格 */
+.cards{display:grid; grid-template-columns:repeat(auto-fill,minmax(238px,1fr)); gap:14px; margin:22px 0}
+.card{
+  display:block; padding:18px 20px; border:1px solid var(--line); border-radius:var(--radius);
+  background:var(--bg); color:var(--fg); transition:border-color .15s, box-shadow .15s;
+}
+.card:hover{text-decoration:none; border-color:var(--accent); box-shadow:0 3px 14px -6px rgba(79,99,224,.4)}
+.card b{display:block; font-size:15px; font-weight:650; margin-bottom:5px}
+.card span{font-size:12.8px; color:var(--fg-soft); line-height:1.6}
+
+/* ---------------- 窄屏 ---------------- */
+@media (max-width:900px){
+  .shell{display:block}
+  .sidebar{position:static; height:auto; flex:none; border-right:0; border-bottom:1px solid var(--line); padding-bottom:14px}
+  .nav-group a{display:inline-block; padding:5px 12px; border-left:0; border-radius:7px; margin:2px 2px}
+  .nav-group>span{padding-left:22px}
+  .nav-group a.active{border-left:0}
+  .main{padding:0 20px 72px}
+  .main h1{font-size:24px; margin-top:28px}
+  .main h2{font-size:19px}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<aside class="sidebar">
+  <a class="brand" href="{{ '/' | relative_url }}">
+    听风 WindTone
+    <small>Android 本地音乐播放器 · 文档</small>
+  </a>
+
+  {% assign u = page.url %}
+  <nav class="nav-group">
+    <span>开始</span>
+    <a href="{{ '/' | relative_url }}"{% if u == '/' or u == '/index.html' %} class="active"{% endif %}>首页</a>
+    <a href="{{ '/功能说明.html' | relative_url }}"{% if u == '/功能说明.html' %} class="active"{% endif %}>功能说明</a>
+    <a href="{{ '/ui/' | relative_url }}">界面效果图</a>
+    <a href="{{ '/权限与更新.html' | relative_url }}"{% if u == '/权限与更新.html' %} class="active"{% endif %}>权限与更新</a>
+    <a href="{{ '/版本历史.html' | relative_url }}"{% if u == '/版本历史.html' %} class="active"{% endif %}>版本历史</a>
+  </nav>
+
+  <nav class="nav-group">
+    <span>开发文档</span>
+    <a href="{{ '/AI开发指南.html' | relative_url }}"{% if u == '/AI开发指南.html' %} class="active"{% endif %}>AI 开发指南</a>
+    <a href="{{ '/数据库设计-MusicDb.html' | relative_url }}"{% if u == '/数据库设计-MusicDb.html' %} class="active"{% endif %}>数据库设计</a>
+    <a href="{{ '/数据层重构规划.html' | relative_url }}"{% if u == '/数据层重构规划.html' %} class="active"{% endif %}>数据层重构规划</a>
+    <a href="{{ '/发版规范-Release说明与多平台产物.html' | relative_url }}"{% if u == '/发版规范-Release说明与多平台产物.html' %} class="active"{% endif %}>发版规范</a>
+    <a href="{{ '/悬浮歌词完善方案.html' | relative_url }}"{% if u == '/悬浮歌词完善方案.html' %} class="active"{% endif %}>悬浮歌词完善方案</a>
+    <a href="{{ '/代码审计-2026-10-15.html' | relative_url }}"{% if u == '/代码审计-2026-10-15.html' %} class="active"{% endif %}>死代码审计</a>
+  </nav>
+
+  <nav class="nav-group">
+    <span>功能规划</span>
+    <a href="{{ '/功能规划.html' | relative_url }}"{% if u == '/功能规划.html' %} class="active"{% endif %}>总纲</a>
+    <a href="{{ '/功能规划-第二期.html' | relative_url }}"{% if u == '/功能规划-第二期.html' %} class="active"{% endif %}>第二期</a>
+    <a href="{{ '/功能规划-第三期.html' | relative_url }}"{% if u == '/功能规划-第三期.html' %} class="active"{% endif %}>第三期</a>
+    <a href="{{ '/功能规划-第四期-云盘音乐.html' | relative_url }}"{% if u == '/功能规划-第四期-云盘音乐.html' %} class="active"{% endif %}>第四期 · 云盘（已否决）</a>
+    <a href="{{ '/功能规划-第五期.html' | relative_url }}"{% if u == '/功能规划-第五期.html' %} class="active"{% endif %}>第五期</a>
+  </nav>
+
+  <div class="sidebar-foot">
+    <a href="https://github.com/LuckyLearning/WindTone">GitHub 仓库</a> ·
+    <a href="https://github.com/LuckyLearning/WindTone/releases/latest">下载最新版</a>
+  </div>
+</aside>
+
+<main class="main">
+  <div class="wrap">
+{{ content }}
+  </div>
+</main>
+
+</div>
+</body>
+</html>

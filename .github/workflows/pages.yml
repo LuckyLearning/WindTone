@@ -1,0 +1,60 @@
+name: Deploy docs to GitHub Pages
+
+# docs/ 目录既是文档源，也是 Pages 的发布目录。
+# 只在 docs/ 或本工作流有改动时触发，避免每次业务提交都跑一遍文档构建。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+# 允许写入 Pages，并用 id-token 向部署服务证明来源
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时间只跑一个部署；不取消进行中的部署（避免站点处于半更新状态）
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: 构建文档站
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      # enablement: true —— 若仓库尚未开启 Pages（Source = GitHub Actions），
+      # 这一步会顺带开启，省掉一次手工设置。
+      - name: 配置 Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      # 用 GitHub Pages 官方 Jekyll 环境构建，插件白名单与线上一致
+      - name: Jekyll 构建
+        uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./docs
+          destination: ./_site
+
+      - name: 上传站点产物
+        uses: actions/upload-pages-artifact@v3
+
+  deploy:
+    name: 部署到 Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 部署
+        id: deployment
+        uses: actions/deploy-pages@v4

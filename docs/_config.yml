@@ -1,0 +1,26 @@
+# ===================================================================
+#  GitHub Pages 站点配置（Source = GitHub Actions，构建 docs/ 目录）
+#  docs/ 既是文档源，也是发布目录 —— 一份内容，两处用途。
+# ===================================================================
+
+title: 听风 WindTone
+description: Android 原生本地音乐播放器 · 项目文档
+
+# 用 GFM 解析：表格、围栏代码块、自动链接、删除线
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+
+# 所有页面统一套自定义布局（docs/_layouts/default.html）
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: "default"
+
+# 本地备份与草稿不入站
+exclude:
+  - "*.bak"
+  - "*.bak-*"
+  - "*.tmp"
