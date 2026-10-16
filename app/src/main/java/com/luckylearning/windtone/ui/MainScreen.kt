@@ -504,11 +504,6 @@ fun MainScreen(
                             },
                             onSubmitSearch = lib::submitSearch,
                             onClearSearchHistory = lib::clearSearchHistory,
-                            onOpenSettings = { showSettings = true },
-                            onCheckUpdate = {
-                                updateVm.checkUpdate()
-                                snackbarHostState.currentSnackbarData?.dismiss()
-                            },
                             onOpenScanScope = { showScanScope = true },
                             onFullScan = requestFullScan,
                             onOpenReport = { showReport = true },
@@ -583,11 +578,6 @@ fun MainScreen(
                         },
                         onSubmitSearch = lib::submitSearch,
                         onClearSearchHistory = lib::clearSearchHistory,
-                        onOpenSettings = { showSettings = true },
-                        onCheckUpdate = {
-                            updateVm.checkUpdate()
-                            snackbarHostState.currentSnackbarData?.dismiss()
-                        },
                         onOpenScanScope = { showScanScope = true },
                         onFullScan = requestFullScan,
                         onOpenReport = { showReport = true },
@@ -642,10 +632,6 @@ fun MainScreen(
                 currentView = library.view,
                 onSelectView = lib::setView,
                 onOpenScanScope = { showScanScope = true },
-                onCheckUpdate = {
-                    updateVm.checkUpdate()
-                    snackbarHostState.currentSnackbarData?.dismiss()
-                },
                 onOpenSettings = { showSettings = true },
                 onClose = { drawerOpen = false },
                 modifier = Modifier.statusBarsPadding(),

@@ -53,7 +53,6 @@ class LibraryDrawerTest {
         var selected: LibraryView? = null
         var closed = false
         var scanScope = false
-        var checkUpdate = false
         var settings = false
     }
 
@@ -66,7 +65,6 @@ class LibraryDrawerTest {
                     currentView = currentView,
                     onSelectView = { rec.selected = it },
                     onOpenScanScope = { rec.scanScope = true },
-                    onCheckUpdate = { rec.checkUpdate = true },
                     onOpenSettings = { rec.settings = true },
                     onClose = { rec.closed = true },
                 )
@@ -86,7 +84,6 @@ class LibraryDrawerTest {
                     currentView = LibraryView.SONGS,
                     onSelectView = {},
                     onOpenScanScope = {},
-                    onCheckUpdate = {},
                     onOpenSettings = {},
                     onClose = {},
                 )
@@ -97,7 +94,7 @@ class LibraryDrawerTest {
         compose.onNodeWithText("歌曲").assertDoesNotExist()
     }
 
-    /** 品牌块 + 两组共 8 项，一个都不能少 */
+    /** 品牌块 + 两组共 7 项，一个都不能少 */
     @Test
     fun showsBrandAndBothGroups() {
         renderOpen()
@@ -109,10 +106,22 @@ class LibraryDrawerTest {
         listOf("歌曲", "专辑", "歌手", "文件夹", "歌单").forEach {
             compose.onNodeWithText(it).assertIsDisplayed()
         }
-        // 第二组 = 与顶栏 ⋮ 菜单同目的地的三个快捷入口
-        listOf("扫描范围", "检查更新", "设置").forEach {
+        // 第二组 = 两个快捷入口（2026-10-17 起「检查更新」已从抽屉移除）
+        listOf("扫描范围", "设置").forEach {
             compose.onNodeWithText(it).assertIsDisplayed()
         }
+    }
+
+    /**
+     * 「检查更新」只剩设置 → 更新里那一处入口。
+     *
+     * 这条是给「入口收敛」这个产品决定上的锁：以后有人觉得抽屉里空着可惜、
+     * 顺手把那一项加回来，这里会红 —— 加回来等于把刚收掉的口子又打开。
+     */
+    @Test
+    fun checkUpdateIsNotInDrawer() {
+        renderOpen()
+        compose.onNodeWithText("检查更新").assertDoesNotExist()
     }
 
     /** 点视图 = 切视图 + 收起抽屉（否则遮罩还在，用户看不到自己刚选的列表） */
@@ -139,7 +148,7 @@ class LibraryDrawerTest {
         }
     }
 
-    /** 「更多」三项各自直达，且都不误伤「切换视图」 */
+    /** 「更多」两项各自直达，且都不误伤「切换视图」 */
     @Test
     fun tappingMoreItemsFiresTheirCallbacksAndCloses() {
         val rec = renderOpen()
@@ -149,10 +158,6 @@ class LibraryDrawerTest {
         assertTrue(rec.scanScope)
         assertTrue(rec.closed)
         assertNull("「更多」项不该被当成视图切换", rec.selected)
-
-        compose.onNodeWithText("检查更新").performClick()
-        compose.waitForIdle()
-        assertTrue(rec.checkUpdate)
 
         compose.onNodeWithText("设置").performClick()
         compose.waitForIdle()
@@ -170,7 +175,6 @@ class LibraryDrawerTest {
                     currentView = current.value,
                     onSelectView = {},
                     onOpenScanScope = {},
-                    onCheckUpdate = {},
                     onOpenSettings = {},
                     onClose = {},
                 )

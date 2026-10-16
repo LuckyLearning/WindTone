@@ -594,7 +594,6 @@ a{color:inherit;text-decoration:none}
     <div class="d-gap"></div>
     <div class="d-label">更多</div>
     <div class="d-item"><svg class="ic ic-22"><use href="#i-folder"/></svg>扫描范围</div>
-    <div class="d-item"><svg class="ic ic-22"><use href="#i-cloud"/></svg>检查更新</div>
     <div class="d-item"><svg class="ic ic-22"><use href="#i-tune"/></svg>设置</div>
   </nav>
 </template>
@@ -772,8 +771,6 @@ a{color:inherit;text-decoration:none}
           <div class="menu-item">重新匹配 .lrc 歌词</div>
           <div class="menu-item">导入 M3U 歌单…</div>
           <div class="menu-item">所有文件访问权限（深度扫描）</div>
-          <div class="menu-item">检查更新</div>
-          <div class="menu-item">设置</div>
         </div>
       </div>
       <div class="mini">
@@ -793,7 +790,7 @@ a{color:inherit;text-decoration:none}
   · 「扫描全盘音乐…」在已授权时显示，未授权时变为「授权并扫描全盘…」（仅范围 ≠ 全盘时出现）；<br>
   · 「导入音乐目录…」「重新匹配 .lrc 歌词」「导入 M3U 歌单…」恒定；<br>
   · 深度扫描项：未开启「所有文件访问权限（深度扫描）」/ 已开启「深度扫描：已开启（点击管理）」；<br>
-  · 范围 ≠ 全盘且未授权时插入「授予音频读取权限」；末两项恒定「检查更新」「设置」。</p>
+  · 范围 ≠ 全盘且未授权时插入「授予音频读取权限」。<b>v1.1.10 起本菜单不再放跳转项</b>——原来的末两项「检查更新」「设置」已删：设置只剩左侧抽屉一个入口，检查更新只在设置 → 更新里（同一个目的地三处入口没必要）。</p>
 </figure>
 
 <figure class="fig" id="scr-drawer">
@@ -862,7 +859,6 @@ a{color:inherit;text-decoration:none}
         <div class="d-gap"></div>
         <div class="d-label">更多</div>
         <div class="d-item"><svg class="ic ic-22"><use href="#i-folder"/></svg>扫描范围</div>
-        <div class="d-item"><svg class="ic ic-22"><use href="#i-cloud"/></svg>检查更新</div>
         <div class="d-item"><svg class="ic ic-22"><use href="#i-tune"/></svg>设置</div>
       </nav>
     </div>
@@ -871,7 +867,7 @@ a{color:inherit;text-decoration:none}
   · <b>展开</b>：点顶栏左侧<b>汉堡按钮</b>（列表纵向空间因此多出一整条导航栏的高度）；<b>收起</b>：点遮罩、再点汉堡、或系统返回键；<br>
   · 抽屉宽 280dp、右缘圆角 28dp（与底部弹层顶部同档）、滑入动画 220ms；<br>
   · <b>第一组「音乐库」</b>= 原五个浏览视图，选中项 secondaryContainer 实底胶囊 + 加粗，切换视图不关闭抽屉（点视图即切换并收起，与 App 内实现一致）；<br>
-  · <b>第二组「更多」</b>=「扫描范围 / 检查更新 / 设置」三个快捷入口，目的地与顶栏「⋮」菜单完全相同（不新增功能，只把高频目的地前置）；「⋮」菜单保持原样不动；<b>打开方式有两个</b>（v1.1.4 起）：顶栏左上角的汉堡按钮，或在内容区<b>任意位置向右滑动</b> —— 刻意不做成「从左边缘起手」，边缘手势的起手带只有十几 dp，车机上单手够不着，而且屏幕左缘正是系统「返回」手势区，抢不过它；<br>
+  · <b>第二组「更多」</b>=「扫描范围 / 设置」两个快捷入口。<b>入口收敛（v1.1.10）</b>：原来还有一项「检查更新」、并且本组目的地与顶栏「⋮」菜单重复，现已收口 ——<b>设置只有本抽屉一个入口</b>（顶栏菜单里那一项已删），<b>「检查更新」只在设置 → 更新里</b>（抽屉与顶栏各挂的那份都已删）；顶栏「⋮」菜单从此只放就地动作（扫描 / 导入 / 重匹配 / 收听报告），不放跳转项；<b>打开方式有两个</b>（v1.1.4 起）：顶栏左上角的汉堡按钮，或在内容区<b>任意位置向右滑动</b> —— 刻意不做成「从左边缘起手」，边缘手势的起手带只有十几 dp，车机上单手够不着，而且屏幕左缘正是系统「返回」手势区，抢不过它；<br>
   · 抽屉盖在迷你播放条之上（遮罩拦住下层触摸），搜索态、首次进入态、扫描中态同样可从汉堡打开。</p>
 </figure>
 

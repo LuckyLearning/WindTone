@@ -128,8 +128,6 @@ internal fun LibraryHeader(
     onImportM3U: () -> Unit,
     onSubmitSearch: (String) -> Unit,
     onClearSearchHistory: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onCheckUpdate: () -> Unit,
     onOpenScanScope: () -> Unit,
     onFullScan: () -> Unit,
     onOpenReport: () -> Unit,
@@ -209,6 +207,9 @@ internal fun LibraryHeader(
                     )
                 }
                 DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
+                    // 这里只放「就地动作」（扫描 / 导入 / 重匹配 / 收听报告），**不放跳转项**：
+                    // 「设置」只有左侧抽屉一个入口，「检查更新」只在设置 → 更新里 ——
+                    // 2026-10-17 收的口子（原先本菜单与抽屉各挂一份，同一个目的地三处入口）。
                     DropdownMenuItem(
                         text = {
                             Text(
@@ -263,14 +264,6 @@ internal fun LibraryHeader(
                     DropdownMenuItem(
                         text = { Text("收听报告") },
                         onClick = { moreMenu = false; onOpenReport() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("检查更新") },
-                        onClick = { moreMenu = false; onCheckUpdate() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("设置") },
-                        onClick = { moreMenu = false; onOpenSettings() },
                     )
                 }
             }

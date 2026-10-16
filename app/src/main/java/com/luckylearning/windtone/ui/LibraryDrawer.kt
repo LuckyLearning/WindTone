@@ -46,15 +46,18 @@ import com.luckylearning.windtone.state.LibraryView
  *  - 滑入 **220ms**（效果图 `transition:transform .22s ease`），收起时滑出屏幕左侧；
  *  - 遮罩 `--dim`（深色 .62 / 浅色 .34）**盖住下层内容并吃掉触摸**，点它收起；
  *  - 品牌块 = 44dp 圆形 halo（primaryContainer）+「听风」16sp/800 +「WindTone · 本地音乐」11sp；
- *  - 两组：**音乐库**（原底部导航的五个浏览视图）/ **更多**（扫描范围 · 检查更新 · 设置）；
+ *  - 两组：**音乐库**（原底部导航的五个浏览视图）/ **更多**（扫描范围 · 设置）；
  *  - 选中项：secondaryContainer 实底胶囊 + 加粗 + onSecondaryContainer 文字。
  *
  * ⚠️ 抽屉盖在迷你播放条之上、但不盖播放页 / 设置页这类全屏覆盖层 ——
  * 那些页面在效果图里各有自己的返回按钮，没有汉堡入口（见 MainScreen 里的挂载位置）。
  *
  * 交互取舍：效果图 ①C 的说明里「切换视图不关闭抽屉」与括号里的「点视图即切换并收起」
- * 互相矛盾；这里按括号内（也是抽屉导航的通行做法、且「更多」三项必须收起才看得到目的地）
+ * 互相矛盾；这里按括号内（也是抽屉导航的通行做法、且「更多」各项必须收起才看得到目的地）
  * 实现为**切换 + 收起**。
+ *
+ * 入口收敛（2026-10-17）：本抽屉是**设置在本应用里的唯一入口**（顶栏「⋮」菜单不再挂）；
+ * 「检查更新」也只剩设置 → 更新里那一处（原先抽屉、顶栏菜单各挂一份）。
  */
 @Composable
 internal fun LibraryDrawer(
@@ -62,7 +65,6 @@ internal fun LibraryDrawer(
     currentView: LibraryView,
     onSelectView: (LibraryView) -> Unit,
     onOpenScanScope: () -> Unit,
-    onCheckUpdate: () -> Unit,
     onOpenSettings: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
@@ -103,7 +105,6 @@ internal fun LibraryDrawer(
                 currentView = currentView,
                 onSelectView = onSelectView,
                 onOpenScanScope = onOpenScanScope,
-                onCheckUpdate = onCheckUpdate,
                 onOpenSettings = onOpenSettings,
                 onClose = onClose,
             )
@@ -116,7 +117,6 @@ private fun DrawerPanel(
     currentView: LibraryView,
     onSelectView: (LibraryView) -> Unit,
     onOpenScanScope: () -> Unit,
-    onCheckUpdate: () -> Unit,
     onOpenSettings: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -151,7 +151,6 @@ private fun DrawerPanel(
 
             DrawerGroupLabel("更多")
             DrawerItem("扫描范围", AppIcons.Folder, false) { onOpenScanScope(); onClose() }
-            DrawerItem("检查更新", AppIcons.Cloud, false) { onCheckUpdate(); onClose() }
             DrawerItem("设置", AppIcons.Tune, false) { onOpenSettings(); onClose() }
         }
     }

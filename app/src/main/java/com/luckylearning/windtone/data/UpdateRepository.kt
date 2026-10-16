@@ -60,7 +60,10 @@ class UpdateRepository(
             when (val r = UpdateChecker.checkLatest()) {
                 is UpdateCheckResult.Available -> {
                     _update.update { it.copy(info = r.info) }
-                    messages.post("发现新版本 v${r.info.version}，可在「设置 → 检查更新」中升级")
+                    // 指路要指到**实际那一级**：设置主页上是「更新」分类卡，
+                    // 「检查更新」是它下面那一行（2026-10-17 入口收敛后更是只剩这一处，
+                    // 见《AI 开发指南》§11 第 16 条）。
+                    messages.post("发现新版本 v${r.info.version}，可在「设置 → 更新」中升级")
                 }
                 // 已是最新 / 检查失败：自动模式下都不提示
                 else -> Unit
