@@ -61,9 +61,10 @@ class UpdateCheckerTest {
             "https://github.com/LuckyLearning/WindTone/releases/tag/v1.0.3",
             info.releaseUrl,
         )
-        // XML 实体必须已反转义，否则 UI 上会显示 &lt;h2&gt;
-        assertTrue("说明应已反转义", info.notes.contains("<h2>") || info.notes.contains("安装包"))
-        assertTrue("说明不应残留实体", !info.notes.contains("&lt;"))
+        // 说明会被清洗成纯文本再上屏：Atom 的 <content> 是 **HTML**，
+        // 原先这里只断言「反转义成功」（允许残留 <h2>），于是真机上弹窗里
+        // 直接显示了一整屏标签（v1.0 ~ v1.1.11 的线上表现）。
+        assertEquals("听风 WindTone v1.0.3\n安装包：WindTone-v1.0.3.apk", info.notes)
     }
 
     @Test
@@ -245,4 +246,131 @@ class UpdateCheckerTest {
         val manual = UpdateChecker.downloadCandidates(urls, DownloadRoute.GHPROXY_NET)
         assertEquals(listOf("https://ghproxy.net/${urls[0]}", "https://ghproxy.net/${urls[1]}"), manual)
     }
+
+    // ------------------------------------------------------------ 更新说明的清洗
+    //
+    // 由来：Atom 通道（主通道）的 <content type="html"> 是 GitHub **渲染后的 HTML**，
+    // REST API 的 body 是 **Markdown 原文**。原先只清理 Markdown，
+    // 于是真机上弹窗显示成了一整屏 `<p><strong>听风 WindTone…`（v1.0 ~ v1.1.11）。
+    // 这里钉两件事：① 两条通道必须收敛到同一份文本；② 结果里不留任何标签与实体。
+
+    @Test
+    fun notesDoNotDependOnChannel() {
+        // 两份都是 v1.1.11 的真实响应：一份取自 releases.atom，一份取自 REST API
+        val fromAtom = UpdateChecker.plainNotes(REAL_ATOM_CONTENT)
+        val fromApi = UpdateChecker.plainNotes(REAL_API_BODY)
+
+        assertEquals("同一份说明在两条通道下必须显示成同一份文本", fromApi, fromAtom)
+        assertTrue("正文首行：${fromAtom.take(40)}", fromAtom.startsWith("听风 WindTone 1.1.11 ——"))
+        assertTrue("列表项应折成 • 行", fromAtom.contains("• 本版包含若干功能调整与问题修复。"))
+        assertTrue("标题应去掉 # 保留文字", fromAtom.contains("手机版 / 车机版 1.1.11"))
+        assertTrue(
+            "表格行应折成 • 行（两条通道的表格写法完全不同）",
+            fromAtom.contains("• WindTone-v1.1.11-arm64-v8a.apk · 绝大多数手机 / 车机"),
+        )
+        assertTrue("表格对齐行应整行丢掉", !fromAtom.contains("--- | ---"))
+        assertTrue("段间不留空行（弹窗高度有限）", !fromAtom.contains("\n\n"))
+    }
+
+    @Test
+    fun notesNeverShowMarkup() {
+        listOf(REAL_ATOM_CONTENT, REAL_API_BODY).forEach { raw ->
+            val notes = UpdateChecker.plainNotes(raw)
+            val tag = Regex("<[a-zA-Z/][^>]*>").find(notes)?.value
+            val entity = Regex("&[a-zA-Z#][a-zA-Z0-9]*;").find(notes)?.value
+            assertTrue("不应残留标签，却发现：$tag", tag == null)
+            assertTrue("不应残留实体，却发现：$entity", entity == null)
+        }
+    }
+
+    @Test
+    fun notesDecodeEntities() {
+        // Atom 的 content 是 XML 转义的，转发义后正文里仍可能带 HTML 实体
+        assertEquals("风格 A & B", UpdateChecker.plainNotes("<p>风格 A &amp; B</p>"))
+        assertEquals("破折号—与中点·", UpdateChecker.plainNotes("<p>破折号&#8212;与中点&middot;</p>"))
+        // 认不出的实体原样保留：宁可显示 &foo;，也不要把内容吞掉
+        assertEquals("保留 &foo; 原样", UpdateChecker.plainNotes("<p>保留 &foo; 原样</p>"))
+        // 实体里出现的尖括号必须是「先剥标签、后解实体」，否则 &lt;b&gt; 会被当成标签剥掉
+        assertEquals("<b> 是标签写法", UpdateChecker.plainNotes("<p>&lt;b&gt; 是标签写法</p>"))
+    }
+
+    @Test
+    fun notesHandleHeadingListAndInlineMarkup() {
+        assertEquals("标题\n• 一条\n• 二条", UpdateChecker.plainNotes("## 标题\n\n- 一条\n- 二条\n"))
+        assertEquals("看文档 · 现在", UpdateChecker.plainNotes("看[文档](https://example.com) · `现在`"))
+    }
+
+    @Test
+    fun notesOnBlankInputIsEmpty() {
+        assertEquals("", UpdateChecker.plainNotes(""))
+        assertEquals("", UpdateChecker.plainNotes("   \n\n"))
+    }
+
+    /** v1.1.11 的真实 Atom 正文（`<content type="html">`，已按 [android] xmlText 反转义、换行统一为 \n） */
+    private val REAL_ATOM_CONTENT = """
+<p><strong>听风 WindTone 1.1.11</strong> —— 本地音乐播放器：无广告、无账号，曲库、歌单、收藏、播放统计与歌词全部只保存在本机。</p>
+<h1>手机版 / 车机版 1.1.11</h1>
+<ul>
+<li>本版包含若干功能调整与问题修复。</li>
+<li>覆盖升级后歌单、收藏、播放统计、歌词设置全部保留，曲库缓存自动复用，无需重新扫描。</li>
+</ul>
+<p><strong>适用设备</strong>：Android 7.0（API 24）及以上；手机与车机通用（车机横屏界面自动切换）。</p>
+<p><strong>安装</strong>：按设备架构下载对应的包，直接覆盖安装即可：</p>
+<table>
+<thead>
+<tr>
+<th>安装包</th>
+<th>适用设备</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>WindTone-v1.1.11-arm64-v8a.apk</code></td>
+<td>绝大多数手机 / 车机</td>
+</tr>
+<tr>
+<td><code>WindTone-v1.1.11-armeabi-v7a.apk</code></td>
+<td>较老的 32 位设备</td>
+</tr>
+<tr>
+<td><code>WindTone-v1.1.11-x86_64.apk</code></td>
+<td>模拟器 / ChromeOS</td>
+</tr>
+<tr>
+<td><code>WindTone-v1.1.11-universal.apk</code></td>
+<td>不确定架构时选它</td>
+</tr>
+</tbody>
+</table>
+<p><strong>升级</strong>：也可以在应用内「设置 → 更新 → 检查更新」一键升级（检查更新只访问 GitHub 官方地址）。</p>
+<p><strong>隐私</strong>：音频与歌词只在本机读写；联网只有一处——检查/下载更新（GitHub Releases）。不采集、不上传任何信息。</p>
+<p><sub>1.1.11（versionCode 21）· 构建于 2026-10-16</sub></p>
+""".trimIndent()
+    /** v1.1.11 的真实 REST API `body`（Markdown 原文，含 Markdown 表格） */
+    private val REAL_API_BODY = """
+**听风 WindTone 1.1.11** —— 本地音乐播放器：无广告、无账号，曲库、歌单、收藏、播放统计与歌词全部只保存在本机。
+
+# 手机版 / 车机版 1.1.11
+
+- 本版包含若干功能调整与问题修复。
+- 覆盖升级后歌单、收藏、播放统计、歌词设置全部保留，曲库缓存自动复用，无需重新扫描。
+
+**适用设备**：Android 7.0（API 24）及以上；手机与车机通用（车机横屏界面自动切换）。
+
+**安装**：按设备架构下载对应的包，直接覆盖安装即可：
+
+| 安装包 | 适用设备 |
+| --- | --- |
+| `WindTone-v1.1.11-arm64-v8a.apk` | 绝大多数手机 / 车机 |
+| `WindTone-v1.1.11-armeabi-v7a.apk` | 较老的 32 位设备 |
+| `WindTone-v1.1.11-x86_64.apk` | 模拟器 / ChromeOS |
+| `WindTone-v1.1.11-universal.apk` | 不确定架构时选它 |
+
+**升级**：也可以在应用内「设置 → 更新 → 检查更新」一键升级（检查更新只访问 GitHub 官方地址）。
+
+**隐私**：音频与歌词只在本机读写；联网只有一处——检查/下载更新（GitHub Releases）。不采集、不上传任何信息。
+
+<sub>1.1.11（versionCode 21）· 构建于 2026-10-16</sub>
+""".trimIndent()
+
 }

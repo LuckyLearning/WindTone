@@ -2717,10 +2717,10 @@ a{color:inherit;text-decoration:none}
         <div class="dlg-title">发现新版本 v1.0.6</div>
         <div style="font-size:12px;color:var(--on-surface-variant);margin-bottom:2px">当前版本 v1.0.5 · 新版本 3.02 MB</div>
         <div style="font-size:11px;color:var(--on-surface-variant);margin-bottom:10px">下载线路：自动（可在「设置 → 更新 → 下载线路」中更换）</div>
-        <div style="background:var(--c-low);border-radius:10px;padding:12px;font-size:12.5px;line-height:1.7;color:var(--on-bg);max-height:150px;overflow:hidden">· 播放模式（顺序 / 列表循环 / 单曲循环 / 随机）合并为一个按钮
-· 文件夹视图支持「移除扫描结果」，不再显示「未知目录」
-· 播放页控制区改三段式布局，播放键居中
-· 修复部分机型状态栏重叠</div>
+        <div style="background:var(--c-low);border-radius:10px;padding:12px;font-size:12.5px;line-height:1.7;color:var(--on-bg);max-height:150px;overflow:hidden">• 播放模式（顺序 / 列表循环 / 单曲循环 / 随机）合并为一个按钮
+• 文件夹视图支持「移除扫描结果」，不再显示「未知目录」
+• 播放页控制区改三段式布局，播放键居中
+• 修复部分机型状态栏重叠</div>
         <button class="txtbtn" style="margin-top:10px;font-size:12px">在浏览器中查看发布页</button>
         <div class="dlg-actions">
           <button class="txtbtn" style="color:var(--on-surface-variant)">忽略</button>
@@ -2732,7 +2732,11 @@ a{color:inherit;text-decoration:none}
   <p class="note"><b>另外两态（同一对话框切换）</b>：<br>
   · <b>下载中</b>：标题「正在下载新版本」，正文第一行小字「下载线路：自动」（手动指定时显示所选线路名）+「已下载 N%」+ 进度条（无进度时显示「已下载 1.2 MB」+ 不确定进度条），<b>此态不可取消</b>；<br>
   · <b>安装包已就绪</b>：标题「安装包已就绪」，需授权时正文「系统需要你允许「听风」安装应用，才能继续升级…」+ 按钮「去授权」；已授权时正文「点击「立即安装」会调起系统安装器，确认后即可完成升级。歌单、收藏、播放统计都会保留。」+ 按钮「立即安装」，右侧「稍后」。<br>
-  没有更新说明时显示「该版本没有填写更新说明。」；下载失败时提示会点明是哪条线路，并指引去「设置 → 更新 → 下载线路」换线或到发布页手动下载。</p>
+  没有更新说明时显示「该版本没有填写更新说明。」；下载失败时提示会点明是哪条线路，并指引去「设置 → 更新 → 下载线路」换线或到发布页手动下载。<br>
+  <b>说明正文先洗净成纯文本再上屏</b>（v1.1.12 修）：Atom 通道给的是 GitHub <b>渲染后的 HTML</b>、
+  REST API 给的是 <b>Markdown 原文</b>，两种都得吃下并收敛到同一份文本 ——
+  在此之前弹窗里会原样显示 <code>&lt;p&gt;&lt;strong&gt;</code>，像乱码。列表项折成「• 」行、
+  表格折成「• a · b」行、段间不留空行。</p>
 </figure>
 
 <figure class="fig" id="scr-dlg-downloadroute">

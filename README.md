@@ -56,7 +56,7 @@ Android 原生本地音乐播放器 —— Kotlin + Jetpack Compose，**数据�
 | 最低版本 | Android 7.0（API 24），compileSdk / targetSdk 35 |
 | 架构 | 分域 ViewModel（播放 / 曲库 / 设置 / 更新）+ 手写服务定位器 `AppContainer`，无 Hilt / Koin |
 | 网络 | **只有**一个用途 —— 访问 `api.github.com` 检查更新；不引入 OkHttp / Gson |
-| 单元测试 | 210 项（JVM + Robolectric），lint Error 级 0 |
+| 单元测试 | 215 项（JVM + Robolectric），lint Error 级 0 |
 
 ---
 
@@ -77,7 +77,7 @@ WindTone/
 │  ├─ ui/                       Compose 界面与四个分域 ViewModel
 │  ├─ overlay/ widget/ tile/    悬浮歌词 / 桌面小部件 / 快捷磁贴
 │  └─ MusicApp.kt MainActivity.kt
-├─ app/src/test/                210 个单元测试
+├─ app/src/test/                215 个单元测试
 ├─ docs/                        文档站源目录（GitHub Pages 发布目录）
 ├─ scripts/                     图标生成、本地 SDK 引导、发版与推送助手
 ├─ gradle/                      Wrapper + `libs.versions.toml`（依赖与插件版本唯一来源）

@@ -661,19 +661,98 @@ object UpdateChecker {
             .split('.')
             .map { it.trim().toIntOrNull() ?: 0 }
 
-    /** 轻量 Markdown 清理：Release 说明直接展示时不难看 */
+    /**
+     * 把 Release 说明整理成纯文本，供更新弹窗直接展示。
+     *
+     * **两条通道给的格式不一样**，这是本函数存在的唯一理由：
+     *  · Atom 源的 `<content type="html">` 是 GitHub **渲染后的 HTML**（`<p>` `<ul>` `<table>`）；
+     *  · REST API 的 `body` 是 **Markdown 原文**（`**加粗**`、`- 列表`、`| 表格 |`）。
+     * 只清理其中一种，另一种就会把标记原样甩给用户 —— v1.0 ~ v1.1.11 的真机表现
+     * 就是这样：更新弹窗里一整屏 `<p><strong>`，看着像乱码。
+     * 注意 Atom 是**主通道**（见 [checkLatest]），所以踩中的恰恰是 HTML 那一种。
+     *
+     * 两种格式都过一遍，并且**必须收敛到同一份文本**：同一份说明在两条通道下显示
+     * 不一样，用户换个网络看到的就是另一个样子，排查时只能靠猜。
+     * 由 `UpdateCheckerTest.notesDoNotDependOnChannel` 拿真实的 Atom / API 响应逐字比对钉住。
+     *
+     * 排版口径：块级元素与列表项**各占一行**、段间不留空行 —— 弹窗高度有限，
+     * 空行只占地方不提供信息。
+     */
     fun plainNotes(raw: String): String {
         if (raw.isBlank()) return ""
         var s = raw.replace("\r\n", "\n")
-        s = Regex("(?m)^\\s*#{1,6}\\s*").replace(s, "")
-        s = Regex("(?m)^\\s*[-*+]\\s+").replace(s, "• ")
+
+        // ---- 表格：HTML 与 Markdown 都折成「• 单元格 · 单元格」 ----
+        // HTML 的 <tr>：表头（th）与数据（td）同等对待，否则两条通道对不上
+        s = Regex("<tr[^>]*>(.*?)</tr>", RegexOption.DOT_MATCHES_ALL).replace(s) { row ->
+            val cells = Regex("<t[hd][^>]*>(.*?)</t[hd]>", RegexOption.DOT_MATCHES_ALL)
+                .findAll(row.groupValues[1])
+                .map { stripTags(it.groupValues[1]).trim() }
+                .filter { it.isNotEmpty() }
+                .toList()
+            if (cells.isEmpty()) "" else "\n• " + cells.joinToString(" · ")
+        }
+        // Markdown 的 | a | b |：对齐行（| --- | --- |）整行丢掉，其余折成同一种形式
+        // 行首行尾一律用 `[ \t]` 而不是 `\s`：`\s` 会吃掉换行，把两行粘成一行
+        s = Regex("(?m)^[ \\t]*\\|[ \\t:|-]*\\|[ \\t]*$").replace(s, "")
+        s = Regex("(?m)^[ \\t]*\\|(.+)\\|[ \\t]*$").replace(s) { row ->
+            val cells = row.groupValues[1].split('|').map { it.trim() }.filter { it.isNotEmpty() }
+            if (cells.isEmpty()) "" else "• " + cells.joinToString(" · ")
+        }
+
+        // ---- HTML → 文本 ----
+        s = Regex("(?i)<br[^>]*>").replace(s, "\n")
+        s = Regex("(?i)</(p|div|h[1-6]|ul|ol|li|table|thead|tbody|tr|blockquote|pre)>").replace(s, "\n")
+        s = Regex("(?i)<li[^>]*>").replace(s, "• ")
+        // 先剥标签再解实体：反过来的话，正文里被转义的 &lt; 会变成尖括号被吃掉
+        s = stripTags(s)
+        s = decodeHtmlEntities(s)
+
+        // ---- Markdown → 文本 ----
+        s = Regex("(?m)^[ \\t]*#{1,6}[ \\t]*").replace(s, "")
+        s = Regex("(?m)^[ \\t]*[-*+][ \\t]+").replace(s, "• ")
         s = Regex("\\*\\*(.+?)\\*\\*").replace(s) { it.groupValues[1] }
         s = Regex("__(.+?)__").replace(s) { it.groupValues[1] }
         s = Regex("`([^`]+)`").replace(s) { it.groupValues[1] }
         s = Regex("!?\\[([^\\]]*)]\\([^)]*\\)").replace(s) { it.groupValues[1] }
-        s = s.replace(Regex("\\n{3,}"), "\n\n")
+
+        // ---- 收尾：去行首尾空白，连续空行压成一条 ----
+        s = Regex("[ \\t]+\\n").replace(s, "\n")
+        s = Regex("(?m)^[ \\t]+").replace(s, "")
+        s = Regex("\\n{2,}").replace(s, "\n")
         return s.trim()
     }
+
+    /** 去掉 HTML 标签（单个 `<...>` 视为标签；Release 说明里不存在裸的 `<`） */
+    private fun stripTags(s: String): String = Regex("<[^>]*>").replace(s, "")
+
+    /**
+     * 解码 HTML 实体。认不出的实体**原样保留** —— 宁可显示 `&foo;`，
+     * 也不要因为不认识就直接吞掉（信息丢了更难查）。
+     */
+    private fun decodeHtmlEntities(s: String): String =
+        Regex("&(#x?[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);").replace(s) { m ->
+            val body = m.groupValues[1]
+            val decoded = when {
+                body.startsWith("#x") || body.startsWith("#X") ->
+                    codePoint(body.drop(2).toIntOrNull(16))
+                body.startsWith("#") -> codePoint(body.drop(1).toIntOrNull())
+                else -> ENTITIES[body.lowercase()]
+            }
+            decoded ?: m.value
+        }
+
+    private fun codePoint(code: Int?): String? =
+        if (code == null || code <= 0) null
+        else runCatching { String(Character.toChars(code)) }.getOrNull()
+
+    /** 常用命名实体；不追求全覆盖，认不出的会原样保留 */
+    private val ENTITIES = mapOf(
+        "amp" to "&", "lt" to "<", "gt" to ">", "quot" to "\"", "apos" to "'",
+        "nbsp" to " ", "middot" to "·", "hellip" to "…", "mdash" to "—",
+        "ndash" to "–", "times" to "×", "copy" to "©", "reg" to "®",
+        "trade" to "™", "laquo" to "«", "raquo" to "»", "deg" to "°",
+    )
 
     /** 把异常翻译成用户能看懂的一句话 */
     private fun describe(t: Throwable): String = when (t) {
