@@ -3,11 +3,20 @@
   静态启动器快捷方式（批次 9.4）。
 
   三个 intent 的 action / extra 必须与 `AppShortcut.ACTION` / `AppShortcut.EXTRA`
-  以及各自的取值逐字一致 —— 三处（这里、Kotlin 常量、MainActivity 的读取）任意一处
-  拼错，表现都是"点了快捷方式只是普通地打开了应用"，不会有任何报错。
+  以及各自的取值逐字一致；`shortcutId` 与 extra 的取值也必须一致（同一个入口在
+  三处用同一个名字）。任意一处拼错的表现是"点了快捷方式没有反应"，不会有任何报错 ——
+  所以这条契约由 `AppShortcutContractTest` 守着。
 
-  targetPackage 故意不写：按文档，省略时默认就是本应用自己的包名。
-  写死包名反而会在 debug（applicationId 带 .debug 后缀）下指向正式版包。
+  ⚠️ **刻意不写 `android:targetPackage` / `android:targetClass`**（2026-10-17 修）：
+      · 只写 `targetClass` 不写 `targetPackage`：**在所有 ROM 上点击都提示「未安装应用」**
+        （v1.1.3 ~ v1.1.11 一直如此，用户报的就是这个）；
+      · 两个都写：包名被写死，而 debug 的 applicationId 带 `.debug` 后缀
+        （见 `app/build.gradle.kts`），debug 包上会去拉正式版包 —— 要么提示未安装，
+        要么更糟：拉起了正式版。
+      · 都不写 + 在 `MainActivity` 上声明一个 action 相同、category 为 DEFAULT 的
+        `intent-filter`：走**隐式意图**解析，不需要写死任何包名，debug / release 都对。
+        这也是唯一不需要按 buildType 维护两份 shortcuts.xml 的写法。
+      因此本文件与 `AndroidManifest.xml` 里那个 `<intent-filter>` 是一对，缺一不可。
 -->
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -17,9 +26,7 @@
         android:shortcutId="play_all"
         android:shortcutLongLabel="@string/shortcut_play_all_long"
         android:shortcutShortLabel="@string/shortcut_play_all_short">
-        <intent
-            android:action="com.luckylearning.windtone.SHORTCUT"
-            android:targetClass="com.luckylearning.windtone.MainActivity">
+        <intent android:action="com.luckylearning.windtone.SHORTCUT">
             <extra
                 android:name="shortcut"
                 android:value="play_all" />
@@ -32,9 +39,7 @@
         android:shortcutId="shuffle"
         android:shortcutLongLabel="@string/shortcut_shuffle_long"
         android:shortcutShortLabel="@string/shortcut_shuffle_short">
-        <intent
-            android:action="com.luckylearning.windtone.SHORTCUT"
-            android:targetClass="com.luckylearning.windtone.MainActivity">
+        <intent android:action="com.luckylearning.windtone.SHORTCUT">
             <extra
                 android:name="shortcut"
                 android:value="shuffle" />
@@ -47,9 +52,7 @@
         android:shortcutId="favorites"
         android:shortcutLongLabel="@string/shortcut_favorites_long"
         android:shortcutShortLabel="@string/shortcut_favorites_short">
-        <intent
-            android:action="com.luckylearning.windtone.SHORTCUT"
-            android:targetClass="com.luckylearning.windtone.MainActivity">
+        <intent android:action="com.luckylearning.windtone.SHORTCUT">
             <extra
                 android:name="shortcut"
                 android:value="favorites" />

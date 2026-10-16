@@ -83,9 +83,33 @@
             </intent-filter>
 
             <!--
+              桌面长按快捷方式的落点（2026-10-17 修「点击提示未安装应用」）。
+
+              `res/xml/shortcuts.xml` 里那三个 <intent> **只有 action、没有组件**，
+              必须靠这条 intent-filter 才能解析到本 Activity：
+                · 快捷方式的 intent 如果只写 targetClass 不写 targetPackage，
+                  所有 ROM 上点击都提示「未安装应用」（v1.1.3 ~ v1.1.11 的实际表现）；
+                  两个都写则把包名写死，debug 的 `.debug` 后缀包会被拉到正式版去。
+                  （模拟器实测：旧写法 + 无这条 filter 时
+                   `cmd package resolve-activity -a <action>` 直接回 "No activity found"）
+                · 隐式意图要求目标 intent-filter 含 `CATEGORY_DEFAULT`（startActivity 的
+                  额外要求），少了这一条同样解析不到。
+              action 字符串是固定的常量（与 `AppShortcut.ACTION` 逐字一致），
+              故意不跟着 applicationId 变 —— 它与包名无关，改了两边都得改。
+
+              小组件（MusicWidgetProvider）与磁贴（PlaybackTileService）走的是
+              显式 Intent，不依赖这条 filter，只是复用同一个 action / extra 通道。
+            -->
+            <intent-filter>
+                <action android:name="com.luckylearning.windtone.SHORTCUT" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
+            <!--
               桌面长按图标 → 播放全部 / 随机播放 / 我的收藏（批次 9.4）。
               intent 的 action / extra 定义见 res/xml/shortcuts.xml，
-              解析在 AppShortcut.kt，三处的字符串必须逐字一致。
+              解析在 AppShortcut.kt，三处的字符串必须逐字一致
+              （契约由 AppShortcutContractTest 守着）。
             -->
             <meta-data
                 android:name="android.app.shortcuts"

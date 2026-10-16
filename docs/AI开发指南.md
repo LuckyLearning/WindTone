@@ -617,9 +617,11 @@ install()
 `AppShortcut` 是**静态快捷方式 + 小组件 + 磁贴共用**的"待处理动作"通道，目的是把"我是从哪进来的"
 从启动参数里解耦出来，交给界面在合适时机消费：
 
-```
+```xml
 res/xml/shortcuts.xml（3 个静态快捷方式：全部播放 / 随机播放 / 我的收藏）
    action = com.luckylearning.windtone.SHORTCUT ，extra.shortcut = play_all | shuffle | favorites
+   ⚠️ <intent> 里**只写 action**，不写 targetPackage / targetClass —— 落点靠
+      AndroidManifest 里 MainActivity 上那条同 action + CATEGORY_DEFAULT 的 <intent-filter>
 MainActivity.onCreate / onNewIntent → AppShortcut.put(AppShortcut.from(intent))
    （onNewIntent 必须写：Activity 已在栈顶时不会再走 onCreate，且 setIntent(intent) 要跟着补）
 MainScreen.kt → 订阅 AppShortcut.pending，等"曲库就绪"后 consumePending() 并执行
@@ -631,8 +633,18 @@ MainScreen.kt → 订阅 AppShortcut.pending，等"曲库就绪"后 consumePendi
 ⚠ **通道用 `MutableStateFlow` 而不是普通变量**：`onNewIntent` 发生在 Compose 之外，
 普通变量变更不会触发重组，界面永远看不到新动作。
 
-`shortcuts.xml` 里的 action / extra 字符串必须与 `AppShortcut` 常量**逐字一致**，且**不写 `targetPackage`**
-（写了在部分 ROM 上快捷方式会失效）。
+⚠ **组件声明只有"都不写"这一条路走得通**（`app/src/test/.../AppShortcutContractTest.kt` 守着）：
+   · 只写 `targetClass` 不写 `targetPackage` → **所有 ROM 上点击都提示「未安装应用」**。
+     这是 v1.1.3 ~ v1.1.11 的真机故障：应用能装能启动，只有长按图标点一下才知道坏了，
+     而提示还反直觉（像是包没装上）。
+   · 两个都写 → 包名被写死，而 debug 的 applicationId 带 `.debug` 后缀（见 `app/build.gradle.kts`），
+     debug 包上会去拉正式版 —— 拉起另一个应用比报错更糟。
+   · 结果：`<intent>` 只留 `android:action` + `<extra>`，落点由 `MainActivity` 上
+     `action=AppShortcut.ACTION` + `android.intent.category.DEFAULT` 的 `<intent-filter>` 提供
+     （隐式意图少了 `CATEGORY_DEFAULT` 同样解析不到，等于没写）。
+     action 字符串与包名无关，故意写成固定的非后缀值，debug / release 同一份资源即可。
+   · 小组件与磁贴走的是**显式 Intent**（`Intent(context, MainActivity::class.java)`），
+     只是复用同一个 action / extra 通道，不依赖那条 filter。
 
 ### 6.8 曲库域的拆分结构（`ui/library/`，2026-10-15）
 
@@ -1573,7 +1585,7 @@ class XxxTest { @get:Rule val compose = createComposeRule() ... }
 | 项 | 现状 | 影响 / 建议 |
 |---|---|---|
 | `MainScreen.kt` 1152 行 | ✅ 2026-10-15 已按 §8.6 拆过一轮：列表区抽成 `LibraryHeader.kt`（424 行）+ `LibraryLists.kt`（742 行），`MainScreen` 只留编排（双栏 / 抽屉 / 播放页挂载 / 深链消费） | 下一个偏大的文件是 `ui/library/LibraryCore.kt`（778 行，见 §6 的拆分结构） |
-| 测试覆盖 | **206 个**（`db/`、`playback/` 有 Robolectric 用例，`ui/` 是 Compose 界面冒烟） | 已覆盖 CASCADE / 软删 / 排除 / 统计 / 队列 / 搜索历史 / 歌词解析 / 悬浮歌词内容解析与排版（32 项）/ 悬浮窗摆放与夹取（14 项）/ 更新检查（19 项）/ 收听报告日历聚合（15 项）/ 重复歌曲指纹（13 项）/ 侧边抽屉行为（6 项）/ 设置页一主六子导航（3 项）/ 车机浏览树（12 项，见 §6.9）/ 均衡器预设曲线与预览归一化（14 项）+ 混响档位表（7 项，见 §6.10）；仍缺 `MusicRepository` 的排序 / 搜索，以及 ViewModel 层的行为测试 |
+| 测试覆盖 | **210 个**（`db/`、`playback/` 有 Robolectric 用例，`ui/` 是 Compose 界面冒烟） | 已覆盖 CASCADE / 软删 / 排除 / 统计 / 队列 / 搜索历史 / 歌词解析 / 悬浮歌词内容解析与排版（32 项）/ 悬浮窗摆放与夹取（14 项）/ 更新检查（19 项）/ 收听报告日历聚合（15 项）/ 重复歌曲指纹（13 项）/ 侧边抽屉行为（6 项）/ 设置页一主六子导航（3 项）/ 车机浏览树（12 项，见 §6.9）/ 均衡器预设曲线与预览归一化（14 项）+ 混响档位表（7 项，见 §6.10）/ 启动器快捷方式契约（4 项，见 §6.7）；仍缺 `MusicRepository` 的排序 / 搜索，以及 ViewModel 层的行为测试 |
 | **`java.time` 不能用**（`minSdk = 24`） | `isCoreLibraryDesugaringEnabled = false` 是**有意**的 | `java.time` / `java.util.stream` / `Optional` 都要 **API 26**，低版本上直接 `NoClassDefFoundError`（不是降级，是崩）。要日历运算走 `java.util.Calendar` + `TimeZone`（见 `data/ListeningReport.kt` 的实现与注释），日期加减用 `Calendar.add(DAY_OF_MONTH, ±n)` 而不是加减 86_400_000 毫秒。真要引入 `java.time`，先开脱糖并加 `desugar_jdk_libs`（会全局影响构建，别为一个小功能开） |
 | **lint 的 `abortOnError = false`** | 2026-10-15 收尾时已把 **Error 清到 0**（warnings 仍在，不阻塞构建） | 也就是说"构建成功"≠"lint 干净"。改完代码别只看 `BUILD SUCCESSFUL`，要扫一眼 `app/build/reports/lint-results-debug.xml` 里的 **Error** 级条目。当天共三次收敛：**32 → 5**（21 条 `java.time` 的 `NewApi` 见上一行，5 条 `Tile.setSubtitle` 的 `NewApi` 见 `tile/TileCompat.kt`，`StartActivityAndCollapseDeprecated` 改显式 `@Suppress` 并写明理由），再 **5 → 0**（5 条 `UnsafeOptInUsageError`：`kotlinOptions.freeCompilerArgs` 里的 `-opt-in=...UnstableApi` 编译器认、lint 不认，改为在 `PlaybackService` / `PlayerHandle` 上挂 `@androidx.annotation.OptIn`）。⚠️ 注意 `w:` 开头的 `-opt-in ... is not an opt-in requirement marker` 是**历史告警**，Kotlin 编译期就带着，不是新引入的 |
 | 无迁移 = 无版本兼容 | 已定口径：重装即可 | 需要保住老用户数据时，得补 `addMigrations(...)` 并配迁移回归测试（见 §5.1 末）。**v1.0.6（DB v2）→ v1.1.0（DB v4）就是按这条走的：覆盖安装会整库重建** |
