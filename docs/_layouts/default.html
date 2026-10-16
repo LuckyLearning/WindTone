@@ -132,7 +132,9 @@ a:hover{text-decoration:underline}
     <small>Android 本地音乐播放器 · 文档</small>
   </a>
 
-  {% assign u = page.url %}
+  {% comment %} page.url 对中文文件名是百分号编码形态，必须先解码才能与字面路径比较；
+     对 ASCII 路径（无 %）url_decode 原样返回，两种形态兼容。{% endcomment %}
+  {% assign u = page.url | url_decode %}
   <nav class="nav-group">
     <span>开始</span>
     <a href="{{ '/' | relative_url }}"{% if u == '/' or u == '/index.html' %} class="active"{% endif %}>首页</a>
