@@ -254,8 +254,20 @@ fun SongRow(
                         color = scheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f, fill = false),
                     )
-                    Spacer(Modifier.width(6.dp))
-                    LyricBadge(if (song.hasSidecarLyric) "LRC" else "内嵌", subtle = !song.hasSidecarLyric)
+                    // 只在**确有**外挂歌词文件时才挂徽标。
+                    //
+                    // 这里原先是 `if (hasSidecarLyric) "LRC" else "内嵌"`，而 `Song` 根本没有
+                    // 「内嵌歌词」的探测字段（见 Song.kt，只有 `lrcUri`）——于是**任何**没有
+                    // 外挂歌词的歌都会被标成「内嵌」，包括压根没有歌词的。v1.1.6 模拟器冒烟
+                    // 实测：8 首测试曲里 5 首被误标，实际只有 1 首真带 USLT。
+                    //
+                    // 取舍：要「准确标注内嵌歌词」得在扫描期读一遍每个文件的标签并入库（schema
+                    // 变更 + 全库额外 IO），收益只是列表里一个小徽标 → 不划算。所以改为**宁可
+                    // 不显示，也不虚报**：有外挂歌词才提示 LRC。
+                    if (song.hasSidecarLyric) {
+                        Spacer(Modifier.width(6.dp))
+                        LyricBadge("LRC")
+                    }
                 }
             }
             Spacer(Modifier.width(if (large) 14.dp else 8.dp))
@@ -290,18 +302,17 @@ fun SongRow(
 private fun largeSize(large: Boolean): Modifier =
     if (large) Modifier.size(56.dp) else Modifier
 
+/** 歌曲行上的小徽标：目前只有「这首歌有独立歌词文件」一种含义。 */
 @Composable
-private fun LyricBadge(text: String, subtle: Boolean = false) {
+private fun LyricBadge(text: String) {
     Surface(
-        color = if (subtle) MaterialTheme.colorScheme.surfaceContainerHighest
-        else MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
         shape = MaterialTheme.shapes.extraSmall,
     ) {
         Text(
             text = text,
             fontSize = 9.sp,
-            color = if (subtle) MaterialTheme.colorScheme.onSurfaceVariant
-            else MaterialTheme.colorScheme.primary,
+            color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
         )
     }
