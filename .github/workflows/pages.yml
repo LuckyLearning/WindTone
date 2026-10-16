@@ -30,12 +30,12 @@ jobs:
       - name: 检出仓库
         uses: actions/checkout@v4
 
-      # enablement: true —— 若仓库尚未开启 Pages（Source = GitHub Actions），
-      # 这一步会顺带开启，省掉一次手工设置。
+      # ⚠️ 不要开 `enablement: true`：仓库的 GITHUB_TOKEN 没有创建 Pages 站点的权限，
+      # 该选项会以「Resource not accessible by integration」直接失败。
+      # Pages（Source = GitHub Actions）只需在仓库 Settings → Pages 里手工开一次，
+      # 之后这套流程就能一直跑。
       - name: 配置 Pages
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       # 用 GitHub Pages 官方 Jekyll 环境构建，插件白名单与线上一致
       - name: Jekyll 构建
@@ -46,6 +46,8 @@ jobs:
 
       - name: 上传站点产物
         uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./_site
 
   deploy:
     name: 部署到 Pages
