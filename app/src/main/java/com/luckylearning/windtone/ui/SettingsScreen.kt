@@ -441,7 +441,7 @@ fun SettingsScreen(
                     )
                     SwitchRow(
                         title = "逐字歌词",
-                        subtitle = "当前行有逐字时间轴时，按字染色（.krc / .yrc / 增强型 LRC）",
+                        subtitle = "当前行随播放逐字点亮；无逐字时间轴的歌词按行时长自动派生",
                         checked = player.lyricWordByWord,
                         onCheckedChange = onLyricWordByWord,
                         onReset = resetAction(player.lyricWordByWord != SettingsDefaults.LYRIC_WORD_BY_WORD) {

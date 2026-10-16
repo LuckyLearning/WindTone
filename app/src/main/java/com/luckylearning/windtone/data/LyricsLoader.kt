@@ -11,6 +11,7 @@ import com.luckylearning.windtone.lyrics.LyricSource
 import com.luckylearning.windtone.lyrics.Lyrics
 import com.luckylearning.windtone.lyrics.TextCodec
 import com.luckylearning.windtone.lyrics.WordLyricsParser
+import com.luckylearning.windtone.lyrics.WordTimingSynth.withDerivedWordTiming
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -19,12 +20,21 @@ import java.io.InputStream
 /**
  * 歌词加载器。
  * 优先级：同目录 .lrc 文件 > 同目录 .txt 歌词 > 音频内嵌同步歌词(SYLT) > 音频内嵌歌词(USLT / Vorbis LYRICS / ©lyr)
+ *
+ * ⚠️ 所有出口都过一遍 [WordTimingSynth.withDerivedWordTiming]：只有 .krc / .yrc /
+ * 增强型 LRC 才自带逐字时间轴，普通 LRC 没有 → 不派生的话「逐字歌词」对绝大多数
+ * 用户的歌词文件都等于没效果（2026-10-16 定位）。这里是全应用歌词的唯一入口，
+ * 在这一层补齐，播放页与桌面悬浮歌词两个消费方同时受益。
  */
 class LyricsLoader(private val context: Context) {
 
     private val maxSidecarBytes = 2 * 1024 * 1024
 
     suspend fun load(song: Song): Lyrics = withContext(Dispatchers.IO) {
+        loadRaw(song).withDerivedWordTiming()
+    }
+
+    private suspend fun loadRaw(song: Song): Lyrics {
         // 1) 侧车歌词文件
         val sidecarUri = song.lrcUri ?: findSidecar(song)
         if (sidecarUri != null) {
@@ -43,7 +53,7 @@ class LyricsLoader(private val context: Context) {
                         else LrcParser.plainText(text, LyricSource.SIDECAR_TXT)
                     }
                 }
-                if (!parsed.isEmpty) return@withContext parsed
+                if (!parsed.isEmpty) return parsed
             }
         }
 
@@ -52,7 +62,7 @@ class LyricsLoader(private val context: Context) {
         if (embedded != null) {
             val synced = embedded.syncedLines
             if (!synced.isNullOrEmpty()) {
-                return@withContext Lyrics(
+                return Lyrics(
                     lines = synced,
                     synced = true,
                     title = embedded.title,
@@ -69,7 +79,7 @@ class LyricsLoader(private val context: Context) {
                     LrcParser.plainText(text, LyricSource.EMBEDDED)
                 }
                 if (!parsed.isEmpty) {
-                    return@withContext parsed.copy(
+                    return parsed.copy(
                         title = embedded.title ?: parsed.title,
                         artist = embedded.artist ?: parsed.artist,
                         album = embedded.album ?: parsed.album,
@@ -78,7 +88,7 @@ class LyricsLoader(private val context: Context) {
             }
         }
 
-        Lyrics.EMPTY
+        return Lyrics.EMPTY
     }
 
     /** 在音频同目录查找同名歌词文件 */
