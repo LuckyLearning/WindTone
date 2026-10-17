@@ -3157,7 +3157,6 @@ a{color:inherit;text-decoration:none}
           <div class="cartrack"><span class="cplayed" style="width:37%"></span><span class="cthumb" style="left:37%"></span></div>
           <div class="nb-time"><span>1:24</span><span>3:46</span></div>
         </div>
-        <button class="nb-full"><svg class="ic"><use href="#i-lyrics"/></svg></button>
       </div>
       <div class="c1dock"><i></i><i></i><i></i><span>车机 Dock（系统浮层，App 只让出 56dp）</span></div>
     </div>
@@ -3168,7 +3167,7 @@ a{color:inherit;text-decoration:none}
   正在播放行用 <code>playing-bg</code> + 歌名 primary，行尾换成音量图标。<b>3dp primary 描边</b>是第一行示例的<b>旋钮焦点态</b> ——
   车机靠方向盘按键 / 旋钮操作时没有触摸点，必须画出来。<br>
   内容区限宽 1180dp 居中：1707dp 全宽铺满会让歌名和「⋮」相隔 1500dp，视线要扫整个屏；<b>播放条不受限宽</b>，横贯全宽（离手最近）。<br>
-  底部大播放条 112dp：封面 80dp、歌名 22sp、收藏 / 上一首 / 播放暂停 / 下一首（76dp、主键 88dp）、进度条 10dp 粗、右端「歌词」快捷入口。<br>
+  底部大播放条 112dp：封面 80dp、歌名 22sp、收藏 / 上一首 / 播放暂停 / 下一首（76dp、主键 88dp）、进度条 10dp 粗；<b>不放「歌词」快捷键</b>——进播放页就是看歌词的，播放条只留最基础的控制，多点一个入口反而误触。<br>
   最底一条是<b>车机 Dock</b>（Home / 应用 / 空调，车机自己画的浮层）：只做 56dp 的<b>留白</b>，不进布局、不画控件 ——
   v1.1.14 的「设置点不到」就是这条浮层压出来的。<br>
   <b>画布说明</b>：本画布 1000×625 装不下 1707×1067dp，元素按比例压缩示意；<b>实现规格以标注的 dp 为准</b>（行高 88dp、播放条 112dp），与<a href="../设计-车载模式.html">设计文档</a>一致。</p>
