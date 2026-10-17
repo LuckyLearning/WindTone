@@ -84,6 +84,7 @@ class PlaybackEngine(
             carMode = prefs.carMode,
             lyricOverlay = prefs.lyricOverlay,
             lyricOverlayLines = prefs.lyricOverlayLines,
+            lyricOverlayFullHeight = prefs.lyricOverlayFullHeight,
             lyricOverlayShowTitle = prefs.lyricOverlayShowTitle,
             lyricOverlayTitleScale = prefs.lyricOverlayTitleScale,
             lyricOverlayTextScale = prefs.lyricOverlayTextScale,
@@ -1014,6 +1015,19 @@ class PlaybackEngine(
         previewOverlayAfterConfigChange()
     }
 
+    /**
+     * 悬浮歌词「全屏高度」：铺满屏宽、高度 = 屏高 − 56dp（让开车机 Dock），
+     * 内容改按播放页歌词区排版（当前行居中放大，上下各 5 句压暗）。
+     *
+     * 只改配置，不重启服务；服务下一帧读 Prefs 就会换外形，
+     * 顺手给一次 6 秒前台预览，让用户当场看见「整屏歌词」长什么样。
+     */
+    override fun setLyricOverlayFullHeight(enabled: Boolean) {
+        prefs.lyricOverlayFullHeight = enabled
+        _player.update { it.copy(lyricOverlayFullHeight = enabled) }
+        previewOverlayAfterConfigChange()
+    }
+
     /** 悬浮窗顶部的「歌名 + 歌手」两行小字：开 / 关 */
     override fun setLyricOverlayShowTitle(show: Boolean) {
         prefs.lyricOverlayShowTitle = show
@@ -1528,6 +1542,9 @@ interface PlayerActions {
     fun setCarMode(enabled: Boolean)
     fun setLyricOverlay(enabled: Boolean)
     fun setLyricOverlayLines(lines: Int)
+
+    /** 悬浮歌词全屏高度（铺满屏宽、避开底部车机 Dock，内容按播放页歌词区排版） */
+    fun setLyricOverlayFullHeight(enabled: Boolean)
     fun setLyricOverlayShowTitle(show: Boolean)
     fun setLyricOverlayTitleScale(scale: Int)
     fun setLyricOverlayTextScale(scale: Int)

@@ -80,6 +80,24 @@ object SettingsDefaults {
     /** 悬浮歌词正文行数的合法区间（1..5）：行数越多占屏越高，5 行是上限 */
     val OVERLAY_LINES_RANGE = 1..5
 
+    /**
+     * 悬浮歌词「全屏高度」（v1.1.19，默认关闭）。
+     *
+     * 打开后窗口铺满屏宽、高度 = 屏高 − [OVERLAY_DOCK_RESERVED_DP]，内容改按
+     * **播放页歌词区**的排版：当前行居中放大高亮，上下各带若干句压暗的上下文。
+     * 默认关闭是为了不影响老用户：原来的单条字幕仍然默认行为。
+     */
+    const val OVERLAY_FULL_HEIGHT = false
+
+    /**
+     * 全屏高度模式下底部让出的高度（dp）。
+     *
+     * 车机（DiLink 等）底部有一条系统固定的 Dock / 按钮栏，悬浮窗压上去会盖住
+     * 返回、空调这些常驻键 —— v1.1.14 的「设置点不到」就是这么来的。
+     * 手机上没有这条 Dock，让出 56dp 也只是避开了手势条，不碍事。
+     */
+    const val OVERLAY_DOCK_RESERVED_DP = 56
+
     /** 悬浮歌词水平对齐：0 居中 / 1 居左（取值与 `overlay/OverlayPositioner` 的 ALIGN_* 一致） */
     const val OVERLAY_ALIGN = 0
     const val OVERLAY_BACKDROP = 1
@@ -289,6 +307,21 @@ class Prefs(context: Context) {
     var lyricOverlayShowTitle: Boolean
         get() = sp.getBoolean(KEY_LYRIC_OVERLAY_TITLE, SettingsDefaults.OVERLAY_SHOW_TITLE)
         set(value) = sp.edit().putBoolean(KEY_LYRIC_OVERLAY_TITLE, value).apply()
+
+    /**
+     * 悬浮歌词「全屏高度」（默认关闭）。
+     *
+     * 打开后：窗口宽度铺满屏宽、高度 = 屏高 − 56dp（让开底部车机 Dock），
+     * 位置固定在左上角（拖动与「调整位置」随之失效），内容按播放页歌词区排版 ——
+     * 当前行居中放大、上下各 5 句压暗上下文、译文紧随当前行。
+     *
+     * 与 [lyricOverlayLines] / [lyricOverlayWidthPercent] 的关系：这两项在全屏
+     * 模式下不生效（行数与宽度由屏幕决定），但**不清空它们的值** ——
+     * 关掉全屏后用户原来的单条字幕设置还在。
+     */
+    var lyricOverlayFullHeight: Boolean
+        get() = sp.getBoolean(KEY_LYRIC_OVERLAY_FULL_HEIGHT, SettingsDefaults.OVERLAY_FULL_HEIGHT)
+        set(value) = sp.edit().putBoolean(KEY_LYRIC_OVERLAY_FULL_HEIGHT, value).apply()
 
     /**
      * 歌名 / 歌手两行小字的字号档位：0 小（默认）/ 1 中 / 2 大。
@@ -518,6 +551,7 @@ class Prefs(context: Context) {
         const val KEY_LYRIC_OVERLAY_PAUSE_MODE = "lyric_overlay_pause_mode"
         const val KEY_LYRIC_OVERLAY_ALIGN = "lyric_overlay_align"
         const val KEY_LYRIC_OVERLAY_WIDTH = "lyric_overlay_width_percent"
+        const val KEY_LYRIC_OVERLAY_FULL_HEIGHT = "lyric_overlay_full_height"
         const val KEY_LYRIC_OVERLAY_TEXT_COLOR = "lyric_overlay_text_color"
         const val KEY_DYNAMIC_THEME = "dynamic_theme"
         const val KEY_SPEED = "playback_speed"

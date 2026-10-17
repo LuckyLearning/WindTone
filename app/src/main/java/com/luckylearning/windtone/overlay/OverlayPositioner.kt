@@ -71,4 +71,25 @@ object OverlayPositioner {
         val y = (if (p.savedY == UNSET) p.defaultY else p.savedY).coerceIn(0, maxY)
         return Placed(Gravity.TOP or Gravity.START, x, y)
     }
+
+    /**
+     * 「全屏高度」模式（v1.1.19）下的窗口尺寸：铺满屏宽，高度 = 屏高 − 底部让位。
+     *
+     * 底部让位是给车机 Dock 留的：车机（DiLink 等）底部有一条系统常驻按钮栏，
+     * 悬浮窗压上去就会盖住返回 / 空调这些键 —— v1.1.14 的「设置点不到」正是
+     * 这条浮层压出来的，别再犯一次。
+     *
+     * 两个夹取都是**防呆**，不是正常路径：
+     *  - 让位不能超过半屏（改 dpi / 极窄屏时，否则窗口会被算成一条缝）；
+     *  - 高度至少 1px —— `LayoutParams.height = 0` 在部分 ROM 上等于「不显示」，
+     *    而这个模式的失败表现就是「开关开了、屏幕上什么都没有」，极难排查。
+     */
+    data class FullFrame(val width: Int, val height: Int)
+
+    fun fullFrame(screenW: Int, screenH: Int, bottomReserved: Int): FullFrame {
+        val w = screenW.coerceAtLeast(1)
+        val reserved = bottomReserved.coerceIn(0, (screenH / 2).coerceAtLeast(0))
+        val h = (screenH - reserved).coerceAtLeast(1)
+        return FullFrame(w, h)
+    }
 }

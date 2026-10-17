@@ -326,6 +326,11 @@ data class PlayerUiState(
     val lyricOverlayAlign: Int = 0,
     /** 悬浮窗宽度：屏幕宽度的百分比（1..100，v1.1.4 起可调） */
     val lyricOverlayWidthPercent: Int = SettingsDefaults.OVERLAY_WIDTH_PERCENT,
+    /**
+     * 悬浮歌词「全屏高度」（v1.1.19）：铺满屏宽、高度 = 屏高 − 车机 Dock 让位，
+     * 内容按播放页歌词区排版（当前行居中放大，上下各 5 句压暗）。
+     */
+    val lyricOverlayFullHeight: Boolean = SettingsDefaults.OVERLAY_FULL_HEIGHT,
     /** 悬浮窗里的歌词文字颜色（ARGB，默认纯白） */
     val lyricOverlayTextColor: Int = SettingsDefaults.OVERLAY_TEXT_COLOR,
     /** 悬浮歌词是否处于「调整位置」模式（临时可拖动，会话级，不落盘） */

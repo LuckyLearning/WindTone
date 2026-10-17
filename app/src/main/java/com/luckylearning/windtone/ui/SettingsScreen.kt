@@ -138,6 +138,8 @@ fun SettingsScreen(
     onCarMode: (Boolean) -> Unit,
     onLyricOverlay: (Boolean) -> Unit,
     onLyricOverlayLines: (Int) -> Unit,
+    /** 悬浮歌词全屏高度（v1.1.19） */
+    onLyricOverlayFullHeight: (Boolean) -> Unit,
     onLyricOverlayShowTitle: (Boolean) -> Unit,
     onLyricOverlayTitleScale: (Int) -> Unit,
     onLyricOverlayTextScale: (Int) -> Unit,
@@ -310,6 +312,7 @@ fun SettingsScreen(
                         onLyricBilingual = onLyricBilingual,
                         onLyricOverlay = onLyricOverlay,
                         onLyricOverlayLines = onLyricOverlayLines,
+                        onLyricOverlayFullHeight = onLyricOverlayFullHeight,
                         onLyricOverlayShowTitle = onLyricOverlayShowTitle,
                         onLyricOverlayTitleScale = onLyricOverlayTitleScale,
                         onLyricOverlayTextScale = onLyricOverlayTextScale,

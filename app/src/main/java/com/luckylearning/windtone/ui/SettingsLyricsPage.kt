@@ -112,6 +112,7 @@ internal fun SettingsLyricsPage(
     onLyricBilingual: (Int) -> Unit,
     onLyricOverlay: (Boolean) -> Unit,
     onLyricOverlayLines: (Int) -> Unit,
+    onLyricOverlayFullHeight: (Boolean) -> Unit,
     onLyricOverlayShowTitle: (Boolean) -> Unit,
     onLyricOverlayTitleScale: (Int) -> Unit,
     onLyricOverlayTextScale: (Int) -> Unit,
@@ -200,6 +201,21 @@ internal fun SettingsLyricsPage(
             onLyricOverlay(SettingsDefaults.LYRIC_OVERLAY)
         },
     )
+    // v1.1.19：全屏高度。放在所有外观项之前 —— 它是**形态**开关（单条字幕 / 整屏歌词），
+    // 行数、宽度、位置这些都在它之下，先定形态再调细节。
+    SwitchRow(
+        title = "全屏高度",
+        subtitle = if (player.lyricOverlayFullHeight) {
+            "占满屏幕（底部给车机 Dock 留 56dp），按播放页排版：当前行居中放大，上下各 5 句压暗"
+        } else {
+            "打开后从单条字幕变成整屏歌词，内容与播放页歌词区一致"
+        },
+        checked = player.lyricOverlayFullHeight,
+        onCheckedChange = onLyricOverlayFullHeight,
+        onReset = resetAction(player.lyricOverlayFullHeight != SettingsDefaults.OVERLAY_FULL_HEIGHT) {
+            onLyricOverlayFullHeight(SettingsDefaults.OVERLAY_FULL_HEIGHT)
+        },
+    )
     // v1.1.15：顶部「歌名 + 歌手」两行小字（默认关闭，不打扰老用户）
     SwitchRow(
         title = "显示歌名与歌手",
@@ -231,15 +247,19 @@ internal fun SettingsLyricsPage(
     // 悬浮歌词的外观选项：行数 / 字号 / 对齐 / 底板 / 暂停行为。
     // 都紧跟在开关下方，与它绑成一个整体；开关关着也允许**预设**，
     // 所以不做可见性 gating。所有项共用同一个选项弹层，改完立刻给一次 6 秒预览。
-    ActionRow(
-        title = "悬浮歌词行数",
-        subtitle = overlayLinesHint(player.lyricOverlayLines),
-        onClick = { overlayChoice = OverlayChoice.LINES },
-        chevron = true,
-        onReset = resetAction(player.lyricOverlayLines != SettingsDefaults.OVERLAY_LINES) {
-            onLyricOverlayLines(SettingsDefaults.OVERLAY_LINES)
-        },
-    )
+    // 行数只在单条字幕模式下有意义：全屏模式固定 11 行（上 5 + 当前 + 下 5），
+    // 摆一个「调了没反应」的选项比藏起来更糟。
+    if (!player.lyricOverlayFullHeight) {
+        ActionRow(
+            title = "悬浮歌词行数",
+            subtitle = overlayLinesHint(player.lyricOverlayLines),
+            onClick = { overlayChoice = OverlayChoice.LINES },
+            chevron = true,
+            onReset = resetAction(player.lyricOverlayLines != SettingsDefaults.OVERLAY_LINES) {
+                onLyricOverlayLines(SettingsDefaults.OVERLAY_LINES)
+            },
+        )
+    }
     ActionRow(
         title = "悬浮歌词字号",
         subtitle = "大屏与车机上建议调大一档",
@@ -295,7 +315,8 @@ internal fun SettingsLyricsPage(
 
     // v1.1.4 新增：宽度滑块 + 颜色。都紧跟在五个外观选项之后，仍属「外观」范畴。
     // 宽度之所以是滑块而不是档位：屏幕尺寸千差万别，档位永远差一个「刚好」。
-    SliderRow(
+    // 宽度同理：全屏模式宽度恒等于屏宽，滑块无效，直接不显示。
+    if (!player.lyricOverlayFullHeight) SliderRow(
         title = "悬浮歌词宽度 ${player.lyricOverlayWidthPercent}%",
         // 宽度与「横向能拖多远」是同一件事的两面，到了 100% 就直接说破，
         // 否则用户会像 2026-10-16 那样把「拖不动」当 bug 报回来。
@@ -375,7 +396,16 @@ internal fun SettingsLyricsPage(
     }
     // 位置调整：开关打开且已授权时才出现。进入后悬浮窗临时可拖动，
     // 拖完点「完成」锁回穿透态。
-    if (player.lyricOverlay && canDrawOverlay) {
+    if (player.lyricOverlay && canDrawOverlay && player.lyricOverlayFullHeight) {
+        Text(
+            text = "全屏高度模式下位置与宽度固定：铺满屏幕、底部让出 56dp 给车机 Dock。" +
+                "想恢复成可拖动的单条字幕，把这上面的「全屏高度」关掉即可。",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(vertical = 6.dp),
+        )
+    }
+    if (player.lyricOverlay && canDrawOverlay && !player.lyricOverlayFullHeight) {
         ActionRow(
             title = if (player.overlayEditing) "完成调整" else "调整悬浮歌词位置",
             subtitle = if (player.overlayEditing) {

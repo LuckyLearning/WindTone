@@ -161,4 +161,50 @@ class OverlayTextComposerTest {
         val lines = compose(resolved(current = "只有原文"), lines = 3)
         assertEquals(1, lines.size)
     }
+
+    // ------------------------------------------------------------ 全屏高度（v1.1.19）
+
+    @Test
+    fun fullHeightWindowPutsCurrentLineExactlyInTheMiddle() {
+        // 11 行 = 上 5 + 当前 + 下 5；上下对称，当前行才真正落在正中。
+        // 这条一旦改成偶数行，全屏歌词的「主角」会偏上/偏下一行，很难看出来但很别扭。
+        val prev = (1..5).map { "上$it" }
+        val next = (1..5).map { "下$it" }
+        val lines = compose(
+            resolved(prevLines = prev, nextLines = next),
+            lines = OverlayTextComposer.FULL_HEIGHT_LINES,
+        )
+        assertEquals(11, lines.size)
+        assertEquals(OverlayTextComposer.Role.CURRENT, lines[5].role)
+        assertEquals("当前句", lines[5].text)
+        assertEquals(OverlayTextComposer.FULL_HEIGHT_LINES, 11)
+    }
+
+    @Test
+    fun fullHeightKeepsTranslationRightUnderCurrentLine() {
+        // 译文的语义是「这一句的翻译」，在全屏模式下也必须紧跟当前行，
+        // 不能因为行数变多被挤到上下文里。
+        val lines = compose(
+            resolved(
+                translation = "译文",
+                prevLines = (1..5).map { "上$it" },
+                nextLines = (1..5).map { "下$it" },
+            ),
+            lines = OverlayTextComposer.FULL_HEIGHT_LINES,
+        )
+        assertEquals("译文", lines[6].text)
+        assertEquals(OverlayTextComposer.Role.TRANSLATION, lines[6].role)
+    }
+
+    @Test
+    fun fullHeightAtSongStartShowsFewerLines() {
+        // 前 5 句：上面没有上下文，只画「当前 + 下 5」，当前行会出现列表开头。
+        // 这是可接受的（歌刚开头），但不能崩、不能把空白行画出来。
+        val lines = compose(
+            resolved(prevLines = emptyList(), nextLines = (1..5).map { "下$it" }),
+            lines = OverlayTextComposer.FULL_HEIGHT_LINES,
+        )
+        assertEquals(6, lines.size)
+        assertEquals(OverlayTextComposer.Role.CURRENT, lines[0].role)
+    }
 }

@@ -19,6 +19,7 @@ import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
 import android.text.style.RelativeSizeSpan
+import android.text.style.StyleSpan
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
@@ -34,6 +35,7 @@ import com.luckylearning.windtone.MainActivity
 import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.CrashLog
 import com.luckylearning.windtone.data.Prefs
+import com.luckylearning.windtone.data.SettingsDefaults
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -145,6 +147,18 @@ class LyricOverlayService : Service() {
     /** 已应用的窗口宽度百分比（v1.1.4）；-1 = 还没应用过 */
     private var appliedWidthPercent = -1
 
+    /** 已应用的「全屏高度」开关（v1.1.19）；-1 = 还没应用过 */
+    private var appliedFullHeight = -1
+
+    /**
+     * 上一次渲染的「角色 + 文字」签名。
+     *
+     * 为什么不能只比文字：全屏模式下同一句在「在唱 / 间奏」之间切换时文字不变、
+     * 只有角色变（主角 vs 压暗），只比对 `tv.text` 的话这次重绘会被整个跳过，
+     * 屏幕上就停在旧的强调状态。签名里带上角色即可。
+     */
+    private var lastRenderKey = ""
+
     /** 已应用的正文色（ARGB）；哨兵值 = 还没应用过 */
     private var appliedTextColor = COLOR_NOT_APPLIED
 
@@ -223,7 +237,12 @@ class LyricOverlayService : Service() {
         super.onConfigurationChanged(newConfig)
         // 横竖屏切换后屏幕宽度变了，已存的绝对坐标可能落到屏幕外，
         // 直接按新尺寸重新夹取一次最省事。拖动中不打扰——那会把窗口弹回旧坐标。
-        if (container != null && !editing) applyPosition()
+        // 全屏模式没有坐标可夹，但**尺寸要跟着新屏幕重算**，否则竖屏时窗口还是横屏的高。
+        if (container != null && Prefs(this).lyricOverlayFullHeight) {
+            applyFullHeightChrome(true)
+        } else if (container != null && !editing) {
+            applyPosition()
+        }
     }
 
     override fun onDestroy() {
@@ -421,6 +440,17 @@ class LyricOverlayService : Service() {
     private fun applyPosition() {
         val p = layoutParams ?: return
         val prefs = Prefs(this)
+        // 全屏模式的位置由 [applyFullHeightChrome] 钉在 (0,0)；这里若继续按拖动坐标
+        // 夹取，会把窗口挪到用户上次拖到的地方，屏幕上就只剩一块偏移的歌词面板。
+        if (prefs.lyricOverlayFullHeight) {
+            if (p.gravity != (Gravity.TOP or Gravity.START) || p.x != 0 || p.y != 0) {
+                p.gravity = Gravity.TOP or Gravity.START
+                p.x = 0
+                p.y = 0
+                runCatching { windowManager?.updateViewLayout(container, p) }
+            }
+            return
+        }
         val (screenW, screenH) = screenSize()
         val placed = OverlayPositioner.place(
             OverlayPositioner.Params(
@@ -526,6 +556,9 @@ class LyricOverlayService : Service() {
     @SuppressLint("ClickableViewAccessibility")
     private val dragListener = View.OnTouchListener { _, event ->
         val p = layoutParams ?: return@OnTouchListener false
+        // 全屏模式位置固定：拖动既无意义，又会把 x/y 写进 Prefs，
+        // 关掉全屏后窗口就跑到了奇怪的位置。
+        if (Prefs(this).lyricOverlayFullHeight) return@OnTouchListener false
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 // 记下起点，MOVE 时算增量才有参照
@@ -631,10 +664,17 @@ class LyricOverlayService : Service() {
                     if (applyTitle(content, prefs) && !editing) {
                         container?.post { applyPosition() }
                     }
+                    // 全屏高度模式（v1.1.19）：行数不再由用户选，而是铺满一屏的
+                    // 11 行（上 5 + 当前 + 下 5），与播放页歌词区的观感一致。
+                    val full = prefs.lyricOverlayFullHeight
                     val lines = when {
                         content.visible -> OverlayTextComposer.compose(
                             resolved = content.resolved,
-                            lineCount = prefs.lyricOverlayLines,
+                            lineCount = if (full) {
+                                OverlayTextComposer.FULL_HEIGHT_LINES
+                            } else {
+                                prefs.lyricOverlayLines
+                            },
                             // 双语副行不设开关：它是**同一句**的翻译，属于内容完整性
                             // 而不是排版选择——能拿到双语歌词的用户本来就想要它。
                             showTranslation = true,
@@ -642,14 +682,16 @@ class LyricOverlayService : Service() {
                         isEditing -> listOf(HINT_EDITING)
                         else -> listOf(HINT_PREVIEW)
                     }
-                    // 行数上限按实际要画的行数放宽（每行都可能折成两行），
-                    // 上限 8：再多就不是「悬浮字幕」而是一块遮屏的板子了。
-                    val maxLines = (lines.size * 2).coerceIn(2, MAX_LINES_CAP)
+                    // 行数上限按实际要画的行数放宽（每行都可能折成两行）。
+                    // 单条字幕上限 12：再多就不是「悬浮字幕」而是一块遮屏的板子；
+                    // 全屏模式本来就是遮屏的歌词面板，放宽到 24 免得长句被截。
+                    val cap = if (full) MAX_FULL_LINES_CAP else MAX_LINES_CAP
+                    val maxLines = (lines.size * 2).coerceIn(2, cap)
                     if (tv.maxLines != maxLines) {
                         tv.maxLines = maxLines
                         tv.ellipsize = android.text.TextUtils.TruncateAt.END
                     }
-                    renderLines(tv, lines, content.playing || showOverride)
+                    renderLines(tv, lines, content.playing || showOverride, full)
                     applyVisibility()
                     updateGeometryReport()
                 }
@@ -665,10 +707,20 @@ class LyricOverlayService : Service() {
     private fun applyAppearance(prefs: Prefs) {
         val tv = lyricView ?: return
 
+        // 全屏高度（v1.1.19）：窗口尺寸与位置改由屏幕决定，宽度百分比与行数两项
+        // 在这个模式下不生效（值仍留在 Prefs 里，关掉全屏后照旧恢复）。
+        val fullHeight = prefs.lyricOverlayFullHeight
+        val fullFlag = if (fullHeight) 1 else 0
+        if (appliedFullHeight != fullFlag) {
+            appliedFullHeight = fullFlag
+            applyFullHeightChrome(fullHeight)
+        }
+
         // 窗口宽度：屏幕百分比（v1.1.4 起可调）。宽度一变必须重摆一次位置 ——
         // OverlayPositioner 的夹取上限是「屏宽 − 窗口宽」，窗口越宽能移动的余量越小。
+        // 全屏模式下宽度恒等于屏宽，这条分支整段跳过。
         val widthPercent = prefs.lyricOverlayWidthPercent
-        if (appliedWidthPercent != widthPercent) {
+        if (!fullHeight && appliedWidthPercent != widthPercent) {
             appliedWidthPercent = widthPercent
             layoutParams?.let { p ->
                 val w = overlayWidthPx(widthPercent)
@@ -714,7 +766,8 @@ class LyricOverlayService : Service() {
         val lines = prefs.lyricOverlayLines
         if (appliedLines != lines) {
             appliedLines = lines
-            container?.post { if (!editing) applyPosition() }
+            // 全屏模式下行数固定 11，用户那一档不生效，自然也不需要重摆
+            if (!fullHeight) container?.post { if (!editing) applyPosition() }
         }
 
         val backdrop = prefs.lyricOverlayBackdrop
@@ -736,6 +789,48 @@ class LyricOverlayService : Service() {
             // 标题跟着歌词一起对齐，否则「居左」时标题还悬在中间，看着像两个控件
             titleView?.gravity = alignGravity(align)
         }
+    }
+
+    /**
+     * 应用「全屏高度」模式的窗口外形（v1.1.19）。
+     *
+     * 全屏 = 铺满屏宽 + 高度 = 屏高 − 底部 56dp（让开车机 Dock），位置钉在左上角；
+     * 文字改走多行排版（行距放大），并由 [buildSpanned] 的 full 分支负责角色样式。
+     *
+     * 关掉时把外形完整还原：宽度回到百分比、高度回到 WRAP_CONTENT、行距复原，
+     * 再重摆一次位置。**必须把 appliedWidthPercent 置回 -1** —— 否则宽度分支
+     * 以为「这个百分比已经应用过」，还原后窗口会卡在全屏宽度上。
+     */
+    private fun applyFullHeightChrome(full: Boolean) {
+        val p = layoutParams ?: return
+        val tv = lyricView ?: return
+        if (full) {
+            val (screenW, screenH) = screenSize()
+            val frame = OverlayPositioner.fullFrame(
+                screenW = screenW,
+                screenH = screenH,
+                bottomReserved = dp(SettingsDefaults.OVERLAY_DOCK_RESERVED_DP),
+            )
+            p.width = frame.width
+            p.height = frame.height
+            p.x = 0
+            p.y = 0
+            p.gravity = Gravity.TOP or Gravity.START
+            tv.setLineSpacing(
+                dp(FULL_LINE_SPACING_EXTRA_DP).toFloat(),
+                FULL_LINE_SPACING_MULT,
+            )
+        } else {
+            p.width = overlayWidthPx(Prefs(this).lyricOverlayWidthPercent)
+            p.height = WindowManager.LayoutParams.WRAP_CONTENT
+            appliedWidthPercent = -1
+            tv.setLineSpacing(dp(2).toFloat(), 1f)
+        }
+        // 排版模式变了，旧的 span 签名作废，下一帧必须重画
+        lastRenderKey = ""
+        runCatching { windowManager?.updateViewLayout(container, p) }
+        refreshModeChrome()
+        if (!full) container?.post { applyPosition() }
     }
 
     /**
@@ -797,12 +892,22 @@ class LyricOverlayService : Service() {
         tv: TextView,
         lines: List<OverlayTextComposer.StyledLine>,
         opaque: Boolean,
+        fullHeight: Boolean = false,
     ) {
         val targetAlpha = if (opaque) 1f else PAUSED_ALPHA
-        val spanned = buildSpanned(lines)
+        val spanned = buildSpanned(lines, fullHeight)
         val sameText = tv.text.toString() == spanned.toString()
+        // 「角色 + 文字」一起做去重键：全屏模式下间奏 ⇄ 演唱是同一串文字、不同角色，
+        // 只比文字的话这次重绘会被跳过，画面停在旧的强调状态。
+        val renderKey = buildString {
+            append(if (fullHeight) "F|" else "S|")
+            append(if (opaque) "1|" else "0|")
+            lines.forEach { append(it.role.name).append(':').append(it.text).append('\n') }
+        }
+        val sameRender = renderKey == lastRenderKey
+        lastRenderKey = renderKey
 
-        if (!sameText) {
+        if (!sameRender && !sameText) {
             tv.animate().cancel()
             if (!fading && container?.visibility == View.VISIBLE) {
                 fading = true
@@ -822,6 +927,12 @@ class LyricOverlayService : Service() {
                 tv.text = spanned
                 tv.alpha = targetAlpha
             }
+        } else if (!sameText) {
+            // 文字没变、只有角色或暂停态变了：直接换 span，不做淡入淡出
+            // （同一句歌词在间奏 ⇄ 演唱之间来回时，闪烁比硬切更刺眼）
+            tv.animate().cancel()
+            tv.text = spanned
+            tv.alpha = targetAlpha
         } else if (!fading && tv.alpha != targetAlpha) {
             // 暂停 / 恢复：只改透明度，不动文字
             tv.animate().cancel()
@@ -836,11 +947,23 @@ class LyricOverlayService : Service() {
      * TextView 的文字色决定，本来就是最亮的那一行），而 1 行模式正是最常见的
      * 情形，没必要每帧造一个 `SpannableStringBuilder`。
      */
-    private fun buildSpanned(lines: List<OverlayTextComposer.StyledLine>): CharSequence {
+    private fun buildSpanned(
+        lines: List<OverlayTextComposer.StyledLine>,
+        fullHeight: Boolean = false,
+    ): CharSequence {
         if (lines.isEmpty()) return ""
         val only = lines.singleOrNull()
-        if (only != null && only.role == OverlayTextComposer.Role.CURRENT) {
+        // 单行 && 主角 && 不是全屏模式时走纯字符串快路径：主角**不需要任何 span**
+        // （颜色由 TextView 的文字色决定），而 1 行模式正是最常见的字幕形态。
+        if (!fullHeight && only != null && only.role == OverlayTextComposer.Role.CURRENT) {
             return only.text
+        }
+        // 全屏模式下配角要跟着用户的文字色走（只是压暗），不能在深色底板上
+        // 突然出现纯白 / 纯灰两种色相。单条字幕保持历史配色不动。
+        val baseColor = if (appliedTextColor != COLOR_NOT_APPLIED) {
+            appliedTextColor
+        } else {
+            Prefs(this).lyricOverlayTextColor
         }
         return SpannableStringBuilder().apply {
             lines.forEachIndexed { index, line ->
@@ -849,28 +972,72 @@ class LyricOverlayService : Service() {
                 append(line.text)
                 val end = length
                 when (line.role) {
-                    // 主角不加 span：文字色由 TextView 决定，不需要再叠一层
-                    OverlayTextComposer.Role.CURRENT -> Unit
-                    OverlayTextComposer.Role.CONTEXT ->
+                    OverlayTextComposer.Role.CURRENT -> if (fullHeight) {
+                        // 播放页的当前行：字号放大一档 + 加粗 + 满不透明
                         setSpan(
-                            ForegroundColorSpan(CONTEXT_TEXT_COLOR),
+                            RelativeSizeSpan(FULL_CURRENT_SCALE),
                             start,
                             end,
                             Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
                         )
+                        setSpan(
+                            StyleSpan(Typeface.BOLD),
+                            start,
+                            end,
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                        )
+                    }
+                    OverlayTextComposer.Role.CONTEXT -> {
+                        setSpan(
+                            ForegroundColorSpan(
+                                if (fullHeight) {
+                                    withAlpha(baseColor, FULL_CONTEXT_ALPHA)
+                                } else {
+                                    CONTEXT_TEXT_COLOR
+                                },
+                            ),
+                            start,
+                            end,
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                        )
+                        if (fullHeight) {
+                            setSpan(
+                                StyleSpan(Typeface.NORMAL),
+                                start,
+                                end,
+                                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                            )
+                        }
+                    }
                     OverlayTextComposer.Role.TRANSLATION -> {
                         setSpan(
-                            ForegroundColorSpan(CONTEXT_TEXT_COLOR),
+                            ForegroundColorSpan(
+                                if (fullHeight) {
+                                    withAlpha(baseColor, FULL_TRANSLATION_ALPHA)
+                                } else {
+                                    CONTEXT_TEXT_COLOR
+                                },
+                            ),
                             start,
                             end,
                             Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
                         )
                         setSpan(
-                            RelativeSizeSpan(TRANSLATION_SCALE),
+                            RelativeSizeSpan(
+                                if (fullHeight) FULL_TRANSLATION_SCALE else TRANSLATION_SCALE,
+                            ),
                             start,
                             end,
                             Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
                         )
+                        if (fullHeight) {
+                            setSpan(
+                                StyleSpan(Typeface.NORMAL),
+                                start,
+                                end,
+                                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                            )
+                        }
                     }
                 }
             }
@@ -916,7 +1083,11 @@ class LyricOverlayService : Service() {
         val p = layoutParams ?: return
         val box = container ?: return
 
-        p.flags = if (editing) {
+        // 全屏高度模式下窗口盖住整屏：**绝不能吃触摸**，否则桌面 / 导航全废，
+        // 用户连「完成调整」都点不到。所以这个模式下一律穿透，编辑态也不解锁。
+        val fullHeight = Prefs(this).lyricOverlayFullHeight
+        val editable = editing && !fullHeight
+        p.flags = if (editable) {
             baseFlags()
         } else {
             baseFlags() or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
@@ -929,8 +1100,10 @@ class LyricOverlayService : Service() {
         // 编辑态无论如何都有底 + 蓝描边：此刻用户需要看清「这块能拖」的边界。
         // （GradientDrawable 不支持声明式虚线间隔，圆角实线框已足够表达「可拖」）
         val backdrop = Prefs(this).lyricOverlayBackdrop
+        // 全屏模式铺满整屏，圆角会在四角露出桌面，看着像渲染错误 —— 直角处理。
+        val corner = if (fullHeight) 0f else dp(14).toFloat()
         box.background = when {
-            editing -> GradientDrawable().apply {
+            editable -> GradientDrawable().apply {
                 setColor(EDIT_BACKDROP_COLOR)
                 setStroke(dp(2), EDIT_STROKE_COLOR)
                 cornerRadius = dp(14).toFloat()
@@ -938,11 +1111,11 @@ class LyricOverlayService : Service() {
             backdrop == BACKDROP_NONE -> null
             backdrop == BACKDROP_SOLID -> GradientDrawable().apply {
                 setColor(SOLID_BACKDROP_COLOR)
-                cornerRadius = dp(14).toFloat()
+                cornerRadius = corner
             }
             else -> GradientDrawable().apply {
                 setColor(TRANSLUCENT_BACKDROP_COLOR)
-                cornerRadius = dp(14).toFloat()
+                cornerRadius = corner
             }
         }
     }
@@ -1051,6 +1224,25 @@ class LyricOverlayService : Service() {
 
         /** 窗口最多画几行（含折行）：再多就不是「悬浮字幕」而是一块遮屏的板子了 */
         private const val MAX_LINES_CAP = 12
+
+        /** 全屏高度模式下每行都可能折行，上限放宽（11 行 × 2） */
+        private const val MAX_FULL_LINES_CAP = 24
+
+        /** 全屏模式：当前行字号相对倍率（播放页 17.5 / 15.5 ≈ 1.13） */
+        private const val FULL_CURRENT_SCALE = 1.13f
+
+        /** 全屏模式：上下句的不透明度（与播放页 0.42 对齐），0x6B = 107 */
+        private const val FULL_CONTEXT_ALPHA = 0x6B
+
+        /** 全屏模式：译文行的不透明度，比上下文略亮（播放页 0.8 × 0.8） */
+        private const val FULL_TRANSLATION_ALPHA = 0xA0
+
+        /** 全屏模式：译文行字号相对倍率（播放页 13 / 15.5 ≈ 0.84） */
+        private const val FULL_TRANSLATION_SCALE = 0.84f
+
+        /** 全屏模式：行间距（额外像素 + 倍率），让 11 行铺满一屏时呼吸感接近播放页 */
+        private const val FULL_LINE_SPACING_EXTRA_DP = 10
+        private const val FULL_LINE_SPACING_MULT = 1.2f
 
         /**
          * 默认位置：状态栏高度再往下让这么多 dp。

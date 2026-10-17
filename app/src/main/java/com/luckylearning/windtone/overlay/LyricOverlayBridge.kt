@@ -136,7 +136,13 @@ object LyricOverlayBridge {
             contentPlaying = LyricOverlayBus.content.value.playing,
             windowGeometry = LyricOverlayService.windowGeometry,
             appearance = buildString {
-                append(if (prefs.lyricOverlayLines == 3) "3 行" else "1 行")
+                // 自检里先说形态：全屏高度下列数固定 11，用户那档行数不生效，
+                // 直接写「11 行」会让自检看起来像设置没生效。
+                if (prefs.lyricOverlayFullHeight) {
+                    append("全屏高度")
+                } else {
+                    append(prefs.lyricOverlayLines).append(" 行")
+                }
                 append(" / 字号").append(listOf("小", "中", "大").getOrElse(prefs.lyricOverlayTextScale) { "中" })
                 append(" / 对齐").append(if (prefs.lyricOverlayAlign == 1) "居左" else "居中")
                 append(" / 底板").append(listOf("无", "半透明", "实底").getOrElse(prefs.lyricOverlayBackdrop) { "半透明" })

@@ -78,6 +78,7 @@ class SettingsScreenTest {
                     onCarMode = onCarMode,
                     onLyricOverlay = {},
                     onLyricOverlayLines = {},
+                    onLyricOverlayFullHeight = {},
                     onLyricOverlayShowTitle = {},
                     onLyricOverlayTitleScale = {},
                     onLyricOverlayTextScale = {},

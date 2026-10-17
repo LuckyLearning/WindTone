@@ -145,4 +145,38 @@ class OverlayPositionerTest {
     fun `UNSET_Y 旧常量与 UNSET 等值`() {
         assertEquals(OverlayPositioner.UNSET, OverlayPositioner.UNSET_Y)
     }
+
+    // ---------------------------------------------------------------- 全屏高度
+
+    @Test
+    fun `全屏高度铺满屏宽并让开车机 Dock`() {
+        // 1920×720 车机屏、Dock 让位 56dp@240dpi = 84px
+        val f = OverlayPositioner.fullFrame(screenW = 1920, screenH = 720, bottomReserved = 84)
+        assertEquals(1920, f.width)
+        assertEquals(636, f.height)
+    }
+
+    @Test
+    fun `没有 Dock 时全屏高度等于屏高`() {
+        val f = OverlayPositioner.fullFrame(screenW = 1080, screenH = 2400, bottomReserved = 0)
+        assertEquals(1080, f.width)
+        assertEquals(2400, f.height)
+    }
+
+    @Test
+    fun `让位不超过半屏`() {
+        // dpi 改得很大 / 屏幕很矮时，让位若照单全收会把窗口压成一条缝。
+        // 半屏是上限：再离谱也还留得下一半高度给歌词。
+        val f = OverlayPositioner.fullFrame(screenW = 800, screenH = 400, bottomReserved = 1000)
+        assertEquals(200, f.height)
+    }
+
+    @Test
+    fun `高度至少一个像素`() {
+        // height = 0 在部分 ROM 上等于「不显示」，而本模式的失败表现正是
+        // 「开关开了、屏幕上什么都没有」——这种静默失败必须从几何上排除。
+        val f = OverlayPositioner.fullFrame(screenW = 0, screenH = 0, bottomReserved = 0)
+        assertEquals(1, f.width)
+        assertEquals(1, f.height)
+    }
 }
