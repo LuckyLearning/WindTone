@@ -213,4 +213,33 @@ class OverlayContentResolverTest {
         val b = OverlayContentResolver.resolve(lyrics, positionMs = 29_999L, offsetMs = 0, title = "歌名")
         assertEquals(a, b)
     }
+
+    // ------------------------------------------------------------ 多行上下文（v1.1.15）
+
+    @Test
+    fun contextListsHoldTwoLinesEachSideInDisplayOrder() {
+        val lyrics = synced(
+            line(10, "第一句"), line(20, "第二句"), line(30, "第三句"),
+            line(40, "第四句"), line(50, "第五句"),
+        )
+        val r = OverlayContentResolver.resolve(lyrics, positionMs = 30_000L, offsetMs = 0, title = "歌名")
+        assertEquals("第三句", r.current)
+        // 上方的按「远端 → 最近」排（直接拿去画），下方按「最近 → 远端」
+        assertEquals(listOf("第一句", "第二句"), r.prevLines)
+        assertEquals(listOf("第四句", "第五句"), r.nextLines)
+    }
+
+    @Test
+    fun contextListsSkipBlankInterludeLines() {
+        val lyrics = synced(
+            line(10, "第一句"),
+            LyricLine(timeMs = 15_000L, text = ""),
+            line(20, "第二句"),
+            LyricLine(timeMs = 35_000L, text = ""),
+            line(40, "第三句"),
+        )
+        val r = OverlayContentResolver.resolve(lyrics, positionMs = 20_000L, offsetMs = 0, title = "歌名")
+        assertEquals(listOf("第一句"), r.prevLines)
+        assertEquals(listOf("第三句"), r.nextLines)
+    }
 }

@@ -28,18 +28,26 @@ object OverlayContentResolver {
      *
      * @param current 主角位置的文字（歌词行，或前奏 / 无歌词时回落成歌名）
      * @param translation 当前行的双语副行（无则空串）
-     * @param prev / next 主角的上下句（3 行模式用），已跳过空行
+     * @param prevLines 主角**上方**的上下文行，按显示顺序（远端在前、最近一句在最后）；
+     *                  最多 [CONTEXT_LINES_EACH_SIDE] 条，空行已跳过
+     * @param nextLines 主角**下方**的上下文行，按显示顺序（最近一句在前）
      * @param idle 当前**没有正在演唱的歌词**（前奏、间奏、无歌词）——渲染侧据此压暗主角
      */
     data class Resolved(
         val current: String = "",
         val translation: String = "",
-        val prev: String = "",
-        val next: String = "",
         val idle: Boolean = false,
+        val prevLines: List<String> = emptyList(),
+        val nextLines: List<String> = emptyList(),
     ) {
         /** 有没有东西可显示；空则表示窗口应当隐藏 */
         val visible: Boolean get() = current.isNotBlank()
+
+        /** 最近的一条上句（老的 3 行模式 / 测试用） */
+        val prev: String get() = prevLines.lastOrNull().orEmpty()
+
+        /** 最近的一条下句（老的 3 行模式 / 测试用） */
+        val next: String get() = nextLines.firstOrNull().orEmpty()
     }
 
     /**
@@ -65,7 +73,9 @@ object OverlayContentResolver {
         if (i < 0) {
             val first = indexOfNonBlank(lines, 0, 1)
             val fallback = titleOnly(title)
-            return fallback.copy(next = first?.let { lines[it].text }.orEmpty())
+            return fallback.copy(
+                nextLines = first?.let { listOf(lines[it].text) }.orEmpty(),
+            )
         }
 
         val anchor = if (lines[i].text.isNotBlank()) i else indexOfNonBlank(lines, i, -1)
@@ -76,16 +86,41 @@ object OverlayContentResolver {
         return Resolved(
             current = line.text,
             translation = line.translation.orEmpty(),
-            prev = indexOfNonBlank(lines, anchor - 1, -1)?.let { lines[it].text }.orEmpty(),
+            idle = anchor != i,
+            // 上下各取若干句：5 行模式要「上 2 行 + 当前 + 下 2 行」，
+            // 取多了也不用 —— composer 按用户选的行数裁。
+            prevLines = collect(lines, anchor - 1, -1).asReversed(),
             // 下一句要从「时间轴上当前位置之后」开始找：间奏时 i 停在空行上，
             // 真正的下一句在空行之后，而不是 anchor 之后。
-            next = indexOfNonBlank(lines, maxOf(i, anchor) + 1, 1)?.let { lines[it].text }.orEmpty(),
-            idle = anchor != i,
+            nextLines = collect(lines, maxOf(i, anchor) + 1, 1),
         )
     }
 
     private fun titleOnly(title: String): Resolved =
         if (title.isBlank()) Resolved() else Resolved(current = title, idle = true)
+
+    /**
+     * 从 [from] 出发、按 [step] 方向连续取最多 [CONTEXT_LINES_EACH_SIDE] 条**非空**歌词行。
+     *
+     * 返回顺序 = 遍历顺序（prev 方向得到「由近到远」，调用方自行反转成显示顺序）。
+     */
+    private fun collect(lines: List<LyricLine>, from: Int, step: Int): List<String> {
+        val out = ArrayList<String>(CONTEXT_LINES_EACH_SIDE)
+        var i = from
+        while (i in lines.indices && out.size < CONTEXT_LINES_EACH_SIDE) {
+            if (lines[i].text.isNotBlank()) out.add(lines[i].text)
+            i += step
+        }
+        return out
+    }
+
+    /**
+     * 主角上下**各**最多带几条上下文。
+     *
+     * 5 行模式是当前支持的最大行数（上 2 + 当前 + 下 2），多取没有意义；
+     * 上限写死在这里，而不是让 composer 反查歌词，是为了让解析结果自带足够的数据。
+     */
+    private const val CONTEXT_LINES_EACH_SIDE = 2
 
     /**
      * 从 [from] 出发、按 [step] 方向找第一条**非空**歌词行，返回行号；找不到返回 null。

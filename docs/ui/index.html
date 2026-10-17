@@ -603,7 +603,7 @@ a{color:inherit;text-decoration:none}
     <a class="backdocs" href="https://luckylearning.github.io/WindTone/">← 文档站</a>
     <div class="bh-title">听风 WindTone · UI 效果图<small>设计基准 / Design Source of Truth</small></div>
     <span class="bh-badge"><span id="screenCount">52</span> 屏 · Material 3 · 手机 360dp / 车机 1707×1067dp</span>
-    <span class="bh-badge">对齐 v1.1.14 · 车机改单栏 / 侧边抽屉 / 设置二级分类 / 均衡器与音效（⑲/⑲B）</span>
+    <span class="bh-badge">对齐 v1.1.15 · 悬浮窗歌名歌手 + 1–5 行 / 车机单栏 / 侧边抽屉 / 设置二级分类（⑲/⑲B）</span>
     <button class="tgl" id="themeBtn">🌙 深色主题</button>
   </div>
   <nav class="bh-nav">
@@ -2446,9 +2446,17 @@ a{color:inherit;text-decoration:none}
         <div class="section-label" style="padding:0;margin:14px 0 4px">桌面悬浮歌词</div>
         <div class="sw-row"><div class="sw-main"><div class="sw-t">桌面悬浮歌词</div>
           <div class="sw-s">退到车机桌面 / 导航页后，在屏幕最上层显示当前歌词行（App 内自动隐藏，开启瞬间有 6 秒预览）</div></div><span class="switch off"><i></i></span></div>
+        <div class="sw-row"><div class="sw-main"><div class="sw-t">显示歌名与歌手</div>
+          <div class="sw-s">悬浮窗最上面加两行小字：歌名 / 歌手，下面是歌词（v1.1.15 新增，默认关）</div></div><span class="switch"><i></i></span></div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-top:6px">
+          <div style="flex:1"><div style="font-size:15px">歌名歌手字号</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">比歌词小一号；车机上看着小就调大一档</div></div>
+          <span style="font-size:11px;color:var(--primary);text-align:right">小</span>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
         <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px">
           <div style="flex:1"><div style="font-size:15px">悬浮歌词行数</div>
-            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">1 行：只显示当前歌词行（一行放不下时自动折行）</div></div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">1–5 行（上下各 2 行 · 当前行居中高亮）</div></div>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
         </div>
         <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-top:6px">
@@ -2501,8 +2509,8 @@ a{color:inherit;text-decoration:none}
       </div>
     </div>
   </div>
-  <p class="note"><b>关键点：</b>「播放页歌词」段只剩 <b>歌词字号</b> 一项；「桌面悬浮歌词」段 = 开关（默认关）+ 行数 / 字号 / 对齐 / 底板 / 暂停表现五个外观选项 + 宽度 / 文字颜色 + 调整位置入口。<br>
-  悬浮歌词五个外观选项（行数 / 字号 / 对齐 / 底板 / 暂停表现）：<b>开关关着也允许预设</b>（不做可见性 gating），五项共用同一个选项弹层（<code>OverlayChoice</code>），点任意一项即生效并给一次 6 秒前台预览；三种实际状态与「对齐 / 位置」的完整规范见 ㊴ 屏。<br>
+  <p class="note"><b>关键点：</b>「播放页歌词」段只剩 <b>歌词字号</b> 一项；「桌面悬浮歌词」段 = 开关（默认关）+ <b>显示歌名与歌手</b>（默认关，开着时多一行「歌名歌手字号」）+ 行数（1–5）/ 字号 / 对齐 / 底板 / 暂停表现 + 宽度 / 文字颜色 + 调整位置入口。<br>
+  悬浮歌词的外观选项（行数 / 标题字号 / 字号 / 对齐 / 底板 / 暂停表现）：<b>开关关着也允许预设</b>（不做可见性 gating），五项共用同一个选项弹层（<code>OverlayChoice</code>），点任意一项即生效并给一次 6 秒前台预览；三种实际状态与「对齐 / 位置」的完整规范见 ㊴ 屏。<br>
   <b>降级不降可达性</b>：播放页「播放设置」弹层的「歌词」分组里仍有「桌面悬浮歌词」开关（见 ⑱）——听歌时顺手就能开，不必钻两层设置。<br>
   <b>v1.1.4 提到设置里的歌词颜色共三项</b>（播放页已唱色 / 悬浮窗文字色 / 悬浮窗已唱色）。⚠️ <b>v1.1.8 起后两项已随逐字染色整体移除</b>，本屏只剩「悬浮歌词文字颜色」这一处 —— 它现在是整窗唯一的颜色，主角与上下句靠<b>明暗 / 字重 / 字号</b>区分，不再有「已唱色」；颜色弹层见 ㉙E。<br>
   <b>宽度滑块改完立刻给一次 6 秒预览</b>。<br>
@@ -3385,12 +3393,12 @@ a{color:inherit;text-decoration:none}
     <b>车载模式</b>：设置 → 外观 →「车载模式」开关（默认关）。开启后：① 启动应用直接进播放页（跳过库主页）并锁横屏；② 播放页歌词态 5 秒无触摸收起<b>顶栏 + 控制键行 + 底部状态行</b>，<b>保留歌名行（含红心）+ 歌词 + 进度条 + 时间</b>，触摸即恢复全部控件并重新计时；<b>封面态不收起</b>（封面本身是主要视觉）；③ 歌词字号放大：在用户设定的 scale 上再乘 <b>1.5</b>（正文 15.5→约 23sp、当前行 17.5→约 26sp）；④ 播放页限宽 760dp 居中，沉浸态取消限宽。见 ⑫D / ㊲ 屏。<br>
     <b>桌面悬浮歌词</b>：设置 → 歌词 →「桌面悬浮歌词」开关（默认关），播放页「播放设置」弹层的歌词分组里也有同一个开关。开启后由 <code>LyricOverlayService</code>（<b>前台服务</b>，<code>foregroundServiceType="mediaPlayback"</code>）在屏幕最上层挂一个 <code>TYPE_APPLICATION_OVERLAY</code> 窗口。<br>
     &nbsp;&nbsp;<b>只在 App 退到后台时显示</b>（前台自动隐藏，避免与播放页歌词重复）；<b>灭屏也隐藏</b>（看不见还画是白耗电）。三个例外：调整位置、开启开关后的 6 秒预览、以及改外观设置后的即时预览。<br>
-    &nbsp;&nbsp;<b>内容与排版</b>：行数 1 / 3 行（3 行模式带上下句上下文，当前行白、上下句压暗）；窗内文字对齐<b>居中 / 居左</b>可配（居中默认；居左 = 每行左对齐起排）；<b>只有该行有翻译时</b>额外紧跟一行双语副行（小一号、同样压暗）；<b>主角与上下句只靠「明暗 / 字重 / 字号」区分</b>（整窗只有「文字颜色」一处可调，v1.1.8 起没有「已唱色」）。行切换带 120ms 淡入淡出。<br>
+    &nbsp;&nbsp;<b>内容与排版</b>：<b>顶部可选两行小字「歌名 / 歌手」</b>（v1.1.15，默认关；独立三档字号，与歌词字号互不影响，歌手缺失时只显示歌名一行）；歌词行数 <b>1–5 行</b>可调（当前行居中高亮，上下带上下文；偶数行时下方多一行）；窗内文字对齐<b>居中 / 居左</b>可配（居中默认；居左 = 每行左对齐起排）；<b>只有该行有翻译时</b>额外紧跟一行双语副行（小一号、同样压暗）；<b>主角与上下句只靠「明暗 / 字重 / 字号」区分</b>（整窗只有「文字颜色」一处可调，v1.1.8 起没有「已唱色」）。行切换带 120ms 淡入淡出。<br>
     &nbsp;&nbsp;<b>前奏 / 间奏不会让字幕消失</b>：「还没到第一句」时回落显示<b>歌名</b>并把第一句作为下一句预告；遇到带时间戳的空行（间奏标记）时<b>停在上一句并压暗</b>——整窗消失会让用户以为功能坏了，这是被真机证实过的老问题。<br>
     &nbsp;&nbsp;<b>外观三档</b>：字号 小 / 中 / 大（基准 20sp，最终宽度夹在屏宽 90% 以内）；底板 无 / 半透明 / 深色实底（<b>默认半透明</b>——「纯白字 + 投影无底板」在亮色壁纸上被证实看不清）；暂停时 淡出 / 隐藏。见 ㊴ 屏。<br>
     &nbsp;&nbsp;<b>两种模式</b>：<b>锁定态</b>（日常）带 <code>FLAG_NOT_TOUCHABLE</code>，点击完全穿透；<b>调整态</b>（设置页「调整悬浮歌词位置」进入）摘掉该 flag 可拖动，2dp 蓝色圆角描边提示，松手落盘横纵坐标，点「完成调整」锁回穿透。<b>调整态 60 秒无操作自动锁定</b>并弹提示（否则用户忘了点「完成」会在桌面上一直留一条吃触摸的横条）。位置存 Prefs：<b>横 <code>lyric_overlay_x</code> / 纵 <code>lyric_overlay_y</code> 都由拖动决定</b>，默认横向居中、纵向「状态栏下方 + 64dp」（64dp 是实测让开荣耀桌面顶部媒体胶囊的值）。<br>
     &nbsp;&nbsp;<b>权限</b>：<code>SYSTEM_ALERT_WINDOW</code>（比亚迪 DiLink 路径：设置 → 应用 → 权限 → 出现在其他应用上）。数据流为 <b>播放域 → LyricOverlayBus（单例 StateFlow）→ Service</b>，单向解耦，界面退出后 Service 仍独立存活；无 IPC，服务只读总线、不持有 ViewModel 引用（唯一的反向通道是「请求退出调整态」这一条一次性事件）。<b>服务被系统杀掉后会在下一次切歌时自动重建</b>（30 秒节流）。<br>
-    <b>车机版（横屏独立布局）</b>：目标 2560×1600px 中控屏（16:10，12.8~13"），实测密度 232~236dpi → hdpi(240) → <b>1707×1067dp</b> 可用空间；
+    <b>车机版（横屏独立布局，v1.1.14 起停用）</b>：目标 2560×1600px 中控屏（16:10，12.8~13"），实测密度 232~236dpi → hdpi(240) → <b>1707×1067dp</b> 可用空间；
     效果图画布 1000×625px 代表之（k≈0.5858，dp = px ÷ 0.5858）。布局 = <b>两栏</b>：左导航 256dp + 右列表占满剩余宽度，播放控制下沉为<b>底部常驻播放条</b>（见 <code>CarHomeScreen.kt</code>）。
     实现的横向尺寸基准（效果图为视觉参考，代码以 dp 为准）：导航条目高 64dp / 图标 26dp / 文字 17sp；列表行高约 80dp、封面 64dp、歌名 22sp；
     底部播放条封面 64dp、歌名 19sp、收藏键 56dp + 控制键 56 / 68 / 56dp、进度条 10dp 粗滑块 26dp。

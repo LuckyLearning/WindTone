@@ -209,9 +209,9 @@ internal fun UpdateDialog(
 internal data class OverlayOption(val value: Int, val label: String, val hint: String)
 
 /**
- * 悬浮歌词五个外观选项（行数 / 字号 / 对齐 / 底板 / 暂停表现）。
+ * 悬浮歌词的外观选项（行数 / 标题字号 / 正文字号 / 对齐 / 底板 / 暂停表现）。
  *
- * 把「标题 + 说明 + 选项列表」一起收进枚举，是为了让五个设置项共用同一个弹层实现——
+ * 把「标题 + 说明 + 选项列表」一起收进枚举，是为了让这些设置项共用同一个弹层实现——
  * 每多一个选项就多复制一份 `AlertDialog` 是不可维护的，而且样式迟早会走样。
  */
 internal enum class OverlayChoice(
@@ -221,10 +221,16 @@ internal enum class OverlayChoice(
 ) {
     LINES(
         "悬浮歌词行数",
-        "桌面悬浮歌词一次显示几行。选中后立刻给一次 6 秒预览。",
+        "桌面悬浮歌词一次显示几行（当前行居中高亮，上下带上下文）。选中后立刻给一次 6 秒预览。",
+        (1..5).map { n -> OverlayOption(n, "$n 行", overlayLinesHint(n)) },
+    ),
+    TITLE_SCALE(
+        "歌名歌手字号",
+        "悬浮窗最上面那两行小字（歌名 / 歌手）的字号，与歌词字号互不影响。",
         listOf(
-            OverlayOption(1, "1 行", "只显示当前歌词行，放不下时自动折行"),
-            OverlayOption(3, "3 行", "上一行 / 当前行 / 下一行，当前行高亮"),
+            OverlayOption(0, "小", "默认，约歌词的六成"),
+            OverlayOption(1, "中", "约歌词的八成"),
+            OverlayOption(2, "大", "约与歌词同号，车机远看更清楚"),
         ),
     ),
     TEXT_SCALE(
@@ -263,6 +269,20 @@ internal enum class OverlayChoice(
             OverlayOption(1, "隐藏", "暂停即消失，桌面更干净"),
         ),
     ),
+}
+
+/**
+ * 「N 行」这一项的一行说明（设置页副标题与弹层选项共用，避免两处措辞不一致）。
+ *
+ * 偶数行时下方多一行：当前行尽量靠中间，而不是贴在最上面。
+ */
+internal fun overlayLinesHint(lines: Int): String = when (lines) {
+    1 -> "只显示当前歌词行（一行放不下时自动折行）"
+    2 -> "当前行 + 下一句"
+    3 -> "上一行 / 当前行 / 下一行，当前行高亮"
+    4 -> "上 1 行 + 当前行 + 下 2 行"
+    5 -> "上下各 2 行，当前行居中高亮"
+    else -> "当前行 + 上下文"
 }
 
 /** 设置页行尾摘要用的短标签（与弹层选项一一对应，按档位下标取） */

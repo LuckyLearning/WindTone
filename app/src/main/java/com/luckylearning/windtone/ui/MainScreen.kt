@@ -603,6 +603,8 @@ fun MainScreen(
                     onCarMode = playerVm::setCarMode,
                     onLyricOverlay = playerVm::setLyricOverlay,
                     onLyricOverlayLines = playerVm::setLyricOverlayLines,
+                    onLyricOverlayShowTitle = playerVm::setLyricOverlayShowTitle,
+                    onLyricOverlayTitleScale = playerVm::setLyricOverlayTitleScale,
                     onLyricOverlayTextScale = playerVm::setLyricOverlayTextScale,
                     onLyricOverlayAlign = playerVm::setLyricOverlayAlign,
                     onLyricOverlayBackdrop = playerVm::setLyricOverlayBackdrop,

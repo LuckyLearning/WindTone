@@ -41,15 +41,21 @@ object OverlayTextComposer {
      * 逐字染色所需的位置参数已随之移除 —— 别再往这里加回 `positionMs`，
      * 那会让整个悬浮窗重新变成每 200ms 重组一次。
      *
-     * @param multiLine 3 行模式（带上下文行）
+     * @param lineCount 歌词行数：1 = 只显示当前行；3 = 上 1 + 当前 + 下 1；5 = 上 2 + 当前 + 下 2。
+     *                  偶数行时下方多一行（2 = 当前 + 下 1），保证当前行尽量靠中。
+     *                  **双语副行不占这个额度**，它永远紧跟当前行。
      * @param showTranslation 是否显示双语副行
      */
     fun compose(
         resolved: OverlayContentResolver.Resolved,
-        multiLine: Boolean,
+        lineCount: Int,
         showTranslation: Boolean,
     ): List<StyledLine> {
         if (!resolved.visible) return emptyList()
+
+        val total = lineCount.coerceAtLeast(1)
+        val before = (total - 1) / 2
+        val after = total - 1 - before
 
         val main = StyledLine(
             text = resolved.current,
@@ -58,16 +64,17 @@ object OverlayTextComposer {
         )
 
         return buildList {
-            if (multiLine && resolved.prev.isNotBlank()) {
-                add(StyledLine(resolved.prev, Role.CONTEXT))
+            // prevLines 已是显示顺序（远端 → 最近），只取离当前行最近的 before 条
+            resolved.prevLines.takeLast(before).forEach {
+                add(StyledLine(it, Role.CONTEXT))
             }
             add(main)
             // 副行紧跟在主角下面 —— 它是这一句的一部分，不是「另一行歌词」
             if (showTranslation && resolved.translation.isNotBlank()) {
                 add(StyledLine(resolved.translation, Role.TRANSLATION))
             }
-            if (multiLine && resolved.next.isNotBlank()) {
-                add(StyledLine(resolved.next, Role.CONTEXT))
+            resolved.nextLines.take(after).forEach {
+                add(StyledLine(it, Role.CONTEXT))
             }
         }
     }

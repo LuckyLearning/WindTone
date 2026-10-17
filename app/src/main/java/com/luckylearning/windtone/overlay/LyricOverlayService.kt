@@ -100,8 +100,11 @@ class LyricOverlayService : Service() {
     /** 外层容器：拖动时整体移动，虚线边框画在它身上 */
     private var container: FrameLayout? = null
 
-    /** 真正显示文字的子 View */
+    /** 真正显示歌词的子 View */
     private var lyricView: TextView? = null
+
+    /** 顶部「歌名 / 歌手」两行小字（v1.1.15，可选显示） */
+    private var titleView: TextView? = null
 
     private var layoutParams: WindowManager.LayoutParams? = null
 
@@ -130,6 +133,11 @@ class LyricOverlayService : Service() {
      * 变了就地重绘。用 Int 比较，开销可以忽略。
      */
     private var appliedScale = -1
+
+    /** 已应用的歌词行数 / 标题字号（v1.1.15）；-1 = 还没应用过 */
+    private var appliedLines = -1
+    private var appliedTitleScale = -1
+
     private var appliedBackdrop = -1
     private var appliedPauseMode = -1
     private var appliedAlign = -1
@@ -269,9 +277,42 @@ class LyricOverlayService : Service() {
             // 用户看到的就是「有窗口没字」。这个 bug 从第一版起就在。
         }
 
-        val box = FrameLayout(this).apply {
+        // 顶部「歌名 / 歌手」两行小字（v1.1.15）：比歌词小一号、压暗，默认隐藏。
+        // 放在独立的 TextView 里而不是拼进歌词串，是为了让两处字号 / 行距各自独立 ——
+        // 标题调大不该把歌词顶出去，歌词换行数也不该影响标题。
+        val title = TextView(this).apply {
+            setTextColor(withAlpha(Prefs(this@LyricOverlayService).lyricOverlayTextColor, TITLE_ALPHA))
+            setPadding(dp(18), dp(8), dp(18), 0)
+            includeFontPadding = false
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, titleTextSp(Prefs(this@LyricOverlayService).lyricOverlayTitleScale))
+            gravity = alignGravity(Prefs(this@LyricOverlayService).lyricOverlayAlign)
+            visibility = View.GONE
+        }
+
+        val column = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            addView(
+                title,
+                android.widget.LinearLayout.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                ),
+            )
             addView(
                 tv,
+                android.widget.LinearLayout.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+        }
+
+        val box = FrameLayout(this).apply {
+            addView(
+                column,
                 FrameLayout.LayoutParams(
                     // 宽度铺满窗口（窗口宽 = 屏宽 × 百分比），文字在框内怎么排由
                     // tv.gravity 决定；高度仍由内容决定。
@@ -303,6 +344,7 @@ class LyricOverlayService : Service() {
             wm.addView(box, params)
             container = box
             lyricView = tv
+            titleView = title
             layoutParams = params
             windowAttached = true
             pendingMeasureClamp = true
@@ -347,6 +389,7 @@ class LyricOverlayService : Service() {
         if (wm != null && v != null) runCatching { wm.removeView(v) }
         container = null
         lyricView = null
+        titleView = null
         layoutParams = null
     }
 
@@ -583,10 +626,15 @@ class LyricOverlayService : Service() {
                         return@collect
                     }
 
+                    // 行数由用户选（1..5）；标题两行小字单独一个 View，见 applyTitle。
+                    // 标题显隐会改变窗口高度，需要重新夹一次位置（否则窗口变高后可能出屏）。
+                    if (applyTitle(content, prefs) && !editing) {
+                        container?.post { applyPosition() }
+                    }
                     val lines = when {
                         content.visible -> OverlayTextComposer.compose(
                             resolved = content.resolved,
-                            multiLine = prefs.lyricOverlayLines == 3,
+                            lineCount = prefs.lyricOverlayLines,
                             // 双语副行不设开关：它是**同一句**的翻译，属于内容完整性
                             // 而不是排版选择——能拿到双语歌词的用户本来就想要它。
                             showTranslation = true,
@@ -638,6 +686,9 @@ class LyricOverlayService : Service() {
         if (appliedTextColor != textColor) {
             appliedTextColor = textColor
             tv.setTextColor(textColor)
+            // 标题用同一个色相、压低透明度：换歌词颜色时两处一起走，不会出现
+            // 「歌词变黄、标题还是白的」这种半截生效
+            titleView?.setTextColor(withAlpha(textColor, TITLE_ALPHA))
         }
 
         val scale = prefs.lyricOverlayTextScale
@@ -649,6 +700,21 @@ class LyricOverlayService : Service() {
             )
             // 这里不再设 maxWidth：宽度已由窗口（屏宽 × 百分比）统一控制，
             // 两处都限宽只会让「调了没反应」变得难以解释。
+        }
+
+        // 歌名 / 歌手两行小字的字号档位（与正文分开）
+        val titleScale = prefs.lyricOverlayTitleScale
+        if (appliedTitleScale != titleScale) {
+            appliedTitleScale = titleScale
+            titleView?.setTextSize(TypedValue.COMPLEX_UNIT_SP, titleTextSp(titleScale))
+        }
+
+        // 行数变了窗口高度就变了，夹取上限（屏高 − 窗高）跟着变。
+        // 必须等一帧、让布局先量出新高度，否则拿到的是旧高度。
+        val lines = prefs.lyricOverlayLines
+        if (appliedLines != lines) {
+            appliedLines = lines
+            container?.post { if (!editing) applyPosition() }
         }
 
         val backdrop = prefs.lyricOverlayBackdrop
@@ -666,10 +732,55 @@ class LyricOverlayService : Service() {
         val align = prefs.lyricOverlayAlign
         if (appliedAlign != align) {
             appliedAlign = align
-            tv.gravity = if (align == OverlayPositioner.ALIGN_LEFT) Gravity.START or Gravity.CENTER_VERTICAL
-            else Gravity.CENTER
+            tv.gravity = alignGravity(align)
+            // 标题跟着歌词一起对齐，否则「居左」时标题还悬在中间，看着像两个控件
+            titleView?.gravity = alignGravity(align)
         }
     }
+
+    /**
+     * 顶部「歌名 / 歌手」两行小字的内容与显隐（v1.1.15）。
+     *
+     * 两个字段各自可能为空：歌名必有，歌手可能拿不到（`<unknown>` 已被上游清成空串）。
+     * 只有一行时就显示一行，不硬凑。
+     */
+    private fun applyTitle(content: LyricOverlayBus.Content, prefs: Prefs): Boolean {
+        val tv = titleView ?: return false
+        val text = if (prefs.lyricOverlayShowTitle) {
+            listOf(content.title, content.artist)
+                .filter { it.isNotBlank() }
+                .joinToString("\n")
+        } else {
+            ""
+        }
+        if (text.isEmpty()) {
+            if (tv.visibility == View.GONE) return false
+            tv.visibility = View.GONE
+            return true
+        }
+        var changed = false
+        if (tv.text.toString() != text) {
+            tv.text = text
+            changed = true
+        }
+        if (tv.visibility != View.VISIBLE) {
+            tv.visibility = View.VISIBLE
+            changed = true
+        }
+        return changed
+    }
+
+    /** 文字在窗内的对齐：居左 = 从同一条竖线起排；否则居中（折行也居中） */
+    private fun alignGravity(align: Int): Int =
+        if (align == OverlayPositioner.ALIGN_LEFT) Gravity.START or Gravity.CENTER_VERTICAL else Gravity.CENTER
+
+    /** 歌名 / 歌手小字的字号（sp）：以正文字号为基准，再乘标题档位与固定缩小比例 */
+    private fun titleTextSp(scale: Int): Float =
+        OVERLAY_TEXT_SP * TEXT_SCALE_FACTORS[scale.coerceIn(0, 2)] * TITLE_TEXT_SCALE
+
+    /** 给颜色换一个透明度通道（用于把标题压暗；保留用户自选的色相） */
+    private fun withAlpha(color: Int, alpha: Int): Int =
+        (color and 0x00FFFFFF) or (alpha.coerceIn(0, 255) shl 24)
 
     /**
      * 把组装好的几行画到 [TextView] 上。
@@ -939,7 +1050,7 @@ class LyricOverlayService : Service() {
         private const val MIN_OVERLAY_WIDTH_DP = 48
 
         /** 窗口最多画几行（含折行）：再多就不是「悬浮字幕」而是一块遮屏的板子了 */
-        private const val MAX_LINES_CAP = 8
+        private const val MAX_LINES_CAP = 12
 
         /**
          * 默认位置：状态栏高度再往下让这么多 dp。
@@ -973,6 +1084,17 @@ class LyricOverlayService : Service() {
 
         /** 双语副行的字号倍率（相对主角） */
         private const val TRANSLATION_SCALE = 0.82f
+
+        /**
+         * 歌名 / 歌手小字的字号倍率（相对歌词基准，再叠加标题档位）。
+         *
+         * 0.62 是「一眼能认出是哪首歌、但不抢歌词」的比例；
+         * 车机上由标题档位单独调大一档即可，不必动歌词字号。
+         */
+        private const val TITLE_TEXT_SCALE = 0.62f
+
+        /** 歌名 / 歌手小字的不透明度：压暗到 ~70%，层级自然落在歌词之下 */
+        private const val TITLE_ALPHA = 0xB4
 
         /** 行切换的淡出 / 淡入时长；再长就会觉得「字幕卡了」 */
         private const val FADE_OUT_MS = 90L

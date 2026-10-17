@@ -50,6 +50,19 @@ object SettingsDefaults {
     const val OVERLAY_LINES = 1
     const val OVERLAY_TEXT_SCALE = 1
 
+    /**
+     * 悬浮窗最上面是否显示「歌名 + 歌手」两行小字（v1.1.15）。
+     *
+     * 默认关闭：老用户看到的还是原来那块纯歌词字幕，不会因为升级突然多出两行。
+     */
+    const val OVERLAY_SHOW_TITLE = false
+
+    /** 歌名 / 歌手两行小字的字号档位：0 小（默认）/ 1 中 / 2 大 */
+    const val OVERLAY_TITLE_SCALE = 0
+
+    /** 悬浮歌词正文行数的合法区间（1..5）：行数越多占屏越高，5 行是上限 */
+    val OVERLAY_LINES_RANGE = 1..5
+
     /** 悬浮歌词水平对齐：0 居中 / 1 居左（取值与 `overlay/OverlayPositioner` 的 ALIGN_* 一致） */
     const val OVERLAY_ALIGN = 0
     const val OVERLAY_BACKDROP = 1
@@ -230,15 +243,35 @@ class Prefs(context: Context) {
         set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_X, value).apply()
 
     /**
-     * 桌面悬浮歌词一次显示几行：1（默认，只显示当前行）或 3（上下各带一行上下文）。
+     * 桌面悬浮歌词一次显示几行：1..5（默认 1 = 只显示当前行）。
      *
-     * 3 行模式下当前行白色高亮、上下两行压暗，视线自然落在当前行——
+     * 行数 > 1 时当前行居中最亮，上下各带若干行上下文（压暗），
      * 车机 / 大屏上尤其有用，不必等下一句冒出来才知道上下文。
-     * 只存 1 或 3 两个值，其它值一律按 1 处理（防旧数据 / 手改）。
+     * 取值范围收在 [SettingsDefaults.OVERLAY_LINES_RANGE] 内，非法值就地夹取
+     * （防旧数据 / 手改）；老版本只写过 1 与 3，读出来天然合法。
      */
     var lyricOverlayLines: Int
-        get() = if (sp.getInt(KEY_LYRIC_OVERLAY_LINES, 1) == 3) 3 else 1
-        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_LINES, if (value == 3) 3 else 1).apply()
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_LINES, SettingsDefaults.OVERLAY_LINES)
+            .coerceIn(SettingsDefaults.OVERLAY_LINES_RANGE.first, SettingsDefaults.OVERLAY_LINES_RANGE.last)
+        set(value) = sp.edit().putInt(
+            KEY_LYRIC_OVERLAY_LINES,
+            value.coerceIn(SettingsDefaults.OVERLAY_LINES_RANGE.first, SettingsDefaults.OVERLAY_LINES_RANGE.last),
+        ).apply()
+
+    /** 悬浮窗最上面是否显示「歌名 + 歌手」两行小字（默认关闭） */
+    var lyricOverlayShowTitle: Boolean
+        get() = sp.getBoolean(KEY_LYRIC_OVERLAY_TITLE, SettingsDefaults.OVERLAY_SHOW_TITLE)
+        set(value) = sp.edit().putBoolean(KEY_LYRIC_OVERLAY_TITLE, value).apply()
+
+    /**
+     * 歌名 / 歌手两行小字的字号档位：0 小（默认）/ 1 中 / 2 大。
+     *
+     * 与正文 [lyricOverlayTextScale] 分开存：标题是配角，需要能独立调小，
+     * 否则「正文调大」会连带把两行标题也顶上去，挤掉歌词。
+     */
+    var lyricOverlayTitleScale: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_TITLE_SCALE, SettingsDefaults.OVERLAY_TITLE_SCALE).coerceIn(0, 2)
+        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_TITLE_SCALE, value.coerceIn(0, 2)).apply()
 
     /**
      * 悬浮歌词的纵向偏移（像素，相对屏幕顶端）。
@@ -439,6 +472,8 @@ class Prefs(context: Context) {
         const val KEY_LYRIC_OVERLAY_X = "lyric_overlay_x"
         const val KEY_LYRIC_OVERLAY_Y = "lyric_overlay_y"
         const val KEY_LYRIC_OVERLAY_LINES = "lyric_overlay_lines"
+        const val KEY_LYRIC_OVERLAY_TITLE = "lyric_overlay_show_title"
+        const val KEY_LYRIC_OVERLAY_TITLE_SCALE = "lyric_overlay_title_scale"
         const val KEY_LYRIC_OVERLAY_TEXT_SCALE = "lyric_overlay_text_scale"
         const val KEY_LYRIC_OVERLAY_BACKDROP = "lyric_overlay_backdrop"
         const val KEY_LYRIC_OVERLAY_PAUSE_MODE = "lyric_overlay_pause_mode"

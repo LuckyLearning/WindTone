@@ -111,8 +111,12 @@ object LyricOverlayBridge {
     fun sync(context: Context, enabled: Boolean) = LyricOverlayService.sync(context, enabled)
 
     /** 把解析好的当前内容推给悬浮窗 */
-    fun publish(resolved: OverlayContentResolver.Resolved, playing: Boolean) =
-        LyricOverlayBus.publish(resolved, playing)
+    fun publish(
+        resolved: OverlayContentResolver.Resolved,
+        playing: Boolean,
+        title: String = "",
+        artist: String = "",
+    ) = LyricOverlayBus.publish(resolved, playing, title, artist)
 
     /** 清空悬浮窗内容 */
     fun clear() = LyricOverlayBus.clear()

@@ -110,6 +110,8 @@ internal fun SettingsLyricsPage(
     onLyricScale: (Float) -> Unit,
     onLyricOverlay: (Boolean) -> Unit,
     onLyricOverlayLines: (Int) -> Unit,
+    onLyricOverlayShowTitle: (Boolean) -> Unit,
+    onLyricOverlayTitleScale: (Int) -> Unit,
     onLyricOverlayTextScale: (Int) -> Unit,
     onLyricOverlayAlign: (Int) -> Unit,
     onLyricOverlayBackdrop: (Int) -> Unit,
@@ -188,16 +190,40 @@ internal fun SettingsLyricsPage(
             onLyricOverlay(SettingsDefaults.LYRIC_OVERLAY)
         },
     )
-    // 悬浮歌词的五个外观选项：行数 / 字号 / 对齐 / 底板 / 暂停行为。
+    // v1.1.15：顶部「歌名 + 歌手」两行小字（默认关闭，不打扰老用户）
+    SwitchRow(
+        title = "显示歌名与歌手",
+        subtitle = if (player.lyricOverlayShowTitle) {
+            "悬浮窗最上面加两行小字：歌名 / 歌手，下面是歌词"
+        } else {
+            "只显示歌词，不加标题行"
+        },
+        checked = player.lyricOverlayShowTitle,
+        onCheckedChange = onLyricOverlayShowTitle,
+        onReset = resetAction(player.lyricOverlayShowTitle != SettingsDefaults.OVERLAY_SHOW_TITLE) {
+            onLyricOverlayShowTitle(SettingsDefaults.OVERLAY_SHOW_TITLE)
+        },
+    )
+    // 标题字号只在开着的时候才出现：关着还摆一行字号设置，只会让人以为它没生效
+    if (player.lyricOverlayShowTitle) {
+        ActionRow(
+            title = "歌名歌手字号",
+            subtitle = "比歌词小一号；车机上看着小就调大一档",
+            onClick = { overlayChoice = OverlayChoice.TITLE_SCALE },
+            trailing = OVERLAY_TEXT_SCALE_LABELS[player.lyricOverlayTitleScale],
+            chevron = true,
+            onReset = resetAction(
+                player.lyricOverlayTitleScale != SettingsDefaults.OVERLAY_TITLE_SCALE,
+            ) { onLyricOverlayTitleScale(SettingsDefaults.OVERLAY_TITLE_SCALE) },
+        )
+    }
+
+    // 悬浮歌词的外观选项：行数 / 字号 / 对齐 / 底板 / 暂停行为。
     // 都紧跟在开关下方，与它绑成一个整体；开关关着也允许**预设**，
-    // 所以不做可见性 gating。五项共用同一个选项弹层，改完立刻给一次 6 秒预览。
+    // 所以不做可见性 gating。所有项共用同一个选项弹层，改完立刻给一次 6 秒预览。
     ActionRow(
         title = "悬浮歌词行数",
-        subtitle = if (player.lyricOverlayLines == 3) {
-            "3 行：上一行 / 当前行 / 下一行，当前行高亮"
-        } else {
-            "1 行：只显示当前歌词行（一行放不下时自动折行）"
-        },
+        subtitle = overlayLinesHint(player.lyricOverlayLines),
         onClick = { overlayChoice = OverlayChoice.LINES },
         chevron = true,
         onReset = resetAction(player.lyricOverlayLines != SettingsDefaults.OVERLAY_LINES) {
@@ -360,6 +386,7 @@ internal fun SettingsLyricsPage(
     overlayChoice?.let { choice ->
         val selected = when (choice) {
             OverlayChoice.LINES -> player.lyricOverlayLines
+            OverlayChoice.TITLE_SCALE -> player.lyricOverlayTitleScale
             OverlayChoice.TEXT_SCALE -> player.lyricOverlayTextScale
             OverlayChoice.ALIGN -> player.lyricOverlayAlign
             OverlayChoice.BACKDROP -> player.lyricOverlayBackdrop
@@ -385,6 +412,7 @@ internal fun SettingsLyricsPage(
                                 .clickable {
                                     when (choice) {
                                         OverlayChoice.LINES -> onLyricOverlayLines(option.value)
+                                        OverlayChoice.TITLE_SCALE -> onLyricOverlayTitleScale(option.value)
                                         OverlayChoice.TEXT_SCALE -> onLyricOverlayTextScale(option.value)
                                         OverlayChoice.ALIGN -> onLyricOverlayAlign(option.value)
                                         OverlayChoice.BACKDROP -> onLyricOverlayBackdrop(option.value)

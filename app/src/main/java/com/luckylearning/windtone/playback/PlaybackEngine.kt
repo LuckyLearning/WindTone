@@ -81,6 +81,8 @@ class PlaybackEngine(
             carMode = prefs.carMode,
             lyricOverlay = prefs.lyricOverlay,
             lyricOverlayLines = prefs.lyricOverlayLines,
+            lyricOverlayShowTitle = prefs.lyricOverlayShowTitle,
+            lyricOverlayTitleScale = prefs.lyricOverlayTitleScale,
             lyricOverlayTextScale = prefs.lyricOverlayTextScale,
             lyricOverlayBackdrop = prefs.lyricOverlayBackdrop,
             lyricOverlayPauseMode = prefs.lyricOverlayPauseMode,
@@ -857,16 +859,34 @@ class PlaybackEngine(
     }
 
     /**
-     * 桌面悬浮歌词一次显示几行：1 = 只显示当前行，3 = 当前行 + 上下各一行上下文。
+     * 桌面悬浮歌词一次显示几行（1..5）：1 = 只显示当前行，3 = 上 1 + 当前 + 下 1，5 = 上 2 + 当前 + 下 2。
      *
      * 只改配置，不重启服务：服务每次收到新歌词时自己读 Prefs 决定排版，
      * 所以下一次歌词刷新（最多几十毫秒）就会按新行数显示，
      * 顺便给一次前台预览让用户当场看见效果。
      */
     override fun setLyricOverlayLines(lines: Int) {
-        val normalized = if (lines == 3) 3 else 1
+        val normalized = lines.coerceIn(
+            SettingsDefaults.OVERLAY_LINES_RANGE.first,
+            SettingsDefaults.OVERLAY_LINES_RANGE.last,
+        )
         prefs.lyricOverlayLines = normalized
         _player.update { it.copy(lyricOverlayLines = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    /** 悬浮窗顶部的「歌名 + 歌手」两行小字：开 / 关 */
+    override fun setLyricOverlayShowTitle(show: Boolean) {
+        prefs.lyricOverlayShowTitle = show
+        _player.update { it.copy(lyricOverlayShowTitle = show) }
+        previewOverlayAfterConfigChange()
+    }
+
+    /** 歌名 / 歌手两行小字的字号档位：0 小 / 1 中 / 2 大 */
+    override fun setLyricOverlayTitleScale(scale: Int) {
+        val normalized = scale.coerceIn(0, 2)
+        prefs.lyricOverlayTitleScale = normalized
+        _player.update { it.copy(lyricOverlayTitleScale = normalized) }
         previewOverlayAfterConfigChange()
     }
 
@@ -1220,7 +1240,17 @@ class PlaybackEngine(
         )
         // 不再下发播放位置：它唯一的用途是逐字染色（v1.1.8 已移除）。位置每 200ms
         // 变一次，下发它会把「内容不变就不重组」的去重彻底废掉。
-        LyricOverlayBridge.publish(resolved = resolved, playing = playing)
+        // 歌名 / 歌手一起下发：悬浮窗可以选择在最上面显示这两行小字（v1.1.15）。
+        // 它们只在切歌时变，不会影响「内容不变就不刷新」的去重。
+        LyricOverlayBridge.publish(
+            resolved = resolved,
+            playing = playing,
+            title = state.current?.title.orEmpty(),
+            // 歌手未知时留空，让悬浮窗只显示歌名一行 —— 谁也不想看一行「未知歌手」
+            artist = state.current?.artist
+                ?.takeIf { it.isNotBlank() && it != "<unknown>" }
+                .orEmpty(),
+        )
     }
 
     /**
@@ -1306,6 +1336,8 @@ interface PlayerActions {
     fun setCarMode(enabled: Boolean)
     fun setLyricOverlay(enabled: Boolean)
     fun setLyricOverlayLines(lines: Int)
+    fun setLyricOverlayShowTitle(show: Boolean)
+    fun setLyricOverlayTitleScale(scale: Int)
     fun setLyricOverlayTextScale(scale: Int)
     fun setLyricOverlayBackdrop(mode: Int)
     fun setLyricOverlayPauseMode(mode: Int)

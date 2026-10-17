@@ -303,8 +303,12 @@ data class PlayerUiState(
     val carMode: Boolean = false,
     /** 桌面悬浮歌词：退到桌面后仍在最上层显示当前歌词行 */
     val lyricOverlay: Boolean = false,
-    /** 悬浮歌词显示行数：1 = 只显示当前行；3 = 当前行 + 上下各一行上下文 */
+    /** 悬浮歌词显示行数：1..5（当前行居中，上下带上下文） */
     val lyricOverlayLines: Int = 1,
+    /** 悬浮窗最上面是否显示「歌名 + 歌手」两行小字 */
+    val lyricOverlayShowTitle: Boolean = SettingsDefaults.OVERLAY_SHOW_TITLE,
+    /** 歌名 / 歌手两行小字的字号档位：0 小 / 1 中 / 2 大 */
+    val lyricOverlayTitleScale: Int = SettingsDefaults.OVERLAY_TITLE_SCALE,
     /** 悬浮歌词字号档位：0 小 / 1 中 / 2 大 */
     val lyricOverlayTextScale: Int = 1,
     /** 悬浮歌词底板：0 无 / 1 半透明 / 2 深色实底 */

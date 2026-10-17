@@ -49,6 +49,10 @@ object LyricOverlayBus {
         val resolved: OverlayContentResolver.Resolved = OverlayContentResolver.Resolved(),
         /** 歌曲是否在播放；暂停时淡出（或按设置隐藏），方便用户看清最后一句 */
         val playing: Boolean = false,
+        /** 当前歌曲名（悬浮窗顶部可选显示） */
+        val title: String = "",
+        /** 当前歌手（悬浮窗顶部可选显示） */
+        val artist: String = "",
     ) {
         val visible: Boolean get() = resolved.visible
     }
@@ -108,16 +112,25 @@ object LyricOverlayBus {
     val exitEditingRequests: SharedFlow<Unit> = _exitEditingRequests.asSharedFlow()
 
     /** 播放域侧调用：把解析好的当前内容送进悬浮窗 */
-    fun publish(resolved: OverlayContentResolver.Resolved, playing: Boolean) {
+    fun publish(
+        resolved: OverlayContentResolver.Resolved,
+        playing: Boolean,
+        title: String = "",
+        artist: String = "",
+    ) {
         val old = _content.value
-        if (old.resolved == resolved && old.playing == playing) return
+        if (old.resolved == resolved && old.playing == playing &&
+            old.title == title && old.artist == artist
+        ) {
+            return
+        }
         // 内容（或播放态）变了才算一次修订。
         //
         // ⚠️ 这里原先有一条「纯位置推进（逐字染色）不算修订」的特殊分支 ——
         // 位置在 v1.1.8 随逐字染色一起移除，于是**任何**变化都是内容变化，
         // 那条分支自然消失。新增高频字段进 [Content] 前想清楚这一点：
         // 只要它每 200ms 变一次，依赖 revision 的消费者就会被叫醒 5 次/秒。
-        _content.value = Content(resolved, playing)
+        _content.value = Content(resolved, playing, title, artist)
         _revision.update { it + 1 }
     }
 
