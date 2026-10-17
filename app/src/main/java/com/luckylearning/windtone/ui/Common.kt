@@ -13,10 +13,12 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -55,6 +57,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -195,8 +198,11 @@ fun SongRow(
     val textGap = if (large) 18.dp else 12.dp
     val padV = if (large) 12.dp else 8.dp
     val checked = selected == true
+    // 车机专用：方向盘按键 / 中控旋钮操作时没有触摸点，焦点必须画得出来
+    var focused by remember { mutableStateOf(false) }
 
     Surface(
+        border = if (large && focused) BorderStroke(3.dp, scheme.primary) else null,
         color = when {
             checked -> scheme.primaryContainer.copy(alpha = 0.75f)
             isCurrent -> scheme.primaryContainer.copy(alpha = 0.55f)
@@ -207,6 +213,8 @@ fun SongRow(
             .fillMaxWidth()
             .padding(horizontal = 10.dp, vertical = 4.dp)
             .clip(MaterialTheme.shapes.medium)
+            .onFocusChanged { if (large) focused = it.isFocused }
+            .focusable(large)
             .combinedClickable(
                 onClick = onClick,
                 // onLongClick 传 null 时**必须**让 combinedClickable 也拿到 null：
@@ -238,7 +246,7 @@ fun SongRow(
                     text = song.title,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    style = if (large) MaterialTheme.typography.titleMedium
+                    style = if (large) MaterialTheme.typography.titleLarge
                     else MaterialTheme.typography.bodyLarge,
                     fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
                     color = tint,
@@ -249,7 +257,7 @@ fun SongRow(
                         text = song.artistOrUnknown,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        style = if (large) MaterialTheme.typography.bodyMedium
+                        style = if (large) MaterialTheme.typography.bodyLarge
                         else MaterialTheme.typography.bodySmall,
                         color = scheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f, fill = false),
@@ -273,7 +281,7 @@ fun SongRow(
             Spacer(Modifier.width(if (large) 14.dp else 8.dp))
             Text(
                 text = formatDuration(song.durationMs),
-                style = if (large) MaterialTheme.typography.bodyMedium
+                style = if (large) MaterialTheme.typography.bodyLarge
                 else MaterialTheme.typography.labelMedium,
                 color = scheme.onSurfaceVariant,
             )

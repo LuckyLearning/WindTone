@@ -3098,10 +3098,10 @@ a{color:inherit;text-decoration:none}
       </div>
       <div class="c1tabs">
         <div class="c1tab on">全部歌曲</div>
-        <div class="c1tab">我的收藏</div>
-        <div class="c1tab">最近播放</div>
-        <div class="c1tab">歌单</div>
+        <div class="c1tab">专辑</div>
+        <div class="c1tab">歌手</div>
         <div class="c1tab">文件夹</div>
+        <div class="c1tab">歌单</div>
       </div>
       <div class="c1body">
         <div class="c1wrap">
@@ -3162,7 +3162,7 @@ a{color:inherit;text-decoration:none}
     </div>
   </div>
   <p class="note"><b>关键点（单栏）：</b>砍掉左导航，改成<b>顶部横向 Tab</b> —— 抽屉要点两次、第二级位置还会变，
-  Tab 一步到位；1707dp 宽放五个入口（每个最小 180dp）绰绰有余。<b>设置固定在标题行右侧、仍是唯一入口</b>，不违反「入口收敛」。<br>
+  Tab 一步到位；1707dp 宽放五个入口（每个最小 180dp）绰绰有余。五个 Tab = `LibraryView` 的五个枚举值，与抽屉共用同一状态。<b>设置固定在标题行右侧、仍是唯一入口</b>，不违反「入口收敛」。<br>
   列表行 88dp（手机 64dp）：封面 64dp / 圆角 14dp、歌名 21sp、歌手 15sp、时长 17sp、行尾「⋮」76dp；
   正在播放行用 <code>playing-bg</code> + 歌名 primary，行尾换成音量图标。<b>3dp primary 描边</b>是第一行示例的<b>旋钮焦点态</b> ——
   车机靠方向盘按键 / 旋钮操作时没有触摸点，必须画出来。<br>

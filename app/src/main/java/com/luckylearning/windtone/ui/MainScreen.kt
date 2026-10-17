@@ -3,6 +3,7 @@ package com.luckylearning.windtone.ui
 import android.Manifest
 import android.app.Activity
 import android.content.Context
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.BackHandler
@@ -127,6 +128,22 @@ fun MainScreen(
         maxOf(navigationBottom, CAR_DOCK_RESERVED_HEIGHT)
     } else {
         navigationBottom
+    }
+
+    // ---------------------------------------------------------------- 车载模式
+    //
+    // 开关一拨**立刻**生效：以前 `requestedOrientation` 只在 MainActivity.onCreate 里读一次，
+    // 用户在设置里打开车载模式后界面毫无变化（除了几个要等 5 秒才出现的细节），
+    // 看起来就像「这个开关没用」——这是本轮重设计的起点，见 docs/设计-车载模式.md。
+    // 这里直接改 Activity 的方向；Activity 声明了 configChanges，不会重建、不会打断播放。
+    val carMode = player.carMode
+    val activity = remember(context) { context.findActivity() }
+    LaunchedEffect(carMode) {
+        activity?.requestedOrientation = if (carMode) {
+            ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
     }
 
     val audioPermission = remember { requiredAudioPermission() }
@@ -381,9 +398,11 @@ fun MainScreen(
                 // 用 `detectHorizontalDragGestures` 而不是自己解 `awaitPointerEvent`：
                 // 它自带水平方向的 touch-slop 判定，纵向滚动（LazyColumn）会自然赢下
                 // 手势竞争，列表照常滚，不会被这里截胡。
-                .pointerInput(drawerOpen, showSettings, player.playerExpanded) {
-                    // 覆盖层（播放页 / 设置页）打开时不再接管；抽屉已开的收起交给遮罩
-                    if (drawerOpen || showSettings || player.playerExpanded) return@pointerInput
+                .pointerInput(drawerOpen, showSettings, player.playerExpanded, carMode) {
+                    // 覆盖层（播放页 / 设置页）打开时不再接管；抽屉已开的收起交给遮罩。
+                    // 车载模式下也不接管：车机触摸板误触率高，「右滑开抽屉」在车上只会添乱，
+                    // 而车机版根本没有抽屉入口（视图切换走顶部横向 Tab）。
+                    if (carMode || drawerOpen || showSettings || player.playerExpanded) return@pointerInput
                     var dragged = 0f
                     val threshold = 72.dp.toPx()
                     detectHorizontalDragGestures(
@@ -434,6 +453,7 @@ fun MainScreen(
                     player = player,
                     onBack = lib::closeGroup,
                     onSongLongPress = { actionSong = it },
+                    carMode = carMode,
                 )
 
                 // 一级列表：用 view 作为 key，每个视图各记一份滚动位置，互不干扰。
@@ -452,6 +472,8 @@ fun MainScreen(
                             onImportFolder = importFolder,
                             onFullScan = requestFullScan,
                             onOpenScanScope = { showScanScope = true },
+                            // 车载：行高 / 字号 / 触控目标放大，且**禁用长按多选**（车机手势不可靠）
+                            carMode = carMode,
                         )
 
                         LibraryView.PLAYLIST -> PlaylistListView(
@@ -467,6 +489,7 @@ fun MainScreen(
                             onOpen = lib::openGroup,
                             canRemove = library.view == LibraryView.FOLDER,
                             onRemove = { folderRemoveConfirmGroup = it },
+                            carMode = carMode,
                         )
                     }
                 }
@@ -485,26 +508,38 @@ fun MainScreen(
                     .fillMaxSize()
                     .statusBarsPadding()
             ) {
-                LibraryHeader(
-                    library = library,
-                    granted = granted,
-                    onOpenDrawer = { drawerOpen = true },
-                    onQuery = lib::setQuery,
-                    onSort = lib::setSort,
-                    onRequestPermission = { permissionLauncher.launch(arrayOf(audioPermission)) },
-                    onImportFolder = importFolder,
-                    onRescan = { lib.scan() },
-                    onRefreshLyrics = lib::refreshLyrics,
-                    onDeepScan = { lib.deepScanSettingsIntent()?.let { context.startActivity(it) } },
-                    onImportM3U = {
-                        m3uImportLauncher.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "text/plain", "*/*"))
-                    },
-                    onSubmitSearch = lib::submitSearch,
-                    onClearSearchHistory = lib::clearSearchHistory,
-                    onOpenScanScope = { showScanScope = true },
-                    onFullScan = requestFullScan,
-                    onOpenReport = { showReport = true },
-                )
+                if (carMode) {
+                    // 车机：标题行（搜索 / 设置）+ 横向视图 Tab，一步到位；
+                    // 手机仍走抽屉式顶栏，一行不改。
+                    CarLibraryHeader(
+                        library = library,
+                        onQuery = lib::setQuery,
+                        onSubmitSearch = lib::submitSearch,
+                        onOpenSettings = { showSettings = true },
+                    )
+                    CarViewTabs(current = library.view, onSelect = lib::setView)
+                } else {
+                    LibraryHeader(
+                        library = library,
+                        granted = granted,
+                        onOpenDrawer = { drawerOpen = true },
+                        onQuery = lib::setQuery,
+                        onSort = lib::setSort,
+                        onRequestPermission = { permissionLauncher.launch(arrayOf(audioPermission)) },
+                        onImportFolder = importFolder,
+                        onRescan = { lib.scan() },
+                        onRefreshLyrics = lib::refreshLyrics,
+                        onDeepScan = { lib.deepScanSettingsIntent()?.let { context.startActivity(it) } },
+                        onImportM3U = {
+                            m3uImportLauncher.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "text/plain", "*/*"))
+                        },
+                        onSubmitSearch = lib::submitSearch,
+                        onClearSearchHistory = lib::clearSearchHistory,
+                        onOpenScanScope = { showScanScope = true },
+                        onFullScan = requestFullScan,
+                        onOpenReport = { showReport = true },
+                    )
+                }
 
                 Box(Modifier.weight(1f)) {
                     if (library.selecting) {
@@ -525,18 +560,37 @@ fun MainScreen(
                 }
 
                 if (!library.selecting) {
-                    // 迷你播放条：放进 Column 而不是浮在最上层，
-                    // 这样列表不会被它遮住，Snackbar 也不会和它打架。
-                    MiniPlayer(
-                        song = player.current,
-                        isPlaying = player.isPlaying,
-                        progressFlow = playerVm.progress,
-                        onExpand = playerVm::openPlayer,
-                        onToggle = playerVm::togglePlay,
-                        onNext = playerVm::next,
-                        onPrevious = playerVm::previous,
-                        onSeek = playerVm::seekTo,
-                    )
+                    if (carMode) {
+                        // 车机大播放条：112dp、主键 88dp、收藏 + 上一首 / 播放 / 下一首 + 进度。
+                        // 不放「歌词」快捷键（用户明确不要），进播放页点封面 / 歌名即可。
+                        CarPlayerBar(
+                            song = player.current,
+                            isPlaying = player.isPlaying,
+                            progressFlow = playerVm.progress,
+                            isFavorite = player.current?.let { it.stableKey in library.favoriteUris } == true,
+                            onToggleFavorite = {
+                                player.current?.let { lib.toggleFavorite(it) }
+                            },
+                            onExpand = playerVm::openPlayer,
+                            onToggle = playerVm::togglePlay,
+                            onNext = playerVm::next,
+                            onPrevious = playerVm::previous,
+                            onSeek = playerVm::seekTo,
+                        )
+                    } else {
+                        // 迷你播放条：放进 Column 而不是浮在最上层，
+                        // 这样列表不会被它遮住，Snackbar 也不会和它打架。
+                        MiniPlayer(
+                            song = player.current,
+                            isPlaying = player.isPlaying,
+                            progressFlow = playerVm.progress,
+                            onExpand = playerVm::openPlayer,
+                            onToggle = playerVm::togglePlay,
+                            onNext = playerVm::next,
+                            onPrevious = playerVm::previous,
+                            onSeek = playerVm::seekTo,
+                        )
+                    }
 
                     // v1.1.3：底部五视图导航整体移除，五个浏览视图收进左侧抽屉
                     // （顶栏汉堡按钮开合，见 LibraryDrawer.kt）。列表因此多出

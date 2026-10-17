@@ -92,4 +92,46 @@ class LayoutContractTest {
             Regex("""padding\(bottom = bottomSafe\)""").containsMatchIn(source),
         )
     }
+
+    /**
+     * v1.1.19 车载版：单栏 + 顶部横向 Tab。
+     *
+     * 钉四件事，任何一条被"顺手改回去"都会立刻变红：
+     *  1. `carMode` 分支必须真的接线（顶栏 / Tab / 大播放条三个组件都在 MainScreen 里出现）；
+     *  2. 车机首页里不许有 `VerticalDivider`（双栏残留）；
+     *  3. 播放条不许再挂「歌词」快捷键 —— 用户 2026-10-17 明确要求删掉，进播放页就是看歌词；
+     *  4. 开关必须立即生效：MainScreen 要在 carMode 变化时改 `requestedOrientation`，
+     *     否则又回到"拨了开关没反应"（本轮重设计的起因）。
+     */
+    @Test
+    fun carModeUsesSingleColumnHome() {
+        val main = sourceFile("src/main/java/com/luckylearning/windtone/ui/MainScreen.kt").readText()
+        listOf("CarLibraryHeader(", "CarViewTabs(", "CarPlayerBar(").forEach { component ->
+            assertTrue("MainScreen 的车载分支没有接 $component", main.contains(component))
+        }
+        assertTrue(
+            "车机模式必须能立即改屏幕方向（requestedOrientation），否则开关等于没反应",
+            main.contains("requestedOrientation"),
+        )
+        assertTrue(
+            "车载分支必须由 player.carMode 驱动",
+            Regex("""val carMode = player\.carMode""").containsMatchIn(main),
+        )
+
+        val car = sourceFile(
+            "src/main/java/com/luckylearning/windtone/ui/CarLibraryScreen.kt",
+        ).readText()
+        assertFalse(
+            "车机首页出现 VerticalDivider —— 单栏是用户明确要求（v1.1.14 起双栏永久停用）",
+            car.contains("VerticalDivider("),
+        )
+        assertFalse(
+            "车机播放条不应再有歌词快捷入口（用户 2026-10-17 要求删掉）",
+            car.contains("AppIcons.Lyrics"),
+        )
+        assertTrue(
+            "车机触控目标必须 ≥76dp（行车中不瞄也能按中）",
+            Regex("""CAR_TOUCH_TARGET: Dp = 76\.dp""").containsMatchIn(car),
+        )
+    }
 }

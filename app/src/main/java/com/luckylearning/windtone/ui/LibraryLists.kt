@@ -93,6 +93,13 @@ internal fun SongsList(
     onImportFolder: () -> Unit,
     onFullScan: () -> Unit,
     onOpenScanScope: () -> Unit,
+    /**
+     * 车载模式：行高与字号放大（封面 64dp / 标题 22sp），并**关闭长按多选**。
+     *
+     * 车机触摸板误触率高，「长按进多选」在车上会变成随机触发；批量操作留给手机。
+     * 单曲的「更多」仍然在行尾 ⋮ 上。
+     */
+    carMode: Boolean = false,
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -150,6 +157,7 @@ internal fun SongsList(
                     song = song,
                     isCurrent = player.current?.stableKey == song.stableKey,
                     isPlaying = player.isPlaying,
+                    large = carMode,
                     // 多选态下点行 = 勾选，不再触发播放（误播一整张列表很恼人）
                     onClick = {
                         if (library.selecting) onToggleSelect(song)
@@ -160,8 +168,13 @@ internal fun SongsList(
                     // 注意：多选态的入口只有这一处（外加全选/反选），
                     // 改动前务必确认 `LibraryViewModel.enterSelection` 仍有调用者——
                     // 它一旦没人调，`selecting` 永远是 false，整个批量操作就此"隐身"。
-                    onLongClick = {
-                        if (library.selecting) onToggleSelect(song) else onEnterSelection(song)
+                    // 车载模式不认长按（见 carMode 注释）
+                    onLongClick = if (carMode) {
+                        null
+                    } else {
+                        {
+                            if (library.selecting) onToggleSelect(song) else onEnterSelection(song)
+                        }
                     },
                     onMore = if (library.selecting) null else ({ onSongLongPress(song) }),
                     selected = if (library.selecting) selected else null,
@@ -169,9 +182,9 @@ internal fun SongsList(
             }
         }
 
-        // 字母索引导航条
+        // 字母索引导航条（车载模式不画：9sp 的小字在车上点不中，靠 Tab 与搜索更快）
         val letters = library.letterIndex.keys.toList()
-        if (letters.size > 4) {
+        if (!carMode && letters.size > 4) {
             Column(
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -245,6 +258,8 @@ internal fun GroupListView(
     onOpen: (GroupInfo) -> Unit,
     canRemove: Boolean = false,
     onRemove: (GroupInfo) -> Unit = {},
+    /** 车载模式：分组行同样放大（封面 64dp、标题 22sp、触控目标 56dp） */
+    carMode: Boolean = false,
 ) {
     if (library.groups.isEmpty()) {
         EmptyHint("暂无分组", "扫描完成后即可按此维度浏览", modifier = Modifier.fillMaxSize())
@@ -265,20 +280,29 @@ internal fun GroupListView(
                     .clip(MaterialTheme.shapes.medium)
                     .clickable { onOpen(group) },
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(10.dp)) {
-                    CoverArt(song = group.sample, size = 52.dp, cornerRadius = 12.dp)
-                    Spacer(Modifier.width(12.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(if (carMode) 14.dp else 10.dp),
+                ) {
+                    CoverArt(
+                        song = group.sample,
+                        size = if (carMode) 64.dp else 52.dp,
+                        cornerRadius = if (carMode) 14.dp else 12.dp,
+                    )
+                    Spacer(Modifier.width(if (carMode) 18.dp else 12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
                             group.title,
-                            style = MaterialTheme.typography.bodyLarge,
+                            style = if (carMode) MaterialTheme.typography.titleLarge
+                            else MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Medium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
                             group.subtitle.ifBlank { "${group.count} 首" },
-                            style = MaterialTheme.typography.bodySmall,
+                            style = if (carMode) MaterialTheme.typography.bodyLarge
+                            else MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -324,6 +348,8 @@ internal fun GroupDetail(
     player: PlayerUiState,
     onBack: () -> Unit,
     onSongLongPress: (Song) -> Unit,
+    /** 车载模式：详情里的歌曲行同样放大（与一级列表一致） */
+    carMode: Boolean = false,
 ) {
     Column(Modifier.fillMaxSize()) {
         DetailHeader(
@@ -345,6 +371,7 @@ internal fun GroupDetail(
                     song = song,
                     isCurrent = player.current?.stableKey == song.stableKey,
                     isPlaying = player.isPlaying,
+                    large = carMode,
                     onClick = { playerVm.playQueue(library.detailSongs, index) },
                     onLongClick = { onSongLongPress(song) },
                     onMore = { onSongLongPress(song) },

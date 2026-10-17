@@ -186,7 +186,7 @@ internal fun SettingsAppearancePage(
     // 副标题原文 180 字，一条设置项就占掉大半屏；详细说明移到标题旁的「?」弹窗
     SwitchRow(
         title = "车载模式",
-        subtitle = "启动直进播放页 · 歌词自动收起 · 开机自启",
+        subtitle = "启动直进播放页 · 大控件首页 · 切换后立即生效",
         checked = player.carMode,
         onCheckedChange = onCarMode,
         onInfo = { showCarModeInfo = true },
@@ -204,7 +204,11 @@ internal fun SettingsAppearancePage(
             text = {
                 Text(
                     "启动后直接进入播放页并锁定横屏，适合车机或手机横放。\n\n" +
-                        "歌词页 5 秒无操作会自动收起顶栏、控制键与底部状态行，只留歌词、歌名、" +
+                        "切换后立即生效：打开就转横屏并展开播放页，不用重开应用" +
+                        "（关闭时不打断当前页面，只是下次启动回到曲库）。\n\n" +
+                        "曲库页换成车机版式：顶部横向分类、行高与字号放大、底部大播放条，" +
+                        "触摸目标都 ≥76dp，并关掉长按多选与滑动切歌这类在车上容易误触的手势。\n\n" +
+                        "播放页 5 秒无操作会自动收起顶栏、控制键与底部状态行，只留歌词、歌名、" +
                         "进度与时间；触摸任意位置恢复。切到封面态不收起。\n\n" +
                         "开启后，设备开机时应用会自动拉起（车载场景）。",
                     style = MaterialTheme.typography.bodySmall,

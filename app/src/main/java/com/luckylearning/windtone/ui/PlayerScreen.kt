@@ -87,6 +87,11 @@ import kotlin.math.abs
 /** 车载模式：歌词态无操作多久后收起顶栏 / 控制键 / 状态行（毫秒） */
 private const val CAR_IMMERSIVE_DELAY_MS = 5_000L
 
+/** 车机播放页：三键里的主键 112dp、两侧 96dp、次级键 76dp（行车中不瞄也能按中） */
+private val CAR_MAIN_BUTTON = 112.dp
+private val CAR_SIDE_BUTTON = 96.dp
+private val CAR_SECONDARY_BUTTON = 76.dp
+
 /**
  * 车载模式播放页的内容限宽。
  *
@@ -429,14 +434,17 @@ fun PlayerScreen(
                 ) {
                     Text(
                         text = song?.title ?: "未在播放",
-                        style = MaterialTheme.typography.titleMedium,
+                        // 车机：歌名 / 歌手各放大一档（22sp / 16sp），60~70cm 视距下读得清
+                        style = if (state.carMode) MaterialTheme.typography.headlineSmall
+                        else MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         text = song?.artistOrUnknown ?: "",
-                        style = MaterialTheme.typography.labelMedium,
+                        style = if (state.carMode) MaterialTheme.typography.bodyLarge
+                        else MaterialTheme.typography.labelMedium,
                         color = scheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -485,10 +493,14 @@ fun PlayerScreen(
                 ) {
                     Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                         // 播放模式（顺序 / 列表循环 / 单曲循环 / 随机）合并在这一个按钮上轮换
-                        IconButton(onClick = { onCyclePlayMode(); keepAwake() }) {
+                        IconButton(
+                            onClick = { onCyclePlayMode(); keepAwake() },
+                            modifier = if (state.carMode) Modifier.size(CAR_SECONDARY_BUTTON) else Modifier,
+                        ) {
                             Icon(
                                 imageVector = playMode.icon,
                                 contentDescription = "播放模式：${playMode.label}",
+                                modifier = if (state.carMode) Modifier.size(34.dp) else Modifier,
                                 tint = if (playMode == PlayMode.SEQUENTIAL) scheme.onSurfaceVariant
                                 else scheme.primary,
                             )
@@ -496,14 +508,17 @@ fun PlayerScreen(
                     }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(if (state.carMode) 40.dp else 20.dp),
                     ) {
-                        IconButton(onClick = { onPrevious(); keepAwake() }) {
+                        IconButton(
+                            onClick = { onPrevious(); keepAwake() },
+                            modifier = if (state.carMode) Modifier.size(CAR_SIDE_BUTTON) else Modifier,
+                        ) {
                             Icon(
                                 imageVector = AppIcons.SkipPrevious,
                                 contentDescription = "上一首",
                                 tint = scheme.onSurface,
-                                modifier = Modifier.size(34.dp),
+                                modifier = Modifier.size(if (state.carMode) 46.dp else 34.dp),
                             )
                         }
                         FilledIconButton(
@@ -514,32 +529,39 @@ fun PlayerScreen(
                                 contentColor = scheme.onPrimary,
                             ),
                             modifier = Modifier
-                                .size(66.dp)
+                                .size(if (state.carMode) CAR_MAIN_BUTTON else 66.dp)
                                 .shadow(10.dp, CircleShape),
                         ) {
                             Icon(
                                 imageVector = if (state.isPlaying) AppIcons.Pause else Icons.Filled.PlayArrow,
                                 contentDescription = if (state.isPlaying) "暂停" else "播放",
-                                modifier = Modifier.size(34.dp),
+                                modifier = Modifier.size(if (state.carMode) 52.dp else 34.dp),
                             )
                         }
-                        IconButton(onClick = { onNext(); keepAwake() }) {
+                        IconButton(
+                            onClick = { onNext(); keepAwake() },
+                            modifier = if (state.carMode) Modifier.size(CAR_SIDE_BUTTON) else Modifier,
+                        ) {
                             Icon(
                                 imageVector = AppIcons.SkipNext,
                                 contentDescription = "下一首",
                                 tint = scheme.onSurface,
-                                modifier = Modifier.size(34.dp),
+                                modifier = Modifier.size(if (state.carMode) 46.dp else 34.dp),
                             )
                         }
                     }
                     // 右侧对称槽：与左槽等宽，把中间三键顶回屏幕正中；
                     // 槽内放播放队列入口（效果图 ⑫ 的 p-ctl 右槽），与左边的播放模式对称。
                     Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-                        IconButton(onClick = { keepAwake(); onShowQueue() }) {
+                        IconButton(
+                            onClick = { keepAwake(); onShowQueue() },
+                            modifier = if (state.carMode) Modifier.size(CAR_SECONDARY_BUTTON) else Modifier,
+                        ) {
                             Icon(
                                 imageVector = AppIcons.QueueMusic,
                                 contentDescription = "播放队列",
                                 tint = scheme.onSurface,
+                                modifier = if (state.carMode) Modifier.size(34.dp) else Modifier,
                             )
                         }
                     }

@@ -300,6 +300,9 @@ object BootDiagView {
             addView(body)
         }
 
+    // WrongConstant：`TextView.breakStrategy` 的 @IntDef 挂在 API 29 的 LineBreaker 上，
+    // 而这里要兼容到 API 26，只能用旧的 Layout.BREAK_STRATEGY_SIMPLE（两者数值相同）。
+    @android.annotation.SuppressLint("WrongConstant")
     private fun paragraph(
         ctx: Context,
         body: String,

@@ -954,10 +954,23 @@ class PlaybackEngine(
         _player.update { it.copy(lyricsPaneVisible = visible) }
     }
 
-    /** 车载模式：启动直进播放页 + 播放页 5 秒无操作进入沉浸态 */
+    /**
+     * 车载模式：启动直进播放页 + 播放页 5 秒无操作进入沉浸态。
+     *
+     * v1.1.19：**打开时立刻展开播放页**。以前 `playerExpanded` 只在构造 `PlayerUiState`
+     * 时按 `prefs.carMode` 读一次，用户拨完开关当次什么都不会发生（必须杀进程重开），
+     * 是「车载模式开关感觉没用」的主要来源之一。关闭时不强行退出播放页 —— 正在听着歌
+     * 被弹回列表页更突兀，只让「下次启动回库页」生效。
+     */
     override fun setCarMode(enabled: Boolean) {
         prefs.carMode = enabled
-        _player.update { it.copy(carMode = enabled) }
+        _player.update {
+            it.copy(
+                carMode = enabled,
+                // 只在打开的那一下展开；关闭时保持用户当前所在页面
+                playerExpanded = if (enabled) true else it.playerExpanded,
+            )
+        }
     }
 
     /**
