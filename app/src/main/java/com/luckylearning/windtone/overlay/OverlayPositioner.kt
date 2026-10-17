@@ -73,23 +73,64 @@ object OverlayPositioner {
     }
 
     /**
-     * 「全屏高度」模式（v1.1.19）下的窗口尺寸：铺满屏宽，高度 = 屏高 − 底部让位。
+     * 把「余量百分比」翻译成人话，给设置页与自检共用。
+     *
+     * 两端各留 2% 的容差：拖动落盘是浮点换算，用户停在「大概最左」时
+     * 存下来的可能是 1 或 2 —— 把它显示成「偏左 1%」既无意义又像 bug。
+     */
+    fun offsetLabel(offsetPercent: Int): String {
+        val v = offsetPercent.coerceIn(0, 100)
+        return when {
+            v <= 2 -> "靠左"
+            v >= 98 -> "靠右"
+            kotlin.math.abs(v - 50) <= 2 -> "居中"
+            v < 50 -> "偏左 ${v}%"
+            else -> "偏右 ${v}%"
+        }
+    }
+
+    /**
+     * 「全屏高度」模式（v1.1.19）下的窗口外形：宽度 = 屏宽 × 百分比，
+     * 高度 = 屏高 − 底部让位，纵向钉在顶部，横向按 [offsetPercent] 在
+     * 「屏宽 − 窗宽」这段余量里取位。
      *
      * 底部让位是给车机 Dock 留的：车机（DiLink 等）底部有一条系统常驻按钮栏，
      * 悬浮窗压上去就会盖住返回 / 空调这些键 —— v1.1.14 的「设置点不到」正是
      * 这条浮层压出来的，别再犯一次。
      *
-     * 两个夹取都是**防呆**，不是正常路径：
+     * **为什么位置用百分比而不是像素**（v1.1.20）：全屏模式是可以左右挪的，
+     * 但「左右能挪多远」跟着宽度走（余量 = 屏宽 − 窗宽）。存像素的话，
+     * 换分辨率 / 转屏后那个绝对坐标会跑到屏幕外或者贴在奇怪的位置；
+     * 存「余量的百分比」则天然跟着屏宽缩放：0 = 最左、50 = 居中、100 = 最右。
+     * 单条字幕那边仍存像素 —— 它的窗口小而自由，用户拖到哪儿就是哪儿。
+     *
+     * 夹取都是**防呆**，不是正常路径：
+     *  - 宽度不低于屏宽 30%（再窄就放不下 11 行歌词，成了条竖线）；
      *  - 让位不能超过半屏（改 dpi / 极窄屏时，否则窗口会被算成一条缝）；
-     *  - 高度至少 1px —— `LayoutParams.height = 0` 在部分 ROM 上等于「不显示」，
+     *  - 宽高至少 1px —— `LayoutParams.height = 0` 在部分 ROM 上等于「不显示」，
      *    而这个模式的失败表现就是「开关开了、屏幕上什么都没有」，极难排查。
      */
-    data class FullFrame(val width: Int, val height: Int)
+    data class FullFrame(val width: Int, val height: Int, val x: Int, val y: Int)
 
-    fun fullFrame(screenW: Int, screenH: Int, bottomReserved: Int): FullFrame {
-        val w = screenW.coerceAtLeast(1)
+    /** 全屏模式宽度的下限（占屏宽的百分比）：比这更窄，11 行歌词会挤成一条竖线 */
+    const val FULL_WIDTH_MIN_PERCENT = 30
+
+    fun fullFrame(
+        screenW: Int,
+        screenH: Int,
+        bottomReserved: Int,
+        widthPercent: Int = 100,
+        offsetPercent: Int = 50,
+    ): FullFrame {
+        val safeW = screenW.coerceAtLeast(1)
+        val pct = widthPercent.coerceIn(FULL_WIDTH_MIN_PERCENT, 100)
+        val w = (safeW * pct / 100f).toInt().coerceIn(1, safeW)
         val reserved = bottomReserved.coerceIn(0, (screenH / 2).coerceAtLeast(0))
         val h = (screenH - reserved).coerceAtLeast(1)
-        return FullFrame(w, h)
+        // 横向余量：宽度 = 屏宽时正好是 0（此时水平位置滑块怎么调都不动，
+        // 与单条字幕 100% 宽时「只能上下拖」是同一个几何事实）。
+        val maxX = (safeW - w).coerceAtLeast(0)
+        val x = (maxX * offsetPercent.coerceIn(0, 100) / 100f).toInt().coerceIn(0, maxX)
+        return FullFrame(w, h, x, 0)
     }
 }

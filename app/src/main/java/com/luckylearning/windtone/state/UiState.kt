@@ -331,6 +331,14 @@ data class PlayerUiState(
      * 内容按播放页歌词区排版（当前行居中放大，上下各 5 句压暗）。
      */
     val lyricOverlayFullHeight: Boolean = SettingsDefaults.OVERLAY_FULL_HEIGHT,
+    /**
+     * 全屏模式下的窗口宽度（屏宽百分比，30..100）与水平位置（余量百分比，0 最左 / 50 居中 / 100 最右）。
+     *
+     * 与单条字幕的 [lyricOverlayWidthPercent] 分开存：两种形态是两套排版，
+     * 调窄整屏歌词不应该顺手把单条字幕也缩窄。
+     */
+    val lyricOverlayFullWidthPercent: Int = SettingsDefaults.OVERLAY_FULL_WIDTH_PERCENT,
+    val lyricOverlayFullOffsetPercent: Int = SettingsDefaults.OVERLAY_FULL_OFFSET_PERCENT,
     /** 悬浮窗里的歌词文字颜色（ARGB，默认纯白） */
     val lyricOverlayTextColor: Int = SettingsDefaults.OVERLAY_TEXT_COLOR,
     /** 悬浮歌词是否处于「调整位置」模式（临时可拖动，会话级，不落盘） */

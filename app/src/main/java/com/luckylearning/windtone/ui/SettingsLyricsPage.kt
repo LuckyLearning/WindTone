@@ -7,6 +7,7 @@ import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.data.UpdateChecker
 import com.luckylearning.windtone.overlay.LyricOverlayBridge
 import com.luckylearning.windtone.overlay.LyricOverlayBus
+import com.luckylearning.windtone.overlay.OverlayPositioner
 import com.luckylearning.windtone.overlay.OverlaySnapshot
 import com.luckylearning.windtone.state.LibraryUiState
 import com.luckylearning.windtone.state.PlayerUiState
@@ -101,7 +102,13 @@ import kotlin.math.roundToInt
 
 // ================================================================ 子页：歌词
 
-// ================================================================ 子页：歌词
+/**
+ * 全屏歌词在「满宽却要点调整」时自动收窄到的宽度（%）。
+ *
+ * 留 8% 就够左右挪：全屏宽度 92% 在 1920 屏上有 154px 的余量，
+ * 车机手指宽度量级下手感正常，视觉上也几乎看不出变窄。
+ */
+private const val OVERLAY_FULL_EDIT_LEAVE_PERCENT = 92
 
 @Composable
 internal fun SettingsLyricsPage(
@@ -113,6 +120,10 @@ internal fun SettingsLyricsPage(
     onLyricOverlay: (Boolean) -> Unit,
     onLyricOverlayLines: (Int) -> Unit,
     onLyricOverlayFullHeight: (Boolean) -> Unit,
+    /** 全屏模式的宽度（屏宽百分比，30..100）—— v1.1.20，与单条字幕的宽度分开 */
+    onLyricOverlayFullWidthPercent: (Int) -> Unit,
+    /** 全屏模式的水平位置（余量百分比：0 最左 / 50 居中 / 100 最右） */
+    onLyricOverlayFullOffsetPercent: (Int) -> Unit,
     onLyricOverlayShowTitle: (Boolean) -> Unit,
     onLyricOverlayTitleScale: (Int) -> Unit,
     onLyricOverlayTextScale: (Int) -> Unit,
@@ -216,6 +227,83 @@ internal fun SettingsLyricsPage(
             onLyricOverlayFullHeight(SettingsDefaults.OVERLAY_FULL_HEIGHT)
         },
     )
+    // v1.1.20：「形态 → 尺寸 → 位置」三段式。
+    // 全屏高度这一档要能改宽度、也要能左右挪，而且**不能和单条字幕共用一套值**——
+    // 两种形态的排版诉求相反（整屏看歌词 vs 一行字幕），共用只会互相打架。
+    // 所以这里按形态分岔，控件、按钮、落盘字段三样都各走各的。
+    if (player.lyricOverlayFullHeight) {
+        SliderRow(
+            title = "全屏宽度 ${player.lyricOverlayFullWidthPercent}%",
+            subtitle = if (player.lyricOverlayFullWidthPercent >= 100) {
+                "已占满屏宽（此时左右没有余量）。调小一点即可左右挪动，两侧留白也更聚焦"
+            } else {
+                "屏宽的 ${player.lyricOverlayFullWidthPercent}%，两侧共留出 " +
+                    "${100 - player.lyricOverlayFullWidthPercent}% 的余量供左右移动；" +
+                    "宽度越窄，长句折行越早"
+            },
+            value = player.lyricOverlayFullWidthPercent.toFloat(),
+            range = SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE.first.toFloat()..
+                SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE.last.toFloat(),
+            onValueChange = {
+                onLyricOverlayFullWidthPercent(it.toInt().coerceIn(30, 100))
+            },
+            onReset = resetAction(
+                player.lyricOverlayFullWidthPercent != SettingsDefaults.OVERLAY_FULL_WIDTH_PERCENT,
+            ) { onLyricOverlayFullWidthPercent(SettingsDefaults.OVERLAY_FULL_WIDTH_PERCENT) },
+        )
+        SliderRow(
+            title = "水平位置 " + OverlayPositioner.offsetLabel(player.lyricOverlayFullOffsetPercent),
+            subtitle = if (player.lyricOverlayFullWidthPercent >= 100) {
+                "宽度 100% 时没有可移动的余量，位置固定；先把上面的宽度调小"
+            } else {
+                "在左右留白之间移动歌词面板；也可以到桌面上直接左右拖（两处是同一份设置）"
+            },
+            value = player.lyricOverlayFullOffsetPercent.toFloat(),
+            range = 0f..100f,
+            onValueChange = { onLyricOverlayFullOffsetPercent(it.toInt().coerceIn(0, 100)) },
+            onReset = resetAction(
+                player.lyricOverlayFullOffsetPercent != SettingsDefaults.OVERLAY_FULL_OFFSET_PERCENT,
+            ) {
+                onLyricOverlayFullOffsetPercent(SettingsDefaults.OVERLAY_FULL_OFFSET_PERCENT)
+            },
+        )
+        // 三个大按钮：车机上用滑块找「正好靠边」很难，一键到位更实际
+        OverlayOffsetPresets(
+            current = player.lyricOverlayFullOffsetPercent,
+            enabled = player.lyricOverlayFullWidthPercent < 100,
+            onPick = onLyricOverlayFullOffsetPercent,
+        )
+    } else {
+        ActionRow(
+            title = "悬浮歌词行数",
+            subtitle = overlayLinesHint(player.lyricOverlayLines),
+            onClick = { overlayChoice = OverlayChoice.LINES },
+            chevron = true,
+            onReset = resetAction(player.lyricOverlayLines != SettingsDefaults.OVERLAY_LINES) {
+                onLyricOverlayLines(SettingsDefaults.OVERLAY_LINES)
+            },
+        )
+        // 宽度之所以是滑块而不是档位：屏幕尺寸千差万别，档位永远差一个「刚好」。
+        SliderRow(
+            title = "悬浮歌词宽度 ${player.lyricOverlayWidthPercent}%",
+            // 宽度与「横向能拖多远」是同一件事的两面，到了 100% 就直接说破，
+            // 否则用户会像 2026-10-16 那样把「拖不动」当 bug 报回来。
+            subtitle = if (player.lyricOverlayWidthPercent >= 100) {
+                "已占满屏宽，无法左右移动；调小一点即可拖到屏幕任意位置"
+            } else {
+                "屏幕宽度的百分比（1–100%）。窗口越窄，能左右移动的范围越大；" +
+                    "窗口越宽，长句折行越晚"
+            },
+            value = player.lyricOverlayWidthPercent.toFloat(),
+            range = 1f..100f,
+            // 拖动时逐帧写回：宽度与屏幕是直接的比例关系，松手才变会让人
+            // 以为「拖了半天没反应」。引擎侧每次都会重摆窗口，正好当实时预览用。
+            onValueChange = { onLyricOverlayWidthPercent(it.toInt().coerceIn(1, 100)) },
+            onReset = resetAction(
+                player.lyricOverlayWidthPercent != SettingsDefaults.OVERLAY_WIDTH_PERCENT,
+            ) { onLyricOverlayWidthPercent(SettingsDefaults.OVERLAY_WIDTH_PERCENT) },
+        )
+    }
     // v1.1.15：顶部「歌名 + 歌手」两行小字（默认关闭，不打扰老用户）
     SwitchRow(
         title = "显示歌名与歌手",
@@ -244,22 +332,9 @@ internal fun SettingsLyricsPage(
         )
     }
 
-    // 悬浮歌词的外观选项：行数 / 字号 / 对齐 / 底板 / 暂停行为。
+    // 悬浮歌词的外观选项：字号 / 对齐 / 底板 / 暂停行为。
     // 都紧跟在开关下方，与它绑成一个整体；开关关着也允许**预设**，
     // 所以不做可见性 gating。所有项共用同一个选项弹层，改完立刻给一次 6 秒预览。
-    // 行数只在单条字幕模式下有意义：全屏模式固定 11 行（上 5 + 当前 + 下 5），
-    // 摆一个「调了没反应」的选项比藏起来更糟。
-    if (!player.lyricOverlayFullHeight) {
-        ActionRow(
-            title = "悬浮歌词行数",
-            subtitle = overlayLinesHint(player.lyricOverlayLines),
-            onClick = { overlayChoice = OverlayChoice.LINES },
-            chevron = true,
-            onReset = resetAction(player.lyricOverlayLines != SettingsDefaults.OVERLAY_LINES) {
-                onLyricOverlayLines(SettingsDefaults.OVERLAY_LINES)
-            },
-        )
-    }
     ActionRow(
         title = "悬浮歌词字号",
         subtitle = "大屏与车机上建议调大一档",
@@ -313,28 +388,7 @@ internal fun SettingsLyricsPage(
         ) { onLyricOverlayPauseMode(SettingsDefaults.OVERLAY_PAUSE_MODE) },
     )
 
-    // v1.1.4 新增：宽度滑块 + 颜色。都紧跟在五个外观选项之后，仍属「外观」范畴。
-    // 宽度之所以是滑块而不是档位：屏幕尺寸千差万别，档位永远差一个「刚好」。
-    // 宽度同理：全屏模式宽度恒等于屏宽，滑块无效，直接不显示。
-    if (!player.lyricOverlayFullHeight) SliderRow(
-        title = "悬浮歌词宽度 ${player.lyricOverlayWidthPercent}%",
-        // 宽度与「横向能拖多远」是同一件事的两面，到了 100% 就直接说破，
-        // 否则用户会像 2026-10-16 那样把「拖不动」当 bug 报回来。
-        subtitle = if (player.lyricOverlayWidthPercent >= 100) {
-            "已占满屏宽，悬浮窗无法左右移动；调小一点即可拖到屏幕任意位置"
-        } else {
-            "屏幕宽度的百分比（1–100%）。窗口越窄，能左右移动的范围越大；" +
-                "窗口越宽，长句折行越晚"
-        },
-        value = player.lyricOverlayWidthPercent.toFloat(),
-        range = 1f..100f,
-        // 拖动时逐帧写回：宽度与屏幕是直接的比例关系，松手才变会让人
-        // 以为「拖了半天没反应」。引擎侧每次都会重摆窗口，正好当实时预览用。
-        onValueChange = { onLyricOverlayWidthPercent(it.toInt().coerceIn(1, 100)) },
-        onReset = resetAction(
-            player.lyricOverlayWidthPercent != SettingsDefaults.OVERLAY_WIDTH_PERCENT,
-        ) { onLyricOverlayWidthPercent(SettingsDefaults.OVERLAY_WIDTH_PERCENT) },
-    )
+    // 文字颜色。宽度滑块已经随形态放到上面那组里（全屏 / 单条各一套），不在这里重复。
     ActionRow(
         title = "悬浮歌词文字颜色",
         subtitle = "悬浮窗是固定色，不跟随主题；当前行与上下句靠明暗区分",
@@ -394,26 +448,58 @@ internal fun SettingsLyricsPage(
             )
         }
     }
-    // 位置调整：开关打开且已授权时才出现。进入后悬浮窗临时可拖动，
-    // 拖完点「完成」锁回穿透态。
-    if (player.lyricOverlay && canDrawOverlay && player.lyricOverlayFullHeight) {
-        Text(
-            text = "全屏高度模式下位置与宽度固定：铺满屏幕、底部让出 56dp 给车机 Dock。" +
-                "想恢复成可拖动的单条字幕，把这上面的「全屏高度」关掉即可。",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(vertical = 6.dp),
-        )
-    }
-    if (player.lyricOverlay && canDrawOverlay && !player.lyricOverlayFullHeight) {
+    // 位置调整：开关打开且已授权时才出现。
+    //
+    // 两种形态给的是**两条不同的操作路径**，按钮文案也据此分开：
+    //  - 单条字幕：进入后横竖都能拖，窗口小而自由；
+    //  - 全屏歌词：只能左右拖（高度由屏幕决定），拖完双击即可锁定。
+    // 不合成一个按钮，是因为「拖到什么程度算对」在两种形态下完全不同 ——
+    // 一个提示「上下左右」，另一个只提示「左右」，合并会让人以为全屏也能上下挪。
+    if (player.lyricOverlay && canDrawOverlay) {
         ActionRow(
-            title = if (player.overlayEditing) "完成调整" else "调整悬浮歌词位置",
-            subtitle = if (player.overlayEditing) {
-                "拖动屏幕上的歌词（横竖都可以）到合适位置，然后点这里锁定（锁定后点击穿透）"
-            } else {
-                "临时解锁，把歌词拖到想要的位置；位置会记住，锁定后不挡触摸"
+            title = when {
+                !player.overlayEditing -> if (player.lyricOverlayFullHeight) {
+                    "在桌面上左右调整位置"
+                } else {
+                    "调整悬浮歌词位置"
+                }
+                else -> "完成调整"
             },
-            onClick = { onOverlayEditing(!player.overlayEditing) },
+            subtitle = when {
+                player.overlayEditing && player.lyricOverlayFullHeight ->
+                    "已进入调整：退到桌面左右拖动歌词，双击即可锁定；也可以点这里锁定"
+                player.overlayEditing ->
+                    "拖动屏幕上的歌词（横竖都可以）到合适位置，然后点这里锁定"
+                // 满宽时全屏窗口盖住整块屏：直接进编辑态会「吃触摸但拖不动」，
+                // 所以这里先说清楚点下去会发生什么（实现里会自动留出 8% 余量）。
+                player.lyricOverlayFullHeight && player.lyricOverlayFullWidthPercent >= 100 ->
+                    "当前满宽没有余量。点一下会先把宽度收到 92% 留出两侧空间，就能左右拖了"
+                player.lyricOverlayFullHeight ->
+                    "临时解锁，在留白范围内左右拖动；也可以直接用上面的宽度与水平位置滑块"
+                else ->
+                    "临时解锁，把歌词拖到想要的位置；位置会记住，锁定后不挡触摸"
+            },
+            onClick = {
+                val entering = !player.overlayEditing
+                if (entering && player.lyricOverlayFullHeight) {
+                    // 满宽进编辑态等于「能吃触摸但拖不动」：桌面被盖住、用户还以为拖成功了。
+                    // 这里先收 8% 留白，把「点了就能拖」变成确定性结果。
+                    val narrowed = player.lyricOverlayFullWidthPercent >= 100
+                    if (narrowed) onLyricOverlayFullWidthPercent(OVERLAY_FULL_EDIT_LEAVE_PERCENT)
+                    // 全屏编辑态在 App 内是隐藏的（否则会盖住本页、连「完成调整」都点不到），
+                    // 所以必须说清楚「去哪儿拖」——否则用户会觉得按了没反应。
+                    android.widget.Toast.makeText(
+                        context,
+                        if (narrowed) {
+                            "已进入调整：宽度收到 92% 留出余量。退到桌面左右拖动，双击锁定"
+                        } else {
+                            "已进入调整：退到桌面左右拖动歌词，双击锁定"
+                        },
+                        android.widget.Toast.LENGTH_LONG,
+                    ).show()
+                }
+                onOverlayEditing(entering)
+            },
         )
     }
 
@@ -568,5 +654,67 @@ internal fun SettingsLyricsPage(
             onPick = { argb -> onLyricOverlayTextColor(argb) },
             onDismiss = { colorPickerShown = false },
         )
+    }
+}
+
+/**
+ * 全屏歌词的三个位置快捷键：靠左 / 居中 / 靠右。
+ *
+ * 为什么在滑块之外还要这组按钮：车机上手指精确定位滑块很难，
+ * 「靠左贴边」这种诉求用滑块找不准，一键到位才实际；
+ * 滑块留着是为了「就差一点点」的微调。两者写的是同一个百分比，不会互相打架。
+ *
+ * 宽度占满屏时整组置灰 —— 此时余量为 0，按了也不会动，置灰比按了没反应诚实。
+ */
+@Composable
+private fun OverlayOffsetPresets(
+    current: Int,
+    enabled: Boolean,
+    onPick: (Int) -> Unit,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 2.dp, bottom = 8.dp),
+    ) {
+        listOf(0 to "靠左", 50 to "居中", 100 to "靠右").forEach { (value, label) ->
+            val selected = abs(current - value) <= 2
+            // 未选中也给一圈细描边：三块 surfaceVariant 底色的按钮并排时，
+            // 不加边框会糊成一条横条，看着像「不可点」而不是「三个选项」。
+            val stroke = when {
+                !enabled -> MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+                selected -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
+            }
+            Surface(
+                color = when {
+                    !enabled -> MaterialTheme.colorScheme.surfaceVariant
+                    selected -> MaterialTheme.colorScheme.primaryContainer
+                    else -> MaterialTheme.colorScheme.surfaceVariant
+                },
+                shape = RoundedCornerShape(10.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, stroke),
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable(enabled = enabled) { onPick(value) },
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.height(44.dp),
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = when {
+                            !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                            selected -> MaterialTheme.colorScheme.onPrimaryContainer
+                            else -> MaterialTheme.colorScheme.onSurface
+                        },
+                    )
+                }
+            }
+        }
     }
 }

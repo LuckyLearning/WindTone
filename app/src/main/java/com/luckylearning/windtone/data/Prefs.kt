@@ -98,6 +98,28 @@ object SettingsDefaults {
      */
     const val OVERLAY_DOCK_RESERVED_DP = 56
 
+    /**
+     * 全屏模式下的窗口宽度（屏宽百分比，默认 100）。
+     *
+     * 与单条字幕的 [OVERLAY_WIDTH_PERCENT] **分开存**：两种形态在用户心里是两件事，
+     * 全屏歌词面板通常要铺满整块屏，单条字幕则要留出能拖动的余量。
+     * 合用一个键的话，调窄单条字幕会顺手把整屏歌词也缩窄，反之亦然。
+     */
+    const val OVERLAY_FULL_WIDTH_PERCENT = 100
+
+    /** 全屏宽度百分比的合法区间：再窄放不下 11 行歌词 */
+    val OVERLAY_FULL_WIDTH_RANGE = 30..100
+
+    /**
+     * 全屏模式下的水平位置，存的是「可移动余量的百分比」（0 = 最左 / 50 = 居中 / 100 = 最右）。
+     *
+     * 不存像素：全屏窗口的宽度会变，余量跟着变；存百分比才能让「居中」永远是居中。
+     */
+    const val OVERLAY_FULL_OFFSET_PERCENT = 50
+
+    /** 水平位置百分比的合法区间 */
+    val OVERLAY_FULL_OFFSET_RANGE = 0..100
+
     /** 悬浮歌词水平对齐：0 居中 / 1 居左（取值与 `overlay/OverlayPositioner` 的 ALIGN_* 一致） */
     const val OVERLAY_ALIGN = 0
     const val OVERLAY_BACKDROP = 1
@@ -322,6 +344,48 @@ class Prefs(context: Context) {
     var lyricOverlayFullHeight: Boolean
         get() = sp.getBoolean(KEY_LYRIC_OVERLAY_FULL_HEIGHT, SettingsDefaults.OVERLAY_FULL_HEIGHT)
         set(value) = sp.edit().putBoolean(KEY_LYRIC_OVERLAY_FULL_HEIGHT, value).apply()
+
+    /**
+     * 全屏模式下的窗口宽度（屏宽百分比）。
+     *
+     * 与 [lyricOverlayWidthPercent] 各存一份，互不影响（见
+     * [SettingsDefaults.OVERLAY_FULL_WIDTH_PERCENT] 的说明）。
+     * 宽度为 100% 时横向余量为 0，此时 [lyricOverlayFullOffsetPercent] 调了也不动 ——
+     * 设 `full_width` 的地方要顺带把这件事讲清楚，别再让用户把它当 bug。
+     */
+    var lyricOverlayFullWidthPercent: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_FULL_WIDTH, SettingsDefaults.OVERLAY_FULL_WIDTH_PERCENT)
+            .coerceIn(
+                SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE.first,
+                SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE.last,
+            )
+        set(value) = sp.edit().putInt(
+            KEY_LYRIC_OVERLAY_FULL_WIDTH,
+            value.coerceIn(
+                SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE.first,
+                SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE.last,
+            ),
+        ).apply()
+
+    /**
+     * 全屏模式下的水平位置：存「可移动余量的百分比」（0 最左 / 50 居中 / 100 最右）。
+     *
+     * 桌面拖动时把像素 x 反算成这个百分比再落盘，所以换分辨率、转屏之后
+     * 「靠右」仍然靠右，不会因为绝对坐标过期而跑到屏幕外。
+     */
+    var lyricOverlayFullOffsetPercent: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_FULL_OFFSET, SettingsDefaults.OVERLAY_FULL_OFFSET_PERCENT)
+            .coerceIn(
+                SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE.first,
+                SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE.last,
+            )
+        set(value) = sp.edit().putInt(
+            KEY_LYRIC_OVERLAY_FULL_OFFSET,
+            value.coerceIn(
+                SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE.first,
+                SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE.last,
+            ),
+        ).apply()
 
     /**
      * 歌名 / 歌手两行小字的字号档位：0 小（默认）/ 1 中 / 2 大。
@@ -552,6 +616,9 @@ class Prefs(context: Context) {
         const val KEY_LYRIC_OVERLAY_ALIGN = "lyric_overlay_align"
         const val KEY_LYRIC_OVERLAY_WIDTH = "lyric_overlay_width_percent"
         const val KEY_LYRIC_OVERLAY_FULL_HEIGHT = "lyric_overlay_full_height"
+        /** 全屏模式的宽度（屏宽百分比）与水平位置（余量百分比），与单条字幕分开存 */
+        const val KEY_LYRIC_OVERLAY_FULL_WIDTH = "lyric_overlay_full_width_percent"
+        const val KEY_LYRIC_OVERLAY_FULL_OFFSET = "lyric_overlay_full_offset_percent"
         const val KEY_LYRIC_OVERLAY_TEXT_COLOR = "lyric_overlay_text_color"
         const val KEY_DYNAMIC_THEME = "dynamic_theme"
         const val KEY_SPEED = "playback_speed"

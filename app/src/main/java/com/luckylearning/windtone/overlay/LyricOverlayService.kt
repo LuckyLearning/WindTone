@@ -150,6 +150,10 @@ class LyricOverlayService : Service() {
     /** 已应用的「全屏高度」开关（v1.1.19）；-1 = 还没应用过 */
     private var appliedFullHeight = -1
 
+    /** 已应用的全屏宽度 / 水平位置（v1.1.20）；-1 = 还没应用过 */
+    private var appliedFullWidthPercent = -1
+    private var appliedFullOffsetPercent = -1
+
     /**
      * 上一次渲染的「角色 + 文字」签名。
      *
@@ -440,15 +444,20 @@ class LyricOverlayService : Service() {
     private fun applyPosition() {
         val p = layoutParams ?: return
         val prefs = Prefs(this)
-        // 全屏模式的位置由 [applyFullHeightChrome] 钉在 (0,0)；这里若继续按拖动坐标
-        // 夹取，会把窗口挪到用户上次拖到的地方，屏幕上就只剩一块偏移的歌词面板。
+        // 全屏模式（v1.1.20）：位置不再钉死在左上角，而是按「宽度 + 水平位置百分比」
+        // 重新算一遍。这里只管 x/y（尺寸由 applyFullHeightChrome 负责），
+        // 拖动过程中本方法不会被调用，所以不会和手指抢位置。
         if (prefs.lyricOverlayFullHeight) {
-            if (p.gravity != (Gravity.TOP or Gravity.START) || p.x != 0 || p.y != 0) {
-                p.gravity = Gravity.TOP or Gravity.START
-                p.x = 0
-                p.y = 0
-                runCatching { windowManager?.updateViewLayout(container, p) }
+            val (screenW, screenH) = screenSize()
+            val frame = fullFrameFor(screenW, screenH, prefs)
+            if (p.gravity == (Gravity.TOP or Gravity.START) && p.x == frame.x && p.y == frame.y) {
+                return
             }
+            p.gravity = Gravity.TOP or Gravity.START
+            p.x = frame.x
+            p.y = frame.y
+            runCatching { windowManager?.updateViewLayout(container, p) }
+            updateGeometryReport()
             return
         }
         val (screenW, screenH) = screenSize()
@@ -493,6 +502,21 @@ class LyricOverlayService : Service() {
         val (screenW, _) = screenSize()
         return (screenW * percent.coerceIn(1, 100) / 100f).toInt().coerceAtLeast(dp(MIN_OVERLAY_WIDTH_DP))
     }
+
+    /**
+     * 全屏模式的外形（尺寸 + 位置），把 dp 让位换算集中在这一处。
+     *
+     * 三个调用点（安装时、改宽度 / 位置、转屏）必须用同一份算法，否则
+     * 「设置里看着靠右、屏幕上却在中间」这种偏差极难解释。
+     */
+    private fun fullFrameFor(screenW: Int, screenH: Int, prefs: Prefs): OverlayPositioner.FullFrame =
+        OverlayPositioner.fullFrame(
+            screenW = screenW,
+            screenH = screenH,
+            bottomReserved = dp(SettingsDefaults.OVERLAY_DOCK_RESERVED_DP),
+            widthPercent = prefs.lyricOverlayFullWidthPercent,
+            offsetPercent = prefs.lyricOverlayFullOffsetPercent,
+        )
 
     /** 状态栏高度（像素），拿不到时按 24dp 兜底 */
     private fun statusBarHeight(): Int {
@@ -541,9 +565,19 @@ class LyricOverlayService : Service() {
     /** 本次触摸里是否真的移动过窗口；只有真移动过才允许把坐标写进 Prefs */
     private var pendingPositionSave = false
 
+    /** 上次抬手的时间 / 位置，用来在编辑态识别「双击锁定」 */
+    private var lastTapUpAt = 0L
+    private var lastTapX = 0f
+    private var lastTapY = 0f
+
     /**
-     * 拖动把手 —— **横纵两轴都可拖**（2026-10-16 用户拍板：悬浮窗就该能自由拖动；
-     * 设置里的「对齐」只管歌词文字在窗口内部怎么排，与窗口位置无关）。
+     * 拖动把手 —— 两种形态共用，但**只动各自允许的轴**：
+     *
+     * - 单条字幕（全屏高度关）：横纵两轴都跟手，位置存像素。窗口小而自由，
+     *   用户拖到哪儿就是哪儿（2026-10-16 用户拍板）。
+     * - 全屏歌词（全屏高度开，v1.1.20）：**只跟横向**。高度已经由「屏高 − Dock」
+     *   决定，纵向拖会立刻露出底部 Dock 或把歌词顶出屏幕，没有第二种合理结果。
+     *   位置在松手时反算成「余量百分比」落盘 —— 换分辨率后仍然保持相对位置。
      *
      * 位移按「手指位移量」累加，而不是「手指绝对位置 = 窗口位置」——
      * 后者会让窗口在按下瞬间跳到手指中心，手感很突兀。
@@ -552,13 +586,16 @@ class LyricOverlayService : Service() {
      * `ACTION_DOWN` 一律归一化坐标 + `ACTION_UP` 一律落盘，结果是
      * 「进调整模式随手点一下、什么都没拖」也会把坐标存下来，
      * 而那个坐标算错了半屏，窗口就此被推到屏幕右侧之外再也看不见。
+     *
+     * 编辑态**双击**即可退出并锁定：全屏窗口贴着整块屏，
+     * 用户拖完往往直接回到桌面，此时还得回来点设置页的「完成」很别扭；
+     * 双击是唯一在桌面上也一定点得到的收尾手势。
      */
     @SuppressLint("ClickableViewAccessibility")
     private val dragListener = View.OnTouchListener { _, event ->
         val p = layoutParams ?: return@OnTouchListener false
-        // 全屏模式位置固定：拖动既无意义，又会把 x/y 写进 Prefs，
-        // 关掉全屏后窗口就跑到了奇怪的位置。
-        if (Prefs(this).lyricOverlayFullHeight) return@OnTouchListener false
+        val prefs = Prefs(this)
+        val full = prefs.lyricOverlayFullHeight
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 // 记下起点，MOVE 时算增量才有参照
@@ -569,34 +606,91 @@ class LyricOverlayService : Service() {
             }
 
             MotionEvent.ACTION_MOVE -> {
-                p.x += (event.rawX - lastRawX).roundToInt()
-                p.y += (event.rawY - lastRawY).roundToInt()
+                val dx = (event.rawX - lastRawX).roundToInt()
+                val dy = (event.rawY - lastRawY).roundToInt()
+                p.x += dx
+                if (!full) p.y += dy
                 lastRawX = event.rawX
                 lastRawY = event.rawY
                 // 夹住，别拖出屏幕就再也抓不回来。按窗口自身尺寸收紧边界，
                 // 只用屏幕尺寸会把窗口整个推到边界外。
                 val (screenW, screenH) = screenSize()
-                val maxX = (screenW - (container?.width ?: 0)).coerceAtLeast(0)
-                val maxY = (screenH - (container?.height ?: 0)).coerceAtLeast(0)
+                val windowW = p.width.coerceAtLeast(container?.width ?: 0)
+                val maxX = (screenW - windowW).coerceAtLeast(0)
                 p.x = p.x.coerceIn(0, maxX)
-                p.y = p.y.coerceIn(0, maxY)
-                pendingPositionSave = true
+                if (full) {
+                    p.y = 0
+                } else {
+                    val maxY = (screenH - (container?.height ?: 0)).coerceAtLeast(0)
+                    p.y = p.y.coerceIn(0, maxY)
+                }
+                if (dx != 0 || (!full && dy != 0)) pendingPositionSave = true
                 runCatching { windowManager?.updateViewLayout(container, p) }
                 updateGeometryReport()
                 true
             }
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                // 只有真拖过才落盘，下次启动沿用；没拖过就保持原有偏好
-                if (pendingPositionSave) {
-                    Prefs(this).lyricOverlayX = p.x
-                    Prefs(this).lyricOverlayY = p.y
+                val upAt = android.os.SystemClock.uptimeMillis()
+                val slop = android.view.ViewConfiguration.get(this).scaledDoubleTapSlop
+                val isTap = !pendingPositionSave
+                val isDoubleTap = isTap &&
+                    upAt - lastTapUpAt <= android.view.ViewConfiguration.getDoubleTapTimeout() &&
+                    kotlin.math.abs(event.rawX - lastTapX) <= slop &&
+                    kotlin.math.abs(event.rawY - lastTapY) <= slop
+                if (isDoubleTap) {
+                    // 双击 = 收工：退出调整态，窗口恢复穿透
+                    lastTapUpAt = 0L
+                    savePositionAfterDrag(prefs, p, full)
+                    LyricOverlayBus.requestExitEditing()
+                    return@OnTouchListener true
                 }
+                if (isTap) {
+                    lastTapUpAt = upAt
+                    lastTapX = event.rawX
+                    lastTapY = event.rawY
+                }
+                savePositionAfterDrag(prefs, p, full)
                 true
             }
 
             else -> false
         }
+    }
+
+    /**
+     * 把拖出来的位置落盘。
+     *
+     * 单条字幕存像素（自由拖动，存哪儿是哪儿）；全屏模式存「余量百分比」，
+     * 因为它的可移动范围跟着宽度与屏宽变 —— 存像素的话换个分辨率 / 转个屏，
+     * 上次的绝对坐标就会落到屏幕外。
+     */
+    private fun savePositionAfterDrag(
+        prefs: Prefs,
+        p: WindowManager.LayoutParams,
+        full: Boolean,
+    ) {
+        if (!pendingPositionSave) return
+        pendingPositionSave = false
+        if (!full) {
+            prefs.lyricOverlayX = p.x
+            prefs.lyricOverlayY = p.y
+            return
+        }
+        val (screenW, _) = screenSize()
+        val maxX = (screenW - p.width.coerceAtLeast(0)).coerceAtLeast(0)
+        // 余量为 0（宽度 = 屏宽）时 x 恒 0，此时不动用户原来的水平位置，
+        // 免得「满宽时随手拖一下」把设置里的靠右偏好抹成居中。
+        if (maxX <= 0) return
+        prefs.lyricOverlayFullOffsetPercent =
+            (p.x * 100f / maxX).roundToInt().coerceIn(
+                SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE.first,
+                SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE.last,
+            )
+        // 落盘后把「已应用的位置」对齐，避免下一帧外观对账时又按旧百分比挪回去
+        appliedFullOffsetPercent = prefs.lyricOverlayFullOffsetPercent
+        // 通知播放域回读一次：设置页的水平位置滑块与这里是同一份数据
+        LyricOverlayBridge.notifyPositionSaved()
     }
 
     // ------------------------------------------------------------------ 状态
@@ -648,10 +742,15 @@ class LyricOverlayService : Service() {
                     // 调整模式下用户此刻正站在设置页点「调整位置」；
                     // 预览模式是刚打开开关的那几秒，得让用户看见「它确实开了」。
                     // 这是「仅后台显示」规则的唯二例外。
+                    //
+                    // ⚠️ 全屏编辑态是例外中的例外（v1.1.20）：它盖住整块屏且吃触摸，
+                    // 在 App 内显示的话，设置页的「完成调整」根本点不到（事件全被浮层吃掉）。
+                    // 而位置本来就只能在桌面上拖，所以 App 前台时先不画，退到桌面再出现。
                     val showOverride = isEditing || isPreview
+                    val fullEditingInApp = isEditing && prefs.lyricOverlayFullHeight && isForeground
                     val pauseMode = prefs.lyricOverlayPauseMode
                     val hideOnPause = !content.playing && !showOverride && pauseMode == PAUSE_HIDE
-                    val visible = !hideOnPause && screenInteractive &&
+                    val visible = !hideOnPause && screenInteractive && !fullEditingInApp &&
                         (showOverride || !isForeground) && (content.visible || showOverride)
                     desiredVisible = visible
                     if (!visible) {
@@ -679,14 +778,13 @@ class LyricOverlayService : Service() {
                             // 而不是排版选择——能拿到双语歌词的用户本来就想要它。
                             showTranslation = true,
                         )
-                        isEditing -> listOf(HINT_EDITING)
+                        isEditing -> listOf(if (full) HINT_EDITING_FULL else HINT_EDITING)
                         else -> listOf(HINT_PREVIEW)
                     }
-                    // 行数上限按实际要画的行数放宽（每行都可能折成两行）。
-                    // 单条字幕上限 12：再多就不是「悬浮字幕」而是一块遮屏的板子；
-                    // 全屏模式本来就是遮屏的歌词面板，放宽到 24 免得长句被截。
+                    // 行数上限按实际要画的行数放宽（每行都可能折成两行）；
+                    // 全屏模式窗口更窄时可能折三行，额度按 3 倍给。
                     val cap = if (full) MAX_FULL_LINES_CAP else MAX_LINES_CAP
-                    val maxLines = (lines.size * 2).coerceIn(2, cap)
+                    val maxLines = (lines.size * if (full) 3 else 2).coerceIn(2, cap)
                     if (tv.maxLines != maxLines) {
                         tv.maxLines = maxLines
                         tv.ellipsize = android.text.TextUtils.TruncateAt.END
@@ -718,7 +816,7 @@ class LyricOverlayService : Service() {
 
         // 窗口宽度：屏幕百分比（v1.1.4 起可调）。宽度一变必须重摆一次位置 ——
         // OverlayPositioner 的夹取上限是「屏宽 − 窗口宽」，窗口越宽能移动的余量越小。
-        // 全屏模式下宽度恒等于屏宽，这条分支整段跳过。
+        // 全屏模式下改用全屏专属的宽度与水平位置（v1.1.20），两套值互不影响。
         val widthPercent = prefs.lyricOverlayWidthPercent
         if (!fullHeight && appliedWidthPercent != widthPercent) {
             appliedWidthPercent = widthPercent
@@ -730,6 +828,14 @@ class LyricOverlayService : Service() {
                     applyPosition()
                 }
             }
+        }
+        if (fullHeight) {
+            // 拖动期间（editing）不按落盘值重摆：此刻位置只在内存里，
+            // 一旦按旧 Prefs 重算，手指还按着窗口就跳回去了。
+            val widthChanged = appliedFullWidthPercent != prefs.lyricOverlayFullWidthPercent
+            val offsetChanged = !editing &&
+                appliedFullOffsetPercent != prefs.lyricOverlayFullOffsetPercent
+            if (widthChanged || offsetChanged) applyFullHeightChrome(true)
         }
 
         // 正文色落到 TextView 上就够了 —— 整窗只有这一种颜色，主角与上下句靠
@@ -792,30 +898,39 @@ class LyricOverlayService : Service() {
     }
 
     /**
-     * 应用「全屏高度」模式的窗口外形（v1.1.19）。
+     * 应用「全屏高度」模式的窗口外形（v1.1.19 / v1.1.20）。
      *
-     * 全屏 = 铺满屏宽 + 高度 = 屏高 − 底部 56dp（让开车机 Dock），位置钉在左上角；
-     * 文字改走多行排版（行距放大），并由 [buildSpanned] 的 full 分支负责角色样式。
+     * 全屏 = 宽度按设置（默认整屏）+ 高度 = 屏高 − 底部 56dp（让开车机 Dock）+
+     * 纵向贴顶 + 横向按「余量百分比」取位；文字改走 11 行排版（行距放大），
+     * 由 [buildSpanned] 的 full 分支负责角色样式。
      *
      * 关掉时把外形完整还原：宽度回到百分比、高度回到 WRAP_CONTENT、行距复原，
      * 再重摆一次位置。**必须把 appliedWidthPercent 置回 -1** —— 否则宽度分支
      * 以为「这个百分比已经应用过」，还原后窗口会卡在全屏宽度上。
+     *
+     * 宽度 / 水平位置都在这里落定，设置页滑块改一下就能实时看到窗口变化。
      */
     private fun applyFullHeightChrome(full: Boolean) {
         val p = layoutParams ?: return
         val tv = lyricView ?: return
         if (full) {
+            val prefs = Prefs(this)
             val (screenW, screenH) = screenSize()
-            val frame = OverlayPositioner.fullFrame(
-                screenW = screenW,
-                screenH = screenH,
-                bottomReserved = dp(SettingsDefaults.OVERLAY_DOCK_RESERVED_DP),
-            )
+            val frame = fullFrameFor(screenW, screenH, prefs)
             p.width = frame.width
             p.height = frame.height
-            p.x = 0
-            p.y = 0
+            // 拖动中只改尺寸、不抢位置：用户正按着窗口，重算 x 会让它跳一下。
+            p.x = if (editing) {
+                p.x.coerceIn(0, (screenW - frame.width).coerceAtLeast(0))
+            } else {
+                frame.x
+            }
+            p.y = frame.y
             p.gravity = Gravity.TOP or Gravity.START
+            // 记下「已经用到哪一档」，否则 applyAppearance 每帧都会认为宽度变了，
+            // 于是每帧 updateViewLayout，屏幕上表现为歌词不停轻微抖动
+            appliedFullWidthPercent = prefs.lyricOverlayFullWidthPercent
+            appliedFullOffsetPercent = prefs.lyricOverlayFullOffsetPercent
             tv.setLineSpacing(
                 dp(FULL_LINE_SPACING_EXTRA_DP).toFloat(),
                 FULL_LINE_SPACING_MULT,
@@ -824,6 +939,8 @@ class LyricOverlayService : Service() {
             p.width = overlayWidthPx(Prefs(this).lyricOverlayWidthPercent)
             p.height = WindowManager.LayoutParams.WRAP_CONTENT
             appliedWidthPercent = -1
+            appliedFullWidthPercent = -1
+            appliedFullOffsetPercent = -1
             tv.setLineSpacing(dp(2).toFloat(), 1f)
         }
         // 排版模式变了，旧的 span 签名作废，下一帧必须重画
@@ -1083,10 +1200,12 @@ class LyricOverlayService : Service() {
         val p = layoutParams ?: return
         val box = container ?: return
 
-        // 全屏高度模式下窗口盖住整屏：**绝不能吃触摸**，否则桌面 / 导航全废，
-        // 用户连「完成调整」都点不到。所以这个模式下一律穿透，编辑态也不解锁。
+        // 编辑态两种形态都吃触摸 —— 全屏歌词也要能左右拖（v1.1.20）。
+        // ⚠️ 全屏（尤其宽度 100%）吃触摸时整块屏都点不动，所以退出编辑有三条路：
+        // 设置页的「完成调整」、双击浮层、60 秒无操作自动锁定（[armEditingTimeout]）。
+        // 少任何一条都会变成「拖完回不到桌面」。
         val fullHeight = Prefs(this).lyricOverlayFullHeight
-        val editable = editing && !fullHeight
+        val editable = editing
         p.flags = if (editable) {
             baseFlags()
         } else {
@@ -1105,8 +1224,8 @@ class LyricOverlayService : Service() {
         box.background = when {
             editable -> GradientDrawable().apply {
                 setColor(EDIT_BACKDROP_COLOR)
-                setStroke(dp(2), EDIT_STROKE_COLOR)
-                cornerRadius = dp(14).toFloat()
+                setStroke(dp(if (fullHeight) 3 else 2), EDIT_STROKE_COLOR)
+                cornerRadius = corner
             }
             backdrop == BACKDROP_NONE -> null
             backdrop == BACKDROP_SOLID -> GradientDrawable().apply {
@@ -1225,8 +1344,13 @@ class LyricOverlayService : Service() {
         /** 窗口最多画几行（含折行）：再多就不是「悬浮字幕」而是一块遮屏的板子了 */
         private const val MAX_LINES_CAP = 12
 
-        /** 全屏高度模式下每行都可能折行，上限放宽（11 行 × 2） */
-        private const val MAX_FULL_LINES_CAP = 24
+        /**
+         * 全屏高度模式下每行都可能折行，上限放宽。
+         *
+         * 11 行 × 3 = 33：全屏宽度调到 50% 以下时，长句会折成三行，
+         * 按 2 倍（22）截断的话末尾几句会静默消失 —— 宁可多给几行额度。
+         */
+        private const val MAX_FULL_LINES_CAP = 36
 
         /** 全屏模式：当前行字号相对倍率（播放页 17.5 / 15.5 ≈ 1.13） */
         private const val FULL_CURRENT_SCALE = 1.13f
@@ -1303,6 +1427,10 @@ class LyricOverlayService : Service() {
         /** 调整态 / 预览态在无歌词时显示的提示行 */
         private val HINT_EDITING =
             OverlayTextComposer.StyledLine("拖动到合适位置，松手即保存", OverlayTextComposer.Role.CONTEXT)
+
+        /** 全屏编辑态：只跟横向，且双击可收工 —— 文案必须说清楚，否则用户会试着上下拖 */
+        private val HINT_EDITING_FULL =
+            OverlayTextComposer.StyledLine("左右拖动调整位置，双击锁定", OverlayTextComposer.Role.CONTEXT)
         private val HINT_PREVIEW =
             OverlayTextComposer.StyledLine("悬浮歌词已开启，退到桌面后持续显示", OverlayTextComposer.Role.CONTEXT)
 

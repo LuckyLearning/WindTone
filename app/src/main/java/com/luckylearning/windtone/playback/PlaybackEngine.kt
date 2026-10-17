@@ -85,6 +85,8 @@ class PlaybackEngine(
             lyricOverlay = prefs.lyricOverlay,
             lyricOverlayLines = prefs.lyricOverlayLines,
             lyricOverlayFullHeight = prefs.lyricOverlayFullHeight,
+            lyricOverlayFullWidthPercent = prefs.lyricOverlayFullWidthPercent,
+            lyricOverlayFullOffsetPercent = prefs.lyricOverlayFullOffsetPercent,
             lyricOverlayShowTitle = prefs.lyricOverlayShowTitle,
             lyricOverlayTitleScale = prefs.lyricOverlayTitleScale,
             lyricOverlayTextScale = prefs.lyricOverlayTextScale,
@@ -195,6 +197,16 @@ class PlaybackEngine(
                 if (_player.value.overlayEditing) {
                     setOverlayEditing(false)
                     messages.post("悬浮歌词已自动锁定位置，需要再调整可重新点「调整悬浮歌词位置」")
+                }
+            }
+        }
+        // 桌面上左右拖动全屏歌词后，服务把新位置写进 Prefs —— 这里回读一次，
+        // 否则设置页的「水平位置」滑块还停在拖动之前的值，看着像没保存。
+        scope.launch {
+            LyricOverlayBridge.positionSaves.collect {
+                val offset = prefs.lyricOverlayFullOffsetPercent
+                if (_player.value.lyricOverlayFullOffsetPercent != offset) {
+                    _player.update { it.copy(lyricOverlayFullOffsetPercent = offset) }
                 }
             }
         }
@@ -1028,6 +1040,38 @@ class PlaybackEngine(
         previewOverlayAfterConfigChange()
     }
 
+    /**
+     * 全屏歌词的宽度（屏宽百分比，30..100）。
+     *
+     * 与单条字幕的宽度分开存，互不影响。宽度一变窗口就重算：余量（屏宽 − 窗宽）
+     * 跟着变，水平位置仍按 [lyricOverlayFullOffsetPercent] 的百分比取位，
+     * 所以「靠右」在缩窄后仍然靠右，不需要用户再挪一次。
+     */
+    override fun setLyricOverlayFullWidthPercent(percent: Int) {
+        val normalized = percent.coerceIn(
+            SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE.first,
+            SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE.last,
+        )
+        prefs.lyricOverlayFullWidthPercent = normalized
+        _player.update { it.copy(lyricOverlayFullWidthPercent = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    /**
+     * 全屏歌词的水平位置：0 = 最左 / 50 = 居中 / 100 = 最右（可移动余量的百分比）。
+     *
+     * 桌面左右拖动时由服务反算出同一个百分比落盘，两处控制同一份数据。
+     */
+    override fun setLyricOverlayFullOffsetPercent(percent: Int) {
+        val normalized = percent.coerceIn(
+            SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE.first,
+            SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE.last,
+        )
+        prefs.lyricOverlayFullOffsetPercent = normalized
+        _player.update { it.copy(lyricOverlayFullOffsetPercent = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
     /** 悬浮窗顶部的「歌名 + 歌手」两行小字：开 / 关 */
     override fun setLyricOverlayShowTitle(show: Boolean) {
         prefs.lyricOverlayShowTitle = show
@@ -1545,6 +1589,12 @@ interface PlayerActions {
 
     /** 悬浮歌词全屏高度（铺满屏宽、避开底部车机 Dock，内容按播放页歌词区排版） */
     fun setLyricOverlayFullHeight(enabled: Boolean)
+
+    /** 全屏歌词的宽度：屏宽百分比（30..100），与单条字幕的宽度各存一份 */
+    fun setLyricOverlayFullWidthPercent(percent: Int)
+
+    /** 全屏歌词的水平位置：余量百分比（0 最左 / 50 居中 / 100 最右） */
+    fun setLyricOverlayFullOffsetPercent(percent: Int)
     fun setLyricOverlayShowTitle(show: Boolean)
     fun setLyricOverlayTitleScale(scale: Int)
     fun setLyricOverlayTextScale(scale: Int)

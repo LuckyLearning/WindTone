@@ -662,6 +662,8 @@ fun MainScreen(
                     onLyricOverlay = playerVm::setLyricOverlay,
                     onLyricOverlayLines = playerVm::setLyricOverlayLines,
                     onLyricOverlayFullHeight = playerVm::setLyricOverlayFullHeight,
+                    onLyricOverlayFullWidthPercent = playerVm::setLyricOverlayFullWidthPercent,
+                    onLyricOverlayFullOffsetPercent = playerVm::setLyricOverlayFullOffsetPercent,
                     onLyricOverlayShowTitle = playerVm::setLyricOverlayShowTitle,
                     onLyricOverlayTitleScale = playerVm::setLyricOverlayTitleScale,
                     onLyricOverlayTextScale = playerVm::setLyricOverlayTextScale,

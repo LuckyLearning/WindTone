@@ -179,4 +179,88 @@ class OverlayPositionerTest {
         assertEquals(1, f.width)
         assertEquals(1, f.height)
     }
+
+    // ------------------------------------------------ 全屏宽度与左右移动（v1.1.20）
+
+    @Test
+    fun `全屏宽度按屏宽百分比缩窄`() {
+        val f = OverlayPositioner.fullFrame(
+            screenW = 1920,
+            screenH = 720,
+            bottomReserved = 0,
+            widthPercent = 60,
+            offsetPercent = 50,
+        )
+        assertEquals((1920 * 0.6f).toInt(), f.width)
+        // 余量 1920 − 1152 = 768，居中 = 384
+        assertEquals(384, f.x)
+        assertEquals(0, f.y)
+    }
+
+    @Test
+    fun `全屏靠左贴左沿`() {
+        val f = OverlayPositioner.fullFrame(
+            screenW = 1920, screenH = 720, bottomReserved = 0,
+            widthPercent = 60, offsetPercent = 0,
+        )
+        assertEquals(0, f.x)
+    }
+
+    @Test
+    fun `全屏靠右贴右沿且不越过屏幕`() {
+        val f = OverlayPositioner.fullFrame(
+            screenW = 1920, screenH = 720, bottomReserved = 0,
+            widthPercent = 60, offsetPercent = 100,
+        )
+        assertEquals(1920 - f.width, f.x)
+        assertEquals(1920, f.x + f.width)
+    }
+
+    @Test
+    fun `全屏满宽时左右没有余量`() {
+        // 与单条字幕 100% 宽时「只能上下拖」是同一个几何事实：
+        // 此时滑块怎么调 x 都是 0，设置页必须把这件事说清楚，别再当 bug 排查。
+        val f = OverlayPositioner.fullFrame(
+            screenW = 1080, screenH = 2400, bottomReserved = 0,
+            widthPercent = 100, offsetPercent = 100,
+        )
+        assertEquals(1080, f.width)
+        assertEquals(0, f.x)
+    }
+
+    @Test
+    fun `全屏宽度过窄时按下限夹取`() {
+        // 10% 在 1080p 上只有 108px，11 行歌词会挤成一条竖线；下限 30%。
+        val f = OverlayPositioner.fullFrame(
+            screenW = 1000, screenH = 800, bottomReserved = 0,
+            widthPercent = 10, offsetPercent = 50,
+        )
+        assertEquals(300, f.width)
+        // 余量 700，居中 350
+        assertEquals(350, f.x)
+    }
+
+    @Test
+    fun `水平位置超界时夹到两端`() {
+        val left = OverlayPositioner.fullFrame(
+            screenW = 1000, screenH = 800, bottomReserved = 0,
+            widthPercent = 50, offsetPercent = -40,
+        )
+        assertEquals(0, left.x)
+        val right = OverlayPositioner.fullFrame(
+            screenW = 1000, screenH = 800, bottomReserved = 0,
+            widthPercent = 50, offsetPercent = 300,
+        )
+        assertEquals(500, right.x)
+    }
+
+    @Test
+    fun `水平位置的文案把两端与中间说成人话`() {
+        assertEquals("靠左", OverlayPositioner.offsetLabel(0))
+        assertEquals("靠左", OverlayPositioner.offsetLabel(2))
+        assertEquals("居中", OverlayPositioner.offsetLabel(50))
+        assertEquals("靠右", OverlayPositioner.offsetLabel(100))
+        assertEquals("偏左 30%", OverlayPositioner.offsetLabel(30))
+        assertEquals("偏右 75%", OverlayPositioner.offsetLabel(75))
+    }
 }

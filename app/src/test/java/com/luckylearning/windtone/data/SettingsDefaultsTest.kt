@@ -77,6 +77,17 @@ class SettingsDefaultsTest {
         check("lyricOverlayBackdrop", prefs.lyricOverlayBackdrop, SettingsDefaults.OVERLAY_BACKDROP)
         check("lyricOverlayPauseMode", prefs.lyricOverlayPauseMode, SettingsDefaults.OVERLAY_PAUSE_MODE)
         check("lyricOverlayWidthPercent", prefs.lyricOverlayWidthPercent, SettingsDefaults.OVERLAY_WIDTH_PERCENT)
+        check("lyricOverlayFullHeight", prefs.lyricOverlayFullHeight, SettingsDefaults.OVERLAY_FULL_HEIGHT)
+        check(
+            "lyricOverlayFullWidthPercent",
+            prefs.lyricOverlayFullWidthPercent,
+            SettingsDefaults.OVERLAY_FULL_WIDTH_PERCENT,
+        )
+        check(
+            "lyricOverlayFullOffsetPercent",
+            prefs.lyricOverlayFullOffsetPercent,
+            SettingsDefaults.OVERLAY_FULL_OFFSET_PERCENT,
+        )
         check("lyricOverlayTextColor", prefs.lyricOverlayTextColor, SettingsDefaults.OVERLAY_TEXT_COLOR)
 
         // 音乐库 / 更新
@@ -98,6 +109,18 @@ class SettingsDefaultsTest {
             "OVERLAY_WIDTH_PERCENT=${SettingsDefaults.OVERLAY_WIDTH_PERCENT} 不在 " +
                 "OVERLAY_WIDTH_RANGE=${SettingsDefaults.OVERLAY_WIDTH_RANGE} 里",
             SettingsDefaults.OVERLAY_WIDTH_PERCENT in SettingsDefaults.OVERLAY_WIDTH_RANGE,
+        )
+        // 全屏那套也一样：默认宽度 100% 与默认居中 50% 都必须落在各自区间内，
+        // 否则新装用户一进设置页就看到「满宽却偏左 30%」这种自相矛盾的状态。
+        assertTrue(
+            "OVERLAY_FULL_WIDTH_PERCENT=${SettingsDefaults.OVERLAY_FULL_WIDTH_PERCENT} 不在 " +
+                "OVERLAY_FULL_WIDTH_RANGE=${SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE} 里",
+            SettingsDefaults.OVERLAY_FULL_WIDTH_PERCENT in SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE,
+        )
+        assertTrue(
+            "OVERLAY_FULL_OFFSET_PERCENT=${SettingsDefaults.OVERLAY_FULL_OFFSET_PERCENT} 不在 " +
+                "OVERLAY_FULL_OFFSET_RANGE=${SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE} 里",
+            SettingsDefaults.OVERLAY_FULL_OFFSET_PERCENT in SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE,
         )
     }
 

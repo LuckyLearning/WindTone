@@ -74,3 +74,6 @@ desktop.ini
 
 # 例外：保留 .github-token 的模板文件，方便他人配置
 !.github-token.example
+
+# 本机验证截图（模拟器 / 真机手拍，不入库）
+.shots/

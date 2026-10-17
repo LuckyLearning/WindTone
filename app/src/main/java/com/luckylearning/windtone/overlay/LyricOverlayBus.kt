@@ -111,6 +111,17 @@ object LyricOverlayBus {
     private val _exitEditingRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val exitEditingRequests: SharedFlow<Unit> = _exitEditingRequests.asSharedFlow()
 
+    /**
+     * 服务 → 播放域的一次性通知：用户在桌面上拖动后，位置已落盘。
+     *
+     * 为什么需要：全屏歌词的「水平位置」在设置页是一个滑块，而拖动会直接改
+     * SharedPreferences —— 播放域那份 [com.luckylearning.windtone.state.PlayerUiState]
+     * 不跟着更新的话，用户拖完回设置页会看到滑块还在旧位置，像是没保存。
+     * 服务不能直接改播放域状态，所以照旧发一条通知，由播放域回读 Prefs。
+     */
+    private val _positionSaves = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val positionSaves: SharedFlow<Unit> = _positionSaves.asSharedFlow()
+
     /** 播放域侧调用：把解析好的当前内容送进悬浮窗 */
     fun publish(
         resolved: OverlayContentResolver.Resolved,
@@ -162,6 +173,11 @@ object LyricOverlayBus {
     /** 服务请求退出调整态（长时间无操作）；由播放域收集处理 */
     fun requestExitEditing() {
         _exitEditingRequests.tryEmit(Unit)
+    }
+
+    /** 服务在桌面拖动落盘后调用，让播放域回读一次位置设置 */
+    fun notifyPositionSaved() {
+        _positionSaves.tryEmit(Unit)
     }
 
     /** 服务停止 / 功能关闭时清空，避免残留上一句 */

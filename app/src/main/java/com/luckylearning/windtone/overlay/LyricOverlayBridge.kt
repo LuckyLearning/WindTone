@@ -139,9 +139,12 @@ object LyricOverlayBridge {
                 // 自检里先说形态：全屏高度下列数固定 11，用户那档行数不生效，
                 // 直接写「11 行」会让自检看起来像设置没生效。
                 if (prefs.lyricOverlayFullHeight) {
-                    append("全屏高度")
+                    append("全屏高度 ")
+                    append(prefs.lyricOverlayFullWidthPercent).append("% 宽 / ")
+                    append(OverlayPositioner.offsetLabel(prefs.lyricOverlayFullOffsetPercent))
                 } else {
                     append(prefs.lyricOverlayLines).append(" 行")
+                    append(" / 宽").append(prefs.lyricOverlayWidthPercent).append("%")
                 }
                 append(" / 字号").append(listOf("小", "中", "大").getOrElse(prefs.lyricOverlayTextScale) { "中" })
                 append(" / 对齐").append(if (prefs.lyricOverlayAlign == 1) "居左" else "居中")
@@ -184,6 +187,12 @@ object LyricOverlayBridge {
 
     /** 服务请求退出调整态（长时间无操作）；由播放域收集 */
     val exitEditingRequests: SharedFlow<Unit> get() = LyricOverlayBus.exitEditingRequests
+
+    /** 服务在桌面拖动落盘后的通知；由播放域回读位置设置，保证设置页滑块跟手 */
+    val positionSaves: SharedFlow<Unit> get() = LyricOverlayBus.positionSaves
+
+    /** 服务侧：位置已落盘 */
+    fun notifyPositionSaved() = LyricOverlayBus.notifyPositionSaved()
 
     /** 进入 / 退出「前台预览」窗口期（刚打开开关时用） */
     fun setPreview(value: Boolean) = LyricOverlayBus.setPreview(value)

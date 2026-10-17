@@ -79,6 +79,8 @@ class SettingsScreenTest {
                     onLyricOverlay = {},
                     onLyricOverlayLines = {},
                     onLyricOverlayFullHeight = {},
+                    onLyricOverlayFullWidthPercent = {},
+                    onLyricOverlayFullOffsetPercent = {},
                     onLyricOverlayShowTitle = {},
                     onLyricOverlayTitleScale = {},
                     onLyricOverlayTextScale = {},
