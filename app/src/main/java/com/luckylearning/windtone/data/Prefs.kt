@@ -55,6 +55,14 @@ object SettingsDefaults {
 
     const val LYRIC_SCALE = 1.0f
 
+    /**
+     * 双语歌词显示模式（v1.1.18）：0 中英都显示 / 1 只显示中文 / 2 只显示英文。
+     *
+     * 默认 0 = 与历史行为完全一致：老用户升级后不会突然少掉译文那一行。
+     * 取值与 `lyrics/BilingualMode.index` 一一对应。
+     */
+    const val BILINGUAL = 0
+
     const val LYRIC_OVERLAY = false
     const val OVERLAY_LINES = 1
     const val OVERLAY_TEXT_SCALE = 1
@@ -208,6 +216,16 @@ class Prefs(context: Context) {
     var lyricScale: Float
         get() = sp.getFloat(KEY_LYRIC_SCALE, SettingsDefaults.LYRIC_SCALE)
         set(value) = sp.edit().putFloat(KEY_LYRIC_SCALE, value).apply()
+
+    /**
+     * 双语歌词显示模式：0 中英都显示（默认）/ 1 只显示中文 / 2 只显示英文。
+     *
+     * 只影响**显示**：歌词文件、导出的 LRC、解析结果都保持原样。
+     * 夹取到 0..2，防旧数据或手改写出越界值（`BilingualMode.of` 也会兜底）。
+     */
+    var lyricBilingual: Int
+        get() = sp.getInt(KEY_LYRIC_BILINGUAL, SettingsDefaults.BILINGUAL).coerceIn(0, 2)
+        set(value) = sp.edit().putInt(KEY_LYRIC_BILINGUAL, value.coerceIn(0, 2)).apply()
 
     /**
      * 播放页中部显示的是歌词（true，默认）还是封面（false）。
@@ -482,6 +500,7 @@ class Prefs(context: Context) {
         const val KEY_SORT_PREFIX = "sort_"
         const val KEY_VIEW = "library_view"
         const val KEY_LYRIC_SCALE = "lyric_scale"
+        const val KEY_LYRIC_BILINGUAL = "lyric_bilingual_mode"
         // ⚠️ 逐字歌词移除后（v1.1.8）有三个键不再读写：`lyric_word_by_word` /
         //    `lyric_sung_color` / `lyric_overlay_sung_color`。它们仍留在老用户的
         //    SharedPreferences 里，**刻意不做清理** —— 为三个死键写迁移代码不划算，

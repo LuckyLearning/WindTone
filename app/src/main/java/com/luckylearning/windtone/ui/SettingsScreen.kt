@@ -153,6 +153,8 @@ fun SettingsScreen(
     canDrawOverlay: Boolean,
     overlayHealth: LyricOverlayBus.Health,
     onLyricScale: (Float) -> Unit,
+    /** 双语歌词显示模式：0 都显示 / 1 只中文 / 2 只英文 —— v1.1.18 */
+    onLyricBilingual: (Int) -> Unit,
     onSpeed: (Float) -> Unit,
     /** 变调：半音（-12..+12，0 = 原调） */
     onPitch: (Int) -> Unit,
@@ -305,6 +307,7 @@ fun SettingsScreen(
                         canDrawOverlay = canDrawOverlay,
                         overlayHealth = overlayHealth,
                         onLyricScale = onLyricScale,
+                        onLyricBilingual = onLyricBilingual,
                         onLyricOverlay = onLyricOverlay,
                         onLyricOverlayLines = onLyricOverlayLines,
                         onLyricOverlayShowTitle = onLyricOverlayShowTitle,

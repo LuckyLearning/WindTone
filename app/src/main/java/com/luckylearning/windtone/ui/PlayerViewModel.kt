@@ -41,7 +41,9 @@ class PlayerViewModel(private val app: Application) :
     fun exportLyrics(target: Uri) {
         viewModelScope.launch {
             val state = engine.player.value
-            val lyrics = state.lyrics
+            // 用原始歌词而不是 state.lyrics：后者可能已被「双语歌词」设置裁成单语，
+            // 按那种结果导出会把译文永久丢掉（文件一旦写出去就找不回来了）。
+            val lyrics = engine.lyricsForExport()
             if (lyrics.isEmpty) {
                 messages.post("当前歌曲没有歌词")
                 return@launch

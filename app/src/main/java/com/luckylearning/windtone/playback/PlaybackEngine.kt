@@ -21,6 +21,8 @@ import com.luckylearning.windtone.data.db.MusicDb
 import com.luckylearning.windtone.data.db.PlayerStateEntity
 import com.luckylearning.windtone.data.db.QueueSongEntity
 import com.luckylearning.windtone.data.model.Song
+import com.luckylearning.windtone.lyrics.BilingualLyrics
+import com.luckylearning.windtone.lyrics.BilingualMode
 import com.luckylearning.windtone.lyrics.Lyrics
 import com.luckylearning.windtone.lyrics.OverlayContentResolver
 import com.luckylearning.windtone.overlay.LyricOverlayBridge
@@ -77,6 +79,7 @@ class PlaybackEngine(
     private val _player = MutableStateFlow(
         PlayerUiState(
             lyricScale = prefs.lyricScale,
+            lyricBilingual = prefs.lyricBilingual,
             lyricsPaneVisible = prefs.lyricsPaneVisible,
             carMode = prefs.carMode,
             lyricOverlay = prefs.lyricOverlay,
@@ -122,10 +125,26 @@ class PlaybackEngine(
     private var librarySongs: List<Song> = emptyList()
 
     private var lyricsJob: Job? = null
+
+    /** 断点续播后的歌词自愈协程（见 [scheduleLyricsHeal]） */
+    private var healLyricsJob: Job? = null
     private var artworkJob: Job? = null
     private var positionJob: Job? = null
     private var previewJob: Job? = null
     private var currentLyricsSong: String? = null
+
+    /**
+     * 最近一次解析出来的**原始**歌词（含双语副行，未经「双语歌词」过滤）。
+     *
+     * 存在的理由有两条：
+     *  - 切换「双语歌词」模式时不必重新读文件，直接拿它重算一遍（读歌词要走
+     *    文件系统 / SAF，慢且可能失败）；
+     *  - 导出 LRC 必须用它 —— 用户选了「只显示中文」，导出时把译文丢掉并不是他想要的。
+     */
+    private var rawLyrics: Lyrics = Lyrics.EMPTY
+
+    /** 歌词加载序号：晚到的旧请求不许覆盖新歌的歌词（取消会把 CancellationException 吞掉） */
+    private var lyricsSeq = 0
     private var consecutiveErrors = 0
 
     private var queueRestored = false
@@ -452,6 +471,10 @@ class PlaybackEngine(
         if (c.mediaItemCount > 0) {
             queueRestored = true
             Log.i(TAG, "断点续播：服务里已有 ${c.mediaItemCount} 首，不重建")
+            // 状态不齐就补齐：引擎单例活着时 current/歌词都在，这里什么都不做；
+            // 万一 current 缺失（状态被清过 / 未来重构换了归属），补一次同步。
+            if (_player.value.current == null) syncCurrentSong(force = true)
+            _player.value.current?.let { scheduleLyricsHeal(it.stableKey) }
             resumeIfWanted(c)
             return
         }
@@ -479,6 +502,7 @@ class PlaybackEngine(
                 c.prepare()
                 _progress.value = PlaybackProgress(position, restored[index].durationMs, 0L)
                 syncCurrentSong(force = true)
+                scheduleLyricsHeal(restored[index].stableKey)
                 queueRestored = true
                 Log.i(TAG, "断点续播：恢复队列 ${restored.size} 首，第 ${index + 1} 首，位置 ${position}ms")
                 resumeIfWanted(c)
@@ -505,6 +529,7 @@ class PlaybackEngine(
         c.prepare()
         _progress.value = PlaybackProgress(position, songs[idx].durationMs, 0L)
         syncCurrentSong(force = true)
+        scheduleLyricsHeal(songs[idx].stableKey)
         queueRestored = true
         Log.i(TAG, "断点续播：单曲恢复（整库 ${songs.size} 首当队列），位置 ${position}ms")
         resumeIfWanted(c)
@@ -901,6 +926,28 @@ class PlaybackEngine(
         _player.update { it.copy(lyricScale = s) }
     }
 
+    /**
+     * 双语歌词显示模式：0 中英都显示 / 1 只显示中文 / 2 只显示英文（v1.1.18）。
+     *
+     * 不重读歌词文件：原始歌词一直在 [rawLyrics] 里，这里只是重新裁剪一遍，
+     * 所以切换是**立刻**生效的（当前歌不用重新加载，也不会闪一下空白）。
+     * 悬浮窗开着时顺带给一次前台预览，让用户在设置页就能看到差别。
+     */
+    override fun setLyricBilingual(mode: Int) {
+        val normalized = mode.coerceIn(0, 2)
+        prefs.lyricBilingual = normalized
+        _player.update {
+            it.copy(
+                lyricBilingual = normalized,
+                lyrics = BilingualLyrics.apply(rawLyrics, BilingualMode.of(normalized)),
+            )
+        }
+        previewOverlayAfterConfigChange()
+    }
+
+    /** 导出用的原始歌词：带双语副行，不受「双语歌词」显示模式影响 */
+    override fun lyricsForExport(): Lyrics = rawLyrics
+
     /** 播放页展示歌词还是封面：落盘，下次进播放页保持这一状态 */
     override fun setLyricsPaneVisible(visible: Boolean) {
         prefs.lyricsPaneVisible = visible
@@ -1168,10 +1215,51 @@ class PlaybackEngine(
 
     private fun loadLyrics(song: Song) {
         lyricsJob?.cancel()
+        val seq = ++lyricsSeq
+        rawLyrics = Lyrics.EMPTY
         _player.update { it.copy(lyrics = Lyrics.EMPTY, lyricsLoading = true) }
         lyricsJob = scope.launch {
-            val lyrics = runCatching { lyricsLoader.load(song) }.getOrDefault(Lyrics.EMPTY)
-            _player.update { it.copy(lyrics = lyrics, lyricsLoading = false) }
+            // ⚠️ 这里的 runCatching 会把 CancellationException 一并吞掉，于是「被取消的旧请求」
+            //    仍会往下走一步。必须用序号挡住它，否则切歌瞬间会把旧歌（或空）的歌词写回去。
+            val raw = runCatching { lyricsLoader.load(song) }.getOrDefault(Lyrics.EMPTY)
+            if (seq != lyricsSeq) return@launch
+            rawLyrics = raw
+            _player.update {
+                it.copy(lyrics = BilingualLyrics.apply(raw, bilingualMode()), lyricsLoading = false)
+            }
+        }
+    }
+
+    /** 当前的「双语歌词」显示模式（设置页只存下标，枚举的还原与兜底都在 [BilingualMode.of]） */
+    private fun bilingualMode(): BilingualMode = BilingualMode.of(prefs.lyricBilingual)
+
+    /**
+     * 断点续播后的**歌词自愈**（v1.1.18）。
+     *
+     * 真机上出现过：重开后当前曲与队列都恢复了，歌词却是空的，下一曲再切回来才有 ——
+     * 模拟器上复现不了。恢复链路里 [syncCurrentSong] → [loadLyrics] 只跑一次，
+     * 那一次读到空就永远停在空态（下一次换歌才会重新加载）。而冷启动那一刻
+     * 文件系统 / MediaStore / 外置存储可能还没就绪（车机尤其明显，杀进程也狠），
+     * 同一个文件隔几秒再读就正常了。
+     *
+     * 与其猜具体哪个环节慢，不如按**结果**自愈：恢复完成后分三个周期复查，
+     * 当前曲的歌词仍是「空且不在加载中」就重载一次。任何一次换歌都会更新
+     * [currentLyricsSong]，自愈随即失效 —— 它只盯着恢复时那一首。
+     */
+    private fun scheduleLyricsHeal(targetKey: String) {
+        healLyricsJob?.cancel()
+        healLyricsJob = scope.launch {
+            for (delayMs in longArrayOf(2_000L, 5_000L, 10_000L)) {
+                delay(delayMs)
+                // 换过歌（用户主动切 / 自动接续）：自愈只管恢复时那一首，收手
+                if (currentLyricsSong != targetKey) return@launch
+                val st = _player.value
+                if (st.lyricsLoading) continue // 上一次重载还没回来，下个周期再看
+                if (st.lyrics.lines.isNotEmpty()) return@launch // 已经有了
+                val cur = st.current ?: return@launch
+                Log.i(TAG, "歌词自愈：当前曲歌词为空，重载一次（${cur.displayName}）")
+                loadLyrics(cur)
+            }
         }
     }
 
@@ -1414,6 +1502,15 @@ interface PlayerActions {
     fun resetLyricOffset()
     fun setLyricOffsetAbsolute(offsetMs: Int)
     fun setLyricScale(scale: Float)
+
+    /**
+     * 双语歌词显示模式：0 中英都显示 / 1 只显示中文 / 2 只显示英文（v1.1.18）。
+     * 只影响显示；歌词文件与导出不受影响。
+     */
+    fun setLyricBilingual(mode: Int)
+
+    /** 未经「双语歌词」过滤的原始歌词（导出用：译文要一起写进 LRC） */
+    fun lyricsForExport(): Lyrics
     fun setLyricsPaneVisible(visible: Boolean)
     fun setCarMode(enabled: Boolean)
     fun setLyricOverlay(enabled: Boolean)

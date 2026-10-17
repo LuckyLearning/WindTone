@@ -78,6 +78,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luckylearning.windtone.BuildConfig
+import com.luckylearning.windtone.lyrics.BilingualMode
 import com.luckylearning.windtone.playback.Pitch
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -108,6 +109,7 @@ internal fun SettingsLyricsPage(
     canDrawOverlay: Boolean,
     overlayHealth: LyricOverlayBus.Health,
     onLyricScale: (Float) -> Unit,
+    onLyricBilingual: (Int) -> Unit,
     onLyricOverlay: (Boolean) -> Unit,
     onLyricOverlayLines: (Int) -> Unit,
     onLyricOverlayShowTitle: (Boolean) -> Unit,
@@ -130,6 +132,7 @@ internal fun SettingsLyricsPage(
     var overlayHintVisible by remember { mutableStateOf(false) }
     // 三条跳转路都走不通（ROM 连系统授权页都不给开）→ 指引卡里改显示手动路径
     var overlayJumpFailed by remember { mutableStateOf(false) }
+    var bilingualChoice by remember { mutableStateOf(false) }
     LaunchedEffect(canDrawOverlay) {
         if (canDrawOverlay) {
             overlayHintVisible = false
@@ -148,6 +151,13 @@ internal fun SettingsLyricsPage(
         onReset = resetAction(abs(player.lyricScale - SettingsDefaults.LYRIC_SCALE) > 0.001f) {
             onLyricScale(SettingsDefaults.LYRIC_SCALE)
         },
+    )
+    // v1.1.18：双语歌词显示模式（默认「中英都显示」= 历史行为）
+    ActionRow(
+        title = "双语歌词 · ${BilingualMode.of(player.lyricBilingual).shortLabel}",
+        subtitle = "带翻译的歌词显示哪些行；只影响显示，导出的 LRC 不受影响",
+        onClick = { bilingualChoice = true },
+        chevron = true,
     )
     // ⚠️ 这里原先还有两项：「逐字歌词」开关与「已唱部分的颜色」（v1.1.8 移除）。
     //    逐字染色（含给普通 LRC 派生字级时间轴、以及它专用的已唱色）已整体删除，
@@ -452,6 +462,68 @@ internal fun SettingsLyricsPage(
             },
             confirmButton = {
                 TextButton(onClick = { overlayChoice = null }) { Text("关闭") }
+            },
+        )
+    }
+
+    // 双语歌词选择弹层（v1.1.18）：结构与悬浮歌词那套一致，但没有 6 秒预览 ——
+    // 选中即对当前歌立即重算，播放页本来就看得到差别。
+    if (bilingualChoice) {
+        val choice = BilingualChoice.MODE
+        val selected = player.lyricBilingual
+        AlertDialog(
+            onDismissRequest = { bilingualChoice = false },
+            title = { Text(choice.title) },
+            text = {
+                Column {
+                    Text(
+                        choice.intro,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    choice.options.forEach { option ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    onLyricBilingual(option.value)
+                                    bilingualChoice = false
+                                }
+                                .padding(vertical = 10.dp, horizontal = 4.dp),
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    option.label,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = if (option.value == selected) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    },
+                                )
+                                Text(
+                                    option.hint,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (option.value == selected) {
+                                Icon(
+                                    Icons.Filled.Check,
+                                    contentDescription = "已选择",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { bilingualChoice = false }) { Text("关闭") }
             },
         )
     }

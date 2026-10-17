@@ -57,6 +57,7 @@ class SettingsScreenTest {
         dynamicTheme: Boolean = SettingsDefaults.DYNAMIC_THEME,
         onCarMode: (Boolean) -> Unit = {},
         onLyricScale: (Float) -> Unit = {},
+        onLyricBilingual: (Int) -> Unit = {},
         onLyricOverlayTextColor: (Int) -> Unit = {},
         onAutoResume: (Boolean) -> Unit = {},
         onOpenStats: () -> Unit = {},
@@ -90,6 +91,7 @@ class SettingsScreenTest {
                     canDrawOverlay = false,
                     overlayHealth = LyricOverlayBus.Health(),
                     onLyricScale = onLyricScale,
+                    onLyricBilingual = onLyricBilingual,
                     onSpeed = {},
                     onPitch = {},
                     onSkipSilence = {},
@@ -286,5 +288,29 @@ class SettingsScreenTest {
         compose.onNodeWithText("格式与容量").performClick()
         compose.waitForIdle()
         assert(opened) { "点「格式与容量」应当打开统计页" }
+    }
+
+    // ================================================================ v1.1.18 双语歌词
+
+    /**
+     * 「歌词」子页有「双语歌词」入口，弹层三选一，点选即回调。
+     *
+     * 入口行丢了不会编译失败也不会报错，只会让这个功能从界面上消失 ——
+     * 与上面「格式与容量」入口同理，必须有一条编译期之外的回归。
+     */
+    @Test
+    fun lyricsPageExposesBilingualModeChoice() {
+        var mode: Int? = null
+        render(onLyricBilingual = { mode = it })
+
+        compose.onNodeWithText("歌词").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("双语歌词 · 都显示", substring = true)
+            .performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("双语歌词 · 都显示", substring = true).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("只显示中文").performClick()
+        compose.waitForIdle()
+        assertEquals("点「只显示中文」应当回调 1", 1, mode)
     }
 }

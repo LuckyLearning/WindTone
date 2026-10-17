@@ -620,6 +620,7 @@ fun MainScreen(
                     canDrawOverlay = canDrawOverlay,
                     overlayHealth = overlayHealth,
                     onLyricScale = playerVm::setLyricScale,
+                    onLyricBilingual = playerVm::setLyricBilingual,
                     onSpeed = playerVm::setSpeed,
                     onPitch = playerVm::setPitchSemitones,
                     onSkipSilence = playerVm::setSkipSilence,

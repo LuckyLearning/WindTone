@@ -206,7 +206,33 @@ internal fun UpdateDialog(
 // ---------------------------------------------------------------- 小组件
 
 /** 选项弹层里的一项 */
-internal data class OverlayOption(val value: Int, val label: String, val hint: String)
+internal data class ChoiceOption(val value: Int, val label: String, val hint: String)
+
+/**
+ * 「双语歌词」显示模式（v1.1.18）：中英都显示 / 只显示中文 / 只显示英文。
+ *
+ * 与悬浮歌词的 [OverlayChoice] 分开立枚举：语义上它属于**播放页歌词**，
+ * 而且没有「6 秒预览」那套联动（切换是对当前歌立即重算，播放页本身就看得到）。
+ * 取值与 `lyrics/BilingualMode.index` 一一对应。
+ */
+internal enum class BilingualChoice(
+    val title: String,
+    val intro: String,
+    val options: List<ChoiceOption>,
+) {
+    MODE(
+        "双语歌词",
+        "对同时带原文和翻译的歌词生效：只影响播放页与悬浮窗的显示，" +
+            "不改歌词文件，导出 LRC 时翻译仍然完整保留。",
+        listOf(
+            ChoiceOption(0, "中英都显示", "原文一行、译文一行，默认"),
+            ChoiceOption(1, "只显示中文", "外文歌词换中文译文显示"),
+            ChoiceOption(2, "只显示英文", "中文歌词换英文译文显示"),
+        ),
+    ),
+    ;
+}
+
 
 /**
  * 悬浮歌词的外观选项（行数 / 标题字号 / 正文字号 / 对齐 / 底板 / 暂停表现）。
@@ -217,29 +243,29 @@ internal data class OverlayOption(val value: Int, val label: String, val hint: S
 internal enum class OverlayChoice(
     val title: String,
     val intro: String,
-    val options: List<OverlayOption>,
+    val options: List<ChoiceOption>,
 ) {
     LINES(
         "悬浮歌词行数",
         "桌面悬浮歌词一次显示几行（当前行居中高亮，上下带上下文）。选中后立刻给一次 6 秒预览。",
-        (1..5).map { n -> OverlayOption(n, "$n 行", overlayLinesHint(n)) },
+        (1..5).map { n -> ChoiceOption(n, "$n 行", overlayLinesHint(n)) },
     ),
     TITLE_SCALE(
         "歌名歌手字号",
         "悬浮窗最上面那两行小字（歌名 / 歌手）的字号，与歌词字号互不影响。",
         listOf(
-            OverlayOption(0, "小", "默认，约歌词的六成"),
-            OverlayOption(1, "中", "约歌词的八成"),
-            OverlayOption(2, "大", "约与歌词同号，车机远看更清楚"),
+            ChoiceOption(0, "小", "默认，约歌词的六成"),
+            ChoiceOption(1, "中", "约歌词的八成"),
+            ChoiceOption(2, "大", "约与歌词同号，车机远看更清楚"),
         ),
     ),
     TEXT_SCALE(
         "悬浮歌词字号",
         "以正文为基准。大屏与车机建议调大一档；一行放不下会自动折行，不会横向溢出屏幕。",
         listOf(
-            OverlayOption(0, "小", "约正文的 0.8 倍"),
-            OverlayOption(1, "中", "默认，与播放页歌词接近"),
-            OverlayOption(2, "大", "约正文的 1.25 倍"),
+            ChoiceOption(0, "小", "约正文的 0.8 倍"),
+            ChoiceOption(1, "中", "默认，与播放页歌词接近"),
+            ChoiceOption(2, "大", "约正文的 1.25 倍"),
         ),
     ),
     ALIGN(
@@ -248,25 +274,25 @@ internal enum class OverlayChoice(
             "居中适合每句都不长的歌词；居左更适合长句——每行都从同一条竖线起排，" +
             "读起来比居中的参差边缘省力。",
         listOf(
-            OverlayOption(0, "居中", "窗内每行居中，默认"),
-            OverlayOption(1, "居左", "窗内每行从左沿起排"),
+            ChoiceOption(0, "居中", "窗内每行居中，默认"),
+            ChoiceOption(1, "居左", "窗内每行从左沿起排"),
         ),
     ),
     BACKDROP(
         "悬浮歌词底板",
         "字幕下面垫什么。亮色壁纸上「无底板的白字」会看不清——投影在高分屏上几乎等于没有。",
         listOf(
-            OverlayOption(0, "无底板", "最干净，需要壁纸足够深"),
-            OverlayOption(1, "半透明", "默认，任何壁纸上都读得清"),
-            OverlayOption(2, "深色实底", "对比最强，适合花哨壁纸"),
+            ChoiceOption(0, "无底板", "最干净，需要壁纸足够深"),
+            ChoiceOption(1, "半透明", "默认，任何壁纸上都读得清"),
+            ChoiceOption(2, "深色实底", "对比最强，适合花哨壁纸"),
         ),
     ),
     PAUSE(
         "暂停时的悬浮歌词",
         "暂停之后字幕怎么处理。",
         listOf(
-            OverlayOption(0, "淡出", "默认，保留最后一句便于回看唱到哪"),
-            OverlayOption(1, "隐藏", "暂停即消失，桌面更干净"),
+            ChoiceOption(0, "淡出", "默认，保留最后一句便于回看唱到哪"),
+            ChoiceOption(1, "隐藏", "暂停即消失，桌面更干净"),
         ),
     ),
 }

@@ -603,7 +603,7 @@ a{color:inherit;text-decoration:none}
     <a class="backdocs" href="https://luckylearning.github.io/WindTone/">← 文档站</a>
     <div class="bh-title">听风 WindTone · UI 效果图<small>设计基准 / Design Source of Truth</small></div>
     <span class="bh-badge"><span id="screenCount">52</span> 屏 · Material 3 · 手机 360dp / 车机 1707×1067dp</span>
-    <span class="bh-badge">对齐 v1.1.17 · 曲库格式与容量统计 / 打开应用继续上次播放 / 悬浮窗歌名歌手 + 1–5 行 / 车机单栏 / 侧边抽屉 / 设置二级分类（⑲/⑲B）</span>
+    <span class="bh-badge">对齐 v1.1.18 · 双语歌词三选一 / 重开歌词自愈 / 曲库格式与容量统计 / 打开应用继续上次播放 / 悬浮窗歌名歌手 + 1–5 行 / 车机单栏 / 侧边抽屉 / 设置二级分类（⑲/⑲B）</span>
     <button class="tgl" id="themeBtn">🌙 深色主题</button>
   </div>
   <nav class="bh-nav">
@@ -2448,6 +2448,11 @@ a{color:inherit;text-decoration:none}
             <div style="flex:1;font-size:15px">歌词字号 1.1x</div>
             <svg class="ic ic-18 rst"><use href="#i-reset"/></svg></div>
           <div class="slider" style="margin:12px 0 4px"><span class="fill" style="width:44%"></span><span class="knob" style="left:44%"></span></div></div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px">
+          <div style="flex:1"><div style="font-size:15px">双语歌词 · 都显示</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">带翻译的歌词显示哪些行；只影响显示，导出的 LRC 不受影响（v1.1.18）</div></div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
         <div class="section-label" style="padding:0;margin:14px 0 4px">桌面悬浮歌词</div>
         <div class="sw-row"><div class="sw-main"><div class="sw-t">桌面悬浮歌词</div>
           <div class="sw-s">退到车机桌面 / 导航页后，在屏幕最上层显示当前歌词行（App 内自动隐藏，开启瞬间有 6 秒预览）</div></div><span class="switch off"><i></i></span></div>
@@ -2514,7 +2519,7 @@ a{color:inherit;text-decoration:none}
       </div>
     </div>
   </div>
-  <p class="note"><b>关键点：</b>「播放页歌词」段只剩 <b>歌词字号</b> 一项；「桌面悬浮歌词」段 = 开关（默认关）+ <b>显示歌名与歌手</b>（默认关，开着时多一行「歌名歌手字号」）+ 行数（1–5）/ 字号 / 对齐 / 底板 / 暂停表现 + 宽度 / 文字颜色 + 调整位置入口。<br>
+  <p class="note"><b>关键点：</b>「播放页歌词」段 = <b>歌词字号</b> + <b>双语歌词</b>（v1.1.18：中英都显示 / 只显示中文 / 只显示英文）；「桌面悬浮歌词」段 = 开关（默认关）+ <b>显示歌名与歌手</b>（默认关，开着时多一行「歌名歌手字号」）+ 行数（1–5）/ 字号 / 对齐 / 底板 / 暂停表现 + 宽度 / 文字颜色 + 调整位置入口。<br>
   悬浮歌词的外观选项（行数 / 标题字号 / 字号 / 对齐 / 底板 / 暂停表现）：<b>开关关着也允许预设</b>（不做可见性 gating），五项共用同一个选项弹层（<code>OverlayChoice</code>），点任意一项即生效并给一次 6 秒前台预览；三种实际状态与「对齐 / 位置」的完整规范见 ㊴ 屏。<br>
   <b>降级不降可达性</b>：播放页「播放设置」弹层的「歌词」分组里仍有「桌面悬浮歌词」开关（见 ⑱）——听歌时顺手就能开，不必钻两层设置。<br>
   <b>v1.1.4 提到设置里的歌词颜色共三项</b>（播放页已唱色 / 悬浮窗文字色 / 悬浮窗已唱色）。⚠️ <b>v1.1.8 起后两项已随逐字染色整体移除</b>，本屏只剩「悬浮歌词文字颜色」这一处 —— 它现在是整窗唯一的颜色，主角与上下句靠<b>明暗 / 字重 / 字号</b>区分，不再有「已唱色」；颜色弹层见 ㉙E。<br>
