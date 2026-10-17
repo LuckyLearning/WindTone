@@ -173,6 +173,8 @@ fun SettingsScreen(
     onOpenReport: () -> Unit,
     /** 打开重复歌曲清理（批次 10.2） */
     onOpenDuplicates: () -> Unit,
+    /** 打开「曲库格式与容量」统计页 —— v1.1.17 */
+    onOpenStats: () -> Unit,
     minSongDurationSec: Int,
     onMinSongDurationSec: (Int) -> Unit,
     onLoadCrashLog: () -> Unit,
@@ -323,6 +325,7 @@ fun SettingsScreen(
                         onRestoreExcluded = onRestoreExcluded,
                         onOpenReport = onOpenReport,
                         onOpenDuplicates = onOpenDuplicates,
+                        onOpenStats = onOpenStats,
                         library = library,
                     )
 

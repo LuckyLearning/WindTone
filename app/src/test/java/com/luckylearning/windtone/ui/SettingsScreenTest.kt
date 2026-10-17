@@ -59,6 +59,7 @@ class SettingsScreenTest {
         onLyricScale: (Float) -> Unit = {},
         onLyricOverlayTextColor: (Int) -> Unit = {},
         onAutoResume: (Boolean) -> Unit = {},
+        onOpenStats: () -> Unit = {},
     ) {
         compose.setContent {
             MusicPlayerTheme {
@@ -103,6 +104,7 @@ class SettingsScreenTest {
                     onRestoreExcluded = {},
                     onOpenReport = {},
                     onOpenDuplicates = {},
+                    onOpenStats = onOpenStats,
                     minSongDurationSec = 60,
                     onMinSongDurationSec = {},
                     onLoadCrashLog = {},
@@ -133,7 +135,7 @@ class SettingsScreenTest {
         // 分类卡与子页里的 ActionRow 的区别就在这一行摘要（连摘要一起断言，
         // 免得以后退回成没有摘要的普通 ActionRow 也照样"通过"）
         compose.onNodeWithText("主题取色 · 车载模式").assertIsDisplayed()
-        compose.onNodeWithText("过滤 < 60 秒").assertIsDisplayed()
+        compose.onNodeWithText("格式与容量 · 过滤 < 60 秒").assertIsDisplayed()
     }
 
     /** 点「外观」→ 进外观子页（主题 / 车载两段），主页的卡整批让位 */
@@ -263,5 +265,26 @@ class SettingsScreenTest {
         compose.onNodeWithContentDescription("恢复默认").performScrollTo().performClick()
         compose.waitForIdle()
         assertEquals(SettingsDefaults.AUTO_RESUME, autoResume)
+    }
+
+    // ================================================================ v1.1.17 曲库格式与容量
+
+    /**
+     * 「音乐库」子页里有「格式与容量」入口，点它能把请求交出去。
+     *
+     * 与上一条同理：统计页本身是个全屏子页，入口行丢了**不会编译失败也不会报错**，
+     * 只会让这个功能从界面上消失。顺带钉住这一行确实存在（不是被折叠进别的行）。
+     */
+    @Test
+    fun libraryPageExposesFormatStatsEntry() {
+        var opened = false
+        render(onOpenStats = { opened = true })
+
+        compose.onNodeWithText("音乐库").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("格式与容量").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("格式与容量").performClick()
+        compose.waitForIdle()
+        assert(opened) { "点「格式与容量」应当打开统计页" }
     }
 }

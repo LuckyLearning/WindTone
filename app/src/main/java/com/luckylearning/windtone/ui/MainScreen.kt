@@ -67,6 +67,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.luckylearning.windtone.data.ScanScope
+import com.luckylearning.windtone.data.buildLibraryStats
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.state.GroupInfo
 import com.luckylearning.windtone.state.LibraryView
@@ -197,6 +198,8 @@ fun MainScreen(
     var showSettings by remember { mutableStateOf(false) }
     var showReport by remember { mutableStateOf(false) }
     var showDuplicates by remember { mutableStateOf(false) }
+    // 曲库格式与容量（v1.1.17）：纯本地统计，进入时现算，不落库
+    var showLibraryStats by remember { mutableStateOf(false) }
     // 侧边抽屉开合（v1.1.3：取代底部五视图导航）。只在曲库页出现，
     // 播放页 / 设置页这类全屏覆盖层在效果图里各有自己的返回按钮，没有汉堡入口。
     var drawerOpen by remember { mutableStateOf(false) }
@@ -361,6 +364,7 @@ fun MainScreen(
     }
     BackHandler(enabled = showReport) { showReport = false }
     BackHandler(enabled = showDuplicates) { showDuplicates = false }
+    BackHandler(enabled = showLibraryStats) { showLibraryStats = false }
     // 抽屉最后注册 = 优先级最高：抽屉开着时返回键只收抽屉，不会顺带退出别的层。
     BackHandler(enabled = drawerOpen) { drawerOpen = false }
 
@@ -641,6 +645,7 @@ fun MainScreen(
                     onRestoreExcluded = lib::restoreExcludedSongs,
                     onOpenReport = { showReport = true },
                     onOpenDuplicates = { showDuplicates = true },
+                    onOpenStats = { showLibraryStats = true },
                     minSongDurationSec = lib.minSongDurationSec(),
                     onMinSongDurationSec = lib::setMinSongDurationSec,
                     onLoadCrashLog = { crashLogText = settings.crashLogText() },
@@ -689,6 +694,21 @@ fun MainScreen(
                     onScan = lib::scanDuplicates,
                     onClean = lib::cleanDuplicates,
                     onClear = lib::clearDuplicateScan,
+                )
+            }
+
+            // 曲库格式与容量：与收听报告 / 重复清理同级的全屏子页。
+            // 统计在组合期现算（remember 只跟曲库变），没有异步、没有 loading 态 ——
+            // 曲库本来就在内存里，几百到几万首的聚合是毫秒级的事。
+            AnimatedVisibility(
+                visible = showLibraryStats,
+                enter = slideInVertically { it },
+                exit = slideOutVertically { it },
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                LibraryStatsScreen(
+                    stats = remember(library.songs) { buildLibraryStats(library.songs) },
+                    onClose = { showLibraryStats = false },
                 )
             }
 

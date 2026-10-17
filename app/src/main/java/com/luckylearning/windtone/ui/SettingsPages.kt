@@ -5,6 +5,8 @@ import com.luckylearning.windtone.data.DataMaintenance
 import com.luckylearning.windtone.data.DownloadRoute
 import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.data.UpdateChecker
+import com.luckylearning.windtone.data.buildLibraryStats
+import com.luckylearning.windtone.data.formatByteSize
 import com.luckylearning.windtone.overlay.LyricOverlayBridge
 import com.luckylearning.windtone.overlay.LyricOverlayBus
 import com.luckylearning.windtone.overlay.OverlaySnapshot
@@ -129,11 +131,12 @@ internal fun SettingsRootPage(
     )
     CategoryRow(
         title = "音乐库",
-        // 效果图把「过滤 < 60 秒」放在摘要里（而不是右侧值），照做
+        // 摘要前置「格式与容量」（v1.1.17）：这是本页唯一会天天被点开的项，
+        // 短音频过滤是一辈子配一次的，摆在摘要前半句反而更容易被误认成唯一内容。
         subtitle = if (minSongDurationSec > 0) {
-            "过滤 < ${minSongDurationSec} 秒"
+            "格式与容量 · 过滤 < ${minSongDurationSec} 秒"
         } else {
-            "未开启短音频过滤"
+            "格式与容量 · 未开启短音频过滤"
         },
         icon = AppIcons.LibraryMusic,
         onClick = { onNavigate(SettingsPage.LIBRARY) },
@@ -294,13 +297,29 @@ internal fun SettingsLibraryPage(
     onRestoreExcluded: () -> Unit,
     onOpenReport: () -> Unit,
     onOpenDuplicates: () -> Unit,
+    onOpenStats: () -> Unit,
     library: LibraryUiState,
 ) {
     var showMinDurationDialog by remember { mutableStateOf(false) }
 
+    // 摘要由纯函数算，且只跟着曲库变 —— 每次重组都重算一遍在几百首的量级上不痛，
+    // 但 `remember(songs)` 让这页在滚动 / 弹层开关时完全不碰统计。
+    val stats = remember(library.songs) { buildLibraryStats(library.songs) }
+
 
     // ------------------------------------------------ 本地曲库
     SectionTitle("本地曲库")
+    ActionRow(
+        title = "格式与容量",
+        subtitle = "各格式的首数与占用、无损 / 有损占比（全部按本机文件大小统计）",
+        onClick = onOpenStats,
+        trailing = if (stats.totalSongs > 0) {
+            "${stats.totalSongs} 首 · ${formatByteSize(stats.totalBytes)}"
+        } else {
+            "—"
+        },
+        chevron = true,
+    )
     ActionRow(
         title = if (minSongDurationSec > 0) "过滤短音频（< ${minSongDurationSec} 秒）" else "过滤短音频（未开启）",
         subtitle = "时长已知且低于阈值的音频不会进入曲库（滤掉提示音、转场音效等）。" +
