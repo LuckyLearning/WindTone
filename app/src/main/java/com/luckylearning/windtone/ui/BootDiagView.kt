@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
+import android.hardware.display.DisplayManager
 import android.os.Build
 import android.util.TypedValue
 import android.view.Gravity
@@ -91,6 +92,11 @@ object BootDiagView {
         val insetsText = paragraph(ctx, "…")
         content.addView(sectionView(ctx, "系统栏 insets", insetsText))
 
+        // 车机上还有一个必须排除的可能：界面被放到了另一块屏幕上（中控 + 仪表是两块 display），
+        // 主屏只会显示桌面。窗口尺寸和 displayId 能把这种情况直接暴露出来。
+        val windowText = paragraph(ctx, "…")
+        content.addView(sectionView(ctx, "窗口与显示", windowText))
+
         content.addView(
             section(
                 ctx,
@@ -163,8 +169,40 @@ object BootDiagView {
             // 分开记才能把「窗口不行」和「界面不行」区分开。
             BootTrace.mark(ctx, BootTrace.STAGE_DIAG_SHOWN)
         }
+        // 窗口要等布局完成才有真实尺寸，与 insets 一起回填
+        scroll.post { windowText.text = windowInfo(ctx, scroll) }
         return scroll
     }
+
+    /**
+     * 窗口与显示设备快照。
+     *
+     * 为什么单独一块：车机通常有两块 display（15.6" 中控 + 10.25" 仪表）。
+     * 如果 Activity 被放到了仪表那块上，用户看主屏就只有桌面 —— 表现与「黑屏」一模一样，
+     * 但成因和渲染毫无关系。窗口尺寸为 0 也是同一类症状。
+     */
+    private fun windowInfo(ctx: Activity, root: View): String = buildString {
+        runCatching {
+            val decor = ctx.window.decorView
+            appendLine("窗口：${decor.width} × ${decor.height} px（decorView）")
+            appendLine("页面所在屏：displayId=${root.display?.displayId ?: -1}")
+            appendLine("多窗口：${ctx.isInMultiWindowMode}　画中画：${ctx.isInPictureInPictureMode}")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val bounds = ctx.windowManager.currentWindowMetrics.bounds
+                appendLine("WindowMetrics：${bounds.width()} × ${bounds.height()}")
+            }
+            val dm = ctx.getSystemService(DisplayManager::class.java)
+            val displays = dm?.displays.orEmpty()
+            appendLine("显示设备：${displays.size} 个")
+            displays.forEach { d ->
+                val mode = d.mode
+                append(
+                    "  #${d.displayId}  ${d.name}  ${mode.physicalWidth}×${mode.physicalHeight}" +
+                        " @${String.format(Locale.US, "%.0f", d.refreshRate ?: 0f)}\n"
+                )
+            }
+        }.onFailure { append("取不到：${it.javaClass.simpleName}") }
+    }.trimEnd()
 
     private fun screenInfo(ctx: Context): String {
         val dm = ctx.resources.displayMetrics
