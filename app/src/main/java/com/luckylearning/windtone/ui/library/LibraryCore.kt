@@ -119,7 +119,9 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
             }
             if (prefs.scanScope == ScanScope.UNSET) {
                 // 首次安装：不自动扫描，界面会提示用户选择范围
-                _library.update { it.copy(scanning = false, statusText = "") }
+                // 这里必须把 libraryLoaded 立起来：不会有任何后续装载了，
+                // 「等曲库就绪」的桌面入口应当立刻得出结论（曲库为空），而不是永远等下去。
+                _library.update { it.copy(scanning = false, statusText = "", libraryLoaded = true) }
                 return@launch
             }
             scan(auto = true)
@@ -200,7 +202,7 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
             }
 
             if (result == null) {
-                _library.update { it.copy(scanning = false, statusText = "") }
+                _library.update { it.copy(scanning = false, statusText = "", libraryLoaded = true) }
                 // 自动扫描失败不打扰用户（等同于原来的空串提示），手动扫描才弹 Snackbar
                 if (!auto) pushMessage("扫描失败，请检查权限后重试")
                 return@launch
@@ -210,6 +212,10 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
             val scopeNow = prefs.scanScope
             if (scopeNow == ScanScope.UNSET || scopeNow != scopeAtStart) {
                 Log.i(TAG, "扫描结果已过期（$scopeAtStart → $scopeNow），丢弃")
+                // 这一批结果不会上界面，装载告一段落：别让「等曲库就绪」的桌面入口一直挂着。
+                // 刻意不动 `scanning`：范围变化几乎总是伴随一次新扫描（见 setScanScope），
+                // 那个标志此刻属于新任务，旧任务无权清掉它。
+                _library.update { it.copy(libraryLoaded = true) }
                 return@launch
             }
 
@@ -357,6 +363,8 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
                 folders = session.folders.folderItemList(),
                 statusText = "",
                 favoriteUris = favs,
+                // 装载给出了结论（本批结果已上界面，哪怕是空结果）——桌面入口可以动手了
+                libraryLoaded = true,
             )
         }
         playback.setLibrarySongs(sorted)

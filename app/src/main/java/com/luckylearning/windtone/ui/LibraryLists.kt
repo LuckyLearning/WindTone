@@ -65,6 +65,7 @@ import com.luckylearning.windtone.state.LibraryUiState
 import com.luckylearning.windtone.state.PlayerUiState
 import com.luckylearning.windtone.state.PlaylistInfo
 import com.luckylearning.windtone.state.VirtualPlaylist
+import com.luckylearning.windtone.state.virtualPlaylistInfo
 import kotlinx.coroutines.launch
 
 /**
@@ -381,28 +382,19 @@ internal fun PlaylistListView(
         }
         item {
             PlaylistRowPlay(
-                info = PlaylistInfo(
-                    VirtualPlaylist.FAVORITES, "我的收藏",
-                    library.extraFavorites.size, library.extraFavorites.firstOrNull(), virtual = true,
-                ),
+                info = virtualPlaylistInfo(VirtualPlaylist.FAVORITES, library),
                 onOpen = lib::openPlaylist,
             )
         }
         item {
             PlaylistRowPlay(
-                info = PlaylistInfo(
-                    VirtualPlaylist.RECENT, "最近播放",
-                    library.extraRecent.size, library.extraRecent.firstOrNull(), virtual = true,
-                ),
+                info = virtualPlaylistInfo(VirtualPlaylist.RECENT, library),
                 onOpen = lib::openPlaylist,
             )
         }
         item {
             PlaylistRowPlay(
-                info = PlaylistInfo(
-                    VirtualPlaylist.MOST_PLAYED, "最常播放",
-                    library.extraMostPlayed.size, library.extraMostPlayed.firstOrNull(), virtual = true,
-                ),
+                info = virtualPlaylistInfo(VirtualPlaylist.MOST_PLAYED, library),
                 onOpen = lib::openPlaylist,
             )
         }

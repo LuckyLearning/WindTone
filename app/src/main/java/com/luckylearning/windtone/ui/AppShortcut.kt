@@ -74,6 +74,52 @@ object AppShortcut {
         return v
     }
 
+    /**
+     * 这个动作现在能不能执行（曲库还没就绪时必须**先不消费**，等下一次状态变化再试）。
+     *
+     * 抽成纯函数是为了能单测：这条判据原先写在 `MainScreen` 的 `LaunchedEffect` 里，
+     * 只看得到「已就绪」的几种正向信号，而漏掉了「还没开始」的负向信号，于是
+     * v1.1.3 ~ v1.1.12 一直有个隐藏故障 —— 见下面那段。
+     *
+     * ## 判据只能用「结论」，不能用「还没发生」
+     *
+     * 早期判据是 `songs 非空 || 扫描范围未选 || 不在扫描`。看着挺全，但那三条在
+     * **冷启动第一帧**居然同时"看着像"成立：`songs` 当然还是空的，
+     * `scanning` 也还没开始扫（false），`scanScope` 是上次选过的值……第三条
+     * （不在扫描）因此为真 → 判成"就绪" → 动作被消费掉 → `playQueue(空)` 被
+     * `startQueue` 的 `if (queue.isEmpty()) return` 静默吞掉。
+     * 用户看到的现象是「点了快捷方式，应用开了，什么也没播」，
+     * 「打开我的收藏」还因为别的原因落到歌单列表页（见 `MainScreen` 那一段）。
+     *
+     * 所以现在只认曲库自己报出来的结论：[songsLoaded]（首批装载已结束）与
+     * [playlistsLoaded]（虚拟歌单曲目已算过）都由 `LibraryCore` / `PlaylistStore`
+     * 在**真的算完之后**才置位。
+     *
+     * @param songsLoaded `LibraryUiState.libraryLoaded`
+     * @param hasSongs `songs` 非空
+     * @param scanning 正在扫描
+     * @param playlistsLoaded `LibraryUiState.playlistsLoaded`
+     */
+    fun canRun(
+        action: String,
+        songsLoaded: Boolean,
+        hasSongs: Boolean,
+        scanning: Boolean,
+        playlistsLoaded: Boolean,
+    ): Boolean = when (action) {
+        // 小组件深链只是切界面，不碰曲库，随时都能跳
+        OPEN_PLAYER, OPEN_LIBRARY, OPEN_PLAYLISTS -> true
+
+        // 有歌就走；没歌则等装载给出结论（扫描中要继续等 —— 扫完可能就有了），
+        // 结论是"确实没有"时才放行，让界面去弹那句提示。
+        PLAY_ALL, SHUFFLE -> hasSongs || (songsLoaded && !scanning)
+
+        // 「打开我的收藏」还要求虚拟歌单的曲目算完，否则会打开一个空收藏夹
+        FAVORITES -> (hasSongs || (songsLoaded && !scanning)) && playlistsLoaded
+
+        else -> true
+    }
+
     private val VALID = setOf(
         PLAY_ALL, SHUFFLE, FAVORITES,
         OPEN_PLAYER, OPEN_LIBRARY, OPEN_PLAYLISTS,

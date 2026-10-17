@@ -72,6 +72,9 @@ internal class PlaylistStore(private val session: LibrarySession) : PlaylistActi
                 extraRecent = recent,
                 extraMostPlayed = most,
                 extraFavorites = favorites,
+                // 虚拟歌单的曲目已经算出来了：「打开我的收藏」这类入口等的就是这一步
+                // （它和曲库装载是两条并行任务，不算完就打开会看到一个空收藏夹）
+                playlistsLoaded = true,
             )
         }
         session.core.refreshStats()

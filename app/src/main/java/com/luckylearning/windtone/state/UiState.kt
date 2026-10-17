@@ -66,6 +66,29 @@ object VirtualPlaylist {
 }
 
 /**
+ * 三个虚拟歌单的展示条目（名称 / 曲目数 / 封面取自曲库状态）。
+ *
+ * 为什么需要这个函数、而不是去 `LibraryUiState.playlists` 里找：那个列表里
+ * **只有用户自建歌单**（直接来自 playlist 表），虚拟歌单从来没进去过 ——
+ * 它们是「曲库内存状态的一个视图」，由界面现拼。
+ * v1.1.12 之前「打开我的收藏」快捷方式就是去 `playlists` 里按 id 找，
+ * 永远找不到，于是只切了个视图就结束，用户看到的是歌单列表页（见 §6.7）。
+ * 收到这里之后，列表页与快捷方式走的是**同一个构造函数**，不会再各拼一份。
+ */
+fun virtualPlaylistInfo(id: Long, library: LibraryUiState): PlaylistInfo = when (id) {
+    VirtualPlaylist.FAVORITES ->
+        PlaylistInfo(id, "我的收藏", library.extraFavorites.size, library.extraFavorites.firstOrNull(), virtual = true)
+
+    VirtualPlaylist.RECENT ->
+        PlaylistInfo(id, "最近播放", library.extraRecent.size, library.extraRecent.firstOrNull(), virtual = true)
+
+    VirtualPlaylist.MOST_PLAYED ->
+        PlaylistInfo(id, "最常播放", library.extraMostPlayed.size, library.extraMostPlayed.firstOrNull(), virtual = true)
+
+    else -> error("不是虚拟歌单：$id")
+}
+
+/**
  * 设置页「扫描范围」里的一行目录。
  *
  * 为什么不是裸的 treeUri：用户要在这一行上做「排除 / 取消排除」的判断，
@@ -92,6 +115,29 @@ data class LibraryUiState(
     val statusText: String = "",
     val skippedUnsupported: Int = 0,
     val lyricsCount: Int = 0,
+    /**
+     * 曲库的**首批装载是否已经给出结论**（v1.1.13 新增）。
+     *
+     * 语义是「要么拿到了歌，要么已经能确定就是没有」——不是「有歌」。
+     * 为什么需要它：桌面入口（快捷方式 / 小组件）要等曲库就绪才能执行
+     * （冷启动第一帧 `songs` 一定为空，那时调 `playQueue` 会被
+     * `startQueue` 的 `if (queue.isEmpty()) return` 静默吞掉）。
+     * 而「第一帧」再没有任何别的信号能判：`scanning` 此刻是 false（还没开始扫）、
+     * `scanScope` 是上次选的值、`songs` 是空的 —— 三个都"看着像"已经就绪，
+     * 早期的判据正是栽在这里（见 §6.7）。
+     *
+     * 注意 `scanning` 不能替代它：扫描中的空曲库应该**继续等**（扫完就有歌了），
+     * 而装载结束的空曲库应该**立刻给提示**，两者恰好相反。
+     */
+    val libraryLoaded: Boolean = false,
+    /**
+     * 歌单（含三个虚拟歌单的曲目）是否已经算过至少一次（v1.1.13 新增）。
+     *
+     * [extraFavorites] 这些字段由 `PlaylistStore.refreshPlaylistsNow()` 填，
+     * 与曲库装载是两条并行任务。所以「曲库就绪」不等于「收藏列表就绪」——
+     * 「打开我的收藏」若只等前者，会打开一个还没算出内容的空收藏夹。
+     */
+    val playlistsLoaded: Boolean = false,
     val deepScan: Boolean = false,
     /** 扫描范围：未选择（首次安装）时不自动扫描，等待用户指定全盘或目录 */
     val scanScope: ScanScope = ScanScope.UNSET,

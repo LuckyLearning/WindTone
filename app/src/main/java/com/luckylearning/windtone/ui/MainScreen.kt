@@ -68,6 +68,7 @@ import com.luckylearning.windtone.state.GroupInfo
 import com.luckylearning.windtone.state.LibraryView
 import com.luckylearning.windtone.state.PlaylistInfo
 import com.luckylearning.windtone.state.VirtualPlaylist
+import com.luckylearning.windtone.state.virtualPlaylistInfo
 
 fun requiredAudioPermission(): String =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_AUDIO
@@ -269,38 +270,45 @@ fun MainScreen(
     // 进播放页 / 进曲库 / 进歌单。
     //
     // 不能一收到就执行 —— 从桌面入口冷启动时，曲库还在从 Room 缓存异步装载，
-    // 此刻 `songs` 是空的，`playQueue` 会拿到空列表然后什么都不做，用户看到的
-    // 就是"点了快捷方式、应用开了、但没播"，而且全程没有任何提示。
+    // 此刻 `songs` 是空的，而 `playQueue` 遇到空列表会**静默返回**（见
+    // `PlaybackEngine.startQueue` 的 `if (queue.isEmpty()) return`），
+    // 用户看到的就是"点了快捷方式、应用开了、但没播"，而且连句提示都没有。
     //
-    // 所以等三种"可以决定了"的情形之一出现再动手：
-    //   ① 已经有歌了；
-    //   ② 用户根本没选过扫描范围（那就是真的没歌，提示一句并结束）；
-    //   ③ 扫描已经结束（扫完仍为空 = 本机确实没有音频）。
-    // 否则一直挂着 pending，等下一次状态变化重试。
+    // 所以等曲库自己报出结论再动手：判据在 [AppShortcut.canRun]（纯函数，有单测）。
+    // 这里**绝不能**自己看 `scanning` / `scanScope` 判断就绪 —— 那三个信号在冷启动
+    // 第一帧全都"看着像"已就绪，正是 v1.1.3 ~ v1.1.12 那个隐藏故障的成因。
     val shortcutAction by AppShortcut.pending.collectAsStateWithLifecycle()
-    LaunchedEffect(shortcutAction, library.songs.size, library.scanning) {
+    LaunchedEffect(
+        shortcutAction,
+        library.libraryLoaded,
+        library.playlistsLoaded,
+        library.songs.size,
+        library.scanning,
+    ) {
         val action = shortcutAction ?: return@LaunchedEffect
-        val libraryReady = library.songs.isNotEmpty() ||
-            library.scanScope == ScanScope.UNSET ||
-            !library.scanning
-        if (!libraryReady) return@LaunchedEffect
+        val ready = AppShortcut.canRun(
+            action = action,
+            songsLoaded = library.libraryLoaded,
+            hasSongs = library.songs.isNotEmpty(),
+            scanning = library.scanning,
+            playlistsLoaded = library.playlistsLoaded,
+        )
+        if (!ready) return@LaunchedEffect
         AppShortcut.consumePending()
-        val hasSongs = library.songs.isNotEmpty()
+        if (library.songs.isEmpty()) snackbarHostState.showSnackbar("曲库里还没有歌曲，先选好扫描范围并等扫描完成")
         when (action) {
-            AppShortcut.PLAY_ALL ->
-                if (hasSongs) playerVm.playQueue(library.songs, 0)
-                else snackbarHostState.showSnackbar("曲库里还没有歌曲，先选一个扫描范围")
+            AppShortcut.PLAY_ALL -> playerVm.playQueue(library.songs, 0)
 
-            AppShortcut.SHUFFLE ->
-                if (hasSongs) playerVm.playShuffled(library.songs)
-                else snackbarHostState.showSnackbar("曲库里还没有歌曲，先选一个扫描范围")
+            AppShortcut.SHUFFLE -> playerVm.playShuffled(library.songs)
 
             AppShortcut.FAVORITES -> {
                 lib.setView(LibraryView.PLAYLIST)
-                // 用 playlists 里那一份而不是自己拼 PlaylistInfo：收藏的曲目数与封面
-                // 由 refreshPlaylists 统一算好，自己拼一份会在下次刷新时对不上。
-                library.playlists.firstOrNull { it.id == VirtualPlaylist.FAVORITES }
-                    ?.let(lib::openPlaylist)
+                // 用 virtualPlaylistInfo 拼条目，**不要**去 `library.playlists` 里按 id 找：
+                // 那个列表只有用户自建歌单，三个虚拟歌单（我的收藏 / 最近播放 / 最常播放）
+                // 是界面现拼的视图，从来没进过它 —— 早期这里就是这么写的，查找永远返回
+                // null，于是只切到「歌单」列表页就走了，用户报的"打开收藏打开的是歌单"。
+                // 同一个构造函数，列表页与这里共用，不会再各拼一份。
+                lib.openPlaylist(virtualPlaylistInfo(VirtualPlaylist.FAVORITES, library))
             }
 
             // 小组件深链：不依赖曲库，随时都能跳
