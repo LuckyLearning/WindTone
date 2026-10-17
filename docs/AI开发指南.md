@@ -609,6 +609,8 @@ install()
 
 `CrashLog.install(this)` 在 `MusicApp` 里挂 `Thread.setDefaultUncaughtExceptionHandler`，日志落本地文件；设置页可查看条数、导出、清空。R8 保留了 `SourceFile,LineNumberTable`，所以 release 崩溃栈可读。
 
+**启动即崩时设置页是走不到的**（v1.1.13 的车机黑屏就是这么发现的：装上打开就是黑屏，连系统对话框都没有，而用户没有 adb、也进不去设置页）。所以 `MainActivity.onCreate` 会先问一句 `CrashLog.latestUnseen(context)`：**上一轮崩过、且还没给用户看过**，就先渲染 `CrashReportScreen`（设备信息 + 完整栈 + 「复制全文」/「继续打开」），用户拍照或复制发来即可定位。看过一次由 `CrashLog.markSeen` 记账，正常启动完全不受影响；`diag-*` 属于非致命诊断，**不会**触发这一页。口径由 `CrashLogTest` 钉住。
+
 ### 6.6 小组件与磁贴
 
 - 小组件 `MusicWidgetProvider`：`onReceive` 用**显式 Intent**（`Intent(context, MusicWidgetProvider::class.java).setAction(...)`）触发，action 常量 `com.luckylearning.windtone.widget.{TOGGLE,NEXT,PREVIOUS}` 同时出现在代码与 Manifest 里，**改包名时要两处一起改**。

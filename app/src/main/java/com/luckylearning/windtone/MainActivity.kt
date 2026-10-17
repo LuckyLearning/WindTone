@@ -7,10 +7,15 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.luckylearning.windtone.data.CrashLog
 import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.ui.AppShortcut
+import com.luckylearning.windtone.ui.CrashReportScreen
 import com.luckylearning.windtone.ui.LibraryViewModel
 import com.luckylearning.windtone.ui.MainScreen
 import com.luckylearning.windtone.ui.PlayerViewModel
@@ -40,6 +45,12 @@ class MainActivity : ComponentActivity() {
         }
 
         enableEdgeToEdge()
+
+        // 上一轮崩过、且还没给用户看过 → 先把栈摆到屏幕上（见 CrashReportScreen 的注释）。
+        // 这一步必须在 setContent 之前算：真机上「装上就黑屏」的情况下，用户走不到设置页，
+        // 拍张照是唯一的取证方式。
+        val pendingCrash = runCatching { CrashLog.latestUnseen(applicationContext) }.getOrNull()
+
         setContent {
             // 四个分域 ViewModel：曲库 / 播放 / 更新 / 设置与诊断。
             // 它们都作用域在同一个 Activity 的 ViewModelStore 上，
@@ -48,6 +59,18 @@ class MainActivity : ComponentActivity() {
             val playerVm: PlayerViewModel = viewModel()
             val updateVm: UpdateViewModel = viewModel()
             val settings: SettingsViewModel = viewModel()
+
+            var showCrash by remember { mutableStateOf(pendingCrash != null) }
+            if (showCrash) {
+                CrashReportScreen(
+                    report = pendingCrash.orEmpty(),
+                    onContinue = {
+                        runCatching { CrashLog.markSeen(applicationContext) }
+                        showCrash = false
+                    },
+                )
+                return@setContent
+            }
 
             val seed by playerVm.themeSeed.collectAsStateWithLifecycle()
             MusicPlayerTheme(

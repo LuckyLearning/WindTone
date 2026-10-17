@@ -18,6 +18,9 @@ object CrashLog {
 
     private const val DIR_NAME = "crash"
     private const val KEEP = 5
+    private const val CRASH_PREFIX = "crash-"
+    private const val SEEN_PREFS = "crash_seen"
+    private const val KEY_SEEN_MTIME = "seen_mtime"
 
     /** 在 Application.onCreate 里安装全局兜底处理器 */
     fun install(context: Context) {
@@ -42,6 +45,34 @@ object CrashLog {
     /** 最近一次崩溃的全文 */
     fun latest(context: Context): String? =
         files(context).firstOrNull()?.let { runCatching { it.readText() }.getOrNull() }
+
+    /**
+     * 最近一次**还没给用户看过**的崩溃（没有就返回 null）。
+     *
+     * 为什么需要这个：真机上出现过「装上就黑屏、连系统崩溃对话框都没有」的故障
+     * （v1.1.13，车机 DiLink）。那种情况下应用一启动就没了，用户进不到「设置 → 诊断」，
+     * 日志等于白记。所以启动时先把上一次的崩溃**主动摆到屏幕上**，用户拍张照就能把
+     * 栈发过来。只在有「上一轮没看过的崩溃」时才出现，正常启动完全不受影响。
+     *
+     * 与 [markSeen] 配合：看过一次就不再重复挡路。
+     */
+    fun latestUnseen(context: Context): String? {
+        val newest = files(context).firstOrNull { it.name.startsWith(CRASH_PREFIX) } ?: return null
+        val seen = seenMtime(context)
+        if (newest.lastModified() <= seen) return null
+        return runCatching { newest.readText() }.getOrNull()
+    }
+
+    /** 把当前最新的一份崩溃标记为「已看过」，下次启动不再弹 */
+    fun markSeen(context: Context) {
+        val newest = files(context).firstOrNull { it.name.startsWith(CRASH_PREFIX) } ?: return
+        context.getSharedPreferences(SEEN_PREFS, Context.MODE_PRIVATE)
+            .edit().putLong(KEY_SEEN_MTIME, newest.lastModified()).apply()
+    }
+
+    private fun seenMtime(context: Context): Long =
+        context.getSharedPreferences(SEEN_PREFS, Context.MODE_PRIVATE)
+            .getLong(KEY_SEEN_MTIME, 0L)
 
     /** 全部崩溃日志合并（供导出） */
     fun allText(context: Context): String = buildString {

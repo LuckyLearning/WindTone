@@ -1,0 +1,74 @@
+package com.luckylearning.windtone.data
+
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import java.io.File
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+
+/**
+ * 「上次异常退出」那一页的取数口径（v1.1.13 加）。
+ *
+ * 背景：车机上出现过「装上就黑屏、连系统崩溃对话框都没有」，用户进不到设置页，
+ * 日志写了也没人看得到。于是启动时把**上一轮没看过的**崩溃主动摆到屏幕上。
+ * 这里钉住三件事：没有就不弹、崩过就弹、看过就不再弹（否则每次启动都被挡住）。
+ */
+@RunWith(RobolectricTestRunner::class)
+class CrashLogTest {
+
+    private lateinit var context: Context
+
+    @Before
+    fun setUp() {
+        context = ApplicationProvider.getApplicationContext()
+        // Robolectric 每个用例复用同一份 filesDir，先清干净
+        CrashLog.clear(context)
+        context.getSharedPreferences("crash_seen", Context.MODE_PRIVATE).edit().clear().commit()
+    }
+
+    private fun writeCrash(name: String, body: String, mtime: Long): File =
+        File(CrashLog.dir(context), name).apply {
+            writeText(body)
+            setLastModified(mtime)
+        }
+
+    @Test
+    fun noCrashFileMeansNothingToShow() {
+        assertNull(CrashLog.latestUnseen(context))
+    }
+
+    @Test
+    fun crashFileIsShownOnceThenNeverAgain() {
+        writeCrash("crash-20261017-114100.txt", "java.lang.IllegalStateException: boom", 1_000L)
+
+        val shown = CrashLog.latestUnseen(context)
+        assertNotNull("崩过就必须摆到屏幕上，否则用户没有任何取证手段", shown)
+        assertTrue(shown!!.contains("boom"))
+
+        CrashLog.markSeen(context)
+        assertNull("看过一次之后不能每次启动都挡路", CrashLog.latestUnseen(context))
+    }
+
+    @Test
+    fun newerCrashShowsAgainAfterTheOldOneWasSeen() {
+        writeCrash("crash-20261017-114100.txt", "first", 1_000L)
+        CrashLog.markSeen(context)
+        assertNull(CrashLog.latestUnseen(context))
+
+        writeCrash("crash-20261017-120000.txt", "second", 2_000L)
+        assertEquals("second", CrashLog.latestUnseen(context)?.trim())
+    }
+
+    @Test
+    fun diagFilesDoNotTriggerTheCrashScreen() {
+        // diag-* 是「非致命诊断」，不该被当成崩溃弹给用户看
+        writeCrash("diag-20261017-114100.txt", "overlay failed", 1_000L)
+        assertNull(CrashLog.latestUnseen(context))
+    }
+}
