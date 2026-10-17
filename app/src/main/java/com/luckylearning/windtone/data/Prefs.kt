@@ -44,6 +44,15 @@ object SettingsDefaults {
 
     const val SKIP_SILENCE = false
 
+    /**
+     * 打开应用时是否从上次的进度接着播（v1.1.16）。
+     *
+     * 默认**开启**：本项目一直只做到「恢复队列但停在原处」，用户每次上车
+     * 都得再点一次播放键 —— 车机上那一下恰好是最不顺手的（要看路）。
+     * 关掉它的语义回到老行为：队列与进度照旧恢复，只是不自动起播。
+     */
+    const val AUTO_RESUME = true
+
     const val LYRIC_SCALE = 1.0f
 
     const val LYRIC_OVERLAY = false
@@ -351,6 +360,17 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_SKIP_SILENCE, false)
         set(value) = sp.edit().putBoolean(KEY_SKIP_SILENCE, value).apply()
 
+    /**
+     * 打开应用时是否从上次的进度接着播（默认开启）。
+     *
+     * 与「自动续播」相关的另一半在数据库里：`player_state` 每 5 秒把当前曲目与
+     * 进度写一次，`queue_songs` 存整个队列。本键只决定「恢复完要不要顺手 play」，
+     * 关掉它不影响恢复 —— 队列、当前曲、进度依旧会摆好，只是停在暂停态。
+     */
+    var autoResume: Boolean
+        get() = sp.getBoolean(KEY_AUTO_RESUME, SettingsDefaults.AUTO_RESUME)
+        set(value) = sp.edit().putBoolean(KEY_AUTO_RESUME, value).apply()
+
     // ---------------- 批次 2/3 新增 ----------------
 
     /** 主题是否跟随封面取色 */
@@ -491,6 +511,7 @@ class Prefs(context: Context) {
         const val KEY_EQ_LOUDNESS = "eq_loudness"
         const val KEY_EQ_REVERB_ID = "eq_reverb_id"
         const val KEY_SKIP_SILENCE = "skip_silence"
+        const val KEY_AUTO_RESUME = "auto_resume_playback"
         const val KEY_AUTO_UPDATE = "auto_check_update"
         const val KEY_LAST_UPDATE_CHECK = "last_update_check_at"
         const val KEY_UPDATE_ROUTE = "update_download_route"

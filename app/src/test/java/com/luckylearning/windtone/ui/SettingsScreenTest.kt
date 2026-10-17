@@ -58,6 +58,7 @@ class SettingsScreenTest {
         onCarMode: (Boolean) -> Unit = {},
         onLyricScale: (Float) -> Unit = {},
         onLyricOverlayTextColor: (Int) -> Unit = {},
+        onAutoResume: (Boolean) -> Unit = {},
     ) {
         compose.setContent {
             MusicPlayerTheme {
@@ -91,6 +92,7 @@ class SettingsScreenTest {
                     onSpeed = {},
                     onPitch = {},
                     onSkipSilence = {},
+                    onAutoResume = onAutoResume,
                     onClearStats = {},
                     maintenance = null,
                     onRefreshMaintenance = {},
@@ -236,5 +238,30 @@ class SettingsScreenTest {
         compose.onAllNodesWithContentDescription("恢复默认")[0].performScrollTo().performClick()
         compose.waitForIdle()
         assertEquals(SettingsDefaults.LYRIC_SCALE, scale)
+    }
+
+    // ================================================================ v1.1.16 继续上次播放
+
+    /**
+     * 播放子页里有「打开应用继续上次播放」，点它的 ↺ 写回出厂默认。
+     *
+     * 为什么非要断言它在界面上：这条开关真正干活的地方在引擎里（冷启动恢复队列
+     * 之后那一下 `play()`），界面少一行既不会编译失败也不会运行报错 ——
+     * 功能从此只能靠「开关找不到」被用户发现，而那通常是一周以后的事。
+     */
+    @Test
+    fun playbackPageExposesAutoResumeSwitch() {
+        var autoResume: Boolean? = null
+        render(player = PlayerUiState(autoResume = false), onAutoResume = { autoResume = it })
+
+        compose.onNodeWithText("播放").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("打开应用继续上次播放").performScrollTo().assertIsDisplayed()
+
+        // 出厂默认是「开」，当前是「关」→ 这一页只该挂着这一枚 ↺
+        compose.onAllNodesWithContentDescription("恢复默认").assertCountEquals(1)
+        compose.onNodeWithContentDescription("恢复默认").performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals(SettingsDefaults.AUTO_RESUME, autoResume)
     }
 }

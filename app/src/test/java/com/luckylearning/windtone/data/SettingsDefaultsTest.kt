@@ -64,6 +64,7 @@ class SettingsDefaultsTest {
         check("playbackSpeed", prefs.playbackSpeed, SettingsDefaults.SPEED)
         check("playbackPitchSemitones", prefs.playbackPitchSemitones, SettingsDefaults.PITCH_SEMITONES)
         check("skipSilence", prefs.skipSilence, SettingsDefaults.SKIP_SILENCE)
+        check("autoResume", prefs.autoResume, SettingsDefaults.AUTO_RESUME)
 
         // 播放页歌词
         check("lyricScale", prefs.lyricScale, SettingsDefaults.LYRIC_SCALE)

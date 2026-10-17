@@ -388,6 +388,12 @@ UI 调 playerVm.playQueue(songs, index)      // PlayerViewModel 用接口委托�
 - `PlayerHandle` 是给**进程内其他入口**（小组件、磁贴）直接操作播放器的把手，不走 ViewModel。
 - 队列**持久化**：`queue_songs` 表（`position` + `songId`）+ `player_state` 单行（当前曲 / 进度 / 随机 / 循环模式），
   引擎创建时 `restoreQueueIfNeeded()` 整队列恢复。队列以稳定 URI 换算 `songId`，**不用 `dbId` 做媒体项 id**。
+  - ⚠️ **恢复动作是「尽力而为 + 可重试」的**：`restoreQueueIfNeeded()` 会被调用多次（缓存装载后 / 扫描完成后），
+    只有在**真的把队列摆上去**之后才置 `queueRestored`。原因是一条实测撞到的时序：曲库还没推给引擎
+    （`librarySongs` 为空）时恢复会被跳过，若此刻就置位，这次启动就**永久**失去恢复机会 ——
+    症状是底部迷你条与当前曲都不出现，不报错也不崩溃（v1.1.16 修）。
+  - 「恢复完要不要顺手 `play()`」的判定在 `playback/AutoResume.kt` 的 `shouldAutoResume(enabled, queueSize, isPlaying)`，
+    见 §11.1 第 6 条。日志标签沿用 `PlaybackEngine`：`断点续播：恢复队列 N 首，第 i 首，位置 XXms`。
 - **引擎是应用级单例，没有 `onCleared()`**：退到后台靠 `setAppForeground(false)` 停掉进度计时器，
   `onIsPlayingChanged` / 再次前台化时重新拉起（原来依赖 ViewModel 销毁收尾的逻辑已全部改为自持）。
 
@@ -1137,6 +1143,11 @@ WindTone-v{版本}-universal.apk      # 拿不准架构时的兜底
 5. **出厂默认值写进 `SettingsDefaults`（`data/Prefs.kt`）**，并给该行挂 `onReset`（见 §11.14-①）。
    ⚠️ 只在 getter 里写默认值是不够的：那样「恢复默认」写回的值与「首次安装」拿到的值会漂移，
    且**不报错、不崩溃**。`SettingsDefaultsTest` 会把两者逐项比一遍，漏了立刻红。
+6. **「只在冷启动生效」的开关，setter 里不要执行动作**：典型是 v1.1.16 的「打开应用继续上次播放」——
+   它描述的是**下次打开应用**的行为，写进 Prefs 就结束了；真正的判定点在
+   `PlaybackEngine.restoreQueueIfNeeded` 里，且被抽成纯函数 `playback/AutoResume.kt` 的
+   `shouldAutoResume(enabled, queueSize, isPlaying)` 以便 JVM 单测覆盖。
+   若在 setter 里顺手 `play()`，用户拨一下开关就会听到歌跳位置，而他只是想改下一次的设置。
 
 ### 11.2 给数据库加字段 / 加表
 

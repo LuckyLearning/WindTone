@@ -619,6 +619,7 @@ fun MainScreen(
                     onSpeed = playerVm::setSpeed,
                     onPitch = playerVm::setPitchSemitones,
                     onSkipSilence = playerVm::setSkipSilence,
+                    onAutoResume = playerVm::setAutoResume,
                     onClearStats = lib::clearPlayStats,
                     maintenance = maintenanceReport,
                     onRefreshMaintenance = settings::refreshMaintenanceReport,

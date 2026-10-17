@@ -603,7 +603,7 @@ a{color:inherit;text-decoration:none}
     <a class="backdocs" href="https://luckylearning.github.io/WindTone/">← 文档站</a>
     <div class="bh-title">听风 WindTone · UI 效果图<small>设计基准 / Design Source of Truth</small></div>
     <span class="bh-badge"><span id="screenCount">52</span> 屏 · Material 3 · 手机 360dp / 车机 1707×1067dp</span>
-    <span class="bh-badge">对齐 v1.1.15 · 悬浮窗歌名歌手 + 1–5 行 / 车机单栏 / 侧边抽屉 / 设置二级分类（⑲/⑲B）</span>
+    <span class="bh-badge">对齐 v1.1.16 · 打开应用继续上次播放 / 悬浮窗歌名歌手 + 1–5 行 / 车机单栏 / 侧边抽屉 / 设置二级分类（⑲/⑲B）</span>
     <button class="tgl" id="themeBtn">🌙 深色主题</button>
   </div>
   <nav class="bh-nav">
@@ -2340,7 +2340,7 @@ a{color:inherit;text-decoration:none}
           <div class="cat-main"><div class="cat-t">外观</div><div class="cat-s">主题取色 · 车载模式</div></div>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
         <div class="cat-row"><span class="cat-ic"><svg class="ic"><use href="#i-play"/></svg></span>
-          <div class="cat-main"><div class="cat-t">播放</div><div class="cat-s">速度 1.00x · 变调 原调 · 跳过静音 · 均衡器与音效</div></div>
+          <div class="cat-main"><div class="cat-t">播放</div><div class="cat-s">速度 1.00x · 变调 原调 · 继续上次播放 · 均衡器与音效</div></div>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
         <div class="cat-row"><span class="cat-ic"><svg class="ic"><use href="#i-lyrics"/></svg></span>
           <div class="cat-main"><div class="cat-t">歌词</div><div class="cat-s">字号 1.1x · 悬浮歌词</div></div>
@@ -2360,7 +2360,7 @@ a{color:inherit;text-decoration:none}
   </div>
   <p class="note"><b>分层原则（v1.1.3 二次重构）</b>：主页面<b>只放二级分类入口卡</b>，一张卡一个分类——左侧<b>语义图标</b>（40dp 圆角 12 容器、secondaryContainer 底）+ 分类名 + 一行摘要 + 右箭头，<b>摘要把子页里最重要的状态前置</b>（「过滤 &lt; 60 秒」「v1.0.6」「速度 1.00x」），不进子页就能看到大概。<br>
   &nbsp;&nbsp;v1.0.7 曾把主页压到「外观 / 播放 / 歌词三组平铺 + 三个子页入口」（约 1.3 屏）；但悬浮歌词五个外观选项加入后，「歌词」一组独占两屏，主页又开始长回去——本次把 <b>外观 / 播放 / 歌词</b> 三组也各自下沉成子页，主页回到<b>一屏六张卡</b>，任何设置最多两层直达。<br>
-  &nbsp;&nbsp;六个分类的归属：①<b>外观</b>——主题跟随封面取色、车载模式；②<b>播放</b>——默认播放速度、跳过静音、均衡器与音效；③<b>歌词</b>——歌词字号、桌面悬浮歌词及其外观选项；④<b>音乐库</b>——短音频过滤（一次性配置）；⑤<b>更新</b>——检查更新 / 自动检查 / 下载线路；⑥<b>关于与诊断</b>——播放统计、崩溃日志、版本与隐私。<br>
+  &nbsp;&nbsp;六个分类的归属：①<b>外观</b>——主题跟随封面取色、车载模式；②<b>播放</b>——默认播放速度、变调、<b>打开应用继续上次播放</b>、跳过静音、均衡器与音效；③<b>歌词</b>——歌词字号、桌面悬浮歌词及其外观选项；④<b>音乐库</b>——短音频过滤（一次性配置）；⑤<b>更新</b>——检查更新 / 自动检查 / 下载线路；⑥<b>关于与诊断</b>——播放统计、崩溃日志、版本与隐私。<br>
   <b>设置页从底部滑入覆盖全屏</b>（不是新 Activity）；子页是同一个 <code>SettingsScreen</code> 内部的页面状态（<code>SettingsPage</code> 枚举），<b>不新建 Activity、不引入导航库</b>；子页里按系统返回键先回主页面，回主页后再按才关闭设置页。<br>
   <b>分类入口卡 = 图标 + 摘要 + 右箭头</b>：v1.0.7 起「全 App 不存在 chevron」的规范放宽为「只有 ActionRow 能带 chevron」；v1.1.3 起再放宽一档——<b>设置主页的二级分类入口卡（<code>CategoryRow</code>）也带 chevron 和左侧图标</b>（参考通用播放器设置主页的二级菜单结构），其余位置不变：<code>OptionRow</code>（弹层行）依旧左侧图标 + 选中 ✓、无箭头；子页内的 <code>ActionRow</code> 依旧左侧无图标、箭头只给「点开会进入另一个界面」的行（子页入口、打开弹层 / 弹窗的行），就地执行动作（「检查更新」）或就地展开（「查看日志」）的行不加。<br>
   <b>子页入口行与分类卡的区别</b>：子页里的 <code>ActionRow</code>（如「均衡器与音效」「过滤短音频」）是<b>某一类设置里的一条</b>，无图标；主页的 <code>CategoryRow</code> 是<b>一整类设置的门面</b>，带图标 + 摘要——两层信息密度不同，不会混淆。<br>
@@ -2395,7 +2395,7 @@ a{color:inherit;text-decoration:none}
 </figure>
 
 <figure class="fig" id="scr-settings-playback">
-  <div class="cap"><b>㉙C 设置页 · 播放子页</b><em>SettingsScreen.kt · 默认播放速度 / 跳过静音 / 均衡器与音效</em></div>
+  <div class="cap"><b>㉙C 设置页 · 播放子页</b><em>SettingsScreen.kt · 默认播放速度 / 继续上次播放 / 跳过静音 / 均衡器与音效</em></div>
   <div class="phone">
     <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
     <div class="app">
@@ -2411,6 +2411,8 @@ a{color:inherit;text-decoration:none}
           <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">升降调不改速度（±12 半音 = 一个八度）</div>
           <div class="slider" style="margin:12px 0 4px"><span class="fill" style="width:50%"></span><span class="knob" style="left:50%"></span></div></div>
         <div class="section-label" style="padding:0;margin:14px 0 4px">播放行为</div>
+        <div class="sw-row"><div class="sw-main"><div class="sw-t">打开应用继续上次播放</div>
+          <div class="sw-s">从上次的进度接着播；关闭后只恢复队列与进度，停在暂停态</div></div><span class="switch"><i></i></span></div>
         <div class="sw-row"><div class="sw-main"><div class="sw-t">跳过静音</div>
           <div class="sw-s">自动跳过录音开头的空白段（对整轨 / 现场录音有效）</div></div><span class="switch off"><i></i></span></div>
         <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-top:6px">
@@ -2425,7 +2427,9 @@ a{color:inherit;text-decoration:none}
   速度与变调滑块、以及「跳过静音」就地生效、无箭头。原「音效」单行分组在此并入「播放」（v1.0.7 决定延续）。<br>
   <b>v1.1.6：变调并入「速度与变调」组</b>——两者在播放器里是同一个 <code>PlaybackParameters</code>，
   分开摆会让人以为互不影响（实际 <code>setPlaybackSpeed</code> 会把变调打回原调）。单位是半音（±12 = 一个八度）。<br>
-  <b>v1.1.4：本页每项都带 ↺</b>（速度 / 变调 / 跳过静音），均衡器那行例外——它的值在弹层里，↺ 跟着弹层走（见 ⑲）。</p>
+  <b>v1.1.4：本页每项都带 ↺</b>（速度 / 变调 / 跳过静音 / 继续上次播放），均衡器那行例外——它的值在弹层里，↺ 跟着弹层走（见 ⑲）。<br>
+  <b>v1.1.16：「打开应用继续上次播放」</b>排在「跳过静音」前面，默认<b>开</b> —— 恢复队列却停在暂停态，
+  在车机上等于没恢复（还要探手去点播放键）。关掉它的语义是「只恢复不自动播」，队列与进度照旧摆好。</p>
 </figure>
 
 <figure class="fig" id="scr-settings-lyrics">
@@ -2683,7 +2687,7 @@ a{color:inherit;text-decoration:none}
           <div class="cat-main"><div class="cat-t">外观</div><div class="cat-s">主题取色 · 车载模式</div></div>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
         <div class="cat-row"><span class="cat-ic"><svg class="ic"><use href="#i-play"/></svg></span>
-          <div class="cat-main"><div class="cat-t">播放</div><div class="cat-s">速度 1.00x · 变调 原调 · 跳过静音 · 均衡器与音效</div></div>
+          <div class="cat-main"><div class="cat-t">播放</div><div class="cat-s">速度 1.00x · 变调 原调 · 继续上次播放 · 均衡器与音效</div></div>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
       </div>
       <div class="dim"></div>

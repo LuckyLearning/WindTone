@@ -333,6 +333,13 @@ data class PlayerUiState(
     val audioInfo: AudioInspector.Info? = null,
     val audioInfoLoading: Boolean = false,
     val skipSilence: Boolean = false,
+    /**
+     * 打开应用时是否从上次的进度接着播（v1.1.16）。
+     *
+     * 与 [skipSilence] 一样是「播放域偏好」：改动只落 Prefs，真正的判定发生在
+     * 冷启动恢复队列那一刻（见 `PlaybackEngine.restoreQueueIfNeeded`）。
+     */
+    val autoResume: Boolean = SettingsDefaults.AUTO_RESUME,
 )
 
 /** 播放队列条目（队列抽屉用） */

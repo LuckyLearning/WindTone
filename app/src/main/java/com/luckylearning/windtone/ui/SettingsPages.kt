@@ -222,6 +222,7 @@ internal fun SettingsPlaybackPage(
     onSpeed: (Float) -> Unit,
     onPitch: (Int) -> Unit,
     onSkipSilence: (Boolean) -> Unit,
+    onAutoResume: (Boolean) -> Unit,
 ) {
     var showEq by remember { mutableStateOf(false) }
 
@@ -252,6 +253,17 @@ internal fun SettingsPlaybackPage(
 
     // ------------------------------------------------ 播放行为
     SectionTitle("播放行为")
+    // 放在「跳过静音」前面：只退过一次界面就回来的人找的是这一条，
+    // 而它此前只能靠「恢复队列但停在暂停态」隐式体现，界面上没有名字。
+    SwitchRow(
+        title = "打开应用继续上次播放",
+        subtitle = "从上次的进度接着播；关闭后只恢复队列与进度，停在暂停态",
+        checked = player.autoResume,
+        onCheckedChange = onAutoResume,
+        onReset = resetAction(player.autoResume != SettingsDefaults.AUTO_RESUME) {
+            onAutoResume(SettingsDefaults.AUTO_RESUME)
+        },
+    )
     SwitchRow(
         title = "跳过静音",
         subtitle = "自动跳过录音开头的空白段（对整轨 / 现场录音有效）",

@@ -95,6 +95,7 @@ class PlaybackEngine(
             speed = prefs.playbackSpeed,
             pitchSemitones = prefs.playbackPitchSemitones,
             skipSilence = prefs.skipSilence,
+            autoResume = prefs.autoResume,
         )
     )
     val player: StateFlow<PlayerUiState> = _player.asStateFlow()
@@ -128,6 +129,9 @@ class PlaybackEngine(
     private var consecutiveErrors = 0
 
     private var queueRestored = false
+
+    /** 恢复动作正在进行中：防止两次调用并发各恢复一遍（曲库缓存与扫描完成各调一次） */
+    private var queueRestoreRunning = false
     private var appForeground = true
 
     // 收听时长统计：仅在播放中累加，切歌 / 暂停时结算
@@ -415,47 +419,111 @@ class PlaybackEngine(
             }
     }
 
-    /** 断点续播：恢复**整个队列**（含顺序、当前曲目、进度与播放模式），但不自动播放 */
+    /**
+     * 断点续播：恢复**整个队列**（含顺序、当前曲目、进度与播放模式）。
+     *
+     * 是否顺手开始播由设置「打开应用继续上次播放」决定（v1.1.16，见 [resumeIfWanted]）；
+     * 关掉时行为与老版本完全一致：摆好队列与进度，停在暂停态等用户点。
+     *
+     * 这个方法会被调用**多次**（曲库缓存装载后一次、扫描完成后再一次），语义是
+     * 「尽力恢复，条件不具备就等下一次」—— 只有真的把队列摆上去了才置 [queueRestored]。
+     * v1.1.16 之前它一进门就把标志置真，于是「曲库还没推给引擎」的那一次调用
+     * 会让恢复永久失效：界面看起来只是「没恢复」，没有任何报错（详见 [restoreQueue]）。
+     */
     override fun restoreQueueIfNeeded() {
-        if (queueRestored) return
-        queueRestored = true
+        if (queueRestored || queueRestoreRunning) return
+        queueRestoreRunning = true
         scope.launch {
-            val c = ensureController() ?: return@launch
-            if (c.mediaItemCount > 0) return@launch
-            val songs = librarySongs
-            if (songs.isEmpty()) return@launch
-
-            val state = withContext(Dispatchers.IO) { db.playerStateDao().get() }
-            val position = (state?.positionMs ?: 0L).coerceAtLeast(0L)
-
-            // 1) 优先整队列恢复
-            val queueIds = withContext(Dispatchers.IO) { db.queueDao().songIds() }
-            if (queueIds.isNotEmpty()) {
-                val byId = songs.associateBy { it.dbId }
-                val restored = queueIds.mapNotNull { byId[it] }
-                if (restored.isNotEmpty()) {
-                    val index = restored.indexOfFirst { it.dbId == state?.currentSongId }.takeIf { it >= 0 } ?: 0
-                    currentQueue = restored
-                    c.setMediaItems(restored.map { PlaybackConnection.toMediaItem(it) }, index, position)
-                    applyPersistedPlayMode(c, state)
-                    c.prepare()
-                    _progress.value = PlaybackProgress(position, restored[index].durationMs, 0L)
-                    syncCurrentSong(force = true)
-                    return@launch
-                }
+            try {
+                restoreQueue()
+            } finally {
+                queueRestoreRunning = false
             }
-
-            // 2) 退化为单曲恢复（只记得当前曲）：整库当队列
-            val currentId = state?.currentSongId ?: return@launch
-            val idx = songs.indexOfFirst { it.dbId == currentId }
-            if (idx < 0) return@launch
-            currentQueue = songs
-            c.setMediaItems(songs.map { PlaybackConnection.toMediaItem(it) }, idx, position)
-            applyPersistedPlayMode(c, state)
-            c.prepare()
-            _progress.value = PlaybackProgress(position, songs[idx].durationMs, 0L)
-            syncCurrentSong(force = true)
         }
+    }
+
+    /** [restoreQueueIfNeeded] 的实际工作体；成功恢复后置 [queueRestored]。 */
+    private suspend fun restoreQueue() {
+        val c = ensureController() ?: return
+        // 播放服务本来就活着（只是界面进程被系统回收，或用户从后台切回来）：
+        // 队列与位置都是真的，不用重建，只按开关决定要不要把暂停态接着播下去。
+        // ⚠️ 这条分支在老版本是直接 return —— 于是「开关打开但没续播」最容易
+        // 出现在这里：服务活着，看起来什么都不缺，可它正暂停着。
+        if (c.mediaItemCount > 0) {
+            queueRestored = true
+            Log.i(TAG, "断点续播：服务里已有 ${c.mediaItemCount} 首，不重建")
+            resumeIfWanted(c)
+            return
+        }
+        val songs = librarySongs
+        if (songs.isEmpty()) {
+            // 曲库还没推过来（冷启动时曲库域的装载与这里是一条竞速链）。
+            // **不置 queueRestored**：下一次调用（扫描完成后）还要再来一遍。
+            Log.i(TAG, "断点续播：曲库尚未就绪，等下一次调用")
+            return
+        }
+
+        val state = withContext(Dispatchers.IO) { db.playerStateDao().get() }
+        val position = (state?.positionMs ?: 0L).coerceAtLeast(0L)
+
+        // 1) 优先整队列恢复
+        val queueIds = withContext(Dispatchers.IO) { db.queueDao().songIds() }
+        if (queueIds.isNotEmpty()) {
+            val byId = songs.associateBy { it.dbId }
+            val restored = queueIds.mapNotNull { byId[it] }
+            if (restored.isNotEmpty()) {
+                val index = restored.indexOfFirst { it.dbId == state?.currentSongId }.takeIf { it >= 0 } ?: 0
+                currentQueue = restored
+                c.setMediaItems(restored.map { PlaybackConnection.toMediaItem(it) }, index, position)
+                applyPersistedPlayMode(c, state)
+                c.prepare()
+                _progress.value = PlaybackProgress(position, restored[index].durationMs, 0L)
+                syncCurrentSong(force = true)
+                queueRestored = true
+                Log.i(TAG, "断点续播：恢复队列 ${restored.size} 首，第 ${index + 1} 首，位置 ${position}ms")
+                resumeIfWanted(c)
+                return
+            }
+        }
+
+        // 2) 退化为单曲恢复（只记得当前曲）：整库当队列
+        val currentId = state?.currentSongId
+        if (currentId == null) {
+            Log.i(TAG, "断点续播：没有可恢复的播放态")
+            return
+        }
+        val idx = songs.indexOfFirst { it.dbId == currentId }
+        if (idx < 0) {
+            // 那首歌已不在曲库里（被删 / 被移出）：没什么可恢复的，别再重试
+            queueRestored = true
+            Log.i(TAG, "断点续播：上次的歌曲已不在曲库（id=$currentId）")
+            return
+        }
+        currentQueue = songs
+        c.setMediaItems(songs.map { PlaybackConnection.toMediaItem(it) }, idx, position)
+        applyPersistedPlayMode(c, state)
+        c.prepare()
+        _progress.value = PlaybackProgress(position, songs[idx].durationMs, 0L)
+        syncCurrentSong(force = true)
+        queueRestored = true
+        Log.i(TAG, "断点续播：单曲恢复（整库 ${songs.size} 首当队列），位置 ${position}ms")
+        resumeIfWanted(c)
+    }
+
+    /**
+     * 恢复完队列后按设置决定要不要自动起播（v1.1.16）。
+     *
+     * 判定本身在 [shouldAutoResume]（纯函数、可单测）；这里只负责把「决定要播」
+     * 落成起播前必须就绪的那几件事：套播放参数（速度 / 变调）、对齐跳过静音、再 `play()`。
+     * 为什么不指望 `ensureController` 里那次套用：它发生在 `prepare()` 之前，
+     * 而「自动续播」是唯一一条**没人按播放键**的起播路径 —— 参数只要有一次没跟上，
+     * 用户听到的就是「1.0x 的这首歌在 1.5x 的偏好下播」，且没有任何界面动作能纠正它。
+     */
+    private fun resumeIfWanted(c: MediaController) {
+        if (!shouldAutoResume(prefs.autoResume, c.mediaItemCount, c.isPlaying)) return
+        applyPlaybackParams(c)
+        PlayerHandle.setSkipSilence(prefs.skipSilence)
+        c.play()
     }
 
     /** 恢复上次的随机 / 循环模式（界面状态由 Player.Listener 回调自动跟随） */
@@ -758,6 +826,17 @@ class PlaybackEngine(
         _player.update { it.copy(skipSilence = enabled) }
         // 跳过静音是 ExoPlayer 专有开关，Player 接口上没有，走进程内句柄
         PlayerHandle.setSkipSilence(enabled)
+    }
+
+    /**
+     * 「打开应用继续上次播放」开关（v1.1.16）。
+     *
+     * 只落盘、不立即起播：这个开关描述的是**下次冷启动**的行为，
+     * 用户此刻正在听的那首歌不该因为拨了一下开关就跳位置。
+     */
+    override fun setAutoResume(enabled: Boolean) {
+        prefs.autoResume = enabled
+        _player.update { it.copy(autoResume = enabled) }
     }
 
     // ---------------------------------------------------------------- 播放界面
@@ -1326,6 +1405,9 @@ interface PlayerActions {
     fun sleepEndOfAlbum()
     fun cancelSleep()
     fun setSkipSilence(enabled: Boolean)
+
+    /** 「打开应用继续上次播放」：冷启动恢复队列后是否自动起播（v1.1.16） */
+    fun setAutoResume(enabled: Boolean)
     fun openPlayer()
     fun closePlayer()
     fun setLyricOffset(deltaMs: Int)
