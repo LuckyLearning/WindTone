@@ -35,6 +35,28 @@ val appVersionCode = 23
 val abiSplitsEnabled = (findProperty("abiSplits") as String?)?.toBoolean() == true
 
 /**
+ * 启动诊断构建（**只给排障用，不进发版**）。
+ *
+ * `-PdiagBuild=true` 时 `BuildConfig.BOOT_DIAG = true`，应用每次冷启动都先停在
+ * 一张纯原生 View 的诊断页上（设备信息 / 屏幕与 insets / 上一轮启动阶段表），
+ * 点「进入应用」才走 Compose。
+ *
+ * 之所以做成构建开关而不是运行时开关：车机上「打开全黑」时用户根本点不到任何开关，
+ * 只有把判断前移到构建期，才能保证那台机器上一定能看到这一页。
+ * 默认 false —— 常规构建、CI 发版都拿不到这一页。
+ */
+val diagBuild = (findProperty("diagBuild") as String?)?.toBoolean() == true
+
+/**
+ * 软件渲染构建（`-PswRender=true`）。
+ *
+ * Compose 依赖硬件加速画布；部分车机 ROM 的 GL 驱动有问题时，画面会是纯黑但进程
+ * 一切正常。这个开关把 `android:hardwareAccelerated` 置为 false 用来做 A/B 对照：
+ * 若软件渲染包能正常显示，就能确定是 GPU/驱动一侧的问题。
+ */
+val swRenderBuild = (findProperty("swRender") as String?)?.toBoolean() == true
+
+/**
  * Room schema 导出目录。
  *
  * 手写 Migration 的 DDL 必须与 Room 运行时期望的结构**完全一致**，
@@ -102,6 +124,11 @@ android {
         buildConfigField("String", "APK_ASSET_TEMPLATE", "\"WindTone-v%s.apk\"")
         buildConfigField("String", "APK_ASSET_TEMPLATE_ABI", "\"WindTone-v%s-%s.apk\"")
         buildConfigField("String", "APK_ASSET_TEMPLATE_UNIVERSAL", "\"WindTone-v%s-universal.apk\"")
+
+        // 启动诊断页（见文件顶部 diagBuild 的说明），默认关闭
+        buildConfigField("boolean", "BOOT_DIAG", diagBuild.toString())
+        // 硬件加速开关由构建参数决定（见 swRenderBuild），供 A/B 对照
+        manifestPlaceholders["hwAccel"] = if (swRenderBuild) "false" else "true"
     }
 
     signingConfigs {

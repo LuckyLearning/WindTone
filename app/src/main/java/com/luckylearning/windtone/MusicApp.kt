@@ -4,6 +4,7 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
+import com.luckylearning.windtone.data.BootTrace
 import com.luckylearning.windtone.data.CoverRepository
 import com.luckylearning.windtone.data.CrashLog
 import com.luckylearning.windtone.data.Prefs
@@ -17,17 +18,40 @@ class MusicApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        CrashLog.install(this)
-        CoverRepository.attach(this)
-        ensureNotificationChannel()
-        restoreLyricOverlay()
 
-        // 调试日志开关（2026-10-15 补上的一处「挂了账」）：
-        // 这个调用此前一直缺失，`UpdateChecker.verbose` 恒为 false，五处
-        // `if (verbose) Log.w(...)` 从来不输出 —— 而它们记录的恰恰是
-        // 「Atom 源不可用 / 检查更新失败 / 下载线路切换 / 拉起安装器失败 / 解析失败」
-        // 这些排障时最需要的线索。Debug 包打开，Release 包保持关闭（不刷用户 logcat）。
-        UpdateChecker.setVerbose(BuildConfig.DEBUG)
+        // 阶段追踪必须在最前面：上一轮的记录要先保下来（见 BootTrace 的注释）。
+        BootTrace.begin(this)
+
+        // 每一步都单独兜住。
+        //
+        // 起因是车机 DiLink 上的「装上打开全黑」：如果这一层里有任何一行抛异常，
+        // 进程会在 MainActivity 之前就被杀掉，用户看到的只有黑屏 —— 崩溃页、日志、
+        // 「设置 → 诊断」全都来不及出现，等于完全没有线索。这几步里没有一步是
+        // 「失败了就宁可不启动」的，所以一律降级继续，把失败记下来。
+        step("crash-log") { CrashLog.install(this) }
+        step("cover") { CoverRepository.attach(this) }
+        step("channel") { ensureNotificationChannel() }
+        step("lyric-overlay") { restoreLyricOverlay() }
+        step("update-log") {
+            // 调试日志开关（2026-10-15 补上的一处「挂了账」）：
+            // 这个调用此前一直缺失，`UpdateChecker.verbose` 恒为 false，五处
+            // `if (verbose) Log.w(...)` 从来不输出 —— 而它们记录的恰恰是
+            // 「Atom 源不可用 / 检查更新失败 / 下载线路切换 / 拉起安装器失败 / 解析失败」
+            // 这些排障时最需要的线索。Debug 包打开，Release 包保持关闭（不刷用户 logcat）。
+            UpdateChecker.setVerbose(BuildConfig.DEBUG)
+        }
+        BootTrace.mark(this, "app:onCreate-done")
+    }
+
+    /** 执行一步启动初始化；失败只记账，不阻断启动 */
+    private inline fun step(name: String, block: () -> Unit) {
+        try {
+            block()
+            BootTrace.mark(this, "ok:$name")
+        } catch (t: Throwable) {
+            // Throwable 而不是 Exception：ROM 里偶发的 LinkageError / OOM 同样不能让应用起不来
+            BootTrace.fail(this, name, t)
+        }
     }
 
     /**

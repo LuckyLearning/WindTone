@@ -1,0 +1,249 @@
+package com.luckylearning.windtone.ui
+
+import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.res.Configuration
+import android.graphics.Color
+import android.graphics.Typeface
+import android.os.Build
+import android.util.TypedValue
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import com.luckylearning.windtone.data.BootRecord
+import com.luckylearning.windtone.data.BootTrace
+import com.luckylearning.windtone.data.CrashLog
+import java.util.Locale
+
+/**
+ * 启动诊断页 —— **纯 Android View，刻意不用 Compose**。
+ *
+ * 背景：车机 DiLink 上「装上打开全黑，什么都看不到」，此前的做法是把崩溃栈用 Compose
+ * 画出来。但如果出问题的恰恰是 Compose（GL 驱动 / 动态取色 / insets），那这个崩溃页
+ * 本身也是黑的 —— 用一个可能坏掉的东西去报告另一个东西坏了，等于没报告。
+ *
+ * 所以这一页只用 `TextView` / `Button` / `ScrollView`：不读主题色、不读系统栏 insets
+ * 来排版、不依赖任何 Composable。它在绝大多数 ROM 上一定能显示，这是它存在的全部理由。
+ *
+ * 页面内容按「一眼能看完就够定位」排序：设备与系统 → 屏幕与 insets → 上一轮启动记录
+ * → 最近崩溃。全部可复制，用户拍照也行。
+ */
+object BootDiagView {
+
+    private const val BG = 0xFFFFFFFF.toInt()
+    private const val FG = 0xFF16161A.toInt()
+    private const val MUTED = 0xFF5C5C66.toInt()
+    private const val ACCENT = 0xFF5B4BE0.toInt()
+
+    /**
+     * @param record   上一轮启动的完整记录（可能是「出过首帧」的正常一轮，也可能是没画成的一轮）
+     * @param forced   是否「构建时就要求必显」（诊断包），只影响首段文案
+     * @param onEnter  用户点「进入应用」时调用
+     */
+    fun create(
+        activity: Activity,
+        record: BootRecord?,
+        forced: Boolean,
+        onEnter: () -> Unit,
+    ): View {
+        val ctx = activity
+        val content = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(ctx, 20), dp(ctx, 28), dp(ctx, 20), dp(ctx, 40))
+            setBackgroundColor(BG)
+        }
+
+        content.addView(title(ctx, "WindTone 启动诊断"))
+        content.addView(
+            paragraph(
+                ctx,
+                when {
+                    // 这三种情况的处置完全不同，所以要在最上面一句话里就分开：
+                    // 「崩了」→ 有栈；「没画」→ 渲染链在首帧之前就断了；
+                    // 「画了但看不见」→ 画布/合成侧，不是没画。
+                    record == null && forced ->
+                        "这是诊断构建：每次打开都先停在这一页。这是安装后的第一次启动，还没有上一轮记录。"
+                    record == null -> "上次启动异常退出。下面是留下的记录。"
+                    record.stoppedAtDiag ->
+                        "上一轮停在诊断页，没点「进入应用」，所以没有首帧记录 —— 点下面的按钮继续。"
+                    record.reachedFrame ->
+                        "上一轮已经画出首帧。如果屏幕仍然全黑，说明界面画出来了但看不见（渲染/合成侧），不是没画。"
+                    else ->
+                        "上一轮没有画出界面 —— 进程活着，但一帧都没送出去（所以既没有崩溃对话框，也没什么可看）。"
+                },
+                color = MUTED,
+            )
+        )
+
+        content.addView(section(ctx, "设备与系统", BootTrace.deviceInfo(ctx)))
+        content.addView(section(ctx, "屏幕", screenInfo(ctx)))
+
+        // insets 必须等 View 挂上去才拿得到，先占位、post 里回填
+        val insetsText = paragraph(ctx, "…")
+        content.addView(sectionView(ctx, "系统栏 insets", insetsText))
+
+        content.addView(
+            section(
+                ctx,
+                "上一轮启动",
+                record?.let { BootTrace.summary(it) } ?: "（还没有上一轮记录）",
+            )
+        )
+
+        val crash = runCatching { CrashLog.latest(ctx) }.getOrNull()
+        if (!crash.isNullOrBlank()) {
+            content.addView(section(ctx, "最近一次崩溃", truncate(crash, 2000)))
+        }
+
+        val buttons = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(ctx, 24), 0, 0)
+        }
+        buttons.addView(
+            Button(ctx).apply {
+                text = "进入应用"
+                setOnClickListener { onEnter() }
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+        )
+        buttons.addView(
+            Button(ctx).apply {
+                text = "复制全部"
+                setOnClickListener {
+                    val all = buildString {
+                        appendLine(BootTrace.deviceInfo(ctx))
+                        appendLine(screenInfo(ctx))
+                        appendLine("insets：" + insetsText.text)
+                        record?.let { appendLine(BootTrace.summary(it)) }
+                        crash?.let { appendLine("--- 最近崩溃 ---"); appendLine(it) }
+                    }
+                    copy(ctx, all)
+                }
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+        )
+        content.addView(buttons)
+
+        content.addView(
+            paragraph(
+                ctx,
+                "如果点「进入应用」后又是全黑，说明窗口能显示、但界面画不出来 —— 请把这个页面拍照发回。",
+                color = ACCENT,
+                topPaddingDp = 20,
+            )
+        )
+
+        val scroll = ScrollView(ctx).apply {
+            setBackgroundColor(BG)
+            isFillViewport = true
+            addView(content)
+        }
+        scroll.post {
+            val insets = runCatching { ViewCompat.getRootWindowInsets(scroll) }.getOrNull()
+            insetsText.text = if (insets == null) {
+                "取不到（rootWindowInsets = null）"
+            } else {
+                buildString {
+                    appendLine("statusBars     ${insets.getInsets(WindowInsetsCompat.Type.statusBars())}")
+                    appendLine("navigationBars ${insets.getInsets(WindowInsetsCompat.Type.navigationBars())}")
+                    appendLine("systemBars     ${insets.getInsets(WindowInsetsCompat.Type.systemBars())}")
+                    append("displayCutout  ${insets.getInsets(WindowInsetsCompat.Type.displayCutout())}")
+                }
+            }
+            // 记「这一页画出来了」：它与「Compose 能不能画」是两件事，
+            // 分开记才能把「窗口不行」和「界面不行」区分开。
+            BootTrace.mark(ctx, BootTrace.STAGE_DIAG_SHOWN)
+        }
+        return scroll
+    }
+
+    private fun screenInfo(ctx: Context): String {
+        val dm = ctx.resources.displayMetrics
+        val cfg = ctx.resources.configuration
+        val night = (cfg.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        val orientation = if (cfg.orientation == Configuration.ORIENTATION_LANDSCAPE) "横屏" else "竖屏"
+        return buildString {
+            appendLine("像素：${dm.widthPixels} × ${dm.heightPixels}")
+            appendLine(
+                "dp：${(dm.widthPixels / dm.density).toInt()} × ${(dm.heightPixels / dm.density).toInt()}" +
+                    "（density ${dm.density} / dpi ${dm.densityDpi}）"
+            )
+            appendLine("方向：$orientation　深色模式：${if (night) "是" else "否"}")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val rate = runCatching { ctx.display?.refreshRate }.getOrNull()
+                appendLine("刷新率：${rate?.let { String.format(Locale.US, "%.0f", it) } ?: "未知"}")
+            }
+            append("字体缩放：${cfg.fontScale}")
+        }
+    }
+
+    private fun title(ctx: Context, text: String) = TextView(ctx).apply {
+        this.text = text
+        setTextColor(FG)
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+        setTypeface(typeface, Typeface.BOLD)
+        setPadding(0, 0, 0, dp(ctx, 8))
+    }
+
+    private fun section(ctx: Context, title: String, body: String) =
+        sectionView(ctx, title, paragraph(ctx, body))
+
+    private fun sectionView(ctx: Context, title: String, body: TextView): View =
+        LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(ctx, 18), 0, 0)
+            addView(
+                TextView(ctx).apply {
+                    text = title
+                    setTextColor(ACCENT)
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                    setTypeface(typeface, Typeface.BOLD)
+                    setPadding(0, 0, 0, dp(ctx, 4))
+                }
+            )
+            addView(body)
+        }
+
+    private fun paragraph(
+        ctx: Context,
+        body: String,
+        color: Int = FG,
+        topPaddingDp: Int = 0,
+    ) = TextView(ctx).apply {
+        text = body
+        setTextColor(color)
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+        // 等宽：栈和阶段表要对齐才好读
+        typeface = Typeface.MONOSPACE
+        gravity = Gravity.START
+        setPadding(0, dp(ctx, topPaddingDp), 0, 0)
+        setTextIsSelectable(true)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // 长栈不要在小屏上把行折得七零八落
+            breakStrategy = android.text.Layout.BREAK_STRATEGY_SIMPLE
+        }
+    }
+
+    private fun truncate(text: String, limit: Int): String =
+        if (text.length <= limit) text else text.substring(0, limit) + "\n…（已截断）"
+
+    private fun copy(ctx: Context, text: String) {
+        runCatching {
+            val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            cm.setPrimaryClip(ClipData.newPlainText("WindTone 诊断", text))
+            Toast.makeText(ctx, "已复制，可以直接粘贴发回", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun dp(ctx: Context, value: Int): Int =
+        (value * ctx.resources.displayMetrics.density).toInt()
+}

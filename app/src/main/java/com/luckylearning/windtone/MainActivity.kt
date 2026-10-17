@@ -3,19 +3,18 @@ package com.luckylearning.windtone
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.os.Bundle
+import android.view.ViewTreeObserver
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.luckylearning.windtone.data.BootTrace
 import com.luckylearning.windtone.data.CrashLog
 import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.ui.AppShortcut
-import com.luckylearning.windtone.ui.CrashReportScreen
+import com.luckylearning.windtone.ui.BootDiagView
 import com.luckylearning.windtone.ui.LibraryViewModel
 import com.luckylearning.windtone.ui.MainScreen
 import com.luckylearning.windtone.ui.PlayerViewModel
@@ -25,8 +24,12 @@ import com.luckylearning.windtone.ui.theme.MusicPlayerTheme
 
 class MainActivity : ComponentActivity() {
 
+    /** 首帧只记一次 */
+    private var frameMarked = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        BootTrace.mark(this, BootTrace.STAGE_ACTIVITY)
 
         // 桌面快捷方式（批次 9.4）只把意图记下来，真正的执行在 MainScreen 里 ——
         // 曲库此时还没装载完，这里直接调 playQueue 只会拿到空列表。
@@ -36,8 +39,8 @@ class MainActivity : ComponentActivity() {
         //  · 仅 `persistent=true`（用户主动选择的车机安装）时主动请求横屏，
         //    车机本身多为固定横屏，这里主要覆盖「手机横置当车机用」的场景；
         //  · `unspecified`（默认）完全跟随系统，不改变手机上的原有行为。
-        // 注意：必须在 super.onCreate() 之前设置，否则会被重建流程吞掉。
-        val carMode = Prefs(applicationContext).carMode
+        // `runCatching`：偏好文件损坏也不该让应用起不来。
+        val carMode = runCatching { Prefs(applicationContext).carMode }.getOrDefault(false)
         requestedOrientation = if (carMode) {
             ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
         } else {
@@ -46,11 +49,43 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
 
-        // 上一轮崩过、且还没给用户看过 → 先把栈摆到屏幕上（见 CrashReportScreen 的注释）。
-        // 这一步必须在 setContent 之前算：真机上「装上就黑屏」的情况下，用户走不到设置页，
-        // 拍张照是唯一的取证方式。
+        // 三个「进去以前」的判据，任一成立就先摆诊断页（见 BootDiagView 的注释）：
+        //  · BOOT_DIAG        —— 诊断构建，每次启动都必显，用来确认这台设备能不能画出窗口；
+        //  · pendingCrash     —— 上一轮崩过、还没给用户看过；
+        //  · lastIncompleteBoot —— 上一轮**进程活着但一帧都没画出去**（车机黑屏的核心线索）。
         val pendingCrash = runCatching { CrashLog.latestUnseen(applicationContext) }.getOrNull()
+        val previousBoot = runCatching { BootTrace.previous(applicationContext) }.getOrNull()
+        // 判据只在 BootTrace 里写一份，这里不重复实现
+        val incomplete = runCatching { BootTrace.lastIncompleteBoot(applicationContext) }.getOrNull()
 
+        if (BuildConfig.BOOT_DIAG || pendingCrash != null || incomplete != null) {
+            setContentView(
+                BootDiagView.create(
+                    activity = this,
+                    // 传「上一轮的完整记录」而不是只传坏的那一轮：
+                    // 「画过首帧但仍全黑」与「一帧都没画」是完全不同的故障，诊断页必须能区分。
+                    record = previousBoot,
+                    forced = BuildConfig.BOOT_DIAG,
+                    onEnter = {
+                        runCatching { CrashLog.markSeen(applicationContext) }
+                        enterApp()
+                    },
+                )
+            )
+            return
+        }
+
+        enterApp()
+    }
+
+    /**
+     * 进入正常界面。
+     *
+     * 单独抽出来是因为它可能被诊断页的「进入应用」二次调用 ——
+     * `setContent` 会替换掉诊断页，用户点一下就能对照「原生 View 能显示 / Compose 能不能显示」。
+     */
+    private fun enterApp() {
+        BootTrace.mark(this, BootTrace.STAGE_CONTENT)
         setContent {
             // 四个分域 ViewModel：曲库 / 播放 / 更新 / 设置与诊断。
             // 它们都作用域在同一个 Activity 的 ViewModelStore 上，
@@ -60,18 +95,6 @@ class MainActivity : ComponentActivity() {
             val updateVm: UpdateViewModel = viewModel()
             val settings: SettingsViewModel = viewModel()
 
-            var showCrash by remember { mutableStateOf(pendingCrash != null) }
-            if (showCrash) {
-                CrashReportScreen(
-                    report = pendingCrash.orEmpty(),
-                    onContinue = {
-                        runCatching { CrashLog.markSeen(applicationContext) }
-                        showCrash = false
-                    },
-                )
-                return@setContent
-            }
-
             val seed by playerVm.themeSeed.collectAsStateWithLifecycle()
             MusicPlayerTheme(
                 seedColor = if (playerVm.dynamicThemeEnabled()) seed else null,
@@ -79,6 +102,32 @@ class MainActivity : ComponentActivity() {
                 MainScreen(lib = lib, playerVm = playerVm, updateVm = updateVm, settings = settings)
             }
         }
+        markFirstFrame()
+    }
+
+    /**
+     * 记「第一帧画出来了」。
+     *
+     * 用 `onPreDraw` 而不是 `post`：要的是「真的走到绘制」，`post` 只说明消息队列转起来了。
+     * 这一行是 [BootTrace] 判断「上次到底有没有出画面」的唯一依据，所以必须在真正
+     * 绘制前一刻记，且只记一次。
+     */
+    private fun markFirstFrame() {
+        val decor = window.decorView
+        decor.viewTreeObserver.addOnPreDrawListener(
+            object : ViewTreeObserver.OnPreDrawListener {
+                override fun onPreDraw(): Boolean {
+                    if (decor.viewTreeObserver.isAlive) {
+                        decor.viewTreeObserver.removeOnPreDrawListener(this)
+                    }
+                    if (!frameMarked) {
+                        frameMarked = true
+                        runCatching { BootTrace.markFrame(applicationContext) }
+                    }
+                    return true
+                }
+            }
+        )
     }
 
     /**

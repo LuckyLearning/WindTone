@@ -609,7 +609,17 @@ install()
 
 `CrashLog.install(this)` 在 `MusicApp` 里挂 `Thread.setDefaultUncaughtExceptionHandler`，日志落本地文件；设置页可查看条数、导出、清空。R8 保留了 `SourceFile,LineNumberTable`，所以 release 崩溃栈可读。
 
-**启动即崩时设置页是走不到的**（v1.1.13 的车机黑屏就是这么发现的：装上打开就是黑屏，连系统对话框都没有，而用户没有 adb、也进不去设置页）。所以 `MainActivity.onCreate` 会先问一句 `CrashLog.latestUnseen(context)`：**上一轮崩过、且还没给用户看过**，就先渲染 `CrashReportScreen`（设备信息 + 完整栈 + 「复制全文」/「继续打开」），用户拍照或复制发来即可定位。看过一次由 `CrashLog.markSeen` 记账，正常启动完全不受影响；`diag-*` 属于非致命诊断，**不会**触发这一页。口径由 `CrashLogTest` 钉住。
+**启动即崩时设置页是走不到的**（v1.1.13 的车机黑屏就是这么发现的：装上打开就是黑屏，连系统对话框都没有，而用户没有 adb、也进不去设置页）。所以 `MainActivity.onCreate` 在 `setContent` 之前先判一次，命中就渲染 `ui/BootDiagView`（**纯 Android View，不用 Compose**）：设备与系统、屏幕与 insets、上一轮启动的阶段表、最近崩溃栈，外加「进入应用」「复制全部」。看过一次由 `CrashLog.markSeen` 记账；`diag-*` 属于非致命诊断，**不会**触发这一页。口径由 `CrashLogTest` 钉住。
+
+**为什么是纯 View 而不是 Compose 页**：出问题的很可能正是 Compose 那条链（GL 驱动 / 动态取色 / insets）。拿一个可能坏掉的东西去报告另一个东西坏了，等于没报告 —— 诊断页必须站在最不容易坏的那一侧。
+
+**`data/BootTrace`：区分「崩了」和「没画」**。车机黑屏有两种完全不同的成因：`Application.onCreate` 就抛异常（进程秒退，Activity 根本没建起来），或者进程活着但一帧都没送出去。冷启动每一步都往 `files/boot/trace.txt` 追加一行「相对耗时 + 阶段」，出首帧时（`window.decorView` 的 `onPreDraw`）补一行 `frame:first`；下次启动把上一轮文件改名 `prev.txt` 保留，`lastIncompleteBoot()` 据此判断「上一轮有没有画出首帧」。**这个判据只看数据，不看现象**，由 `BootTraceTest` 钉住（含两个易错分支：停在诊断页没点进入不算故障；点过「进入应用」却没出首帧必须保留信号）。
+
+配套的两处防御：
+
+- `MusicApp.onCreate` 的每一步初始化都套 `runCatching`（`step("cover") { ... }`）。这几步里没有一步是「失败就宁可不启动」的，一律降级继续并记账 —— 否则任何一行抛异常都会让诊断页永远出不来。
+- 构建开关 `-PdiagBuild=true`（`BuildConfig.BOOT_DIAG`）让**每次**冷启动都先停在诊断页。车机上「打开全黑」时用户点不到任何运行时开关，只有把判断前移到构建期才保证那台机器上一定能看到这一页。
+- 构建开关 `-PswRender=true` 把 `android:hardwareAccelerated` 置 false（`manifestPlaceholders`），用来做 GPU/驱动问题的 A/B 对照。
 
 ### 6.6 小组件与磁贴
 
