@@ -1518,9 +1518,10 @@ private 成员按**文件内**统计（作用域就是文件），internal / pub
 
 ### 11.13 给 Compose 界面加「点一下看看」的冒烟测试
 
-本机**没有真机也没有模拟器**（`adb devices` 为空、没有 AVD），所以「界面渲染得出来 / 点得动」
+本机**默认没有连接真机**（`adb devices` 为空），所以「界面渲染得出来 / 点得动」
 这件事以前只能靠人眼看。现在可以进单测：`androidx.compose.ui:ui-test-junit4` + Robolectric，
 `createComposeRule()` 就能在 JVM 里跑 Compose，不需要设备。参考 `ui/LibraryDrawerTest.kt`。
+（需要真机尺度的端到端时，用自建 AVD —— 配方见 11.13.1。）
 
 依赖两个（版本都由 Compose BOM 决定，catalog 里**不写 version**）：
 
@@ -1554,6 +1555,38 @@ class XxxTest { @get:Rule val compose = createComposeRule() ... }
 典型价值场景就是 v1.1.3 的抽屉：底部导航被删掉之后它成了视图切换的**唯一入口**，
 它要是不工作，五个浏览视图全都进不去，而这类故障编译、打包、lint 全都不会报。
 测试里别断言像素或文案细节（那些看效果图），断言**行为**。
+
+---
+
+### 11.13.1 宽屏 / 车机：务必按 ≥840dp 验一遍（附复现配方）
+
+2026-10-17 的车机事故：比亚迪宋 L DM-i 装上打开**全黑**，手机上一切正常。
+
+根因是双栏里的一条分隔线：`VerticalDivider(modifier = Modifier.fillMaxSize().width(1.dp))`。
+`fillMaxSize()` = `fillMaxWidth() + fillMaxHeight()`，它在 `Row` 里把**整行宽度**吃满；
+而 `Row` 只把「剩余宽度」分给 `weight(...)` 的子节点 → 左侧列表、右侧播放页**双双击 0 宽**，
+整屏只剩主题背景色（深色模式下就是纯黑）。看着像渲染坏了，其实是布局把宽度吃光了。
+
+为什么一直没发现：**双栏只在 `widthDp ≥ 840` 时才走**（`MainScreen` 的 `EXPANDED_WIDTH_DP`），
+手机竖屏约 411dp，永远测不到；车机 1920×1080 / 240dpi 正好 1280dp，一进去就命中。
+
+**模拟器复现配方**（`wt_phone` 这类普通 AVD 就够，不必用车机镜像）：
+
+```bash
+adb shell wm size 1920x1080
+adb shell wm density 240            # 240dpi → 1280dp 宽，正好跨过 840
+adb shell settings put system accelerometer_rotation 0
+adb shell settings put system user_rotation 0        # 0 才是横向；1 会把屏幕转成竖的
+adb shell cmd uimode night yes      # 车机常年深色，黑屏才「黑得彻底」
+# 之后每次改完重装、重启应用即可；收工还原：
+adb shell wm size reset && adb shell wm density reset && adb shell cmd uimode night no
+```
+
+判据：应该看到**左列表 + 右播放页**两栏。若只有一片背景色，先怀疑有兄弟节点把宽度吃满。
+
+**已上锁**：`LayoutContractTest` 扫全部 `ui/**`，禁止 `fillMaxSize()` 后接 `.width(...)` /
+`.height(...)`，并逐字钉住那条分隔线的写法（`fillMaxHeight().width(1.dp)`）。
+做过反向验证：改回旧写法，两条用例立刻变红。
 
 ---
 

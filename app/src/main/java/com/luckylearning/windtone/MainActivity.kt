@@ -19,6 +19,7 @@ import com.luckylearning.windtone.ui.LibraryViewModel
 import com.luckylearning.windtone.ui.MainScreen
 import com.luckylearning.windtone.ui.PlayerViewModel
 import com.luckylearning.windtone.ui.SettingsViewModel
+import com.luckylearning.windtone.ui.SplitProbeView
 import com.luckylearning.windtone.ui.UpdateViewModel
 import com.luckylearning.windtone.ui.theme.MusicPlayerTheme
 
@@ -48,6 +49,16 @@ class MainActivity : ComponentActivity() {
         }
 
         enableEdgeToEdge()
+
+        // 半屏对照测试构建（`-Pprobe=split`，见 app/build.gradle.kts 的说明）。
+        // 车机上已经确认原生 View 能正常显示，所以这里只需要回答一个问题：
+        // Compose 到底能不能在这台设备上画出东西。上原生 / 下 Compose，一张照片定案。
+        if (BuildConfig.PROBE == "split") {
+            setContentView(SplitProbeView.create(this))
+            markFirstFrame()
+            SplitProbeView.mark(this)
+            return
+        }
 
         // 三个「进去以前」的判据，任一成立就先摆诊断页（见 BootDiagView 的注释）：
         //  · BOOT_DIAG        —— 诊断构建，每次启动都必显，用来确认这台设备能不能画出窗口；

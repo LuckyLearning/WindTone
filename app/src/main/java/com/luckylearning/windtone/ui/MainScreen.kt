@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -548,8 +549,13 @@ fun MainScreen(
                             // 宽屏这一侧同样只留迷你播放条，视图切换走顶栏汉堡。
                         }
                     }
+                    // 只填高度，**不能** fillMaxSize：这是 Row 里唯一的「无权重」子节点，
+                    // 一旦它把宽度吃满（fillMaxSize = fillMaxWidth + fillMaxHeight），
+                    // 两个 weight 子节点就只剩 0 宽 —— 整屏只剩背景色。
+                    // 这正是 v1.1.13 在车机 / 平板上「打开全黑」的唯一原因：
+                    // widthDp ≥ 840 才会走这条双栏分支，手机竖屏永远测不到。
                     VerticalDivider(
-                        modifier = Modifier.fillMaxSize().width(1.dp),
+                        modifier = Modifier.fillMaxHeight().width(1.dp),
                         color = MaterialTheme.colorScheme.outlineVariant,
                     )
                     PlayerPane(

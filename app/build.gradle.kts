@@ -57,6 +57,23 @@ val diagBuild = (findProperty("diagBuild") as String?)?.toBoolean() == true
 val swRenderBuild = (findProperty("swRender") as String?)?.toBoolean() == true
 
 /**
+ * 半屏对照测试构建（`-Pprobe=split`）。
+ *
+ * 车机上已经确认：**原生 View 能正常显示整页诊断信息，窗口与 insets 都正常**，
+ * 但点了「进入应用」之后仍然全黑。这时候要回答的问题只剩一个：
+ * 到底是 Compose 这条渲染链在这台机器上画不出东西，还是我们的界面代码把它画没了？
+ *
+ * 这个构建把屏幕上下各分一半：上半屏是纯原生 `TextView`，下半屏是一个最小化的
+ * `ComposeView`（只有一个色块和一行字，不挂主题、不挂 ViewModel、不读 insets）。
+ * 一张照片就能分辨三种情况：
+ *   · 两半都有 → Compose 没问题，问题在我们的界面代码里（下一步二分 MainScreen）
+ *   · 只有上半屏，下半屏是**黄色** → ComposeView 一像素都没画（渲染链问题）
+ *   · 只有上半屏，下半屏是**黑色** → Compose 画了，但画出来的是黑（配色/图层问题）
+ * 黄色的用法是故意的：它就是用来区分「什么都没画」与「画了黑的」。
+ */
+val probeBuild = (findProperty("probe") as String?).orEmpty()
+
+/**
  * Room schema 导出目录。
  *
  * 手写 Migration 的 DDL 必须与 Room 运行时期望的结构**完全一致**，
@@ -127,6 +144,8 @@ android {
 
         // 启动诊断页（见文件顶部 diagBuild 的说明），默认关闭
         buildConfigField("boolean", "BOOT_DIAG", diagBuild.toString())
+        // 半屏对照（见文件顶部 probeBuild 的说明），空串 = 正常构建
+        buildConfigField("String", "PROBE", "\"$probeBuild\"")
         // 硬件加速开关由构建参数决定（见 swRenderBuild），供 A/B 对照
         manifestPlaceholders["hwAccel"] = if (swRenderBuild) "false" else "true"
     }
