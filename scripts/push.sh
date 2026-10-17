@@ -52,6 +52,10 @@ EOF
 chmod +x "$ASKPASS"
 
 echo "→ 推送到 $REMOTE/$BRANCH ..."
+# -c credential.helper= ：把系统级的凭据助手（manager / GCM）临时清空。
+#   本机凭据库里同时存着 LuckyLearning 和 x-access-token 两个账号，
+#   GCM 会弹「选哪个账号」的窗口并一直等待 → 无人值守推送就挂在这里。
+#   清空后 git 只会走下面的 GIT_ASKPASS，用户名固定 LuckyLearning。
 GIT_ASKPASS="$ASKPASS" GIT_TERMINAL_PROMPT=0 \
-  git -C "$ROOT" push "$REMOTE" "$BRANCH"
+  git -C "$ROOT" -c credential.helper= push "$REMOTE" "$BRANCH"
 echo "✓ 推送完成"
