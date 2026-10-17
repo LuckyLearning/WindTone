@@ -1,5 +1,6 @@
 package com.luckylearning.windtone.ui
 
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -55,16 +56,40 @@ class LayoutContractTest {
         )
     }
 
-    /** 分隔线的正确写法：只填高度，宽度固定 1dp */
+    /**
+     * v1.1.14：双栏整体停用。
+     *
+     * 车机（比亚迪宋 L DM-i）实测两条问题：左侧导航底部的「设置」被车机固定按钮栏
+     * 压住点不到；用户也明确表示不要双栏。于是车机两栏（[CarHomeScreen]）与平板双栏
+     * 一起下线，统一走单栏 + 抽屉导航。
+     *
+     * 这条测试防「顺手恢复」：MainScreen 里一旦又出现分隔线或车载两栏调用，
+     * 必须同时恢复上一版那条 `fillMaxHeight().width(1.dp)` 的断言，否则黑屏会回来。
+     */
     @Test
-    fun doublePaneDividerOnlyFillsHeight() {
+    fun noTwoPaneLayout() {
         val source = sourceFile("src/main/java/com/luckylearning/windtone/ui/MainScreen.kt").readText()
-        val divider = Regex("""VerticalDivider\(\s*modifier\s*=\s*([^,]+),""").find(source)
-        assertTrue("MainScreen 里找不到 VerticalDivider —— 双栏结构变了？", divider != null)
-        val modifier = divider!!.groupValues[1].replace(Regex("\\s+"), "")
+        assertFalse(
+            "MainScreen 又出现 VerticalDivider —— 恢复双栏前先读 docs/版本历史.md 的 v1.1.13/v1.1.14 两条",
+            source.contains("VerticalDivider("),
+        )
+        assertFalse(
+            "MainScreen 不应再调用车载两栏布局 CarHomeScreen（v1.1.14 起停用）",
+            source.contains("CarHomeScreen("),
+        )
+    }
+
+    /**
+     * 底部必须给车机 Dock 留死高度：DiLink 的按钮栏不在 insets 里上报（navigationBars = 0），
+     * 只在 `Box` 上套 `navigationBarsPadding()` 没用，「设置」照样被压住。
+     */
+    @Test
+    fun mainScreenReservesCarDockHeight() {
+        val source = sourceFile("src/main/java/com/luckylearning/windtone/ui/MainScreen.kt").readText()
+        assertTrue("MainScreen 缺少车机 Dock 保底高度常量", source.contains("CAR_DOCK_RESERVED_HEIGHT"))
         assertTrue(
-            "宽屏双栏的分隔线必须是 fillMaxHeight().width(1.dp)，实际是：$modifier",
-            modifier == "Modifier.fillMaxHeight().width(1.dp)",
+            "根布局必须把内容抬到 bottomSafe 之上（padding(bottom = bottomSafe)）",
+            Regex("""padding\(bottom = bottomSafe\)""").containsMatchIn(source),
         )
     }
 }

@@ -1112,7 +1112,7 @@ WindTone-v{版本}-universal.apk      # 拿不准架构时的兜底
 15. **手机版导航是「顶栏汉堡 + 侧边抽屉」（v1.1.3）**：底部五视图导航已**整体移除**（列表因此多出一条导航栏的纵向空间），五个浏览视图 + 「扫描范围 / 设置」都收进左侧抽屉（`ui/LibraryDrawer.kt`）。
     - 规格：宽 280dp、右缘圆角 28dp、滑入 220ms、遮罩点收起、返回键收起、抽屉盖在迷你播放条之上；选中项 = secondaryContainer 实底胶囊 + 加粗。
     - 抽屉挂在 `MainScreen` 顶层 Box、**在播放页 / 设置页这两个全屏覆盖层之前** —— 那两个页面各有自己的返回按钮，效果图里也没有汉堡入口。
-    - **车机版（`CarHomeScreen`）的左导航不受影响**，效果图的车机屏也没有汉堡按钮。
+    - **v1.1.14 起车机也走这一套单栏 + 抽屉**：车载两栏（`CarHomeScreen`）已下线，车机上的「设置」同样从汉堡进抽屉。
 16. **入口收敛（2026-10-17）**：同一个目的地不再挂多处入口。
     - **「设置」只有左侧抽屉一个入口**：顶栏「⋮」菜单里那一项已删（车机版左导航里的「设置」保留 —— 那是车机唯一的入口，且它本身就是左面板）。
     - **「检查更新」只在设置 → 更新**：原先抽屉与顶栏「⋮」菜单各挂一份，都已删。顶栏「⋮」菜单从此**只放就地动作**（扫描范围 / 重扫 / 导入 / 重匹配 .lrc / 深度扫描 / 收听报告），不放跳转项。
@@ -1558,7 +1558,7 @@ class XxxTest { @get:Rule val compose = createComposeRule() ... }
 
 ---
 
-### 11.13.1 宽屏 / 车机：务必按 ≥840dp 验一遍（附复现配方）
+### 11.13.1 宽屏 / 车机：按 ≥840dp 验一遍（附复现配方与车机 Dock 坑）
 
 2026-10-17 的车机事故：比亚迪宋 L DM-i 装上打开**全黑**，手机上一切正常。
 
@@ -1582,11 +1582,39 @@ adb shell cmd uimode night yes      # 车机常年深色，黑屏才「黑得彻
 adb shell wm size reset && adb shell wm density reset && adb shell cmd uimode night no
 ```
 
-判据：应该看到**左列表 + 右播放页**两栏。若只有一片背景色，先怀疑有兄弟节点把宽度吃满。
+判据：**单栏**（顶栏 + 列表 + 迷你播放条）。若只有一片背景色，先怀疑有兄弟节点把宽度吃满。
 
 **已上锁**：`LayoutContractTest` 扫全部 `ui/**`，禁止 `fillMaxSize()` 后接 `.width(...)` /
-`.height(...)`，并逐字钉住那条分隔线的写法（`fillMaxHeight().width(1.dp)`）。
-做过反向验证：改回旧写法，两条用例立刻变红。
+`.height(...)`。做过反向验证：改回旧写法，用例立刻变红。
+
+#### v1.1.14：双栏整体下线，以及车机底部「点不到」
+
+黑屏修好之后，同一位车机用户（比亚迪宋 L DM-i 2026 款）第二天又报了两条：
+
+1. **左下角「设置」点不到**——被车机固定的按钮栏（Home / 应用 / 空调那条）压住了；
+2. **不要双栏模式**。
+
+第 1 条是平台差异：**车机 Dock 不是系统导航栏**，`WindowInsets.navigationBars` 实测为 0，
+`navigationBarsPadding()` 拿到 0dp，于是一路铺到屏幕最底，正好被浮层盖住。
+修法是给根布局留死高度：
+
+```kotlin
+val navigationBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+val bottomSafe = if (widthDp >= LARGE_SCREEN_WIDTH_DP) {
+    maxOf(navigationBottom, CAR_DOCK_RESERVED_HEIGHT)   // 56.dp
+} else navigationBottom
+Box(Modifier.fillMaxSize().padding(bottom = bottomSafe))
+```
+
+`Surface` 背景仍铺满全屏，所以 Dock 后面不会露出一条异色；手机三键导航盖住迷你播放条的老问题也一起修了。
+
+第 2 条是产品决定：车机两栏（`CarHomeScreen`）与平板双栏一起下线，统一单栏 + 抽屉导航。
+`CarHomeScreen.kt` 文件保留但**不再被调用**（注释里写明了），后续要恢复必须先看
+`docs/版本历史.md` 的 v1.1.13 / v1.1.14 两条 —— `LayoutContractTest.noTwoPaneLayout`
+会禁止 `MainScreen` 里再出现 `VerticalDivider(` 或 `CarHomeScreen(`。
+
+**教训**：横屏大屏的布局问题，手机上永远测不到；而「insets 为 0」这种平台差异，
+只能靠真机照片里的位置关系反推（内容压到按钮下面 = insets 没给），别指望 `dumpsys` 会告诉你。
 
 ---
 
@@ -1659,7 +1687,7 @@ adb shell wm size reset && adb shell wm density reset && adb shell cmd uimode ni
 
 | 项 | 现状 | 影响 / 建议 |
 |---|---|---|
-| `MainScreen.kt` 1152 行 | ✅ 2026-10-15 已按 §8.6 拆过一轮：列表区抽成 `LibraryHeader.kt`（424 行）+ `LibraryLists.kt`（742 行），`MainScreen` 只留编排（双栏 / 抽屉 / 播放页挂载 / 深链消费） | 下一个偏大的文件是 `ui/library/LibraryCore.kt`（778 行，见 §6 的拆分结构） |
+| `MainScreen.kt` 1152 行 | ✅ 2026-10-15 已按 §8.6 拆过一轮：列表区抽成 `LibraryHeader.kt`（424 行）+ `LibraryLists.kt`（742 行），`MainScreen` 只留编排（单栏骨架 / 抽屉 / 播放页挂载 / 深链消费） | 下一个偏大的文件是 `ui/library/LibraryCore.kt`（778 行，见 §6 的拆分结构） |
 | 测试覆盖 | **225 个**（`db/`、`playback/` 有 Robolectric 用例，`ui/` 是 Compose 界面冒烟） | 已覆盖 CASCADE / 软删 / 排除 / 统计 / 队列 / 搜索历史 / 歌词解析 / 悬浮歌词内容解析与排版（32 项）/ 悬浮窗摆放与夹取（14 项）/ 更新检查（24 项，含说明正文的通道无关性，见 §6.2）/ 收听报告日历聚合（15 项）/ 重复歌曲指纹（13 项）/ 侧边抽屉行为（6 项）/ 设置页一主六子导航（3 项）/ 车机浏览树（12 项，见 §6.9）/ 均衡器预设曲线与预览归一化（14 项）+ 混响档位表（7 项，见 §6.10）/ 启动器快捷方式契约（4 项）+ 桌面入口就绪判据（6 项）+ 虚拟歌单条目（4 项，均见 §6.7）；仍缺 `MusicRepository` 的排序 / 搜索，以及 ViewModel 层的行为测试 |
 | **`java.time` 不能用**（`minSdk = 24`） | `isCoreLibraryDesugaringEnabled = false` 是**有意**的 | `java.time` / `java.util.stream` / `Optional` 都要 **API 26**，低版本上直接 `NoClassDefFoundError`（不是降级，是崩）。要日历运算走 `java.util.Calendar` + `TimeZone`（见 `data/ListeningReport.kt` 的实现与注释），日期加减用 `Calendar.add(DAY_OF_MONTH, ±n)` 而不是加减 86_400_000 毫秒。真要引入 `java.time`，先开脱糖并加 `desugar_jdk_libs`（会全局影响构建，别为一个小功能开） |
 | **lint 的 `abortOnError = false`** | 2026-10-15 收尾时已把 **Error 清到 0**（warnings 仍在，不阻塞构建） | 也就是说"构建成功"≠"lint 干净"。改完代码别只看 `BUILD SUCCESSFUL`，要扫一眼 `app/build/reports/lint-results-debug.xml` 里的 **Error** 级条目。当天共三次收敛：**32 → 5**（21 条 `java.time` 的 `NewApi` 见上一行，5 条 `Tile.setSubtitle` 的 `NewApi` 见 `tile/TileCompat.kt`，`StartActivityAndCollapseDeprecated` 改显式 `@Suppress` 并写明理由），再 **5 → 0**（5 条 `UnsafeOptInUsageError`：`kotlinOptions.freeCompilerArgs` 里的 `-opt-in=...UnstableApi` 编译器认、lint 不认，改为在 `PlaybackService` / `PlayerHandle` 上挂 `@androidx.annotation.OptIn`）。⚠️ 注意 `w:` 开头的 `-opt-in ... is not an opt-in requirement marker` 是**历史告警**，Kotlin 编译期就带着，不是新引入的 |
@@ -1679,7 +1707,7 @@ adb shell wm size reset && adb shell wm density reset && adb shell cmd uimode ni
 | **`androidx.appcompat` / `lifecycle.service` 零 import** | ✅ **2026-10-15 已删** | 主题继承框架 `android:Theme.Material.Light.NoActionBar` 而非 AppCompat；`MediaSessionService` 自带 lifecycle。catalog 里删了版本项 / 库项 / 两处 `implementation(...)`，并在 catalog 注释里留了原因。**删传递依赖要真机跑一遍**，不能只看编译过 |
 | **9.3 英文资源只做了第一步** | 框架层文案（磁贴 / 快捷方式 / 小组件）已分 `values`(英) 与 `values-zh`(中) | Compose 界面文案仍**硬编码中文**（约 1500 条散在 20+ 文件）。**做一半比不做更糟**：会变成中英混排。要么不动，要么一次抽干净（`stringResource` + 两个桶） |
 | **9.1 Android Auto 只做了清单兼容层** | `PlaybackService` 加了并列的 `android.media.browse.MediaBrowserService` intent-filter | 车机媒体卡能认出本应用，但**歌单/文件夹不可浏览**（要换 `MediaLibraryService` 才能提供层级）。且**未在真机/模拟器验证过** |
-| **9.2 平板双栏未真机验证** | `MainScreen` 用 `LocalConfiguration.screenWidthDp >= 840 && !carMode` 作为断点 | 刻意不引 `material3-window-size-class`（省一个依赖）。**折叠屏铰链未处理**——拿不到铰链位置，只能按"够宽就双栏" |
+| **9.2 平板 / 车机双栏** | ✅ **v1.1.14 已整体下线** | 起因是车机真机反馈（设置被 Dock 压住 + 不要双栏）。现在所有尺寸统一单栏；`widthDp >= 840` 只用来判断底部要不要给车机 Dock 留 56dp。`CarHomeScreen.kt` 保留未接入，恢复前先读版本历史 v1.1.13 / v1.1.14 |
 
 ---
 

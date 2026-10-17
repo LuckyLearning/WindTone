@@ -603,7 +603,7 @@ a{color:inherit;text-decoration:none}
     <a class="backdocs" href="https://luckylearning.github.io/WindTone/">← 文档站</a>
     <div class="bh-title">听风 WindTone · UI 效果图<small>设计基准 / Design Source of Truth</small></div>
     <span class="bh-badge"><span id="screenCount">52</span> 屏 · Material 3 · 手机 360dp / 车机 1707×1067dp</span>
-    <span class="bh-badge">对齐 v1.1.13 · 含侧边抽屉 / 设置二级分类 / 均衡器与音效（⑲/⑲B）</span>
+    <span class="bh-badge">对齐 v1.1.14 · 车机改单栏 / 侧边抽屉 / 设置二级分类 / 均衡器与音效（⑲/⑲B）</span>
     <button class="tgl" id="themeBtn">🌙 深色主题</button>
   </div>
   <nav class="bh-nav">
@@ -1540,7 +1540,7 @@ a{color:inherit;text-decoration:none}
 </figure>
 
 <figure class="fig" id="scr-player-car">
-  <div class="cap"><b>⑫D 播放页 · 沉浸态（歌词态 · 5 秒无操作）</b><em>PlayerScreen.kt · immersive —— 车载模式下触发；车机横屏独立布局另见 ㊱~㊳</em></div>
+  <div class="cap"><b>⑫D 播放页 · 沉浸态（歌词态 · 5 秒无操作）</b><em>PlayerScreen.kt · immersive —— 车载模式下触发；车机横屏在 v1.1.14 起也走单栏（㊱~㊳ 两栏已停用）</em></div>
   <div class="phone">
     <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
     <div class="app">
@@ -1577,7 +1577,7 @@ a{color:inherit;text-decoration:none}
   进入沉浸态时内容区最大宽度限制（760dp）解除，歌词铺满整屏宽度。<br>
   车载模式歌词整体放大 <b>1.5 倍</b>（在用户「歌词大小」缩放基础上再乘：正文 15.5sp→约 23sp、当前行 17.5sp→约 26sp），
   行距与「颜色 / 字号 / 字重 / 底色」的强调规则与普通模式一致（普通模式另见 ⑫）——车机屏离驾驶位 60~70cm，手机字号瞄一眼读不清。<br>
-  触发前提：设置 → 外观 →「车载模式」开启（启动直接进播放页、锁横屏）；车机横屏的独立两栏布局另见第六节 ㊱~㊳，本屏是播放页自身的沉浸态。</p>
+  触发前提：设置 → 外观 →「车载模式」开启（启动直接进播放页、锁横屏）；车机横屏在 v1.1.14 起也走同一套单栏布局（第六节的 ㊱~㊳ 两栏已停用），本屏是播放页自身的沉浸态。</p>
 </figure>
 
 <figure class="fig" id="scr-player-cover">
@@ -2959,7 +2959,13 @@ a{color:inherit;text-decoration:none}
 </section>
 
 <section class="sec" id="sec-car">
-  <div class="sec-hd"><h2>六、车机版（2560×1600 中控屏）</h2><span>CarHomeScreen.kt —— 横屏两栏布局 · 1707×1067dp 基准 · 左导航 256dp + 右列表占满 + 底部播放条</span></div>
+  <div class="sec-hd"><h2>六、车机版（2560×1600 中控屏）</h2><span>历史设计 · 1707×1067dp 基准 · 横屏两栏（v1.1.14 起不再使用）</span></div>
+  <div class="note" style="border-color:#c58b00">
+    <b>⚠️ v1.1.14 起车机也走单栏</b>：这一节的 ㊱~㊳ 是 1.0.3~1.1.13 的车载两栏设计，
+    现已<b>停用</b>（<code>CarHomeScreen.kt</code> 保留但不再被调用）。原因：车机固定按钮栏压住左下角「设置」，
+    且用户明确不要双栏。现在车机界面 = 手机单栏式样（第一~五节），只是根布局多让出<b>底部 56dp</b>
+    安全区给车机 Dock。本节保留作为以后重做「单栏大控件版」的参考。
+  </div>
   <div class="legend" style="margin-bottom:18px">
     <b>目标设备</b>：2560×1600 px 中控屏（16:10，12.8~13 英寸）。按实测密度 232~236 dpi 落到 <b>hdpi(240)</b> 密度桶，
     换算可用空间约 <b>1707×1067 dp</b>（约为手机 360dp 宽的 4.7 倍）。<br>

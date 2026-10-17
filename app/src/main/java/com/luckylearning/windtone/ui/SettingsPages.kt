@@ -183,7 +183,7 @@ internal fun SettingsAppearancePage(
     // 副标题原文 180 字，一条设置项就占掉大半屏；详细说明移到标题旁的「?」弹窗
     SwitchRow(
         title = "车载模式",
-        subtitle = "横屏大界面 · 歌词页自动收起 · 开机自启",
+        subtitle = "启动直进播放页 · 歌词自动收起 · 开机自启",
         checked = player.carMode,
         onCheckedChange = onCarMode,
         onInfo = { showCarModeInfo = true },

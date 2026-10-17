@@ -23,6 +23,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -79,13 +82,20 @@ fun hasPermission(context: Context, permission: String): Boolean =
     ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 
 /**
- * 宽屏阈值：≥ 840dp 视为「平板 / 折叠屏展开态」，列表与播放页并排双栏。
+ * 大屏阈值：≥ 840dp 视为「车机 / 平板 / 折叠屏展开」。
  *
- * 用 [LocalConfiguration.screenWidthDp] 而不是 `material3-window-size-class`：
- * 依赖少一个、启动少一次订阅，而判定用的本来就是同一个值。
- * （代价是拿不到铰链位置，折叠屏半折态仍按普通宽屏处理，见文档「批次 9 遗留」。）
+ * 只用来判断底部要不要给车机 Dock 让位，**不再**用来切双栏——v1.1.14 起双栏整体停用。
  */
-private const val EXPANDED_WIDTH_DP = 840
+private const val LARGE_SCREEN_WIDTH_DP = 840
+
+/**
+ * 车机底部固定按钮栏的保底高度。
+ *
+ * 比亚迪 DiLink 那条「Home / 应用 / 空调」的条子不是系统导航栏，不在 insets 里上报
+ * （实测 navigationBars = 0），所以必须在布局上留死高度，否则「设置」和迷你播放条
+ * 会整块压在按钮下面，点不到也看不见。
+ */
+private val CAR_DOCK_RESERVED_HEIGHT = 56.dp
 
 /**
  * 主界面骨架：状态编排、权限申请、覆盖层与全部弹窗。
@@ -108,8 +118,15 @@ fun MainScreen(
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val widthDp = LocalConfiguration.current.screenWidthDp
-    // 车机走自己那套两栏；这里的双栏只服务「平板 / 折叠屏展开」这类宽屏
-    val twoPane = widthDp >= EXPANDED_WIDTH_DP && !player.carMode
+    // 底部安全留白：系统导航栏 insets 与「车机 Dock 保底高度」取大值。
+    // 车机把底部按钮栏当浮层、insets 报 0，光靠 navigationBarsPadding 会让左下角
+    // 「设置」被按钮压住点不到（用户实测比亚迪宋 L DM-i）。
+    val navigationBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomSafe = if (widthDp >= LARGE_SCREEN_WIDTH_DP) {
+        maxOf(navigationBottom, CAR_DOCK_RESERVED_HEIGHT)
+    } else {
+        navigationBottom
+    }
 
     val audioPermission = remember { requiredAudioPermission() }
     var granted by remember { mutableStateOf(hasPermission(context, audioPermission)) }
@@ -331,7 +348,7 @@ fun MainScreen(
         LaunchedEffect(Unit) { if (library.report == null) lib.loadReport() }
     }
 
-    BackHandler(enabled = player.playerExpanded && !twoPane) { playerVm.closePlayer() }
+    BackHandler(enabled = player.playerExpanded) { playerVm.closePlayer() }
     BackHandler(enabled = !player.playerExpanded && library.selecting) { lib.exitSelection() }
     BackHandler(enabled = !player.playerExpanded && !library.selecting && library.selectedPlaylist != null) { lib.closePlaylist() }
     BackHandler(
@@ -454,190 +471,77 @@ fun MainScreen(
     }
 
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize()) {
-            // 车载模式：整体换成两栏横屏布局（左导航 / 右内容 + 底部常驻播放条），
-            // 手机的「单列 + 底部导航」在横屏大屏上会把列表压成窄条，故单独走一套。
-            // 播放页是盖在最上层的独立全屏页（见下方 AnimatedVisibility），不进这两栏。
-            when {
-                player.carMode -> CarHomeScreen(
+        // 整块内容抬到底部安全线之上：车机 Dock 会把它压住，也顺带修好手机三键导航
+        // 盖住迷你播放条的老问题（surface 背景仍铺满全屏，不会露出黑边）。
+        Box(Modifier.fillMaxSize().padding(bottom = bottomSafe)) {
+            // v1.1.14：双栏（车载两栏 / 平板双栏）整体停用 —— 车机上底部固定按钮栏会
+            // 压住左下角「设置」，且用户明确不要双栏；统一走单栏（抽屉导航 + 迷你播放条）。
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+            ) {
+                LibraryHeader(
                     library = library,
-                    player = player,
-                    progressFlow = playerVm.progress,
-                    onSelectView = lib::setView,
-                    onOpenSettings = { showSettings = true },
+                    granted = granted,
+                    onOpenDrawer = { drawerOpen = true },
                     onQuery = lib::setQuery,
-                    onSort = { lib.setSort(library.sortOrder.next(library.view)) },
+                    onSort = lib::setSort,
+                    onRequestPermission = { permissionLauncher.launch(arrayOf(audioPermission)) },
+                    onImportFolder = importFolder,
                     onRescan = { lib.scan() },
-                    onPlay = playerVm::playQueue,
-                    onSongLongPress = { actionSong = it },
-                    onOpenGroup = lib::openGroup,
-                    onOpenPlaylist = lib::openPlaylist,
-                    onCloseDetail = {
-                        if (library.selectedPlaylist != null) lib.closePlaylist() else lib.closeGroup()
-                    },
-                    onNewPlaylist = { newPlaylistDialog = true },
+                    onRefreshLyrics = lib::refreshLyrics,
+                    onDeepScan = { lib.deepScanSettingsIntent()?.let { context.startActivity(it) } },
                     onImportM3U = {
-                        m3uImportLauncher.launch(
-                            arrayOf("audio/x-mpegurl", "audio/mpegurl", "text/plain", "*/*")
-                        )
+                        m3uImportLauncher.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "text/plain", "*/*"))
                     },
+                    onSubmitSearch = lib::submitSearch,
+                    onClearSearchHistory = lib::clearSearchHistory,
                     onOpenScanScope = { showScanScope = true },
                     onFullScan = requestFullScan,
-                    onImportFolder = importFolder,
-                    granted = granted,
-                    onToggle = playerVm::togglePlay,
-                    onNext = playerVm::next,
-                    onPrevious = playerVm::previous,
-                    onSeek = playerVm::seekTo,
-                    onExpandPlayer = playerVm::openPlayer,
-                    isFavorite = player.current?.let { it.stableKey in library.favoriteUris } == true,
-                    onToggleFavorite = { player.current?.let(lib::toggleFavorite) },
+                    onOpenReport = { showReport = true },
                 )
 
-                // 平板 / 折叠屏展开：左列表右播放页并排，播放页不再全屏覆盖
-                twoPane -> Row(Modifier.fillMaxSize().statusBarsPadding()) {
-                    Column(Modifier.weight(0.92f).fillMaxSize()) {
-                        LibraryHeader(
-                            library = library,
-                            granted = granted,
-                            onOpenDrawer = { drawerOpen = true },
-                            onQuery = lib::setQuery,
-                            onSort = lib::setSort,
-                            onRequestPermission = { permissionLauncher.launch(arrayOf(audioPermission)) },
-                            onImportFolder = importFolder,
-                            onRescan = { lib.scan() },
-                            onRefreshLyrics = lib::refreshLyrics,
-                            onDeepScan = { lib.deepScanSettingsIntent()?.let { context.startActivity(it) } },
-                            onImportM3U = {
-                                m3uImportLauncher.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "text/plain", "*/*"))
-                            },
-                            onSubmitSearch = lib::submitSearch,
-                            onClearSearchHistory = lib::clearSearchHistory,
-                            onOpenScanScope = { showScanScope = true },
-                            onFullScan = requestFullScan,
-                            onOpenReport = { showReport = true },
+                Box(Modifier.weight(1f)) {
+                    if (library.selecting) {
+                        SelectionBar(
+                            count = library.selection.size,
+                            onExit = lib::exitSelection,
+                            onSelectAll = lib::selectAllVisible,
+                            onInvert = lib::invertSelection,
+                            onAddToPlaylist = { showBulkAddToPlaylist = true },
+                            onFavorite = { lib.bulkSetFavorite(true) },
+                            onEnqueue = lib::bulkAddToQueue,
+                            onRemoveFromLibrary = { lib.bulkRemoveFromLibrary() },
+                            onDeleteFiles = { bulkDeleteConfirm = true },
                         )
-                        Box(Modifier.weight(1f)) {
-                            if (library.selecting) {
-                                SelectionBar(
-                                    count = library.selection.size,
-                                    onExit = lib::exitSelection,
-                                    onSelectAll = lib::selectAllVisible,
-                                    onInvert = lib::invertSelection,
-                                    onAddToPlaylist = { showBulkAddToPlaylist = true },
-                                    onFavorite = { lib.bulkSetFavorite(true) },
-                                    onEnqueue = lib::bulkAddToQueue,
-                                    onRemoveFromLibrary = { lib.bulkRemoveFromLibrary() },
-                                    onDeleteFiles = { bulkDeleteConfirm = true },
-                                )
-                            } else {
-                                listArea()
-                            }
-                        }
-                        if (!library.selecting) {
-                            MiniPlayer(
-                                song = player.current,
-                                isPlaying = player.isPlaying,
-                                progressFlow = playerVm.progress,
-                                onExpand = playerVm::openPlayer,
-                                onToggle = playerVm::togglePlay,
-                                onNext = playerVm::next,
-                                onPrevious = playerVm::previous,
-                                onSeek = playerVm::seekTo,
-                            )
-                            // v1.1.3：底部五视图导航已整体移除（见 LibraryDrawer.kt），
-                            // 宽屏这一侧同样只留迷你播放条，视图切换走顶栏汉堡。
-                        }
+                    } else {
+                        listArea()
                     }
-                    // 只填高度，**不能** fillMaxSize：这是 Row 里唯一的「无权重」子节点，
-                    // 一旦它把宽度吃满（fillMaxSize = fillMaxWidth + fillMaxHeight），
-                    // 两个 weight 子节点就只剩 0 宽 —— 整屏只剩背景色。
-                    // 这正是 v1.1.13 在车机 / 平板上「打开全黑」的唯一原因：
-                    // widthDp ≥ 840 才会走这条双栏分支，手机竖屏永远测不到。
-                    VerticalDivider(
-                        modifier = Modifier.fillMaxHeight().width(1.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant,
-                    )
-                    PlayerPane(
-                        playerVm = playerVm,
-                        player = player,
-                        library = library,
-                        lib = lib,
-                        canDrawOverlay = canDrawOverlay,
-                        onShowQueue = { playerVm.refreshQueue(); showQueue = true },
-                        onShowAudioInfo = { player.current?.let { infoSong = it; playerVm.inspectAudio(it) } },
-                        onExportLyrics = null,
-                        modifier = Modifier.weight(1.08f),
-                    )
                 }
 
-                else -> Column(
-                    Modifier
-                        .fillMaxSize()
-                        .statusBarsPadding()
-                ) {
-                    LibraryHeader(
-                        library = library,
-                        granted = granted,
-                        onOpenDrawer = { drawerOpen = true },
-                        onQuery = lib::setQuery,
-                        onSort = lib::setSort,
-                        onRequestPermission = { permissionLauncher.launch(arrayOf(audioPermission)) },
-                        onImportFolder = importFolder,
-                        onRescan = { lib.scan() },
-                        onRefreshLyrics = lib::refreshLyrics,
-                        onDeepScan = { lib.deepScanSettingsIntent()?.let { context.startActivity(it) } },
-                        onImportM3U = {
-                            m3uImportLauncher.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "text/plain", "*/*"))
-                        },
-                        onSubmitSearch = lib::submitSearch,
-                        onClearSearchHistory = lib::clearSearchHistory,
-                        onOpenScanScope = { showScanScope = true },
-                        onFullScan = requestFullScan,
-                        onOpenReport = { showReport = true },
+                if (!library.selecting) {
+                    // 迷你播放条：放进 Column 而不是浮在最上层，
+                    // 这样列表不会被它遮住，Snackbar 也不会和它打架。
+                    MiniPlayer(
+                        song = player.current,
+                        isPlaying = player.isPlaying,
+                        progressFlow = playerVm.progress,
+                        onExpand = playerVm::openPlayer,
+                        onToggle = playerVm::togglePlay,
+                        onNext = playerVm::next,
+                        onPrevious = playerVm::previous,
+                        onSeek = playerVm::seekTo,
                     )
 
-                    Box(Modifier.weight(1f)) {
-                        if (library.selecting) {
-                            SelectionBar(
-                                count = library.selection.size,
-                                onExit = lib::exitSelection,
-                                onSelectAll = lib::selectAllVisible,
-                                onInvert = lib::invertSelection,
-                                onAddToPlaylist = { showBulkAddToPlaylist = true },
-                                onFavorite = { lib.bulkSetFavorite(true) },
-                                onEnqueue = lib::bulkAddToQueue,
-                                onRemoveFromLibrary = { lib.bulkRemoveFromLibrary() },
-                                onDeleteFiles = { bulkDeleteConfirm = true },
-                            )
-                        } else {
-                            listArea()
-                        }
-                    }
-
-                    if (!library.selecting) {
-                        // 迷你播放条：放进 Column 而不是浮在最上层，
-                        // 这样列表不会被它遮住，Snackbar 也不会和它打架。
-                        MiniPlayer(
-                            song = player.current,
-                            isPlaying = player.isPlaying,
-                            progressFlow = playerVm.progress,
-                            onExpand = playerVm::openPlayer,
-                            onToggle = playerVm::togglePlay,
-                            onNext = playerVm::next,
-                            onPrevious = playerVm::previous,
-                            onSeek = playerVm::seekTo,
-                        )
-
-                        // v1.1.3：底部五视图导航整体移除，五个浏览视图收进左侧抽屉
-                        // （顶栏汉堡按钮开合，见 LibraryDrawer.kt）。列表因此多出
-                        // 一整条导航栏的纵向空间 —— 这是这次重构的直接收益。
-                    }
+                    // v1.1.3：底部五视图导航整体移除，五个浏览视图收进左侧抽屉
+                    // （顶栏汉堡按钮开合，见 LibraryDrawer.kt）。列表因此多出
+                    // 一整条导航栏的纵向空间 —— 这是这次重构的直接收益。
                 }
             }
 
             // 侧边抽屉：盖住曲库内容与迷你播放条（遮罩吃掉下层触摸）。
-            // 挂在 when 之外、且放在播放页与设置页**之前** —— 那两个是全屏覆盖层，
+            // 挂在主内容之上、且放在播放页与设置页**之前** —— 那两个是全屏覆盖层，
             // 各有自己的返回按钮，抽屉不该压在其上（效果图里它们也没有汉堡入口）。
             // statusBarsPadding：效果图的抽屉在状态栏**之下**（.app 的坐标系起点），
             // 不是盖住状态栏。
@@ -651,9 +555,9 @@ fun MainScreen(
                 modifier = Modifier.statusBarsPadding(),
             )
 
-            // 播放页 / 设置页 / 报告 / 重复清理覆盖在最上层（宽屏双栏时播放页已在右栏，不再全屏覆盖）
+            // 播放页 / 设置页 / 报告 / 重复清理覆盖在最上层（v1.1.14 起没有双栏，播放页一律全屏覆盖）
             AnimatedVisibility(
-                visible = player.playerExpanded && !twoPane,
+                visible = player.playerExpanded,
                 enter = slideInVertically { it },
                 exit = slideOutVertically { it },
                 modifier = Modifier.fillMaxSize(),
