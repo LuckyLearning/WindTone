@@ -5,7 +5,9 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.res.Configuration
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.Typeface
 import android.hardware.display.DisplayManager
 import android.os.Build
@@ -59,9 +61,24 @@ object BootDiagView {
         val ctx = activity
         val content = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(ctx, 20), dp(ctx, 28), dp(ctx, 20), dp(ctx, 40))
+            setPadding(dp(ctx, 20), dp(ctx, 20), dp(ctx, 20), dp(ctx, 40))
             setBackgroundColor(BG)
         }
+
+        // 顶部这一条是**探针**，不是装饰。
+        // 色条用 Canvas 直接画：不依赖字体、不依赖主题、不依赖 Compose，
+        // 是「这台车机到底能不能画出我们的窗口」这个问题最省事的答案。
+        // 只靠文字判断不可靠 —— 车机上字体缺失/设置异常时字会画成空白，但色条不会。
+        content.addView(BarsView(ctx))
+        content.addView(
+            TextView(ctx).apply {
+                text = "能看到上面的色条和这一行字，说明车机能正常显示本应用的窗口"
+                setTextColor(0xFF7A0F5A.toInt())
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                setTypeface(typeface, Typeface.BOLD)
+                setPadding(0, dp(ctx, 10), 0, dp(ctx, 6))
+            }
+        )
 
         content.addView(title(ctx, "WindTone 启动诊断"))
         content.addView(
@@ -221,6 +238,38 @@ object BootDiagView {
                 appendLine("刷新率：${rate?.let { String.format(Locale.US, "%.0f", it) } ?: "未知"}")
             }
             append("字体缩放：${cfg.fontScale}")
+        }
+    }
+
+    /**
+     * 四条纯色色条，全部在 `onDraw` 里用 Canvas 填。
+     *
+     * 刻意**不**做任何依赖：不读主题、不用 drawable、不设圆角/阴影（那些走 RenderNode），
+     * 只调 `drawRect`。如果连这个都看不到，问题一定在窗口/合成层，而不是界面代码。
+     */
+    private class BarsView(ctx: Context) : View(ctx) {
+        private val bars = intArrayOf(
+            0xFFE0007A.toInt(), // 品红
+            0xFF00A8E8.toInt(), // 青
+            0xFFF5B800.toInt(), // 黄
+            0xFF17A34A.toInt(), // 绿
+        )
+        private val paint = Paint().apply { isAntiAlias = false }
+
+        init {
+            setBackgroundColor(BG)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(ctx, 40),
+            )
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            val step = width.toFloat() / bars.size
+            bars.forEachIndexed { i, color ->
+                paint.color = color
+                canvas.drawRect(i * step, 0f, (i + 1) * step, height.toFloat(), paint)
+            }
         }
     }
 
