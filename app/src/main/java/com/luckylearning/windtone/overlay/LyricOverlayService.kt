@@ -147,6 +147,9 @@ class LyricOverlayService : Service() {
     /** 已应用的窗口宽度百分比（v1.1.4）；-1 = 还没应用过 */
     private var appliedWidthPercent = -1
 
+    /** 已应用的底板档位（决定文字描边强度） */
+    private var appliedLegibility = Int.MIN_VALUE
+
     /** 已应用的「全屏高度」开关（v1.1.19）；-1 = 还没应用过 */
     private var appliedFullHeight = -1
 
@@ -807,6 +810,14 @@ class LyricOverlayService : Service() {
     private fun applyAppearance(prefs: Prefs) {
         val tv = lyricView ?: return
 
+        // 底板档位变了就重算一次文字的「可读性包」：无底板时文字直接压在任何画面上，
+        // 必须有更硬的描边，否则浅色文字落在浅色地图 / 泊车画面上就是一片糊（v1.1.25）。
+        val backdropNow = prefs.lyricOverlayBackdrop
+        if (appliedLegibility != backdropNow) {
+            appliedLegibility = backdropNow
+            applyTextLegibility(tv, backdropNow)
+        }
+
         // 全屏高度（v1.1.19）：窗口尺寸与位置改由屏幕决定，宽度百分比与行数两项
         // 在这个模式下不生效（值仍留在 Prefs 里，关掉全屏后照旧恢复）。
         val fullHeight = prefs.lyricOverlayFullHeight
@@ -897,6 +908,29 @@ class LyricOverlayService : Service() {
             // 标题跟着歌词一起对齐，否则「居左」时标题还悬在中间，看着像两个控件
             titleView?.gravity = alignGravity(align)
         }
+    }
+
+    /**
+     * 文字的可读性「包」（v1.1.25）。
+     *
+     * 为什么需要：选「无底板」时文字直接压在车机画面上 —— 泊车影像、浅色地图、
+     * 白底导航路口图都会把浅色歌词吃掉，真机反馈就是「无底板时歌词模糊」。
+     * 模糊的观感其实来自两件事叠加：
+     *  1. 投影半径 3dp + 下移 1dp 是个「柔光」，浅色字 + 柔光在浅底上边界全糊；
+     *  2. 上下句只有 42% 不透明度，压暗之后在浅底上直接看不见。
+     *
+     * 处理：无底板时改成**零位移 + 更紧的深色描边**（边界立刻变硬），
+     * 有底板时保持原来的柔光（底板已经给了对比度，再加深会显脏）。
+     */
+    private fun applyTextLegibility(tv: TextView, backdrop: Int) {
+        if (backdrop == BACKDROP_NONE) {
+            // 半径取 2dp：远小于字重，只加粗边缘而不会糊掉笔画之间的空隙
+            tv.setShadowLayer(dp(2).toFloat(), 0f, 0f, Color.argb(255, 0, 0, 0))
+        } else {
+            tv.setShadowLayer(dp(3).toFloat(), 0f, dp(1).toFloat(), Color.argb(220, 0, 0, 0))
+        }
+        // 描边变了必须重画：span 里的颜色没变，但字形渲染变了
+        lastRenderKey = ""
     }
 
     /**
@@ -1084,6 +1118,11 @@ class LyricOverlayService : Service() {
         } else {
             Prefs(this).lyricOverlayTextColor
         }
+        // 无底板时不能把上下句压到 42%：浅底（泊车影像 / 地图）上那就是一片雾。
+        // 底板本身提供的对比度没了，只能靠提高不透明度补回来（v1.1.25）。
+        val noBackdrop = Prefs(this).lyricOverlayBackdrop == BACKDROP_NONE
+        val contextAlpha = OverlayLegibility.contextAlpha(noBackdrop)
+        val translationAlpha = OverlayLegibility.translationAlpha(noBackdrop)
         return SpannableStringBuilder().apply {
             lines.forEachIndexed { index, line ->
                 if (index > 0) append("\n")
@@ -1110,7 +1149,7 @@ class LyricOverlayService : Service() {
                         setSpan(
                             ForegroundColorSpan(
                                 if (fullHeight) {
-                                    withAlpha(baseColor, FULL_CONTEXT_ALPHA)
+                                    withAlpha(baseColor, contextAlpha)
                                 } else {
                                     CONTEXT_TEXT_COLOR
                                 },
@@ -1132,7 +1171,7 @@ class LyricOverlayService : Service() {
                         setSpan(
                             ForegroundColorSpan(
                                 if (fullHeight) {
-                                    withAlpha(baseColor, FULL_TRANSLATION_ALPHA)
+                                    withAlpha(baseColor, translationAlpha)
                                 } else {
                                     CONTEXT_TEXT_COLOR
                                 },
@@ -1362,6 +1401,8 @@ class LyricOverlayService : Service() {
 
         /** 全屏模式：译文行的不透明度，比上下文略亮（播放页 0.8 × 0.8） */
         private const val FULL_TRANSLATION_ALPHA = 0xA0
+
+        // 无底板时的不透明度见 [OverlayLegibility]（抽出去是为了能被单测钉住）
 
         /** 全屏模式：译文行字号相对倍率（播放页 13 / 15.5 ≈ 0.84） */
         private const val FULL_TRANSLATION_SCALE = 0.84f

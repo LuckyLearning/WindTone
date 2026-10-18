@@ -398,7 +398,8 @@ internal fun SettingsLyricsPage(
         ActionRow(
             title = "悬浮歌词底板",
             subtitle = if (player.lyricOverlayBackdrop == 0) {
-                "无底板最干净，但亮色壁纸上白字可能看不清"
+                "无底板最干净；此时会自动给文字加一层深色描边、并提高上下句亮度，" +
+                    "浅色画面（泊车影像 / 地图）上也读得清"
             } else {
                 "垫一层底色，任何壁纸上都读得清"
             },

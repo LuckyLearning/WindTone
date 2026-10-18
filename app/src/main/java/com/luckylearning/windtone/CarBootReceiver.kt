@@ -4,7 +4,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import androidx.core.content.ContextCompat
 import com.luckylearning.windtone.data.BootAction
 import com.luckylearning.windtone.data.BootTrace
 import com.luckylearning.windtone.data.Prefs
@@ -35,10 +34,14 @@ class CarBootReceiver : BroadcastReceiver() {
         when (BootAction.decide(prefs.autoPlayOnBoot, prefs.carMode)) {
             BootAction.Kind.PLAY_IN_BACKGROUND -> runCatching {
                 BootTrace.mark(context, "boot:autoplay")
-                // 用 startForegroundService：媒体服务会在起播时自己贴通知。
-                // BOOT_COMPLETED 是系统允许「后台启动前台服务」的豁免场景。
-                ContextCompat.startForegroundService(
-                    context,
+                // ⚠️ 这里**必须用 startService 而不是 startForegroundService**。
+                // 用后者时系统要求 5 秒内调用 startForeground()，而「恢复队列」在冷启动的
+                // 车机上可能超过 5 秒（读库 + 建 MediaController），一旦超时就是
+                // 「Context.startForegroundService() did not then call Service.startForeground()」
+                // 的 ANR —— 2026-10-18 在模拟器上就是这样复现的（真机上更慢）。
+                // BOOT_COMPLETED 接收器自带临时白名单，允许直接 startService；
+                // 通知由 Media3 在真正起播时自己贴（它内部会调 startForeground）。
+                context.startService(
                     Intent(context, PlaybackService::class.java)
                         .setAction(PlaybackService.ACTION_AUTOPLAY),
                 )
