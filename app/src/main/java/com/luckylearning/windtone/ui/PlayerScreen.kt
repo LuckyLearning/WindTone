@@ -28,7 +28,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -290,7 +289,11 @@ fun PlayerScreen(
                     if (state.carMode) Modifier.fillMaxHeight() else Modifier.fillMaxSize()
                 )
                 .statusBarsPadding()
-                .navigationBarsPadding()
+                // ⚠️ 不加 navigationBarsPadding：宿主 MainScreen 已经让出过一次
+                // bottomSafe（系统导航栏与车机 Dock 取大值），这里再让一次就是
+                // **双重让位** —— 沉浸态的进度条 / 时间会悬在 Dock 上方一大截
+                // （2026-10-18 用户反馈「进度条及歌曲名应移到最下面」，模拟器实测撞上）。
+                // 顶部没有对应预留，statusBarsPadding 保留。
                 // 任意触摸（包括点按钮、拖进度条）都算「有操作」，回到完整界面并重新计时。
                 // 只观察不消费，所有既有手势（滑动切歌、拖动进度、点击按钮）保持原样。
                 // 注意：同一个手势会同时命中这里和子按钮的 onClick，但两者都只是把
@@ -317,7 +320,10 @@ fun PlayerScreen(
                 // 歌词本来就在宽屏上更好读，限宽反而把两侧留成大片空白。
                 .align(Alignment.Center)
                 .padding(horizontal = if (state.carMode) 40.dp else 20.dp)
-                .padding(top = 8.dp, bottom = 12.dp),
+                // 沉浸态贴底（用户 2026-10-18 反馈「进度条及歌曲名应移到最下面，
+                // 现在和 Dock 之间还有很大间隙」）：底部不留白，直接贴到 MainScreen
+                // 让出的 Dock 安全区上沿；完整态保留 12dp 呼吸感。
+                .padding(top = 8.dp, bottom = if (immersive) 0.dp else 12.dp),
         ) {
             // ------------------------------------------------------ 顶栏
             // 车载沉浸态收起：整条不参与测量，歌词区顺势向上占满。
@@ -422,91 +428,68 @@ fun PlayerScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Column(
-                    // v1.1.23：车机也占满剩余宽度 —— 控制键并进这一行后必须靠右排，
-                    // 否则歌名后面紧跟四个键、右侧空出大半屏，看着像没排完版。
-                    // 手机保持「标题占满 + 红心贴右」（与效果图 ⑫ 一致）。
-                    Modifier.weight(1f),
-                ) {
-                    Text(
-                        text = song?.title ?: "未在播放",
-                        // 车机：歌名 / 歌手各放大一档（22sp / 16sp），60~70cm 视距下读得清
-                        style = if (state.carMode) MaterialTheme.typography.headlineSmall
-                        else MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = song?.artistOrUnknown ?: "",
-                        style = if (state.carMode) MaterialTheme.typography.bodyLarge
-                        else MaterialTheme.typography.labelMedium,
-                        color = scheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                if (song != null) {
-                    IconButton(onClick = { onToggleFavorite(song); keepAwake() }) {
-                        Icon(
-                            imageVector = if (isFavorite) AppIcons.Favorite
-                            else AppIcons.FavoriteBorder,
-                            contentDescription = if (isFavorite) "取消收藏" else "收藏",
-                            tint = if (isFavorite) scheme.primary else scheme.onSurfaceVariant,
+                if (state.carMode) {
+                    // 车机（效果图 ⑫D）：红心**紧跟歌名/歌手**，不贴屏幕最右缘 ——
+                    // 驾驶时视线不用扫到边上（1.0.6 起的既定要求）。
+                    // v1.1.23 曾为「控制键并进这一行靠右」把标题列撑满整行、红心随之贴右；
+                    // 控制键已回到独立的三段式控制行（2026-10-18 用户反馈「应该居中」），
+                    // 这里一并改回紧跟式：标题按内容收缩（超长省略），红心紧随其后。
+                    Column(Modifier.weight(1f, fill = false)) {
+                        Text(
+                            text = song?.title ?: "未在播放",
+                            // 车机：歌名 / 歌手各放大一档（22sp / 16sp），60~70cm 视距下读得清
+                            style = if (state.carMode) MaterialTheme.typography.headlineSmall
+                            else MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = song?.artistOrUnknown ?: "",
+                            style = if (state.carMode) MaterialTheme.typography.bodyLarge
+                            else MaterialTheme.typography.labelMedium,
+                            color = scheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
-                }
-                // 车机（v1.1.23）：控制键并进这一行，不再单独占一整行。
-                // 原来那排要 112dp+间距，歌词区被压矮；用户的要求原话是
-                // 「不要播放按钮的占高度」。沉浸态照旧收起（只留歌名 + 进度）。
-                if (state.carMode && !immersive) {
-                    IconButton(
-                        onClick = { onPrevious(); keepAwake() },
-                        modifier = Modifier.size(CAR_SIDE_BUTTON),
-                    ) {
-                        Icon(
-                            imageVector = AppIcons.SkipPrevious,
-                            contentDescription = "上一首",
-                            tint = scheme.onSurface,
-                            modifier = Modifier.size(36.dp),
+                    if (song != null) {
+                        IconButton(onClick = { onToggleFavorite(song); keepAwake() }) {
+                            Icon(
+                                imageVector = if (isFavorite) AppIcons.Favorite
+                                else AppIcons.FavoriteBorder,
+                                contentDescription = if (isFavorite) "取消收藏" else "收藏",
+                                tint = if (isFavorite) scheme.primary else scheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                } else {
+                    // 手机：标题占满 + 红心贴右（效果图 ⑫）。
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = song?.title ?: "未在播放",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = song?.artistOrUnknown ?: "",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = scheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    FilledIconButton(
-                        onClick = { onToggle(); keepAwake() },
-                        shape = CircleShape,
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = scheme.primary,
-                            contentColor = scheme.onPrimary,
-                        ),
-                        modifier = Modifier.size(CAR_MAIN_BUTTON),
-                    ) {
-                        Icon(
-                            imageVector = if (state.isPlaying) AppIcons.Pause else Icons.Filled.PlayArrow,
-                            contentDescription = if (state.isPlaying) "暂停" else "播放",
-                            modifier = Modifier.size(40.dp),
-                        )
-                    }
-                    IconButton(
-                        onClick = { onNext(); keepAwake() },
-                        modifier = Modifier.size(CAR_SIDE_BUTTON),
-                    ) {
-                        Icon(
-                            imageVector = AppIcons.SkipNext,
-                            contentDescription = "下一首",
-                            tint = scheme.onSurface,
-                            modifier = Modifier.size(36.dp),
-                        )
-                    }
-                    IconButton(
-                        onClick = { keepAwake(); onShowQueue() },
-                        modifier = Modifier.size(CAR_SECONDARY_BUTTON),
-                    ) {
-                        Icon(
-                            imageVector = AppIcons.QueueMusic,
-                            contentDescription = "播放队列",
-                            tint = scheme.onSurface,
-                            modifier = Modifier.size(32.dp),
-                        )
+                    if (song != null) {
+                        IconButton(onClick = { onToggleFavorite(song); keepAwake() }) {
+                            Icon(
+                                imageVector = if (isFavorite) AppIcons.Favorite
+                                else AppIcons.FavoriteBorder,
+                                contentDescription = if (isFavorite) "取消收藏" else "收藏",
+                                tint = if (isFavorite) scheme.primary else scheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }
@@ -529,12 +512,17 @@ fun PlayerScreen(
                 TimeLabel(progressState, durationFallback, showPosition = false)
             }
 
-            Spacer(Modifier.height(4.dp))
+            // 与下方控制行的间隔只在完整态需要；沉浸态控制行不渲染，
+            // 这 4dp 会变成时间行与 Dock 之间的悬空感（同上条反馈），一并去掉。
+            if (!immersive) Spacer(Modifier.height(4.dp))
 
             // ------------------------------------------------------ 控制区
-            // 车载沉浸态整块收起（与顶栏同一开关，见文件头的沉浸态说明）；
-            // 车机非沉浸态也已把控制键并进歌名行，这里只服务手机版式。
-            if (!immersive && !state.carMode) {
+            // 车载沉浸态整块收起（与顶栏同一开关，见文件头的沉浸态说明）。
+            // v1.1.23 曾把车机控制键并进歌名行靠右排（省一整行高度），
+            // 用户 2026-10-18 反馈「播放按钮及上一曲下一曲等按钮应该居中，不应该居右」
+            // → 恢复独立三段式控制行：播放模式左槽 / ⏮ ⏯ ⏭ 居中 / 队列右槽，
+            // 与手机同一套结构，只是尺寸放大（车机尺寸分支保留至今）。
+            if (!immersive) {
                 // 三段式布局：左右两个等宽槽位夹住中间的「上一首 / 播放 / 下一首」，
                 // 保证主控按钮绝对居中；播放模式固定在左槽，不再把整排按钮挤偏。
                 Row(

@@ -1,0 +1,21 @@
+<!--
+    覆盖 media3-session 自带的同名图标（app 模块资源优先于库资源）。
+
+    为什么覆盖：media3 1.4.1 的图标用 viewport 960 的绝对坐标路径，而比亚迪车机的
+    渲染链把其中个别图标（上一曲 / 暂停）画成了扭曲残缺的形状（2026-10-18 真机上
+    「上一曲乱码」，用户上报）。这里换成 viewport 24 的常规写法（逐点等价缩放），
+    通知 / 车机系统媒体卡片 / 蓝牙界面取到的都是这份。
+
+    命名规则：名字必须与库里的一致（CommandButton 按资源名 getIdentifier 解析），
+    只覆盖默认媒体通知实际会用到的播放控制五个；几何与原版逐点等价（960 → 24 缩 40 倍）。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <!-- 上一曲：左竖条 + 左指三角（media3_icon_previous 等价缩放） -->
+  <path
+      android:fillColor="@android:color/white"
+      android:pathData="M5.5 18L5.5 6L7.5 6L7.5 18Z M9.5 12L18.5 18L18.5 6Z"/>
+</vector>

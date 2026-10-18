@@ -26,11 +26,16 @@ object AppIcons {
             )
         }.build()
 
-    val Pause: ImageVector by lazy { build("Pause", "M6 19h4V5H6v14zm8-14v14h4V5h-4z") }
+    // ⚠️ 三个播放控制图标一律用**绝对坐标**、多子路径用「Z M」分开写（大写 M）。
+    // 最初沿用的 Material 写法里子路径开头是小写相对 m（如 `zM3.5 6…`），
+    // 比亚迪车机的渲染链（HWUI/GPU 驱动路径合成）把这种「closepath 后接相对 moveto」
+    // 的多子路径画成了扭曲残缺的形状（上一曲在真机上乱码，2026-10-18 用户上报），
+    // 同语法的 SkipNext 却正常 —— 手机端无差别。改写为全绝对坐标后形状逐点等价。
+    val Pause: ImageVector by lazy { build("Pause", "M6 19L10 19L10 5L6 5Z M14 5L18 5L18 19L14 19Z") }
 
-    val SkipNext: ImageVector by lazy { build("SkipNext", "M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z") }
+    val SkipNext: ImageVector by lazy { build("SkipNext", "M6 18L14.5 12L6 6Z M16 6L18 6L18 18L16 18Z") }
 
-    val SkipPrevious: ImageVector by lazy { build("SkipPrevious", "M6 6h2v12H6zm3.5 6l8.5 6V6z") }
+    val SkipPrevious: ImageVector by lazy { build("SkipPrevious", "M6 6L8 6L8 18L6 18Z M9.5 12L18 18L18 6Z") }
 
     val Shuffle: ImageVector by lazy {
         build(

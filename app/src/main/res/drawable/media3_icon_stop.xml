@@ -1,0 +1,12 @@
+<!-- 覆盖 media3_icon_stop（几何等价缩放），缘由见 media3_icon_previous.xml。
+     API < 33 时默认媒体通知会补一颗「停止」键，车机（Android 12）会走到它。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <!-- 停止：实心方块 -->
+  <path
+      android:fillColor="@android:color/white"
+      android:pathData="M6 18L6 6L18 6L18 18Z"/>
+</vector>
