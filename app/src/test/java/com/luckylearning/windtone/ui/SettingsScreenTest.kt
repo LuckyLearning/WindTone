@@ -101,6 +101,7 @@ class SettingsScreenTest {
                     onPitch = {},
                     onSkipSilence = {},
                     onAutoResume = onAutoResume,
+                    onAutoPlayOnBoot = {},
                     onClearStats = {},
                     maintenance = null,
                     onRefreshMaintenance = {},

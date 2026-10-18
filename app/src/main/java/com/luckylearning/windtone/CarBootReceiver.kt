@@ -4,39 +4,59 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import androidx.core.content.ContextCompat
+import com.luckylearning.windtone.data.BootAction
+import com.luckylearning.windtone.data.BootTrace
 import com.luckylearning.windtone.data.Prefs
+import com.luckylearning.windtone.playback.PlaybackService
 
 /**
- * 车载模式开机自启。
+ * 开机自启。
  *
- * 场景：比亚迪 DiLink 车机每次上电都会走一遍完整的开机流程，
- * 上次会话里开着的第三方 App 不会被系统自动拉起。开着「车载模式」的用户
- * 显然希望上车通电就进播放页（歌词悬浮窗、媒体控制都随主界面就绪），
- * 这个 Receiver 就是补上这一环。
+ * 两种形态，由 [BootAction.decide] 决定（纯函数、有单测）：
  *
- * 行为约束：
- *  - **只在车载模式开启时动作**。关闭时收到广播直接返回，手机用户零打扰；
- *  - 用 `FLAG_ACTIVITY_NEW_TASK` 拉主界面——Receiver 环境里没有 Activity 栈；
- *  - 广播处理必须在 10 秒内返回，所以只做「读一个布尔 + startActivity」，
- *    不碰数据库、不起服务（播放链路由主界面启动后按需拉起）。
+ *  1. **后台播放**（v1.1.24，设置里「开机后台播放」）：只把 [PlaybackService] 拉起来，
+ *     服务自己从数据库恢复上次队列并起播，**不打开主界面**。车机用户要的是
+ *     「上车通电就有歌」，弹一个全屏界面会挡住导航和桌面 —— 2026-10-18 用户原话
+ *     「可以增强为开机自启后后台自启播放，不打开主页面吗」。
+ *  2. **打开主界面**（车载模式的老行为）：`ACTION_BOOT_COMPLETED` 属于系统列出的
+ *     「可从后台启动 Activity」豁免场景，车机 ROM 通常也放行。
  *
- * 关于后台启动限制：`ACTION_BOOT_COMPLETED` 属于系统文档明确列出的
- * 「可从后台启动 Activity」的豁免场景；DiLink 等车机 ROM 对此也更宽松。
- * 若个别 ROM 拦截，用户从桌面图标点开即可，不影响其他功能。
+ * 广播处理必须在 10 秒内返回，所以这里只做「读两个布尔 + 一次 startService」，
+ * 数据库与播放链路都在服务里异步做。
  */
 class CarBootReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action ?: return
         if (action != Intent.ACTION_BOOT_COMPLETED && action != "android.intent.action.QUICKBOOT_POWERON") return
-        if (!Prefs(context).carMode) return
-        runCatching {
-            context.startActivity(
-                Intent(context, MainActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                },
-            )
-        }.onFailure { Log.w(TAG, "开机自启失败", it) }
+
+        val prefs = Prefs(context)
+        when (BootAction.decide(prefs.autoPlayOnBoot, prefs.carMode)) {
+            BootAction.Kind.PLAY_IN_BACKGROUND -> runCatching {
+                BootTrace.mark(context, "boot:autoplay")
+                // 用 startForegroundService：媒体服务会在起播时自己贴通知。
+                // BOOT_COMPLETED 是系统允许「后台启动前台服务」的豁免场景。
+                ContextCompat.startForegroundService(
+                    context,
+                    Intent(context, PlaybackService::class.java)
+                        .setAction(PlaybackService.ACTION_AUTOPLAY),
+                )
+            }.onFailure {
+                Log.w(TAG, "开机后台播放启动失败", it)
+                BootTrace.mark(context, "boot:autoplay-failed")
+            }
+
+            BootAction.Kind.OPEN_UI -> runCatching {
+                context.startActivity(
+                    Intent(context, MainActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    },
+                )
+            }.onFailure { Log.w(TAG, "开机自启失败", it) }
+
+            BootAction.Kind.NONE -> Unit
+        }
     }
 
     private companion object {

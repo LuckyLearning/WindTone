@@ -56,6 +56,8 @@ object SettingsDefaults {
     const val LYRIC_SCALE = 1.0f
     /** 点击歌词行是否跳转进度：默认关闭（拖动歌词找人声段落时误跳很烦） */
     const val LYRIC_TAP_SEEKS = false
+    /** 开机后台自启播放：默认关（要用户明确打开，避免一上车就突然出声） */
+    const val AUTO_PLAY_ON_BOOT = false
 
     /**
      * 双语歌词显示模式（v1.1.18）：0 中英都显示 / 1 只显示中文 / 2 只显示英文。
@@ -253,6 +255,17 @@ class Prefs(context: Context) {
     var libraryView: String
         get() = sp.getString(KEY_VIEW, "SONGS").orEmpty()
         set(value) = sp.edit().putString(KEY_VIEW, value).apply()
+
+    /**
+     * 开机后台自启播放（v1.1.24，默认关）。
+     *
+     * 打开后：开机广播里**不打开主界面**，只把播放服务拉起来，从数据库恢复上次队列并直接起播。
+     * 车机场景的诉求是「上车通电就有歌」，而弹一个全屏界面会挡住导航 / 桌面。
+     * 与「车载模式 + 启动直进播放页」的区别就在这里：那条要界面，这条不要。
+     */
+    var autoPlayOnBoot: Boolean
+        get() = sp.getBoolean(KEY_AUTO_PLAY_ON_BOOT, SettingsDefaults.AUTO_PLAY_ON_BOOT)
+        set(value) = sp.edit().putBoolean(KEY_AUTO_PLAY_ON_BOOT, value).apply()
 
     /**
      * 点击歌词行是否跳转到那一句（默认**关闭**，2026-10-18 用户要求）。
@@ -611,6 +624,7 @@ class Prefs(context: Context) {
         const val KEY_VIEW = "library_view"
         const val KEY_LYRIC_SCALE = "lyric_scale"
         const val KEY_LYRIC_TAP_SEEKS = "lyric_tap_seeks"
+        const val KEY_AUTO_PLAY_ON_BOOT = "auto_play_on_boot"
         const val KEY_LYRIC_BILINGUAL = "lyric_bilingual_mode"
         // ⚠️ 逐字歌词移除后（v1.1.8）有三个键不再读写：`lyric_word_by_word` /
         //    `lyric_sung_color` / `lyric_overlay_sung_color`。它们仍留在老用户的

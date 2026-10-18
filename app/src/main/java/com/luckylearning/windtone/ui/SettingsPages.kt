@@ -230,6 +230,8 @@ internal fun SettingsPlaybackPage(
     onPitch: (Int) -> Unit,
     onSkipSilence: (Boolean) -> Unit,
     onAutoResume: (Boolean) -> Unit,
+    /** 开机后台起播（v1.1.24） */
+    onAutoPlayOnBoot: (Boolean) -> Unit,
 ) {
     var showEq by remember { mutableStateOf(false) }
 
@@ -269,6 +271,21 @@ internal fun SettingsPlaybackPage(
         onCheckedChange = onAutoResume,
         onReset = resetAction(player.autoResume != SettingsDefaults.AUTO_RESUME) {
             onAutoResume(SettingsDefaults.AUTO_RESUME)
+        },
+    )
+    // 开机自启（v1.1.24）：车机上「通电就播」但不弹界面。
+    // 放在这里而不是「外观 → 车载」，因为它是播放行为，跟车载模式是否打开无关。
+    SwitchRow(
+        title = "开机后台播放",
+        subtitle = if (player.autoPlayOnBoot) {
+            "开机后在后台恢复上次队列并直接播放，不打开主界面（需要系统「开机启动」权限）"
+        } else {
+            "关闭时开机不做任何播放入口动作；打开后上车通电即续播，且不弹界面"
+        },
+        checked = player.autoPlayOnBoot,
+        onCheckedChange = onAutoPlayOnBoot,
+        onReset = resetAction(player.autoPlayOnBoot != SettingsDefaults.AUTO_PLAY_ON_BOOT) {
+            onAutoPlayOnBoot(SettingsDefaults.AUTO_PLAY_ON_BOOT)
         },
     )
     SwitchRow(

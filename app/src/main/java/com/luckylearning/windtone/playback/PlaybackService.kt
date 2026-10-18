@@ -296,7 +296,26 @@ class PlaybackService : MediaLibraryService() {
         super.onDestroy()
     }
 
+    /**
+     * 开机广播专用的动作（v1.1.24）：后台恢复上次队列并起播，不涉及任何界面。
+     *
+     * 为什么走 `onStartCommand` 而不是在 Receiver 里直接操作播放器：
+     * Receiver 的存活时间只有 10 秒且没有保活，恢复队列要读数据库、建 MediaController；
+     * 交给服务做，链路与「用户在界面上点播放」完全一致，出问题也只在同一处。
+     */
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_AUTOPLAY) {
+            runCatching {
+                (application as MusicApp).container.playback.startPlaybackInBackground()
+            }.onFailure { Log.w(TAG, "开机后台播放启动失败", it) }
+        }
+        return super.onStartCommand(intent, flags, startId)
+    }
+
     companion object {
         private const val TAG = "WindToneBrowse"
+
+        /** 开机后台起播（见 [onStartCommand]） */
+        const val ACTION_AUTOPLAY = "com.luckylearning.windtone.action.AUTOPLAY"
     }
 }

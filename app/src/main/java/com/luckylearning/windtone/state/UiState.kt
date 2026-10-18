@@ -362,6 +362,8 @@ data class PlayerUiState(
      * 冷启动恢复队列那一刻（见 `PlaybackEngine.restoreQueueIfNeeded`）。
      */
     val autoResume: Boolean = SettingsDefaults.AUTO_RESUME,
+    /** 开机后台起播（v1.1.24，默认关） */
+    val autoPlayOnBoot: Boolean = SettingsDefaults.AUTO_PLAY_ON_BOOT,
 )
 
 /** 播放队列条目（队列抽屉用） */

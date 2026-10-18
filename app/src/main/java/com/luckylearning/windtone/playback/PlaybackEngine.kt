@@ -20,6 +20,7 @@ import com.luckylearning.windtone.data.db.ListenLogEntity
 import com.luckylearning.windtone.data.db.MusicDb
 import com.luckylearning.windtone.data.db.PlayerStateEntity
 import com.luckylearning.windtone.data.db.QueueSongEntity
+import com.luckylearning.windtone.data.db.toSong
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.lyrics.BilingualLyrics
 import com.luckylearning.windtone.lyrics.BilingualMode
@@ -103,6 +104,7 @@ class PlaybackEngine(
             pitchSemitones = prefs.playbackPitchSemitones,
             skipSilence = prefs.skipSilence,
             autoResume = prefs.autoResume,
+            autoPlayOnBoot = prefs.autoPlayOnBoot,
         )
     )
     val player: StateFlow<PlayerUiState> = _player.asStateFlow()
@@ -135,6 +137,8 @@ class PlaybackEngine(
     private var artworkJob: Job? = null
     private var positionJob: Job? = null
     private var previewJob: Job? = null
+    /** 本次恢复是否**强制**起播（开机后台播放用；不受「打开应用继续上次播放」开关限制） */
+    private var forceAutoplayOnRestore = false
     private var currentLyricsSong: String? = null
 
     /**
@@ -475,6 +479,49 @@ class PlaybackEngine(
         }
     }
 
+    /**
+     * 开机后台起播（v1.1.24）：不经界面，把上次队列摆上并**直接开播**。
+     *
+     * 与 [restoreQueueIfNeeded] 的差别只有两点：
+     *  - 曲库通常还没被界面推过来（开机时界面根本没建），所以先从数据库读一次；
+     *  - 起播不看「打开应用继续上次播放」（那条开关的语义是「点开 App 时」），
+     *    开机自启本身就是用户明确要求「通电就播」。用 [forceAutoplayOnRestore] 表达。
+     *
+     * 兜底再播一次：部分车机在 `setMediaItems` 后立刻 `play()` 会被忽略
+     * （音频设备还没初始化完），等 800ms 再确认一遍能救回这一类。
+     */
+    override fun startPlaybackInBackground() {
+        scope.launch {
+            val songs = withContext(Dispatchers.IO) {
+                runCatching {
+                    val states = db.songStateDao().all().associateBy { it.songId }
+                    db.songDao().visible().mapNotNull { it.toSong(states[it.id]) }
+                }.getOrDefault(emptyList())
+            }
+            if (songs.isEmpty()) {
+                Log.i(TAG, "开机后台播放：曲库为空，放弃")
+                return@launch
+            }
+            if (librarySongs.isEmpty()) setLibrarySongs(songs)
+
+            forceAutoplayOnRestore = true
+            try {
+                restoreQueue()
+            } finally {
+                forceAutoplayOnRestore = false
+            }
+
+            delay(800)
+            val c = controller ?: return@launch
+            if (!c.isPlaying && c.mediaItemCount > 0) {
+                applyPlaybackParams(c)
+                PlayerHandle.setSkipSilence(prefs.skipSilence)
+                c.play()
+                Log.i(TAG, "开机后台播放：补一次 play()")
+            }
+        }
+    }
+
     /** [restoreQueueIfNeeded] 的实际工作体；成功恢复后置 [queueRestored]。 */
     private suspend fun restoreQueue() {
         val c = ensureController() ?: return
@@ -559,7 +606,9 @@ class PlaybackEngine(
      * 用户听到的就是「1.0x 的这首歌在 1.5x 的偏好下播」，且没有任何界面动作能纠正它。
      */
     private fun resumeIfWanted(c: MediaController) {
-        if (!shouldAutoResume(prefs.autoResume, c.mediaItemCount, c.isPlaying)) return
+        if (!forceAutoplayOnRestore &&
+            !shouldAutoResume(prefs.autoResume, c.mediaItemCount, c.isPlaying)
+        ) return
         applyPlaybackParams(c)
         PlayerHandle.setSkipSilence(prefs.skipSilence)
         c.play()
@@ -873,6 +922,12 @@ class PlaybackEngine(
      * 只落盘、不立即起播：这个开关描述的是**下次冷启动**的行为，
      * 用户此刻正在听的那首歌不该因为拨了一下开关就跳位置。
      */
+    /** 开机后台起播（v1.1.24）：只落盘 + 更新界面状态，实际动作在开机广播里 */
+    override fun setAutoPlayOnBoot(enabled: Boolean) {
+        prefs.autoPlayOnBoot = enabled
+        _player.update { it.copy(autoPlayOnBoot = enabled) }
+    }
+
     override fun setAutoResume(enabled: Boolean) {
         prefs.autoResume = enabled
         _player.update { it.copy(autoResume = enabled) }
@@ -1565,6 +1620,9 @@ class PlaybackEngine(
  */
 interface PlayerActions {
     fun restoreQueueIfNeeded()
+
+    /** 开机后台起播：不经界面恢复上次队列并直接开播（v1.1.24） */
+    fun startPlaybackInBackground()
     fun playQueue(queue: List<Song>, startIndex: Int)
 
     /** 随机播放一整批歌（先切成「随机 + 列表循环」再起播），见 [PlaybackEngine.playShuffled] */
@@ -1594,6 +1652,9 @@ interface PlayerActions {
 
     /** 「打开应用继续上次播放」：冷启动恢复队列后是否自动起播（v1.1.16） */
     fun setAutoResume(enabled: Boolean)
+
+    /** 开机后台起播（默认关） */
+    fun setAutoPlayOnBoot(enabled: Boolean)
     fun openPlayer()
     fun closePlayer()
     fun setLyricOffset(deltaMs: Int)

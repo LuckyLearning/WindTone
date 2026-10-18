@@ -178,10 +178,12 @@
           这类厂商广播表示「上电完成」）。内部会再检查一次车载模式开关，
           关着就静默返回——手机用户不会被打扰。
         -->
+        <!-- exported 必须是 true：BOOT_COMPLETED 的发送方是系统进程，
+             写成 false 时系统广播根本不会送达，表现就是「开关打开了但开机没反应」。 -->
         <receiver
             android:name=".CarBootReceiver"
             android:enabled="true"
-            android:exported="false">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />

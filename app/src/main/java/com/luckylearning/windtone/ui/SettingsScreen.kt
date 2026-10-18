@@ -168,6 +168,8 @@ fun SettingsScreen(
     onSkipSilence: (Boolean) -> Unit,
     /** 「打开应用继续上次播放」：冷启动恢复队列后是否自动起播 —— v1.1.16 */
     onAutoResume: (Boolean) -> Unit,
+    /** 开机后台起播（v1.1.24） */
+    onAutoPlayOnBoot: (Boolean) -> Unit,
     onClearStats: () -> Unit,
     maintenance: DataMaintenance.Report?,
     onRefreshMaintenance: () -> Unit,
@@ -307,6 +309,7 @@ fun SettingsScreen(
                         onPitch = onPitch,
                         onSkipSilence = onSkipSilence,
                         onAutoResume = onAutoResume,
+                        onAutoPlayOnBoot = onAutoPlayOnBoot,
                     )
 
                     SettingsPage.LYRICS -> SettingsLyricsPage(
