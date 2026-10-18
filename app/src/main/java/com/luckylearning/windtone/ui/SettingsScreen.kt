@@ -137,6 +137,8 @@ fun SettingsScreen(
     onDynamicTheme: (Boolean) -> Unit,
     onCarMode: (Boolean) -> Unit,
     onLyricOverlay: (Boolean) -> Unit,
+    /** 立刻走一次「开机后台起播」（v1.1.27，诊断页用） */
+    onTestBootPlayback: () -> Unit,
     onLyricOverlayLines: (Int) -> Unit,
     /** 悬浮歌词全屏高度（v1.1.19） */
     onLyricOverlayFullHeight: (Boolean) -> Unit,
@@ -366,6 +368,7 @@ fun SettingsScreen(
                         onClearCrashLog = onClearCrashLog,
                         onOverlayPreview = onOverlayPreview,
                         onLyricOverlay = onLyricOverlay,
+                        onTestBootPlayback = onTestBootPlayback,
                     )
 
                     SettingsPage.UPDATE -> SettingsUpdatePage(

@@ -8,6 +8,7 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import com.luckylearning.windtone.data.AudioInspector
+import com.luckylearning.windtone.data.BootStatus
 import com.luckylearning.windtone.data.CoverRepository
 import com.luckylearning.windtone.data.HOUR_MS
 import com.luckylearning.windtone.data.LyricsLoader
@@ -139,6 +140,12 @@ class PlaybackEngine(
     private var previewJob: Job? = null
     /** 本次恢复是否**强制**起播（开机后台播放用；不受「打开应用继续上次播放」开关限制） */
     private var forceAutoplayOnRestore = false
+
+    /** 开机起播的重试节奏（毫秒）：首试立刻，之后 4s / 10s 各补一次 */
+    private val BOOT_RETRY_DELAYS = longArrayOf(0L, 4_000L, 10_000L)
+
+    /** `play()` 之后等多久再确认「真的播起来了」—— 车机音频链路起振慢，800ms 常不够 */
+    private val BOOT_PLAY_CONFIRM_MS = 1_200L
     private var currentLyricsSong: String? = null
 
     /**
@@ -492,35 +499,91 @@ class PlaybackEngine(
      */
     override fun startPlaybackInBackground() {
         scope.launch {
-            val songs = withContext(Dispatchers.IO) {
-                runCatching {
-                    val states = db.songStateDao().all().associateBy { it.songId }
-                    db.songDao().visible().mapNotNull { it.toSong(states[it.id]) }
-                }.getOrDefault(emptyList())
+            // 开机这一路有**三个竞速**，任何一个没赢都会静默失败：
+            //  ① `MediaController` 还没连上（服务刚起，绑定是异步的）；
+            //  ② 曲库还没从数据库读出来（冷启动时 IO 最慢）；
+            //  ③ 音频设备还没就绪，`play()` 被 HAL 吞掉（车机最常见）。
+            // 一次不成就放弃的话，用户看到的就是「开关打开了，开机没反应」。
+            // 所以按 0s / 4s / 10s 三次重试 —— 三次的总时长仍在 20 秒内，
+            // 不会让「开机没播」变成「开机十几秒后才突然出声」这种更糟的体验。
+            var lastReason = ""
+            for ((attempt, waitMs) in BOOT_RETRY_DELAYS.withIndex()) {
+                if (waitMs > 0) delay(waitMs)
+                val result = runCatching { attemptBootPlayback() }
+                    .getOrElse {
+                        BootAttempt(it.javaClass.simpleName + ": " + (it.message ?: ""))
+                    }
+                if (result.failure == null) {
+                    val note = listOf(
+                        result.note,
+                        if (attempt > 0) "第 ${attempt + 1} 次尝试成功" else "",
+                    ).filter { it.isNotBlank() }.joinToString("；")
+                    BootStatus.markResult(app, true, note)
+                    return@launch
+                }
+                lastReason = result.failure
+                Log.i(TAG, "开机后台播放：第 ${attempt + 1} 次未成功（${result.failure}）")
             }
-            if (songs.isEmpty()) {
-                Log.i(TAG, "开机后台播放：曲库为空，放弃")
-                return@launch
-            }
-            if (librarySongs.isEmpty()) setLibrarySongs(songs)
-
-            forceAutoplayOnRestore = true
-            try {
-                restoreQueue()
-            } finally {
-                forceAutoplayOnRestore = false
-            }
-
-            delay(800)
-            val c = controller ?: return@launch
-            if (!c.isPlaying && c.mediaItemCount > 0) {
-                applyPlaybackParams(c)
-                PlayerHandle.setSkipSilence(prefs.skipSilence)
-                c.play()
-                Log.i(TAG, "开机后台播放：补一次 play()")
-            }
+            BootStatus.markResult(app, false, lastReason)
         }
     }
+
+    /**
+     * 一次完整的开机起播尝试。返回 `null` 表示成功，否则返回**人话原因**。
+     *
+     * 之所以把原因当返回值而不是抛异常：这些原因最终要出现在设置页的诊断卡上
+     * （用户没法接 adb，只能靠界面告诉他断在哪一环），异常类型对他的价值是零。
+     */
+    private suspend fun attemptBootPlayback(): BootAttempt {
+        val songs = withContext(Dispatchers.IO) {
+            runCatching {
+                val states = db.songStateDao().all().associateBy { it.songId }
+                db.songDao().visible().mapNotNull { it.toSong(states[it.id]) }
+            }.getOrNull()
+        } ?: return BootAttempt("读曲库失败（数据库还没就绪）")
+        if (songs.isEmpty()) {
+            return BootAttempt("曲库是空的（可能还没扫描完，或歌曲都在未挂载的存储上）")
+        }
+        if (librarySongs.isEmpty()) setLibrarySongs(songs)
+
+        forceAutoplayOnRestore = true
+        try {
+            restoreQueue()
+        } finally {
+            forceAutoplayOnRestore = false
+        }
+
+        val c = controller ?: return BootAttempt("播放服务还没连上")
+        // 从没播过任何东西的机器（刚装好就打开「开机后台播放」）：没有队列也没有
+        // 「上次那一首」，恢复无从谈起。但用户要的是「通电就有歌」——此时退化成
+        // 「从曲库第一首开始」比什么都不做合理；否则新装机的第一次开机永远是
+        // 「未起播」，而用户根本不知道该先手动播一次。
+        var note = ""
+        if (c.mediaItemCount == 0) {
+            currentQueue = songs
+            c.setMediaItems(songs.map { PlaybackConnection.toMediaItem(it) }, 0, 0L)
+            c.prepare()
+            syncCurrentSong(force = true)
+            note = "从曲库第一首开始（之前没有播放记录）"
+        }
+
+        applyPlaybackParams(c)
+        PlayerHandle.setSkipSilence(prefs.skipSilence)
+        if (!c.isPlaying) c.play()
+        delay(BOOT_PLAY_CONFIRM_MS)
+
+        val c2 = controller ?: return BootAttempt("播放会话中途断开")
+        // IDLE 在 Media3 里表示「没有可播的内容 / 解码器没建起来」，
+        // 与「正在缓冲」是两回事 —— 文件所在 U 盘还没挂载完就是这一档。
+        if (c2.playbackState == Player.STATE_IDLE) {
+            return BootAttempt("播放器没接受这首歌（存储可能还没挂载完）")
+        }
+        if (!c2.playWhenReady) return BootAttempt("起播被系统拒绝（音频焦点被别的应用占着？）")
+        return BootAttempt(failure = null, note = note)
+    }
+
+    /** 一次开机起播的结果：[failure] 为 `null` 表示成功，[note] 是成功时的补充说明 */
+    private data class BootAttempt(val failure: String?, val note: String = "")
 
     /** [restoreQueueIfNeeded] 的实际工作体；成功恢复后置 [queueRestored]。 */
     private suspend fun restoreQueue() {

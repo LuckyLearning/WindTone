@@ -92,6 +92,7 @@ class SettingsScreenTest {
                     onLyricOverlayTextColor = onLyricOverlayTextColor,
                     onOverlayEditing = {},
                     onOverlayPreview = {},
+                    onTestBootPlayback = {},
                     canDrawOverlay = false,
                     overlayHealth = LyricOverlayBus.Health(),
                     onLyricScale = onLyricScale,

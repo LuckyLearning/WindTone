@@ -663,6 +663,7 @@ fun MainScreen(
                     onDynamicTheme = { dynamicThemeOn = it; playerVm.setDynamicTheme(it) },
                     onCarMode = playerVm::setCarMode,
                     onLyricOverlay = playerVm::setLyricOverlay,
+                    onTestBootPlayback = playerVm::startPlaybackInBackground,
                     onLyricOverlayLines = playerVm::setLyricOverlayLines,
                     onLyricOverlayFullHeight = playerVm::setLyricOverlayFullHeight,
                     onLyricOverlayFullWidthPercent = playerVm::setLyricOverlayFullWidthPercent,

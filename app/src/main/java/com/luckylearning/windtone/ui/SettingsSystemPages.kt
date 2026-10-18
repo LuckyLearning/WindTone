@@ -1,6 +1,9 @@
 package com.luckylearning.windtone.ui
 
 import android.content.Context
+import android.widget.Toast
+import com.luckylearning.windtone.data.BootStatus
+import com.luckylearning.windtone.data.BootStatusText
 import com.luckylearning.windtone.data.DataMaintenance
 import com.luckylearning.windtone.data.DownloadRoute
 import com.luckylearning.windtone.data.SettingsDefaults
@@ -123,6 +126,8 @@ internal fun SettingsDiagnosticsPage(
     onClearCrashLog: () -> Unit,
     onOverlayPreview: () -> Unit,
     onLyricOverlay: (Boolean) -> Unit,
+    /** 立刻走一次「开机后台起播」链路（v1.1.27，用于不重启也能验一遍） */
+    onTestBootPlayback: () -> Unit,
 ) {
     val context = LocalContext.current
     val version = remember {
@@ -141,7 +146,51 @@ internal fun SettingsDiagnosticsPage(
     var showResetDataConfirm by remember { mutableStateOf(false) }
     // 清空曲库（与「清空全部用户数据」方向相反，同样不可撤销）
     var showResetLibraryConfirm by remember { mutableStateOf(false) }
+    // 开机自启的落盘证据（v1.1.27）：进页面读一次，随时可手动刷新
+    var bootInfo by remember { mutableStateOf<BootStatus.Snapshot?>(null) }
+    LaunchedEffect(Unit) { bootInfo = BootStatus.snapshot(context) }
 
+
+    // ------------------------------------------------ 开机自启
+    // 这条链路只有真车能验（开机广播是系统保护广播，adb 发不出去），而失败表现
+    // 全是「开机后什么都没发生」。所以把广播是否到达、决策是什么、起播结果原样摆出来 ——
+    // 用户看一眼就能知道是「系统没给广播」还是「给了但没播起来」。
+    SectionTitle("开机自启")
+    val boot = bootInfo
+    StatCard(
+        rows = listOf(
+            "开关" to if (player.autoPlayOnBoot) {
+                "已打开（开机后台起播，不弹界面）"
+            } else {
+                "关闭"
+            },
+            "上次开机广播" to if (boot == null || !boot.received) {
+                "从未收到"
+            } else {
+                BootStatusText.agoLabel(System.currentTimeMillis(), boot.atMillis)
+            },
+            "决策" to (if (boot == null) "—" else BootStatusText.actionLabel(boot.action)),
+            "结果" to (if (boot == null) "—" else BootStatusText.resultLabel(boot)),
+        )
+    )
+    ActionRow(
+        title = "立刻试一次后台起播",
+        subtitle = "不重启也能验一遍：按开机那条路恢复上次队列并起播（不会弹出界面）",
+        onClick = {
+            onTestBootPlayback()
+            Toast.makeText(context, "已触发，退到桌面即可看到它在后台播放", Toast.LENGTH_SHORT).show()
+            bootInfo = BootStatus.snapshot(context)
+        },
+    )
+    ActionRow(
+        title = "刷新上面的状态",
+        subtitle = if (boot == null || !boot.received) {
+            "还没收到过开机广播：请确认系统「应用 → 听风 → 权限」里「开机启动 / 自启动」是允许的"
+        } else {
+            "看一遍这条路走到哪一步了"
+        },
+        onClick = { bootInfo = BootStatus.snapshot(context) },
+    )
 
     // ------------------------------------------------ 播放统计
     SectionTitle("播放统计")

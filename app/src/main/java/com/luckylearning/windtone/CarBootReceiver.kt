@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.luckylearning.windtone.data.BootAction
+import com.luckylearning.windtone.data.BootStatus
 import com.luckylearning.windtone.data.BootTrace
 import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.playback.PlaybackService
@@ -31,7 +32,19 @@ class CarBootReceiver : BroadcastReceiver() {
         if (action != Intent.ACTION_BOOT_COMPLETED && action != "android.intent.action.QUICKBOOT_POWERON") return
 
         val prefs = Prefs(context)
-        when (BootAction.decide(prefs.autoPlayOnBoot, prefs.carMode)) {
+        val kind = BootAction.decide(prefs.autoPlayOnBoot, prefs.carMode)
+        // 先落一条「广播到了」再动手：这条链路的失败表现全是「开机后什么都没发生」，
+        // 有这行记录才能区分「广播没到」与「到了但没播起来」（诊断页会念出来）。
+        when (kind) {
+            BootAction.Kind.PLAY_IN_BACKGROUND -> BootStatus.markReceived(context, BootStatus.ACTION_AUTOPLAY)
+            BootAction.Kind.OPEN_UI -> BootStatus.markReceived(context, BootStatus.ACTION_OPEN_UI)
+            BootAction.Kind.NONE -> BootStatus.markReceived(
+                context,
+                BootStatus.ACTION_NONE,
+                "「开机后台播放」与「车载模式」都没打开",
+            )
+        }
+        when (kind) {
             BootAction.Kind.PLAY_IN_BACKGROUND -> runCatching {
                 BootTrace.mark(context, "boot:autoplay")
                 // ⚠️ 这里**必须用 startService 而不是 startForegroundService**。
@@ -48,6 +61,7 @@ class CarBootReceiver : BroadcastReceiver() {
             }.onFailure {
                 Log.w(TAG, "开机后台播放启动失败", it)
                 BootTrace.mark(context, "boot:autoplay-failed")
+                BootStatus.markResult(context, false, "服务没起来：" + (it.message ?: it.javaClass.simpleName))
             }
 
             BootAction.Kind.OPEN_UI -> runCatching {
@@ -56,7 +70,10 @@ class CarBootReceiver : BroadcastReceiver() {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     },
                 )
-            }.onFailure { Log.w(TAG, "开机自启失败", it) }
+            }.onFailure {
+                Log.w(TAG, "开机自启失败", it)
+                BootStatus.markResult(context, false, "界面没起来：" + (it.message ?: it.javaClass.simpleName))
+            }.onSuccess { BootStatus.markResult(context, true) }
 
             BootAction.Kind.NONE -> Unit
         }
