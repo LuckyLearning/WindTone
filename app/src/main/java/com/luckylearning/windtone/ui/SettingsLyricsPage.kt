@@ -212,193 +212,211 @@ internal fun SettingsLyricsPage(
             onLyricOverlay(SettingsDefaults.LYRIC_OVERLAY)
         },
     )
-    // v1.1.19：全屏高度。放在所有外观项之前 —— 它是**形态**开关（单条字幕 / 整屏歌词），
-    // 行数、宽度、位置这些都在它之下，先定形态再调细节。
-    SwitchRow(
-        title = "全屏高度",
-        subtitle = if (player.lyricOverlayFullHeight) {
-            "占满屏幕（底部给车机 Dock 留 56dp），按播放页排版：当前行居中放大，上下各 5 句压暗"
+    // 关掉开关时，下面这些**全部不显示**（v1.1.21 用户要求）：形态、宽度、
+    // 位置、行数、字号、对齐、底板、暂停表现、文字颜色，全部只对「浮层已经
+    // 在屏幕上」这件事有意义。留着它们只会让人以为「改了会生效」，
+    // 而实际什么都看不到 —— 展示出来的每一行都必须是当下真正起作用的。
+    if (player.lyricOverlay) {
+        // v1.1.19：全屏高度。放在所有外观项之前 —— 它是**形态**开关（单条字幕 / 整屏歌词），
+        // 行数、宽度、位置这些都在它之下，先定形态再调细节。
+        SwitchRow(
+            title = "全屏高度",
+            subtitle = if (player.lyricOverlayFullHeight) {
+                "占满屏幕（底部给车机 Dock 留 56dp），按播放页排版：当前行居中放大，上下各 5 句压暗"
+            } else {
+                "打开后从单条字幕变成整屏歌词，内容与播放页歌词区一致"
+            },
+            checked = player.lyricOverlayFullHeight,
+            onCheckedChange = onLyricOverlayFullHeight,
+            onReset = resetAction(player.lyricOverlayFullHeight != SettingsDefaults.OVERLAY_FULL_HEIGHT) {
+                onLyricOverlayFullHeight(SettingsDefaults.OVERLAY_FULL_HEIGHT)
+            },
+        )
+        // v1.1.20：「形态 → 尺寸 → 位置」三段式。
+        // 全屏高度这一档要能改宽度、也要能左右挪，而且**不能和单条字幕共用一套值**——
+        // 两种形态的排版诉求相反（整屏看歌词 vs 一行字幕），共用只会互相打架。
+        // 所以这里按形态分岔，控件、按钮、落盘字段三样都各走各的。
+        if (player.lyricOverlayFullHeight) {
+            SliderRow(
+                title = "全屏宽度 ${player.lyricOverlayFullWidthPercent}%",
+                subtitle = if (player.lyricOverlayFullWidthPercent >= 100) {
+                    "已占满屏宽（此时左右没有余量）。调小一点即可左右挪动，两侧留白也更聚焦"
+                } else {
+                    "屏宽的 ${player.lyricOverlayFullWidthPercent}%，两侧共留出 " +
+                        "${100 - player.lyricOverlayFullWidthPercent}% 的余量供左右移动；" +
+                        "宽度越窄，长句折行越早"
+                },
+                value = player.lyricOverlayFullWidthPercent.toFloat(),
+                range = SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE.first.toFloat()..
+                    SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE.last.toFloat(),
+                onValueChange = {
+                    onLyricOverlayFullWidthPercent(it.toInt().coerceIn(30, 100))
+                },
+                onReset = resetAction(
+                    player.lyricOverlayFullWidthPercent != SettingsDefaults.OVERLAY_FULL_WIDTH_PERCENT,
+                ) { onLyricOverlayFullWidthPercent(SettingsDefaults.OVERLAY_FULL_WIDTH_PERCENT) },
+            )
+            SliderRow(
+                title = "水平位置 " + OverlayPositioner.offsetLabel(player.lyricOverlayFullOffsetPercent),
+                subtitle = if (player.lyricOverlayFullWidthPercent >= 100) {
+                    "宽度 100% 时没有可移动的余量，位置固定；先把上面的宽度调小"
+                } else {
+                    "在左右留白之间移动歌词面板；也可以到桌面上直接左右拖（两处是同一份设置）"
+                },
+                value = player.lyricOverlayFullOffsetPercent.toFloat(),
+                range = 0f..100f,
+                onValueChange = { onLyricOverlayFullOffsetPercent(it.toInt().coerceIn(0, 100)) },
+                onReset = resetAction(
+                    player.lyricOverlayFullOffsetPercent != SettingsDefaults.OVERLAY_FULL_OFFSET_PERCENT,
+                ) {
+                    onLyricOverlayFullOffsetPercent(SettingsDefaults.OVERLAY_FULL_OFFSET_PERCENT)
+                },
+            )
+            // 三个大按钮：车机上用滑块找「正好靠边」很难，一键到位更实际
+            OverlayOffsetPresets(
+                current = player.lyricOverlayFullOffsetPercent,
+                enabled = player.lyricOverlayFullWidthPercent < 100,
+                onPick = onLyricOverlayFullOffsetPercent,
+            )
         } else {
-            "打开后从单条字幕变成整屏歌词，内容与播放页歌词区一致"
-        },
-        checked = player.lyricOverlayFullHeight,
-        onCheckedChange = onLyricOverlayFullHeight,
-        onReset = resetAction(player.lyricOverlayFullHeight != SettingsDefaults.OVERLAY_FULL_HEIGHT) {
-            onLyricOverlayFullHeight(SettingsDefaults.OVERLAY_FULL_HEIGHT)
-        },
-    )
-    // v1.1.20：「形态 → 尺寸 → 位置」三段式。
-    // 全屏高度这一档要能改宽度、也要能左右挪，而且**不能和单条字幕共用一套值**——
-    // 两种形态的排版诉求相反（整屏看歌词 vs 一行字幕），共用只会互相打架。
-    // 所以这里按形态分岔，控件、按钮、落盘字段三样都各走各的。
-    if (player.lyricOverlayFullHeight) {
-        SliderRow(
-            title = "全屏宽度 ${player.lyricOverlayFullWidthPercent}%",
-            subtitle = if (player.lyricOverlayFullWidthPercent >= 100) {
-                "已占满屏宽（此时左右没有余量）。调小一点即可左右挪动，两侧留白也更聚焦"
+            ActionRow(
+                title = "悬浮歌词行数",
+                subtitle = overlayLinesHint(player.lyricOverlayLines),
+                onClick = { overlayChoice = OverlayChoice.LINES },
+                chevron = true,
+                onReset = resetAction(player.lyricOverlayLines != SettingsDefaults.OVERLAY_LINES) {
+                    onLyricOverlayLines(SettingsDefaults.OVERLAY_LINES)
+                },
+            )
+            // 宽度之所以是滑块而不是档位：屏幕尺寸千差万别，档位永远差一个「刚好」。
+            SliderRow(
+                title = "悬浮歌词宽度 ${player.lyricOverlayWidthPercent}%",
+                // 宽度与「横向能拖多远」是同一件事的两面，到了 100% 就直接说破，
+                // 否则用户会像 2026-10-16 那样把「拖不动」当 bug 报回来。
+                subtitle = if (player.lyricOverlayWidthPercent >= 100) {
+                    "已占满屏宽，无法左右移动；调小一点即可拖到屏幕任意位置"
+                } else {
+                    "屏幕宽度的百分比（1–100%）。窗口越窄，能左右移动的范围越大；" +
+                        "窗口越宽，长句折行越晚"
+                },
+                value = player.lyricOverlayWidthPercent.toFloat(),
+                range = 1f..100f,
+                // 拖动时逐帧写回：宽度与屏幕是直接的比例关系，松手才变会让人
+                // 以为「拖了半天没反应」。引擎侧每次都会重摆窗口，正好当实时预览用。
+                onValueChange = { onLyricOverlayWidthPercent(it.toInt().coerceIn(1, 100)) },
+                onReset = resetAction(
+                    player.lyricOverlayWidthPercent != SettingsDefaults.OVERLAY_WIDTH_PERCENT,
+                ) { onLyricOverlayWidthPercent(SettingsDefaults.OVERLAY_WIDTH_PERCENT) },
+            )
+        }
+        // v1.1.15：顶部「歌名 + 歌手」两行小字（默认关闭，不打扰老用户）
+        SwitchRow(
+            title = "显示歌名与歌手",
+            subtitle = if (player.lyricOverlayShowTitle) {
+                "悬浮窗最上面加两行小字：歌名 / 歌手，下面是歌词"
             } else {
-                "屏宽的 ${player.lyricOverlayFullWidthPercent}%，两侧共留出 " +
-                    "${100 - player.lyricOverlayFullWidthPercent}% 的余量供左右移动；" +
-                    "宽度越窄，长句折行越早"
+                "只显示歌词，不加标题行"
             },
-            value = player.lyricOverlayFullWidthPercent.toFloat(),
-            range = SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE.first.toFloat()..
-                SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE.last.toFloat(),
-            onValueChange = {
-                onLyricOverlayFullWidthPercent(it.toInt().coerceIn(30, 100))
-            },
-            onReset = resetAction(
-                player.lyricOverlayFullWidthPercent != SettingsDefaults.OVERLAY_FULL_WIDTH_PERCENT,
-            ) { onLyricOverlayFullWidthPercent(SettingsDefaults.OVERLAY_FULL_WIDTH_PERCENT) },
-        )
-        SliderRow(
-            title = "水平位置 " + OverlayPositioner.offsetLabel(player.lyricOverlayFullOffsetPercent),
-            subtitle = if (player.lyricOverlayFullWidthPercent >= 100) {
-                "宽度 100% 时没有可移动的余量，位置固定；先把上面的宽度调小"
-            } else {
-                "在左右留白之间移动歌词面板；也可以到桌面上直接左右拖（两处是同一份设置）"
-            },
-            value = player.lyricOverlayFullOffsetPercent.toFloat(),
-            range = 0f..100f,
-            onValueChange = { onLyricOverlayFullOffsetPercent(it.toInt().coerceIn(0, 100)) },
-            onReset = resetAction(
-                player.lyricOverlayFullOffsetPercent != SettingsDefaults.OVERLAY_FULL_OFFSET_PERCENT,
-            ) {
-                onLyricOverlayFullOffsetPercent(SettingsDefaults.OVERLAY_FULL_OFFSET_PERCENT)
+            checked = player.lyricOverlayShowTitle,
+            onCheckedChange = onLyricOverlayShowTitle,
+            onReset = resetAction(player.lyricOverlayShowTitle != SettingsDefaults.OVERLAY_SHOW_TITLE) {
+                onLyricOverlayShowTitle(SettingsDefaults.OVERLAY_SHOW_TITLE)
             },
         )
-        // 三个大按钮：车机上用滑块找「正好靠边」很难，一键到位更实际
-        OverlayOffsetPresets(
-            current = player.lyricOverlayFullOffsetPercent,
-            enabled = player.lyricOverlayFullWidthPercent < 100,
-            onPick = onLyricOverlayFullOffsetPercent,
-        )
-    } else {
+        // 标题字号只在开着的时候才出现：关着还摆一行字号设置，只会让人以为它没生效
+        if (player.lyricOverlayShowTitle) {
+            ActionRow(
+                title = "歌名歌手字号",
+                subtitle = "比歌词小一号；车机上看着小就调大一档",
+                onClick = { overlayChoice = OverlayChoice.TITLE_SCALE },
+                trailing = OVERLAY_TEXT_SCALE_LABELS[player.lyricOverlayTitleScale],
+                chevron = true,
+                onReset = resetAction(
+                    player.lyricOverlayTitleScale != SettingsDefaults.OVERLAY_TITLE_SCALE,
+                ) { onLyricOverlayTitleScale(SettingsDefaults.OVERLAY_TITLE_SCALE) },
+            )
+        }
+
+        // 悬浮歌词的外观选项：字号 / 对齐 / 底板 / 暂停行为。
+        // 所有项共用同一个选项弹层，改完立刻给一次 6 秒预览。
+        // v1.1.21 起这一整块只在开关打开时出现 —— 早先允许「开着之前先预设」，
+        // 但实际用起来是：关着开关还摆一排会失效的控件，用户改完回桌面看不到任何
+        // 变化，只会当成 bug。宁可少给一个预设置口，也不给一个骗人的控件。
         ActionRow(
-            title = "悬浮歌词行数",
-            subtitle = overlayLinesHint(player.lyricOverlayLines),
-            onClick = { overlayChoice = OverlayChoice.LINES },
+            title = "悬浮歌词字号",
+            subtitle = "大屏与车机上建议调大一档",
+            onClick = { overlayChoice = OverlayChoice.TEXT_SCALE },
+            trailing = OVERLAY_TEXT_SCALE_LABELS[player.lyricOverlayTextScale],
             chevron = true,
-            onReset = resetAction(player.lyricOverlayLines != SettingsDefaults.OVERLAY_LINES) {
-                onLyricOverlayLines(SettingsDefaults.OVERLAY_LINES)
+            onReset = resetAction(
+                player.lyricOverlayTextScale != SettingsDefaults.OVERLAY_TEXT_SCALE,
+            ) { onLyricOverlayTextScale(SettingsDefaults.OVERLAY_TEXT_SCALE) },
+        )
+        ActionRow(
+            title = "悬浮歌词对齐",
+            subtitle = if (player.lyricOverlayAlign == 1) {
+                "歌词在窗内靠左排，适合长句与固定视线"
+            } else {
+                "歌词在窗内水平居中（窗口位置由拖动决定）"
+            },
+            onClick = { overlayChoice = OverlayChoice.ALIGN },
+            trailing = OVERLAY_ALIGN_LABELS[player.lyricOverlayAlign],
+            chevron = true,
+            onReset = resetAction(player.lyricOverlayAlign != SettingsDefaults.OVERLAY_ALIGN) {
+                onLyricOverlayAlign(SettingsDefaults.OVERLAY_ALIGN)
             },
         )
-        // 宽度之所以是滑块而不是档位：屏幕尺寸千差万别，档位永远差一个「刚好」。
-        SliderRow(
-            title = "悬浮歌词宽度 ${player.lyricOverlayWidthPercent}%",
-            // 宽度与「横向能拖多远」是同一件事的两面，到了 100% 就直接说破，
-            // 否则用户会像 2026-10-16 那样把「拖不动」当 bug 报回来。
-            subtitle = if (player.lyricOverlayWidthPercent >= 100) {
-                "已占满屏宽，无法左右移动；调小一点即可拖到屏幕任意位置"
+        ActionRow(
+            title = "悬浮歌词底板",
+            subtitle = if (player.lyricOverlayBackdrop == 0) {
+                "无底板最干净，但亮色壁纸上白字可能看不清"
             } else {
-                "屏幕宽度的百分比（1–100%）。窗口越窄，能左右移动的范围越大；" +
-                    "窗口越宽，长句折行越晚"
+                "垫一层底色，任何壁纸上都读得清"
             },
-            value = player.lyricOverlayWidthPercent.toFloat(),
-            range = 1f..100f,
-            // 拖动时逐帧写回：宽度与屏幕是直接的比例关系，松手才变会让人
-            // 以为「拖了半天没反应」。引擎侧每次都会重摆窗口，正好当实时预览用。
-            onValueChange = { onLyricOverlayWidthPercent(it.toInt().coerceIn(1, 100)) },
+            onClick = { overlayChoice = OverlayChoice.BACKDROP },
+            trailing = OVERLAY_BACKDROP_LABELS[player.lyricOverlayBackdrop],
+            chevron = true,
             onReset = resetAction(
-                player.lyricOverlayWidthPercent != SettingsDefaults.OVERLAY_WIDTH_PERCENT,
-            ) { onLyricOverlayWidthPercent(SettingsDefaults.OVERLAY_WIDTH_PERCENT) },
+                player.lyricOverlayBackdrop != SettingsDefaults.OVERLAY_BACKDROP,
+            ) { onLyricOverlayBackdrop(SettingsDefaults.OVERLAY_BACKDROP) },
+        )
+        ActionRow(
+            title = "暂停时的悬浮歌词",
+            subtitle = if (player.lyricOverlayPauseMode == 1) {
+                "暂停即隐藏，恢复播放时再出现"
+            } else {
+                "淡出到半透明，方便看清唱到哪一句"
+            },
+            onClick = { overlayChoice = OverlayChoice.PAUSE },
+            trailing = OVERLAY_PAUSE_LABELS[player.lyricOverlayPauseMode],
+            chevron = true,
+            onReset = resetAction(
+                player.lyricOverlayPauseMode != SettingsDefaults.OVERLAY_PAUSE_MODE,
+            ) { onLyricOverlayPauseMode(SettingsDefaults.OVERLAY_PAUSE_MODE) },
+        )
+
+        // 文字颜色。宽度滑块已经随形态放到上面那组里（全屏 / 单条各一套），不在这里重复。
+        ActionRow(
+            title = "悬浮歌词文字颜色",
+            subtitle = "悬浮窗是固定色，不跟随主题；当前行与上下句靠明暗区分",
+            onClick = { colorPickerShown = true },
+            swatch = player.lyricOverlayTextColor,
+            chevron = true,
+            onReset = resetAction(
+                player.lyricOverlayTextColor != SettingsDefaults.OVERLAY_TEXT_COLOR,
+            ) { onLyricOverlayTextColor(SettingsDefaults.OVERLAY_TEXT_COLOR) },
         )
     }
-    // v1.1.15：顶部「歌名 + 歌手」两行小字（默认关闭，不打扰老用户）
-    SwitchRow(
-        title = "显示歌名与歌手",
-        subtitle = if (player.lyricOverlayShowTitle) {
-            "悬浮窗最上面加两行小字：歌名 / 歌手，下面是歌词"
-        } else {
-            "只显示歌词，不加标题行"
-        },
-        checked = player.lyricOverlayShowTitle,
-        onCheckedChange = onLyricOverlayShowTitle,
-        onReset = resetAction(player.lyricOverlayShowTitle != SettingsDefaults.OVERLAY_SHOW_TITLE) {
-            onLyricOverlayShowTitle(SettingsDefaults.OVERLAY_SHOW_TITLE)
-        },
-    )
-    // 标题字号只在开着的时候才出现：关着还摆一行字号设置，只会让人以为它没生效
-    if (player.lyricOverlayShowTitle) {
-        ActionRow(
-            title = "歌名歌手字号",
-            subtitle = "比歌词小一号；车机上看着小就调大一档",
-            onClick = { overlayChoice = OverlayChoice.TITLE_SCALE },
-            trailing = OVERLAY_TEXT_SCALE_LABELS[player.lyricOverlayTitleScale],
-            chevron = true,
-            onReset = resetAction(
-                player.lyricOverlayTitleScale != SettingsDefaults.OVERLAY_TITLE_SCALE,
-            ) { onLyricOverlayTitleScale(SettingsDefaults.OVERLAY_TITLE_SCALE) },
+    // 关闭态只留一句「打开后有什么可调」，免得这一整块消失得像设置丢了。
+    if (!player.lyricOverlay) {
+        Text(
+            text = "打开后可调形态（单条字幕 / 全屏歌词）、宽度、位置、字号、对齐、底板、颜色与暂停表现。",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(vertical = 4.dp),
         )
     }
 
-    // 悬浮歌词的外观选项：字号 / 对齐 / 底板 / 暂停行为。
-    // 都紧跟在开关下方，与它绑成一个整体；开关关着也允许**预设**，
-    // 所以不做可见性 gating。所有项共用同一个选项弹层，改完立刻给一次 6 秒预览。
-    ActionRow(
-        title = "悬浮歌词字号",
-        subtitle = "大屏与车机上建议调大一档",
-        onClick = { overlayChoice = OverlayChoice.TEXT_SCALE },
-        trailing = OVERLAY_TEXT_SCALE_LABELS[player.lyricOverlayTextScale],
-        chevron = true,
-        onReset = resetAction(
-            player.lyricOverlayTextScale != SettingsDefaults.OVERLAY_TEXT_SCALE,
-        ) { onLyricOverlayTextScale(SettingsDefaults.OVERLAY_TEXT_SCALE) },
-    )
-    ActionRow(
-        title = "悬浮歌词对齐",
-        subtitle = if (player.lyricOverlayAlign == 1) {
-            "歌词在窗内靠左排，适合长句与固定视线"
-        } else {
-            "歌词在窗内水平居中（窗口位置由拖动决定）"
-        },
-        onClick = { overlayChoice = OverlayChoice.ALIGN },
-        trailing = OVERLAY_ALIGN_LABELS[player.lyricOverlayAlign],
-        chevron = true,
-        onReset = resetAction(player.lyricOverlayAlign != SettingsDefaults.OVERLAY_ALIGN) {
-            onLyricOverlayAlign(SettingsDefaults.OVERLAY_ALIGN)
-        },
-    )
-    ActionRow(
-        title = "悬浮歌词底板",
-        subtitle = if (player.lyricOverlayBackdrop == 0) {
-            "无底板最干净，但亮色壁纸上白字可能看不清"
-        } else {
-            "垫一层底色，任何壁纸上都读得清"
-        },
-        onClick = { overlayChoice = OverlayChoice.BACKDROP },
-        trailing = OVERLAY_BACKDROP_LABELS[player.lyricOverlayBackdrop],
-        chevron = true,
-        onReset = resetAction(
-            player.lyricOverlayBackdrop != SettingsDefaults.OVERLAY_BACKDROP,
-        ) { onLyricOverlayBackdrop(SettingsDefaults.OVERLAY_BACKDROP) },
-    )
-    ActionRow(
-        title = "暂停时的悬浮歌词",
-        subtitle = if (player.lyricOverlayPauseMode == 1) {
-            "暂停即隐藏，恢复播放时再出现"
-        } else {
-            "淡出到半透明，方便看清唱到哪一句"
-        },
-        onClick = { overlayChoice = OverlayChoice.PAUSE },
-        trailing = OVERLAY_PAUSE_LABELS[player.lyricOverlayPauseMode],
-        chevron = true,
-        onReset = resetAction(
-            player.lyricOverlayPauseMode != SettingsDefaults.OVERLAY_PAUSE_MODE,
-        ) { onLyricOverlayPauseMode(SettingsDefaults.OVERLAY_PAUSE_MODE) },
-    )
-
-    // 文字颜色。宽度滑块已经随形态放到上面那组里（全屏 / 单条各一套），不在这里重复。
-    ActionRow(
-        title = "悬浮歌词文字颜色",
-        subtitle = "悬浮窗是固定色，不跟随主题；当前行与上下句靠明暗区分",
-        onClick = { colorPickerShown = true },
-        swatch = player.lyricOverlayTextColor,
-        chevron = true,
-        onReset = resetAction(
-            player.lyricOverlayTextColor != SettingsDefaults.OVERLAY_TEXT_COLOR,
-        ) { onLyricOverlayTextColor(SettingsDefaults.OVERLAY_TEXT_COLOR) },
-    )
     // 运行状态：开关打开且已授权时显示。这一行是排障的关键 ——
     // 悬浮窗启动失败（挂窗被 ROM 拒绝 / 前台服务被系统拦）在
     // 旧版本里是完全静默的，用户只看到「开关开了但什么都没发生」。

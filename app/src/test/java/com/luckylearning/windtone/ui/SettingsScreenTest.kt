@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -210,6 +211,10 @@ class SettingsScreenTest {
      *  ② ↺ 必须**先滚进视口再点**：这一页比 800dp 的测试窗口长，页尾那枚 ↺ 的底边实测在
      *     1662px，而窗口只有 1600px —— 点击坐标落到窗口外时会**静默落空**（回调一次都
      *     不被叫到，看着像功能坏了），既不报错也不抛异常，只能靠断言抓到。
+     *
+     * ⚠️ v1.1.21 起 `lyricOverlay` 必须显式打开：悬浮歌词关着时，颜色这一项与其
+     * 余外观项一起隐藏（见 [overlayAppearanceOptionsHideWhenOverlayOff]），
+     * 沿用默认的 `false` 会直接找不到这一行。
      */
     @Test
     fun lyricsPageResetsScaleAndOverlayTextColorIndependently() {
@@ -218,6 +223,7 @@ class SettingsScreenTest {
         render(
             player = PlayerUiState(
                 lyricScale = 1.3f,
+                lyricOverlay = true,
                 lyricOverlayTextColor = 0xFF4FC3F7.toInt(),
             ),
             onLyricScale = { scale = it },
@@ -226,12 +232,15 @@ class SettingsScreenTest {
 
         compose.onNodeWithText("歌词").performClick()
         compose.waitForIdle()
-        compose.onAllNodesWithContentDescription("恢复默认").assertCountEquals(2)
+        // 三枚：①「歌词字号」（页首）②「桌面悬浮歌词」开关本身（开着 ≠ 出厂默认）
+        // ③「悬浮歌词文字颜色」（页尾）。开关那枚是 v1.1.21 打开悬浮歌词后才冒出来的，
+        // 早先这条测试用默认的「关闭」状态，所以只有两枚。
+        compose.onAllNodesWithContentDescription("恢复默认").assertCountEquals(3)
 
-        // 下标 = 页面里的先后顺序：0 是「歌词字号」（页首），1 是「悬浮歌词文字颜色」（页尾）
+        // 下标 = 页面里的先后顺序：0 歌词字号 / 1 悬浮歌词开关 / 2 悬浮歌词文字颜色
         compose.onNodeWithText("悬浮歌词文字颜色").performScrollTo()
         compose.waitForIdle()
-        compose.onAllNodesWithContentDescription("恢复默认")[1].performScrollTo().performClick()
+        compose.onAllNodesWithContentDescription("恢复默认")[2].performScrollTo().performClick()
         compose.waitForIdle()
         assertEquals(
             "点「悬浮歌词文字颜色」行的 ↺ 应当写回 OVERLAY_TEXT_COLOR",
@@ -245,6 +254,70 @@ class SettingsScreenTest {
         compose.onAllNodesWithContentDescription("恢复默认")[0].performScrollTo().performClick()
         compose.waitForIdle()
         assertEquals(SettingsDefaults.LYRIC_SCALE, scale)
+    }
+
+    // ================================================================ v1.1.21 联动项按开关显隐
+
+    /**
+     * 悬浮歌词关闭时，它下面那一整块**一个都不许出现**。
+     *
+     * 这条测的是用户 2026-10-18 提的那句「功能关闭时相应联动选项都隐藏」：
+     * 此前的做法是「关着也允许预设」，于是页面上摆着一排改了不会生效的控件 ——
+     * 用户调完宽度回桌面什么也看不到，只会当成 bug。断言用 assertDoesNotExist
+     * 而不是「不可见」：不存在与不可见是两回事，前者连读屏都扫不到。
+     */
+    @Test
+    fun overlayAppearanceOptionsHideWhenOverlayOff() {
+        render(player = PlayerUiState(lyricOverlay = false))
+
+        compose.onNodeWithText("歌词").performClick()
+        compose.waitForIdle()
+
+        listOf(
+            "全屏高度",
+            "悬浮歌词字号",
+            "悬浮歌词对齐",
+            "悬浮歌词底板",
+            "暂停时的悬浮歌词",
+            "悬浮歌词文字颜色",
+            "显示歌名与歌手",
+            "悬浮歌词行数",
+            "调整悬浮歌词位置",
+        ).forEach { title ->
+            compose.onNodeWithText(title, substring = true).assertDoesNotExist()
+        }
+        // 开关本身必须还在（这一页只剩「分组标题 + 开关」两处出现这个词），
+        // 否则整页就剩一个孤零零的分组标题。
+        compose.onAllNodesWithText("桌面悬浮歌词").assertCountEquals(2)
+    }
+
+    /**
+     * 反过来：开关打开后这些项必须**真的出现**。
+     *
+     * 与上一条成对 —— 只测「关掉会消失」的话，把整块内容误删掉也能通过测试。
+     * 顺带锁住「全屏关闭态下展示单条字幕那套」：行数在、全屏宽度不在。
+     */
+    @Test
+    fun overlayAppearanceOptionsAppearWhenOverlayOn() {
+        render(player = PlayerUiState(lyricOverlay = true, lyricOverlayFullHeight = false))
+
+        compose.onNodeWithText("歌词").performClick()
+        compose.waitForIdle()
+
+        listOf(
+            "全屏高度",
+            "悬浮歌词行数",
+            "悬浮歌词宽度",
+            "显示歌名与歌手",
+            "悬浮歌词字号",
+            "悬浮歌词对齐",
+            "悬浮歌词底板",
+            "悬浮歌词文字颜色",
+        ).forEach { title ->
+            compose.onNodeWithText(title, substring = true).performScrollTo().assertIsDisplayed()
+        }
+        // 单条字幕这一档不该出现全屏专属的「宽度 / 水平位置」两个滑块
+        compose.onNodeWithText("水平位置", substring = true).assertDoesNotExist()
     }
 
     // ================================================================ v1.1.16 继续上次播放

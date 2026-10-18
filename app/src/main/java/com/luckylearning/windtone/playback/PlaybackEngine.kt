@@ -1007,6 +1007,14 @@ class PlaybackEngine(
             val c = controller
             if (c != null) publishLyricToOverlay(c.currentPosition.coerceAtLeast(0L), c.isPlaying)
             startOverlayPreview()
+        } else {
+            // 关掉时顺手退出调整态：v1.1.21 起设置页的「调整位置」入口在关闭后
+            // 整块隐藏，若此时 overlayEditing 还是 true，状态就成了没有出口的孤儿
+            // —— 下次打开开关，页面会直接显示「完成调整」，而用户从没进过调整态。
+            if (_player.value.overlayEditing) {
+                LyricOverlayBridge.setEditing(false)
+                _player.update { it.copy(overlayEditing = false) }
+            }
         }
     }
 
