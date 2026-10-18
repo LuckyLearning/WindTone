@@ -23,6 +23,7 @@ Android 原生本地音乐播放器。**数据全部留在本机**，只在你�
 <a class="card" href="ui/"><b>界面效果图</b><span>55 屏设计基准（含车机单栏 v1.1.19 设计）</span></a>
 <a class="card" href="权限与更新.html"><b>权限与更新</b><span>申请哪些权限、什么时候申请；应用内更新怎么工作</span></a>
 <a class="card" href="版本历史.html"><b>版本历史</b><span>从 1.0.0 到现在，每个版本改了什么</span></a>
+<a class="card" href="竞品调研-车机音乐应用.html"><b>竞品调研 · 车机音乐应用</b><span>汽水音乐 / QQ音乐车机版的交互逻辑对标，小迪语音接管机制</span></a>
 </div>
 
 ---
