@@ -297,6 +297,8 @@ data class PlayerUiState(
     val lyricsLoading: Boolean = false,
     val lyricOffsetMs: Int = 0,
     val lyricScale: Float = 1f,
+    /** 点击歌词行是否跳转（默认关，v1.1.23） */
+    val lyricTapSeeks: Boolean = SettingsDefaults.LYRIC_TAP_SEEKS,
     /**
      * 双语歌词显示模式：0 中英都显示 / 1 只显示中文 / 2 只显示英文（v1.1.18）。
      *

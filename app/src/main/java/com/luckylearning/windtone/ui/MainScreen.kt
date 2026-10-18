@@ -274,6 +274,9 @@ fun MainScreen(
                     val changed = nowCanDraw != canDrawOverlay
                     canDrawOverlay = nowCanDraw
                     if (changed && nowCanDraw && !player.lyricOverlay) playerVm.setLyricOverlay(true)
+                    // 安装权限同理：从「安装未知应用」授权页回来若已授权，直接续上装包，
+                    // 不再要求用户重新点一次（旧版这里断掉，用户只能杀进程重来）。
+                    updateVm.onAppForeground()
                 }
 
                 // 悬浮窗只在 App 退到后台时显示：回到前台立刻隐藏，
@@ -677,6 +680,7 @@ fun MainScreen(
                     canDrawOverlay = canDrawOverlay,
                     overlayHealth = overlayHealth,
                     onLyricScale = playerVm::setLyricScale,
+                    onLyricTapSeeks = playerVm::setLyricTapSeeks,
                     onLyricBilingual = playerVm::setLyricBilingual,
                     onSpeed = playerVm::setSpeed,
                     onPitch = playerVm::setPitchSemitones,

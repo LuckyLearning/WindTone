@@ -166,6 +166,21 @@ class UpdateRepository(
             }
     }
 
+    /**
+     * 回到 App 时自动续上安装（v1.1.23）。
+     *
+     * 用户抱怨「第一次去授权装应用，必须杀掉 App 才能装上」——原因是我们把
+     * 「去授权」和「装包」拆成了两次手动点击，而授权页回来后没人再拉起安装器，
+     * 用户只能反复点、点不动就以为要重启应用。现在只要回到前台且权限已给，
+     * 就直接续上那一步。
+     */
+    fun onAppForeground() {
+        val s = _update.value
+        if (!s.needInstallPermission || s.readyApkPath == null) return
+        if (!UpdateChecker.canInstall(app)) return
+        installUpdate()
+    }
+
     /** 跳转系统「安装未知应用」授权页 */
     override fun grantInstallPermission() {
         val intent = UpdateChecker.unknownSourcesIntent(app)

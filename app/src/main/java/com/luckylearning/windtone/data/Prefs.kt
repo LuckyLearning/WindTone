@@ -54,6 +54,8 @@ object SettingsDefaults {
     const val AUTO_RESUME = true
 
     const val LYRIC_SCALE = 1.0f
+    /** 点击歌词行是否跳转进度：默认关闭（拖动歌词找人声段落时误跳很烦） */
+    const val LYRIC_TAP_SEEKS = false
 
     /**
      * 双语歌词显示模式（v1.1.18）：0 中英都显示 / 1 只显示中文 / 2 只显示英文。
@@ -251,6 +253,17 @@ class Prefs(context: Context) {
     var libraryView: String
         get() = sp.getString(KEY_VIEW, "SONGS").orEmpty()
         set(value) = sp.edit().putString(KEY_VIEW, value).apply()
+
+    /**
+     * 点击歌词行是否跳转到那一句（默认**关闭**，2026-10-18 用户要求）。
+     *
+     * 为什么默认关：车机上歌词区要上下拖动才看得全，而「点一下某行就跳过去」意味着
+     * 手指在歌词上滑动时稍有位移就被判成点击，播放进度莫名其妙跳到别的段落。
+     * 想用「点歌词跳转」的人可以自己打开。
+     */
+    var lyricTapSeeks: Boolean
+        get() = sp.getBoolean(KEY_LYRIC_TAP_SEEKS, SettingsDefaults.LYRIC_TAP_SEEKS)
+        set(value) = sp.edit().putBoolean(KEY_LYRIC_TAP_SEEKS, value).apply()
 
     /** 歌词字号缩放 */
     var lyricScale: Float
@@ -597,6 +610,7 @@ class Prefs(context: Context) {
         const val KEY_SORT_PREFIX = "sort_"
         const val KEY_VIEW = "library_view"
         const val KEY_LYRIC_SCALE = "lyric_scale"
+        const val KEY_LYRIC_TAP_SEEKS = "lyric_tap_seeks"
         const val KEY_LYRIC_BILINGUAL = "lyric_bilingual_mode"
         // ⚠️ 逐字歌词移除后（v1.1.8）有三个键不再读写：`lyric_word_by_word` /
         //    `lyric_sung_color` / `lyric_overlay_sung_color`。它们仍留在老用户的

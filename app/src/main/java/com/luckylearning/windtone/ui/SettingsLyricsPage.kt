@@ -120,6 +120,8 @@ internal fun SettingsLyricsPage(
     canDrawOverlay: Boolean,
     overlayHealth: LyricOverlayBus.Health,
     onLyricScale: (Float) -> Unit,
+    /** 点歌词行是否跳转（默认关，v1.1.23） */
+    onLyricTapSeeks: (Boolean) -> Unit,
     onLyricBilingual: (Int) -> Unit,
     onLyricOverlay: (Boolean) -> Unit,
     onLyricOverlayLines: (Int) -> Unit,
@@ -166,6 +168,21 @@ internal fun SettingsLyricsPage(
         onValueChange = onLyricScale,
         onReset = resetAction(abs(player.lyricScale - SettingsDefaults.LYRIC_SCALE) > 0.001f) {
             onLyricScale(SettingsDefaults.LYRIC_SCALE)
+        },
+    )
+    // 点歌词行跳转（v1.1.23，默认关）：车机上歌词要上下拖动，而「可点」会把
+    // 带位移的滑动判成点击，进度莫名其妙跳走。想要这个能力的人自己打开。
+    SwitchRow(
+        title = "点击歌词跳转",
+        subtitle = if (player.lyricTapSeeks) {
+            "点某一句歌词直接跳到那一句；拖动歌词时也可能被误判成点击"
+        } else {
+            "关闭（推荐）：歌词只能上下拖动，播放进度不会被误触改动；长按校准偏移仍可用"
+        },
+        checked = player.lyricTapSeeks,
+        onCheckedChange = onLyricTapSeeks,
+        onReset = resetAction(player.lyricTapSeeks != SettingsDefaults.LYRIC_TAP_SEEKS) {
+            onLyricTapSeeks(SettingsDefaults.LYRIC_TAP_SEEKS)
         },
     )
     // v1.1.18：双语歌词显示模式（默认「中英都显示」= 历史行为）

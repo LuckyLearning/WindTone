@@ -95,6 +95,7 @@ class SettingsScreenTest {
                     canDrawOverlay = false,
                     overlayHealth = LyricOverlayBus.Health(),
                     onLyricScale = onLyricScale,
+                    onLyricTapSeeks = {},
                     onLyricBilingual = onLyricBilingual,
                     onSpeed = {},
                     onPitch = {},

@@ -79,6 +79,13 @@ fun LyricsPane(
      * 直接长按那一行，比在设置里按 ±100ms 试错直观得多。传 null 关闭该手势。
      */
     onLineLongPress: ((Long) -> Unit)? = null,
+    /**
+     * 点歌词行是否跳转到那一句（v1.1.23，默认关）。
+     *
+     * 关掉后整行不可点：车机上歌词区需要上下拖动，而「可点」会把带位移的滑动
+     * 判成点击，播放进度就莫名其妙跳走。
+     */
+    tapSeeks: Boolean = false,
 ) {
     val effectiveScale = if (carMode) scale * CAR_LYRIC_BOOST else scale
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -96,6 +103,7 @@ fun LyricsPane(
                 scale = effectiveScale,
                 onSeekTo = onSeekTo,
                 onLineLongPress = onLineLongPress,
+                tapSeeks = tapSeeks,
             )
         }
     }
@@ -191,6 +199,7 @@ private fun SyncedLyrics(
     scale: Float,
     onSeekTo: (Long) -> Unit,
     onLineLongPress: ((Long) -> Unit)?,
+    tapSeeks: Boolean,
 ) {
     val listState = rememberLazyListState()
     val density = LocalDensity.current
@@ -256,7 +265,12 @@ private fun SyncedLyrics(
                 line = line,
                 active = index == currentIndex,
                 scale = scale,
-                onClick = { if (line.timeMs >= 0) onSeekTo(line.timeMs) },
+                // 关闭时传 null：整行不再可点，滑动不会被当成点击
+                onClick = if (tapSeeks) {
+                    { if (line.timeMs >= 0) onSeekTo(line.timeMs) }
+                } else {
+                    null
+                },
                 // 没有时间轴的行（`timeMs < 0`）不参与校准：拿它算偏移只会算出一个
                 // 无意义的巨大数字，等于把偏移一次搞坏。
                 onLongClick = onLineLongPress
@@ -273,7 +287,7 @@ private fun LyricLineItem(
     line: LyricLine,
     active: Boolean,
     scale: Float,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)?,
     /** 长按这一行（校准偏移用）；null = 不接管长按 */
     onLongClick: (() -> Unit)? = null,
 ) {
@@ -284,12 +298,21 @@ private fun LyricLineItem(
         label = "lyricAlpha",
     )
 
+    // 两个手势都没有时**不挂 clickable**：`combinedClickable` 的 onClick 不可为空，
+    // 传个空 lambda 会让这一行变成「可点但什么都不做」——在 Compose 里它仍然吃掉
+    // 手势，父级的滚动就会变得迟钝。干脆整条 modifier 不加。
+    val gestureModifier = if (onClick != null || onLongClick != null) {
+        Modifier.combinedClickable(onClick = onClick ?: {}, onLongClick = onLongClick)
+    } else {
+        Modifier
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(if (active) scheme.primary.copy(alpha = 0.10f) else Color.Transparent)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .then(gestureModifier)
             .padding(horizontal = 14.dp, vertical = 9.dp),
         contentAlignment = Alignment.Center,
     ) {

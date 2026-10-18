@@ -79,6 +79,7 @@ class PlaybackEngine(
     private val _player = MutableStateFlow(
         PlayerUiState(
             lyricScale = prefs.lyricScale,
+            lyricTapSeeks = prefs.lyricTapSeeks,
             lyricBilingual = prefs.lyricBilingual,
             lyricsPaneVisible = prefs.lyricsPaneVisible,
             carMode = prefs.carMode,
@@ -940,6 +941,17 @@ class PlaybackEngine(
     }
 
     /**
+     * 点歌词行是否跳转（v1.1.23，默认关）。
+     *
+     * 关掉后歌词区只认滚动与长按（长按校准偏移仍然可用），
+     * 手指在歌词上滑一下不会再被当成「点这一句」而跳走。
+     */
+    override fun setLyricTapSeeks(enabled: Boolean) {
+        prefs.lyricTapSeeks = enabled
+        _player.update { it.copy(lyricTapSeeks = enabled) }
+    }
+
+    /**
      * 双语歌词显示模式：0 中英都显示 / 1 只显示中文 / 2 只显示英文（v1.1.18）。
      *
      * 不重读歌词文件：原始歌词一直在 [rawLyrics] 里，这里只是重新裁剪一遍，
@@ -1588,6 +1600,9 @@ interface PlayerActions {
     fun resetLyricOffset()
     fun setLyricOffsetAbsolute(offsetMs: Int)
     fun setLyricScale(scale: Float)
+
+    /** 点歌词行是否跳转（默认关） */
+    fun setLyricTapSeeks(enabled: Boolean)
 
     /**
      * 双语歌词显示模式：0 中英都显示 / 1 只显示中文 / 2 只显示英文（v1.1.18）。

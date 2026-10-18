@@ -585,6 +585,10 @@ object UpdateChecker {
             setDataAndType(uri, "application/vnd.android.package-archive")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            // clipData 不是装饰：部分 ROM（车机居多）的安装器只认 clipData 里的
+            // grant，单靠 FLAG_GRANT_READ_URI_PERMISSION 会读不到文件，
+            // 表现为「安装器一闪而过 / 一直转圈」，用户只能杀掉应用重来。
+            clipData = android.content.ClipData.newRawUri("apk", uri)
         }
         context.startActivity(intent)
     }.onFailure { if (verbose) Log.w(TAG, "拉起安装器失败", it) }

@@ -68,6 +68,8 @@ class SettingsDefaultsTest {
 
         // 播放页歌词
         check("lyricScale", prefs.lyricScale, SettingsDefaults.LYRIC_SCALE)
+        // v1.1.23：点歌词跳转默认关闭（车机上滑动歌词会被误判成点击而跳进度）
+        check("lyricTapSeeks", prefs.lyricTapSeeks, SettingsDefaults.LYRIC_TAP_SEEKS)
 
         // 桌面悬浮歌词
         check("lyricOverlay", prefs.lyricOverlay, SettingsDefaults.LYRIC_OVERLAY)

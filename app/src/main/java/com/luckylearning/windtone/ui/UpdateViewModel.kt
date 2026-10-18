@@ -16,5 +16,9 @@ class UpdateViewModel(app: Application) :
     AndroidViewModel(app),
     UpdateActions by (app as MusicApp).container.updates {
 
-    val update: StateFlow<UpdateUiState> = (app as MusicApp).container.updates.update
+    private val repo = (app as MusicApp).container.updates
+    val update: StateFlow<UpdateUiState> = repo.update
+
+    /** 回到前台时续上「授权后装包」那一步（v1.1.23，见 UpdateRepository.onAppForeground） */
+    fun onAppForeground() = repo.onAppForeground()
 }

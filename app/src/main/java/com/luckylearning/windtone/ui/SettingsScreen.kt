@@ -158,6 +158,8 @@ fun SettingsScreen(
     canDrawOverlay: Boolean,
     overlayHealth: LyricOverlayBus.Health,
     onLyricScale: (Float) -> Unit,
+    /** 点歌词行是否跳转（默认关，v1.1.23） */
+    onLyricTapSeeks: (Boolean) -> Unit,
     /** 双语歌词显示模式：0 都显示 / 1 只中文 / 2 只英文 —— v1.1.18 */
     onLyricBilingual: (Int) -> Unit,
     onSpeed: (Float) -> Unit,
@@ -312,6 +314,7 @@ fun SettingsScreen(
                         canDrawOverlay = canDrawOverlay,
                         overlayHealth = overlayHealth,
                         onLyricScale = onLyricScale,
+                        onLyricTapSeeks = onLyricTapSeeks,
                         onLyricBilingual = onLyricBilingual,
                         onLyricOverlay = onLyricOverlay,
                         onLyricOverlayLines = onLyricOverlayLines,

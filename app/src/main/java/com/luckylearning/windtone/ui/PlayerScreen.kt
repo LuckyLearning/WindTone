@@ -87,20 +87,16 @@ import kotlin.math.abs
 /** 车载模式：歌词态无操作多久后收起顶栏 / 控制键 / 状态行（毫秒） */
 private const val CAR_IMMERSIVE_DELAY_MS = 5_000L
 
-/** 车机播放页：三键里的主键 112dp、两侧 96dp、次级键 76dp（行车中不瞄也能按中） */
-private val CAR_MAIN_BUTTON = 112.dp
-private val CAR_SIDE_BUTTON = 96.dp
-private val CAR_SECONDARY_BUTTON = 76.dp
-
 /**
- * 车载模式播放页的内容限宽。
+ * 车机播放页的控制键尺寸（v1.1.23 收紧）。
  *
- * 车机屏约 1707dp 宽，但播放页是「竖屏版式」——一个 1707dp 宽的返回键 + 最右设置键
- * 中间隔着一米多的视线距离，歌词一行也会长到需要扭头读。限宽到 760dp 后，
- * 版式与手机竖屏基本同构，只是整体更宽松、字号更大。
- * 760dp 也是 1707dp 屏幕下「不显得空、也不拉太宽」的折中值。
+ * 原先是 112 / 96 / 76 —— 三个键占掉将近 120dp 高度，歌词区被压得很扁，
+ * 用户的原话是「不要播放按钮的占高度」。现在整排压到 64~76dp：
+ * 触控目标仍在 64dp 以上（行车中按得中），但纵向只占原来的一半。
  */
-private val CAR_CONTENT_MAX_WIDTH = 760.dp
+private val CAR_MAIN_BUTTON = 76.dp
+private val CAR_SIDE_BUTTON = 64.dp
+private val CAR_SECONDARY_BUTTON = 64.dp
 
 @Composable
 fun PlayerScreen(
@@ -317,9 +313,8 @@ fun PlayerScreen(
                 // 但**沉浸态不限宽**——沉浸态已经把顶栏 / 控制键 / 状态行全收起了，
                 // 只剩歌词 + 歌名行 + 进度条，此时的诉求是「歌词尽量大、尽量宽」，
                 // 再套 760dp 反而把最该利用的宽屏空间浪费掉（效果图 ㊲ 正是全宽歌词）。
-                .widthIn(
-                    max = if (state.carMode && !immersive) CAR_CONTENT_MAX_WIDTH else Dp.Unspecified
-                )
+                // v1.1.23：车机不再限宽（原先 760dp）。用户要的是「进来就是全屏宽度」——
+                // 歌词本来就在宽屏上更好读，限宽反而把两侧留成大片空白。
                 .align(Alignment.Center)
                 .padding(horizontal = if (state.carMode) 40.dp else 20.dp)
                 .padding(top = 8.dp, bottom = 12.dp),
@@ -374,6 +369,7 @@ fun PlayerScreen(
                         scale = state.lyricScale,
                         onSeekTo = onSeekTo,
                         carMode = state.carMode,
+                        tapSeeks = state.lyricTapSeeks,
                         // 长按哪一行就在哪一刻对表：位置在这里取一次快照
                         onLineLongPress = { lineMs ->
                             keepAwake()
@@ -427,10 +423,10 @@ fun PlayerScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(
-                    // 车机：标题列不占满剩余宽度，红心紧跟在歌名/歌手后面——
-                    // 1707dp 横屏上红心贴屏幕最右端，驾驶时视线要扫一两千像素；
+                    // v1.1.23：车机也占满剩余宽度 —— 控制键并进这一行后必须靠右排，
+                    // 否则歌名后面紧跟四个键、右侧空出大半屏，看着像没排完版。
                     // 手机保持「标题占满 + 红心贴右」（与效果图 ⑫ 一致）。
-                    Modifier.weight(1f, fill = !state.carMode),
+                    Modifier.weight(1f),
                 ) {
                     Text(
                         text = song?.title ?: "未在播放",
@@ -460,6 +456,59 @@ fun PlayerScreen(
                         )
                     }
                 }
+                // 车机（v1.1.23）：控制键并进这一行，不再单独占一整行。
+                // 原来那排要 112dp+间距，歌词区被压矮；用户的要求原话是
+                // 「不要播放按钮的占高度」。沉浸态照旧收起（只留歌名 + 进度）。
+                if (state.carMode && !immersive) {
+                    IconButton(
+                        onClick = { onPrevious(); keepAwake() },
+                        modifier = Modifier.size(CAR_SIDE_BUTTON),
+                    ) {
+                        Icon(
+                            imageVector = AppIcons.SkipPrevious,
+                            contentDescription = "上一首",
+                            tint = scheme.onSurface,
+                            modifier = Modifier.size(36.dp),
+                        )
+                    }
+                    FilledIconButton(
+                        onClick = { onToggle(); keepAwake() },
+                        shape = CircleShape,
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = scheme.primary,
+                            contentColor = scheme.onPrimary,
+                        ),
+                        modifier = Modifier.size(CAR_MAIN_BUTTON),
+                    ) {
+                        Icon(
+                            imageVector = if (state.isPlaying) AppIcons.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = if (state.isPlaying) "暂停" else "播放",
+                            modifier = Modifier.size(40.dp),
+                        )
+                    }
+                    IconButton(
+                        onClick = { onNext(); keepAwake() },
+                        modifier = Modifier.size(CAR_SIDE_BUTTON),
+                    ) {
+                        Icon(
+                            imageVector = AppIcons.SkipNext,
+                            contentDescription = "下一首",
+                            tint = scheme.onSurface,
+                            modifier = Modifier.size(36.dp),
+                        )
+                    }
+                    IconButton(
+                        onClick = { keepAwake(); onShowQueue() },
+                        modifier = Modifier.size(CAR_SECONDARY_BUTTON),
+                    ) {
+                        Icon(
+                            imageVector = AppIcons.QueueMusic,
+                            contentDescription = "播放队列",
+                            tint = scheme.onSurface,
+                            modifier = Modifier.size(32.dp),
+                        )
+                    }
+                }
             }
             Spacer(Modifier.height(2.dp))
 
@@ -483,8 +532,9 @@ fun PlayerScreen(
             Spacer(Modifier.height(4.dp))
 
             // ------------------------------------------------------ 控制区
-            // 车载沉浸态整块收起（与顶栏同一开关，见文件头的沉浸态说明）
-            if (!immersive) {
+            // 车载沉浸态整块收起（与顶栏同一开关，见文件头的沉浸态说明）；
+            // 车机非沉浸态也已把控制键并进歌名行，这里只服务手机版式。
+            if (!immersive && !state.carMode) {
                 // 三段式布局：左右两个等宽槽位夹住中间的「上一首 / 播放 / 下一首」，
                 // 保证主控按钮绝对居中；播放模式固定在左槽，不再把整排按钮挤偏。
                 Row(
@@ -518,7 +568,7 @@ fun PlayerScreen(
                                 imageVector = AppIcons.SkipPrevious,
                                 contentDescription = "上一首",
                                 tint = scheme.onSurface,
-                                modifier = Modifier.size(if (state.carMode) 46.dp else 34.dp),
+                                modifier = Modifier.size(if (state.carMode) 36.dp else 34.dp),
                             )
                         }
                         FilledIconButton(
@@ -535,7 +585,7 @@ fun PlayerScreen(
                             Icon(
                                 imageVector = if (state.isPlaying) AppIcons.Pause else Icons.Filled.PlayArrow,
                                 contentDescription = if (state.isPlaying) "暂停" else "播放",
-                                modifier = Modifier.size(if (state.carMode) 52.dp else 34.dp),
+                                modifier = Modifier.size(if (state.carMode) 40.dp else 34.dp),
                             )
                         }
                         IconButton(
@@ -546,7 +596,7 @@ fun PlayerScreen(
                                 imageVector = AppIcons.SkipNext,
                                 contentDescription = "下一首",
                                 tint = scheme.onSurface,
-                                modifier = Modifier.size(if (state.carMode) 46.dp else 34.dp),
+                                modifier = Modifier.size(if (state.carMode) 36.dp else 34.dp),
                             )
                         }
                     }
@@ -569,8 +619,10 @@ fun PlayerScreen(
 
                 Spacer(Modifier.height(6.dp))
 
-                // -------------------------------------------------- 状态信息
-                Row(
+                // 状态信息（内置歌词 / 偏移 / 队列数）只在手机显示：
+                // 车机这一行要占 30dp 高度，而它能提供的信息在播放页并不是驾驶时要看的
+                // （v1.1.23，用户要求「不要播放按钮的占高度」，这一行同理让位给歌词）。
+                if (!state.carMode) Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth(),
                 ) {

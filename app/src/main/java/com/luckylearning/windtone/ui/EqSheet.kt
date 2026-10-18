@@ -99,6 +99,19 @@ fun EqSheet(onClose: () -> Unit) {
                 Switch(checked = state.enabled, onCheckedChange = AudioFx::setEnabled, enabled = state.available)
             }
 
+            // 绕道系统输出时必须说清楚作用范围（v1.1.23）：车机上媒体会话常没有
+            // 自己的效果链，我们退到 audioSession 0 才让它能用 —— 但那样连导航
+            // 提示音也会被一起调。
+            if (state.available && state.globalEffects) {
+                Text(
+                    "本机的播放会话不支持音效，已改挂到系统音频输出：" +
+                        "这些调节对所有声音生效（包括导航提示音与铃音）。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+
             if (!state.available) {
                 // 2026-10-18 真机反馈：车机上明明在放歌，这里却弹「播放器尚未启动」。
                 // 原因是只有 available=false 一个信号，界面只能猜。现在按原因分开说

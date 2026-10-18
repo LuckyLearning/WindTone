@@ -58,6 +58,14 @@ object AudioFx {
         val unavailable: Unavailable = Unavailable.NONE,
         /** 构造失败时的原始异常文案，只用于诊断展示 */
         val unavailableDetail: String = "",
+        /**
+         * 是否绕道「系统输出」（audioSession 0）建的效果器（v1.1.23）。
+         *
+         * 不少车机的媒体会话根本没挂效果链（HAL 把音效交给整车 DSP），
+         * 按会话建 `Equalizer` 必然抛异常；而挂到全局输出上通常还能用。
+         * 代价是作用范围变成整个系统混音，界面上必须说清楚。
+         */
+        val globalEffects: Boolean = false,
     ) {
         override fun equals(other: Any?): Boolean = this === other
         override fun hashCode(): Int = System.identityHashCode(this)
@@ -82,7 +90,7 @@ object AudioFx {
 
     /** 绑定播放会话（服务端调用；sessionId 未就绪时传入 0 延后绑定） */
     fun attach(audioSessionId: Int) {
-        val p = prefs ?: return
+        prefs ?: return
         if (audioSessionId != 0) sessionId = audioSessionId
         if (sessionId == 0) {
             // 还没有会话：明确标成「等播放器」，别让界面把它说成「设备不支持」
@@ -90,74 +98,97 @@ object AudioFx {
             return
         }
         releaseEffects()
-
-        runCatching {
-            val eq = Equalizer(0, sessionId)
-            val bassMax = runCatching { BassBoost(0, sessionId) }.getOrNull()
-            val virt = runCatching { Virtualizer(0, sessionId) }.getOrNull()
-            val loud = runCatching { LoudnessEnhancer(sessionId) }.getOrNull()
-            // 混响单独 runCatching：拿不到就只少一档功能，不能连带把均衡器整页判成不可用
-            val rev = runCatching { PresetReverb(0, sessionId) }.getOrNull()
-
-            val bandCount = eq.numberOfBands.toInt()
-            val min: Int = eq.bandLevelRange[0].toInt()
-            val max: Int = eq.bandLevelRange[1].toInt()
-            val centers = (0 until bandCount).map { i ->
-                val hz = eq.getCenterFreq(i.toShort()) / 100 // -> Hz
-                if (hz >= 1000) "${hz / 1000}kHz" else "${hz}Hz"
-            }
-            val centerHz = (0 until bandCount).map { i -> eq.getCenterFreq(i.toShort()) / 100 }
-
-            // 选中了内置预设 → 直接把曲线写到频段上；否则用用户自定义值
-            val preset = EqPresets.byId(p.eqPresetId)
-            val bands = if (preset != null) {
-                EqPresets.curveFor(preset, centerHz)
-            } else {
-                decodeBands(p.eqBands, bandCount, min, max)
-            }
-            applyBands(eq, bands)
-
-            bassMax?.setStrength(p.eqBassBoost.coerceIn(0, 1000).toShort())
-            virt?.setStrength(p.eqVirtualizer.coerceIn(0, 1000).toShort())
-            runCatching { loud?.setTargetGain(p.eqLoudness.coerceIn(0, 1500)) }
-
-            // 混响：存的是 id，平台要的是档位；存下来的 id 认不出来就退回「关闭」
-            val reverbPreset = ReverbPresets.byId(p.eqReverbId) ?: ReverbPresets.OFF
-            runCatching { rev?.setPreset(reverbPreset.platform) }
-
-            equalizer = eq
-            bass = bassMax
-            virtualizer = virt
-            loudness = loud
-            reverb = rev
-
-            _state.value = EqState(
-                available = true,
-                enabled = p.eqEnabled,
-                bandCount = bandCount,
-                bandMinMb = min,
-                bandMaxMb = max,
-                bandLevels = bands,
-                centerFreqs = centers,
-                bandCenterHz = centerHz,
-                presetId = preset?.id.orEmpty(),
-                bassStrength = p.eqBassBoost,
-                virtualStrength = p.eqVirtualizer,
-                bassMax = 1000,
-                loudnessGain = p.eqLoudness,
-                reverbId = p.eqReverbId,
-                reverbAvailable = rev != null,
-            )
-            apply(p.eqEnabled)
-        }.onFailure {
-            // 会话有了却建不出来：车机上很常见（音频走系统混音，HAL 不暴露效果器）。
-            // 原始异常文案留着，设置页只在诊断行里展示，正常界面不吓人。
-            _state.value = EqState(
-                available = false,
-                unavailable = Unavailable.DEVICE_REJECTED,
-                unavailableDetail = it.javaClass.simpleName + ": " + (it.message ?: ""),
-            )
+        // 先按播放会话建；车机上多半会失败，失败就退到 audioSession 0（系统输出）。
+        // 两条路都失败才判定「设备不支持」。
+        val bound = runCatching { bindEffects(sessionId, global = false) }
+        if (bound.isFailure && sessionId != 0) {
+            val fallback = runCatching { bindEffects(0, global = true) }
+            if (fallback.isSuccess) return
+            reportFailure(fallback.exceptionOrNull() ?: bound.exceptionOrNull())
+            return
         }
+        bound.onFailure { reportFailure(it) }
+    }
+
+    /**
+     * 建一条效果链并写状态；**失败直接抛**，由 [attach] 决定是退到全局还是判定不支持。
+     *
+     * [global] 只给状态留痕（界面要提示「作用范围是整个系统输出」），不参与构造。
+     */
+    private fun bindEffects(session: Int, global: Boolean) {
+        val p = prefs ?: return
+        val eq = Equalizer(0, session)
+        val bassMax = runCatching { BassBoost(0, session) }.getOrNull()
+        val virt = runCatching { Virtualizer(0, session) }.getOrNull()
+        val loud = runCatching { LoudnessEnhancer(session) }.getOrNull()
+        // 混响单独 runCatching：拿不到就只少一档功能，不能连带把均衡器整页判成不可用
+        val rev = runCatching { PresetReverb(0, session) }.getOrNull()
+
+        val bandCount = eq.numberOfBands.toInt()
+        val min: Int = eq.bandLevelRange[0].toInt()
+        val max: Int = eq.bandLevelRange[1].toInt()
+        val centers = (0 until bandCount).map { i ->
+            val hz = eq.getCenterFreq(i.toShort()) / 100 // -> Hz
+            if (hz >= 1000) "${hz / 1000}kHz" else "${hz}Hz"
+        }
+        val centerHz = (0 until bandCount).map { i -> eq.getCenterFreq(i.toShort()) / 100 }
+
+        // 选中了内置预设 → 直接把曲线写到频段上；否则用用户自定义值
+        val preset = EqPresets.byId(p.eqPresetId)
+        val bands = if (preset != null) {
+            EqPresets.curveFor(preset, centerHz)
+        } else {
+            decodeBands(p.eqBands, bandCount, min, max)
+        }
+        applyBands(eq, bands)
+
+        bassMax?.setStrength(p.eqBassBoost.coerceIn(0, 1000).toShort())
+        virt?.setStrength(p.eqVirtualizer.coerceIn(0, 1000).toShort())
+        runCatching { loud?.setTargetGain(p.eqLoudness.coerceIn(0, 1500)) }
+
+        // 混响：存的是 id，平台要的是档位；存下来的 id 认不出来就退回「关闭」
+        val reverbPreset = ReverbPresets.byId(p.eqReverbId) ?: ReverbPresets.OFF
+        runCatching { rev?.setPreset(reverbPreset.platform) }
+
+        equalizer = eq
+        bass = bassMax
+        virtualizer = virt
+        loudness = loud
+        reverb = rev
+
+        _state.value = EqState(
+            available = true,
+            enabled = p.eqEnabled,
+            bandCount = bandCount,
+            bandMinMb = min,
+            bandMaxMb = max,
+            bandLevels = bands,
+            centerFreqs = centers,
+            bandCenterHz = centerHz,
+            presetId = preset?.id.orEmpty(),
+            bassStrength = p.eqBassBoost,
+            virtualStrength = p.eqVirtualizer,
+            bassMax = 1000,
+            loudnessGain = p.eqLoudness,
+            reverbId = p.eqReverbId,
+            reverbAvailable = rev != null,
+            globalEffects = global,
+        )
+        apply(p.eqEnabled)
+    }
+
+    /**
+     * 记录「为什么建不出来」。
+     *
+     * 会话与系统输出两条路都失败才会走到这里。原始异常文案留着，
+     * 设置页只在诊断行里展示，正常界面不吓人。
+     */
+    private fun reportFailure(t: Throwable?) {
+        _state.value = EqState(
+            available = false,
+            unavailable = Unavailable.DEVICE_REJECTED,
+            unavailableDetail = t?.let { it.javaClass.simpleName + ": " + (it.message ?: "") }.orEmpty(),
+        )
     }
 
     /**
