@@ -738,20 +738,20 @@ class LyricOverlayService : Service() {
                     // 用户改完设置，下一帧就生效，不必重启服务、也不必等下一句歌词。
                     applyAppearance(prefs)
 
-                    // 调整 / 预览两种模式下即使 App 在前台、即使没歌词，也要显示——
-                    // 调整模式下用户此刻正站在设置页点「调整位置」；
-                    // 预览模式是刚打开开关的那几秒，得让用户看见「它确实开了」。
-                    // 这是「仅后台显示」规则的唯二例外。
-                    //
-                    // ⚠️ 全屏编辑态是例外中的例外（v1.1.20）：它盖住整块屏且吃触摸，
-                    // 在 App 内显示的话，设置页的「完成调整」根本点不到（事件全被浮层吃掉）。
-                    // 而位置本来就只能在桌面上拖，所以 App 前台时先不画，退到桌面再出现。
-                    val showOverride = isEditing || isPreview
-                    val fullEditingInApp = isEditing && prefs.lyricOverlayFullHeight && isForeground
-                    val pauseMode = prefs.lyricOverlayPauseMode
-                    val hideOnPause = !content.playing && !showOverride && pauseMode == PAUSE_HIDE
-                    val visible = !hideOnPause && screenInteractive && !fullEditingInApp &&
-                        (showOverride || !isForeground) && (content.visible || showOverride)
+                    // 显不显示交给 [OverlayVisibility] 判（v1.1.22 抽出并上单测）：
+                    // 规则里叠着「仅后台 / 调整 / 预览 / 暂停隐藏」四种例外，
+                    // 而全屏形态在 App 前台必须一律不画 —— 否则整屏歌词会压在
+                    // 设置页的宽度滑块和位置按钮上，一边调一边看不见（真机照片为证）。
+                    val visible = OverlayVisibility.show(
+                        fullHeight = prefs.lyricOverlayFullHeight,
+                        foreground = isForeground,
+                        editing = isEditing,
+                        preview = isPreview,
+                        playing = content.playing,
+                        pauseHide = prefs.lyricOverlayPauseMode == PAUSE_HIDE,
+                        screenInteractive = screenInteractive,
+                        hasContent = content.visible,
+                    )
                     desiredVisible = visible
                     if (!visible) {
                         applyVisibility()
@@ -789,7 +789,9 @@ class LyricOverlayService : Service() {
                         tv.maxLines = maxLines
                         tv.ellipsize = android.text.TextUtils.TruncateAt.END
                     }
-                    renderLines(tv, lines, content.playing || showOverride, full)
+                    // 「强调当前行」在播放时、以及调整 / 预览态下都要给 ——
+                    // 调整态可能没在放歌，但用户正看着它摆位置。
+                    renderLines(tv, lines, content.playing || isEditing || isPreview, full)
                     applyVisibility()
                     updateGeometryReport()
                 }

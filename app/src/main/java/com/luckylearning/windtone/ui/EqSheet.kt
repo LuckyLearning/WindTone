@@ -100,12 +100,23 @@ fun EqSheet(onClose: () -> Unit) {
             }
 
             if (!state.available) {
+                // 2026-10-18 真机反馈：车机上明明在放歌，这里却弹「播放器尚未启动」。
+                // 原因是只有 available=false 一个信号，界面只能猜。现在按原因分开说
+                // （文案见 [eqUnavailableCopy]，纯函数、有单测锁住）。
                 Text(
-                    "当前设备不可用或播放器尚未启动。\n开始播放任意一首歌曲后即可调节。",
+                    eqUnavailableCopy(state),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 24.dp),
                 )
+                if (state.unavailableDetail.isNotBlank()) {
+                    Text(
+                        text = "诊断：${state.unavailableDetail}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 16.dp),
+                    )
+                }
             } else {
                 PresetSection(state)
                 CurveSection(state)
@@ -395,3 +406,19 @@ private fun FxSlider(
 /** 增益 mB → 带符号的 dB（`0.0` / `+2.4` / `-3.0`），与效果图 ⑲ 的数值口径一致 */
 private fun formatGainDb(levelMb: Int): String =
     if (levelMb == 0) "0.0" else "%+.1f".format(levelMb / 100.0)
+
+/**
+ * 音效不可用时给用户看的那句话（v1.1.22）。
+ *
+ * 抽成纯函数是为了能上单测：这句话此前把「设备不给效果器」也说成
+ * 「播放器尚未启动」，在真车机上误导性极强 —— 用户明明在放歌，
+ * 却被指去点播放键。两种原因必须说成两件事。
+ */
+internal fun eqUnavailableCopy(state: AudioFx.EqState): String =
+    when (state.unavailable) {
+        AudioFx.Unavailable.DEVICE_REJECTED ->
+            "这台设备的音频系统没有向应用开放音效接口（车机上很常见）。\n" +
+                "均衡器 / 低音 / 混响都建不起来，请改用车辆自带的音效设置。播放本身不受影响。"
+        else ->
+            "播放器还没准备好音频会话。\n开始播放任意一首歌曲后即可调节。"
+    }

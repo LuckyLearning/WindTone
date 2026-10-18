@@ -1194,6 +1194,13 @@ class PlaybackEngine(
     override fun previewOverlay() {
         if (!prefs.lyricOverlay) return
         LyricOverlayBridge.sync(app, true)
+        // 全屏这一档在 App 前台不画（整屏浮层会盖住设置页，见 LyricOverlayService
+        // 的 fullInApp）。自检里的「显示预览」在这种情况下必然看不到东西，
+        // 与其静默无反应，不如直接告诉用户去哪儿看。
+        if (prefs.lyricOverlayFullHeight) {
+            messages.post("全屏歌词不在设置页内显示（否则会盖住控件），退到桌面即可看到")
+            return
+        }
         startOverlayPreview()
     }
 

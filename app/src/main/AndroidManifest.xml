@@ -16,6 +16,12 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!--
+      均衡器与音效：`AudioEffect`（Equalizer / BassBoost / Virtualizer / PresetReverb）
+      在部分 ROM（尤其车机）上要求调用方持有该权限，否则构造即抛异常，
+      表现为「明明在播放，音效页却说不可用」。这是普通权限，安装即授予、不弹窗。
+    -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
     <!--
       桌面悬浮歌词：在车机桌面 / 导航页最上层挂一行歌词字幕。

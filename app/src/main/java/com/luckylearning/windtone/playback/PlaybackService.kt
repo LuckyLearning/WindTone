@@ -95,6 +95,10 @@ class PlaybackService : MediaLibraryService() {
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
+                // 音效补试（v1.1.22）：部分机型要等第一次真正输出音频才有
+                // audioSessionId。此前只在 onAudioSessionIdChanged 里绑一次，
+                // 「先开 App 后放歌」的用户会一直停在「不可用」，只能杀进程重来。
+                if (isPlaying) AudioFx.retryIfUnavailable(player.audioSessionId)
                 pushWidget()
             }
 

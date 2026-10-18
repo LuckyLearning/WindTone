@@ -46,10 +46,24 @@ object AudioFx {
          * 混成一个布尔会让整页在那种机器上消失。
          */
         val reverbAvailable: Boolean = false,
+        /**
+         * 不可用的**原因**（v1.1.22）。
+         *
+         * 原先只有一个 `available=false`，界面只能猜「大概是还没开始播放」，
+         * 于是一辆正在放歌的车机上弹出了「播放器尚未启动」——一句话把用户引到
+         * 完全错误的方向。现在把两种情况分开报：
+         *  - [Unavailable.SESSION_PENDING]：还没拿到 audioSessionId（确实没开始播放）；
+         *  - [Unavailable.DEVICE_REJECTED]：会话有了，但本机音频系统不给建效果器。
+         */
+        val unavailable: Unavailable = Unavailable.NONE,
+        /** 构造失败时的原始异常文案，只用于诊断展示 */
+        val unavailableDetail: String = "",
     ) {
         override fun equals(other: Any?): Boolean = this === other
         override fun hashCode(): Int = System.identityHashCode(this)
     }
+
+    enum class Unavailable { NONE, SESSION_PENDING, DEVICE_REJECTED }
 
     private val _state = MutableStateFlow(EqState())
     val state: StateFlow<EqState> = _state.asStateFlow()
@@ -70,7 +84,11 @@ object AudioFx {
     fun attach(audioSessionId: Int) {
         val p = prefs ?: return
         if (audioSessionId != 0) sessionId = audioSessionId
-        if (sessionId == 0) return
+        if (sessionId == 0) {
+            // 还没有会话：明确标成「等播放器」，别让界面把它说成「设备不支持」
+            _state.value = EqState(available = false, unavailable = Unavailable.SESSION_PENDING)
+            return
+        }
         releaseEffects()
 
         runCatching {
@@ -132,14 +150,35 @@ object AudioFx {
             )
             apply(p.eqEnabled)
         }.onFailure {
-            _state.value = EqState(available = false)
+            // 会话有了却建不出来：车机上很常见（音频走系统混音，HAL 不暴露效果器）。
+            // 原始异常文案留着，设置页只在诊断行里展示，正常界面不吓人。
+            _state.value = EqState(
+                available = false,
+                unavailable = Unavailable.DEVICE_REJECTED,
+                unavailableDetail = it.javaClass.simpleName + ": " + (it.message ?: ""),
+            )
         }
+    }
+
+    /**
+     * 播放真正开始后再试一次绑定（v1.1.22）。
+     *
+     * 为什么需要：`audioSessionId` 在部分机型上要等第一次真正输出音频才拿到，
+     * 而 [attach] 在拿到 0 时只能先记「等播放器」。此前没有任何补试机制，
+     * 于是「先开 App 后放歌」的用户会一直停在不可用状态，只有杀进程重来才好。
+     */
+    fun retryIfUnavailable(audioSessionId: Int) {
+        val s = _state.value
+        if (s.available) return
+        if (audioSessionId == 0 && sessionId == 0) return
+        if (audioSessionId != 0) sessionId = audioSessionId
+        attach(sessionId)
     }
 
     fun release() {
         releaseEffects()
         sessionId = 0
-        _state.value = EqState(available = false)
+        _state.value = EqState(available = false, unavailable = Unavailable.SESSION_PENDING)
     }
 
     private fun releaseEffects() {
@@ -250,9 +289,14 @@ object AudioFx {
         }
 
         val s = _state.value
-        // 播放器还没起来（未开始播放 / 设备不支持）：只落盘，界面保持「不可用」
+        // 播放器还没起来（未开始播放 / 设备不支持）：只落盘，界面保持「不可用」，
+        // 但要把**为什么不可用**原样带过去，否则重置一次就把诊断信息抹成「未启动」
         if (!s.available || s.bandCount <= 0) {
-            _state.value = EqState(available = false)
+            _state.value = EqState(
+                available = false,
+                unavailable = s.unavailable,
+                unavailableDetail = s.unavailableDetail,
+            )
             return
         }
 

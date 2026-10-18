@@ -14,11 +14,13 @@ import com.luckylearning.windtone.state.PlayerUiState
 import com.luckylearning.windtone.state.UpdateUiState
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -70,6 +72,8 @@ import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -277,6 +281,14 @@ internal fun SettingsLyricsPage(
                 current = player.lyricOverlayFullOffsetPercent,
                 enabled = player.lyricOverlayFullWidthPercent < 100,
                 onPick = onLyricOverlayFullOffsetPercent,
+            )
+            // 页内示意图（v1.1.22）：全屏浮层在 App 内不再绘制（见 LyricOverlayService
+            // 的 fullInApp），否则整屏歌词会压在这些滑块和按钮上，一边调一边看不见。
+            // 代价是「改完当场看不到」，所以这里补一张跟屏幕同比例的缩略图：
+            // 调宽度它就跟着变窄，调位置它就跟着左右走，调完再退到桌面看真效果。
+            OverlayFullPreviewMock(
+                widthPercent = player.lyricOverlayFullWidthPercent,
+                offsetPercent = player.lyricOverlayFullOffsetPercent,
             )
         } else {
             ActionRow(
@@ -671,6 +683,93 @@ internal fun SettingsLyricsPage(
             value = player.lyricOverlayTextColor,
             onPick = { argb -> onLyricOverlayTextColor(argb) },
             onDismiss = { colorPickerShown = false },
+        )
+    }
+}
+
+/**
+ * 全屏歌词的**页内示意图**（v1.1.22）。
+ *
+ * 为什么需要它：全屏这一档在 App 前台一律不画浮层 —— 整屏歌词会盖住设置页，
+ * 宽度滑块、靠左/居中/靠右按钮全被字压住（真机上就是这么被用户拍回来的），
+ * 而且整屏吃触摸时连「完成调整」都点不到。但把浮层一关，用户改宽度就彻底
+ * 看不到反馈了。所以用一块 16:9 的缩略屏把「面板占多宽、站在哪」画出来：
+ * 纯 Compose 绘制，不碰 WindowManager，也不需要悬浮窗权限。
+ *
+ * 图里三条横向短线代表歌词行（当前行一条更亮），底部那条浅色带是车机 Dock
+ * —— 面板高度恒为「屏高 − 56dp」，示意里也把这段让位画出来，免得用户以为
+ * 满高贴着最底。
+ */
+@Composable
+private fun OverlayFullPreviewMock(widthPercent: Int, offsetPercent: Int) {
+    val screenColor = MaterialTheme.colorScheme.surface
+    val frameColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+    val panelColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
+    val panelEdge = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)
+    val lineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+    val currentLineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.95f)
+    val dockColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.22f)
+
+    Column(modifier = Modifier.padding(top = 2.dp, bottom = 8.dp)) {
+        // 缩略图不铺满整行：铺满时它自己就成了「一块大面板」，
+        // 反而看不出「面板在屏幕里占多少」。限宽 + 居中，让它明显是「一台屏幕的缩影」。
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Canvas(
+                modifier = Modifier
+                    // 定高 + 16:9 反推宽度（170dp 高 ≈ 302dp 宽）：既是一眼能看懂的缩略图，
+                    // 又不会在车机的大屏上变成一块占掉整屏的「大面板」——
+                    // 早先写成 fillMaxWidth(0.62f) 时算出来近 500dp 宽，整块滚出视口。
+                    .height(170.dp)
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(screenColor)
+                    .border(1.dp, frameColor, RoundedCornerShape(8.dp)),
+            ) {
+                val panelW = size.width * widthPercent.coerceIn(1, 100) / 100f
+                val travel = (size.width - panelW).coerceAtLeast(0f)
+                val x = travel * offsetPercent.coerceIn(0, 100) / 100f
+                // 与 OverlayPositioner.fullFrame 同口径：底部要让出车机 Dock。
+                // 示意图按屏高的 6% 画（56dp 在车机常见屏高下大致就是这个比例）。
+                val dockH = size.height * 0.06f
+                val panelH = size.height - dockH
+
+                drawRect(color = panelColor, topLeft = Offset(x, 0f), size = Size(panelW, panelH))
+                // 左右两条边线：面板贴边时也能一眼看出边界在哪
+                drawRect(color = panelEdge, topLeft = Offset(x, 0f), size = Size(1.5f, panelH))
+                drawRect(
+                    color = panelEdge,
+                    topLeft = Offset((x + panelW - 1.5f).coerceAtLeast(x), 0f),
+                    size = Size(1.5f, panelH),
+                )
+
+                // 歌词示意：上 2 条压暗、中间一条亮（当前行）、下 2 条压暗
+                val lineH = (panelH * 0.035f).coerceAtLeast(3f)
+                listOf(0.32f, 0.44f, 0.58f, 0.70f, 0.82f).forEach { fy ->
+                    val isCurrent = fy == 0.58f
+                    val lineW = if (isCurrent) panelW * 0.58f else panelW * 0.40f
+                    drawRect(
+                        color = if (isCurrent) currentLineColor else lineColor,
+                        topLeft = Offset(x + (panelW - lineW) / 2f, panelH * fy),
+                        size = Size(lineW, if (isCurrent) lineH * 1.5f else lineH),
+                    )
+                }
+
+                // 底部 Dock 让位带（这一段不画歌词）
+                drawRect(
+                    color = dockColor,
+                    topLeft = Offset(0f, panelH),
+                    size = Size(size.width, dockH),
+                )
+            }
+        }
+        Text(
+            text = "示意图：宽 $widthPercent%、" +
+                "${OverlayPositioner.offsetLabel(offsetPercent)}；" +
+                "底部灰色是车机 Dock（56dp 内不画歌词）。" +
+                "实际效果退到桌面查看 —— 全屏歌词不会盖住这一页，否则没法边调边看。",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 6.dp),
         )
     }
 }
