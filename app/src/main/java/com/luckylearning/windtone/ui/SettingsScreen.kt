@@ -339,7 +339,6 @@ fun SettingsScreen(
                         onLyricOverlayWidthPercent = onLyricOverlayWidthPercent,
                         onLyricOverlayTextColor = onLyricOverlayTextColor,
                         onLyricOverlayHiddenApps = onLyricOverlayHiddenApps,
-                        onForegroundLogEnabled = onForegroundLogEnabled,
                         onOverlayEditing = onOverlayEditing,
                         onOverlayPreview = onOverlayPreview,
                     )
@@ -374,6 +373,8 @@ fun SettingsScreen(
                         onClearCrashLog = onClearCrashLog,
                         onOverlayPreview = onOverlayPreview,
                         onLyricOverlay = onLyricOverlay,
+                        onForegroundLogEnabled = onForegroundLogEnabled,
+                        onLyricOverlayHiddenApps = onLyricOverlayHiddenApps,
                         onTestBootPlayback = onTestBootPlayback,
                     )
 

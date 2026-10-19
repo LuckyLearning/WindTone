@@ -87,6 +87,24 @@ internal fun SectionTitle(text: String) {
 }
 
 /**
+ * 分区内的**次级小标题**（v1.1.30）。
+ *
+ * 「调试」分区下面挂着四块排障工具（前台应用记录 / 悬浮歌词自检 / 崩溃日志 / 开机自启），
+ * 它们需要各自的标题，但不该再各占一个 [SectionTitle] —— 那会看起来像四个并列分区，
+ * 与「集中放一起」的初衷相反。所以次级标题比 SectionTitle 轻一档（left 对齐、无上间距加倍）。
+ */
+@Composable
+internal fun DebugLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurface,
+        fontWeight = FontWeight.Medium,
+        modifier = Modifier.padding(top = 14.dp, bottom = 2.dp),
+    )
+}
+
+/**
  * 「恢复默认」按钮的判据包装。
  *
  * `needsReset` 为真时给出动作，否则返回 `null` —— 行组件见到 `null` 就不画 ↺。

@@ -140,8 +140,6 @@ internal fun SettingsLyricsPage(
     onLyricOverlayTextColor: (Int) -> Unit,
     /** 「不显示悬浮窗的应用」名单（v1.1.29）；整体写回，弹窗内逐个勾选 */
     onLyricOverlayHiddenApps: (Set<String>) -> Unit,
-    /** 「前台应用记录」开关（v1.1.29，默认关） */
-    onForegroundLogEnabled: (Boolean) -> Unit,
     onOverlayEditing: (Boolean) -> Unit,
     onOverlayPreview: () -> Unit,
 ) {
@@ -448,7 +446,8 @@ internal fun SettingsLyricsPage(
         ActionRow(
             title = "不显示悬浮窗的应用",
             subtitle = if (player.lyricOverlayHiddenApps.isEmpty()) {
-                "还没有设置。选中的应用在前台时，悬浮歌词自动收起，退出后恢复"
+                "还没有设置。选中的应用在前台时，悬浮歌词自动收起，退出后恢复；" +
+                    "找不到应用就先去「关于与诊断 → 调试 → 前台应用记录」看包名"
             } else {
                 "已设 ${player.lyricOverlayHiddenApps.size} 个应用；点开可增删"
             },
@@ -457,21 +456,6 @@ internal fun SettingsLyricsPage(
             onReset = resetAction(player.lyricOverlayHiddenApps.isNotEmpty()) {
                 onLyricOverlayHiddenApps(emptySet())
             },
-        )
-        // 前台应用记录：默认关（行为记录要用户显式开启）。
-        // 副标题常驻显示检测源状态 —— 两个通道都没授权时直说，别让用户
-        // 以为开着记录其实什么都没记（这正是他最初提「实时显示看不到」时要的）。
-        SwitchRow(
-            title = "前台应用记录",
-            subtitle = overlayForegroundSubtitle(
-                hiddenCount = player.lyricOverlayHiddenApps.size,
-                logEnabled = player.foregroundLogEnabled,
-            ),
-            checked = player.foregroundLogEnabled,
-            onCheckedChange = onForegroundLogEnabled,
-            onReset = resetAction(
-                player.foregroundLogEnabled != SettingsDefaults.FOREGROUND_LOG_ENABLED,
-            ) { onForegroundLogEnabled(SettingsDefaults.FOREGROUND_LOG_ENABLED) },
         )
     }
     // 关闭态只留一句「打开后有什么可调」，免得这一整块消失得像设置丢了。
@@ -755,24 +739,6 @@ internal fun SettingsLyricsPage(
             onDismiss = { showHiddenApps = false },
         )
     }
-}
-
-/**
- * 「前台应用记录」行的副标题（v1.1.29）。
- *
- * 要回答用户三个问题：记不记、靠谁记、不记时名单还能不能生效 ——
- *  · 名单非空时，即使记录关着，隐藏依然生效（靠同一套检测）；
- *  · 两个检测通道的授权状态在诊断页看得到，这里给一句人话指引。
- */
-private fun overlayForegroundSubtitle(hiddenCount: Int, logEnabled: Boolean): String = when {
-    logEnabled && hiddenCount > 0 ->
-        "记录中；同时按名单（$hiddenCount 个）收起悬浮窗"
-    logEnabled ->
-        "记录中：前台应用切换会写进本机历史（关于与诊断 → 前台应用记录）"
-    hiddenCount > 0 ->
-        "已关闭记录；名单（$hiddenCount 个）的隐藏仍然生效"
-    else ->
-        "关闭。打开后记录前台应用切换，便于把 360 影像等应用加进上方名单"
 }
 
 /**

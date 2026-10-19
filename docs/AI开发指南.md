@@ -1743,9 +1743,11 @@ UsageStats 要「使用情况访问」授权且只能轮询。两者任一可用
 修法 = 作为**第六路**并入收集循环；`LayoutContractTest.overlayServiceSubscribesToForegroundPackage` 在源码层钉死。
 **通用教训：写端与读端之间必须有一条订阅关系**，否则纯函数测试全绿也没用。
 
-**UI 两处**：设置 → 歌词 底部「不显示悬浮窗的应用」（`SettingsLyricsOverlayAppsDialog.kt`：
-launcher 应用列表 + 搜索 + 图标，`Drawable→Bitmap` 转换要在 `remember` 外先取 `LocalContext`）
-与「前台应用记录」开关；诊断页新增同名区块（通道状态 / 跳转 / 历史列表 / 复制 / 清空）。
+**UI 两处**：① 设置 → 歌词 底部「不显示悬浮窗的应用」（`SettingsLyricsOverlayAppsDialog.kt`：
+launcher 应用列表 + 搜索 + 图标 + 手动贴包名，`Drawable→Bitmap` 转换要在 `remember` 外先取 `LocalContext`）；
+② **关于与诊断 → 调试**里的「前台应用记录」（v1.1.31 从歌词页搬来，与悬浮歌词自检 / 崩溃日志 / 开机自启
+同属 `SectionTitle("调试")` 下，次级标题用 `DebugLabel`）：开关 + 通道状态 + 历史列表，**每行自带「加入名单」**，
+已在名单的显示「已在名单」并禁用。查包名 → 加名单的动线因此全在一屏内完成。
 测试：`OverlayVisibilityTest`（4 条新增）/ `ForegroundAppStateTest`（上报去重 + 门控 + 日志纯函数）/ `LayoutContractTest`（manifest 声明）/ `SettingsScreenTest`。
 
 ---

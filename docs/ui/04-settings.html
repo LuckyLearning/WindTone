@@ -230,8 +230,6 @@
           <svg class="ic ic-18 rst"><use href="#i-reset"/></svg>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
         </div>
-        <div class="sw-row"><div class="sw-main"><div class="sw-t">前台应用记录</div>
-          <div class="sw-s">记录中；同时按名单（1 个）收起悬浮窗。状态文案随两块联动：关记录留名单 →「已关闭记录；名单（N 个）的隐藏仍然生效」；全关 →「关闭。打开后记录前台应用切换，便于把 360 影像等应用加进上方名单」</div></div><span class="switch"><i></i></span></div>
         <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-top:6px">
           <div style="flex:1"><div style="font-size:15px">调整悬浮歌词位置</div>
             <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">临时解锁，把歌词拖到想要的位置；位置会记住，锁定后不挡触摸</div></div>
@@ -247,7 +245,7 @@
   <b>宽度滑块改完立刻给一次 6 秒预览</b>。<br>
   <b>v1.1.22 起全屏这一档在 App 内不画</b>：整屏浮层不再压在设置页上（含「调整位置」与改完配置的 6 秒预览），宽度 / 水平位置下方改为一块 16:9 缩略示意图 —— 面板宽度、左右位置、底部 Dock 让位都按当前值实时绘制，实际效果退到桌面看。<br>
   <b>v1.1.21 起整块按开关显隐</b>：上面的「桌面悬浮歌词」关着时，形态 / 宽度 / 位置 / 行数 / 字号 / 对齐 / 底板 / 暂停 / 颜色 / 歌名歌手 / 调整位置<b>一项都不显示</b>，只留开关与一行小字说明「打开后能调什么」。开着的功能不摆无效控件 —— 早先那种「关着也允许预设」的写法，用户调完退到桌面看不到变化，只会当成 bug。<br>
-  <b>v1.1.29 尾部新增两行</b>（颜色之后、调整位置之前）：①「不显示悬浮窗的应用」——ActionRow 进名单弹窗（㉙F），副标题实时显示「已设 N 个应用；点开可增删」，带 ↺（清回空名单）；②「前台应用记录」——SwitchRow，默认关，副标题四态联动（记录+名单 / 只记录 / 只名单 / 全关），文案要把「记录关了但名单仍生效」这种中间态说清楚。两块共用免 adb 检测通道（无障碍服务为主、使用情况权限兜底），检测规范见 <code>docs/设计-悬浮窗按应用隐藏.md</code> 与 AI 开发指南 §11.15。<br>
+  <b>v1.1.29 尾部新增「不显示悬浮窗的应用」</b>（颜色之后、调整位置之前）：ActionRow 进名单弹窗（㉙F），副标题实时显示「已设 N 个应用；点开可增删」，带 ↺（清回空名单）。<b>v1.1.31 起「前台应用记录」开关搬去「关于与诊断 → 调试」</b>（㉚F）——记录是排障手段，不该出现在歌词设置里；查包名 → 加名单的动线因此全在调试页完成。检测通道规范见 <code>docs/设计-悬浮窗按应用隐藏.md</code> 与 AI 开发指南 §11.15。<br>
   <b>v1.1.20 起「全屏高度」是独立的一套</b>：形态开关拨开后，这一段换成「全屏宽度 30–100%」+「水平位置（0 靠左 / 50 居中 / 100 靠右）」两个滑块，外加<b>靠左 / 居中 / 靠右三个 44dp 等宽按钮</b>；单条字幕的行数 / 宽度 / 自由拖动全部收进「全屏关」那一档。两套值分开落盘，互不污染。全屏这一档的桌面拖动<b>只跟横向</b>，双击浮层即锁定（全屏铺满整块屏，吃触摸时必须有桌面侧也能收工的手势）。<br>
   <b>宽度两端的两条口径</b>：①滑块范围就是 <b>1–100%</b>（用户要的语义），拖动时<b>逐帧</b>写回——宽度与屏宽是直接的比例关系，松手才变会让人以为「拖了半天没反应」，引擎每次都会重摆窗口，正好当实时预览用。②服务侧对像素宽度留了 <b>48dp 下限</b>（标准最小触控边长）：1% 在 1080p 屏上只有 10px，窗口会小到既看不见也拖不着。下限不能再往上抬——抬到 80dp 时，1080p / 3x 的机器上滑块 <b>1%~22% 全是同一个宽度</b>，低端那一整段等于失灵；48dp 把这段死区压到 13% 以内。</p>
 </figure>
@@ -506,7 +504,7 @@
 </figure>
 
 <figure class="fig" id="scr-diagnostics-foreground-log">
-  <div class="cap"><b>㉚F 关于与诊断 · 前台应用记录</b><em>SettingsSystemPages.kt · SettingsDiagnosticsPage 前台应用记录区块（v1.1.29 新增）</em></div>
+  <div class="cap"><b>㉚F 关于与诊断 · 调试</b><em>SettingsSystemPages.kt · SettingsDiagnosticsPage 的「调试」分区（v1.1.29 起，v1.1.31 重排）</em></div>
   <div class="phone">
     <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
     <div class="app">
@@ -515,7 +513,10 @@
         <div class="dh-main"><div class="detail-title">关于与诊断</div></div>
       </div>
       <div class="list" style="padding:0 18px 12px">
-        <div class="section-label" style="padding:0;margin:12px 0 4px">前台应用记录</div>
+        <div class="section-label" style="padding:0;margin:12px 0 4px">调试</div>
+        <div style="font-size:13.5px;font-weight:500;margin-top:6px">前台应用记录</div>
+        <div class="sw-row"><div class="sw-main"><div class="sw-t">记录前台应用切换</div>
+          <div class="sw-s">记录中：最多 300 条，只写本机（关掉不影响名单生效）</div></div><svg class="ic ic-18 rst"><use href="#i-reset"/></svg><span class="switch"><i></i></span></div>
         <div style="font-size:12.5px;line-height:1.6">检测通道：无障碍服务（已开启） · 使用情况权限（未授予）</div>
         <div style="font-size:11px;color:var(--on-surface-variant);margin-top:4px">两个通道任一可用即可按名单收起悬浮窗；都不可用时按「不隐藏」放行，悬浮窗不会因此消失。没有 adb 也能用：无障碍服务在系统设置里手动开启。</div>
         <div style="display:flex;gap:6px;margin-top:8px">
@@ -526,11 +527,10 @@
         <div style="font-size:11px;color:var(--on-surface-variant);margin-top:6px">日志可读性：未测试（不影响任何功能，仅作信息）</div>
         <div style="font-size:12.5px;margin-top:8px">当前前台：未知</div>
         <div style="font-size:12.5px;margin-top:6px">最近 8 条切换（最新在上）：</div>
-        <div style="background:var(--surface-variant);border-radius:12px;padding:8px 12px;margin-top:4px;max-height:210px;overflow:hidden">
-          <div style="display:flex;gap:8px;font-size:11.5px;padding:3px 0"><span class="mono" style="color:var(--on-surface-variant);flex:none">10-19 00:55:37</span><span style="flex:1">听风 WindTone</span><span class="mono" style="color:var(--on-surface-variant);font-size:10px">com.luckylearning.windtone</span></div>
-          <div style="display:flex;gap:8px;font-size:11.5px;padding:3px 0"><span class="mono" style="color:var(--on-surface-variant);flex:none">10-19 00:54:48</span><span style="flex:1">360 影像</span><span class="mono" style="color:var(--on-surface-variant);font-size:10px">com.byd.aeri.caranywhere</span></div>
-          <div style="display:flex;gap:8px;font-size:11.5px;padding:3px 0"><span class="mono" style="color:var(--on-surface-variant);flex:none">10-19 00:54:26</span><span style="flex:1">Settings</span><span class="mono" style="color:var(--on-surface-variant);font-size:10px">com.android.settings</span></div>
-          <div style="display:flex;gap:8px;font-size:11.5px;padding:3px 0"><span class="mono" style="color:var(--on-surface-variant);flex:none">10-19 00:54:12</span><span style="flex:1">（应用名解析不到）</span><span class="mono" style="color:var(--on-surface-variant);font-size:10px">com.google.android.apps.nexuslauncher</span></div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:8px 12px;margin-top:4px;max-height:220px;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:8px;font-size:11.5px;padding:3px 0"><span class="mono" style="color:var(--on-surface-variant);flex:none">10-19 00:54:48</span><span style="flex:1">360 影像<br><span class="mono" style="color:var(--on-surface-variant);font-size:10px">com.byd.aeri.caranywhere</span></span><span style="color:var(--primary);font-size:12px">加入名单</span></div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:11.5px;padding:3px 0"><span class="mono" style="color:var(--on-surface-variant);flex:none">10-19 00:54:26</span><span style="flex:1">Settings<br><span class="mono" style="color:var(--on-surface-variant);font-size:10px">com.android.settings</span></span><span style="color:var(--on-surface-variant);font-size:12px">已在名单</span></div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:11.5px;padding:3px 0"><span class="mono" style="color:var(--on-surface-variant);flex:none">10-19 00:54:12</span><span style="flex:1">（应用名解析不到）<br><span class="mono" style="color:var(--on-surface-variant);font-size:10px">com.google.android.apps.nexuslauncher</span></span><span style="color:var(--primary);font-size:12px">加入名单</span></div>
         </div>
         <div style="display:flex;gap:6px;margin-top:8px">
           <button class="txtbtn" style="border:1px solid var(--outline);border-radius:18px;padding:5px 12px">复制全部</button>
@@ -540,9 +540,10 @@
       </div>
     </div>
   </div>
-  <p class="note"><b>为什么要有历史</b>：实时「当前前台」对听风没用——它藏在后台时用户根本看不见；要定位「360 影像到底是哪个包名」，必须<b>多条、按时间倒序</b>地看切换历史，再回到歌词子页把包名加进名单（㉙F）。<br>
-  <b>三条口径</b>：①记录<b>默认关</b>（歌词子页「前台应用记录」开关门控写入，<code>SettingsDefaults.FOREGROUND_LOG_ENABLED = false</code>）；②只存本机 <code>files/foreground_app_log.tsv</code>，滚动 300 条，坏了只丢日志不伤曲库（故意不进数据库）；③应用名解析不到时显示「（应用名解析不到）」并保留包名——launcher 一类无 label 包名的真实降级表现，真机验证过。<br>
-  <b>区块结构</b>：通道状态行（实时）→ 两颗系统设置跳转 + 「实测日志可读」（READ_LOGS 探针，纯信息、不影响功能）→ 当前前台 → 历史列表（LazyColumn，最新在上）→ 复制全部 / 刷新 / 清空（清空二次确认）。</p>
+  <p class="note"><b>为什么要有历史</b>：实时「当前前台」对听风没用——它藏在后台时用户根本看不见；要定位「360 影像到底是哪个包名」，必须<b>多条、按时间倒序</b>地看切换历史。v1.1.31 起每条右侧直接给「加入名单」（已在名单的显示「已在名单」），<b>原地一键加进名单</b>，不再需要复制包名切页粘贴（车机上这套动作没人愿意做）。<br>
+  <b>v1.1.31 的分区重排</b>：关于与诊断页把排障工具集中成一个「调试」分区 —— 前台应用记录 / 悬浮歌词自检 / 崩溃日志 / 开机自启，用次级标题（`DebugLabel`，titleSmall）挂在同一个 `SectionTitle("调试")` 下；播放统计、数据与存储、关于仍是独立分区。<br>
+  <b>三条口径</b>：①记录<b>默认关</b>（本区顶部的开关门控写入，<code>SettingsDefaults.FOREGROUND_LOG_ENABLED = false</code>，带 ↺）；②只存本机 <code>files/foreground_app_log.tsv</code>，滚动 300 条，坏了只丢日志不伤曲库（故意不进数据库）；③应用名解析不到时显示「（应用名解析不到）」并保留包名——launcher 一类无 label 包名的真实降级表现，真机验证过。<br>
+  <b>区块结构</b>：开关 → 通道状态行（实时）→ 两颗系统设置跳转 + 「实测日志可读」（READ_LOGS 探针，纯信息、不影响功能）→ 当前前台 → 历史列表（LazyColumn，最新在上，每行「加入名单」）→ 复制全部 / 刷新 / 清空（清空二次确认）。</p>
 </figure>
 
 <figure class="fig" id="scr-dlg-carmode">

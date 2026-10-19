@@ -1,5 +1,6 @@
 package com.luckylearning.windtone.ui
 
+import android.content.Context
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -8,9 +9,13 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.test.core.app.ApplicationProvider
 import com.luckylearning.windtone.data.DownloadRoute
 import com.luckylearning.windtone.data.SettingsDefaults
+import com.luckylearning.windtone.overlay.ForegroundAppLog
 import com.luckylearning.windtone.overlay.LyricOverlayBus
 import com.luckylearning.windtone.state.LibraryUiState
 import com.luckylearning.windtone.state.PlayerUiState
@@ -398,31 +403,70 @@ class SettingsScreenTest {
     }
 
     /**
-     * v1.1.29 两行新控件必须真的在歌词子页里（悬浮歌词开关打开后才出现）。
+     * v1.1.30：两个入口分家了。
      *
-     * 防的正是「功能从界面上悄悄消失」—— 这两行是用户在自己车上
-     * 勾选「360 影像时藏悬浮窗」的唯一入口，丢了不会编译失败、不会报错。
+     *  · 歌词子页只剩「不显示悬浮窗的应用」（日常配置）；
+     *  · 「记录前台应用切换」搬进 关于与诊断 → **调试**，和「加入名单」放在同一屏。
+     *
+     * 防的是「功能从界面上悄悄消失」—— 这两处都是用户在自己车上配名单的唯一入口，
+     * 丢了不会编译失败、不会报错。
      */
     @Test
-    fun lyricsPageExposesHiddenAppsAndForegroundLog() {
-        var logEnabled: Boolean? = null
-        render(
-            player = PlayerUiState(lyricOverlay = true),
-            onForegroundLogEnabled = { logEnabled = it },
-        )
+    fun lyricsPageKeepsOnlyHiddenAppsRow() {
+        render(player = PlayerUiState(lyricOverlay = true))
 
         compose.onNodeWithText("歌词").performClick()
         compose.waitForIdle()
-        // 先滚到页面底部，再回验两行都在（滚到一半就断言会假失败 —— 副标题那行
-        // 在视口下方时报「not displayed」，那是测试自己的时序问题，不是产品问题）。
-        compose.onNodeWithText("前台应用记录").performScrollTo().assertExists()
-        compose.onNodeWithText("不显示悬浮窗的应用").assertExists()
-        compose.onNodeWithText("关闭。打开后记录前台应用切换", substring = true).assertExists()
-        // SwitchRow 整行不可点（只有开关本体可点）。开关带 contentDescription
-        // （= 行标题，v1.1.29 为读屏补的），直接按它定位即可
-        compose.onNodeWithContentDescription("前台应用记录")
+        compose.onNodeWithText("不显示悬浮窗的应用").performScrollTo().assertExists()
+        // 记录开关已经搬走，不该再出现在歌词子页
+        compose.onNodeWithText("记录前台应用切换").assertDoesNotExist()
+    }
+
+    /**
+     * 调试分区：开关 + 历史 + 「加入名单」闭环（v1.1.30）。
+     *
+     * 用户要的是「在记录里看到 360 影像，直接把它加进名单」，而不是复制包名、
+     * 切到歌词子页、再粘进弹窗搜索框 —— 车机上这套动作没人愿意做。
+     */
+    @Test
+    fun debugSectionTogglesLogAndAddsFromHistory() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        ForegroundAppLog.clear(context)
+        ForegroundAppLog.append(context, "com.byd.aeri.caranywhere", "360 影像")
+
+        var logEnabled: Boolean? = null
+        var hidden: Set<String>? = null
+        render(
+            player = PlayerUiState(lyricOverlay = true),
+            onForegroundLogEnabled = { logEnabled = it },
+            onLyricOverlayHiddenApps = { hidden = it },
+        )
+
+        compose.onNodeWithText("关于与诊断").performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText("调试").performScrollTo().assertExists()
+        // SwitchRow 整行不可点，只有开关本体可点；它带 contentDescription = 标题
+        compose.onNodeWithContentDescription("记录前台应用切换")
             .performScrollTo().performClick()
         compose.waitForIdle()
-        assertEquals("点「前台应用记录」的开关应回调 true", true, logEnabled)
+        assertEquals("点开关应回调 true", true, logEnabled)
+
+        // 历史里那条记录 → 「加入名单」
+        //
+        // ⚠️ 这里用语义动作而不是 performClick()：这一行在页面很靠下的位置，
+        // Robolectric 的测试窗口只有 360×800dp，`performScrollTo()` 之后按钮
+        // 仍可能落在窗口外 —— 而 Compose 的 performClick() 是**注入真实触摸**，
+        // 落在窗口外会被静默丢弃（不抛异常、回调一次都不触发）。
+        // 本用例要验的是「按钮接线到 onLyricOverlayHiddenApps」，不是命中区域；
+        // 真实点击在模拟器上验过（设置 → 关于与诊断 → 调试 → 加入名单）。
+        compose.onNodeWithText("360 影像").assertExists()
+        compose.onNodeWithText("加入名单").performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitForIdle()
+        assertEquals(
+            "应把历史里的包名加入名单",
+            setOf("com.byd.aeri.caranywhere"),
+            hidden,
+        )
     }
 }

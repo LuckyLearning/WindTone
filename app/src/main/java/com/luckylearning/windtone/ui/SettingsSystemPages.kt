@@ -136,6 +136,10 @@ internal fun SettingsDiagnosticsPage(
     onClearCrashLog: () -> Unit,
     onOverlayPreview: () -> Unit,
     onLyricOverlay: (Boolean) -> Unit,
+    /** 「前台应用记录」开关（v1.1.30 从歌词子页搬到这里） */
+    onForegroundLogEnabled: (Boolean) -> Unit,
+    /** 整份「不显示悬浮窗的应用」名单（v1.1.30：记录里可以一键加入） */
+    onLyricOverlayHiddenApps: (Set<String>) -> Unit,
     /** 立刻走一次「开机后台起播」链路（v1.1.27，用于不重启也能验一遍） */
     onTestBootPlayback: () -> Unit,
 ) {
@@ -160,47 +164,6 @@ internal fun SettingsDiagnosticsPage(
     var bootInfo by remember { mutableStateOf<BootStatus.Snapshot?>(null) }
     LaunchedEffect(Unit) { bootInfo = BootStatus.snapshot(context) }
 
-
-    // ------------------------------------------------ 开机自启
-    // 这条链路只有真车能验（开机广播是系统保护广播，adb 发不出去），而失败表现
-    // 全是「开机后什么都没发生」。所以把广播是否到达、决策是什么、起播结果原样摆出来 ——
-    // 用户看一眼就能知道是「系统没给广播」还是「给了但没播起来」。
-    SectionTitle("开机自启")
-    val boot = bootInfo
-    StatCard(
-        rows = listOf(
-            "开关" to if (player.autoPlayOnBoot) {
-                "已打开（开机后台起播，不弹界面）"
-            } else {
-                "关闭"
-            },
-            "上次开机广播" to if (boot == null || !boot.received) {
-                "从未收到"
-            } else {
-                BootStatusText.agoLabel(System.currentTimeMillis(), boot.atMillis)
-            },
-            "决策" to (if (boot == null) "—" else BootStatusText.actionLabel(boot.action)),
-            "结果" to (if (boot == null) "—" else BootStatusText.resultLabel(boot)),
-        )
-    )
-    ActionRow(
-        title = "立刻试一次后台起播",
-        subtitle = "不重启也能验一遍：按开机那条路恢复上次队列并起播（不会弹出界面）",
-        onClick = {
-            onTestBootPlayback()
-            Toast.makeText(context, "已触发，退到桌面即可看到它在后台播放", Toast.LENGTH_SHORT).show()
-            bootInfo = BootStatus.snapshot(context)
-        },
-    )
-    ActionRow(
-        title = "刷新上面的状态",
-        subtitle = if (boot == null || !boot.received) {
-            "还没收到过开机广播：请确认系统「应用 → 听风 → 权限」里「开机启动 / 自启动」是允许的"
-        } else {
-            "看一遍这条路走到哪一步了"
-        },
-        onClick = { bootInfo = BootStatus.snapshot(context) },
-    )
 
     // ------------------------------------------------ 播放统计
     SectionTitle("播放统计")
@@ -281,62 +244,31 @@ internal fun SettingsDiagnosticsPage(
         Text("清空曲库与导入目录（保留收藏与统计）")
     }
 
-    // ------------------------------------------------ 悬浮歌词自检
-    // 悬浮歌词链路跨 6 个环节，任何一环断掉用户侧都是同一个「没反应」。
-    // 这个入口把整条链路一次测完，直接指出断点，省去猜和反复重装。
-    SectionTitle("悬浮歌词")
-    ActionRow(
-        title = "悬浮歌词自检",
-        subtitle = "逐项检查 授权 → 开关 → 服务 → 窗口 → 内容，指出断在哪一环",
-        onClick = {
-            overlayCheck = LyricOverlayBridge.snapshot(context)
-            showOverlayCheck = true
-        },
-        chevron = true,
-    )
-
-    // ------------------------------------------------ 崩溃日志
-    SectionTitle("崩溃日志")
-    ActionRow(
-        title = if (crashLogCount > 0) "查看日志（共 $crashLogCount 条）" else "暂无崩溃记录",
-        subtitle = "崩溃信息只保存在本机，不会自动上传，可导出后反馈",
-        onClick = onLoadCrashLog,
-    )
-    if (crashLogText != null) {
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            shape = RoundedCornerShape(10.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 6.dp),
-        ) {
-            Text(
-                text = crashLogText,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(10.dp),
-                maxLines = 24,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        TextButton(onClick = onExportCrashLog, enabled = crashLogCount > 0) {
-            Text("导出日志")
-        }
-        // 不可撤销 → 二次确认
-        TextButton(
-            onClick = { showClearCrashConfirm = true },
-            enabled = crashLogCount > 0,
-        ) { Text("清空日志") }
-    }
-
+    // ------------------------------------------------ 调试
+    // 排障工具集中在这里 —— 它们都是**只在出问题时才用**的东西（查包名 / 查链路 / 查崩溃 / 查开机），
+    // 和「播放统计」「数据与存储」这类日常信息分开，免得设置页被排障项挤满。
+    SectionTitle("调试")
     // ------------------------------------------------ 前台应用记录（v1.1.29）
     //
     // 「悬浮窗按应用隐藏」的仪表盘（设计见 docs/设计-悬浮窗按应用隐藏.md）。
     // 为什么历史在这里而不是只在设置里：悬浮窗的价值全在**听风在后台**时，
     // 实时显示反而看不到 —— 正常用车，停车后打开这里回看、勾名单。
-    SectionTitle("前台应用记录")
+    DebugLabel("前台应用记录")
+    // 开关就在这块里（v1.1.30 从「设置 → 歌词」搬过来）：记录是排障手段，
+    // 日常不该出现在歌词设置里；而查包名 → 加名单的动线全在这一页完成。
+    SwitchRow(
+        title = "记录前台应用切换",
+        subtitle = if (player.foregroundLogEnabled) {
+            "记录中：最多 300 条，只写本机（关掉不影响名单生效）"
+        } else {
+            "关闭。打开后把前台切换写进本机历史，便于查出 360 影像等应用的包名"
+        },
+        checked = player.foregroundLogEnabled,
+        onCheckedChange = onForegroundLogEnabled,
+        onReset = resetAction(
+            player.foregroundLogEnabled != SettingsDefaults.FOREGROUND_LOG_ENABLED,
+        ) { onForegroundLogEnabled(SettingsDefaults.FOREGROUND_LOG_ENABLED) },
+    )
     val currentPkg by ForegroundAppState.currentPkg.collectAsStateWithLifecycle()
     var logEntries by remember { mutableStateOf(ForegroundAppLog.read(context)) }
     var logcatProbe by remember { mutableStateOf<Boolean?>(null) }
@@ -403,40 +335,54 @@ internal fun SettingsDiagnosticsPage(
     )
     if (logEntries.isEmpty()) {
         Text(
-            text = "还没有记录。先在「设置 → 歌词 → 前台应用记录」打开开关，再正常用车；" +
-                "停车后回到这里，就能看到 360 影像等应用的包名，回上方名单勾选。",
+            text = "还没有记录。先打开上面的「记录前台应用切换」，再正常用车；" +
+                "停车后回到这里，就能看到 360 影像等应用的包名，点右侧「加入名单」即可收起悬浮窗。",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     } else {
         LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
             items(logEntries.reversed(), key = { "${it.timeMs}-${it.pkg}" }) { entry ->
+                // 一行 = 时间 + 「名字 / 包名」两行 + 「加入名单」按钮。
+                // v1.1.30 起可以直接点「加入名单」，不必再复制包名去歌词子页粘贴 ——
+                // 车机上长按复制、切页、粘贴这套动作基本没人愿意做。
+                val inList = entry.pkg in player.lyricOverlayHiddenApps
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                 ) {
                     Text(
                         text = ForegroundAppLog.formatTime(entry.timeMs),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = entry.label ?: "（应用名解析不到）",
-                        style = MaterialTheme.typography.labelMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = entry.pkg,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = entry.label ?: "（应用名解析不到）",
+                            style = MaterialTheme.typography.labelMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = entry.pkg,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    TextButton(
+                        enabled = !inList,
+                        onClick = {
+                            onLyricOverlayHiddenApps(player.lyricOverlayHiddenApps + entry.pkg)
+                            Toast.makeText(
+                                context,
+                                "已加入名单：" + (entry.label ?: entry.pkg),
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        },
+                    ) { Text(if (inList) "已在名单" else "加入名单") }
                 }
             }
         }
@@ -472,6 +418,97 @@ internal fun SettingsDiagnosticsPage(
             },
         )
     }
+
+    // ------------------------------------------------ 悬浮歌词自检
+    // 悬浮歌词链路跨 6 个环节，任何一环断掉用户侧都是同一个「没反应」。
+    // 这个入口把整条链路一次测完，直接指出断点，省去猜和反复重装。
+    DebugLabel("悬浮歌词")
+    ActionRow(
+        title = "悬浮歌词自检",
+        subtitle = "逐项检查 授权 → 开关 → 服务 → 窗口 → 内容，指出断在哪一环",
+        onClick = {
+            overlayCheck = LyricOverlayBridge.snapshot(context)
+            showOverlayCheck = true
+        },
+        chevron = true,
+    )
+
+    // ------------------------------------------------ 崩溃日志
+    DebugLabel("崩溃日志")
+    ActionRow(
+        title = if (crashLogCount > 0) "查看日志（共 $crashLogCount 条）" else "暂无崩溃记录",
+        subtitle = "崩溃信息只保存在本机，不会自动上传，可导出后反馈",
+        onClick = onLoadCrashLog,
+    )
+    if (crashLogText != null) {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
+        ) {
+            Text(
+                text = crashLogText,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(10.dp),
+                maxLines = 24,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        TextButton(onClick = onExportCrashLog, enabled = crashLogCount > 0) {
+            Text("导出日志")
+        }
+        // 不可撤销 → 二次确认
+        TextButton(
+            onClick = { showClearCrashConfirm = true },
+            enabled = crashLogCount > 0,
+        ) { Text("清空日志") }
+    }
+
+    // ------------------------------------------------ 开机自启
+    // 这条链路只有真车能验（开机广播是系统保护广播，adb 发不出去），而失败表现
+    // 全是「开机后什么都没发生」。所以把广播是否到达、决策是什么、起播结果原样摆出来 ——
+    // 用户看一眼就能知道是「系统没给广播」还是「给了但没播起来」。
+    DebugLabel("开机自启")
+    val boot = bootInfo
+    StatCard(
+        rows = listOf(
+            "开关" to if (player.autoPlayOnBoot) {
+                "已打开（开机后台起播，不弹界面）"
+            } else {
+                "关闭"
+            },
+            "上次开机广播" to if (boot == null || !boot.received) {
+                "从未收到"
+            } else {
+                BootStatusText.agoLabel(System.currentTimeMillis(), boot.atMillis)
+            },
+            "决策" to (if (boot == null) "—" else BootStatusText.actionLabel(boot.action)),
+            "结果" to (if (boot == null) "—" else BootStatusText.resultLabel(boot)),
+        )
+    )
+    ActionRow(
+        title = "立刻试一次后台起播",
+        subtitle = "不重启也能验一遍：按开机那条路恢复上次队列并起播（不会弹出界面）",
+        onClick = {
+            onTestBootPlayback()
+            Toast.makeText(context, "已触发，退到桌面即可看到它在后台播放", Toast.LENGTH_SHORT).show()
+            bootInfo = BootStatus.snapshot(context)
+        },
+    )
+    ActionRow(
+        title = "刷新上面的状态",
+        subtitle = if (boot == null || !boot.received) {
+            "还没收到过开机广播：请确认系统「应用 → 听风 → 权限」里「开机启动 / 自启动」是允许的"
+        } else {
+            "看一遍这条路走到哪一步了"
+        },
+        onClick = { bootInfo = BootStatus.snapshot(context) },
+    )
 
     // ------------------------------------------------ 关于
     SectionTitle("关于")
