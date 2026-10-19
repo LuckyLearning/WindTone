@@ -483,14 +483,14 @@ internal fun SettingsDiagnosticsPage(
             "最低系统" to "Android 7.0（API 24）",
             // v1.0.7 起 Release 按 ABI 分包，这里显示本机架构，方便对照下载
             "CPU 架构" to UpdateChecker.primaryAbiLabel().ifBlank { "—" },
-            "更新来源" to "${BuildConfig.GITHUB_OWNER}/${BuildConfig.GITHUB_REPO}",
+            "更新来源" to "${BuildConfig.RELEASE_OWNER}/${BuildConfig.RELEASE_REPO}",
         )
     )
     Text(
         "歌单、收藏、播放统计、歌词等全部数据都只保存在本机；" +
             "歌词优先读取音频同目录的 .lrc / .krc / .yrc 文件，其次读取音频内嵌歌词。\n" +
-            "联网行为只有一处：「检查更新 / 下载新版本」访问 GitHub Releases" +
-            "（检查更新只走 GitHub 官方地址；下载安装包可选择第三方加速镜像，可在「下载线路」中调整）。" +
+            "联网行为只有一处：「检查更新 / 下载新版本」访问 GitHub 上的公共分发仓库" +
+            "（LuckyLearning/Release；检查更新只走 GitHub 官方地址，下载安装包可选择第三方加速镜像，可在「下载线路」中调整）。" +
             "不采集、不上传任何信息。",
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -700,7 +700,7 @@ internal fun SettingsUpdatePage(
             else -> "检查更新"
         },
         subtitle = when {
-            update.checking -> "正在访问 GitHub Releases…"
+            update.checking -> "正在检查更新…"
             info != null ->
                 "当前 v${update.currentVersion} → 最新 v${info.version}" +
                     UpdateChecker.formatSize(info.apkSizeBytes)
@@ -708,7 +708,7 @@ internal fun SettingsUpdatePage(
                         ?.let { " · $it" }
                         .orEmpty()
 
-            else -> "当前版本 v${update.currentVersion} · 安装包由 GitHub Releases 分发"
+            else -> "当前版本 v${update.currentVersion} · 安装包由公共仓库分发"
         },
         onClick = onCheckUpdate,
     )

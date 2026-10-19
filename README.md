@@ -6,14 +6,14 @@ Android 原生本地音乐播放器 —— Kotlin + Jetpack Compose，**数据�
 
 [![Android CI](https://github.com/LuckyLearning/WindTone/actions/workflows/android-ci.yml/badge.svg)](https://github.com/LuckyLearning/WindTone/actions/workflows/android-ci.yml)
 [![Release APK](https://github.com/LuckyLearning/WindTone/actions/workflows/android-release.yml/badge.svg)](https://github.com/LuckyLearning/WindTone/actions/workflows/android-release.yml)
-[![Latest Release](https://img.shields.io/github/v/release/LuckyLearning/WindTone?display_name=tag&sort=semver)](https://github.com/LuckyLearning/WindTone/releases/latest)
+[![下载](https://img.shields.io/badge/下载-公共仓库-5B4BE0)](https://github.com/LuckyLearning/Release/tree/main/WindTone)
 [![License](https://img.shields.io/github/license/LuckyLearning/WindTone)](LICENSE)
 
 ---
 
 ## 下载安装
 
-最新安装包在 **[Releases](https://github.com/LuckyLearning/WindTone/releases/latest)** 页面，按 CPU 架构分成 4 个包（Release 签名包，R8 混淆 + 资源压缩，约 3 MB）：
+源码仓库是私有的，安装包单独放在公共分发仓库 **[LuckyLearning/Release](https://github.com/LuckyLearning/Release/tree/main/WindTone)**（按「软件 / 版本」分目录，只保留最近 5 个版本）。每个版本按 CPU 架构分成 4 个包（Release 签名包，R8 混淆 + 资源压缩，约 3 MB）：
 
 | 文件 | 说明 |
 |---|---|

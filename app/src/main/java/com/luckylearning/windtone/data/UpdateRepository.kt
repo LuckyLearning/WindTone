@@ -161,7 +161,7 @@ class UpdateRepository(
             .onSuccess { _update.update { it.copy(dialogVisible = false) } }
             .onFailure { t ->
                 _update.update {
-                    it.copy(message = "无法启动安装器：${t.message ?: "请到 Releases 页面手动下载"}")
+                    it.copy(message = "无法启动安装器：${t.message ?: "请到公共仓库页面手动下载"}")
                 }
             }
     }
@@ -227,7 +227,7 @@ class UpdateRepository(
         _update.update { it.copy(route = route) }
     }
 
-    /** 浏览器打开 Releases 页面（下载失败或想手动下载时的兜底） */
+    /** 浏览器打开公共仓库的版本目录（下载失败或想手动下载时的兜底） */
     override fun openReleasePage() {
         runCatching {
             app.startActivity(

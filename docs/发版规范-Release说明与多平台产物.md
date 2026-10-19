@@ -171,3 +171,75 @@ title: 发版规范：Release 说明与多平台产物
 
 1. 固定模板的文案（第二节）是否照此？特别是「本版包含若干功能调整与问题修复」这句要不要换成别的说法；
 2. 下一版号用 **1.0.7**（1.0.6 已发，分包改造需要新版本号验证）——确认后我就推送并发布。
+
+---
+
+## 六、公共分发仓库（v1.1.30 起）
+
+源码仓库已**私有**，它的 Release 与资产匿名不可访问，而应用内更新必须能在无鉴权的情况下工作。
+因此每个版本在打完 tag、建好私有 Release 之后，还要往公共仓库 **`LuckyLearning/Release`** 发一份。
+
+### 6.1 目录结构（固定）
+
+```
+Release/
+├─ README.md                      # 索引：软件名 / 目录 / 最新版本（脚本自动刷新）
+├─ LICENSE
+└─ WindTone/                     # 软件名（英文，便于拼直链）
+   ├─ latest.json                # ★ 应用内更新读这个
+   └─ v1.1.30/                   # 一个版本一个目录，最多保留 5 个
+      ├─ WindTone-v1.1.30-arm64-v8a.apk
+      ├─ WindTone-v1.1.30-armeabi-v7a.apk
+      ├─ WindTone-v1.1.30-x86_64.apk
+      ├─ WindTone-v1.1.30-universal.apk
+      ├─ notes.md                # 该版本的 Release 说明（模板渲染结果）
+      └─ checksums.txt           # sha256sum -c 可直接校验
+```
+
+命名口径：软件目录英文驼峰；版本目录 `v` + 语义化版本；安装包 `<软件>-v<版本>-<abi>.apk`。
+
+### 6.2 `latest.json`
+
+```json
+{
+  "schema": 1,
+  "app": "WindTone",
+  "displayName": "听风 WindTone",
+  "version": "1.1.30",
+  "versionCode": 40,
+  "tag": "v1.1.30",
+  "publishedAt": "2026-10-19T04:10:00Z",
+  "minSdk": 24,
+  "notes": "…纯文本/Markdown…",
+  "assets": [
+    { "abi": "arm64-v8a", "file": "WindTone-v1.1.30-arm64-v8a.apk", "size": 3023626, "sha256": "…" }
+  ]
+}
+```
+
+⚠️ **向后兼容是硬要求**：客户端散落在旧版本上，清单只能**加可选字段**，不能改名/删字段；
+应用侧解析按「缺字段给默认值」写（`parseManifest` 对坏数据一律折成「检查失败」，不崩）。
+
+### 6.3 发布与保留策略（自动）
+
+`android-release.yml` 在创建私有 Release 后追加一步：
+
+```bash
+bash scripts/publish-release-repo.sh    # 需要 secret RELEASE_REPO_TOKEN
+```
+
+脚本做四件事：
+
+1. 浅克隆公共仓库，把本次 4 个 APK + `notes.md` + `checksums.txt` 放进 `WindTone/v<版本>/`；
+2. **裁剪到最近 5 个版本**（`sort -V` 倒序，删第 6 个及更旧）；
+3. 用 `scripts/gen-release-manifest.py` 生成 `latest.json`、刷新 README 的版本行；
+4. **以「快照」方式 force push 到 `main`**（每次一个孤立提交）—— 发行仓库不需要保留历史二进制，
+   否则 5 个版本 × 4 包 × 3MB 会逐版堆积；然后实查远端 `latest.json` 的 `version` 是否已更新。
+
+失败即让工作流**红**：宁可发版失败，也不要出现「私有 Release 有包、公共仓库还是旧版本」这种
+应用内更新永远升不上去的状态。
+
+### 6.4 首次 / 迁移
+
+公共仓库可以随时从私有 Release 重建：把历史版本的 4 个包下载下来按上面的结构摆好，
+跑一次 `gen-release-manifest.py` 生成清单即可（2026-10-19 迁移时保留了 1.1.29 / 1.1.28 / 1.1.27 / 1.1.23 / 1.1.21）。

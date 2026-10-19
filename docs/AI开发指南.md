@@ -17,7 +17,7 @@ title: AI 开发指南
 ### 这是什么
 
 **听风 WindTone** 是一个纯本地的 Android 音乐播放器（Kotlin + Jetpack Compose + Media3）。
-不依赖任何在线音乐服务，播的是本机音频文件；唯一的联网功能是「应用内更新」——去 GitHub Releases 查新版本。
+不依赖任何在线音乐服务，播的是本机音频文件；唯一的联网功能是「应用内更新」——读公共分发仓库的 latest.json 查新版本。
 
 - 仓库：`https://github.com/LuckyLearning/WindTone`（**public**）
 - 发布方式：打 `v*` tag → GitHub Actions 自动构建**已签名** APK 并创建 Release
@@ -107,7 +107,7 @@ LibraryViewModel   PlayerViewModel    UpdateViewModel    SettingsViewModel
 | **数据维护** | 诊断页「数据与存储」：曲库/目录/歌单/缓存占用快照、清理失效歌曲、清空封面缓存、重置用户数据（保留曲库） |
 | **个性化** | 封面主色动态主题、Material 3 色板、浮动迷你条、封面上下滑调音量、迷你条拖拽跳转 |
 | **系统集成** | 桌面小组件（上一首/播放/下一首）、快捷设置磁贴、崩溃日志本地留存与导出 |
-| **更新** | 应用内检查 GitHub Releases → 下载 APK（进度条）→ FileProvider 交系统安装器 |
+| **更新** | 读公共分发仓库 `latest.json` → 下载 APK（进度条，多线路）→ SHA-256 校验 → FileProvider 交系统安装器 |
 
 ### 1.3 界面导航结构
 
@@ -569,40 +569,36 @@ Prefs 里**也没有**任何遗留键搬迁逻辑或 `data_v4_migrated` 之类�
 （查 Release / 比对版本 / 下载 / 校验 / 安装）。界面侧 `UpdateViewModel` 用接口委托整体转出，**不写实现**。
 
 ```
-checkLatest()  ── 通道 1（首选）：GET github.com/{owner}/{repo}/releases.atom  ← 普通网页资源，无配额限制
-                 → parseAtom()：取第一条 entry 的 <id> 末尾 tag、<title>、<content>（HTML 实体反转义）
-                 → 下载地址按 CI 命名规则推导：releases/download/{tag}/WindTone-v{版本}.apk
+checkLatest()  ── GET raw.githubusercontent.com/{owner}/{repo}/{branch}/{app}/latest.json
+                 · 静态文件、CDN 直出，**不消耗 api.github.com 的 60 次/小时配额**
+                 · 一次请求拿全：version / versionCode / tag / notes / assets[abi,file,size,sha256]
+                 → parseManifest()：坏 JSON / 没版本号 / 没资产都折成 Failed（永不抛异常）
+                 → orderAssets(assets, deviceAbis)：本机 ABI → universal → 其它 ABI
                  → isNewer(candidate, BuildConfig.VERSION_NAME)  语义化版本比较（1.10 > 1.9，不是字符串比较）
-               ── 通道 2（兜底）：GET api.github.com/repos/{owner}/{repo}/releases/latest
-                 → pickApkAsset()  从 assets 里挑 .apk（优先名字含 WindTone），拿真实资产链接与大小
 download()
-   → 下载到 cacheDir/updates/xxx.apk.part
-   → verifyApk()：校验文件头是 ZIP（0x50 4B）→ 大小符合（Release 声明值 或 响应 Content-Length）→ 重命名为 .apk
+   → downloadCandidates()：直连 raw → jsDelivr → ghproxy（手动选线路时**只走那一条**）
+   → 写 .part；8 秒内不足 512KB 判「慢线路」并换下一条
+   → verifyApk()：ZIP 头 → 字节数 → **SHA-256**（清单给了摘要就必须一致，否则拒绝安装）
    → 进度回调 → UpdateUiState.progress
 install()
    → FileProvider.getUriForFile(context, "${applicationId}.fileprovider", apk)
    → Intent(ACTION_VIEW, apkUri) + FLAG_GRANT_READ_URI_PERMISSION → 系统安装器
 ```
 
-> ⚠ **为什么不直接用 REST API？** 未认证的 GitHub API 按**出口 IP** 限 60 次/小时。手机常在运营商
-> NAT / 代理后面，同一 IP 被大量用户共享，配额会被别人耗尽 → 403 `rate limit exceeded`
-> （报错文案「GitHub 接口访问过于频繁」）。这不是用户自己请求太频繁。
-> `releases.atom` 与资产直链都是普通网页资源，**不计入该配额**，所以作为主通道。
-> 改这块时**不要把 Atom 通道删掉退回纯 API**；`UpdateCheckerTest` 已锁住解析与限流文案。
+> ⚠ **为什么不再直接读源码仓库的 Releases**（v1.1.30 改）：源码仓库已**私有**，匿名请求
+> `api.github.com` / `releases.atom` / Release 资产一律 404，更新链路会整体失效。
+> 现在安装包由发布流水线另发到**公共分发仓库** `LuckyLearning/Release`（`<软件>/<版本>/`，
+> 只保留最近 5 个版本），应用读它的 `latest.json`。顺带解决了 API 配额问题（未认证请求按
+> **出口 IP** 限 60 次/小时，手机常在运营商 NAT 后，配额会被别人耗尽）。
 
-> ⚠ **两条通道给的说明正文格式不一样，`plainNotes()` 必须同时吃下两种**（v1.1.12 修）：
-> Atom 的 `<content type="html">` 是 **GitHub 渲染后的 HTML**（`<p>` `<strong>` `<ul>` `<table>`），
-> REST API 的 `body` 是 **Markdown 原文**（`**加粗**`、`- 列表`、`| 表格 |`）。
-> 只清洗一种，另一种就会把标记原样甩进弹窗 —— v1.0 ~ v1.1.11 线上就是这样：用户看到一整屏
-> `<p><strong>`，像乱码。而 **Atom 是主通道**，所以踩中的恰恰是 HTML 那一种。
-> （旧单测只断言「实体已反转义」，把残留 `<h2>` 当成了正确结果，等于没测。）
-> 两条通道必须收敛到**逐字相同**的文本，`UpdateCheckerTest.notesDoNotDependOnChannel`
-> 拿真实的 atom / API 响应比对钉死了这一点。清洗口径：HTML 与 Markdown 的表格都折成 `• a · b` 行、
-> 块级元素与列表项各占一行、段间不留空行、**先剥标签再解实体**（反过来的话正文里被转义的
-> `&lt;b&gt;` 会变成尖括号被当成标签剥掉）。
+> ⚠ **`plainNotes()` 必须同时吃下 Markdown 与 HTML**：清单里的 `notes` 是模板渲染出的 **Markdown**，
+> 但历史上的 Release 正文曾是 **HTML**（Atom 的 `<content>`），且旧版本客户端仍会读老数据。
+> 只清洗一种，另一种就会把标记原样甩进弹窗（v1.0 ~ v1.1.11 线上就是这样，用户看到一整屏 `<p><strong>`）。
+> 清洗口径：HTML 与 Markdown 的表格都折成 `• a · b` 行、块级元素与列表项各占一行、段间不留空行、
+> **先剥标签再解实体**（反过来会让正文里被转义的 `&lt;b&gt;` 变成尖括号被当标签剥掉）。
 
-- 仓库坐标来自 `BuildConfig.GITHUB_OWNER` / `GITHUB_REPO` / `GITHUB_RELEASES_URL` / `APK_ASSET_TEMPLATE`（在 `build.gradle.kts` 的 `buildConfigField`，**换仓库改这里**）。
-- `APK_ASSET_TEMPLATE` 必须与 CI 产出的资产名一致（`WindTone-v%s.apk`，见 `android-release.yml` 的重命名步骤）。
+- 仓库坐标来自 `BuildConfig.RELEASE_OWNER` / `RELEASE_REPO` / `RELEASE_BRANCH` / `RELEASE_APP_DIR` / `RELEASE_PAGE_URL`（在 `build.gradle.kts` 的 `buildConfigField`，**换仓库改这里**）。
+- 资产名由清单里的 `assets[].file` 给出，**应用侧不再按模板推导文件名**（模板只影响 CI 产出）。
 - `REQUEST_INSTALL_PACKAGES` 权限 + `canInstall()` 判断，未授权时引导用户去设置页（`unknownSourcesIntent()`）。
 - FileProvider authority 是 **`${applicationId}.fileprovider`** 占位符 → debug 与 release 自动隔离，无需硬编码。
 - `file_paths.xml` 只暴露 `cache-path updates/`，不要为了省事暴露整盘。

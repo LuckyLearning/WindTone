@@ -131,16 +131,18 @@ android {
         vectorDrawables { useSupportLibrary = true }
         resourceConfigurations += listOf("zh", "en")
 
-        // 应用内更新：Release 托管在 GitHub，APK 通过 Releases 资产分发
-        buildConfigField("String", "GITHUB_OWNER", "\"LuckyLearning\"")
-        buildConfigField("String", "GITHUB_REPO", "\"WindTone\"")
-        buildConfigField("String", "GITHUB_RELEASES_URL", "\"https://github.com/LuckyLearning/WindTone/releases\"")
-        // APK 命名规则（见文件末尾 androidComponents 的命名逻辑）：
-        //  - 不分包：WindTone-v<版本>.apk（历史行为，应用内更新仍兼容）
-        //  - 分包：  WindTone-v<版本>-<abi>.apk / WindTone-v<版本>-universal.apk
-        buildConfigField("String", "APK_ASSET_TEMPLATE", "\"WindTone-v%s.apk\"")
-        buildConfigField("String", "APK_ASSET_TEMPLATE_ABI", "\"WindTone-v%s-%s.apk\"")
-        buildConfigField("String", "APK_ASSET_TEMPLATE_UNIVERSAL", "\"WindTone-v%s-universal.apk\"")
+        // 应用内更新：源码仓库是**私有**的，安装包改由公共分发仓库
+        // LuckyLearning/Release 按 <软件>/<版本> 目录分发（只保留最近 5 个版本）。
+        // 应用读的是该仓库里的 WindTone/latest.json，不需要任何鉴权。
+        buildConfigField("String", "RELEASE_OWNER", "\"LuckyLearning\"")
+        buildConfigField("String", "RELEASE_REPO", "\"Release\"")
+        buildConfigField("String", "RELEASE_BRANCH", "\"main\"")
+        buildConfigField("String", "RELEASE_APP_DIR", "\"WindTone\"")
+        buildConfigField(
+            "String",
+            "RELEASE_PAGE_URL",
+            "\"https://github.com/LuckyLearning/Release/tree/main/WindTone\""
+        )
 
         // 启动诊断页（见文件顶部 diagBuild 的说明），默认关闭
         buildConfigField("boolean", "BOOT_DIAG", diagBuild.toString())

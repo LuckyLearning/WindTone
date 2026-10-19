@@ -5,14 +5,12 @@ title: 项目文档
 
 # 听风 WindTone
 
-Android 原生本地音乐播放器。**数据全部留在本机**，只在你主动（或开启自动检查时）才访问 GitHub Releases 查询新版本。
+Android 原生本地音乐播放器。**数据全部留在本机**，只在你主动（或开启自动检查时）才访问 GitHub 上的公共分发仓库查询新版本。
 
 支持 MP3 / FLAC / WAV / M4A / OGG / Opus 等常见格式；同时支持「独立歌词文件」与「音频内嵌歌词」两种来源，兼容 KRC / YRC（酷狗 / 网易云）格式，并支持原文 + 翻译的双语歌词。
 
-[![Android CI](https://github.com/LuckyLearning/WindTone/actions/workflows/android-ci.yml/badge.svg)](https://github.com/LuckyLearning/WindTone/actions/workflows/android-ci.yml)
-[![Release APK](https://github.com/LuckyLearning/WindTone/actions/workflows/android-release.yml/badge.svg)](https://github.com/LuckyLearning/WindTone/actions/workflows/android-release.yml)
-[![Latest Release](https://img.shields.io/github/v/release/LuckyLearning/WindTone?display_name=tag&sort=semver)](https://github.com/LuckyLearning/WindTone/releases/latest)
-[![License](https://img.shields.io/github/license/LuckyLearning/WindTone)](https://github.com/LuckyLearning/WindTone/blob/main/LICENSE)
+[![下载](https://img.shields.io/badge/下载-公共仓库-5B4BE0)](https://github.com/LuckyLearning/Release/tree/main/WindTone)
+[![License](https://img.shields.io/github/license/LuckyLearning/Release)](https://github.com/LuckyLearning/Release/blob/main/LICENSE)
 
 ---
 
@@ -31,7 +29,7 @@ Android 原生本地音乐播放器。**数据全部留在本机**，只在你�
 
 ## 下载安装
 
-最新安装包在 **[Releases](https://github.com/LuckyLearning/WindTone/releases/latest)** 页面。每个版本按 CPU 架构分成 4 个包（Release 签名包，R8 混淆 + 资源压缩，约 3 MB）：
+最新安装包在公共分发仓库 **[LuckyLearning/Release](https://github.com/LuckyLearning/Release/tree/main/WindTone)**（源码仓库私有，安装包单独放这里；按「软件 / 版本」分目录，只保留最近 5 个版本）。每个版本按 CPU 架构分成 4 个包（Release 签名包，R8 混淆 + 资源压缩，约 3 MB）：
 
 | 文件 | 说明 |
 |---|---|
