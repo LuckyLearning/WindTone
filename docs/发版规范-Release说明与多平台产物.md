@@ -91,7 +91,7 @@ title: 发版规范：Release 说明与多平台产物
 
 > 上面这段是 1.0.6 当时的正文，属历史示例、不再改动。**现行模板以 `.github/release-notes/template.md` 为准**：
 > 1.1.30 起更新源改为公共分发仓库 `LuckyLearning/Release` 的 `latest.json`（不再是 GitHub Releases API），
-> 下一版起「检查更新」在直连不通时也会自动切换镜像线路。
+> 1.1.32 起「检查更新」在直连不通时也会自动切换镜像线路（整体 18 秒封顶）。
 
 ---
 

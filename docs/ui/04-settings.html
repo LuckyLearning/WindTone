@@ -65,14 +65,14 @@
           <span style="font-size:11px;color:var(--primary)">v1.0.6</span>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
         <div class="cat-row"><span class="cat-ic"><svg class="ic"><use href="#i-info"/></svg></span>
-          <div class="cat-main"><div class="cat-t">关于与诊断</div><div class="cat-s">版本信息 · 播放统计 · 崩溃日志 · 隐私说明</div></div>
+          <div class="cat-main"><div class="cat-t">关于与诊断</div><div class="cat-s">版本信息 · 播放统计 · 隐私说明</div></div>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
       </div>
     </div>
   </div>
   <p class="note"><b>分层原则（v1.1.3 二次重构）</b>：主页面<b>只放二级分类入口卡</b>，一张卡一个分类——左侧<b>语义图标</b>（40dp 圆角 12 容器、secondaryContainer 底）+ 分类名 + 一行摘要 + 右箭头，<b>摘要把子页里最重要的状态前置</b>（「格式与容量 · 过滤 &lt; 60 秒」「v1.0.6」「速度 1.00x」），不进子页就能看到大概。<br>
   &nbsp;&nbsp;v1.0.7 曾把主页压到「外观 / 播放 / 歌词三组平铺 + 三个子页入口」（约 1.3 屏）；但悬浮歌词五个外观选项加入后，「歌词」一组独占两屏，主页又开始长回去——本次把 <b>外观 / 播放 / 歌词</b> 三组也各自下沉成子页，主页回到<b>一屏六张卡</b>，任何设置最多两层直达。<br>
-  &nbsp;&nbsp;六个分类的归属：①<b>外观</b>——主题跟随封面取色、车载模式；②<b>播放</b>——默认播放速度、变调、<b>打开应用继续上次播放</b>、跳过静音、均衡器与音效；③<b>歌词</b>——歌词字号、桌面悬浮歌词及其外观选项；④<b>音乐库</b>——短音频过滤（一次性配置）；⑤<b>更新</b>——检查更新 / 自动检查 / 下载线路；⑥<b>关于与诊断</b>——播放统计、崩溃日志、版本与隐私。<br>
+  &nbsp;&nbsp;六个分类的归属：①<b>外观</b>——主题跟随封面取色、车载模式；②<b>播放</b>——默认播放速度、变调、<b>打开应用继续上次播放</b>、跳过静音、均衡器与音效；③<b>歌词</b>——歌词字号、桌面悬浮歌词及其外观选项；④<b>音乐库</b>——短音频过滤（一次性配置）；⑤<b>更新</b>——检查更新 / 自动检查 / 下载线路；⑥<b>关于与诊断</b>——播放统计、数据与存储、版本与隐私（<b>崩溃日志在「调试」分区里，默认不显示</b>，见 <a href="#scr-diagnostics-foreground-log">㉚F</a>）。<br>
   <b>设置页从底部滑入覆盖全屏</b>（不是新 Activity）；子页是同一个 <code>SettingsScreen</code> 内部的页面状态（<code>SettingsPage</code> 枚举），<b>不新建 Activity、不引入导航库</b>；子页里按系统返回键先回主页面，回主页后再按才关闭设置页。<br>
   <b>分类入口卡 = 图标 + 摘要 + 右箭头</b>：v1.0.7 起「全 App 不存在 chevron」的规范放宽为「只有 ActionRow 能带 chevron」；v1.1.3 起再放宽一档——<b>设置主页的二级分类入口卡（<code>CategoryRow</code>）也带 chevron 和左侧图标</b>（参考通用播放器设置主页的二级菜单结构），其余位置不变：<code>OptionRow</code>（弹层行）依旧左侧图标 + 选中 ✓、无箭头；子页内的 <code>ActionRow</code> 依旧左侧无图标、箭头只给「点开会进入另一个界面」的行（子页入口、打开弹层 / 弹窗的行），就地执行动作（「检查更新」）或就地展开（「查看日志」）的行不加。<br>
   <b>子页入口行与分类卡的区别</b>：子页里的 <code>ActionRow</code>（如「均衡器与音效」「过滤短音频」）是<b>某一类设置里的一条</b>，无图标；主页的 <code>CategoryRow</code> 是<b>一整类设置的门面</b>，带图标 + 摘要——两层信息密度不同，不会混淆。<br>
@@ -226,7 +226,7 @@
              名单命中是硬隐藏（仅次灭屏/无内容），检测通道两选一、都不可用按「不隐藏」放行。 -->
         <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-top:6px">
           <div style="flex:1"><div style="font-size:15px">不显示悬浮窗的应用</div>
-            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">已设 1 个应用；点开可增删。选中的应用在前台时悬浮歌词自动收起（车机 360 影像等），退出后恢复</div></div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">已设 1 个应用；点开可增删</div></div>
           <svg class="ic ic-18 rst"><use href="#i-reset"/></svg>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
         </div>
@@ -302,22 +302,26 @@
       <div class="list" style="padding:4px 18px 12px">
         <div style="background:var(--surface-variant);border-radius:16px;padding:14px 16px;margin:10px 0;box-shadow:0 8px 24px rgba(0,0,0,.35)">
           <div style="font-size:17px;font-weight:600">不显示悬浮窗的应用</div>
-          <div style="font-size:12px;color:var(--on-surface-variant);margin-top:6px">已设 1 个。勾上的应用在前台时，悬浮歌词会自动收起，退出后恢复。</div>
-          <div style="background:var(--surface);border:1px solid var(--outline);border-radius:10px;padding:8px 12px;margin-top:10px;font-size:13px;color:var(--on-surface-variant)">搜索应用名或包名</div>
+          <div style="font-size:12px;color:var(--on-surface-variant);margin-top:6px">已设 2 个。勾上的应用在前台时，悬浮歌词会自动收起，退出后恢复。</div>
+          <!-- 搜索框画出「已输入完整包名」这一态：下面「加入包名」行只在输入像包名的串时才出现 -->
+          <div style="display:flex;align-items:center;gap:8px;background:var(--surface);border:1.5px solid var(--primary);border-radius:10px;padding:8px 12px;margin-top:10px">
+            <span class="mono" style="flex:1;font-size:12.5px">com.byd.aeri.car</span>
+            <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-close"/></svg>
+          </div>
           <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
-            <span style="width:32px;height:32px;border-radius:8px;background:#5c6bc0;display:flex;align-items:center;justify-content:center;font-size:15px;color:#fff">齿轮</span>
-            <div style="flex:1"><div style="font-size:14px">Settings</div><div style="font-size:10.5px;color:var(--on-surface-variant)">com.android.settings</div></div>
+            <div style="flex:1"><div style="font-size:14px">加入包名</div><div class="mono" style="font-size:10.5px;color:var(--primary)">com.byd.aeri.car</div></div>
+            <span class="switch off"><i></i></span>
+          </div>
+          <div style="font-size:10.5px;color:var(--on-surface-variant);margin-top:12px">已加入（这些应用没有桌面图标，从这里也能取消）</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+            <span style="width:32px;height:32px;border-radius:8px;background:#546e7a;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff">影像</span>
+            <div style="flex:1"><div style="font-size:14px">360 全景</div><div style="font-size:10.5px;color:var(--on-surface-variant)">com.byd.avm360</div></div>
             <span class="switch"><i></i></span>
           </div>
           <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
             <span style="width:32px;height:32px;border-radius:8px;background:#43a047;display:flex;align-items:center;justify-content:center;font-size:15px;color:#fff">仪表</span>
             <div style="flex:1"><div style="font-size:14px">360 影像</div><div style="font-size:10.5px;color:var(--on-surface-variant)">com.byd.aeri.caranywhere</div></div>
             <span class="switch"><i></i></span>
-          </div>
-          <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
-            <span style="width:32px;height:32px;border-radius:8px;background:#7e57c2;display:flex;align-items:center;justify-content:center;font-size:15px;color:#fff">风</span>
-            <div style="flex:1"><div style="font-size:14px">听风 WindTone</div><div style="font-size:10.5px;color:var(--on-surface-variant)">com.luckylearning.windtone</div></div>
-            <span class="switch off"><i></i></span>
           </div>
           <div style="display:flex;justify-content:flex-end;gap:18px;margin-top:14px">
             <button class="txtbtn">清空</button><button class="txtbtn" style="color:var(--primary)">完成</button>
@@ -328,7 +332,7 @@
   </div>
   <p class="note"><b>关键点：</b>列表来自 <code>PackageManager.queryIntentActivities(MAIN/LAUNCHER)</code>（按包名去重、按应用名排序），行 = 图标 + 应用名 + 包名 + Switch；顶部搜索框按应用名或包名实时过滤；标题下方的计数随勾选实时变（「还没有设置…」→「已设 N 个…」）。<br>
   <b>清空要二次确认</b>；「完成」落盘。图标的 <code>Drawable→ImageBitmap</code> 转换要先在 <code>remember</code> 外取好 <code>LocalContext</code>（Compose 网关坑，见实现注释）。<br>
-  <b>为什么列的是 launcher 应用</b>：能被用户打开的应用才可能「到前台挡住悬浮窗」；无界面组件与系统进程不在列表里，属预期。<br>  <b>v1.1.30 补的两条入口</b>：① 搜索框里粘贴完整包名（如从诊断页「前台应用记录」抄来的）→ 列表顶部出现「加入包名」一行，可直接勾上；② 已在名单、但没有桌面图标的应用单独列在顶部（「已加入（这些应用没有桌面图标，从这里也能取消）」），否则勾错了改不回来。<br>
+  <b>为什么列的是 launcher 应用</b>：能被用户打开的应用才可能「到前台挡住悬浮窗」；无界面组件与系统进程不在列表里，属预期。<br>  <b>v1.1.30 补的两条入口</b>（上图即这两条同时生效的样子：搜索框里粘贴了一个完整包名）：① 搜索框里粘贴完整包名（如从诊断页「前台应用记录」抄来的）→ 列表顶部出现「加入包名」一行，可直接勾上；② 已在名单、但没有桌面图标的应用单独列在顶部（「已加入（这些应用没有桌面图标，从这里也能取消）」），否则勾错了改不回来。输入过包名时下面的可启动列表会按串过滤（`com.byd.aeri.car` 仍能匹配到 `com.byd.aeri.caranywhere`）。<br>
   <b>判定口径</b>：名单命中 → <code>OverlayVisibility.foregroundHidden = true</code> 硬隐藏（仅次灭屏 / 无内容，压过编辑态与预览）；检测通道不可用 → 按「不隐藏」放行，悬浮窗不会凭空消失。</p>
 </figure>
 
@@ -427,32 +431,36 @@
       <div class="list" style="padding:0 18px 12px">
         <div class="section-label" style="padding:0;margin:12px 0 4px">更新</div>
         <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px">
-          <div style="font-size:15px">发现新版本 v1.0.6</div>
-          <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">当前 v1.0.5 → 最新 v1.0.6 · 3.02 MB</div>
+          <div style="font-size:15px">发现新版本 v1.1.32</div>
+          <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">当前 v1.1.31 → 最新 v1.1.32 · 3.04 MB</div>
         </div>
         <div class="sw-row" style="margin-top:6px"><div class="sw-main"><div class="sw-t">启动时自动检查更新</div>
           <div class="sw-s">关闭后应用不再发起任何网络请求（在线更新是唯一的联网功能）</div></div><span class="switch"><i></i></span></div>
         <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px">
           <div style="flex:1"><div style="font-size:15px">下载线路</div>
-            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">自动 · 直连优先，太慢会自动切换镜像</div></div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">自动 · 直连优先，连不上自动换镜像</div></div>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
         </div>
         <div style="display:flex;gap:4px"><button class="txtbtn">打开发布页面</button><button class="txtbtn">忽略此版本</button></div>
       </div>
     </div>
   </div>
-  <p class="note"><b>关键点：</b>更新行有三态：检查中「正在检查更新…」/ 有新版「发现新版本 vX.Y.Z」/ 常态「检查更新」；
-  「忽略此版本」只在有新版本时出现。<br>
-  <b>检查失败态</b>：失败时该行副标题直接显示原因（如「GitHub 访问额度已用完（N 分钟后恢复）」/「网络不可用，请检查网络后重试」），
-  主标题退回「检查更新」；因为检查主通道走 releases.atom（不计 API 配额），正常网络下不会再出现限流提示。<br>
-  <b>下载线路（v1.0.6）</b>：副标题「当前线路 · 一句话说明」，点开是单选弹窗（见 <a href="#scr-dlg-downloadroute">㉚G</a>），带右箭头。<br>
-  <b>检查更新永远访问 GitHub 官方地址</b>——早期版本让检查也走加速镜像，镜像缓存了旧内容，刚发布的版本会被误判成「已是最新」；镜像现在只用于下载安装包。<br>
+  <p class="note"><b>关键点：</b>更新行有三态：检查中「正在检查更新…」/ 有新版「发现新版本 vX.Y.Z」/ 常态「检查更新」
+  （常态副标题「当前版本 vX.Y.Z · 安装包由公共仓库分发」）；「忽略此版本」只在有新版本时出现。<br>
+  <b>检查失败态</b>：失败时该行副标题直接显示原因，主标题退回「检查更新」。v1.1.30 起检查只读公共分发仓库的
+  <code>latest.json</code>（不再走 GitHub API，没有限流问题）；v1.1.32 起<b>检查也带线路兜底</b>：先直连
+  <code>raw.githubusercontent.com</code>，连不上依次试 ghproxy.net → gh-proxy.com → jsDelivr，
+  单条 6s 连接 / 8s 读取、整体 18s 封顶。文案：超时 →「连接更新服务器超时，请稍后重试，或点「打开发布页面」手动下载」；
+  域名解析失败 →「解析不到更新服务器（多为 DNS 问题），请检查网络或换一个网络重试」。<br>
+  <b>镜像缓存的两条口径</b>：① 只有直连失败才会退到镜像；② 经镜像得出的「已是最新」会注明「刚发布的版本可能有延迟」（<code>viaMirror</code>），
+  不会把刚发的版本静默报成最新。<b>手动选定某条线路时只走那一条，不偷偷换线</b>。<br>
+  <b>下载线路（v1.0.6 起，v1.1.32 扩到检查+下载共用）</b>：副标题「当前线路 · 一句话说明」，点开是单选弹窗（见 <a href="#scr-dlg-downloadroute">㉚G</a>），带右箭头。<br>
   <b>为什么独立成页</b>：这一组里「检查更新」是偶尔要点的动作、「自动检查」是开关、「下载线路」是排障工具，三类性质混排，
   但都属于「更新」这一件事；主页面只留一条带状态摘要的入口行。</p>
 </figure>
 
 <figure class="fig" id="scr-settings-diagnostics">
-  <div class="cap"><b>㉚D 设置页 · 关于与诊断子页</b><em>SettingsScreen.kt · 播放统计 / 崩溃日志 / 关于</em></div>
+  <div class="cap"><b>㉚D 设置页 · 关于与诊断子页</b><em>SettingsScreen.kt · 播放统计 / 数据与存储 / 关于（「调试」分区默认隐藏，见 ㉚F）</em></div>
   <div class="phone">
     <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
     <div class="app">
@@ -470,37 +478,49 @@
           <div class="sr"><span>收藏</span>28 首</div>
         </div>
         <button class="txtbtn" style="align-self:flex-start;margin-top:6px">清空播放统计（保留收藏）</button>
-        <div class="section-label" style="padding:0;margin:14px 0 4px">崩溃日志</div>
-        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px">
-          <div style="font-size:15px">查看日志（共 2 条）</div>
-          <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">崩溃信息只保存在本机，不会自动上传，可导出后反馈</div>
+        <div class="section-label" style="padding:0;margin:14px 0 4px">数据与存储</div>
+        <div class="stat-card">
+          <div class="sr"><span>曲库歌曲</span>500 首</div>
+          <div class="sr"><span>暂不可见</span>6 首</div>
+          <div class="sr"><span>已移出曲库</span>2 首</div>
+          <div class="sr"><span>导入目录</span>3 个</div>
+          <div class="sr"><span>歌单</span>5 个</div>
+          <div class="sr"><span>封面缓存</span>18.4 MB</div>
+          <div class="sr"><span>数据库占用</span>2.1 MB</div>
         </div>
-        <div class="mono" style="margin-top:8px">2026-10-12 21:04:11 · IllegalStateException
-  at com.luckylearning.windtone.ui.MusicViewModel.refreshGroups(MusicViewModel.kt:412)
-  at ... (共 24 行，此处截断展示)</div>
-        <div style="display:flex;gap:4px;margin-top:4px"><button class="txtbtn">导出日志</button><button class="txtbtn">清空日志</button></div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;margin-top:6px">
+          <div style="font-size:15px">清理失效歌曲</div>
+          <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">6 首歌曲的文件已不在本机，清理后其收藏与统计一并移除</div>
+        </div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-top:6px">
+          <div style="flex:1"><div style="font-size:15px">重复歌曲清理</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">按「标题 + 歌手 + 时长」找重复，每组留一首，其余移出曲库（不删文件）</div></div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
         <div class="section-label" style="padding:0;margin:14px 0 4px">关于</div>
         <div class="stat-card">
           <div class="sr"><span>应用</span>听风 WindTone</div>
-          <div class="sr"><span>版本</span>1.0.6</div>
+          <div class="sr"><span>版本</span>1.1.32</div>
           <div class="sr"><span>包名</span>com.luckylearning.windtone</div>
           <div class="sr"><span>最低系统</span>Android 7.0（API 24）</div>
           <div class="sr"><span>CPU 架构</span>arm64-v8a</div>
-          <div class="sr"><span>更新来源</span>LuckyLearning/WindTone</div>
+          <div class="sr"><span>更新来源</span>LuckyLearning/Release</div>
         </div>
         <div style="font-size:11px;line-height:1.65;color:var(--on-surface-variant);margin-top:8px">歌单、收藏、播放统计、歌词等全部数据都只保存在本机；歌词优先读取音频同目录的 .lrc / .krc / .yrc 文件，其次读取音频内嵌歌词。
-联网行为只有一处：「检查更新 / 下载新版本」访问 GitHub 上的公共分发仓库（LuckyLearning/Release；检查更新只走 GitHub 官方地址，下载安装包可选第三方加速镜像，见「下载线路」）。不采集、不上传任何信息。</div>
+联网行为只有一处：「检查更新 / 下载新版本」访问 GitHub 上的公共分发仓库（LuckyLearning/Release；先直连官方地址，连不上时自动切换第三方加速镜像，也可在「下载线路」中手动指定）。不采集、不上传任何信息。</div>
       </div>
     </div>
   </div>
-  <p class="note"><b>为什么独立成页</b>：这三块全是<b>只读信息 + 排障工具</b>，看一次就够，却原来和开关平铺在同一条滚动里 ——
-  用户想改「跳过静音」要滚过 5 行统计卡和崩溃日志。<br>
-  <b>三段各自的职责</b>：<br>
+  <p class="note"><b>为什么独立成页</b>：这几块全是<b>只读信息 + 维护工具</b>，看一次就够，却原来和开关平铺在同一条滚动里 ——
+  用户想改「跳过静音」要滚过 5 行统计卡和维护项。<br>
+  <b>四段各自的职责</b>（本屏画前三段；「调试」默认不渲染）：<br>
   &nbsp;&nbsp;· <b>播放统计</b>——StatCard（标签列宽 112dp）+「清空播放统计（保留收藏）」；点击弹二次确认「会清空播放次数、累计收听时长与「播放过的歌曲」；收藏与歌单保留。该操作不可撤销。」；<br>
-  &nbsp;&nbsp;· <b>崩溃日志</b>——「查看日志（共 N 条）」点击就地展开 24 行 mono 文本块（<b>就地展开，所以行上不加箭头</b>）；「导出日志」「清空日志」在有记录时才可用，清空同样二次确认；<br>
+  &nbsp;&nbsp;· <b>数据与存储</b>——StatCard 报七项实时占用（曲库歌曲 / 暂不可见 / 已移出曲库 / 导入目录 / 歌单 / 封面缓存 / 数据库占用），下面「清理失效歌曲」「恢复已移出曲库的歌曲」「重复歌曲清理」「清空封面缓存」四条 ActionRow，末尾两条 TextButton 是不可撤销的整体操作（各自二次确认）。进入本页时刷新一次自检；读不到文件大小的歌只计首数、不计占用；<br>
+  &nbsp;&nbsp;· <b>调试</b>（<b>v1.1.31 起默认隐藏</b>，在「关于」卡上连点 5 次解锁）——前台应用记录 / 悬浮歌词自检 / <b>崩溃日志</b> / 开机自启，详见 <a href="#scr-diagnostics-foreground-log">㉚F</a>。崩溃日志已从本页主体搬进这个分区，普通用户看不到；<br>
   &nbsp;&nbsp;· <b>关于</b>——应用 / 版本 / 包名 / 最低系统 / CPU 架构 / 更新来源 六行 + 隐私说明长文。隐私说明是产品信任核心，不要删。<br>
   <b>CPU 架构行（v1.0.7）</b>：展示本机主 ABI（<code>UpdateChecker.primaryAbiLabel()</code>），
-  与 Release 页面按 ABI 分包的资产名（<code>WindTone-v1.0.7-arm64-v8a.apk</code> 等）一一对应，方便用户对照下载。</p>
+  与公共分发仓库里按 ABI 分包的资产名（<code>WindTone-v1.1.32-arm64-v8a.apk</code> 等）一一对应，方便用户对照下载。<br>
+  <b>更新来源行（v1.1.30 起）</b>：显示 <code>BuildConfig.RELEASE_OWNER/RELEASE_REPO</code> = <code>LuckyLearning/Release</code>——安装包与 <code>latest.json</code> 都在这个公共仓库，不再是源码仓库的 Releases。</p>
 </figure>
 
 <figure class="fig" id="scr-diagnostics-foreground-log">
@@ -643,10 +663,10 @@
       <div class="dim"></div>
       <div class="dialog">
         <div class="dlg-title">下载线路</div>
-        <div style="font-size:11px;line-height:1.65;color:var(--on-surface-variant);margin-bottom:6px">「检查更新」始终访问 GitHub 官方地址；只有下载安装包时可以选择走加速镜像。镜像有缓存，偶尔会慢或滞后，下载失败时换一条线路再试即可。</div>
+        <div style="font-size:11px;line-height:1.65;color:var(--on-surface-variant);margin-bottom:6px">检查更新与下载安装包都走这条线路：「自动」先直连 GitHub 官方地址，连不上时依次尝试加速镜像；手动选定则只走那一条。镜像有缓存，偶尔会慢或滞后，失败时换一条线路再试即可。</div>
         <div style="display:flex;align-items:center;gap:10px;padding:9px 2px">
           <div style="flex:1"><div style="font-size:14.5px;color:var(--primary)">自动</div>
-            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:2px">直连优先，太慢会自动切换镜像</div></div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:2px">直连优先，连不上自动换镜像</div></div>
           <svg class="ic" style="color:var(--primary)"><use href="#i-check"/></svg>
         </div>
         <div style="display:flex;align-items:center;gap:10px;padding:9px 2px">
@@ -669,10 +689,11 @@
   </div>
   <p class="note"><b>关键点：</b>四个选项单选，选中项标题用 primary 色 + 右侧 ✓（与弹层 <code>OptionRow</code> 的选中态一致，<b>没有右箭头</b>）；
   点任一项立即生效并关闭弹窗，<code>完成</code> 只是显式关闭。入口在「更新」子页（见 ㉚C），行上带右箭头。选项即 <code>DownloadRoute</code> 枚举（Prefs.kt）：<br>
-  &nbsp;&nbsp;· <b>自动</b>（默认）→ 直链 + ghproxy.net + gh-proxy.com 依次降级；<br>
+  &nbsp;&nbsp;· <b>自动</b>（默认）→ 检查与下载都先用直链，连不上依次退 ghproxy.net → gh-proxy.com（检查还会多试一条 jsDelivr）；<br>
   &nbsp;&nbsp;· <b>直连 GitHub</b> → 只用官方直链，不套任何前缀；<br>
   &nbsp;&nbsp;· <b>ghproxy.net / gh-proxy.com</b> → <b>只走这一条</b>（手动选了就不偷偷换线，失败时提示去改线路）。<br>
-  下载起始 8 秒内不足 512KB 视为「线路过慢」，自动模式下直接换下一条，手动模式下报错并提示换线。</p>
+  <b>v1.1.32 起这条线路同时管「检查更新」</b>：此前检查只认官方直连，国内被阻断就只能报超时；现在检查也按同一份候选表降级，单条 6s/8s、整体 18s 封顶。
+  下载侧仍保留 8 秒内不足 512KB 视为「线路过慢」的判定：自动模式下直接换下一条，手动模式下报错并提示换线。</p>
 </figure>
 
 
