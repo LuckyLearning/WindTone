@@ -56,7 +56,7 @@ Android 原生本地音乐播放器 —— Kotlin + Jetpack Compose，**数据�
 | 最低版本 | Android 7.0（API 24），compileSdk / targetSdk 35 |
 | 架构 | 分域 ViewModel（播放 / 曲库 / 设置 / 更新）+ 手写服务定位器 `AppContainer`，无 Hilt / Koin |
 | 网络 | **只有**一个用途 —— 访问 `api.github.com` 检查更新；不引入 OkHttp / Gson |
-| 单元测试 | 225 项（JVM + Robolectric），lint Error 级 0 |
+| 单元测试 | 346 项（JVM + Robolectric），lint Error 级 0 |
 
 ---
 
@@ -77,7 +77,7 @@ WindTone/
 │  ├─ ui/                       Compose 界面与四个分域 ViewModel
 │  ├─ overlay/ widget/ tile/    悬浮歌词 / 桌面小部件 / 快捷磁贴
 │  └─ MusicApp.kt MainActivity.kt
-├─ app/src/test/                225 个单元测试
+├─ app/src/test/                346 个单元测试
 ├─ docs/                        文档站源目录（GitHub Pages 发布目录）
 ├─ scripts/                     图标生成、本地 SDK 引导、发版与推送助手
 ├─ gradle/                      Wrapper + `libs.versions.toml`（依赖与插件版本唯一来源）
@@ -134,47 +134,4 @@ Windows 下首次可先跑 `scripts\sdk-setup.bat` 把 SDK 装到 `.toolchain\an
 `docs/` 目录同时是文档源与 GitHub Pages 发布目录，由 `.github/workflows/pages.yml` 在 `main` 分支推送时自动部署。
 本地预览装好 Jekyll 后 `cd docs && jekyll serve` 即可，无需构建步骤。
 
-### 签名
-
-本项目**本地构建与 CI 使用同一套密钥库** `.toolchain/keystore/windtone.jks`，
-所以两边产出的 APK 签名一致、可以互相覆盖安装。
-
-密钥库本身不进仓库（`.toolchain/` 与 `*.jks` 均已 gitignore），取值优先级：
-
-1. `-PkeystorePath=...` 等命令行参数（临时覆盖）
-2. 环境变量 `WINDTONE_KEYSTORE` / `WINDTONE_STORE_PASSWORD` / `WINDTONE_KEY_ALIAS` / `WINDTONE_KEY_PASSWORD`（CI 从 Secrets 注入）
-3. 本地 `keystore.properties`（已 gitignore，开发机专属）
-4. 默认路径 `.toolchain/keystore/windtone.jks`
-
-四者都取不到时产出**未签名包**（`assembleRelease` 仍然成功）。
-
-当前证书：`CN=WindTone, OU=Mobile, O=LuckyLearning, C=CN`，
-SHA-256 `75EAECCD7CAB0DB4E30170F52091B3BF80AC0F1D6F89235433EBE2B5876E7398`。
-
-> ⚠️ 覆盖安装要求前后版本签名一致。**一旦密钥库或口令丢失，后续版本就无法覆盖升级**，
-> 用户只能卸载重装。请把 `windtone.jks` 与口令单独备份到安全位置（密码管理器 / 离线介质），
-> 不要只留在开发机上。
-
-### CI 需要的 Secrets
-
-在仓库 **Settings → Secrets and variables → Actions** 里配置：
-
-| Secret | 说明 |
-|---|---|
-| `KEYSTORE_BASE64` | 密钥库文件的 base64：`base64 -w0 .toolchain/keystore/windtone.jks` |
-| `KEYSTORE_PASSWORD` | 密钥库口令 |
-| `KEY_ALIAS` | 密钥别名（`windtone`） |
-| `KEY_PASSWORD` | 密钥口令 |
-
-未配置时工作流仍会成功，但产物不带签名，不能直接覆盖安装。
-
-### 发版
-
-发版说明正文由 `.github/release-notes/template.md` 提供，`scripts/render-release-notes.sh` 由 CI 与 `scripts/release.sh` 共用。
-细节见[发版规范](https://luckylearning.github.io/WindTone/发版规范-Release说明与多平台产物.html)。
-
----
-
-## License
-
-[Apache License 2.0](LICENSE)
+> 签名密钥、CI Secrets 与发版流程等仓库维护细节**不在公开 README 中记录**（避免把密钥位置、口令来源与流水线细节暴露在公开仓库页面上），需要时请查看本地开发文档。
