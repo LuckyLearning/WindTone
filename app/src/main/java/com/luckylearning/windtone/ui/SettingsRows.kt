@@ -59,6 +59,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -138,7 +140,15 @@ internal fun SwitchRow(
             ResetButton(onReset)
             Spacer(Modifier.width(4.dp))
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        // contentDescription 用标题（v1.1.29 补）：读屏软件对没有描述的开关
+        // 只会念「开关，已关闭」，用户不知道这是哪一个。加上标题后念
+        // 「前台应用记录，开关，已关闭」。顺带给界面测试一个稳定抓手 ——
+        // 合并语义树里用「父级含标题」定位开关会连滚动容器一起命中。
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            modifier = Modifier.semantics { contentDescription = title },
+        )
     }
 }
 

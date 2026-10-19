@@ -23,9 +23,10 @@ class OverlayVisibilityTest {
         pauseHide: Boolean = false,
         screenInteractive: Boolean = true,
         hasContent: Boolean = true,
+        foregroundHidden: Boolean = false,
     ) = OverlayVisibility.show(
         fullHeight, foreground, editing, preview,
-        playing, pauseHide, screenInteractive, hasContent,
+        playing, pauseHide, screenInteractive, hasContent, foregroundHidden,
     )
 
     @Test
@@ -75,5 +76,38 @@ class OverlayVisibilityTest {
         assertFalse(show(foreground = false, hasContent = false))
         // 但调整 / 预览态要显示提示行，否则「调整位置」按了像没反应
         assertTrue(show(foreground = false, hasContent = false, editing = true))
+    }
+
+    // ---------------- v1.1.29：前台应用命中「不显示悬浮窗的应用」名单 ----------------
+
+    @Test
+    fun `前台应用在隐藏名单里时一律收起`() {
+        // 360 影像 / 视频类应用打开时，浮层会挡住画面 —— 后台照样收起
+        assertFalse(show(foreground = false, foregroundHidden = true))
+        // 单条字幕在 App 前台本来就不画，叠加名单依旧不画（不是「二更不画」）
+        assertFalse(show(foreground = true, foregroundHidden = true))
+    }
+
+    @Test
+    fun `名单命中压过调整与预览`() {
+        // 用户正在设置页里调悬浮窗，恰好切到名单应用 → 继续画会盖住那个应用，
+        // 调整可以等（这是刻意选的优先级，写死在 KDoc 里）
+        assertFalse(show(foreground = true, editing = true, foregroundHidden = true))
+        assertFalse(show(foreground = true, preview = true, foregroundHidden = true))
+        assertFalse(show(foreground = false, editing = true, foregroundHidden = true))
+    }
+
+    @Test
+    fun `名单命中压不过灭屏与无内容`() {
+        // 这两种情况本来就不画，与名单无关（别为名单引入新的显示路径）
+        assertFalse(show(foreground = false, foregroundHidden = true, screenInteractive = false))
+        assertFalse(show(foreground = false, foregroundHidden = true, hasContent = false))
+    }
+
+    @Test
+    fun `名单未命中时行为与旧版完全一致`() {
+        assertTrue(show(foreground = false, foregroundHidden = false))
+        assertTrue(show(foreground = true, preview = true, foregroundHidden = false))
+        assertFalse(show(foreground = true, foregroundHidden = false))
     }
 }

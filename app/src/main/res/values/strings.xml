@@ -24,4 +24,12 @@
     <string name="shortcut_shuffle_long">Shuffle all songs</string>
     <string name="shortcut_favorites_short">Favorites</string>
     <string name="shortcut_favorites_long">Open my favorites</string>
+<!--
+      无障碍服务说明（设置 → 辅助功能 → 听风 里显示的那段）。
+      v1.1.29「悬浮窗按应用隐藏」的主检测通道：只订阅窗口状态变化事件、
+      不读屏幕内容（canRetrieveWindowContent=false），用来判断当前前台应用，
+      好在 360 影像等应用打开时收起悬浮歌词。写清用途是信任的一部分 ——
+      用户在这一页看到的是系统原生气泡，说明越直白越敢开。
+    -->
+    <string name="accessibility_service_description">Detects which app is in the foreground (window switches only, no screen content is read) so WindTone can hide its floating lyrics over apps like the 360 camera view.</string>
 </resources>

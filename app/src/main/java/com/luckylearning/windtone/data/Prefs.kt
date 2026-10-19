@@ -155,6 +155,18 @@ object SettingsDefaults {
 
     /** 悬浮窗宽度百分比的合法区间 */
     val OVERLAY_WIDTH_RANGE = 1..100
+
+    /**
+     * 「不显示悬浮窗的应用」出厂名单：**空**。
+     *
+     * 空 = 功能完全不介入（检测通道都不启动）。勾选入口在
+     * 设置 → 歌词 → 桌面悬浮歌词 →「不显示悬浮窗的应用」弹窗里，
+     * 用户自己在车机上勾（设计见 docs/设计-悬浮窗按应用隐藏.md）。
+     */
+    val OVERLAY_HIDDEN_APPS: Set<String> = emptySet()
+
+    /** 「前台应用记录」出厂值：关（行为记录要用户显式开启） */
+    const val FOREGROUND_LOG_ENABLED = false
 }
 
 /**
@@ -494,6 +506,41 @@ class Prefs(context: Context) {
         get() = sp.getInt(KEY_LYRIC_OVERLAY_TEXT_COLOR, SettingsDefaults.OVERLAY_TEXT_COLOR)
         set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_TEXT_COLOR, value).apply()
 
+    // ---------------- v1.1.29 新增：悬浮窗按应用隐藏 ----------------
+
+    /**
+     * 这些应用（包名）在前台时，收起悬浮歌词 —— 默认**空**，即功能完全不介入。
+     *
+     * 动机（2026-10-19 用户车机反馈）：打开 360 全景影像等全屏应用时，
+     * 悬浮歌词浮在画面上方挡住视线；影像 / 泊车 / 视频类不止一个应用需要回避。
+     * 系统级整合（7 分屏白名单 / 小迪默认音乐）已证伪走不通，只能在自己 App 内解决：
+     * 检测到前台应用命中名单就临时收起，退出自动恢复。
+     *
+     * 空名单时**检测通道都不启动**（零开销）；名单非空或「前台应用记录」开着时才跑。
+     * 检测手段（无障碍服务 / UsageStats）需要用户在系统设置里手动授权，
+     * **两个都没授权时按「不隐藏」放行** —— 绝不让权限问题导致悬浮窗反而消失。
+     *
+     * ⚠️ setter 里拷贝一份：`getStringSet` 返回的实例不能被就地改，
+     * 调用方（设置页勾选 / 诊断页）一律用新集合写回。
+     */
+    var lyricOverlayHiddenApps: Set<String>
+        get() = sp.getStringSet(KEY_LYRIC_OVERLAY_HIDDEN_APPS, SettingsDefaults.OVERLAY_HIDDEN_APPS)
+            ?: SettingsDefaults.OVERLAY_HIDDEN_APPS
+        set(value) = sp.edit().putStringSet(KEY_LYRIC_OVERLAY_HIDDEN_APPS, HashSet(value)).apply()
+
+    /**
+     * 是否记录「前台应用切换」历史（默认 **false**）。
+     *
+     * 记录只写本机 `files/foreground_app_log.tsv`（滚动 300 条），
+     * 用于诊断页查看 / 复制 / 清空 —— 悬浮窗的价值全在「听风在后台」时，
+     * 实时显示反而看不到，所以主要靠这份历史：正常用车 → 停车后打开听风 →
+     * 看历史 → 把 360 等应用勾进 [lyricOverlayHiddenApps]。
+     * 这是行为记录，**默认关**，用户在设置里显式打开才记。
+     */
+    var foregroundLogEnabled: Boolean
+        get() = sp.getBoolean(KEY_FOREGROUND_LOG_ENABLED, SettingsDefaults.FOREGROUND_LOG_ENABLED)
+        set(value) = sp.edit().putBoolean(KEY_FOREGROUND_LOG_ENABLED, value).apply()
+
     // ---------------- 批次 6 新增 ----------------
 
     /** 跳过音频文件里的静音段（整轨/现场录音常用） */
@@ -641,6 +688,8 @@ class Prefs(context: Context) {
         const val KEY_LYRIC_OVERLAY_TEXT_SCALE = "lyric_overlay_text_scale"
         const val KEY_LYRIC_OVERLAY_BACKDROP = "lyric_overlay_backdrop"
         const val KEY_LYRIC_OVERLAY_PAUSE_MODE = "lyric_overlay_pause_mode"
+        const val KEY_LYRIC_OVERLAY_HIDDEN_APPS = "lyric_overlay_hidden_apps"
+        const val KEY_FOREGROUND_LOG_ENABLED = "foreground_log_enabled"
         const val KEY_LYRIC_OVERLAY_ALIGN = "lyric_overlay_align"
         const val KEY_LYRIC_OVERLAY_WIDTH = "lyric_overlay_width_percent"
         const val KEY_LYRIC_OVERLAY_FULL_HEIGHT = "lyric_overlay_full_height"

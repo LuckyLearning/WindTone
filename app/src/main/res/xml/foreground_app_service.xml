@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  前台应用检测的无障碍服务配置（v1.1.29，设计见 docs/设计-悬浮窗按应用隐藏.md）。
+
+  刻意最小的订阅面：
+   · 只要 typeWindowStateChanged（窗口切换 = 前台应用变化的信号）；
+   · canRetrieveWindowContent = false —— **不读屏幕内容**，这是信任的关键，
+     服务说明里也是这么写的（values/strings.xml 的 accessibility_service_description）；
+   · 不设 packageNames 过滤 —— 要的是「任意应用到前台」都算，
+     隐藏名单由用户自己勾，过滤交给应用侧而不是这里。
+
+  notificationTimeout 100ms：同一波事件去个抖，别把一次切换刷成好几条。
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:canRetrieveWindowContent="false"
+    android:description="@string/accessibility_service_description"
+    android:notificationTimeout="100" />

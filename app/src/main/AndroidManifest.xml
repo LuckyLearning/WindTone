@@ -217,6 +217,30 @@
         </service>
 
         <!--
+          前台应用检测（v1.1.29「悬浮窗按应用隐藏」，设计见 docs/设计-悬浮窗按应用隐藏.md）。
+
+          用户在系统设置 → 辅助功能里手动开启后，本服务才知道「当前前台是哪个应用」，
+          好在 360 影像等应用打开时收起悬浮歌词、并按开关记录前台切换历史。
+          · `BIND_ACCESSIBILITY_SERVICE` 是系统绑定用的签名权限，必须声明，
+            否则服务根本不会被辅助功能列表接纳；
+          · 订阅面见 res/xml/foreground_app_service.xml —— 只收窗口状态变化、
+            **不读屏幕内容**；
+          · 不授权也能用：检测通道一个都没通时按「不隐藏」放行（见 ForegroundAppState）。
+        -->
+        <service
+            android:name=".overlay.ForegroundAppService"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/foreground_app_service" />
+        </service>
+
+        <!--
           应用内更新下载的 APK 放在 cacheDir/updates/，通过 FileProvider 交给系统安装器。
           以 ${applicationId} 作为 authority，保证 debug（.debug 后缀）与 release 互不冲突。
         -->

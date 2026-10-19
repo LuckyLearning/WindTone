@@ -1,0 +1,225 @@
+package com.luckylearning.windtone.ui
+
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
+/**
+ * 「不显示悬浮窗的应用」选择弹窗（v1.1.29，设计见 docs/设计-悬浮窗按应用隐藏.md）。
+ *
+ * 为什么是弹窗而不是跳页：用户的核心动作是「打开 360 → 勾一下」，一两步的事；
+ * 而且这是在车机上用，弹窗的大行高 + 大开关比二级页更好按。
+ *
+ * 数据来源：`PackageManager` 查全部**可启动应用**（MAIN/LAUNCHER）——
+ * 系统应用（电话 / 地图 / 影像…）与用户应用一视同仁，因为要回避的恰恰
+ * 多数是系统应用。零权限，本机查询。
+ *
+ * 交互：顶部搜索框（按应用名或包名过滤，车机输入法可语音听写），
+ * 列表每行 = 图标 + 应用名 + 包名 + 开关；底部「清空」= 回到出厂默认（空名单）。
+ */
+
+/** 一行应用的数据（图标现取，反正一行只画一次） */
+private data class LaunchableApp(val pkg: String, val label: String)
+
+@Composable
+internal fun OverlayHiddenAppsDialog(
+    hiddenApps: Set<String>,
+    onToggle: (String, Boolean) -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val apps = remember {
+        val pm = context.packageManager
+        val main = android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(
+            android.content.Intent.CATEGORY_LAUNCHER,
+        )
+        pm.queryIntentActivities(main, 0)
+            .asSequence()
+            .map { it.activityInfo.applicationInfo }
+            .distinctBy { it.packageName }
+            .map { LaunchableApp(it.packageName, pm.getApplicationLabel(it).toString()) }
+            .sortedBy { it.label }
+            .toList()
+    }
+    var query by remember { mutableStateOf("") }
+    val filtered = remember(apps, query) {
+        if (query.isBlank()) {
+            apps
+        } else {
+            val q = query.trim()
+            apps.filter { it.label.contains(q, ignoreCase = true) || it.pkg.contains(q, ignoreCase = true) }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("不显示悬浮窗的应用") },
+        text = {
+            Column {
+                Text(
+                    if (hiddenApps.isEmpty()) {
+                        "还没有设置。勾上的应用在前台时，悬浮歌词会自动收起，退出后恢复。"
+                    } else {
+                        "已设 ${hiddenApps.size} 个。勾上的应用在前台时，悬浮歌词会自动收起，退出后恢复。"
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    singleLine = true,
+                    placeholder = { Text("搜索应用名或包名") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 360.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    items(filtered, key = { it.pkg }) { app ->
+                        val checked = app.pkg in hiddenApps
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(64.dp)
+                                .clickable { onToggle(app.pkg, !checked) }
+                                .padding(horizontal = 4.dp),
+                        ) {
+                            AppIcon(app.pkg)
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = app.label,
+                                    fontSize = 16.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = app.pkg,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            Switch(
+                                checked = checked,
+                                onCheckedChange = { onToggle(app.pkg, it) },
+                            )
+                        }
+                    }
+                    if (filtered.isEmpty()) {
+                        item {
+                            Text(
+                                "没有匹配的应用",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(vertical = 24.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("完成") }
+        },
+        dismissButton = {
+            // 不可撤销 → 二次确认（与诊断页「清空记录」同一条规矩）
+            var confirmClear by remember { mutableStateOf(false) }
+            TextButton(
+                onClick = { confirmClear = true },
+                enabled = hiddenApps.isNotEmpty(),
+            ) { Text("清空") }
+            if (confirmClear) {
+                AlertDialog(
+                    onDismissRequest = { confirmClear = false },
+                    title = { Text("清空名单？") },
+                    text = { Text("清空后所有应用都不再隐藏悬浮歌词（回到出厂默认）。") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            confirmClear = false
+                            onClear()
+                        }) { Text("清空") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { confirmClear = false }) { Text("取消") }
+                    },
+                )
+            }
+        },
+    )
+}
+
+/** 应用图标：Drawable → Bitmap → ImageBitmap（跨 Compose 版本都稳的做法） */
+@Composable
+private fun AppIcon(pkg: String) {
+    // Context 先在 composable 作用域里取一次 —— remember 的 lambda 不是 composable 上下文，
+    // 在里面调 LocalContext.current 会直接编译不过。
+    val context = LocalContext.current
+    val bitmap = remember(pkg, context) {
+        runCatching {
+            val drawable = context.packageManager.getApplicationIcon(pkg)
+            val w = drawable.intrinsicWidth.coerceIn(1, 256)
+            val h = drawable.intrinsicHeight.coerceIn(1, 256)
+            val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bmp)
+            drawable.setBounds(0, 0, w, h)
+            drawable.draw(canvas)
+            bmp.asImageBitmap()
+        }.getOrNull()
+    }
+    Box(
+        modifier = Modifier.size(44.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (bitmap != null) {
+            Image(bitmap = bitmap, contentDescription = null, modifier = Modifier.size(40.dp))
+        } else {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.size(40.dp),
+            ) {}
+        }
+    }
+}

@@ -324,6 +324,13 @@ data class PlayerUiState(
     val lyricOverlayBackdrop: Int = 1,
     /** 悬浮歌词暂停时：0 淡出 / 1 隐藏 */
     val lyricOverlayPauseMode: Int = 0,
+    /**
+     * 「不显示悬浮窗的应用」名单（包名集合，v1.1.29）。
+     * 这些应用在前台时收起悬浮歌词；空 = 功能不介入。
+     */
+    val lyricOverlayHiddenApps: Set<String> = SettingsDefaults.OVERLAY_HIDDEN_APPS,
+    /** 是否记录「前台应用切换」历史（v1.1.29，默认关；记录只写本机文件） */
+    val foregroundLogEnabled: Boolean = SettingsDefaults.FOREGROUND_LOG_ENABLED,
     /** 悬浮歌词水平对齐：0 居中 / 1 居左 */
     val lyricOverlayAlign: Int = 0,
     /** 悬浮窗宽度：屏幕宽度的百分比（1..100，v1.1.4 起可调） */

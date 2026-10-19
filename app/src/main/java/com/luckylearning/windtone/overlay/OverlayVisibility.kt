@@ -12,6 +12,10 @@ package com.luckylearning.windtone.overlay
  *
  * 规则本身不复杂，但四种例外叠在一起（仅后台 / 调整 / 预览 / 暂停隐藏），
  * 靠读代码很难确信没有漏，所以固定成纯函数并上单测。
+ *
+ * v1.1.29 新增第五条例外：**前台应用命中「不显示悬浮窗的应用」名单**
+ * （[foregroundHidden]）—— 用户车机上 360 影像 / 视频类应用打开时，
+ * 浮层会挡住画面，这时一律收起，退出自动恢复。
  */
 object OverlayVisibility {
 
@@ -24,6 +28,9 @@ object OverlayVisibility {
      * @param pauseHide 暂停时是否隐藏（用户设置）
      * @param screenInteractive 屏幕是否亮着
      * @param hasContent 手上是否有一句可显示的内容
+     * @param foregroundHidden 当前前台应用是否在「不显示悬浮窗的应用」名单里
+     *   （v1.1.29；命中即收起，且**不被调整 / 预览豁免**——用户正在设置页里调
+     *   悬浮窗时若恰好切到名单应用，继续画会盖住那个应用，调整可以等）
      */
     fun show(
         fullHeight: Boolean,
@@ -34,6 +41,7 @@ object OverlayVisibility {
         pauseHide: Boolean,
         screenInteractive: Boolean,
         hasContent: Boolean,
+        foregroundHidden: Boolean,
     ): Boolean {
         // 全屏这一档在 App 前台一律不画：整屏浮层会盖住设置页上的宽度滑块与
         // 位置按钮，用户一边调一边看不见自己调的是什么；而且它吃触摸时连
@@ -43,7 +51,9 @@ object OverlayVisibility {
         val override = (editing || preview) && !fullInApp
         // 暂停隐藏：有例外态（调整 / 预览）时不隐藏，否则用户正在调却被藏掉
         val hideOnPause = !playing && !override && pauseHide
-        return !hideOnPause && screenInteractive &&
+        // 名单命中：压过调整 / 预览（见 [foregroundHidden] 的说明），
+        // 但压不过「本就没内容可显示」与灭屏 —— 那两种情况本来就不画。
+        return !hideOnPause && !foregroundHidden && screenInteractive &&
             (override || !foreground) && (hasContent || override)
     }
 }

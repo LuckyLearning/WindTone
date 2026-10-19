@@ -60,6 +60,8 @@ class SettingsScreenTest {
         onLyricScale: (Float) -> Unit = {},
         onLyricBilingual: (Int) -> Unit = {},
         onLyricOverlayTextColor: (Int) -> Unit = {},
+        onLyricOverlayHiddenApps: (Set<String>) -> Unit = {},
+        onForegroundLogEnabled: (Boolean) -> Unit = {},
         onAutoResume: (Boolean) -> Unit = {},
         onOpenStats: () -> Unit = {},
     ) {
@@ -90,6 +92,8 @@ class SettingsScreenTest {
                     onLyricOverlayPauseMode = {},
                     onLyricOverlayWidthPercent = {},
                     onLyricOverlayTextColor = onLyricOverlayTextColor,
+                    onLyricOverlayHiddenApps = onLyricOverlayHiddenApps,
+                    onForegroundLogEnabled = onForegroundLogEnabled,
                     onOverlayEditing = {},
                     onOverlayPreview = {},
                     onTestBootPlayback = {},
@@ -391,5 +395,34 @@ class SettingsScreenTest {
         compose.onNodeWithText("只显示中文").performClick()
         compose.waitForIdle()
         assertEquals("点「只显示中文」应当回调 1", 1, mode)
+    }
+
+    /**
+     * v1.1.29 两行新控件必须真的在歌词子页里（悬浮歌词开关打开后才出现）。
+     *
+     * 防的正是「功能从界面上悄悄消失」—— 这两行是用户在自己车上
+     * 勾选「360 影像时藏悬浮窗」的唯一入口，丢了不会编译失败、不会报错。
+     */
+    @Test
+    fun lyricsPageExposesHiddenAppsAndForegroundLog() {
+        var logEnabled: Boolean? = null
+        render(
+            player = PlayerUiState(lyricOverlay = true),
+            onForegroundLogEnabled = { logEnabled = it },
+        )
+
+        compose.onNodeWithText("歌词").performClick()
+        compose.waitForIdle()
+        // 先滚到页面底部，再回验两行都在（滚到一半就断言会假失败 —— 副标题那行
+        // 在视口下方时报「not displayed」，那是测试自己的时序问题，不是产品问题）。
+        compose.onNodeWithText("前台应用记录").performScrollTo().assertExists()
+        compose.onNodeWithText("不显示悬浮窗的应用").assertExists()
+        compose.onNodeWithText("关闭。打开后记录前台应用切换", substring = true).assertExists()
+        // SwitchRow 整行不可点（只有开关本体可点）。开关带 contentDescription
+        // （= 行标题，v1.1.29 为读屏补的），直接按它定位即可
+        compose.onNodeWithContentDescription("前台应用记录")
+            .performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals("点「前台应用记录」的开关应回调 true", true, logEnabled)
     }
 }

@@ -16,4 +16,6 @@
     <string name="shortcut_shuffle_long">随机播放全部歌曲</string>
     <string name="shortcut_favorites_short">我的收藏</string>
     <string name="shortcut_favorites_long">打开我的收藏</string>
+<!-- 无障碍服务说明（设置 → 辅助功能 → 听风 里显示的那段），口径见 values/strings.xml -->
+    <string name="accessibility_service_description">侦测当前前台是哪个应用（只读取窗口切换事件，不读取屏幕内容），以便在 360 影像等应用打开时自动收起听风的悬浮歌词。</string>
 </resources>

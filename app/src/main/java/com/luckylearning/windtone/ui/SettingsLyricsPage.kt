@@ -138,12 +138,18 @@ internal fun SettingsLyricsPage(
     onLyricOverlayPauseMode: (Int) -> Unit,
     onLyricOverlayWidthPercent: (Int) -> Unit,
     onLyricOverlayTextColor: (Int) -> Unit,
+    /** 「不显示悬浮窗的应用」名单（v1.1.29）；整体写回，弹窗内逐个勾选 */
+    onLyricOverlayHiddenApps: (Set<String>) -> Unit,
+    /** 「前台应用记录」开关（v1.1.29，默认关） */
+    onForegroundLogEnabled: (Boolean) -> Unit,
     onOverlayEditing: (Boolean) -> Unit,
     onOverlayPreview: () -> Unit,
 ) {
     val context = LocalContext.current
     // 悬浮歌词的外观选项（行数 / 字号 / 对齐 / 底板 / 暂停行为）共用一个选项弹层
     var overlayChoice by remember { mutableStateOf<OverlayChoice?>(null) }
+    // 「不显示悬浮窗的应用」弹窗（v1.1.29）
+    var showHiddenApps by remember { mutableStateOf(false) }
     // 歌词颜色选择弹层是否打开（v1.1.8 起只剩「悬浮窗文字颜色」一处，
     // 原先用 ColorSlot 区分三处颜色，现在一个布尔量就够）
     var colorPickerShown by remember { mutableStateOf(false) }
@@ -436,6 +442,37 @@ internal fun SettingsLyricsPage(
                 player.lyricOverlayTextColor != SettingsDefaults.OVERLAY_TEXT_COLOR,
             ) { onLyricOverlayTextColor(SettingsDefaults.OVERLAY_TEXT_COLOR) },
         )
+
+        // v1.1.29：不显示悬浮窗的应用（360 影像 / 视频类等打开时收起浮层）。
+        // 放在外观项之后 —— 它管的不是「长什么样」而是「在哪儿不出现」。
+        ActionRow(
+            title = "不显示悬浮窗的应用",
+            subtitle = if (player.lyricOverlayHiddenApps.isEmpty()) {
+                "还没有设置。选中的应用在前台时，悬浮歌词自动收起，退出后恢复"
+            } else {
+                "已设 ${player.lyricOverlayHiddenApps.size} 个应用；点开可增删"
+            },
+            onClick = { showHiddenApps = true },
+            chevron = true,
+            onReset = resetAction(player.lyricOverlayHiddenApps.isNotEmpty()) {
+                onLyricOverlayHiddenApps(emptySet())
+            },
+        )
+        // 前台应用记录：默认关（行为记录要用户显式开启）。
+        // 副标题常驻显示检测源状态 —— 两个通道都没授权时直说，别让用户
+        // 以为开着记录其实什么都没记（这正是他最初提「实时显示看不到」时要的）。
+        SwitchRow(
+            title = "前台应用记录",
+            subtitle = overlayForegroundSubtitle(
+                hiddenCount = player.lyricOverlayHiddenApps.size,
+                logEnabled = player.foregroundLogEnabled,
+            ),
+            checked = player.foregroundLogEnabled,
+            onCheckedChange = onForegroundLogEnabled,
+            onReset = resetAction(
+                player.foregroundLogEnabled != SettingsDefaults.FOREGROUND_LOG_ENABLED,
+            ) { onForegroundLogEnabled(SettingsDefaults.FOREGROUND_LOG_ENABLED) },
+        )
     }
     // 关闭态只留一句「打开后有什么可调」，免得这一整块消失得像设置丢了。
     if (!player.lyricOverlay) {
@@ -703,6 +740,39 @@ internal fun SettingsLyricsPage(
             onDismiss = { colorPickerShown = false },
         )
     }
+
+    // 「不显示悬浮窗的应用」弹窗（v1.1.29）：本机全部可启动应用 + 每行开关。
+    // 逐个勾选时整体写回（引擎侧去重 + 剔空白项），名单与检测都即时生效。
+    if (showHiddenApps) {
+        OverlayHiddenAppsDialog(
+            hiddenApps = player.lyricOverlayHiddenApps,
+            onToggle = { pkg, checked ->
+                val next = player.lyricOverlayHiddenApps.toMutableSet()
+                if (checked) next.add(pkg) else next.remove(pkg)
+                onLyricOverlayHiddenApps(next)
+            },
+            onClear = { onLyricOverlayHiddenApps(emptySet()) },
+            onDismiss = { showHiddenApps = false },
+        )
+    }
+}
+
+/**
+ * 「前台应用记录」行的副标题（v1.1.29）。
+ *
+ * 要回答用户三个问题：记不记、靠谁记、不记时名单还能不能生效 ——
+ *  · 名单非空时，即使记录关着，隐藏依然生效（靠同一套检测）；
+ *  · 两个检测通道的授权状态在诊断页看得到，这里给一句人话指引。
+ */
+private fun overlayForegroundSubtitle(hiddenCount: Int, logEnabled: Boolean): String = when {
+    logEnabled && hiddenCount > 0 ->
+        "记录中；同时按名单（$hiddenCount 个）收起悬浮窗"
+    logEnabled ->
+        "记录中：前台应用切换会写进本机历史（关于与诊断 → 前台应用记录）"
+    hiddenCount > 0 ->
+        "已关闭记录；名单（$hiddenCount 个）的隐藏仍然生效"
+    else ->
+        "关闭。打开后记录前台应用切换，便于把 360 影像等应用加进上方名单"
 }
 
 /**

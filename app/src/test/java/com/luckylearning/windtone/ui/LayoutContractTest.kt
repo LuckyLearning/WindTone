@@ -134,4 +134,28 @@ class LayoutContractTest {
             Regex("""CAR_TOUCH_TARGET: Dp = 76\.dp""").containsMatchIn(car),
         )
     }
+
+    /**
+     * v1.1.29 前台应用检测（无障碍服务）必须按规矩声明。
+     *
+     * 两个坑防住：
+     *  1. 少了 `BIND_ACCESSIBILITY_SERVICE` 权限 —— 服务根本进不了系统辅助功能列表，
+     *     用户想授权都找不到入口（表现为「开关开了但什么都没记」）；
+     *  2. `canRetrieveWindowContent` 若被谁「顺手打开」—— 服务就开始读屏幕内容，
+     *     那是信任底线，配置里写死 false，测试钉死。
+     */
+    @Test
+    fun foregroundAppServiceIsDeclaredProperly() {
+        val manifest = sourceFile("src/main/AndroidManifest.xml").readText()
+        assertTrue(
+            "清单缺少 .overlay.ForegroundAppService 声明（v1.1.29 前台检测服务）",
+            manifest.contains("android:name=\".overlay.ForegroundAppService\""),
+        )
+        val xml = sourceFile("src/main/res/xml/foreground_app_service.xml").readText()
+        assertTrue("只应订阅窗口状态变化事件", xml.contains("typeWindowStateChanged"))
+        assertTrue(
+            "canRetrieveWindowContent 必须为 false —— 不读屏幕内容是这条通道的信任底线",
+            xml.contains("canRetrieveWindowContent=\"false\""),
+        )
+    }
 }

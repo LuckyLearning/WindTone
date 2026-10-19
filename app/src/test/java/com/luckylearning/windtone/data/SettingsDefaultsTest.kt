@@ -92,6 +92,8 @@ class SettingsDefaultsTest {
             SettingsDefaults.OVERLAY_FULL_OFFSET_PERCENT,
         )
         check("lyricOverlayTextColor", prefs.lyricOverlayTextColor, SettingsDefaults.OVERLAY_TEXT_COLOR)
+        check("lyricOverlayHiddenApps", prefs.lyricOverlayHiddenApps, SettingsDefaults.OVERLAY_HIDDEN_APPS)
+        check("foregroundLogEnabled", prefs.foregroundLogEnabled, SettingsDefaults.FOREGROUND_LOG_ENABLED)
 
         // 音乐库 / 更新
         check("minSongDurationSec", prefs.minSongDurationSec, SettingsDefaults.MIN_DURATION_SEC)

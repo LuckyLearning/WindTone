@@ -95,6 +95,9 @@ class PlaybackEngine(
             lyricOverlayTextScale = prefs.lyricOverlayTextScale,
             lyricOverlayBackdrop = prefs.lyricOverlayBackdrop,
             lyricOverlayPauseMode = prefs.lyricOverlayPauseMode,
+            // v1.1.29：悬浮窗按应用隐藏 + 前台应用记录开关
+            lyricOverlayHiddenApps = prefs.lyricOverlayHiddenApps,
+            foregroundLogEnabled = prefs.foregroundLogEnabled,
             lyricOverlayAlign = prefs.lyricOverlayAlign,
             // v1.1.4 新增：悬浮窗宽度与文字颜色
             lyricOverlayWidthPercent = prefs.lyricOverlayWidthPercent,
@@ -1250,6 +1253,27 @@ class PlaybackEngine(
     }
 
     /**
+     * 「不显示悬浮窗的应用」名单（v1.1.29）。
+     *
+     * 存的时候顺手剔掉空白项 —— 名单来自用户勾选，理论上不会脏，
+     * 但 Set 是不可变副本进来的，防一手比事后排查便宜。
+     */
+    override fun setLyricOverlayHiddenApps(apps: Set<String>) {
+        val normalized = apps.filterTo(LinkedHashSet()) { it.isNotBlank() }
+        prefs.lyricOverlayHiddenApps = normalized
+        _player.update { it.copy(lyricOverlayHiddenApps = normalized) }
+        // 不预览（隐藏效果在 App 内看不到），但要把服务叫醒去启停检测
+        LyricOverlayBridge.bumpAppearance()
+    }
+
+    /** 「前台应用记录」开关（v1.1.29）：记录只写本机文件，同样不预览 */
+    override fun setForegroundLogEnabled(enabled: Boolean) {
+        prefs.foregroundLogEnabled = enabled
+        _player.update { it.copy(foregroundLogEnabled = enabled) }
+        LyricOverlayBridge.bumpAppearance()
+    }
+
+    /**
      * 悬浮歌词水平对齐：0 居中 / 1 居左。
      *
      * 与其它外观项的区别：它同时改**文字对齐**与**窗口重心**，所以服务侧
@@ -1755,6 +1779,18 @@ interface PlayerActions {
     fun setLyricOverlayBackdrop(mode: Int)
     fun setLyricOverlayPauseMode(mode: Int)
     fun setLyricOverlayAlign(align: Int)
+
+    /**
+     * 「不显示悬浮窗的应用」名单（v1.1.29）。
+     *
+     * 不触发预览 —— 隐藏不是能在设置页里「看一眼」的效果；但必须推高外观版本
+     * 把悬浮窗服务叫醒：它靠这个信号决定启停前台检测轮询（见
+     * `LyricOverlayService.syncForegroundTracking`）。
+     */
+    fun setLyricOverlayHiddenApps(apps: Set<String>)
+
+    /** 「前台应用记录」开关（v1.1.29，默认关）；同样只叫醒服务、不预览 */
+    fun setForegroundLogEnabled(enabled: Boolean)
 
     /** 悬浮窗宽度：屏幕宽度百分比（1..100） */
     fun setLyricOverlayWidthPercent(percent: Int)

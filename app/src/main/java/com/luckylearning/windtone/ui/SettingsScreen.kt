@@ -155,6 +155,10 @@ fun SettingsScreen(
     onLyricOverlayWidthPercent: (Int) -> Unit,
     /** 悬浮窗歌词文字颜色 —— v1.1.4 */
     onLyricOverlayTextColor: (Int) -> Unit,
+    /** 「不显示悬浮窗的应用」名单（v1.1.29） */
+    onLyricOverlayHiddenApps: (Set<String>) -> Unit,
+    /** 「前台应用记录」开关（v1.1.29） */
+    onForegroundLogEnabled: (Boolean) -> Unit,
     onOverlayEditing: (Boolean) -> Unit,
     onOverlayPreview: () -> Unit,
     canDrawOverlay: Boolean,
@@ -334,6 +338,8 @@ fun SettingsScreen(
                         onLyricOverlayPauseMode = onLyricOverlayPauseMode,
                         onLyricOverlayWidthPercent = onLyricOverlayWidthPercent,
                         onLyricOverlayTextColor = onLyricOverlayTextColor,
+                        onLyricOverlayHiddenApps = onLyricOverlayHiddenApps,
+                        onForegroundLogEnabled = onForegroundLogEnabled,
                         onOverlayEditing = onOverlayEditing,
                         onOverlayPreview = onOverlayPreview,
                     )

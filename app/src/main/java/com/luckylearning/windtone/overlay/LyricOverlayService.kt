@@ -259,10 +259,12 @@ class LyricOverlayService : Service() {
         windowGeometry = "未挂载"
         windowJob?.cancel()
         editingTimeoutJob?.cancel()
+        foregroundJob?.cancel()
         runCatching { unregisterReceiver(screenReceiver) }
         scope.cancel()
         detachWindow()
         LyricOverlayBus.clear()
+        ForegroundAppState.reset()
         LyricOverlayBridge.report(LyricOverlayBus.Status.IDLE, "服务已停止")
         super.onDestroy()
     }
@@ -698,6 +700,40 @@ class LyricOverlayService : Service() {
 
     // ------------------------------------------------------------------ 状态
 
+    /** v1.1.29 前台检测轮询协程；「不需要知道前台是谁」时撤掉 */
+    private var foregroundJob: Job? = null
+
+    /**
+     * 按「是否需要前台检测」启停 UsageStats 轮询（v1.1.29）。
+     *
+     * 两种需要：① 隐藏名单非空（要判「当前应用在不在名单里」）；
+     * ② 用户开着「前台应用记录」。两者都不成立就撤协程、清残留包名 ——
+     * **一个字节都不查**，这是零权限开销的底线。
+     *
+     * 没授 UsageStats 权限时不启动（无障碍服务若已被用户开启，由它自己喂
+     * [ForegroundAppState]，这里不抢）；两个通道都没有时按「不隐藏」放行。
+     *
+     * 由收集循环每帧调用（设置变更会推高外观版本，必然触发），
+     * 所以用户在设置里勾名单 / 开记录的**下一帧**就生效，不用重启服务。
+     */
+    private fun syncForegroundTracking(hiddenApps: Set<String>, logEnabled: Boolean) {
+        if (!foregroundDetectionNeeded(hiddenApps, logEnabled)) {
+            foregroundJob?.cancel()
+            foregroundJob = null
+            ForegroundAppState.reset()
+            return
+        }
+        if (foregroundJob?.isActive == true) return
+        if (!ForegroundAppDetector.usageStatsGranted(this)) return
+        foregroundJob = scope.launch {
+            ForegroundAppDetector.pollLoop(this@LyricOverlayService) { pkg ->
+                if (Prefs(this@LyricOverlayService).foregroundLogEnabled) {
+                    ForegroundAppLog.append(this@LyricOverlayService, pkg, ForegroundAppLog.labelOf(this@LyricOverlayService, pkg))
+                }
+            }
+        }
+    }
+
     private fun observeState() {
         windowJob?.cancel()
         windowJob = scope.launch {
@@ -717,7 +753,6 @@ class LyricOverlayService : Service() {
                     val box = container ?: return@collect
                     val tv = lyricView ?: return@collect
                     val prefs = Prefs(this@LyricOverlayService)
-
                     if (editing != isEditing) {
                         editing = isEditing
                         if (!isEditing) {
@@ -745,6 +780,7 @@ class LyricOverlayService : Service() {
                     // 规则里叠着「仅后台 / 调整 / 预览 / 暂停隐藏」四种例外，
                     // 而全屏形态在 App 前台必须一律不画 —— 否则整屏歌词会压在
                     // 设置页的宽度滑块和位置按钮上，一边调一边看不见（真机照片为证）。
+                    // v1.1.29 加第五种：前台应用命中「不显示悬浮窗的应用」名单。
                     val visible = OverlayVisibility.show(
                         fullHeight = prefs.lyricOverlayFullHeight,
                         foreground = isForeground,
@@ -754,6 +790,16 @@ class LyricOverlayService : Service() {
                         pauseHide = prefs.lyricOverlayPauseMode == PAUSE_HIDE,
                         screenInteractive = screenInteractive,
                         hasContent = content.visible,
+                        foregroundHidden = overlayHiddenForForeground(
+                            pkg = ForegroundAppState.currentPkg.value,
+                            hiddenApps = prefs.lyricOverlayHiddenApps,
+                        ),
+                    )
+                    // 名单或记录开着才需要知道前台是谁（否则一个字节都不查）；
+                    // 两者都关了就撤掉轮询协程，并把残留包名清掉。
+                    syncForegroundTracking(
+                        hiddenApps = prefs.lyricOverlayHiddenApps,
+                        logEnabled = prefs.foregroundLogEnabled,
                     )
                     desiredVisible = visible
                     if (!visible) {

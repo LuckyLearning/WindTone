@@ -8,6 +8,9 @@ import com.luckylearning.windtone.data.DataMaintenance
 import com.luckylearning.windtone.data.DownloadRoute
 import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.data.UpdateChecker
+import com.luckylearning.windtone.overlay.ForegroundAppDetector
+import com.luckylearning.windtone.overlay.ForegroundAppLog
+import com.luckylearning.windtone.overlay.ForegroundAppState
 import com.luckylearning.windtone.overlay.LyricOverlayBridge
 import com.luckylearning.windtone.overlay.LyricOverlayBus
 import com.luckylearning.windtone.overlay.OverlaySnapshot
@@ -37,6 +40,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -65,16 +70,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -82,6 +91,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luckylearning.windtone.BuildConfig
 import com.luckylearning.windtone.playback.Pitch
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -319,6 +329,148 @@ internal fun SettingsDiagnosticsPage(
             onClick = { showClearCrashConfirm = true },
             enabled = crashLogCount > 0,
         ) { Text("清空日志") }
+    }
+
+    // ------------------------------------------------ 前台应用记录（v1.1.29）
+    //
+    // 「悬浮窗按应用隐藏」的仪表盘（设计见 docs/设计-悬浮窗按应用隐藏.md）。
+    // 为什么历史在这里而不是只在设置里：悬浮窗的价值全在**听风在后台**时，
+    // 实时显示反而看不到 —— 正常用车，停车后打开这里回看、勾名单。
+    SectionTitle("前台应用记录")
+    val currentPkg by ForegroundAppState.currentPkg.collectAsStateWithLifecycle()
+    var logEntries by remember { mutableStateOf(ForegroundAppLog.read(context)) }
+    var logcatProbe by remember { mutableStateOf<Boolean?>(null) }
+    var confirmClearLog by remember { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
+    // 检测源状态每次重组都探一次：三次 Settings.Secure / AppOps 查询很便宜，
+    // 换来「用户在系统设置里刚开完无障碍，返回就是最新状态」。
+    val detector = ForegroundAppDetector.status(context)
+
+    Text(
+        text = "检测通道：" +
+            (if (detector.accessibility) "无障碍服务（已开启）" else "无障碍服务（未开启）") +
+            " · " +
+            (if (detector.usageStats) "使用情况权限（已授予）" else "使用情况权限（未授予）"),
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Text(
+        text = "两个通道任一可用即可按名单收起悬浮窗；都不可用时按「不隐藏」放行，" +
+            "悬浮窗不会因此消失。没有 adb 也能用：无障碍服务在系统设置里手动开启。",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        TextButton(onClick = {
+            runCatching { context.startActivity(ForegroundAppDetector.accessibilitySettingsIntent()) }
+                .onFailure {
+                    Toast.makeText(context, "打不开无障碍设置页，请手动前往：设置 → 辅助功能", Toast.LENGTH_LONG).show()
+                }
+        }) { Text("无障碍设置") }
+        TextButton(onClick = {
+            runCatching { context.startActivity(ForegroundAppDetector.usageAccessSettingsIntent()) }
+                .onFailure {
+                    Toast.makeText(context, "打不开使用情况权限页（部分车机没有这一页）", Toast.LENGTH_LONG).show()
+                }
+        }) { Text("使用情况权限") }
+        // logcat 实测：用户最初想要的「日志监听」路线要 READ_LOGS（adb）——
+        // 这里留一个实测按钮，万一迪丽放松了限制，报告里会显示「可读」。
+        TextButton(onClick = {
+            scope.launch { logcatProbe = ForegroundAppDetector.logcatReadable() }
+        }) { Text("实测日志可读") }
+    }
+    Text(
+        text = "日志可读性：" + when (logcatProbe) {
+            null -> "未测试（不影响任何功能，仅作信息）"
+            true -> "可读（本机允许读取系统日志）"
+            false -> "不可读（符合预期：Android 4.1 起需 adb 授予 READ_LOGS）"
+        },
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+
+    Spacer(Modifier.height(6.dp))
+    Text(
+        text = "当前前台：" + (currentPkg ?: "未知") +
+            (currentPkg?.let { ForegroundAppLog.labelOf(context, it) }?.let { "（$it）" } ?: ""),
+        style = MaterialTheme.typography.labelMedium,
+    )
+    Text(
+        text = "最近 ${logEntries.size} 条切换（最新在上）：",
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    if (logEntries.isEmpty()) {
+        Text(
+            text = "还没有记录。先在「设置 → 歌词 → 前台应用记录」打开开关，再正常用车；" +
+                "停车后回到这里，就能看到 360 影像等应用的包名，回上方名单勾选。",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    } else {
+        LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
+            items(logEntries.reversed(), key = { "${it.timeMs}-${it.pkg}" }) { entry ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                ) {
+                    Text(
+                        text = ForegroundAppLog.formatTime(entry.timeMs),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = entry.label ?: "（应用名解析不到）",
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = entry.pkg,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        TextButton(
+            enabled = logEntries.isNotEmpty(),
+            onClick = {
+                clipboard.setText(AnnotatedString(ForegroundAppLog.formatForCopy(logEntries)))
+                Toast.makeText(context, "已复制 ${logEntries.size} 条记录", Toast.LENGTH_SHORT).show()
+            },
+        ) { Text("复制全部") }
+        TextButton(onClick = { logEntries = ForegroundAppLog.read(context) }) { Text("刷新") }
+        TextButton(
+            enabled = logEntries.isNotEmpty(),
+            onClick = { confirmClearLog = true },
+        ) { Text("清空") }
+    }
+    if (confirmClearLog) {
+        AlertDialog(
+            onDismissRequest = { confirmClearLog = false },
+            title = { Text("清空前台记录？") },
+            text = { Text("清空后不可恢复；不影响「不显示悬浮窗的应用」名单。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmClearLog = false
+                    ForegroundAppLog.clear(context)
+                    logEntries = emptyList()
+                }) { Text("清空") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClearLog = false }) { Text("取消") }
+            },
+        )
     }
 
     // ------------------------------------------------ 关于

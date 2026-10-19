@@ -632,8 +632,8 @@ a{color:inherit;text-decoration:none}
   <div class="bh-row">
     <a class="backdocs" href="https://luckylearning.github.io/WindTone/">← 文档站</a>
     <div class="bh-title">听风 WindTone · UI 效果图<small>设计基准 / Design Source of Truth</small></div>
-    <span class="bh-badge"><span id="screenCount">52</span> 屏 · Material 3 · 手机 360dp / 车机 1707×1067dp</span>
-    <span class="bh-badge">对齐 v1.1.28 · 车机控制键恢复独立居中行（收回并入歌名行）/ 沉浸态信息贴底 / 播放控制图标全绝对坐标（修车机上一曲乱码）/ 点歌词跳转默认关 / 全屏歌词不盖设置页（页内示意图）/ 关闭的功能不再摆无效控件（设置项按开关显隐）/ 车载单栏大控件（开关立即生效）/ 全屏歌词可调宽度与左右位置 / 双语歌词三选一 / 重开歌词自愈 / 曲库格式与容量统计 / 打开应用继续上次播放 / 悬浮窗歌名歌手 + 1–5 行 / 侧边抽屉 / 设置二级分类（⑲/⑲B）</span>
+    <span class="bh-badge"><span id="screenCount">50</span> 屏 · Material 3 · 手机 360dp / 车机 1707×1067dp</span>
+    <span class="bh-badge">对齐 v1.1.29 · 悬浮窗按应用隐藏（不显示悬浮窗的应用名单弹窗） / 前台应用记录（默认关 · 诊断页历史）/ 车机控制键恢复独立居中行（收回并入歌名行）/ 沉浸态信息贴底 / 播放控制图标全绝对坐标（修车机上一曲乱码）/ 点歌词跳转默认关 / 全屏歌词不盖设置页（页内示意图）/ 关闭的功能不再摆无效控件（设置项按开关显隐）/ 车载单栏大控件（开关立即生效）/ 全屏歌词可调宽度与左右位置 / 双语歌词三选一 / 重开歌词自愈 / 曲库格式与容量统计 / 打开应用继续上次播放 / 悬浮窗歌名歌手 + 1–5 行 / 侧边抽屉 / 设置二级分类（⑲/⑲B）</span>
     <button class="tgl" id="themeBtn">🌙 深色主题</button>
   </div>
   <nav class="bh-nav">
@@ -2541,6 +2541,16 @@ a{color:inherit;text-decoration:none}
           <span style="width:16px;height:16px;border-radius:50%;background:#fff;border:1px solid var(--outline);flex:none"></span>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
         </div>
+        <!-- v1.1.29 新增：按应用隐藏 + 前台记录。排在颜色之后、调整位置之前；
+             名单命中是硬隐藏（仅次灭屏/无内容），检测通道两选一、都不可用按「不隐藏」放行。 -->
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-top:6px">
+          <div style="flex:1"><div style="font-size:15px">不显示悬浮窗的应用</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">已设 1 个应用；点开可增删。选中的应用在前台时悬浮歌词自动收起（车机 360 影像等），退出后恢复</div></div>
+          <svg class="ic ic-18 rst"><use href="#i-reset"/></svg>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+        <div class="sw-row"><div class="sw-main"><div class="sw-t">前台应用记录</div>
+          <div class="sw-s">记录中；同时按名单（1 个）收起悬浮窗。状态文案随两块联动：关记录留名单 →「已关闭记录；名单（N 个）的隐藏仍然生效」；全关 →「关闭。打开后记录前台应用切换，便于把 360 影像等应用加进上方名单」</div></div><span class="switch"><i></i></span></div>
         <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-top:6px">
           <div style="flex:1"><div style="font-size:15px">调整悬浮歌词位置</div>
             <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">临时解锁，把歌词拖到想要的位置；位置会记住，锁定后不挡触摸</div></div>
@@ -2556,6 +2566,7 @@ a{color:inherit;text-decoration:none}
   <b>宽度滑块改完立刻给一次 6 秒预览</b>。<br>
   <b>v1.1.22 起全屏这一档在 App 内不画</b>：整屏浮层不再压在设置页上（含「调整位置」与改完配置的 6 秒预览），宽度 / 水平位置下方改为一块 16:9 缩略示意图 —— 面板宽度、左右位置、底部 Dock 让位都按当前值实时绘制，实际效果退到桌面看。<br>
   <b>v1.1.21 起整块按开关显隐</b>：上面的「桌面悬浮歌词」关着时，形态 / 宽度 / 位置 / 行数 / 字号 / 对齐 / 底板 / 暂停 / 颜色 / 歌名歌手 / 调整位置<b>一项都不显示</b>，只留开关与一行小字说明「打开后能调什么」。开着的功能不摆无效控件 —— 早先那种「关着也允许预设」的写法，用户调完退到桌面看不到变化，只会当成 bug。<br>
+  <b>v1.1.29 尾部新增两行</b>（颜色之后、调整位置之前）：①「不显示悬浮窗的应用」——ActionRow 进名单弹窗（㉙F），副标题实时显示「已设 N 个应用；点开可增删」，带 ↺（清回空名单）；②「前台应用记录」——SwitchRow，默认关，副标题四态联动（记录+名单 / 只记录 / 只名单 / 全关），文案要把「记录关了但名单仍生效」这种中间态说清楚。两块共用免 adb 检测通道（无障碍服务为主、使用情况权限兜底），检测规范见 <code>docs/设计-悬浮窗按应用隐藏.md</code> 与 AI 开发指南 §11.15。<br>
   <b>v1.1.20 起「全屏高度」是独立的一套</b>：形态开关拨开后，这一段换成「全屏宽度 30–100%」+「水平位置（0 靠左 / 50 居中 / 100 靠右）」两个滑块，外加<b>靠左 / 居中 / 靠右三个 44dp 等宽按钮</b>；单条字幕的行数 / 宽度 / 自由拖动全部收进「全屏关」那一档。两套值分开落盘，互不污染。全屏这一档的桌面拖动<b>只跟横向</b>，双击浮层即锁定（全屏铺满整块屏，吃触摸时必须有桌面侧也能收工的手势）。<br>
   <b>宽度两端的两条口径</b>：①滑块范围就是 <b>1–100%</b>（用户要的语义），拖动时<b>逐帧</b>写回——宽度与屏宽是直接的比例关系，松手才变会让人以为「拖了半天没反应」，引擎每次都会重摆窗口，正好当实时预览用。②服务侧对像素宽度留了 <b>48dp 下限</b>（标准最小触控边长）：1% 在 1080p 屏上只有 10px，窗口会小到既看不见也拖不着。下限不能再往上抬——抬到 80dp 时，1080p / 3x 的机器上滑块 <b>1%~22% 全是同一个宽度</b>，低端那一整段等于失灵；48dp 把这段死区压到 13% 以内。</p>
 </figure>
@@ -2598,6 +2609,48 @@ a{color:inherit;text-decoration:none}
   自定义区从<b>暖黄</b>起步（<code>LyricsColors.DEFAULT_SEED</code>，也是色板里的一颗），所以预览条与三个滑块的初始位置每次都一样，不随上一个弹层留下的色相漂移。<br>
   <b>为什么不用色轮</b>：车机上手指粗、精度差，色轮边缘的色相极难选准；三个滑块 + 一块实时预览条的组合在大屏上反而更好操作。<br>
   选完立刻落盘并给一次 6 秒悬浮窗预览，不必退到桌面验证。三个滑块<b>松手才写回</b>——逐帧写回会连着触发预览，把浮动窗口刷成流水。</p>
+</figure>
+
+<figure class="fig" id="scr-dlg-overlay-hidden-apps">
+  <div class="cap"><b>㉙F 不显示悬浮窗的应用 · 名单弹窗</b><em>SettingsLyricsOverlayAppsDialog.kt · OverlayHiddenAppsDialog（v1.1.29 新增）</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">歌词</div></div>
+      </div>
+      <div class="list" style="padding:4px 18px 12px">
+        <div style="background:var(--surface-variant);border-radius:16px;padding:14px 16px;margin:10px 0;box-shadow:0 8px 24px rgba(0,0,0,.35)">
+          <div style="font-size:17px;font-weight:600">不显示悬浮窗的应用</div>
+          <div style="font-size:12px;color:var(--on-surface-variant);margin-top:6px">已设 1 个。勾上的应用在前台时，悬浮歌词会自动收起，退出后恢复。</div>
+          <div style="background:var(--surface);border:1px solid var(--outline);border-radius:10px;padding:8px 12px;margin-top:10px;font-size:13px;color:var(--on-surface-variant)">搜索应用名或包名</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+            <span style="width:32px;height:32px;border-radius:8px;background:#5c6bc0;display:flex;align-items:center;justify-content:center;font-size:15px;color:#fff">齿轮</span>
+            <div style="flex:1"><div style="font-size:14px">Settings</div><div style="font-size:10.5px;color:var(--on-surface-variant)">com.android.settings</div></div>
+            <span class="switch"><i></i></span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+            <span style="width:32px;height:32px;border-radius:8px;background:#43a047;display:flex;align-items:center;justify-content:center;font-size:15px;color:#fff">仪表</span>
+            <div style="flex:1"><div style="font-size:14px">360 影像</div><div style="font-size:10.5px;color:var(--on-surface-variant)">com.byd.aeri.caranywhere</div></div>
+            <span class="switch"><i></i></span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+            <span style="width:32px;height:32px;border-radius:8px;background:#7e57c2;display:flex;align-items:center;justify-content:center;font-size:15px;color:#fff">风</span>
+            <div style="flex:1"><div style="font-size:14px">听风 WindTone</div><div style="font-size:10.5px;color:var(--on-surface-variant)">com.luckylearning.windtone</div></div>
+            <span class="switch off"><i></i></span>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:18px;margin-top:14px">
+            <button class="txtbtn">清空</button><button class="txtbtn" style="color:var(--primary)">完成</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>列表来自 <code>PackageManager.queryIntentActivities(MAIN/LAUNCHER)</code>（按包名去重、按应用名排序），行 = 图标 + 应用名 + 包名 + Switch；顶部搜索框按应用名或包名实时过滤；标题下方的计数随勾选实时变（「还没有设置…」→「已设 N 个…」）。<br>
+  <b>清空要二次确认</b>；「完成」落盘。图标的 <code>Drawable→ImageBitmap</code> 转换要先在 <code>remember</code> 外取好 <code>LocalContext</code>（Compose 网关坑，见实现注释）。<br>
+  <b>为什么列的是 launcher 应用</b>：能被用户打开的应用才可能「到前台挡住悬浮窗」；无界面组件与系统进程不在列表里，属预期。<br>
+  <b>判定口径</b>：名单命中 → <code>OverlayVisibility.foregroundHidden = true</code> 硬隐藏（仅次灭屏 / 无内容，压过编辑态与预览）；检测通道不可用 → 按「不隐藏」放行，悬浮窗不会凭空消失。</p>
 </figure>
 
 <figure class="fig" id="scr-settings-2">
@@ -2769,6 +2822,46 @@ a{color:inherit;text-decoration:none}
   &nbsp;&nbsp;· <b>关于</b>——应用 / 版本 / 包名 / 最低系统 / CPU 架构 / 更新来源 六行 + 隐私说明长文。隐私说明是产品信任核心，不要删。<br>
   <b>CPU 架构行（v1.0.7）</b>：展示本机主 ABI（<code>UpdateChecker.primaryAbiLabel()</code>），
   与 Release 页面按 ABI 分包的资产名（<code>WindTone-v1.0.7-arm64-v8a.apk</code> 等）一一对应，方便用户对照下载。</p>
+</figure>
+
+<figure class="fig" id="scr-diagnostics-foreground-log">
+  <div class="cap"><b>㉚F 关于与诊断 · 前台应用记录</b><em>SettingsSystemPages.kt · SettingsDiagnosticsPage 前台应用记录区块（v1.1.29 新增）</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">关于与诊断</div></div>
+      </div>
+      <div class="list" style="padding:0 18px 12px">
+        <div class="section-label" style="padding:0;margin:12px 0 4px">前台应用记录</div>
+        <div style="font-size:12.5px;line-height:1.6">检测通道：无障碍服务（已开启） · 使用情况权限（未授予）</div>
+        <div style="font-size:11px;color:var(--on-surface-variant);margin-top:4px">两个通道任一可用即可按名单收起悬浮窗；都不可用时按「不隐藏」放行，悬浮窗不会因此消失。没有 adb 也能用：无障碍服务在系统设置里手动开启。</div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <button class="txtbtn" style="border:1px solid var(--outline);border-radius:18px;padding:5px 12px">无障碍设置</button>
+          <button class="txtbtn" style="border:1px solid var(--outline);border-radius:18px;padding:5px 12px">使用情况权限</button>
+          <button class="txtbtn" style="border:1px solid var(--outline);border-radius:18px;padding:5px 12px">实测日志可读</button>
+        </div>
+        <div style="font-size:11px;color:var(--on-surface-variant);margin-top:6px">日志可读性：未测试（不影响任何功能，仅作信息）</div>
+        <div style="font-size:12.5px;margin-top:8px">当前前台：未知</div>
+        <div style="font-size:12.5px;margin-top:6px">最近 8 条切换（最新在上）：</div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:8px 12px;margin-top:4px;max-height:210px;overflow:hidden">
+          <div style="display:flex;gap:8px;font-size:11.5px;padding:3px 0"><span class="mono" style="color:var(--on-surface-variant);flex:none">10-19 00:55:37</span><span style="flex:1">听风 WindTone</span><span class="mono" style="color:var(--on-surface-variant);font-size:10px">com.luckylearning.windtone</span></div>
+          <div style="display:flex;gap:8px;font-size:11.5px;padding:3px 0"><span class="mono" style="color:var(--on-surface-variant);flex:none">10-19 00:54:48</span><span style="flex:1">360 影像</span><span class="mono" style="color:var(--on-surface-variant);font-size:10px">com.byd.aeri.caranywhere</span></div>
+          <div style="display:flex;gap:8px;font-size:11.5px;padding:3px 0"><span class="mono" style="color:var(--on-surface-variant);flex:none">10-19 00:54:26</span><span style="flex:1">Settings</span><span class="mono" style="color:var(--on-surface-variant);font-size:10px">com.android.settings</span></div>
+          <div style="display:flex;gap:8px;font-size:11.5px;padding:3px 0"><span class="mono" style="color:var(--on-surface-variant);flex:none">10-19 00:54:12</span><span style="flex:1">（应用名解析不到）</span><span class="mono" style="color:var(--on-surface-variant);font-size:10px">com.google.android.apps.nexuslauncher</span></div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <button class="txtbtn" style="border:1px solid var(--outline);border-radius:18px;padding:5px 12px">复制全部</button>
+          <button class="txtbtn" style="border:1px solid var(--outline);border-radius:18px;padding:5px 12px">刷新</button>
+          <button class="txtbtn" style="border:1px solid var(--outline);border-radius:18px;padding:5px 12px">清空</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>为什么要有历史</b>：实时「当前前台」对听风没用——它藏在后台时用户根本看不见；要定位「360 影像到底是哪个包名」，必须<b>多条、按时间倒序</b>地看切换历史，再回到歌词子页把包名加进名单（㉙F）。<br>
+  <b>三条口径</b>：①记录<b>默认关</b>（歌词子页「前台应用记录」开关门控写入，<code>SettingsDefaults.FOREGROUND_LOG_ENABLED = false</code>）；②只存本机 <code>files/foreground_app_log.tsv</code>，滚动 300 条，坏了只丢日志不伤曲库（故意不进数据库）；③应用名解析不到时显示「（应用名解析不到）」并保留包名——launcher 一类无 label 包名的真实降级表现，真机验证过。<br>
+  <b>区块结构</b>：通道状态行（实时）→ 两颗系统设置跳转 + 「实测日志可读」（READ_LOGS 探针，纯信息、不影响功能）→ 当前前台 → 历史列表（LazyColumn，最新在上）→ 复制全部 / 刷新 / 清空（清空二次确认）。</p>
 </figure>
 
 <figure class="fig" id="scr-dlg-carmode">
