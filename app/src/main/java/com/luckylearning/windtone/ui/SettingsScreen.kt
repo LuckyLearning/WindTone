@@ -208,13 +208,63 @@ fun SettingsScreen(
     onOpenReleasePage: () -> Unit,
     onIgnoreUpdate: () -> Unit,
     onDismissUpdateDialog: () -> Unit,
+    // ---------------------------------------------------------- 车载专用（v1.1.32）
+    // 车载设置页是另一套「一页到底」的版式，它需要几个手机版设置里没有的动作：
+    // 一步回播放页、就地切歌、重新扫描、打开扫描范围弹层。
+    // 全部带默认值 —— 手机端与既有测试不用改一行。
+    /** 一步回播放页（调用方负责先关设置页） */
+    onOpenPlayer: () -> Unit = {},
+    onTogglePlay: () -> Unit = {},
+    onPrevious: () -> Unit = {},
+    onNext: () -> Unit = {},
+    onRescan: () -> Unit = {},
+    onOpenScanScope: () -> Unit = {},
 ) {
 
     // 当前处于哪一层：主页面 / 音乐库 / 更新 / 关于与诊断
     var page by remember { mutableStateOf(SettingsPage.ROOT) }
 
+    // 车载：「完整设置」是否已打开（v1.1.32）。
+    // 车载默认走一页到底的 CarSettingsScreen；只有用户主动点最后一行「完整设置」
+    // 才回到手机版这套六卡 + 子页的结构，且返回键先退回车载页而不是直接关设置。
+    var fullSettings by remember { mutableStateOf(false) }
+
+    // ---------------------------------------------------------------- 车载设置
+    // 为什么在入口处分叉而不是改造六个子页：车机的诉求是「层级 1、控件大、now playing 常在」，
+    // 与手机的「分类卡 + 子页」是两套信息结构。混在一套里必然两边都不达标
+    // （子页里的 13sp 小字、Slider 拖动、弹层都是行车中不该出现的东西）。
+    if (player.carMode && !fullSettings) {
+        CarSettingsScreen(
+            player = player,
+            update = update,
+            minSongDurationSec = minSongDurationSec,
+            canDrawOverlay = canDrawOverlay,
+            onClose = onClose,
+            onOpenPlayer = onOpenPlayer,
+            onOpenFullSettings = { fullSettings = true },
+            onTogglePlay = onTogglePlay,
+            onPrevious = onPrevious,
+            onNext = onNext,
+            onSpeed = onSpeed,
+            onPitch = onPitch,
+            onSkipSilence = onSkipSilence,
+            onAutoResume = onAutoResume,
+            onAutoPlayOnBoot = onAutoPlayOnBoot,
+            onLyricScale = onLyricScale,
+            onLyricOverlay = onLyricOverlay,
+            onRescan = onRescan,
+            onOpenScanScope = onOpenScanScope,
+            onCheckUpdate = onCheckUpdate,
+        )
+        return
+    }
+
     // 子页里按返回键先回主页面（本处理器在子页才启用，主页面时交给外层关闭设置页）
     BackHandler(enabled = page != SettingsPage.ROOT) { page = SettingsPage.ROOT }
+    // 车载「完整设置」在主页时，返回键退回车载页（注册在子页处理器之后，优先命中）
+    BackHandler(enabled = player.carMode && fullSettings && page == SettingsPage.ROOT) {
+        fullSettings = false
+    }
 
     // 每个页面各留一份滚动位置 —— 但**存数字，不存 ScrollState 对象**。
     //
@@ -255,7 +305,16 @@ fun SettingsScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 6.dp, vertical = 4.dp),
             ) {
-                IconButton(onClick = { if (page == SettingsPage.ROOT) onClose() else page = SettingsPage.ROOT }) {
+                IconButton(
+                    onClick = {
+                        when {
+                            page != SettingsPage.ROOT -> page = SettingsPage.ROOT
+                            // 车载：从「完整设置」退回车载设置页，而不是直接关掉整个设置
+                            player.carMode && fullSettings -> fullSettings = false
+                            else -> onClose()
+                        }
+                    },
+                ) {
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "返回",
@@ -263,10 +322,31 @@ fun SettingsScreen(
                     )
                 }
                 Text(
-                    page.title,
+                    // 车载进入「完整设置」时换个标题：让用户始终知道自己站在哪一层
+                    if (player.carMode && fullSettings && page == SettingsPage.ROOT) {
+                        "完整设置"
+                    } else {
+                        page.title
+                    },
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                 )
+                // 车载：任何子页都在顶栏留一个「播放页」——这是本版「任何页一步回播放」
+                // 的后半句。车载设置页底部有常驻播放条，但用户一旦进了「完整设置」
+                // （六卡 + 子页），播放条就不在画面上了，顶栏这一个按钮补上那个缺口。
+                if (player.carMode) {
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = onOpenPlayer) {
+                        Icon(
+                            AppIcons.Lyrics,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text("播放页", color = MaterialTheme.colorScheme.primary)
+                    }
+                }
             }
 
             Column(

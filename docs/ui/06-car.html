@@ -36,7 +36,7 @@
 
 <div class="wrap">
 <section class="sec" id="sec-car">
-  <div class="sec-hd"><h2>六、车机版（2560×1600 中控屏）</h2><span>v1.1.19 设计 · 单栏大控件 · 1707×1067dp 基准（㊱B / ㊲B 为当前方案，㊱~㊳ 为历史两栏）</span></div>
+  <div class="sec-hd"><h2>六、车机版（2560×1600 中控屏）</h2><span>v1.1.32 · 单栏大控件 · 1707×1067dp 基准（㊱B / ㊲B / ㊵ 为当前方案，㊱~㊳ 为历史两栏）</span></div>
   <div class="note">
     <b>本版方向：单栏 + 大控件 + 免手势</b>。v1.1.14 停用车机两栏后，车载模式只剩「直进播放页 / 锁横屏 / 5 秒收起 / 歌词 ×1.5」，
     实测反馈是<b>开关拨了感觉没区别</b>。这一版把车机界面重新做成<b>单栏</b>（不做左右分栏，用户否决仍然有效），
@@ -407,7 +407,8 @@
       </aside>
     </div>
   </div>
-  <p class="note"><b>关键点：</b>车机设置不用手机那种纵向长列表（在横屏上会拉得很长、左右空），改成<b>左分类导航 + 右内容分栏</b>，
+  <p class="note"><b>历史方案，不要照此实现</b>：左右分栏在 v1.1.14 被用户否决（车机 Dock 压住左下角，且明确不要双栏），
+  本屏从未落地。<b>当前车机设置见 ㊵（扁平单页 + 底部常驻正在播放）</b>。<br><b>关键点：</b>车机设置不用手机那种纵向长列表（在横屏上会拉得很长、左右空），改成<b>左分类导航 + 右内容分栏</b>，
   宽控件用两列卡片平铺，短选项用等宽按钮组。<br>
   开关行改为卡片：内边距 28dp、标题 34sp、副标题 24sp、开关放大到 76dp 触控区。<br>
   右侧保留「当前设置」摘要栏，行驶中不用滚回去确认改了什么。底部固定「返回」入口（左上角也有）。<br>
@@ -581,6 +582,87 @@
   &nbsp;&nbsp;④ <b>坐标系已统一</b>——v1.0.5 曾因「居中下 <code>x</code> 是相对屏幕中心的偏移、拖动却是绝对左上角」做过归一化又删除；2026-10-16 起窗口位置全部走拖动坐标（<code>x</code> / <code>y</code> 都是距屏幕左 / 顶沿的像素），<code>lastRawX</code> / <code>lastRawY</code> 双轴增量累加，没有两套坐标打架的问题了。<br>
   <b>权限</b>：需 <code>SYSTEM_ALERT_WINDOW</code>（「出现在其他应用上」）。开启开关时若未授权自动跳系统授权页，返回后自动打开开关。<br>
   <b>比亚迪 DiLink 提示</b>：部分车型需把应用加入白名单，或先强停一次应用进程，否则授权后可能黑屏。</p>
+</figure>
+
+<figure class="fig car" id="scr-car-settings-flat">
+  <div class="cap"><b>㊵ 车机 · 设置（扁平单页，v1.1.32 现行）</b><em>CarSettingsScreen.kt —— 层级 1：打开即可改；底部常驻「正在播放」，一步回播放页</em></div>
+  <div class="carphone">
+    <div class="carbar">
+      <span>9:41</span><span class="cb-item">🌡 24°C</span>
+      <span class="sp"></span><span class="cb-item">听风</span>
+    </div>
+    <div class="car1">
+      <div class="c1head">
+        <button class="ibtn" style="width:44px;height:44px"><svg class="ic" style="width:22px;height:22px"><use href="#i-back"/></svg></button>
+        <div class="c1title">设置</div>
+        <div style="flex:1"></div>
+        <span style="font-size:13px;color:var(--on-surface-variant)">v1.1.32</span>
+      </div>
+      <div class="cset">
+        <div class="cset-sec">播放</div>
+        <div class="cset-row">
+          <div style="flex:1"><div class="cset-k">播放速度</div><div class="cset-s">0.75x ~ 2.00x，每档 0.05x</div></div>
+          <div class="cset-step">−</div>
+          <div class="cset-v">1.00x</div>
+          <div class="cset-step"><svg class="ic"><use href="#i-add"/></svg></div>
+        </div>
+        <div class="cset-row">
+          <div style="flex:1"><div class="cset-k">变调</div><div class="cset-s">升降调不改速度（±12 半音 = 一个八度）</div></div>
+          <div class="cset-step">−</div>
+          <div class="cset-v">原调</div>
+          <div class="cset-step"><svg class="ic"><use href="#i-add"/></svg></div>
+        </div>
+        <div class="cset-row">
+          <div style="flex:1"><div class="cset-k">跳过静音</div><div class="cset-s">自动跳过录音开头的空白段</div></div>
+          <span class="switch"><i></i></span>
+        </div>
+        <div class="cset-sec">歌词</div>
+        <div class="cset-row">
+          <div style="flex:1"><div class="cset-k">歌词字号</div><div class="cset-s">只影响播放页歌词，车载下已自动放大一档</div></div>
+          <div class="cset-step">−</div>
+          <div class="cset-v">1.0x</div>
+          <div class="cset-step"><svg class="ic"><use href="#i-add"/></svg></div>
+        </div>
+        <div class="cset-row">
+          <div style="flex:1"><div class="cset-k">桌面悬浮歌词</div><div class="cset-s">退到桌面后在最上层显示当前歌词行</div></div>
+          <span class="switch"><i></i></span>
+        </div>
+        <div class="cset-sec">曲库</div>
+        <div style="display:flex;gap:10px;flex:none">
+          <div class="cset-btn"><svg class="ic"><use href="#i-cloud"/></svg>重新扫描</div>
+          <div class="cset-btn"><svg class="ic"><use href="#i-folder"/></svg>扫描范围</div>
+        </div>
+        <div class="cset-sec">更多</div>
+        <div class="cset-row">
+          <div style="flex:1"><div class="cset-k">完整设置</div><div class="cset-s">均衡器 · 悬浮歌词外观 · 双语歌词 · 数据维护 · 下载线路（建议停车后调整）</div></div>
+          <svg class="ic" style="width:22px;height:22px;color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+      </div>
+      <div class="cset-dock">
+        <div class="nb-cov"><svg class="ic"><use href="#i-note"/></svg></div>
+        <div class="nb-main">
+          <div class="nb-t">夜曲</div>
+          <div class="nb-a">周杰伦</div>
+        </div>
+        <button class="cbtn"><svg class="ic"><use href="#i-prev"/></svg></button>
+        <button class="cbtn" style="background:var(--primary)"><svg class="ic" style="color:var(--on-primary)"><use href="#i-pause"/></svg></button>
+        <button class="cbtn"><svg class="ic"><use href="#i-next"/></svg></button>
+        <div class="cset-open"><svg class="ic"><use href="#i-lyrics"/></svg>播放页</div>
+      </div>
+      <div class="c1dock"><i></i><i></i><i></i><span>车机 Dock（系统浮层，App 只让出 56dp）</span></div>
+    </div>
+  </div>
+  <p class="note"><b>为什么另做一页：</b>Google 车机设计规范（Android for Cars · 驾驶分心准则）对设置这类非驾驶任务要求三条 ——
+  <b>层级要浅</b>（打开即可改，不要在行驶中做多级导航）、<b>控件要大</b>（触控目标 ≥ 76dp、主操作 ≥ 88dp）、
+  <b>now playing 常在</b>（任何画面都能一步回到正在播放）。手机版「六卡 → 子页 → 弹层」三层，车机横屏上还要滚很久，
+  第三条更是没有：设置一盖上来，底部大播放条就被挡住。<br>
+  <b>车载版只保留行车中会改的项</b>：速度 / 变调 / 跳过静音 / 继续上次播放 / 开机后台播放 / 歌词字号 / 悬浮歌词 / 曲库 / 更新 ——
+  全部就地改，<b>层级 1</b>；Slider 换成 <b>− 值 +</b> 的 76dp 圆键（拖动在行车中几乎按不中，而且拖到多少只能看数字跳）。<br>
+  <b>底部常驻「正在播放」</b>（100dp）：封面、歌名区、最右「播放页」按钮三条路都通向播放页；
+  控制键只留 ⏮ ⏯ ⏭（设置页里最常做的是「换一首 / 停一下」）。没有当前曲时仍显示，只把控制键换成说明 —— 入口不能时有时无。<br>
+  <b>「完整设置」</b>是唯一的多级入口（均衡器 / 悬浮歌词外观 / 双语歌词 / 数据维护 / 下载线路），明确标注「建议停车后调整」；
+  进去之后顶栏右侧仍有「播放页」，所以<b>任何子页也是一步回播放</b>。返回键先退车载设置页，再按才关设置。<br>
+  <b>手机端完全不受影响</b>：<code>carMode == false</code> 时一行代码都不走这条分支。历史双栏方案见 ㊳（未实现，已否决）。</p>
 </figure>
 
   </div>

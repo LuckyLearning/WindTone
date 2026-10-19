@@ -208,6 +208,14 @@ class SettingsScreenTest {
         // 车载模式开着（偏离默认），主题取色仍在默认上 → 全页应当只有**一枚** ↺
         render(player = PlayerUiState(carMode = true), onCarMode = { carMode = it })
 
+        // ⚠️ v1.1.32 起车载模式默认走「扁平单页」设置，六张分类卡收在「完整设置」里。
+        // 这条用例验的是手机版六卡结构里的 ↺，所以先经「完整设置」进到那套页面
+        // （这条路径本身也顺带被覆盖：车载下唯一的多级入口必须通）。
+        compose.onNodeWithText("完整设置")
+            .performScrollTo()
+            .performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitForIdle()
+
         compose.onNodeWithText("外观").performClick()
         compose.waitForIdle()
         compose.onAllNodesWithContentDescription("恢复默认").assertCountEquals(1)
