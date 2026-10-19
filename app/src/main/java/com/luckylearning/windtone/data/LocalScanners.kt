@@ -80,7 +80,9 @@ class FolderScanner(private val context: Context) {
         depth: Int,
         tick: () -> Unit,
     ): Boolean {
-        if (depth > 12) return true
+        // 深度上限只是防 provider 返回自引用导致死循环，不是产品限制：老实现没有上限，
+        // 定得太小会「优化出漏歌」。32 层对任何真实的音乐目录都远超所需。
+        if (depth > MAX_SAF_DEPTH) return true
         val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentDocId)
         val cursor = runCatching {
             context.contentResolver.query(childrenUri, CHILD_PROJECTION, null, null, null)
@@ -224,6 +226,9 @@ class FolderScanner(private val context: Context) {
 
     private companion object {
         const val TAG = "FolderScanner"
+
+        /** 递归深度上限，只用于防 provider 自引用；老实现的 DocumentFile 路径无此上限 */
+        const val MAX_SAF_DEPTH = 32
 
         /** 与 [walkBatch] 里按下标读取的顺序一一对应，改顺序必须同步改下标 */
         val CHILD_PROJECTION = arrayOf(
