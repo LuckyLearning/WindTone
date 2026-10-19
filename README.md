@@ -135,3 +135,9 @@ Windows 下首次可先跑 `scripts\sdk-setup.bat` 把 SDK 装到 `.toolchain\an
 本地预览装好 Jekyll 后 `cd docs && jekyll serve` 即可，无需构建步骤。
 
 > 签名密钥、CI Secrets 与发版流程等仓库维护细节**不在公开 README 中记录**（避免把密钥位置、口令来源与流水线细节暴露在公开仓库页面上），需要时请查看本地开发文档。
+
+---
+
+## License
+
+[Apache License 2.0](LICENSE)
