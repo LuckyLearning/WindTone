@@ -331,6 +331,8 @@ data class PlayerUiState(
     val lyricOverlayHiddenApps: Set<String> = SettingsDefaults.OVERLAY_HIDDEN_APPS,
     /** 是否记录「前台应用切换」历史（v1.1.29，默认关；记录只写本机文件） */
     val foregroundLogEnabled: Boolean = SettingsDefaults.FOREGROUND_LOG_ENABLED,
+    /** 调试分区是否已解锁（v1.1.31，默认隐藏；关于连点 5 次打开） */
+    val debugUnlocked: Boolean = SettingsDefaults.DEBUG_UNLOCKED,
     /** 悬浮歌词水平对齐：0 居中 / 1 居左 */
     val lyricOverlayAlign: Int = 0,
     /** 悬浮窗宽度：屏幕宽度的百分比（1..100，v1.1.4 起可调） */

@@ -167,6 +167,15 @@ object SettingsDefaults {
 
     /** 「前台应用记录」出厂值：关（行为记录要用户显式开启） */
     const val FOREGROUND_LOG_ENABLED = false
+
+    /**
+     * 调试分区是否已解锁：出厂 **false**（默认隐藏）。
+     *
+     * 排障工具（前台应用记录 / 悬浮歌词自检 / 崩溃日志 / 开机自启）对普通用户没有意义，
+     * 摆在设置页里只会让人误点。隐藏入口 → 在「关于」连点 5 次解锁 → 调试区顶部有开关可关回去。
+     * 只记「是否解锁」，不记连点次数 —— 次数是界面态，重启即清零。
+     */
+    const val DEBUG_UNLOCKED = false
 }
 
 /**
@@ -541,6 +550,16 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_FOREGROUND_LOG_ENABLED, SettingsDefaults.FOREGROUND_LOG_ENABLED)
         set(value) = sp.edit().putBoolean(KEY_FOREGROUND_LOG_ENABLED, value).apply()
 
+    /**
+     * 调试分区是否已解锁（默认 **false**，即隐藏）。
+     *
+     * 解锁动线是「关于」连点 5 次；关掉的动线是调试分区顶部那个开关（把这里写回 false）。
+     * 键值与 [SettingsDefaults.DEBUG_UNLOCKED] 对质见 `SettingsDefaultsTest`。
+     */
+    var debugUnlocked: Boolean
+        get() = sp.getBoolean(KEY_DEBUG_UNLOCKED, SettingsDefaults.DEBUG_UNLOCKED)
+        set(value) = sp.edit().putBoolean(KEY_DEBUG_UNLOCKED, value).apply()
+
     // ---------------- 批次 6 新增 ----------------
 
     /** 跳过音频文件里的静音段（整轨/现场录音常用） */
@@ -690,6 +709,7 @@ class Prefs(context: Context) {
         const val KEY_LYRIC_OVERLAY_PAUSE_MODE = "lyric_overlay_pause_mode"
         const val KEY_LYRIC_OVERLAY_HIDDEN_APPS = "lyric_overlay_hidden_apps"
         const val KEY_FOREGROUND_LOG_ENABLED = "foreground_log_enabled"
+        const val KEY_DEBUG_UNLOCKED = "settings_debug_unlocked"
         const val KEY_LYRIC_OVERLAY_ALIGN = "lyric_overlay_align"
         const val KEY_LYRIC_OVERLAY_WIDTH = "lyric_overlay_width_percent"
         const val KEY_LYRIC_OVERLAY_FULL_HEIGHT = "lyric_overlay_full_height"

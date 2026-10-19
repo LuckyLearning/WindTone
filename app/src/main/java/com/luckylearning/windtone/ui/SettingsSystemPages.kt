@@ -96,6 +96,14 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
+ * 解锁调试分区要连点「关于」的次数（v1.1.31）。
+ *
+ * 5 次是经验值：足够挡住误触（没人会连点信息卡 5 下），又不至于让人点到怀疑人生。
+ * 这是交互常量、不是设置项默认值，所以放在界面层而不是 `SettingsDefaults`。
+ */
+private const val DEBUG_UNLOCK_TAPS = 5
+
+/**
  * 设置页六个子页的正文（v1.1.6 从 `SettingsScreen.kt` 拆出）。
  *
  * 拆分理由：`SettingsScreen.kt` 一度 **2165 行**，远超本项目 §8.6 定的「600 行/文件」。
@@ -142,6 +150,8 @@ internal fun SettingsDiagnosticsPage(
     onLyricOverlayHiddenApps: (Set<String>) -> Unit,
     /** 立刻走一次「开机后台起播」链路（v1.1.27，用于不重启也能验一遍） */
     onTestBootPlayback: () -> Unit,
+    /** 调试分区解锁开关（v1.1.31；关于连点 5 次打开，分区内开关可关回去） */
+    onDebugUnlocked: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
     val version = remember {
@@ -244,275 +254,301 @@ internal fun SettingsDiagnosticsPage(
         Text("清空曲库与导入目录（保留收藏与统计）")
     }
 
-    // ------------------------------------------------ 调试
-    // 排障工具集中在这里 —— 它们都是**只在出问题时才用**的东西（查包名 / 查链路 / 查崩溃 / 查开机），
-    // 和「播放统计」「数据与存储」这类日常信息分开，免得设置页被排障项挤满。
-    SectionTitle("调试")
-    // ------------------------------------------------ 前台应用记录（v1.1.29）
+    // ------------------------------------------------ 调试（默认隐藏，v1.1.31）
     //
-    // 「悬浮窗按应用隐藏」的仪表盘（设计见 docs/设计-悬浮窗按应用隐藏.md）。
-    // 为什么历史在这里而不是只在设置里：悬浮窗的价值全在**听风在后台**时，
-    // 实时显示反而看不到 —— 正常用车，停车后打开这里回看、勾名单。
-    DebugLabel("前台应用记录")
-    // 开关就在这块里（v1.1.30 从「设置 → 歌词」搬过来）：记录是排障手段，
-    // 日常不该出现在歌词设置里；而查包名 → 加名单的动线全在这一页完成。
-    SwitchRow(
-        title = "记录前台应用切换",
-        subtitle = if (player.foregroundLogEnabled) {
-            "记录中：最多 300 条，只写本机（关掉不影响名单生效）"
-        } else {
-            "关闭。打开后把前台切换写进本机历史，便于查出 360 影像等应用的包名"
-        },
-        checked = player.foregroundLogEnabled,
-        onCheckedChange = onForegroundLogEnabled,
-        onReset = resetAction(
-            player.foregroundLogEnabled != SettingsDefaults.FOREGROUND_LOG_ENABLED,
-        ) { onForegroundLogEnabled(SettingsDefaults.FOREGROUND_LOG_ENABLED) },
-    )
-    val currentPkg by ForegroundAppState.currentPkg.collectAsStateWithLifecycle()
-    var logEntries by remember { mutableStateOf(ForegroundAppLog.read(context)) }
-    var logcatProbe by remember { mutableStateOf<Boolean?>(null) }
-    var confirmClearLog by remember { mutableStateOf(false) }
-    val clipboard = LocalClipboardManager.current
-    val scope = rememberCoroutineScope()
-    // 检测源状态每次重组都探一次：三次 Settings.Secure / AppOps 查询很便宜，
-    // 换来「用户在系统设置里刚开完无障碍，返回就是最新状态」。
-    val detector = ForegroundAppDetector.status(context)
+    // 排障工具集中在这里 —— 它们都是**只在出问题时才用**的东西（查包名 / 查链路 / 查崩溃 / 查开机）。
+    // ⚠️ 整段默认**不渲染**：普通用户用不上，摆在设置页里只会误点。
+    //    打开：在下方「关于」卡上连点 5 次（`DEBUG_UNLOCK_TAPS`，计数只活在本页，退出即清零）。
+    //    关闭：本区第一个开关，写回 `SettingsDefaults.DEBUG_UNLOCKED`。
+    if (player.debugUnlocked) {
+        SectionTitle("调试")
+        // 分区自身的开关：关掉即整段消失。放在最上面而不是最下面 ——
+        // 关掉之后这一区就没了，开关必须在「消失之前」够得着的位置。
+        SwitchRow(
+            title = "显示调试功能",
+            subtitle = "关闭后本区隐藏；需要时在「关于」连点 5 次可再次显示",
+            checked = true,
+            onCheckedChange = { if (!it) onDebugUnlocked(false) },
+        )
+        // ------------------------------------------------ 前台应用记录（v1.1.29）
+        //
+        // 「悬浮窗按应用隐藏」的仪表盘（设计见 docs/设计-悬浮窗按应用隐藏.md）。
+        // 为什么历史在这里而不是只在设置里：悬浮窗的价值全在**听风在后台**时，
+        // 实时显示反而看不到 —— 正常用车，停车后打开这里回看、勾名单。
+        DebugLabel("前台应用记录")
+        // 开关就在这块里（v1.1.30 从「设置 → 歌词」搬过来）：记录是排障手段，
+        // 日常不该出现在歌词设置里；而查包名 → 加名单的动线全在这一页完成。
+        SwitchRow(
+            title = "记录前台应用切换",
+            subtitle = if (player.foregroundLogEnabled) {
+                "记录中：最多 300 条，只写本机（关掉不影响名单生效）"
+            } else {
+                "关闭。打开后把前台切换写进本机历史，便于查出 360 影像等应用的包名"
+            },
+            checked = player.foregroundLogEnabled,
+            onCheckedChange = onForegroundLogEnabled,
+            onReset = resetAction(
+                player.foregroundLogEnabled != SettingsDefaults.FOREGROUND_LOG_ENABLED,
+            ) { onForegroundLogEnabled(SettingsDefaults.FOREGROUND_LOG_ENABLED) },
+        )
+        val currentPkg by ForegroundAppState.currentPkg.collectAsStateWithLifecycle()
+        var logEntries by remember { mutableStateOf(ForegroundAppLog.read(context)) }
+        var logcatProbe by remember { mutableStateOf<Boolean?>(null) }
+        var confirmClearLog by remember { mutableStateOf(false) }
+        val clipboard = LocalClipboardManager.current
+        val scope = rememberCoroutineScope()
+        // 检测源状态每次重组都探一次：三次 Settings.Secure / AppOps 查询很便宜，
+        // 换来「用户在系统设置里刚开完无障碍，返回就是最新状态」。
+        val detector = ForegroundAppDetector.status(context)
 
-    Text(
-        text = "检测通道：" +
-            (if (detector.accessibility) "无障碍服务（已开启）" else "无障碍服务（未开启）") +
-            " · " +
-            (if (detector.usageStats) "使用情况权限（已授予）" else "使用情况权限（未授予）"),
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Text(
-        text = "两个通道任一可用即可按名单收起悬浮窗；都不可用时按「不隐藏」放行，" +
-            "悬浮窗不会因此消失。没有 adb 也能用：无障碍服务在系统设置里手动开启。",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        TextButton(onClick = {
-            runCatching { context.startActivity(ForegroundAppDetector.accessibilitySettingsIntent()) }
-                .onFailure {
-                    Toast.makeText(context, "打不开无障碍设置页，请手动前往：设置 → 辅助功能", Toast.LENGTH_LONG).show()
-                }
-        }) { Text("无障碍设置") }
-        TextButton(onClick = {
-            runCatching { context.startActivity(ForegroundAppDetector.usageAccessSettingsIntent()) }
-                .onFailure {
-                    Toast.makeText(context, "打不开使用情况权限页（部分车机没有这一页）", Toast.LENGTH_LONG).show()
-                }
-        }) { Text("使用情况权限") }
-        // logcat 实测：用户最初想要的「日志监听」路线要 READ_LOGS（adb）——
-        // 这里留一个实测按钮，万一迪丽放松了限制，报告里会显示「可读」。
-        TextButton(onClick = {
-            scope.launch { logcatProbe = ForegroundAppDetector.logcatReadable() }
-        }) { Text("实测日志可读") }
-    }
-    Text(
-        text = "日志可读性：" + when (logcatProbe) {
-            null -> "未测试（不影响任何功能，仅作信息）"
-            true -> "可读（本机允许读取系统日志）"
-            false -> "不可读（符合预期：Android 4.1 起需 adb 授予 READ_LOGS）"
-        },
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-
-    Spacer(Modifier.height(6.dp))
-    Text(
-        text = "当前前台：" + (currentPkg ?: "未知") +
-            (currentPkg?.let { ForegroundAppLog.labelOf(context, it) }?.let { "（$it）" } ?: ""),
-        style = MaterialTheme.typography.labelMedium,
-    )
-    Text(
-        text = "最近 ${logEntries.size} 条切换（最新在上）：",
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    if (logEntries.isEmpty()) {
         Text(
-            text = "还没有记录。先打开上面的「记录前台应用切换」，再正常用车；" +
-                "停车后回到这里，就能看到 360 影像等应用的包名，点右侧「加入名单」即可收起悬浮窗。",
+            text = "检测通道：" +
+                (if (detector.accessibility) "无障碍服务（已开启）" else "无障碍服务（未开启）") +
+                " · " +
+                (if (detector.usageStats) "使用情况权限（已授予）" else "使用情况权限（未授予）"),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = "两个通道任一可用即可按名单收起悬浮窗；都不可用时按「不隐藏」放行，" +
+                "悬浮窗不会因此消失。没有 adb 也能用：无障碍服务在系统设置里手动开启。",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-    } else {
-        LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
-            items(logEntries.reversed(), key = { "${it.timeMs}-${it.pkg}" }) { entry ->
-                // 一行 = 时间 + 「名字 / 包名」两行 + 「加入名单」按钮。
-                // v1.1.30 起可以直接点「加入名单」，不必再复制包名去歌词子页粘贴 ——
-                // 车机上长按复制、切页、粘贴这套动作基本没人愿意做。
-                val inList = entry.pkg in player.lyricOverlayHiddenApps
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                ) {
-                    Text(
-                        text = ForegroundAppLog.formatTime(entry.timeMs),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick = {
+                runCatching { context.startActivity(ForegroundAppDetector.accessibilitySettingsIntent()) }
+                    .onFailure {
+                        Toast.makeText(context, "打不开无障碍设置页，请手动前往：设置 → 辅助功能", Toast.LENGTH_LONG).show()
+                    }
+            }) { Text("无障碍设置") }
+            TextButton(onClick = {
+                runCatching { context.startActivity(ForegroundAppDetector.usageAccessSettingsIntent()) }
+                    .onFailure {
+                        Toast.makeText(context, "打不开使用情况权限页（部分车机没有这一页）", Toast.LENGTH_LONG).show()
+                    }
+            }) { Text("使用情况权限") }
+            // logcat 实测：用户最初想要的「日志监听」路线要 READ_LOGS（adb）——
+            // 这里留一个实测按钮，万一迪丽放松了限制，报告里会显示「可读」。
+            TextButton(onClick = {
+                scope.launch { logcatProbe = ForegroundAppDetector.logcatReadable() }
+            }) { Text("实测日志可读") }
+        }
+        Text(
+            text = "日志可读性：" + when (logcatProbe) {
+                null -> "未测试（不影响任何功能，仅作信息）"
+                true -> "可读（本机允许读取系统日志）"
+                false -> "不可读（符合预期：Android 4.1 起需 adb 授予 READ_LOGS）"
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = "当前前台：" + (currentPkg ?: "未知") +
+                (currentPkg?.let { ForegroundAppLog.labelOf(context, it) }?.let { "（$it）" } ?: ""),
+            style = MaterialTheme.typography.labelMedium,
+        )
+        Text(
+            text = "最近 ${logEntries.size} 条切换（最新在上）：",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (logEntries.isEmpty()) {
+            Text(
+                text = "还没有记录。先打开上面的「记录前台应用切换」，再正常用车；" +
+                    "停车后回到这里，就能看到 360 影像等应用的包名，点右侧「加入名单」即可收起悬浮窗。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
+                items(logEntries.reversed(), key = { "${it.timeMs}-${it.pkg}" }) { entry ->
+                    // 一行 = 时间 + 「名字 / 包名」两行 + 「加入名单」按钮。
+                    // v1.1.30 起可以直接点「加入名单」，不必再复制包名去歌词子页粘贴 ——
+                    // 车机上长按复制、切页、粘贴这套动作基本没人愿意做。
+                    val inList = entry.pkg in player.lyricOverlayHiddenApps
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                    ) {
                         Text(
-                            text = entry.label ?: "（应用名解析不到）",
-                            style = MaterialTheme.typography.labelMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = entry.pkg,
+                            text = ForegroundAppLog.formatTime(entry.timeMs),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
                         )
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = entry.label ?: "（应用名解析不到）",
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = entry.pkg,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        TextButton(
+                            enabled = !inList,
+                            onClick = {
+                                onLyricOverlayHiddenApps(player.lyricOverlayHiddenApps + entry.pkg)
+                                Toast.makeText(
+                                    context,
+                                    "已加入名单：" + (entry.label ?: entry.pkg),
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            },
+                        ) { Text(if (inList) "已在名单" else "加入名单") }
                     }
-                    TextButton(
-                        enabled = !inList,
-                        onClick = {
-                            onLyricOverlayHiddenApps(player.lyricOverlayHiddenApps + entry.pkg)
-                            Toast.makeText(
-                                context,
-                                "已加入名单：" + (entry.label ?: entry.pkg),
-                                Toast.LENGTH_SHORT,
-                            ).show()
-                        },
-                    ) { Text(if (inList) "已在名单" else "加入名单") }
                 }
             }
         }
-    }
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        TextButton(
-            enabled = logEntries.isNotEmpty(),
-            onClick = {
-                clipboard.setText(AnnotatedString(ForegroundAppLog.formatForCopy(logEntries)))
-                Toast.makeText(context, "已复制 ${logEntries.size} 条记录", Toast.LENGTH_SHORT).show()
-            },
-        ) { Text("复制全部") }
-        TextButton(onClick = { logEntries = ForegroundAppLog.read(context) }) { Text("刷新") }
-        TextButton(
-            enabled = logEntries.isNotEmpty(),
-            onClick = { confirmClearLog = true },
-        ) { Text("清空") }
-    }
-    if (confirmClearLog) {
-        AlertDialog(
-            onDismissRequest = { confirmClearLog = false },
-            title = { Text("清空前台记录？") },
-            text = { Text("清空后不可恢复；不影响「不显示悬浮窗的应用」名单。") },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmClearLog = false
-                    ForegroundAppLog.clear(context)
-                    logEntries = emptyList()
-                }) { Text("清空") }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmClearLog = false }) { Text("取消") }
-            },
-        )
-    }
-
-    // ------------------------------------------------ 悬浮歌词自检
-    // 悬浮歌词链路跨 6 个环节，任何一环断掉用户侧都是同一个「没反应」。
-    // 这个入口把整条链路一次测完，直接指出断点，省去猜和反复重装。
-    DebugLabel("悬浮歌词")
-    ActionRow(
-        title = "悬浮歌词自检",
-        subtitle = "逐项检查 授权 → 开关 → 服务 → 窗口 → 内容，指出断在哪一环",
-        onClick = {
-            overlayCheck = LyricOverlayBridge.snapshot(context)
-            showOverlayCheck = true
-        },
-        chevron = true,
-    )
-
-    // ------------------------------------------------ 崩溃日志
-    DebugLabel("崩溃日志")
-    ActionRow(
-        title = if (crashLogCount > 0) "查看日志（共 $crashLogCount 条）" else "暂无崩溃记录",
-        subtitle = "崩溃信息只保存在本机，不会自动上传，可导出后反馈",
-        onClick = onLoadCrashLog,
-    )
-    if (crashLogText != null) {
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            shape = RoundedCornerShape(10.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 6.dp),
-        ) {
-            Text(
-                text = crashLogText,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(10.dp),
-                maxLines = 24,
-                overflow = TextOverflow.Ellipsis,
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(
+                enabled = logEntries.isNotEmpty(),
+                onClick = {
+                    clipboard.setText(AnnotatedString(ForegroundAppLog.formatForCopy(logEntries)))
+                    Toast.makeText(context, "已复制 ${logEntries.size} 条记录", Toast.LENGTH_SHORT).show()
+                },
+            ) { Text("复制全部") }
+            TextButton(onClick = { logEntries = ForegroundAppLog.read(context) }) { Text("刷新") }
+            TextButton(
+                enabled = logEntries.isNotEmpty(),
+                onClick = { confirmClearLog = true },
+            ) { Text("清空") }
+        }
+        if (confirmClearLog) {
+            AlertDialog(
+                onDismissRequest = { confirmClearLog = false },
+                title = { Text("清空前台记录？") },
+                text = { Text("清空后不可恢复；不影响「不显示悬浮窗的应用」名单。") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        confirmClearLog = false
+                        ForegroundAppLog.clear(context)
+                        logEntries = emptyList()
+                    }) { Text("清空") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmClearLog = false }) { Text("取消") }
+                },
             )
         }
-    }
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        TextButton(onClick = onExportCrashLog, enabled = crashLogCount > 0) {
-            Text("导出日志")
-        }
-        // 不可撤销 → 二次确认
-        TextButton(
-            onClick = { showClearCrashConfirm = true },
-            enabled = crashLogCount > 0,
-        ) { Text("清空日志") }
-    }
 
-    // ------------------------------------------------ 开机自启
-    // 这条链路只有真车能验（开机广播是系统保护广播，adb 发不出去），而失败表现
-    // 全是「开机后什么都没发生」。所以把广播是否到达、决策是什么、起播结果原样摆出来 ——
-    // 用户看一眼就能知道是「系统没给广播」还是「给了但没播起来」。
-    DebugLabel("开机自启")
-    val boot = bootInfo
-    StatCard(
-        rows = listOf(
-            "开关" to if (player.autoPlayOnBoot) {
-                "已打开（开机后台起播，不弹界面）"
-            } else {
-                "关闭"
+        // ------------------------------------------------ 悬浮歌词自检
+        // 悬浮歌词链路跨 6 个环节，任何一环断掉用户侧都是同一个「没反应」。
+        // 这个入口把整条链路一次测完，直接指出断点，省去猜和反复重装。
+        DebugLabel("悬浮歌词")
+        ActionRow(
+            title = "悬浮歌词自检",
+            subtitle = "逐项检查 授权 → 开关 → 服务 → 窗口 → 内容，指出断在哪一环",
+            onClick = {
+                overlayCheck = LyricOverlayBridge.snapshot(context)
+                showOverlayCheck = true
             },
-            "上次开机广播" to if (boot == null || !boot.received) {
-                "从未收到"
-            } else {
-                BootStatusText.agoLabel(System.currentTimeMillis(), boot.atMillis)
-            },
-            "决策" to (if (boot == null) "—" else BootStatusText.actionLabel(boot.action)),
-            "结果" to (if (boot == null) "—" else BootStatusText.resultLabel(boot)),
+            chevron = true,
         )
-    )
-    ActionRow(
-        title = "立刻试一次后台起播",
-        subtitle = "不重启也能验一遍：按开机那条路恢复上次队列并起播（不会弹出界面）",
-        onClick = {
-            onTestBootPlayback()
-            Toast.makeText(context, "已触发，退到桌面即可看到它在后台播放", Toast.LENGTH_SHORT).show()
-            bootInfo = BootStatus.snapshot(context)
-        },
-    )
-    ActionRow(
-        title = "刷新上面的状态",
-        subtitle = if (boot == null || !boot.received) {
-            "还没收到过开机广播：请确认系统「应用 → 听风 → 权限」里「开机启动 / 自启动」是允许的"
-        } else {
-            "看一遍这条路走到哪一步了"
-        },
-        onClick = { bootInfo = BootStatus.snapshot(context) },
-    )
+
+        // ------------------------------------------------ 崩溃日志
+        DebugLabel("崩溃日志")
+        ActionRow(
+            title = if (crashLogCount > 0) "查看日志（共 $crashLogCount 条）" else "暂无崩溃记录",
+            subtitle = "崩溃信息只保存在本机，不会自动上传，可导出后反馈",
+            onClick = onLoadCrashLog,
+        )
+        if (crashLogText != null) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp),
+            ) {
+                Text(
+                    text = crashLogText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(10.dp),
+                    maxLines = 24,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick = onExportCrashLog, enabled = crashLogCount > 0) {
+                Text("导出日志")
+            }
+            // 不可撤销 → 二次确认
+            TextButton(
+                onClick = { showClearCrashConfirm = true },
+                enabled = crashLogCount > 0,
+            ) { Text("清空日志") }
+        }
+
+        // ------------------------------------------------ 开机自启
+        // 这条链路只有真车能验（开机广播是系统保护广播，adb 发不出去），而失败表现
+        // 全是「开机后什么都没发生」。所以把广播是否到达、决策是什么、起播结果原样摆出来 ——
+        // 用户看一眼就能知道是「系统没给广播」还是「给了但没播起来」。
+        DebugLabel("开机自启")
+        val boot = bootInfo
+        StatCard(
+            rows = listOf(
+                "开关" to if (player.autoPlayOnBoot) {
+                    "已打开（开机后台起播，不弹界面）"
+                } else {
+                    "关闭"
+                },
+                "上次开机广播" to if (boot == null || !boot.received) {
+                    "从未收到"
+                } else {
+                    BootStatusText.agoLabel(System.currentTimeMillis(), boot.atMillis)
+                },
+                "决策" to (if (boot == null) "—" else BootStatusText.actionLabel(boot.action)),
+                "结果" to (if (boot == null) "—" else BootStatusText.resultLabel(boot)),
+            )
+        )
+        ActionRow(
+            title = "立刻试一次后台起播",
+            subtitle = "不重启也能验一遍：按开机那条路恢复上次队列并起播（不会弹出界面）",
+            onClick = {
+                onTestBootPlayback()
+                Toast.makeText(context, "已触发，退到桌面即可看到它在后台播放", Toast.LENGTH_SHORT).show()
+                bootInfo = BootStatus.snapshot(context)
+            },
+        )
+        ActionRow(
+            title = "刷新上面的状态",
+            subtitle = if (boot == null || !boot.received) {
+                "还没收到过开机广播：请确认系统「应用 → 听风 → 权限」里「开机启动 / 自启动」是允许的"
+            } else {
+                "看一遍这条路走到哪一步了"
+            },
+            onClick = { bootInfo = BootStatus.snapshot(context) },
+        )
+    }
 
     // ------------------------------------------------ 关于
     SectionTitle("关于")
+    // 连点 5 次解锁调试分区（v1.1.31）。
+    // 计数用 `remember` 而不是持久化：必须「连续」点 —— 退出本页再进来就重新数，
+    // 免得几下零散误触攒够 5 次把调试区翻出来。真正的「已解锁」状态才落盘。
+    var aboutTaps by remember { mutableStateOf(0) }
+    val onAboutTap: () -> Unit = {
+        aboutTaps += 1
+        if (aboutTaps >= DEBUG_UNLOCK_TAPS) {
+            aboutTaps = 0
+            onDebugUnlocked(true)
+            Toast.makeText(context, "调试功能已显示", Toast.LENGTH_SHORT).show()
+        }
+    }
     StatCard(
+        onClick = if (player.debugUnlocked) null else onAboutTap,
         rows = listOf(
             "应用" to "听风 WindTone",
             "版本" to version,

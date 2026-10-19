@@ -94,6 +94,8 @@ class SettingsDefaultsTest {
         check("lyricOverlayTextColor", prefs.lyricOverlayTextColor, SettingsDefaults.OVERLAY_TEXT_COLOR)
         check("lyricOverlayHiddenApps", prefs.lyricOverlayHiddenApps, SettingsDefaults.OVERLAY_HIDDEN_APPS)
         check("foregroundLogEnabled", prefs.foregroundLogEnabled, SettingsDefaults.FOREGROUND_LOG_ENABLED)
+        // v1.1.31：调试分区出厂隐藏（关于连点 5 次才显示）
+        check("debugUnlocked", prefs.debugUnlocked, SettingsDefaults.DEBUG_UNLOCKED)
 
         // 音乐库 / 更新
         check("minSongDurationSec", prefs.minSongDurationSec, SettingsDefaults.MIN_DURATION_SEC)

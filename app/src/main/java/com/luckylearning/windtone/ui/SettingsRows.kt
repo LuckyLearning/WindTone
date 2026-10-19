@@ -373,12 +373,21 @@ internal fun ActionRow(
     }
 }
 
+/**
+ * 只读信息卡。
+ *
+ * [onClick] 非空时整张卡可点 —— 目前只有「关于」用它（连点 5 次解锁调试分区，v1.1.31）。
+ * 刻意不做任何视觉提示（没有箭头、没有 ripple 之外的变化）：这个入口要的是「知道的人能找到」，
+ * 而不是「所有人都想点一下看看」。
+ */
 @Composable
-internal fun StatCard(rows: List<Pair<String, String>>) {
+internal fun StatCard(rows: List<Pair<String, String>>, onClick: (() -> Unit)? = null) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
         shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().then(
+            if (onClick == null) Modifier else Modifier.clickable(onClick = onClick),
+        ),
     ) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
             rows.forEach { (k, v) ->

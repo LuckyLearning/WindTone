@@ -98,6 +98,7 @@ class PlaybackEngine(
             // v1.1.29：悬浮窗按应用隐藏 + 前台应用记录开关
             lyricOverlayHiddenApps = prefs.lyricOverlayHiddenApps,
             foregroundLogEnabled = prefs.foregroundLogEnabled,
+            debugUnlocked = prefs.debugUnlocked,
             lyricOverlayAlign = prefs.lyricOverlayAlign,
             // v1.1.4 新增：悬浮窗宽度与文字颜色
             lyricOverlayWidthPercent = prefs.lyricOverlayWidthPercent,
@@ -1274,6 +1275,18 @@ class PlaybackEngine(
     }
 
     /**
+     * 调试分区解锁开关（v1.1.31）。
+     *
+     * 纯界面态：不碰播放、不叫醒悬浮窗服务，也不触发预览。之所以仍然走 Prefs 而不是
+     * `rememberSaveable`，是因为它必须跨进程重启保留 —— 用户解锁过一次，下次进设置
+     * 就该还在，否则每次都要连点 5 次。
+     */
+    override fun setDebugUnlocked(enabled: Boolean) {
+        prefs.debugUnlocked = enabled
+        _player.update { it.copy(debugUnlocked = enabled) }
+    }
+
+    /**
      * 悬浮歌词水平对齐：0 居中 / 1 居左。
      *
      * 与其它外观项的区别：它同时改**文字对齐**与**窗口重心**，所以服务侧
@@ -1791,6 +1804,9 @@ interface PlayerActions {
 
     /** 「前台应用记录」开关（v1.1.29，默认关）；同样只叫醒服务、不预览 */
     fun setForegroundLogEnabled(enabled: Boolean)
+
+    /** 调试分区解锁开关（v1.1.31，默认关 = 隐藏） */
+    fun setDebugUnlocked(enabled: Boolean)
 
     /** 悬浮窗宽度：屏幕宽度百分比（1..100） */
     fun setLyricOverlayWidthPercent(percent: Int)

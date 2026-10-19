@@ -159,6 +159,8 @@ fun SettingsScreen(
     onLyricOverlayHiddenApps: (Set<String>) -> Unit,
     /** 「前台应用记录」开关（v1.1.29） */
     onForegroundLogEnabled: (Boolean) -> Unit,
+    /** 调试分区解锁开关（v1.1.31，默认隐藏） */
+    onDebugUnlocked: (Boolean) -> Unit,
     onOverlayEditing: (Boolean) -> Unit,
     onOverlayPreview: () -> Unit,
     canDrawOverlay: Boolean,
@@ -376,6 +378,7 @@ fun SettingsScreen(
                         onForegroundLogEnabled = onForegroundLogEnabled,
                         onLyricOverlayHiddenApps = onLyricOverlayHiddenApps,
                         onTestBootPlayback = onTestBootPlayback,
+                        onDebugUnlocked = onDebugUnlocked,
                     )
 
                     SettingsPage.UPDATE -> SettingsUpdatePage(

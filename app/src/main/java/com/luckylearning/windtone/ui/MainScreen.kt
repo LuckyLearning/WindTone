@@ -678,6 +678,7 @@ fun MainScreen(
                     onLyricOverlayTextColor = playerVm::setLyricOverlayTextColor,
                     onLyricOverlayHiddenApps = playerVm::setLyricOverlayHiddenApps,
                     onForegroundLogEnabled = playerVm::setForegroundLogEnabled,
+                    onDebugUnlocked = playerVm::setDebugUnlocked,
                     onOverlayEditing = playerVm::setOverlayEditing,
                     onOverlayPreview = playerVm::previewOverlay,
                     canDrawOverlay = canDrawOverlay,

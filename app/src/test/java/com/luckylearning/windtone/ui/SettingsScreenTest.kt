@@ -22,6 +22,7 @@ import com.luckylearning.windtone.state.PlayerUiState
 import com.luckylearning.windtone.state.UpdateUiState
 import com.luckylearning.windtone.ui.theme.MusicPlayerTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -67,6 +68,7 @@ class SettingsScreenTest {
         onLyricOverlayTextColor: (Int) -> Unit = {},
         onLyricOverlayHiddenApps: (Set<String>) -> Unit = {},
         onForegroundLogEnabled: (Boolean) -> Unit = {},
+        onDebugUnlocked: (Boolean) -> Unit = {},
         onAutoResume: (Boolean) -> Unit = {},
         onOpenStats: () -> Unit = {},
     ) {
@@ -99,6 +101,7 @@ class SettingsScreenTest {
                     onLyricOverlayTextColor = onLyricOverlayTextColor,
                     onLyricOverlayHiddenApps = onLyricOverlayHiddenApps,
                     onForegroundLogEnabled = onForegroundLogEnabled,
+                    onDebugUnlocked = onDebugUnlocked,
                     onOverlayEditing = {},
                     onOverlayPreview = {},
                     onTestBootPlayback = {},
@@ -437,7 +440,8 @@ class SettingsScreenTest {
         var logEnabled: Boolean? = null
         var hidden: Set<String>? = null
         render(
-            player = PlayerUiState(lyricOverlay = true),
+            // 调试分区默认隐藏，本用例要验的是分区内的接线，所以直接以「已解锁」状态渲染
+            player = PlayerUiState(lyricOverlay = true, debugUnlocked = true),
             onForegroundLogEnabled = { logEnabled = it },
             onLyricOverlayHiddenApps = { hidden = it },
         )
@@ -468,5 +472,72 @@ class SettingsScreenTest {
             setOf("com.byd.aeri.caranywhere"),
             hidden,
         )
+    }
+
+    /**
+     * 调试分区默认**不在**页面上（v1.1.31）。
+     *
+     * 排障工具对普通用户是纯噪音：他们既不需要「前台应用记录」，也不该看到
+     * 「崩溃日志 / 开机自启」这些字样。藏起来不是安全措施，是不打扰。
+     */
+    @Test
+    fun debugSectionIsHiddenByDefault() {
+        render()
+
+        compose.onNodeWithText("关于与诊断").performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText("播放统计").assertExists()
+        compose.onNodeWithText("调试").assertDoesNotExist()
+        compose.onNodeWithText("显示调试功能").assertDoesNotExist()
+        compose.onNodeWithText("记录前台应用切换").assertDoesNotExist()
+    }
+
+    /**
+     * 在「关于」卡上连点 5 次才解锁，点 4 次不算。
+     *
+     * 计数只看「本页连续点击」：`remember` 不落盘，退出本页重新数 ——
+     * 否则零散误触会慢慢攒够 5 次，把入口翻出来。
+     */
+    @Test
+    fun fiveTapsOnAboutUnlockDebugSection() {
+        var unlocked: Boolean? = null
+        render(onDebugUnlocked = { unlocked = it })
+
+        compose.onNodeWithText("关于与诊断").performClick()
+        compose.waitForIdle()
+
+        repeat(4) {
+            compose.onNodeWithText("版本").performScrollTo().performClick()
+            compose.waitForIdle()
+        }
+        assertNull("点 4 次不该解锁", unlocked)
+
+        compose.onNodeWithText("版本").performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals("第 5 次应解锁调试分区", true, unlocked)
+    }
+
+    /**
+     * 解锁后可关回去：调试分区顶部那个开关写回 false。
+     *
+     * 开关放在分区**最上面**是有意的 —— 关掉之后整段消失，放在底部就再也点不到了。
+     */
+    @Test
+    fun debugSectionCanBeHiddenAgainFromItsOwnSwitch() {
+        var unlocked: Boolean? = null
+        render(
+            player = PlayerUiState(debugUnlocked = true),
+            onDebugUnlocked = { unlocked = it },
+        )
+
+        compose.onNodeWithText("关于与诊断").performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText("调试").performScrollTo().assertExists()
+        compose.onNodeWithContentDescription("显示调试功能")
+            .performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals("关掉开关应把解锁状态写回 false", false, unlocked)
     }
 }

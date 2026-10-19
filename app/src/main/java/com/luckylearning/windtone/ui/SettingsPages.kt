@@ -150,7 +150,8 @@ internal fun SettingsRootPage(
     )
     CategoryRow(
         title = "关于与诊断",
-        subtitle = "版本信息 · 播放统计 · 崩溃日志 · 隐私说明",
+        // 默认不写「崩溃日志」：它在调试分区里，未解锁时不显示（v1.1.31）
+        subtitle = "版本信息 · 播放统计 · 隐私说明",
         icon = AppIcons.Info,
         onClick = { onNavigate(SettingsPage.DIAGNOSTICS) },
     )

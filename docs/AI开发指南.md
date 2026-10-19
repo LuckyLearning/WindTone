@@ -66,7 +66,7 @@ LibraryViewModel   PlayerViewModel    UpdateViewModel    SettingsViewModel
 | APK 产物名 | `WindTone-v1.1.3.apk`（debug：`WindTone-v1.1.3-debug.apk`）—— 版本号随发版变化 |
 | 应用显示名 | 英文 `WindTone` / 中文 `听风`（`values/` 与 `values-zh/`） |
 | 数据库 | `music_player.db`，Room **v5**，9 张表（schema 快照在 `app/schemas/`） |
-| 单元测试 | **346 个**：`lyrics/` / `UpdateChecker` / `PlayMode` 为纯 JVM；`db/` 与 `playback/` 走 Robolectric（真实 SQLite）；`ui/` 是 Compose 界面冒烟（见 §11.13） |
+| 单元测试 | **349 个**：`lyrics/` / `UpdateChecker` / `PlayMode` 为纯 JVM；`db/` 与 `playback/` 走 Robolectric（真实 SQLite）；`ui/` 是 Compose 界面冒烟（见 §11.13） |
 
 ### ⚠️ 兼容口径（2026-10-14 起，务必先读）
 
@@ -515,6 +515,7 @@ SharedPreferences 文件 `music_player_prefs`（**勿改名**）。v4 之后只�
 | `lyric_overlay_width_percent` | Int | 80 | 悬浮窗宽度（屏宽百分比 1..100，v1.1.4 新增）。服务侧另有 48dp 像素下限。**默认不是 100%**：窗口宽度决定横向可移动量（`屏宽 − 窗宽`），100% 时归零、悬浮窗只能上下拖 |
 | `lyric_overlay_text_color` | Int | `0xFFFFFFFF` | 悬浮窗歌词文字颜色（v1.1.4 新增）。v1.1.8 起是**整窗唯一的颜色** —— 主角与上下句靠明暗 / 字重区分，不再有「已唱色」 |
 | `lyric_overlay_hidden_apps` | StringSet | `emptySet()` | **不显示悬浮窗的应用**（v1.1.29 新增）：名单内包名前台时悬浮窗收起（`OverlayVisibility.foregroundHidden`）。检测通道见 §11.15 |
+| `settings_debug_unlocked` | Bool | false | **调试分区是否已解锁**（v1.1.31 新增，默认 **false = 隐藏**）：关于与诊断页的「调试」分区（前台应用记录 / 悬浮歌词自检 / 崩溃日志 / 开机自启）只在为 true 时渲染。解锁 = 在「关于」卡上连点 5 次（`DEBUG_UNLOCK_TAPS`，计数不落盘）；关闭 = 分区顶部「显示调试功能」开关写回 false。纯界面态，不叫醒任何服务 |
 | `foreground_log_enabled` | Bool | false | **前台应用记录**（v1.1.29 新增，默认关）：开着才把前台切换写进 `files/foreground_app_log.tsv`（滚动 300 条）。与名单共用检测通道，二者任一需要时才拉起检测 |
 | `skip_silence` | Bool | false | 跳过静音 |
 | `dynamic_theme` | Bool | **true** | 封面主色动态主题 |
@@ -1120,6 +1121,10 @@ WindTone-v{版本}-universal.apk      # 拿不准架构时的兜底
     - v1.0.7 起曾是「主页面平铺外观 / 播放 / 歌词三组 + 三条子页入口」，**v1.1.3 把三组也下沉成子页** —— 起因是桌面悬浮歌词的五个外观选项加入后「歌词」一组独占两屏，主页又开始长回去。
     - 子页是 `SettingsScreen` 内部的 `SettingsPage` 枚举状态（**7 项**，`pagePositions` 数组长度必须同步），**不新建 Activity、不引导航库**；子页里返回键先回主页面。
     - ⚠️ 加子页 = 枚举加一项 + 「六张卡」里加一张 + `mutableStateListOf(0, 0, …)` 加一个 0，三处缺一就崩或错位。
+    - **「关于与诊断」内部还有一层条件渲染（v1.1.31）**：`SectionTitle("调试")` 起的整段（前台应用记录 / 悬浮歌词自检 / 崩溃日志 / 开机自启）
+      被 `if (player.debugUnlocked)` 包着，默认**不存在于界面**；解锁动线是在「关于」信息卡（`StatCard(onClick = …)`）上连点 5 次，
+      关闭动线是分区顶部「显示调试功能」开关。排障工具对普通用户是纯噪音，藏起来不是安全措施，是不打扰。
+      ⇒ 以后把新的排障项加进这段 `if` 里，**不要再往日常分区加调试开关**。
 14. **chevron 的使用边界（v1.1.3 再放宽一档）**：右箭头（`AppIcons.ChevronRight`）只给 **`CategoryRow`（设置主页分类卡）** 和 **`ActionRow`**；`ActionRow` 里还只给**点开会进入另一个界面**的行（子页入口、打开弹层 / 弹窗的行，如「均衡器与音效」「下载线路」「过滤短音频」），**就地执行动作**（「检查更新」）或**就地展开**（「查看日志」）的行不加。弹层的 `OptionRow` 仍然不带箭头。行右侧可放「当前值摘要」（如「过滤 < 60 秒」「已是最新」）把状态前置。
     - `CategoryRow` = **一整类设置的门面**（左侧 40dp 语义图标 + 标题 + 摘要 + 箭头，只出现在设置主页）；
       `ActionRow` = **某一类设置里的一条**（无图标，出现在子页里）。两层信息密度不同，不会混淆。
@@ -1246,7 +1251,7 @@ bash scripts/release.sh minor     # 或 patch / major / 具体版本号
 
 链路跨 7 个环节，任何一环断掉，用户侧的表现都是同一个"没反应"。**先让用户跑自检，不要猜**：
 
-设置 → 关于与诊断 → **悬浮歌词自检**。它一次测完并直接给出结论：
+设置 → 关于与诊断 → **调试 → 悬浮歌词自检**（「调试」默认隐藏：在「关于」卡上连点 5 次才出现，v1.1.31）。它一次测完并直接给出结论：
 
 | 环节 | 检查项 | 断了意味着 |
 |---|---|---|
@@ -1731,7 +1736,7 @@ ForegroundAppLog.kt       历史落盘：files/foreground_app_log.tsv，滚动 3
 
 **为什么主通道是无障碍而不是 UsageStats**：无障碍是**事件驱动**、听风在后台也收得到；
 UsageStats 要「使用情况访问」授权且只能轮询。两者任一可用即可工作，状态显示在
-设置 → 关于与诊断 → 「前台应用记录」。
+设置 → 关于与诊断 → **调试** → 「前台应用记录」（该分区默认隐藏，关于卡连点 5 次解锁，v1.1.31）。
 
 **历史记录三条红线**：
 1. **默认关**（`SettingsDefaults.FOREGROUND_LOG_ENABLED = false`），开关控制写入，`SettingsDefaultsTest` 对质；
@@ -1745,7 +1750,8 @@ UsageStats 要「使用情况访问」授权且只能轮询。两者任一可用
 
 **UI 两处**：① 设置 → 歌词 底部「不显示悬浮窗的应用」（`SettingsLyricsOverlayAppsDialog.kt`：
 launcher 应用列表 + 搜索 + 图标 + 手动贴包名，`Drawable→Bitmap` 转换要在 `remember` 外先取 `LocalContext`）；
-② **关于与诊断 → 调试**里的「前台应用记录」（v1.1.31 从歌词页搬来，与悬浮歌词自检 / 崩溃日志 / 开机自启
+② **关于与诊断 → 调试**里的「前台应用记录」（v1.1.31 从歌词页搬来，且整个「调试」分区**默认隐藏**、
+关于卡连点 5 次解锁；与悬浮歌词自检 / 崩溃日志 / 开机自启
 同属 `SectionTitle("调试")` 下，次级标题用 `DebugLabel`）：开关 + 通道状态 + 历史列表，**每行自带「加入名单」**，
 已在名单的显示「已在名单」并禁用。查包名 → 加名单的动线因此全在一屏内完成。
 测试：`OverlayVisibilityTest`（4 条新增）/ `ForegroundAppStateTest`（上报去重 + 门控 + 日志纯函数）/ `LayoutContractTest`（manifest 声明）/ `SettingsScreenTest`。
@@ -1757,7 +1763,7 @@ launcher 应用列表 + 搜索 + 图标 + 手动贴包名，`Drawable→Bitmap` 
 | 项 | 现状 | 影响 / 建议 |
 |---|---|---|
 | `MainScreen.kt` 1152 行 | ✅ 2026-10-15 已按 §8.6 拆过一轮：列表区抽成 `LibraryHeader.kt`（424 行）+ `LibraryLists.kt`（742 行），`MainScreen` 只留编排（单栏骨架 / 抽屉 / 播放页挂载 / 深链消费） | 下一个偏大的文件是 `ui/library/LibraryCore.kt`（778 行，见 §6 的拆分结构） |
-| 测试覆盖 | **346 个**（`db/`、`playback/` 有 Robolectric 用例，`ui/` 是 Compose 界面冒烟） | 已覆盖 CASCADE / 软删 / 排除 / 统计 / 队列 / 搜索历史 / 歌词解析 / 悬浮歌词内容解析与排版（32 项）/ 悬浮窗摆放与夹取（14 项）/ 悬浮窗按应用隐藏与前台记录（v1.1.29，见 §11.15）/ 更新检查（24 项，含说明正文的通道无关性，见 §6.2）/ 收听报告日历聚合（15 项）/ 重复歌曲指纹（13 项）/ 侧边抽屉行为（6 项）/ 设置页一主六子导航（3 项）/ 车机浏览树（12 项，见 §6.9）/ 均衡器预设曲线与预览归一化（14 项）+ 混响档位表（7 项，见 §6.10）/ 启动器快捷方式契约（4 项）+ 桌面入口就绪判据（6 项）+ 虚拟歌单条目（4 项，均见 §6.7）；仍缺 `MusicRepository` 的排序 / 搜索，以及 ViewModel 层的行为测试 |
+| 测试覆盖 | **349 个**（`db/`、`playback/` 有 Robolectric 用例，`ui/` 是 Compose 界面冒烟） | 已覆盖 CASCADE / 软删 / 排除 / 统计 / 队列 / 搜索历史 / 歌词解析 / 悬浮歌词内容解析与排版（32 项）/ 悬浮窗摆放与夹取（14 项）/ 悬浮窗按应用隐藏与前台记录（v1.1.29，见 §11.15）/ 更新检查（24 项，含说明正文的通道无关性，见 §6.2）/ 收听报告日历聚合（15 项）/ 重复歌曲指纹（13 项）/ 侧边抽屉行为（6 项）/ 设置页一主六子导航（3 项）/ 车机浏览树（12 项，见 §6.9）/ 均衡器预设曲线与预览归一化（14 项）+ 混响档位表（7 项，见 §6.10）/ 启动器快捷方式契约（4 项）+ 桌面入口就绪判据（6 项）+ 虚拟歌单条目（4 项，均见 §6.7）；仍缺 `MusicRepository` 的排序 / 搜索，以及 ViewModel 层的行为测试 |
 | **`java.time` 不能用**（`minSdk = 24`） | `isCoreLibraryDesugaringEnabled = false` 是**有意**的 | `java.time` / `java.util.stream` / `Optional` 都要 **API 26**，低版本上直接 `NoClassDefFoundError`（不是降级，是崩）。要日历运算走 `java.util.Calendar` + `TimeZone`（见 `data/ListeningReport.kt` 的实现与注释），日期加减用 `Calendar.add(DAY_OF_MONTH, ±n)` 而不是加减 86_400_000 毫秒。真要引入 `java.time`，先开脱糖并加 `desugar_jdk_libs`（会全局影响构建，别为一个小功能开） |
 | **lint 的 `abortOnError = false`** | 2026-10-15 收尾时已把 **Error 清到 0**（warnings 仍在，不阻塞构建） | 也就是说"构建成功"≠"lint 干净"。改完代码别只看 `BUILD SUCCESSFUL`，要扫一眼 `app/build/reports/lint-results-debug.xml` 里的 **Error** 级条目。当天共三次收敛：**32 → 5**（21 条 `java.time` 的 `NewApi` 见上一行，5 条 `Tile.setSubtitle` 的 `NewApi` 见 `tile/TileCompat.kt`，`StartActivityAndCollapseDeprecated` 改显式 `@Suppress` 并写明理由），再 **5 → 0**（5 条 `UnsafeOptInUsageError`：`kotlinOptions.freeCompilerArgs` 里的 `-opt-in=...UnstableApi` 编译器认、lint 不认，改为在 `PlaybackService` / `PlayerHandle` 上挂 `@androidx.annotation.OptIn`）。⚠️ 注意 `w:` 开头的 `-opt-in ... is not an opt-in requirement marker` 是**历史告警**，Kotlin 编译期就带着，不是新引入的 |
 | 无迁移 = 无版本兼容 | 已定口径：重装即可 | 需要保住老用户数据时，得补 `addMigrations(...)` 并配迁移回归测试（见 §5.1 末）。**v1.0.6（DB v2）→ v1.1.0（DB v4）就是按这条走的：覆盖安装会整库重建** |
