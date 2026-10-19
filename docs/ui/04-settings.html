@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>四、设置页 · 听风 WindTone UI 效果图</title>
+<script>
+/* 主题必须在样式之前定位，避免首帧闪错色：
+   1) 用户手动切过 → 用记住的选择（localStorage）
+   2) 没切过 → 跟随系统 prefers-color-scheme（App 也是跟随系统主题） */
+(function(){
+  try{
+    var saved=localStorage.getItem('wt-ui-theme');
+    var theme=saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme',theme);
+  }catch(e){
+    document.documentElement.setAttribute('data-theme','dark');
+  }
+})();
+</script>
+<link rel="stylesheet" href="ui.css">
+</head>
+<body>
+<script src="ui-sprite.js"></script>
+
+<header class="board-head">
+  <div class="bh-row">
+    <a class="backdocs" href="index.html">← 效果图总览</a>
+    <div class="bh-title">四、设置页<small>UI 效果图 · 设计基准（第 4 / 7 章）</small></div>
+    <span class="bh-badge"><span id="pageCount">15</span> 屏</span>
+    <span class="bh-badge">对齐 v1.1.29</span>
+    <button class="tgl" id="themeBtn">🌙 深色主题</button>
+  </div>
+  <nav class="bh-nav"><a href="01-main.html">主界面</a><a href="02-player.html">播放页</a><a href="03-sheets.html">抽屉与弹窗</a><a href="04-settings.html" class="on">设置页</a><a href="05-extras.html">小组件·通知</a><a href="06-car.html">车机版</a><a href="07-spec.html">颜色与尺寸</a></nav>
+</header>
+
+<div class="wrap">
+<section class="sec" id="sec-set">
+  <div class="sec-hd"><h2>四、设置页</h2><span>SettingsScreen.kt —— 主页面只放二级分类入口卡（六类）+ 各分类子页（顺序与代码一致）</span></div>
+  <div class="board">
+<figure class="fig" id="scr-settings-1">
+  <div class="cap"><b>㉙ 设置页 · 主页面（二级分类）</b><em>SettingsScreen.kt · 六张分类入口卡：外观 / 播放 / 歌词 / 音乐库 / 更新 / 关于与诊断</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">设置</div></div>
+      </div>
+      <div class="list" style="padding:4px 18px 12px">
+        <div class="cat-row"><span class="cat-ic"><svg class="ic"><use href="#i-palette"/></svg></span>
+          <div class="cat-main"><div class="cat-t">外观</div><div class="cat-s">主题取色 · 车载模式</div></div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
+        <div class="cat-row"><span class="cat-ic"><svg class="ic"><use href="#i-play"/></svg></span>
+          <div class="cat-main"><div class="cat-t">播放</div><div class="cat-s">速度 1.00x · 变调 原调 · 跳过静音 · 均衡器与音效</div></div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
+        <div class="cat-row"><span class="cat-ic"><svg class="ic"><use href="#i-lyrics"/></svg></span>
+          <div class="cat-main"><div class="cat-t">歌词</div><div class="cat-s">字号 1.1x · 悬浮歌词</div></div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
+        <div class="cat-row"><span class="cat-ic"><svg class="ic"><use href="#i-library"/></svg></span>
+          <div class="cat-main"><div class="cat-t">音乐库</div><div class="cat-s">格式与容量 · 过滤 &lt; 60 秒</div></div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
+        <div class="cat-row"><span class="cat-ic"><svg class="ic"><use href="#i-cloud"/></svg></span>
+          <div class="cat-main"><div class="cat-t">更新</div><div class="cat-s">检查更新 · 自动检查 · 下载线路</div></div>
+          <span style="font-size:11px;color:var(--primary)">v1.0.6</span>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
+        <div class="cat-row"><span class="cat-ic"><svg class="ic"><use href="#i-info"/></svg></span>
+          <div class="cat-main"><div class="cat-t">关于与诊断</div><div class="cat-s">版本信息 · 播放统计 · 崩溃日志 · 隐私说明</div></div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>分层原则（v1.1.3 二次重构）</b>：主页面<b>只放二级分类入口卡</b>，一张卡一个分类——左侧<b>语义图标</b>（40dp 圆角 12 容器、secondaryContainer 底）+ 分类名 + 一行摘要 + 右箭头，<b>摘要把子页里最重要的状态前置</b>（「格式与容量 · 过滤 &lt; 60 秒」「v1.0.6」「速度 1.00x」），不进子页就能看到大概。<br>
+  &nbsp;&nbsp;v1.0.7 曾把主页压到「外观 / 播放 / 歌词三组平铺 + 三个子页入口」（约 1.3 屏）；但悬浮歌词五个外观选项加入后，「歌词」一组独占两屏，主页又开始长回去——本次把 <b>外观 / 播放 / 歌词</b> 三组也各自下沉成子页，主页回到<b>一屏六张卡</b>，任何设置最多两层直达。<br>
+  &nbsp;&nbsp;六个分类的归属：①<b>外观</b>——主题跟随封面取色、车载模式；②<b>播放</b>——默认播放速度、变调、<b>打开应用继续上次播放</b>、跳过静音、均衡器与音效；③<b>歌词</b>——歌词字号、桌面悬浮歌词及其外观选项；④<b>音乐库</b>——短音频过滤（一次性配置）；⑤<b>更新</b>——检查更新 / 自动检查 / 下载线路；⑥<b>关于与诊断</b>——播放统计、崩溃日志、版本与隐私。<br>
+  <b>设置页从底部滑入覆盖全屏</b>（不是新 Activity）；子页是同一个 <code>SettingsScreen</code> 内部的页面状态（<code>SettingsPage</code> 枚举），<b>不新建 Activity、不引入导航库</b>；子页里按系统返回键先回主页面，回主页后再按才关闭设置页。<br>
+  <b>分类入口卡 = 图标 + 摘要 + 右箭头</b>：v1.0.7 起「全 App 不存在 chevron」的规范放宽为「只有 ActionRow 能带 chevron」；v1.1.3 起再放宽一档——<b>设置主页的二级分类入口卡（<code>CategoryRow</code>）也带 chevron 和左侧图标</b>（参考通用播放器设置主页的二级菜单结构），其余位置不变：<code>OptionRow</code>（弹层行）依旧左侧图标 + 选中 ✓、无箭头；子页内的 <code>ActionRow</code> 依旧左侧无图标、箭头只给「点开会进入另一个界面」的行（子页入口、打开弹层 / 弹窗的行），就地执行动作（「检查更新」）或就地展开（「查看日志」）的行不加。<br>
+  <b>子页入口行与分类卡的区别</b>：子页里的 <code>ActionRow</code>（如「均衡器与音效」「过滤短音频」）是<b>某一类设置里的一条</b>，无图标；主页的 <code>CategoryRow</code> 是<b>一整类设置的门面</b>，带图标 + 摘要——两层信息密度不同，不会混淆。<br>
+  <b>v1.1.4：每项都能恢复默认</b>。凡是「能调的地方」，行尾都会在<b>当前值偏离出厂默认时</b>出现一枚 <code>.rst</code>（↺，18dp、<code>onSurfaceVariant</code> 色），点一下写回 <code>SettingsDefaults</code> 里那个常量。<br>
+  &nbsp;&nbsp;<b>只在偏离时出现</b>：一行都没动过却挂着按钮，用户会以为「还得点一下才算生效」，等于把默认状态本身渲染成了一个疑问。反过来，默认值<b>不能</b>只写在 getter 里——恢复默认写回的那份和首次安装拿到的那份对不上时，不报错、不崩溃，只是两类用户行为不一致（由 <code>SettingsDefaultsTest</code> 钉住）。<br>
+  &nbsp;&nbsp;<b>↺ 嵌在整行 clickable 里</b>：Compose 的点击手势由最内层消费，所以点 ↺ 只复位、不会顺带打开这一行该进的那个界面（<code>SettingsScreenTest</code> 有专门一条守着）。<br>
+  &nbsp;&nbsp;不复位的东西有两处：<b>「均衡器与音效」那一行本身</b>（它只是个弹层入口，真正的复位按钮在弹层标题行里，见 ⑲）与<b>悬浮歌词的位置</b>（属于「调整位置」那条路径，自检里有「重置位置并预览」）。</p>
+</figure>
+
+<figure class="fig" id="scr-settings-appearance">
+  <div class="cap"><b>㉙B 设置页 · 外观子页</b><em>SettingsScreen.kt · 主题跟随封面取色 / 车载模式</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">外观</div></div>
+      </div>
+      <div class="list" style="padding:4px 18px 12px">
+        <div class="section-label" style="padding:0;margin:12px 0 4px">主题</div>
+        <div class="sw-row"><div class="sw-main"><div class="sw-t">主题跟随封面取色</div>
+          <div class="sw-s">从当前歌曲封面提取主色，驱动整个界面的配色</div></div><span class="switch"><i></i></span></div>
+        <div class="section-label" style="padding:0;margin:14px 0 4px">车载</div>
+        <div class="sw-row"><div class="sw-main"><div class="sw-t">车载模式<svg class="ic ic-13" style="display:inline-block;vertical-align:-2px;margin-left:5px;color:var(--on-surface-variant)"><use href="#i-info"/></svg></div>
+          <div class="sw-s">横屏大界面 · 歌词页自动收起 · 开机自启</div></div><span class="switch off"><i></i></span></div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>「车载模式」副标题仍是压缩后的一行三要点，标题右侧 13px 的 <code>i-info</code> 图标点开完整说明弹窗（见 <a href="#scr-dlg-carmode">㉚E</a>）；
+  点图标只开弹窗、不切换开关（<code>SwitchRow</code> 的可选参数 <code>onInfo</code>）。<br>
+  <b>为什么独立成子页</b>：这一组是「界面长什么样」的总开关，改动频率低；留在主页只会让六张分类卡之外又开始长第三层内容。</p>
+</figure>
+
+<figure class="fig" id="scr-settings-playback">
+  <div class="cap"><b>㉙C 设置页 · 播放子页</b><em>SettingsScreen.kt · 默认播放速度 / 继续上次播放 / 跳过静音 / 均衡器与音效</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">播放</div></div>
+      </div>
+      <div class="list" style="padding:4px 18px 12px">
+        <div class="section-label" style="padding:0;margin:12px 0 4px">速度与变调</div>
+        <div class="sw-row" style="display:block"><div style="font-size:15px">默认播放速度 1.00x</div>
+          <div class="slider" style="margin:12px 0 4px"><span class="fill" style="width:20%"></span><span class="knob" style="left:20%"></span></div></div>
+        <div class="sw-row" style="display:block"><div style="font-size:15px">变调 原调</div>
+          <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">升降调不改速度（±12 半音 = 一个八度）</div>
+          <div class="slider" style="margin:12px 0 4px"><span class="fill" style="width:50%"></span><span class="knob" style="left:50%"></span></div></div>
+        <div class="section-label" style="padding:0;margin:14px 0 4px">播放行为</div>
+        <div class="sw-row"><div class="sw-main"><div class="sw-t">打开应用继续上次播放</div>
+          <div class="sw-s">从上次的进度接着播；关闭后只恢复队列与进度，停在暂停态</div></div><span class="switch"><i></i></span></div>
+        <div class="sw-row"><div class="sw-main"><div class="sw-t">跳过静音</div>
+          <div class="sw-s">自动跳过录音开头的空白段（对整轨 / 现场录音有效）</div></div><span class="switch off"><i></i></span></div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-top:6px">
+          <div style="flex:1"><div style="font-size:15px">均衡器与音效</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">预设 / 频段曲线 / 低音增强 / 环绕声 / 响度增强 / 混响（需先开始播放）</div></div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>「均衡器与音效」点开的是底部弹层 <code>EqSheet</code>（见 ⑲），属于「打开弹层」的行，带右箭头；
+  速度与变调滑块、以及「跳过静音」就地生效、无箭头。原「音效」单行分组在此并入「播放」（v1.0.7 决定延续）。<br>
+  <b>v1.1.6：变调并入「速度与变调」组</b>——两者在播放器里是同一个 <code>PlaybackParameters</code>，
+  分开摆会让人以为互不影响（实际 <code>setPlaybackSpeed</code> 会把变调打回原调）。单位是半音（±12 = 一个八度）。<br>
+  <b>v1.1.4：本页每项都带 ↺</b>（速度 / 变调 / 跳过静音 / 继续上次播放），均衡器那行例外——它的值在弹层里，↺ 跟着弹层走（见 ⑲）。<br>
+  <b>v1.1.16：「打开应用继续上次播放」</b>排在「跳过静音」前面，默认<b>开</b> —— 恢复队列却停在暂停态，
+  在车机上等于没恢复（还要探手去点播放键）。关掉它的语义是「只恢复不自动播」，队列与进度照旧摆好。</p>
+</figure>
+
+<figure class="fig" id="scr-settings-lyrics">
+  <div class="cap"><b>㉙D 设置页 · 歌词子页</b><em>SettingsScreen.kt · 歌词字号 / 桌面悬浮歌词及其外观选项</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">歌词</div></div>
+      </div>
+      <div class="list" style="padding:4px 18px 12px">
+        <div class="section-label" style="padding:0;margin:12px 0 4px">播放页歌词</div>
+        <div class="sw-row" style="display:block"><div style="display:flex;align-items:center;gap:6px">
+            <div style="flex:1;font-size:15px">歌词字号 1.1x</div>
+            <svg class="ic ic-18 rst"><use href="#i-reset"/></svg></div>
+          <div class="slider" style="margin:12px 0 4px"><span class="fill" style="width:44%"></span><span class="knob" style="left:44%"></span></div></div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px">
+          <div style="flex:1"><div style="font-size:15px">双语歌词 · 都显示</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">带翻译的歌词显示哪些行；只影响显示，导出的 LRC 不受影响（v1.1.18）</div></div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+        <div class="section-label" style="padding:0;margin:14px 0 4px">桌面悬浮歌词</div>
+        <div class="sw-row"><div class="sw-main"><div class="sw-t">桌面悬浮歌词</div>
+          <div class="sw-s">退到车机桌面 / 导航页后，在屏幕最上层显示当前歌词行（App 内自动隐藏，开启瞬间有 6 秒预览）</div></div><span class="switch off"><i></i></span></div>
+        <div class="sw-row"><div class="sw-main"><div class="sw-t">显示歌名与歌手</div>
+          <div class="sw-s">悬浮窗最上面加两行小字：歌名 / 歌手，下面是歌词（v1.1.15 新增，默认关）</div></div><span class="switch"><i></i></span></div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-top:6px">
+          <div style="flex:1"><div style="font-size:15px">歌名歌手字号</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">比歌词小一号；车机上看着小就调大一档</div></div>
+          <span style="font-size:11px;color:var(--primary);text-align:right">小</span>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px">
+          <div style="flex:1"><div style="font-size:15px">悬浮歌词行数</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">1–5 行（上下各 2 行 · 当前行居中高亮）</div></div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-top:6px">
+          <div style="flex:1"><div style="font-size:15px">悬浮歌词字号</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">大屏与车机上建议调大一档</div></div>
+          <span style="font-size:11px;color:var(--primary);text-align:right">中</span>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-top:6px">
+          <div style="flex:1"><div style="font-size:15px">悬浮歌词对齐</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">歌词在窗内居中 / 居左；窗口位置由拖动自由决定</div></div>
+          <span style="font-size:11px;color:var(--primary);text-align:right">居中</span>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-top:6px">
+          <div style="flex:1"><div style="font-size:15px">悬浮歌词底板</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">垫一层底色，任何壁纸上都读得清</div></div>
+          <span style="font-size:11px;color:var(--primary);text-align:right">半透明</span>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-top:6px">
+          <div style="flex:1"><div style="font-size:15px">暂停时的悬浮歌词</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">淡出到半透明，方便看清唱到哪一句</div></div>
+          <span style="font-size:11px;color:var(--primary);text-align:right">淡出</span>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+        <!-- v1.1.4 新增：宽度滑块 + 颜色。都紧跟在五个外观选项之后，仍属「外观」范畴。
+             ⚠️ 这一行的默认值是 80% 而不是 100%：窗口宽度与「横向能拖多远」是同一件事
+             （可移动量 = 屏宽 − 窗宽），100% 时正好为 0，悬浮窗会被钉死在最左边。
+             ⚠️ v1.1.8 起颜色只剩下面这一处：那两处「已唱色」随逐字染色一起删了。 -->
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;margin-top:6px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="flex:1;font-size:15px">悬浮歌词宽度 80%</div>
+            <svg class="ic ic-18 rst"><use href="#i-reset"/></svg>
+          </div>
+          <div class="slider" style="margin:12px 0 4px"><span class="fill" style="width:80%"></span><span class="knob" style="left:80%"></span></div>
+          <div style="font-size:11px;color:var(--on-surface-variant)">屏幕宽度的百分比（1–100%）。窗口越窄，能左右移动的范围越大；窗口越宽，长句折行越晚。<br>调到 100% 时该行改成：「已占满屏宽，悬浮窗无法左右移动；调小一点即可拖到屏幕任意位置」</div>
+        </div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:8px;margin-top:6px">
+          <div style="flex:1"><div style="font-size:15px">悬浮歌词文字颜色</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">悬浮窗是固定色，不跟随主题；当前行与上下句靠明暗区分</div></div>
+          <span style="width:16px;height:16px;border-radius:50%;background:#fff;border:1px solid var(--outline);flex:none"></span>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+        <!-- v1.1.29 新增：按应用隐藏 + 前台记录。排在颜色之后、调整位置之前；
+             名单命中是硬隐藏（仅次灭屏/无内容），检测通道两选一、都不可用按「不隐藏」放行。 -->
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-top:6px">
+          <div style="flex:1"><div style="font-size:15px">不显示悬浮窗的应用</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">已设 1 个应用；点开可增删。选中的应用在前台时悬浮歌词自动收起（车机 360 影像等），退出后恢复</div></div>
+          <svg class="ic ic-18 rst"><use href="#i-reset"/></svg>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+        <div class="sw-row"><div class="sw-main"><div class="sw-t">前台应用记录</div>
+          <div class="sw-s">记录中；同时按名单（1 个）收起悬浮窗。状态文案随两块联动：关记录留名单 →「已关闭记录；名单（N 个）的隐藏仍然生效」；全关 →「关闭。打开后记录前台应用切换，便于把 360 影像等应用加进上方名单」</div></div><span class="switch"><i></i></span></div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-top:6px">
+          <div style="flex:1"><div style="font-size:15px">调整悬浮歌词位置</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">临时解锁，把歌词拖到想要的位置；位置会记住，锁定后不挡触摸</div></div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>「播放页歌词」段 = <b>歌词字号</b> + <b>双语歌词</b>（v1.1.18：中英都显示 / 只显示中文 / 只显示英文）；「桌面悬浮歌词」段 = 开关（默认关）+ <b>显示歌名与歌手</b>（默认关，开着时多一行「歌名歌手字号」）+ 行数（1–5）/ 字号 / 对齐 / 底板 / 暂停表现 + 宽度 / 文字颜色 + 调整位置入口。<br>
+  悬浮歌词的外观选项（行数 / 标题字号 / 字号 / 对齐 / 底板 / 暂停表现）：<b>开关关着也允许预设</b>（不做可见性 gating），五项共用同一个选项弹层（<code>OverlayChoice</code>），点任意一项即生效并给一次 6 秒前台预览；三种实际状态与「对齐 / 位置」的完整规范见 ㊴ 屏。<br>
+  <b>降级不降可达性</b>：播放页「播放设置」弹层的「歌词」分组里仍有「桌面悬浮歌词」开关（见 ⑱）——听歌时顺手就能开，不必钻两层设置。<br>
+  <b>v1.1.4 提到设置里的歌词颜色共三项</b>（播放页已唱色 / 悬浮窗文字色 / 悬浮窗已唱色）。⚠️ <b>v1.1.8 起后两项已随逐字染色整体移除</b>，本屏只剩「悬浮歌词文字颜色」这一处 —— 它现在是整窗唯一的颜色，主角与上下句靠<b>明暗 / 字重 / 字号</b>区分，不再有「已唱色」；颜色弹层见 ㉙E。<br>
+  <b>宽度滑块改完立刻给一次 6 秒预览</b>。<br>
+  <b>v1.1.22 起全屏这一档在 App 内不画</b>：整屏浮层不再压在设置页上（含「调整位置」与改完配置的 6 秒预览），宽度 / 水平位置下方改为一块 16:9 缩略示意图 —— 面板宽度、左右位置、底部 Dock 让位都按当前值实时绘制，实际效果退到桌面看。<br>
+  <b>v1.1.21 起整块按开关显隐</b>：上面的「桌面悬浮歌词」关着时，形态 / 宽度 / 位置 / 行数 / 字号 / 对齐 / 底板 / 暂停 / 颜色 / 歌名歌手 / 调整位置<b>一项都不显示</b>，只留开关与一行小字说明「打开后能调什么」。开着的功能不摆无效控件 —— 早先那种「关着也允许预设」的写法，用户调完退到桌面看不到变化，只会当成 bug。<br>
+  <b>v1.1.29 尾部新增两行</b>（颜色之后、调整位置之前）：①「不显示悬浮窗的应用」——ActionRow 进名单弹窗（㉙F），副标题实时显示「已设 N 个应用；点开可增删」，带 ↺（清回空名单）；②「前台应用记录」——SwitchRow，默认关，副标题四态联动（记录+名单 / 只记录 / 只名单 / 全关），文案要把「记录关了但名单仍生效」这种中间态说清楚。两块共用免 adb 检测通道（无障碍服务为主、使用情况权限兜底），检测规范见 <code>docs/设计-悬浮窗按应用隐藏.md</code> 与 AI 开发指南 §11.15。<br>
+  <b>v1.1.20 起「全屏高度」是独立的一套</b>：形态开关拨开后，这一段换成「全屏宽度 30–100%」+「水平位置（0 靠左 / 50 居中 / 100 靠右）」两个滑块，外加<b>靠左 / 居中 / 靠右三个 44dp 等宽按钮</b>；单条字幕的行数 / 宽度 / 自由拖动全部收进「全屏关」那一档。两套值分开落盘，互不污染。全屏这一档的桌面拖动<b>只跟横向</b>，双击浮层即锁定（全屏铺满整块屏，吃触摸时必须有桌面侧也能收工的手势）。<br>
+  <b>宽度两端的两条口径</b>：①滑块范围就是 <b>1–100%</b>（用户要的语义），拖动时<b>逐帧</b>写回——宽度与屏宽是直接的比例关系，松手才变会让人以为「拖了半天没反应」，引擎每次都会重摆窗口，正好当实时预览用。②服务侧对像素宽度留了 <b>48dp 下限</b>（标准最小触控边长）：1% 在 1080p 屏上只有 10px，窗口会小到既看不见也拖不着。下限不能再往上抬——抬到 80dp 时，1080p / 3x 的机器上滑块 <b>1%~22% 全是同一个宽度</b>，低端那一整段等于失灵；48dp 把这段死区压到 13% 以内。</p>
+</figure>
+
+<figure class="fig" id="scr-settings-colorpicker">
+  <div class="cap"><b>㉙E 颜色选择弹层</b><em>SettingsScreen.kt · ColorPickerSheet（v1.1.8 起只剩「悬浮歌词文字颜色」一处调用）</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">悬浮歌词文字颜色</div></div>
+      </div>
+      <div class="list" style="padding:4px 18px 12px">
+        <div class="section-label" style="padding:0;margin:14px 0 0">预设</div>
+        <div class="swatches">
+          <div class="swatch on" style="background:#fff"></div>
+          <div class="swatch" style="background:#FFCD56"></div>
+          <div class="swatch" style="background:#4FC3F7"></div>
+          <div class="swatch" style="background:#4DD0E1"></div>
+          <div class="swatch" style="background:#81C784"></div>
+          <div class="swatch" style="background:#F06292"></div>
+          <div class="swatch" style="background:#FF7043"></div>
+          <div class="swatch" style="background:#BA68C8"></div>
+        </div>
+        <div class="section-label" style="padding:0;margin:14px 0 0">自定义</div>
+        <div class="color-preview" style="background:#FFCD56"></div>
+        <div class="sw-row" style="display:block;padding:2px 0"><div style="font-size:13px">色相</div>
+          <div class="slider" style="margin:8px 0 4px"><span class="fill" style="width:31%"></span><span class="knob" style="left:31%"></span></div></div>
+        <div class="sw-row" style="display:block;padding:2px 0"><div style="font-size:13px">饱和度</div>
+          <div class="slider" style="margin:8px 0 4px"><span class="fill" style="width:66%"></span><span class="knob" style="left:66%"></span></div></div>
+        <div class="sw-row" style="display:block;padding:2px 0"><div style="font-size:13px">亮度</div>
+          <div class="slider" style="margin:8px 0 4px"><span class="fill" style="width:100%"></span><span class="knob" style="left:100%"></span></div></div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>两段式 —— <b>预设色板 / 自定义</b>。<br>
+  <b>v1.1.8 起这里没有「跟随主题」</b>：它原先是播放页<b>已唱色</b>专用的（默认跟着 <code>colorScheme.primary</code> 走）。逐字染色整体移除后已唱色没了，仅剩的「悬浮歌词文字颜色」是**固定色**，弹层也就去掉了这一段。<br>
+  选中的是<b>纯白</b> —— 它就是 <code>SettingsDefaults.OVERLAY_TEXT_COLOR</code>。⚠️ 默认值必须真的在色板里，否则用户点开弹层找不到默认色，「恢复默认」就成了界面上不可达的一步（<code>LyricsColorsTest</code> 钉着这条）。<br>
+  自定义区从<b>暖黄</b>起步（<code>LyricsColors.DEFAULT_SEED</code>，也是色板里的一颗），所以预览条与三个滑块的初始位置每次都一样，不随上一个弹层留下的色相漂移。<br>
+  <b>为什么不用色轮</b>：车机上手指粗、精度差，色轮边缘的色相极难选准；三个滑块 + 一块实时预览条的组合在大屏上反而更好操作。<br>
+  选完立刻落盘并给一次 6 秒悬浮窗预览，不必退到桌面验证。三个滑块<b>松手才写回</b>——逐帧写回会连着触发预览，把浮动窗口刷成流水。</p>
+</figure>
+
+<figure class="fig" id="scr-dlg-overlay-hidden-apps">
+  <div class="cap"><b>㉙F 不显示悬浮窗的应用 · 名单弹窗</b><em>SettingsLyricsOverlayAppsDialog.kt · OverlayHiddenAppsDialog（v1.1.29 新增）</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">歌词</div></div>
+      </div>
+      <div class="list" style="padding:4px 18px 12px">
+        <div style="background:var(--surface-variant);border-radius:16px;padding:14px 16px;margin:10px 0;box-shadow:0 8px 24px rgba(0,0,0,.35)">
+          <div style="font-size:17px;font-weight:600">不显示悬浮窗的应用</div>
+          <div style="font-size:12px;color:var(--on-surface-variant);margin-top:6px">已设 1 个。勾上的应用在前台时，悬浮歌词会自动收起，退出后恢复。</div>
+          <div style="background:var(--surface);border:1px solid var(--outline);border-radius:10px;padding:8px 12px;margin-top:10px;font-size:13px;color:var(--on-surface-variant)">搜索应用名或包名</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+            <span style="width:32px;height:32px;border-radius:8px;background:#5c6bc0;display:flex;align-items:center;justify-content:center;font-size:15px;color:#fff">齿轮</span>
+            <div style="flex:1"><div style="font-size:14px">Settings</div><div style="font-size:10.5px;color:var(--on-surface-variant)">com.android.settings</div></div>
+            <span class="switch"><i></i></span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+            <span style="width:32px;height:32px;border-radius:8px;background:#43a047;display:flex;align-items:center;justify-content:center;font-size:15px;color:#fff">仪表</span>
+            <div style="flex:1"><div style="font-size:14px">360 影像</div><div style="font-size:10.5px;color:var(--on-surface-variant)">com.byd.aeri.caranywhere</div></div>
+            <span class="switch"><i></i></span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+            <span style="width:32px;height:32px;border-radius:8px;background:#7e57c2;display:flex;align-items:center;justify-content:center;font-size:15px;color:#fff">风</span>
+            <div style="flex:1"><div style="font-size:14px">听风 WindTone</div><div style="font-size:10.5px;color:var(--on-surface-variant)">com.luckylearning.windtone</div></div>
+            <span class="switch off"><i></i></span>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:18px;margin-top:14px">
+            <button class="txtbtn">清空</button><button class="txtbtn" style="color:var(--primary)">完成</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>列表来自 <code>PackageManager.queryIntentActivities(MAIN/LAUNCHER)</code>（按包名去重、按应用名排序），行 = 图标 + 应用名 + 包名 + Switch；顶部搜索框按应用名或包名实时过滤；标题下方的计数随勾选实时变（「还没有设置…」→「已设 N 个…」）。<br>
+  <b>清空要二次确认</b>；「完成」落盘。图标的 <code>Drawable→ImageBitmap</code> 转换要先在 <code>remember</code> 外取好 <code>LocalContext</code>（Compose 网关坑，见实现注释）。<br>
+  <b>为什么列的是 launcher 应用</b>：能被用户打开的应用才可能「到前台挡住悬浮窗」；无界面组件与系统进程不在列表里，属预期。<br>
+  <b>判定口径</b>：名单命中 → <code>OverlayVisibility.foregroundHidden = true</code> 硬隐藏（仅次灭屏 / 无内容，压过编辑态与预览）；检测通道不可用 → 按「不隐藏」放行，悬浮窗不会凭空消失。</p>
+</figure>
+
+<figure class="fig" id="scr-settings-2">
+  <div class="cap"><b>㉚ 设置页 · 音乐库子页</b><em>SettingsScreen.kt · 本地曲库（短音频过滤）</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">音乐库</div></div>
+      </div>
+      <div class="list" style="padding:0 18px 12px">
+        <div class="section-label" style="padding:0;margin:12px 0 4px">本地曲库</div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-bottom:8px">
+          <div style="flex:1"><div style="font-size:15px">格式与容量</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">各格式的首数与占用、无损 / 有损占比（全部按本机文件大小统计）</div></div>
+          <div style="font-size:11px;color:var(--primary)">812 首 · 7.4 GB</div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px">
+          <div style="flex:1"><div style="font-size:15px">过滤短音频（&lt; 60 秒）</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">时长已知且低于阈值的音频不会进入曲库（滤掉提示音、转场音效等）。修改后自动重新扫描；填 0 关闭过滤</div></div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>为什么单独成页</b>：短音频过滤是<b>一辈子配一次</b>的一次性配置，留在主设置页里等于用最贵的位置放一个几乎不用的表单。<br>
+  <b>危险操作二次确认</b>：「清空播放统计」「清空日志」两处会丢数据且不可撤销，统一弹 AlertDialog 确认（见 <a href="#scr-settings-diagnostics">㉚D</a>）。<br>
+  <b>安全边界</b>：云端曲目在本应用内<b>不可删除</b>——长按菜单的删除入口在 ViewModel 前置拦截，<code>SongDeleter</code> 再兜底一层，双保险避免误删服务器文件。</p>
+</figure>
+
+<figure class="fig" id="scr-libstats">
+  <div class="cap"><b>㉚H 曲库格式与容量</b><em>LibraryStatsScreen.kt · 各格式首数 / 占用 / 占比 · 无损拆分</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">曲库格式与容量</div></div>
+      </div>
+      <div class="list" style="padding:0 18px 12px">
+        <div style="background:var(--surface-variant);border-radius:12px;padding:10px 14px;font-size:13px">
+          <div style="display:flex;padding:4px 0"><div style="width:112px;font-size:12px;color:var(--on-surface-variant)">歌曲总数</div><div>812 首</div></div>
+          <div style="display:flex;padding:4px 0"><div style="width:112px;font-size:12px;color:var(--on-surface-variant)">合计占用</div><div>7.42 GB</div></div>
+          <div style="display:flex;padding:4px 0"><div style="width:112px;font-size:12px;color:var(--on-surface-variant)">总时长</div><div>52 小时 18 分</div></div>
+          <div style="display:flex;padding:4px 0"><div style="width:112px;font-size:12px;color:var(--on-surface-variant)">平均每首</div><div>9.4 MB</div></div>
+          <div style="display:flex;padding:4px 0"><div style="width:112px;font-size:12px;color:var(--on-surface-variant)">格式种类</div><div>4 种</div></div>
+        </div>
+        <div class="section-label" style="padding:0;margin:14px 0 4px">按占用排序</div>
+        <div style="font-size:13px;padding:7px 0">
+          <div style="display:flex;align-items:flex-end"><div style="flex:1;font-weight:600">FLAC</div><div style="color:var(--on-surface-variant);font-size:12px">186 首</div><div style="color:var(--primary);font-size:12px;margin-left:10px">5.10 GB</div><div style="color:var(--on-surface-variant);font-size:12px;margin-left:8px;min-width:34px;text-align:right">69%</div></div>
+          <div style="height:6px;border-radius:3px;background:rgba(128,128,128,.18);margin-top:5px"><div style="width:69%;height:6px;border-radius:3px;background:var(--tertiary)"></div></div>
+          <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">平均 872 kbps · 平均每首 28.1 MB</div>
+        </div>
+        <div style="font-size:13px;padding:7px 0">
+          <div style="display:flex;align-items:flex-end"><div style="flex:1;font-weight:600">MP3</div><div style="color:var(--on-surface-variant);font-size:12px">578 首</div><div style="color:var(--primary);font-size:12px;margin-left:10px">2.06 GB</div><div style="color:var(--on-surface-variant);font-size:12px;margin-left:8px;min-width:34px;text-align:right">28%</div></div>
+          <div style="height:6px;border-radius:3px;background:rgba(128,128,128,.18);margin-top:5px"><div style="width:28%;height:6px;border-radius:3px;background:var(--primary)"></div></div>
+          <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">平均 196 kbps · 平均每首 3.7 MB</div>
+        </div>
+        <div style="font-size:13px;padding:7px 0">
+          <div style="display:flex;align-items:flex-end"><div style="flex:1;font-weight:600">M4A</div><div style="color:var(--on-surface-variant);font-size:12px">44 首</div><div style="color:var(--primary);font-size:12px;margin-left:10px">232 MB</div><div style="color:var(--on-surface-variant);font-size:12px;margin-left:8px;min-width:34px;text-align:right">3%</div></div>
+          <div style="height:6px;border-radius:3px;background:rgba(128,128,128,.18);margin-top:5px"><div style="width:3%;height:6px;border-radius:3px;background:var(--primary)"></div></div>
+          <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">平均 265 kbps · 平均每首 5.3 MB</div>
+        </div>
+        <div style="font-size:13px;padding:7px 0">
+          <div style="display:flex;align-items:flex-end"><div style="flex:1;font-weight:600">OGG</div><div style="color:var(--on-surface-variant);font-size:12px">4 首</div><div style="color:var(--primary);font-size:12px;margin-left:10px">18 MB</div><div style="color:var(--on-surface-variant);font-size:12px;margin-left:8px;min-width:34px;text-align:right">0%</div></div>
+          <div style="height:6px;border-radius:3px;background:rgba(128,128,128,.18);margin-top:5px"><div style="width:1%;height:6px;border-radius:3px;background:var(--primary)"></div></div>
+        </div>
+        <div class="section-label" style="padding:0;margin:14px 0 4px">无损 / 有损</div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:10px 14px;font-size:13px">
+          <div style="display:flex;padding:4px 0"><div style="width:112px;font-size:12px;color:var(--on-surface-variant)">无损</div><div>186 首 · 5.10 GB · 69%</div></div>
+          <div style="display:flex;padding:4px 0"><div style="width:112px;font-size:12px;color:var(--on-surface-variant)">有损</div><div>626 首 · 2.31 GB · 31%</div></div>
+        </div>
+        <div style="font-size:11px;color:var(--on-surface-variant);margin-top:14px;line-height:1.5">占用按文件大小累加，与系统「文件管理」里看到的一致；同一首歌的歌词、封面若单独存成文件，不计在这里。<br>m4a 可能是无损的 ALAC，也可能是有损的 AAC，按扩展名分不出来，统计里计入「有损」。</div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>为什么单独成页</b>：这是「看一眼就够」的报表，不是设置 —— 塞进设置页会把那两行真正要配的项挤到第二屏。<br>
+  <b>柱状条而不是饼图</b>：格式通常 3~6 种，条长差比扇形角度好读；比例条与右侧百分比用<b>同一个 share 值</b>算，不会出现「条 72% 文字写 71%」这种对不上的细节 —— 这类不一致正是「统计页看着不可信」的来源。<br>
+  <b>格式识别的顺序必须是「文件名 → 路径 → MIME」</b>：MediaStore 的 MIME 常年写 <code>audio/mpeg</code>（连 <code>.m4a</code> 都可能这么报），先信 MIME 会把一半 FLAC 统计成 MP3，而且这个错误看起来完全合理。<br>
+  <b>只读内存曲库</b>：不查库、不碰文件系统、不落表。曲库已是「当前有哪些歌」的唯一真相，再查一遍只会得到第二份可能对不上的数字。<br>
+  <b>脏数据的处理写进界面</b>：读不到文件大小的歌只计首数、不计占用，并在页脚单独报出条数 —— 否则用户会发现「加起来跟文件管理里对不上」，而界面上没有任何线索。</p>
+</figure>
+
+<figure class="fig" id="scr-settings-update">
+  <div class="cap"><b>㉚C 设置页 · 更新子页</b><em>SettingsScreen.kt · 检查更新 / 自动检查 / 下载线路</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">更新</div></div>
+      </div>
+      <div class="list" style="padding:0 18px 12px">
+        <div class="section-label" style="padding:0;margin:12px 0 4px">更新</div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px">
+          <div style="font-size:15px">发现新版本 v1.0.6</div>
+          <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">当前 v1.0.5 → 最新 v1.0.6 · 3.02 MB</div>
+        </div>
+        <div class="sw-row" style="margin-top:6px"><div class="sw-main"><div class="sw-t">启动时自动检查更新</div>
+          <div class="sw-s">关闭后应用不再发起任何网络请求（在线更新是唯一的联网功能）</div></div><span class="switch"><i></i></span></div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px">
+          <div style="flex:1"><div style="font-size:15px">下载线路</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">自动 · 直连优先，太慢会自动切换镜像</div></div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+        <div style="display:flex;gap:4px"><button class="txtbtn">打开发布页面</button><button class="txtbtn">忽略此版本</button></div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>更新行有三态：检查中「正在检查更新…」/ 有新版「发现新版本 vX.Y.Z」/ 常态「检查更新」；
+  「忽略此版本」只在有新版本时出现。<br>
+  <b>检查失败态</b>：失败时该行副标题直接显示原因（如「GitHub 访问额度已用完（N 分钟后恢复）」/「网络不可用，请检查网络后重试」），
+  主标题退回「检查更新」；因为检查主通道走 releases.atom（不计 API 配额），正常网络下不会再出现限流提示。<br>
+  <b>下载线路（v1.0.6）</b>：副标题「当前线路 · 一句话说明」，点开是单选弹窗（见 <a href="#scr-dlg-downloadroute">㉚G</a>），带右箭头。<br>
+  <b>检查更新永远访问 GitHub 官方地址</b>——早期版本让检查也走加速镜像，镜像缓存了旧内容，刚发布的版本会被误判成「已是最新」；镜像现在只用于下载安装包。<br>
+  <b>为什么独立成页</b>：这一组里「检查更新」是偶尔要点的动作、「自动检查」是开关、「下载线路」是排障工具，三类性质混排，
+  但都属于「更新」这一件事；主页面只留一条带状态摘要的入口行。</p>
+</figure>
+
+<figure class="fig" id="scr-settings-diagnostics">
+  <div class="cap"><b>㉚D 设置页 · 关于与诊断子页</b><em>SettingsScreen.kt · 播放统计 / 崩溃日志 / 关于</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">关于与诊断</div></div>
+      </div>
+      <div class="list" style="padding:0 18px 12px">
+        <div class="section-label" style="padding:0;margin:12px 0 4px">播放统计</div>
+        <div class="stat-card">
+          <div class="sr"><span>歌曲总数</span>500 首</div>
+          <div class="sr"><span>播放过的歌曲</span>382 首</div>
+          <div class="sr"><span>累计播放次数</span>2,461 次</div>
+          <div class="sr"><span>累计收听时长</span>37 小时 12 分钟</div>
+          <div class="sr"><span>收藏</span>28 首</div>
+        </div>
+        <button class="txtbtn" style="align-self:flex-start;margin-top:6px">清空播放统计（保留收藏）</button>
+        <div class="section-label" style="padding:0;margin:14px 0 4px">崩溃日志</div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px">
+          <div style="font-size:15px">查看日志（共 2 条）</div>
+          <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">崩溃信息只保存在本机，不会自动上传，可导出后反馈</div>
+        </div>
+        <div class="mono" style="margin-top:8px">2026-10-12 21:04:11 · IllegalStateException
+  at com.luckylearning.windtone.ui.MusicViewModel.refreshGroups(MusicViewModel.kt:412)
+  at ... (共 24 行，此处截断展示)</div>
+        <div style="display:flex;gap:4px;margin-top:4px"><button class="txtbtn">导出日志</button><button class="txtbtn">清空日志</button></div>
+        <div class="section-label" style="padding:0;margin:14px 0 4px">关于</div>
+        <div class="stat-card">
+          <div class="sr"><span>应用</span>听风 WindTone</div>
+          <div class="sr"><span>版本</span>1.0.6</div>
+          <div class="sr"><span>包名</span>com.luckylearning.windtone</div>
+          <div class="sr"><span>最低系统</span>Android 7.0（API 24）</div>
+          <div class="sr"><span>CPU 架构</span>arm64-v8a</div>
+          <div class="sr"><span>更新来源</span>LuckyLearning/WindTone</div>
+        </div>
+        <div style="font-size:11px;line-height:1.65;color:var(--on-surface-variant);margin-top:8px">歌单、收藏、播放统计、歌词等全部数据都只保存在本机；歌词优先读取音频同目录的 .lrc / .krc / .yrc 文件，其次读取音频内嵌歌词。
+联网行为只有一处：「检查更新 / 下载新版本」访问 GitHub Releases（检查更新只走 GitHub 官方地址，下载安装包可选第三方加速镜像，见「下载线路」）。不采集、不上传任何信息。</div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>为什么独立成页</b>：这三块全是<b>只读信息 + 排障工具</b>，看一次就够，却原来和开关平铺在同一条滚动里 ——
+  用户想改「跳过静音」要滚过 5 行统计卡和崩溃日志。<br>
+  <b>三段各自的职责</b>：<br>
+  &nbsp;&nbsp;· <b>播放统计</b>——StatCard（标签列宽 112dp）+「清空播放统计（保留收藏）」；点击弹二次确认「会清空播放次数、累计收听时长与「播放过的歌曲」；收藏与歌单保留。该操作不可撤销。」；<br>
+  &nbsp;&nbsp;· <b>崩溃日志</b>——「查看日志（共 N 条）」点击就地展开 24 行 mono 文本块（<b>就地展开，所以行上不加箭头</b>）；「导出日志」「清空日志」在有记录时才可用，清空同样二次确认；<br>
+  &nbsp;&nbsp;· <b>关于</b>——应用 / 版本 / 包名 / 最低系统 / CPU 架构 / 更新来源 六行 + 隐私说明长文。隐私说明是产品信任核心，不要删。<br>
+  <b>CPU 架构行（v1.0.7）</b>：展示本机主 ABI（<code>UpdateChecker.primaryAbiLabel()</code>），
+  与 Release 页面按 ABI 分包的资产名（<code>WindTone-v1.0.7-arm64-v8a.apk</code> 等）一一对应，方便用户对照下载。</p>
+</figure>
+
+<figure class="fig" id="scr-diagnostics-foreground-log">
+  <div class="cap"><b>㉚F 关于与诊断 · 前台应用记录</b><em>SettingsSystemPages.kt · SettingsDiagnosticsPage 前台应用记录区块（v1.1.29 新增）</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">关于与诊断</div></div>
+      </div>
+      <div class="list" style="padding:0 18px 12px">
+        <div class="section-label" style="padding:0;margin:12px 0 4px">前台应用记录</div>
+        <div style="font-size:12.5px;line-height:1.6">检测通道：无障碍服务（已开启） · 使用情况权限（未授予）</div>
+        <div style="font-size:11px;color:var(--on-surface-variant);margin-top:4px">两个通道任一可用即可按名单收起悬浮窗；都不可用时按「不隐藏」放行，悬浮窗不会因此消失。没有 adb 也能用：无障碍服务在系统设置里手动开启。</div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <button class="txtbtn" style="border:1px solid var(--outline);border-radius:18px;padding:5px 12px">无障碍设置</button>
+          <button class="txtbtn" style="border:1px solid var(--outline);border-radius:18px;padding:5px 12px">使用情况权限</button>
+          <button class="txtbtn" style="border:1px solid var(--outline);border-radius:18px;padding:5px 12px">实测日志可读</button>
+        </div>
+        <div style="font-size:11px;color:var(--on-surface-variant);margin-top:6px">日志可读性：未测试（不影响任何功能，仅作信息）</div>
+        <div style="font-size:12.5px;margin-top:8px">当前前台：未知</div>
+        <div style="font-size:12.5px;margin-top:6px">最近 8 条切换（最新在上）：</div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:8px 12px;margin-top:4px;max-height:210px;overflow:hidden">
+          <div style="display:flex;gap:8px;font-size:11.5px;padding:3px 0"><span class="mono" style="color:var(--on-surface-variant);flex:none">10-19 00:55:37</span><span style="flex:1">听风 WindTone</span><span class="mono" style="color:var(--on-surface-variant);font-size:10px">com.luckylearning.windtone</span></div>
+          <div style="display:flex;gap:8px;font-size:11.5px;padding:3px 0"><span class="mono" style="color:var(--on-surface-variant);flex:none">10-19 00:54:48</span><span style="flex:1">360 影像</span><span class="mono" style="color:var(--on-surface-variant);font-size:10px">com.byd.aeri.caranywhere</span></div>
+          <div style="display:flex;gap:8px;font-size:11.5px;padding:3px 0"><span class="mono" style="color:var(--on-surface-variant);flex:none">10-19 00:54:26</span><span style="flex:1">Settings</span><span class="mono" style="color:var(--on-surface-variant);font-size:10px">com.android.settings</span></div>
+          <div style="display:flex;gap:8px;font-size:11.5px;padding:3px 0"><span class="mono" style="color:var(--on-surface-variant);flex:none">10-19 00:54:12</span><span style="flex:1">（应用名解析不到）</span><span class="mono" style="color:var(--on-surface-variant);font-size:10px">com.google.android.apps.nexuslauncher</span></div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <button class="txtbtn" style="border:1px solid var(--outline);border-radius:18px;padding:5px 12px">复制全部</button>
+          <button class="txtbtn" style="border:1px solid var(--outline);border-radius:18px;padding:5px 12px">刷新</button>
+          <button class="txtbtn" style="border:1px solid var(--outline);border-radius:18px;padding:5px 12px">清空</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>为什么要有历史</b>：实时「当前前台」对听风没用——它藏在后台时用户根本看不见；要定位「360 影像到底是哪个包名」，必须<b>多条、按时间倒序</b>地看切换历史，再回到歌词子页把包名加进名单（㉙F）。<br>
+  <b>三条口径</b>：①记录<b>默认关</b>（歌词子页「前台应用记录」开关门控写入，<code>SettingsDefaults.FOREGROUND_LOG_ENABLED = false</code>）；②只存本机 <code>files/foreground_app_log.tsv</code>，滚动 300 条，坏了只丢日志不伤曲库（故意不进数据库）；③应用名解析不到时显示「（应用名解析不到）」并保留包名——launcher 一类无 label 包名的真实降级表现，真机验证过。<br>
+  <b>区块结构</b>：通道状态行（实时）→ 两颗系统设置跳转 + 「实测日志可读」（READ_LOGS 探针，纯信息、不影响功能）→ 当前前台 → 历史列表（LazyColumn，最新在上）→ 复制全部 / 刷新 / 清空（清空二次确认）。</p>
+</figure>
+
+<figure class="fig" id="scr-dlg-carmode">
+  <div class="cap"><b>㉚E 设置页 · 车载模式说明弹窗</b><em>SettingsScreen.kt · showCarModeInfo（AlertDialog）</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">设置</div></div>
+      </div>
+      <div class="list" style="padding:4px 18px 12px">
+        <div class="cat-row"><span class="cat-ic"><svg class="ic"><use href="#i-palette"/></svg></span>
+          <div class="cat-main"><div class="cat-t">外观</div><div class="cat-s">主题取色 · 车载模式</div></div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
+        <div class="cat-row"><span class="cat-ic"><svg class="ic"><use href="#i-play"/></svg></span>
+          <div class="cat-main"><div class="cat-t">播放</div><div class="cat-s">速度 1.00x · 变调 原调 · 跳过静音 · 均衡器与音效</div></div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
+      </div>
+      <div class="dim"></div>
+      <div class="dialog">
+        <div class="dlg-title">车载模式</div>
+        <div style="font-size:12.5px;line-height:1.75;color:var(--on-bg)">启动后直接进入播放页并锁定横屏，适合车机或手机横放。<br><br>
+        歌词页 5 秒无操作会自动收起顶栏、控制键与底部状态行，只留歌词、歌名、进度与时间；触摸任意位置恢复。切到封面态不收起。<br><br>
+        开启后，设备开机时应用会自动拉起（车载场景）。</div>
+        <div class="dlg-actions">
+          <button class="txtbtn">知道了</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>为什么要弹窗</b>：这段说明原本就是「车载模式」的副标题，原文 180 字，
+  实测一条设置项就占掉大半屏 —— 而它是<b>安装时看一次</b>的说明性文字，不是需要反复读的操作提示。<br>
+  <b>呈现方式</b>：副标题压成一行三要点「横屏大界面 · 歌词页自动收起 · 开机自启」；标题右侧加一个 13px 的 <code>i-info</code> 图标
+  （<code>AppIcons.Info</code>），点击弹出本对话框。非授权态的 <code>SwitchRow</code> 也复用了这个参数（<code>onInfo</code>），后续要补说明的设置项直接挂图标即可。<br>
+  <b>图标不是开关的一部分</b>：点图标只开弹窗，不会切换开关；开关点击区域仍是整行右侧的 Switch。</p>
+</figure>
+
+<figure class="fig" id="scr-dlg-update">
+  <div class="cap"><b>㉛ 更新对话框（三态）</b><em>SettingsScreen.kt · UpdateDialog</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">设置</div></div>
+      </div>
+      <div class="list" style="padding:4px 18px 12px">
+        <div class="cat-row"><span class="cat-ic"><svg class="ic"><use href="#i-cloud"/></svg></span>
+          <div class="cat-main"><div class="cat-t">更新</div><div class="cat-s">检查更新 · 自动检查 · 下载线路</div></div>
+          <span style="font-size:11px;color:var(--primary)">v1.0.6</span>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
+      </div>
+      <div class="dim"></div>
+      <div class="dialog">
+        <div class="dlg-title">发现新版本 v1.0.6</div>
+        <div style="font-size:12px;color:var(--on-surface-variant);margin-bottom:2px">当前版本 v1.0.5 · 新版本 3.02 MB</div>
+        <div style="font-size:11px;color:var(--on-surface-variant);margin-bottom:10px">下载线路：自动（可在「设置 → 更新 → 下载线路」中更换）</div>
+        <div style="background:var(--c-low);border-radius:10px;padding:12px;font-size:12.5px;line-height:1.7;color:var(--on-bg);max-height:150px;overflow:hidden">• 播放模式（顺序 / 列表循环 / 单曲循环 / 随机）合并为一个按钮
+• 文件夹视图支持「移除扫描结果」，不再显示「未知目录」
+• 播放页控制区改三段式布局，播放键居中
+• 修复部分机型状态栏重叠</div>
+        <button class="txtbtn" style="margin-top:10px;font-size:12px">在浏览器中查看发布页</button>
+        <div class="dlg-actions">
+          <button class="txtbtn" style="color:var(--on-surface-variant)">忽略</button>
+          <button class="txtbtn">下载并安装</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>另外两态（同一对话框切换）</b>：<br>
+  · <b>下载中</b>：标题「正在下载新版本」，正文第一行小字「下载线路：自动」（手动指定时显示所选线路名）+「已下载 N%」+ 进度条（无进度时显示「已下载 1.2 MB」+ 不确定进度条），<b>此态不可取消</b>；<br>
+  · <b>安装包已就绪</b>：标题「安装包已就绪」，需授权时正文「系统需要你允许「听风」安装应用，才能继续升级…」+ 按钮「去授权」；已授权时正文「点击「立即安装」会调起系统安装器，确认后即可完成升级。歌单、收藏、播放统计都会保留。」+ 按钮「立即安装」，右侧「稍后」。<br>
+  没有更新说明时显示「该版本没有填写更新说明。」；下载失败时提示会点明是哪条线路，并指引去「设置 → 更新 → 下载线路」换线或到发布页手动下载。<br>
+  <b>说明正文先洗净成纯文本再上屏</b>（v1.1.12 修）：Atom 通道给的是 GitHub <b>渲染后的 HTML</b>、
+  REST API 给的是 <b>Markdown 原文</b>，两种都得吃下并收敛到同一份文本 ——
+  在此之前弹窗里会原样显示 <code>&lt;p&gt;&lt;strong&gt;</code>，像乱码。列表项折成「• 」行、
+  表格折成「• a · b」行、段间不留空行。</p>
+</figure>
+
+<figure class="fig" id="scr-dlg-downloadroute">
+  <div class="cap"><b>㉚G 设置页 · 下载线路弹窗</b><em>SettingsScreen.kt · showRouteDialog（AlertDialog，单选）</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">设置</div></div>
+      </div>
+      <div class="list" style="padding:4px 18px 12px">
+        <div class="cat-row"><span class="cat-ic"><svg class="ic"><use href="#i-cloud"/></svg></span>
+          <div class="cat-main"><div class="cat-t">更新</div><div class="cat-s">检查更新 · 自动检查 · 下载线路</div></div>
+          <span style="font-size:11px;color:var(--primary)">v1.0.6</span>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
+      </div>
+      <div class="dim"></div>
+      <div class="dialog">
+        <div class="dlg-title">下载线路</div>
+        <div style="font-size:11px;line-height:1.65;color:var(--on-surface-variant);margin-bottom:6px">「检查更新」始终访问 GitHub 官方地址；只有下载安装包时可以选择走加速镜像。镜像有缓存，偶尔会慢或滞后，下载失败时换一条线路再试即可。</div>
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 2px">
+          <div style="flex:1"><div style="font-size:14.5px;color:var(--primary)">自动</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:2px">直连优先，太慢会自动切换镜像</div></div>
+          <svg class="ic" style="color:var(--primary)"><use href="#i-check"/></svg>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 2px">
+          <div style="flex:1"><div style="font-size:14.5px">直连 GitHub</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:2px">只用官方地址，最及时；国内可能较慢</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 2px">
+          <div style="flex:1"><div style="font-size:14.5px">ghproxy.net</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:2px">公共加速镜像，速度较快</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 2px">
+          <div style="flex:1"><div style="font-size:14.5px">gh-proxy.com</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:2px">公共加速镜像，ghproxy 不通时备用</div></div>
+        </div>
+        <div class="dlg-actions">
+          <button class="txtbtn">完成</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>四个选项单选，选中项标题用 primary 色 + 右侧 ✓（与弹层 <code>OptionRow</code> 的选中态一致，<b>没有右箭头</b>）；
+  点任一项立即生效并关闭弹窗，<code>完成</code> 只是显式关闭。入口在「更新」子页（见 ㉚C），行上带右箭头。选项即 <code>DownloadRoute</code> 枚举（Prefs.kt）：<br>
+  &nbsp;&nbsp;· <b>自动</b>（默认）→ 直链 + ghproxy.net + gh-proxy.com 依次降级；<br>
+  &nbsp;&nbsp;· <b>直连 GitHub</b> → 只用官方直链，不套任何前缀；<br>
+  &nbsp;&nbsp;· <b>ghproxy.net / gh-proxy.com</b> → <b>只走这一条</b>（手动选了就不偷偷换线，失败时提示去改线路）。<br>
+  下载起始 8 秒内不足 512KB 视为「线路过慢」，自动模式下直接换下一条，手动模式下报错并提示换线。</p>
+</figure>
+
+
+<figure class="fig" id="scr-dlg-minduration">
+  <div class="cap"><b>㉚F 设置页 · 过滤短音频弹窗</b><em>SettingsScreen.kt · showMinDurationDialog（AlertDialog）</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">音乐库</div></div>
+      </div>
+      <div class="list" style="padding:0 18px 12px">
+        <div class="section-label" style="padding:0;margin:12px 0 4px">本地曲库</div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px">
+          <div style="flex:1"><div style="font-size:15px">过滤短音频（&lt; 60 秒）</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">时长已知且低于阈值的音频不会进入曲库（滤掉提示音、转场音效等）。修改后自动重新扫描；填 0 关闭过滤</div></div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+      </div>
+      <div class="dim"></div>
+      <div class="dialog">
+        <div class="dlg-title">过滤短音频</div>
+        <div style="font-size:11.5px;color:var(--on-surface-variant);line-height:1.6">时长小于该秒数的音频不进入曲库；填 0 关闭过滤。默认 60 秒。</div>
+        <div style="border:1px solid var(--primary);border-radius:10px;padding:9px 12px;margin-top:10px">
+          <div style="font-size:10px;color:var(--primary)">最短时长（秒）</div>
+          <div style="font-size:14px;margin-top:2px">60</div>
+        </div>
+        <div class="dlg-actions">
+          <button class="txtbtn" style="color:var(--on-surface-variant)">取消</button>
+          <button class="txtbtn">确定</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>取值范围</b>：0 ~ 3600 秒（输入框只收数字、最多 4 位，<code>coerceIn(0, 3600)</code>；留空按 0 处理 = 关闭过滤）。<br>
+  <b>入口位置</b>：在「音乐库」子页的「本地曲库」分组里，行上带右箭头（因为点开会进入一个输入界面）。<br>
+  <b>生效方式</b>：确定后立即写 Prefs 并触发一次重扫（扫描范围为「未选择」时不触发，界面给提示）；扫描结束后曲库立即反映过滤结果。<br>
+  <b>过滤口径</b>：只剔除<b>时长已知且小于阈值</b>的曲目——时长未知（<code>durationMs == 0</code>）的不参与过滤，播过一次拿到真实时长后由下次扫描接管。<br>
+  <b>入口文案三态</b>：正常值显示「过滤短音频（&lt; 60 秒）」；为 0 时显示「过滤短音频（未开启）」。</p>
+</figure>
+
+  </div>
+</section>
+
+  <div class="pagenav">
+    <a href="03-sheets.html">← 抽屉与弹窗</a>
+    <a href="index.html">↑ 全部屏</a>
+    <a href="05-extras.html">小组件·通知 →</a>
+  </div>
+</div>
+
+<script src="ui.js"></script>
+</body>
+</html>

@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>二、播放页 · 听风 WindTone UI 效果图</title>
+<script>
+/* 主题必须在样式之前定位，避免首帧闪错色：
+   1) 用户手动切过 → 用记住的选择（localStorage）
+   2) 没切过 → 跟随系统 prefers-color-scheme（App 也是跟随系统主题） */
+(function(){
+  try{
+    var saved=localStorage.getItem('wt-ui-theme');
+    var theme=saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme',theme);
+  }catch(e){
+    document.documentElement.setAttribute('data-theme','dark');
+  }
+})();
+</script>
+<link rel="stylesheet" href="ui.css">
+</head>
+<body>
+<script src="ui-sprite.js"></script>
+
+<header class="board-head">
+  <div class="bh-row">
+    <a class="backdocs" href="index.html">← 效果图总览</a>
+    <div class="bh-title">二、播放页<small>UI 效果图 · 设计基准（第 2 / 7 章）</small></div>
+    <span class="bh-badge"><span id="pageCount">6</span> 屏</span>
+    <span class="bh-badge">对齐 v1.1.29</span>
+    <button class="tgl" id="themeBtn">🌙 深色主题</button>
+  </div>
+  <nav class="bh-nav"><a href="01-main.html">主界面</a><a href="02-player.html" class="on">播放页</a><a href="03-sheets.html">抽屉与弹窗</a><a href="04-settings.html">设置页</a><a href="05-extras.html">小组件·通知</a><a href="06-car.html">车机版</a><a href="07-spec.html">颜色与尺寸</a></nav>
+</header>
+
+<div class="wrap">
+<section class="sec" id="sec-player">
+  <div class="sec-hd"><h2>二、播放页</h2><span>PlayerScreen.kt · LyricsPane.kt —— 歌词态 / 封面态 / 音量浮层 / 暂无歌词 / 纯文本 / 车载沉浸态</span></div>
+  <div class="board">
+<figure class="fig" id="scr-player-lyrics">
+  <div class="cap"><b>⑫ 播放页 · 歌词态（默认）</b><em>PlayerScreen.kt · LyricsPane（showLyrics = true）</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="player">
+        <div class="p-top">
+          <button class="ibtn"><svg class="ic"><use href="#i-down"/></svg></button>
+          <div class="t-main"><div class="sp"></div></div>
+          <button class="ibtn"><svg class="ic"><use href="#i-album"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-tune"/></svg></button>
+        </div>
+        <div class="p-mid">
+          <div class="lyr">
+            <div class="lyr-line">一群嗜血的蚂蚁 被腐肉所吸引</div>
+            <div class="lyr-line">我面无表情 看孤独的风景</div>
+            <div class="lyr-line cur">失去你 爱恨 开始分明<span class="tr">Without you, love and hate start to blur</span></div>
+            <div class="lyr-line">失去你 还有什么事好关心</div>
+            <div class="lyr-line">当鸽子不再象征和平</div>
+            <div class="lyr-line">我终于被提醒 广场上喂食的是秃鹰</div>
+            <div class="lyr-line">我用漂亮的押韵 形容被掠夺一空的爱情</div>
+            <div class="mode-hint" data-modehint style="display:none">单曲循环</div>
+          </div>
+        </div>
+        <div class="p-nowrow">
+          <div class="p-now-main"><div class="p-now-title">夜曲</div><div class="p-now-artist">周杰伦</div></div>
+          <button class="ibtn fav-on" title="取消收藏"><svg class="ic"><use href="#i-heart"/></svg></button>
+        </div>
+        <div class="p-progress">
+          <div class="track"><span class="buf" style="width:88%"></span><span class="played" style="width:37%"></span>
+            <span class="thumb" style="left:37%"><i></i></span></div>
+        </div>
+        <div class="p-times"><span>1:24</span><span>3:46</span></div>
+        <div class="p-ctl">
+          <div class="slot"><button class="ibtn mode-on" data-playmode title="播放模式：单曲循环"><svg class="ic"><use href="#i-repeat-one"/></svg></button></div>
+          <div class="mid">
+            <button class="ibtn"><svg class="ic ic-34"><use href="#i-prev"/></svg></button>
+            <button class="play-main"><svg class="ic ic-34"><use href="#i-pause"/></svg></button>
+            <button class="ibtn"><svg class="ic ic-34"><use href="#i-next"/></svg></button>
+          </div>
+          <div class="slot end"><button class="ibtn" title="播放队列"><svg class="ic"><use href="#i-queue"/></svg></button></div>
+        </div>
+        <div class="p-status">
+          <span class="chip-lsrc">内嵌同步歌词</span>
+          <span class="right"><span>导入文件夹</span><span>队列 500 首</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>背景为不透明垂直渐变（lerp(background, primary, .32) → .10 → background）；<br>
+  顶栏 = 收起箭头 + 歌词↔封面切换 / 播放设置（歌名/歌手已下移到进度条上方）；<br>
+  歌词：当前行 17.5sp primary 加粗 + primary 10% 底（无竖线指示条），非当前行 15.5sp alpha .42；<br>
+  <b>当前行的强调只靠「颜色 / 字号 / 字重 / 底色」四件事</b>（v1.1.8 起）—— 原先还有一条逐字卡拉OK分支，
+  它要按播放位置逐字染色，已经整体移除；现在这一行不再随进度重组，只在换行时重画；<br>
+  <b>KRC / YRC / 增强 LRC 仍然照读</b>：行内的字级标签（`&lt;mm:ss.xx&gt;` / `&lt;start,dur,0&gt;`）会被剥离干净，
+  只取行首时间戳，按行滚动高亮 —— 直接把这几种文件丢进同目录即可，不必事先转成 `.lrc`；<br>
+  双语副行 13sp（当前行 primary 80%）；空文本行显示「♪」；点击某行可跳转，手动滚动后停止跟随 4 秒；<br>
+  底部状态行：歌词来源 chip（无歌词 / 本地歌词文件 / 本地文本歌词 / 内嵌同步歌词 / 内嵌歌词）+「偏移 Xms」+「睡眠 M:SS」，右侧歌曲来源「导入文件夹」与「队列 N 首」。</p>
+</figure>
+
+<figure class="fig" id="scr-player-car">
+  <div class="cap"><b>⑫D 播放页 · 沉浸态（歌词态 · 5 秒无操作）</b><em>PlayerScreen.kt · immersive —— 车载模式下触发；车机横屏在 v1.1.14 起也走单栏（㊱~㊳ 两栏已停用）</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="player car">
+        <div class="p-mid">
+          <div class="lyr carlyr">
+            <div class="lyr-line">一群嗜血的蚂蚁 被腐肉所吸引</div>
+            <div class="lyr-line">我面无表情 看孤独的风景</div>
+            <div class="lyr-line cur">失去你 爱恨 开始分明<span class="tr">Without you, love and hate start to blur</span></div>
+            <div class="lyr-line">失去你 还有什么事好关心</div>
+            <div class="lyr-line">当鸽子不再象征和平</div>
+            <div class="lyr-line">我终于被提醒 广场上喂食的是秃鹰</div>
+          </div>
+        </div>
+        <div class="p-nowrow">
+          <div class="p-now-main" style="flex:0 1 auto">
+            <div class="p-now-title">夜曲</div><div class="p-now-artist">周杰伦</div>
+          </div>
+          <button class="ibtn fav-on" title="取消收藏"><svg class="ic"><use href="#i-heart"/></svg></button>
+        </div>
+        <div class="p-progress">
+          <div class="track"><span class="buf" style="width:88%"></span><span class="played" style="width:37%"></span>
+            <span class="thumb" style="left:37%"><i></i></span></div>
+        </div>
+        <div class="p-times"><span>1:24</span><span>3:46</span></div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点（车载沉浸态）：</b>仅<b>车载模式 + 歌词态</b>下生效（<code>immersive = carMode && showLyrics</code>，封面态不收起）。
+  播放页歌词态 <b>5 秒无触摸</b>后进入沉浸态：<b>顶栏、控制键行、底部状态行收起</b>，
+  <b>歌名行（歌名 + 歌手 + 红心）保留</b>，贴在进度条上方——即保留<b>歌词区（占满剩余空间）+ 歌名行 + 进度条 + 时间</b>；
+  车机版式下红心<b>紧跟在歌名/歌手后面</b>（不贴屏幕最右缘——驾驶时视线不用扫到边上），手机版仍为「标题占满 + 红心贴右」；
+  任意触摸（点按钮、拖进度条、滑歌词、按返回键——返回键此时先恢复界面而不是退出播放页）立即退出沉浸态并重新计时 5 秒。<br>
+  进入沉浸态时内容区最大宽度限制（760dp）解除，歌词铺满整屏宽度。<br>
+  车载模式歌词整体放大 <b>1.5 倍</b>（在用户「歌词大小」缩放基础上再乘：正文 15.5sp→约 23sp、当前行 17.5sp→约 26sp），
+  行距与「颜色 / 字号 / 字重 / 底色」的强调规则与普通模式一致（普通模式另见 ⑫）——车机屏离驾驶位 60~70cm，手机字号瞄一眼读不清。<br>
+  触发前提：设置 → 外观 →「车载模式」开启（启动直接进播放页、锁横屏）；车机横屏在 v1.1.14 起也走同一套单栏布局（第六节的 ㊱~㊳ 两栏已停用），本屏是播放页自身的沉浸态。</p>
+</figure>
+
+<figure class="fig" id="scr-player-cover">
+  <div class="cap"><b>⑬ 播放页 · 封面态（含播放模式提示）</b><em>PlayerScreen.kt · CoverPane + modeHint</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="player">
+        <div class="p-top">
+          <button class="ibtn"><svg class="ic"><use href="#i-down"/></svg></button>
+          <div class="t-main"><div class="sp"></div></div>
+          <button class="ibtn"><svg class="ic"><use href="#i-lyrics"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-tune"/></svg></button>
+        </div>
+        <div class="p-mid">
+          <div class="p-cover">
+            <div class="cov cov-292 c2"><svg><use href="#i-note"/></svg></div>
+            <div class="cover-album">叶惠美</div>
+            <div class="cover-file">夜曲.flac · 24bit / 96kHz</div>
+            <div class="ghost-chip">双击暂停 · 左右滑切歌 · 上下滑调音量</div>
+          </div>
+          <div class="mode-hint" data-modehint style="display:block">随机播放</div>
+        </div>
+        <div class="p-nowrow">
+          <div class="p-now-main"><div class="p-now-title">夜曲</div><div class="p-now-artist">周杰伦</div></div>
+          <button class="ibtn fav-on" title="取消收藏"><svg class="ic"><use href="#i-heart"/></svg></button>
+        </div>
+        <div class="p-progress">
+          <div class="track"><span class="buf" style="width:88%"></span><span class="played" style="width:37%"></span>
+            <span class="thumb" style="left:37%"><i></i></span></div>
+        </div>
+        <div class="p-times"><span>1:24</span><span>3:46</span></div>
+        <div class="p-ctl">
+          <div class="slot"><button class="ibtn mode-on" data-playmode title="播放模式：随机播放"><svg class="ic"><use href="#i-shuffle"/></svg></button></div>
+          <div class="mid">
+            <button class="ibtn"><svg class="ic ic-34"><use href="#i-prev"/></svg></button>
+            <button class="play-main"><svg class="ic ic-34"><use href="#i-pause"/></svg></button>
+            <button class="ibtn"><svg class="ic ic-34"><use href="#i-next"/></svg></button>
+          </div>
+          <div class="slot end"><button class="ibtn" title="播放队列"><svg class="ic"><use href="#i-queue"/></svg></button></div>
+        </div>
+        <div class="p-status">
+          <span class="chip-lsrc">内嵌同步歌词</span>
+          <span class="right"><span>导入文件夹</span><span>队列 500 首</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>封面 292dp / 圆角 24dp / 阴影 18dp，播放时呼吸缩放 1.0↔1.025（2600ms 反转）；
+  下方 = 专辑名 14sp + 文件名 11sp（alpha .75） + 手势提示胶囊 10sp；<br>
+  <b>歌名/歌手 + 收藏红心固定在进度条上方一行</b>（左对齐标题 18sp/歌手 12sp，右侧红心），顶栏只留收起 / 歌词↔封面切换 / 播放设置；<br>
+  <b>控制区必须三段式</b>：左槽放播放模式按钮（顺序播放时图标 onSurfaceVariant，其余档 primary）+ 中间「上一首 / 播放 66dp 圆形主键 / 下一首」间距 20dp + 右槽放<b>播放队列</b>（与左槽等宽配平），保证主键绝对居中；<br>
+  播放模式四档轮换：顺序播放 → 列表循环 → 单曲循环 → 随机播放，切换后浮出模式名 1.4s（此处固定展示「随机播放」）。</p>
+</figure>
+
+<figure class="fig" id="scr-player-vol">
+  <div class="cap"><b>⑭ 播放页 · 音量浮层</b><em>PlayerScreen.kt · 上下滑手势反馈（约 1.2s 后消失）</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="player">
+        <div class="p-top">
+          <button class="ibtn"><svg class="ic"><use href="#i-down"/></svg></button>
+          <div class="t-main"><div class="sp"></div></div>
+          <button class="ibtn"><svg class="ic"><use href="#i-lyrics"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-tune"/></svg></button>
+        </div>
+        <div class="p-mid">
+          <div class="p-cover">
+            <div class="cov cov-292 c3"><svg><use href="#i-note"/></svg></div>
+            <div class="cover-album">What's Going On…?</div>
+            <div class="cover-file">富士山下.mp3 · 320 kbps</div>
+            <div class="ghost-chip">双击暂停 · 左右滑切歌 · 上下滑调音量</div>
+          </div>
+          <div class="vol-hud"><svg class="ic"><use href="#i-vol"/></svg><b>62%</b></div>
+        </div>
+        <div class="p-nowrow">
+          <div class="p-now-main"><div class="p-now-title">富士山下</div><div class="p-now-artist">陈奕迅</div></div>
+          <button class="ibtn" title="收藏"><svg class="ic ic-outline"><use href="#i-heart"/></svg></button>
+        </div>
+        <div class="p-progress">
+          <div class="track"><span class="buf" style="width:96%"></span><span class="played" style="width:64%"></span>
+            <span class="thumb" style="left:64%"><i></i></span></div>
+        </div>
+        <div class="p-times"><span>2:47</span><span>4:19</span></div>
+        <div class="p-ctl">
+          <div class="slot"><button class="ibtn mode-on" data-playmode title="播放模式：列表循环"><svg class="ic"><use href="#i-repeat"/></svg></button></div>
+          <div class="mid">
+            <button class="ibtn"><svg class="ic ic-34"><use href="#i-prev"/></svg></button>
+            <button class="play-main"><svg class="ic ic-34"><use href="#i-pause"/></svg></button>
+            <button class="ibtn"><svg class="ic ic-34"><use href="#i-next"/></svg></button>
+          </div>
+          <div class="slot end"><button class="ibtn" title="播放队列"><svg class="ic"><use href="#i-queue"/></svg></button></div>
+        </div>
+        <div class="p-status">
+          <span class="chip-lsrc">本地歌词文件</span><span class="chip-lsrc">睡眠 28:14</span>
+          <span class="right"><span>媒体库</span><span>队列 500 首</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>封面区手势：双击暂停 / 左右滑 &gt;90px 切歌 / 上下滑调音量（每 42px 一档，向上增大）；音量浮层为反色卡片（inverseSurface 92%）居中显示百分比。</p>
+</figure>
+
+<figure class="fig" id="scr-player-nolyric">
+  <div class="cap"><b>⑮ 播放页 · 暂无歌词</b><em>LyricsPane.kt · NoLyricsHint</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="player">
+        <div class="p-top">
+          <button class="ibtn"><svg class="ic"><use href="#i-down"/></svg></button>
+          <div class="t-main"><div class="sp"></div></div>
+          <button class="ibtn"><svg class="ic"><use href="#i-album"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-tune"/></svg></button>
+        </div>
+        <div class="p-mid">
+          <div class="no-lyric">
+            <div class="t">暂无歌词</div>
+            <div class="d">歌词获取顺序：
+1. 音频同目录的同名 .lrc / .krc / .yrc 文件
+2. 音频文件内嵌歌词（MP3 的 USLT/SYLT、FLAC/Ogg 的 LYRICS、M4A 的 ©lyr）
+
+把歌词文件放到歌曲同一目录，或在电脑上用音乐标签工具写入内嵌歌词即可。</div>
+          </div>
+        </div>
+        <div class="p-nowrow">
+          <div class="p-now-main"><div class="p-now-title">海阔天空</div><div class="p-now-artist">Beyond</div></div>
+          <button class="ibtn" title="收藏"><svg class="ic ic-outline"><use href="#i-heart"/></svg></button>
+        </div>
+        <div class="p-progress">
+          <div class="track"><span class="buf" style="width:100%"></span><span class="played" style="width:12%"></span>
+            <span class="thumb" style="left:12%"><i></i></span></div>
+        </div>
+        <div class="p-times"><span>0:38</span><span>5:22</span></div>
+        <div class="p-ctl">
+          <div class="slot"><button class="ibtn mode-off" data-playmode title="播放模式：顺序播放"><svg class="ic"><use href="#i-seq"/></svg></button></div>
+          <div class="mid">
+            <button class="ibtn"><svg class="ic ic-34"><use href="#i-prev"/></svg></button>
+            <button class="play-main"><svg class="ic ic-34"><use href="#i-play"/></svg></button>
+            <button class="ibtn"><svg class="ic ic-34"><use href="#i-next"/></svg></button>
+          </div>
+          <div class="slot end"><button class="ibtn" title="播放队列"><svg class="ic"><use href="#i-queue"/></svg></button></div>
+        </div>
+        <div class="p-status">
+          <span class="chip-lsrc">无歌词</span>
+          <span class="right"><span>本地文件</span><span>队列 500 首</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>无歌词时不隐藏歌词区，而是给出获取路径说明（信任感 + 可自助解决）；
+  顺序播放档位下播放模式图标用 onSurfaceVariant，其余三档用 primary，便于一眼分辨「非循环」状态。</p>
+</figure>
+
+<figure class="fig" id="scr-player-plain">
+  <div class="cap"><b>⑯ 播放页 · 纯文本歌词 / 加载中</b><em>LyricsPane.kt · PlainLyrics · LyricsLoading</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="player">
+        <div class="p-top">
+          <button class="ibtn"><svg class="ic"><use href="#i-down"/></svg></button>
+          <div class="t-main"><div class="sp"></div></div>
+          <button class="ibtn"><svg class="ic"><use href="#i-album"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-tune"/></svg></button>
+        </div>
+        <div class="p-mid">
+          <div class="plain-note">纯文本歌词（无时间轴）</div>
+          <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:14px;text-align:center">
+            <div style="font-size:15px;line-height:1.75;color:var(--on-bg)">这一路上走走停停 顺着少年漂流的痕迹</div>
+            <div style="font-size:15px;line-height:1.75;color:var(--on-bg)">迈出车站的前一刻 竟有些犹豫</div>
+            <div style="font-size:15px;line-height:1.75;color:var(--on-bg)">不禁笑这近乡情怯 仍无可避免</div>
+            <div style="font-size:15px;line-height:1.75;color:var(--on-bg)">而长野的天 依旧那么暖</div>
+            <div style="font-size:15px;line-height:1.75;color:var(--on-bg)">风吹起了从前</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:16px;margin-top:18px">
+            <div style="height:14px;width:46%;border-radius:7px;background:var(--c-highest);margin:0 auto"></div>
+            <div style="height:14px;width:62%;border-radius:7px;background:var(--c-highest);margin:0 auto"></div>
+            <div style="height:14px;width:46%;border-radius:7px;background:var(--c-highest);margin:0 auto"></div>
+          </div>
+          <div style="font-size:11px;color:var(--on-surface-variant);text-align:center;margin-top:10px">↑ 上方为纯文本歌词态，下方三条灰条是「歌词加载中」骨架</div>
+        </div>
+        <div class="p-nowrow">
+          <div class="p-now-main"><div class="p-now-title">起风了</div><div class="p-now-artist">买辣椒也用券</div></div>
+          <button class="ibtn" title="收藏"><svg class="ic ic-outline"><use href="#i-heart"/></svg></button>
+        </div>
+        <div class="p-progress">
+          <div class="track"><span class="buf" style="width:70%"></span><span class="played" style="width:22%"></span>
+            <span class="thumb" style="left:22%"><i></i></span></div>
+        </div>
+        <div class="p-times"><span>1:08</span><span>5:11</span></div>
+        <div class="p-ctl">
+          <div class="slot"><button class="ibtn mode-on" data-playmode title="播放模式：列表循环"><svg class="ic"><use href="#i-repeat"/></svg></button></div>
+          <div class="mid">
+            <button class="ibtn"><svg class="ic ic-34"><use href="#i-prev"/></svg></button>
+            <button class="play-main"><svg class="ic ic-34"><use href="#i-pause"/></svg></button>
+            <button class="ibtn"><svg class="ic ic-34"><use href="#i-next"/></svg></button>
+          </div>
+          <div class="slot end"><button class="ibtn" title="播放队列"><svg class="ic"><use href="#i-queue"/></svg></button></div>
+        </div>
+        <div class="p-status">
+          <span class="chip-lsrc">本地文本歌词</span><span class="chip-lsrc">偏移 -300ms</span>
+          <span class="right"><span>导入文件夹</span><span>队列 500 首</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>纯文本歌词（无时间轴）顶部标注「纯文本歌词（无时间轴）」，正文 15×scale sp / 行高 26×scale sp，可垂直滚动；
+  歌词加载中是 3 行灰条（中行 62%、其余 46%，高 14dp 圆角 7dp）。歌词字号与偏移在「播放设置」抽屉里调，逐曲生效。</p>
+</figure>
+
+  </div>
+</section>
+
+  <div class="pagenav">
+    <a href="01-main.html">← 主界面</a>
+    <a href="index.html">↑ 全部屏</a>
+    <a href="03-sheets.html">抽屉与弹窗 →</a>
+  </div>
+</div>
+
+<script src="ui.js"></script>
+</body>
+</html>

@@ -198,7 +198,10 @@ WindTone/                        ← 仓库根 == Gradle 根（已扁平化，�
 │   ├─ 数据层重构规划.md         v3→v4 的来龙去脉
 │   ├─ 功能规划.md / -第二期 / -第三期 / -第四期-云盘音乐（存档）
 │   ├─ 发版规范-…（存档，已被固定模板方案取代）
-│   └─ ui/index.html             ⭐ UI 唯一视觉真源（46 屏，改 UI 先改它）
+│   └─ ui/                       ⭐ UI 唯一视觉真源（7 章 / 57 屏，改 UI 先改它）
+│        index.html              总览：章节卡 + 屏索引（脚本扫各章生成）
+│        01-main … 07-spec.html  分章屏稿（改哪屏只读哪章）
+│        ui.css / ui.js / ui-sprite.js  样式 / 行为 / 图标池（分章文件不写内联）
 ├─ scripts/
 │   ├─ push.sh                   用 .github-token 推送（GIT_ASKPASS，token 不落盘；退出码已根治 trap 污染）
 │   ├─ release.sh                跑单测 → 改版本号 → 提交 → 打 tag → 推送 + 推后查证
@@ -313,7 +316,7 @@ ui/                       ── 展示层 ──
   UpdateViewModel.kt      ⭐ 更新域：`UpdateActions by updates` 接口委托（20 行）
   SettingsViewModel.kt    ⭐ 维护域：诊断快照 / 清理失效歌曲 / 重置用户数据 / 崩溃日志
   MainScreen.kt           主界面（列表 / 分组 / 歌单 / 扫描引导）—— 把分域 VM **按需**传给子组件
-  PlayerScreen.kt         全屏播放页（**手机与车机共用**；改它之前务必先读 docs/ui/index.html 核对两版）
+  PlayerScreen.kt         全屏播放页（**手机与车机共用**；改它之前务必先读 docs/ui/02-player.html 与 06-car.html 核对两版）
   LyricsPane.kt           歌词面板（滚动居中、当前行高亮、偏移调节）
   Sheets.kt               各类抽屉与弹窗（队列、播放设置、扫描范围、睡眠定时、歌曲操作……）
   EqSheet.kt              「均衡器与音效」弹层（预设网 / 曲线预览 / 频段 / 增强音效，见 §6.10）
@@ -1116,7 +1119,7 @@ WindTone-v{版本}-universal.apk      # 拿不准架构时的兜底
 9. **本地资料写 `docs/`**（已 gitignore，不会外泄）。
 10. **敏感值绝不硬编码**：token、口令一律走「本地 gitignore 文件 + CI Secrets」。
 11. **版本号只在用户主动要求发版时才改**：日常功能开发不动 `appVersionName` / `appVersionCode`；只有当用户明确说「发个版本」/「release」时才用 `scripts/release.sh` 改版本号、打 tag、触发 CI。
-12. **改 UI 先改效果图（硬约定）**：`docs/ui/index.html` 是全部 UI 的设计真源（52 屏，单文件自包含，深/浅主题可切换）。任何 UI 改动的顺序固定为：先改 `docs/ui/index.html` 对应屏并预览确认 → 再按该屏标注的 Compose 位置改 `ui/*.kt` → 出包核对。改配色先改文件顶部的 CSS 设计令牌，再同步 `Theme.kt`。新屏/新组件要在效果图里补位，编号顺延（同一屏的另一种状态用字母后缀，如 ⑲/⑲B，不占新号）。维护细则见 `docs/ui/README.md`。
+12. **改 UI 先改效果图（硬约定）**：`docs/ui/` 是全部 UI 的设计真源 —— **2026-10-19 起按章拆成 7 个文件（共 57 屏）**：`index.html` 是总览（章节卡 + 全屏索引），`01-main.html` ~ `07-spec.html` 是分章屏稿，样式 / 行为 / 图标池分别在 `ui.css` / `ui.js` / `ui-sprite.js`。**改 UI 时只读目标屏所在的那一章**，不要整目录通读。任何 UI 改动的顺序固定为：先改对应分章并预览确认 → 再按该屏标注的 Compose 位置改 `ui/*.kt` → 出包核对。改配色先改 `ui.css` 顶部的 CSS 设计令牌，再同步 `Theme.kt`。**分章文件里不写内联样式与脚本**；新屏/新组件在对应章补位，编号顺延（同一屏的另一种状态用字母后缀，如 ⑲/⑲B，不占新号）；屏数一律由脚本现算，不手写数字。维护细则见 `docs/ui/README.md`。
 13. **设置页是「一主六子」结构（v1.1.3 二次重构）**：主页面**只放六张二级分类入口卡**（`CategoryRow`，一屏放下）；外观 / 播放 / 歌词 / 音乐库 / 更新 / 关于与诊断各成一个子页。
     - v1.0.7 起曾是「主页面平铺外观 / 播放 / 歌词三组 + 三条子页入口」，**v1.1.3 把三组也下沉成子页** —— 起因是桌面悬浮歌词的五个外观选项加入后「歌词」一组独占两屏，主页又开始长回去。
     - 子页是 `SettingsScreen` 内部的 `SettingsPage` 枚举状态（**7 项**，`pagePositions` 数组长度必须同步），**不新建 Activity、不引导航库**；子页里返回键先回主页面。
@@ -1409,7 +1412,7 @@ LyricOverlayService.armEditingTimeout()（60s 无触摸）
 ### 播放页里的快捷入口
 
 播放设置弹层（⑱ 屏）的「歌词」分组第一项就是「桌面悬浮歌词」，用 `OptionRow`（左侧图标 + 右侧选中 ✓）。
-**列表里加行不属于「改 UI 布局」的范畴，但仍要遵守 `docs/ui/index.html` 的行组件规范**
+**列表里加行不属于「改 UI 布局」的范畴，但仍要遵守 `docs/ui/` 的行组件规范**
 （`OptionRow` 不带箭头、`ActionRow` 才带 chevron）。授权页跳转函数 `Context.startOverlayPermissionPage()`
 放在 `ui/Common.kt`，设置页与播放页共用一份。
 

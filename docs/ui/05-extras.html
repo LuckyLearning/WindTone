@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>五、桌面小组件 / 通知 / 快捷磁贴 / 提示 · 听风 WindTone UI 效果图</title>
+<script>
+/* 主题必须在样式之前定位，避免首帧闪错色：
+   1) 用户手动切过 → 用记住的选择（localStorage）
+   2) 没切过 → 跟随系统 prefers-color-scheme（App 也是跟随系统主题） */
+(function(){
+  try{
+    var saved=localStorage.getItem('wt-ui-theme');
+    var theme=saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme',theme);
+  }catch(e){
+    document.documentElement.setAttribute('data-theme','dark');
+  }
+})();
+</script>
+<link rel="stylesheet" href="ui.css">
+</head>
+<body>
+<script src="ui-sprite.js"></script>
+
+<header class="board-head">
+  <div class="bh-row">
+    <a class="backdocs" href="index.html">← 效果图总览</a>
+    <div class="bh-title">五、桌面小组件 / 通知 / 快捷磁贴 / 提示<small>UI 效果图 · 设计基准（第 5 / 7 章）</small></div>
+    <span class="bh-badge"><span id="pageCount">3</span> 屏</span>
+    <span class="bh-badge">对齐 v1.1.29</span>
+    <button class="tgl" id="themeBtn">🌙 深色主题</button>
+  </div>
+  <nav class="bh-nav"><a href="01-main.html">主界面</a><a href="02-player.html">播放页</a><a href="03-sheets.html">抽屉与弹窗</a><a href="04-settings.html">设置页</a><a href="05-extras.html" class="on">小组件·通知</a><a href="06-car.html">车机版</a><a href="07-spec.html">颜色与尺寸</a></nav>
+</header>
+
+<div class="wrap">
+<section class="sec" id="sec-other">
+  <div class="sec-hd"><h2>五、桌面小组件 / 通知 / 快捷磁贴 / 提示</h2><span>MusicWidgetProvider · PlaybackTileService · Snackbar</span></div>
+  <div class="board">
+<figure class="fig wide" id="scr-widget">
+  <div class="cap"><b>㉜ 桌面小组件 + 快捷设置磁贴</b><em>MusicWidgetProvider · PlaybackTileService</em></div>
+  <div class="panel">
+    <div class="launcher">
+      <div class="widget" style="width:100%">
+        <div class="w-cov"><svg class="ic" style="fill:rgba(255,255,255,.9)"><use href="#i-note"/></svg></div>
+        <div class="w-main"><div class="w-t">夜曲</div><div class="w-a">周杰伦 · 叶惠美</div></div>
+        <div class="w-btns">
+          <span class="b" style="width:36px;height:36px"><svg class="ic ic-22"><use href="#i-prev"/></svg></span>
+          <span class="b" style="width:40px;height:40px"><svg class="ic"><use href="#i-pause"/></svg></span>
+          <span class="b" style="width:36px;height:36px"><svg class="ic ic-22"><use href="#i-next"/></svg></span>
+        </div>
+      </div>
+      <div class="widget" style="width:56%">
+        <div class="w-cov" style="width:40px;height:40px"><svg class="ic ic-18" style="fill:rgba(255,255,255,.9)"><use href="#i-note"/></svg></div>
+        <div class="w-main"><div class="w-t" style="font-size:13px">夜曲</div><div class="w-a" style="font-size:11px">播放中</div></div>
+        <div class="w-btns"><span class="b" style="width:32px;height:32px"><svg class="ic ic-20"><use href="#i-pause"/></svg></span></div>
+      </div>
+      <div class="tile">
+        <div class="t-ic"><svg class="ic ic-22"><use href="#i-pause"/></svg></div>
+        <div><div class="t-t">夜曲</div><div class="t-s">正在播放</div></div>
+      </div>
+    </div>
+    <p class="note" style="margin-bottom:0"><b>小组件</b>：minWidth 250dp / minHeight 40dp，可横向纵向缩放；背景实色 #F2EFF8、圆角 18dp（不跟随深浅主题）；
+  封面 52×52 圆角 12（无封面用 ic_widget_music）；标题 14sp Bold #1B1B21、艺术家 12sp #5F5E5A；
+  右侧三键 = 上一首 36dp / 播放暂停 40dp / 下一首 36dp；点封面或信息区打开 App。<br>
+  <b>快捷磁贴</b>：label「音乐播放」；播放中 STATE_ACTIVE（label 换为曲名、副标题「正在播放」），暂停或未连接 STATE_INACTIVE（「已暂停」，无连接时 label 回退为应用名）；点击切换播放/暂停。</p>
+  </div>
+</figure>
+
+<figure class="fig" id="scr-notif">
+  <div class="cap"><b>㉝ 媒体通知 / 锁屏</b><em>PlaybackService（Media3 默认 MediaStyle）</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app" style="padding-top:6px">
+      <div style="text-align:center;font-size:12px;color:var(--on-surface-variant);padding:10px 0 4px">锁屏 · 通知栏</div>
+      <div class="notif">
+        <div class="n-hd"><svg class="ic ic-15" style="color:var(--primary)"><use href="#i-note"/></svg><b style="font-weight:600">听风</b><span>· 正在播放</span></div>
+        <div class="n-body">
+          <div class="cov cov-48 c2" style="width:44px;height:44px"><svg><use href="#i-note"/></svg></div>
+          <div class="n-main"><div class="n-t">夜曲</div><div class="n-s">周杰伦</div></div>
+        </div>
+        <div class="n-ctl">
+          <svg class="ic ic-22"><use href="#i-prev"/></svg>
+          <svg class="ic ic-22"><use href="#i-pause"/></svg>
+          <svg class="ic ic-22"><use href="#i-next"/></svg>
+        </div>
+      </div>
+      <div class="notif">
+        <div class="n-hd"><svg class="ic ic-15" style="color:var(--primary)"><use href="#i-note"/></svg><b style="font-weight:600">听风</b><span>· 已暂停</span></div>
+        <div class="n-body">
+          <div class="cov cov-48 c3" style="width:44px;height:44px"><svg><use href="#i-note"/></svg></div>
+          <div class="n-main"><div class="n-t">富士山下</div><div class="n-s">陈奕迅 · What's Going On…?</div></div>
+        </div>
+        <div class="n-ctl">
+          <svg class="ic ic-22"><use href="#i-prev"/></svg>
+          <svg class="ic ic-22"><use href="#i-play"/></svg>
+          <svg class="ic ic-22"><use href="#i-next"/></svg>
+        </div>
+      </div>
+      <div style="margin:14px 14px 0;font-size:11.5px;line-height:1.7;color:var(--on-surface-variant)">
+        通知栏样式由 Media3 默认模板生成：小图标 <b>ic_notification</b>、封面、标题（歌名）、副标题（歌手）；
+        展开后有上一首 / 播放暂停 / 下一首 + 进度条。<br><br>
+        <b>本应用不提供「把歌词显示在通知栏」的开关</b>：Media3 的通知正文只取 <code>artist</code>，
+        要显示歌词就得覆盖 <code>artist</code>，而队列抽屉与桌面小组件也读它——贴上去会让那两处显示错信息。
+        歌词的落点是<b>桌面悬浮歌词</b>（见 ㊴ 屏）与<b>播放页歌词</b>。
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>应用没有任何自定义通知布局，全部走 MediaSessionService 默认样式；锁屏界面复用同一份媒体通知。<br>
+  <b>曾经的弯路（别重走）</b>：v1.1.0 及以前有个「通知栏 / 锁屏显示歌词」开关，做法是把当前歌词行写进 <code>mediaItem.subtitle</code>；
+  但反编译 <code>DefaultMediaNotificationProvider</code> 可见其 <code>getNotificationContentText()</code> 只有一句 <code>getfield artist</code>——
+  写进 subtitle 的歌词<strong>永远看不见</strong>，那个开关从头到尾都是失效的。v1.1.1 用自定义 provider 改过取值顺序，后来（悬浮歌词可用之后）这个功能整体移除：
+  通知栏那点宽度放歌词本来就难看，不如把精力放在悬浮字幕上。</p>
+</figure>
+
+<figure class="fig" id="scr-snack">
+  <div class="cap"><b>㉞ 顶部提示（Snackbar）</b><em>MainScreen · SnackbarHost（TopCenter + statusBarsPadding + top 6dp）</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="topbar">
+        <div class="tb-row"><button class="ibtn" data-menu title="打开侧边抽屉"><svg class="ic"><use href="#i-menu"/></svg></button><h1 class="lib-title">本地音乐</h1><span class="pill">500 首</span><div class="sp"></div>
+          <button class="ibtn"><svg class="ic"><use href="#i-search"/></svg></button><button class="ibtn"><svg class="ic"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="list">
+        <div class="song-row"><div class="cov cov-48 c1"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">晴天</div><div class="song-sub"><span>周杰伦</span><span class="badge badge-lrc">LRC</span></div></div><div class="song-time">4:29</div></div>
+        <div class="song-row"><div class="cov cov-48 c2"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">夜曲</div><div class="song-sub"><span>周杰伦</span><span class="badge badge-emb">内嵌</span></div></div><div class="song-time">3:46</div></div>
+        <div class="song-row"><div class="cov cov-48 c3"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">富士山下</div><div class="song-sub"><span>陈奕迅</span><span class="badge badge-lrc">LRC</span></div></div><div class="song-time">4:19</div></div>
+      </div>
+      <div class="mini">
+        <div class="mini-track"><i style="width:56%"></i></div>
+        <div class="mini-row">
+          <div class="cov cov-46 c2"><svg><use href="#i-note"/></svg></div>
+          <div class="mini-main"><div class="mini-title">夜曲</div><div class="mini-sub">周杰伦 · 叶惠美</div></div>
+          <button class="ibtn fav-on" title="取消收藏"><svg class="ic ic-20"><use href="#i-heart"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-pause"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-next"/></svg></button>
+        </div>
+      </div>
+      <div style="position:absolute;left:12px;right:12px;top:6px;z-index:6" class="snack">
+        <span>已加入播放队列：晴天</span><b>撤销</b>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>Snackbar 固定出现在<b>顶部</b>（避免与底部迷你播放条 / 侧边抽屉打架），反色卡片 + 可选动作按钮。<br>
+  <b>常用提示文案</b>（走同一组件）：<br>
+  · 歌单：「已创建歌单「X」」「已删除歌单」「已加入歌单」「已导出「X」（N 首）」「无法读取 M3U 文件」<br>
+  · 删除 / 移除：「已删除「X」」「删除「X」失败：存储拒绝了该操作」「已移除「X」的 N 首歌曲」「已移除全部目录，请重新选择扫描范围」<br>
+  · 收藏 / 编辑：「已收藏「X」」「已取消收藏」「已更新歌曲信息（仅本应用内显示，不修改原文件）」<br>
+  · 扫描 / 歌词：「已重新匹配歌词文件：N 首」「所选目录里没有找到音频文件」「扫描失败，请检查权限后重试」<br>
+  · 权限：「没有读取音频的权限。可以改为「选择音乐目录」，用文件选择器授权指定文件夹。」<br>
+  · 播放：「播放失败：X，已跳到下一首」「已加入播放队列：X」<br>
+  · 统计 / 日志：「播放统计已清空（收藏保留）」「崩溃日志已清空」「崩溃日志已导出」「导出失败：X」<br>
+  · 更新：更新相关的网络错误文案见设置页说明（仓库未发布 / 访问过于频繁 / 网络不可用 / 连接超时 / 下载包不完整 / 不是有效 APK 等）。</p>
+</figure>
+
+  </div>
+</section>
+
+  <div class="pagenav">
+    <a href="04-settings.html">← 设置页</a>
+    <a href="index.html">↑ 全部屏</a>
+    <a href="06-car.html">车机版 →</a>
+  </div>
+</div>
+
+<script src="ui.js"></script>
+</body>
+</html>

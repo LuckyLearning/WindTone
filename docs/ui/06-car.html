@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>六、车机版（2560×1600 中控屏） · 听风 WindTone UI 效果图</title>
+<script>
+/* 主题必须在样式之前定位，避免首帧闪错色：
+   1) 用户手动切过 → 用记住的选择（localStorage）
+   2) 没切过 → 跟随系统 prefers-color-scheme（App 也是跟随系统主题） */
+(function(){
+  try{
+    var saved=localStorage.getItem('wt-ui-theme');
+    var theme=saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme',theme);
+  }catch(e){
+    document.documentElement.setAttribute('data-theme','dark');
+  }
+})();
+</script>
+<link rel="stylesheet" href="ui.css">
+</head>
+<body>
+<script src="ui-sprite.js"></script>
+
+<header class="board-head">
+  <div class="bh-row">
+    <a class="backdocs" href="index.html">← 效果图总览</a>
+    <div class="bh-title">六、车机版（2560×1600 中控屏）<small>UI 效果图 · 设计基准（第 6 / 7 章）</small></div>
+    <span class="bh-badge"><span id="pageCount">6</span> 屏</span>
+    <span class="bh-badge">对齐 v1.1.29</span>
+    <button class="tgl" id="themeBtn">🌙 深色主题</button>
+  </div>
+  <nav class="bh-nav"><a href="01-main.html">主界面</a><a href="02-player.html">播放页</a><a href="03-sheets.html">抽屉与弹窗</a><a href="04-settings.html">设置页</a><a href="05-extras.html">小组件·通知</a><a href="06-car.html" class="on">车机版</a><a href="07-spec.html">颜色与尺寸</a></nav>
+</header>
+
+<div class="wrap">
+<section class="sec" id="sec-car">
+  <div class="sec-hd"><h2>六、车机版（2560×1600 中控屏）</h2><span>v1.1.19 设计 · 单栏大控件 · 1707×1067dp 基准（㊱B / ㊲B 为当前方案，㊱~㊳ 为历史两栏）</span></div>
+  <div class="note">
+    <b>本版方向：单栏 + 大控件 + 免手势</b>。v1.1.14 停用车机两栏后，车载模式只剩「直进播放页 / 锁横屏 / 5 秒收起 / 歌词 ×1.5」，
+    实测反馈是<b>开关拨了感觉没区别</b>。这一版把车机界面重新做成<b>单栏</b>（不做左右分栏，用户否决仍然有效），
+    宽屏余量全部用来<b>放大控件</b>，并把「开关即刻生效」一并补上。
+    设计说明见 <a href="../设计-车载模式.html">《车载模式重设计 · 单栏大控件》</a>。
+  </div>
+  <div class="legend" style="margin-bottom:18px">
+    <b>目标设备</b>：2560×1600 px 中控屏（16:10，12.8~13 英寸）。按实测密度 232~236 dpi 落到 <b>hdpi(240)</b> 密度桶，
+    换算可用空间约 <b>1707×1067 dp</b>（约为手机 360dp 宽的 4.7 倍）。<br>
+    <b>本页画布</b>：1000×625 px 代表 1707×1067 dp，换算系数 k ≈ 0.5858（<b>写成 dp 时 = 画布 px ÷ 0.5858</b>，或直接看标注）。
+    <br><b>与手机版的关系</b>：<b>不是</b>把手机竖屏拉宽，而是独立的横屏两栏布局；仅复用颜色令牌、图标与全屏播放页。
+  </div>
+  <div class="board">
+
+<figure class="fig car" id="scr-car-home-single">
+  <div class="cap"><b>㊱B 车机 · 单栏主页（v1.1.19 设计）</b><em>CarLibraryScreen.kt（待建） —— 标题行 + 横向 Tab + 88dp 大行 + 底部大播放条，无左导航</em></div>
+  <div class="carphone">
+    <div class="carbar">
+      <span>9:41</span><span class="cb-item">🌡 24°C</span>
+      <span class="sp"></span><span class="cb-item">听风</span>
+    </div>
+    <div class="car1">
+      <div class="c1head">
+        <div class="c1title">本地音乐</div>
+        <span class="pill" style="font-size:13px;padding:4px 12px">500 首</span>
+        <div style="flex:1"></div>
+        <button class="ibtn" style="width:64px;height:64px"><svg class="ic" style="width:30px;height:30px"><use href="#i-search"/></svg></button>
+        <button class="ibtn" style="width:64px;height:64px"><svg class="ic" style="width:30px;height:30px"><use href="#i-tune"/></svg></button>
+      </div>
+      <div class="c1tabs">
+        <div class="c1tab on">全部歌曲</div>
+        <div class="c1tab">专辑</div>
+        <div class="c1tab">歌手</div>
+        <div class="c1tab">文件夹</div>
+        <div class="c1tab">歌单</div>
+      </div>
+      <div class="c1body">
+        <div class="c1wrap">
+          <div class="c1row focus">
+            <div class="cov" style="width:56px;height:56px;border-radius:12px"><svg style="width:24px;height:24px"><use href="#i-note"/></svg></div>
+            <div style="flex:1;min-width:0">
+              <div class="c1t">晴天</div>
+              <div class="c1s"><span>周杰伦</span><span class="badge">LRC</span></div>
+            </div>
+            <div class="c1time">4:29</div>
+            <button class="ibtn" style="width:56px;height:56px"><svg class="ic ic-22"><use href="#i-more"/></svg></button>
+          </div>
+          <div class="c1row on">
+            <div class="cov" style="width:56px;height:56px;border-radius:12px"><svg style="width:24px;height:24px"><use href="#i-note"/></svg></div>
+            <div style="flex:1;min-width:0">
+              <div class="c1t">夜曲</div>
+              <div class="c1s"><span>周杰伦</span><span class="badge">LRC</span></div>
+            </div>
+            <div class="c1time">3:46</div>
+            <button class="ibtn" style="width:56px;height:56px"><svg class="ic ic-22" style="color:var(--primary)"><use href="#i-vol"/></svg></button>
+          </div>
+          <div class="c1row">
+            <div class="cov" style="width:56px;height:56px;border-radius:12px"><svg style="width:24px;height:24px"><use href="#i-note"/></svg></div>
+            <div style="flex:1;min-width:0">
+              <div class="c1t">富士山下</div>
+              <div class="c1s"><span>陈奕迅</span><span class="badge">内嵌</span></div>
+            </div>
+            <div class="c1time">4:19</div>
+            <button class="ibtn" style="width:56px;height:56px"><svg class="ic ic-22"><use href="#i-more"/></svg></button>
+          </div>
+          <div class="c1row">
+            <div class="cov" style="width:56px;height:56px;border-radius:12px"><svg style="width:24px;height:24px"><use href="#i-note"/></svg></div>
+            <div style="flex:1;min-width:0">
+              <div class="c1t">稻香</div>
+              <div class="c1s"><span>周杰伦</span><span class="badge">LRC</span></div>
+            </div>
+            <div class="c1time">3:43</div>
+            <button class="ibtn" style="width:56px;height:56px"><svg class="ic ic-22"><use href="#i-more"/></svg></button>
+          </div>
+        </div>
+      </div>
+      <div class="carnowbar" style="height:72px;padding:0 18px">
+        <div class="nb-cov" style="width:52px;height:52px"><svg class="ic"><use href="#i-note"/></svg></div>
+        <div class="nb-main" style="width:236px">
+          <div class="nb-t" style="font-size:22px">夜曲</div>
+          <div class="nb-a" style="font-size:15px">周杰伦</div>
+        </div>
+        <button class="cbtn" style="width:56px;height:56px"><svg class="ic fav-on" style="width:28px;height:28px"><use href="#i-heart"/></svg></button>
+        <button class="cbtn" style="width:56px;height:56px"><svg class="ic" style="width:28px;height:28px"><use href="#i-prev"/></svg></button>
+        <button class="cmain" style="width:56px;height:56px;box-shadow:none"><svg class="ic" style="width:28px;height:28px"><use href="#i-pause"/></svg></button>
+        <button class="cbtn" style="width:56px;height:56px"><svg class="ic" style="width:28px;height:28px"><use href="#i-next"/></svg></button>
+        <div class="nb-bar">
+          <div class="cartrack"><span class="cplayed" style="width:37%"></span><span class="cthumb" style="left:37%"></span></div>
+          <div class="nb-time"><span>1:24</span><span>3:46</span></div>
+        </div>
+      </div>
+      <div class="c1dock"><i></i><i></i><i></i><span>车机 Dock（系统浮层，App 只让出 56dp）</span></div>
+    </div>
+  </div>
+  <p class="note"><b>关键点（单栏）：</b>砍掉左导航，改成<b>顶部横向 Tab</b> —— 抽屉要点两次、第二级位置还会变，
+  Tab 一步到位；1707dp 宽放五个入口（每个最小 180dp）绰绰有余。五个 Tab = `LibraryView` 的五个枚举值，与抽屉共用同一状态。<b>设置固定在标题行右侧、仍是唯一入口</b>，不违反「入口收敛」。<br>
+  列表行 88dp（手机 64dp）：封面 64dp / 圆角 14dp、歌名 21sp、歌手 15sp、时长 17sp、行尾「⋮」76dp；
+  正在播放行用 <code>playing-bg</code> + 歌名 primary，行尾换成音量图标。<b>3dp primary 描边</b>是第一行示例的<b>旋钮焦点态</b> ——
+  车机靠方向盘按键 / 旋钮操作时没有触摸点，必须画出来。<br>
+  内容区限宽 1180dp 居中：1707dp 全宽铺满会让歌名和「⋮」相隔 1500dp，视线要扫整个屏；<b>播放条不受限宽</b>，横贯全宽（离手最近）。<br>
+  底部大播放条 112dp：封面 80dp、歌名 22sp、收藏 / 上一首 / 播放暂停 / 下一首（76dp、主键 88dp）、进度条 10dp 粗；<b>不放「歌词」快捷键</b>——进播放页就是看歌词的，播放条只留最基础的控制，多点一个入口反而误触。<br>
+  最底一条是<b>车机 Dock</b>（Home / 应用 / 空调，车机自己画的浮层）：只做 56dp 的<b>留白</b>，不进布局、不画控件 ——
+  v1.1.14 的「设置点不到」就是这条浮层压出来的。<br>
+  <b>画布说明</b>：本画布 1000×625 装不下 1707×1067dp，元素按比例压缩示意；<b>实现规格以标注的 dp 为准</b>（行高 88dp、播放条 112dp），与<a href="../设计-车载模式.html">设计文档</a>一致。</p>
+</figure>
+
+<figure class="fig car" id="scr-car-player-full">
+  <div class="cap"><b>㊲B 车机 · 播放页 · 歌词态（v1.1.19 设计）</b><em>PlayerScreen.kt —— 单列：顶栏 + 歌词 + 歌名行 + 进度 + 大控制键；5 秒后收成 ㊲ 沉浸态</em></div>
+  <div class="carphone">
+    <div class="carbar">
+      <span>9:41</span><span class="cb-item">🌡 24°C</span>
+      <span class="sp"></span><span class="cb-item">听风</span>
+    </div>
+    <div class="car1">
+      <div class="c1head" style="padding:10px 18px 4px">
+        <button class="ibtn" style="width:56px;height:56px"><svg class="ic" style="width:30px;height:30px"><use href="#i-down"/></svg></button>
+        <div style="font-size:22px;font-weight:600;color:var(--on-bg)">正在播放</div>
+        <div style="flex:1"></div>
+        <button class="ibtn" style="width:56px;height:56px"><svg class="ic" style="width:28px;height:28px"><use href="#i-album"/></svg></button>
+      </div>
+      <div style="flex:1;min-height:0;display:flex;flex-direction:column;width:100%;max-width:1180px;margin:0 auto;padding:0 40px 8px">
+        <div class="carlyric" style="gap:18px">
+          <div class="cl" style="font-size:24px">一群嗜血的蚂蚁 被腐肉所吸引</div>
+          <div class="cl" style="font-size:24px">我面无表情 看孤独的风景</div>
+          <div class="cl cur" style="font-size:30px">失去你 爱恨 开始分明<span class="tr">Without you, love and hate start to blur</span></div>
+          <div class="cl" style="font-size:24px">失去你 还有什么事好关心</div>
+          <div class="cl" style="font-size:24px">当鸽子不再象征和平</div>
+        </div>
+        <div class="carnow">
+          <div>
+            <div class="cnt">夜曲</div>
+            <div class="cna">周杰伦</div>
+          </div>
+          <svg class="ic fav-on"><use href="#i-heart"/></svg>
+        </div>
+        <div class="cartrack" style="margin-bottom:6px"><span class="cplayed" style="width:37%"></span><span class="cthumb" style="left:37%"></span></div>
+        <div style="display:flex;justify-content:space-between;font-size:15px;color:var(--on-surface-variant);margin-bottom:4px">
+          <span>1:24</span><span>3:46</span>
+        </div>
+        <div class="carctl" style="justify-content:center;gap:26px">
+          <button class="cbtn"><svg class="ic"><use href="#i-repeat"/></svg></button>
+          <button class="cbtn"><svg class="ic"><use href="#i-prev"/></svg></button>
+          <button class="cmain"><svg class="ic"><use href="#i-pause"/></svg></button>
+          <button class="cbtn"><svg class="ic"><use href="#i-next"/></svg></button>
+          <button class="cbtn"><svg class="ic"><use href="#i-queue"/></svg></button>
+        </div>
+      </div>
+      <div class="c1dock"><i></i><i></i><i></i><span>车机 Dock（系统浮层，App 只让出 56dp）</span></div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>与 ㊲（沉浸态）是<b>同一页的两个状态</b>：进来先看到这版完整控件，<b>5 秒无触摸</b>收成 ㊲，
+  触摸任意位置立刻回来并重新计时；切封面态不计时。返回键在沉浸态先恢复界面，不直接退出播放页。<br>
+  歌词：正文 24sp / 当前行 30sp / 翻译行 18sp（= 用户字号 × 1.5），当前行只用底色 + 字号 + 颜色区分，不加竖线。
+  双语三种模式（中英 / 只中文 / 只英文）在这屏同样生效。<br>
+  控制键沿用全局 <code>.cbtn</code> 76dp / <code>.cmain</code> 112dp，间距 26dp：行车中靠边缘一按就中，不需要瞄。
+  红心紧跟歌名（不贴屏幕最右缘），与 ㊲ 一致。<br>
+  <b>不做左右分栏</b>（封面在左、控制在右）：仍属分栏，且会把现有 <code>PlayerScreen</code> 的复用打断。</p>
+</figure>
+
+  <div class="note" style="border-color:#c58b00">
+    <b>⚠️ 以下 ㊱~㊳ 为历史设计（1.0.3~1.1.13 的车载两栏），v1.1.14 起停用</b>：
+    原因见《版本历史》1.1.14 —— 车机固定按钮栏压住左下角「设置」，且用户明确不要双栏。
+    <code>CarHomeScreen.kt</code> 保留但<b>不再被调用</b>（<code>LayoutContractTest.noTwoPaneLayout</code> 盯着）。
+    保留它们只为对照，<b>不要照着改代码</b>。
+  </div>
+
+<figure class="fig car" id="scr-car-home">
+  <div class="cap"><b>㊱ 车机 · 本地音乐（横屏两栏）</b><em>CarHomeScreen.kt —— 左导航 256dp + 右列表，底部常驻播放条</em></div>
+  <div class="carphone">
+    <div class="carbar">
+      <span>9:41</span>
+      <span class="cb-item">🌡 24°C</span>
+      <span class="sp"></span>
+      <span class="cb-item">听风</span>
+    </div>
+    <div class="cargrid">
+      <nav class="carnav">
+        <div class="cni on"><svg class="ic"><use href="#i-library"/></svg>本地音乐</div>
+        <div class="cni"><svg class="ic"><use href="#i-album"/></svg>专辑</div>
+        <div class="cni"><svg class="ic"><use href="#i-artist"/></svg>歌手</div>
+        <div class="cni"><svg class="ic"><use href="#i-folder"/></svg>文件夹</div>
+        <div class="cni"><svg class="ic"><use href="#i-note"/></svg>歌单</div>
+        <div class="cni"><svg class="ic"><use href="#i-heart"/></svg>我的收藏</div>
+        <div class="cngap"></div>
+        <div class="cni"><svg class="ic"><use href="#i-search"/></svg>搜索</div>
+        <div class="cni"><svg class="ic"><use href="#i-tune"/></svg>设置</div>
+      </nav>
+      <div class="carmain">
+        <div style="display:flex;align-items:center;gap:14px;flex:none;padding-bottom:12px">
+          <div style="font-size:30px;font-weight:700;color:var(--on-bg)">本地音乐</div>
+          <span class="pill">500 首</span>
+          <div class="sp" style="flex:1"></div>
+          <button class="ibtn" style="width:56px;height:56px"><svg class="ic" style="width:30px;height:30px"><use href="#i-sort"/></svg></button>
+          <button class="ibtn" style="width:56px;height:56px"><svg class="ic" style="width:30px;height:30px"><use href="#i-more"/></svg></button>
+        </div>
+        <div style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:8px">
+          <div class="song-row" style="padding:8px 14px;border-radius:14px">
+            <div class="cov" style="width:56px;height:56px;border-radius:12px"><svg style="width:24px;height:24px"><use href="#i-note"/></svg></div>
+            <div class="song-main"><div class="song-title" style="font-size:22px">晴天</div>
+              <div class="song-sub" style="font-size:15px"><span>周杰伦</span><span class="badge">LRC</span></div></div>
+            <div class="song-time" style="font-size:17px">4:29</div>
+            <button class="ibtn"><svg class="ic ic-22"><use href="#i-more"/></svg></button>
+          </div>
+          <div class="song-row" style="padding:8px 14px;border-radius:14px;background:var(--playing-bg)">
+            <div class="cov" style="width:56px;height:56px;border-radius:12px"><svg style="width:24px;height:24px"><use href="#i-note"/></svg></div>
+            <div class="song-main"><div class="song-title" style="font-size:22px;color:var(--primary);font-weight:700">夜曲</div>
+              <div class="song-sub" style="font-size:15px"><span>周杰伦</span><span class="badge">LRC</span></div></div>
+            <div class="song-time" style="font-size:17px">3:46</div>
+            <button class="ibtn"><svg class="ic ic-22" style="color:var(--primary)"><use href="#i-vol"/></svg></button>
+          </div>
+          <div class="song-row" style="padding:8px 14px;border-radius:14px">
+            <div class="cov" style="width:56px;height:56px;border-radius:12px"><svg style="width:24px;height:24px"><use href="#i-note"/></svg></div>
+            <div class="song-main"><div class="song-title" style="font-size:22px">富士山下</div>
+              <div class="song-sub" style="font-size:15px"><span>陈奕迅</span><span class="badge">内嵌</span></div></div>
+            <div class="song-time" style="font-size:17px">4:19</div>
+            <button class="ibtn"><svg class="ic ic-22"><use href="#i-more"/></svg></button>
+          </div>
+          <div class="song-row" style="padding:8px 14px;border-radius:14px">
+            <div class="cov" style="width:56px;height:56px;border-radius:12px"><svg style="width:24px;height:24px"><use href="#i-note"/></svg></div>
+            <div class="song-main"><div class="song-title" style="font-size:22px">稻香</div>
+              <div class="song-sub" style="font-size:15px"><span>周杰伦</span><span class="badge">LRC</span></div></div>
+            <div class="song-time" style="font-size:17px">3:43</div>
+            <button class="ibtn"><svg class="ic ic-22"><use href="#i-more"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="carnowbar">
+      <div class="nb-cov"><svg class="ic"><use href="#i-note"/></svg></div>
+      <div class="nb-main">
+        <div class="nb-t">夜曲</div>
+        <div class="nb-a">周杰伦</div>
+      </div>
+      <button class="cbtn"><svg class="ic fav-on"><use href="#i-heart"/></svg></button>
+      <button class="cbtn"><svg class="ic"><use href="#i-prev"/></svg></button>
+      <button class="cmain"><svg class="ic"><use href="#i-pause"/></svg></button>
+      <button class="cbtn"><svg class="ic"><use href="#i-next"/></svg></button>
+      <div class="nb-bar">
+        <div class="cartrack"><span class="cplayed" style="width:37%"></span><span class="cthumb" style="left:37%"></span></div>
+        <div class="nb-time"><span>1:24</span><span>3:46</span></div>
+      </div>
+      <button class="nb-full"><svg class="ic"><use href="#i-lyrics"/></svg></button>
+    </div>
+  </div>
+  <p class="note"><b>关键点（两栏布局）：</b>左导航 256dp + 右列表占满剩余宽度，<b>播放控制下沉到底部常驻播放条</b>；
+  点播放条上任意位置（封面 / 歌名 / 右侧按钮）进入独立全屏播放页。<br>
+  为什么不做第三栏：1707dp 屏上右侧栏 400dp 会吃掉列表近 40% 宽度，长曲名被挤成省略号；
+  横条方案把控制下沉到车机里最顺手的位置，列表拿到全部剩余宽度。<br>
+  列表行高 80dp（手机 64dp），封面 64dp / 圆角 14dp，主标题 22sp（手机 15sp）、副标题 15sp、时长 17sp；顶栏标题 30sp。<br>
+  左导航 256dp 宽，条目高 64dp、图标 26dp、文字 17sp；选中项 primaryContainer 实底 + onPrimaryContainer 文字
+  （不用 onPrimary：跟随封面取色时它由 seed 派生，亮色 seed 下会糊）。<br>
+  底部播放条：封面 64dp、歌名 19sp、控制键簇 = <b>收藏 + 上一首 / 播放暂停 / 下一首</b>（收藏 56dp，已收藏 primary 实心红心、未收藏描边；放在簇最左，驾驶时顺手），
+  进度条 10dp 粗（滑块 26dp，自带「已播 / 总时长」）、
+  最右一个显式「全屏播放」按钮。触控目标全部 ≥56dp，主键 68dp；列表行「⋮」与顶栏按钮 56dp。</p>
+</figure>
+
+<figure class="fig car" id="scr-car-player">
+  <div class="cap"><b>㊲ 车机 · 全屏播放（歌词沉浸态）</b><em>PlayerScreen.kt —— 独立全屏页，5s 无操作后收起控件</em></div>
+  <div class="carphone">
+    <div class="carbar">
+      <span>9:41</span><span class="cb-item">🌡 24°C</span>
+      <span class="sp"></span><span class="cb-item">听风</span>
+    </div>
+    <div class="cargrid" style="flex-direction:column">
+      <div class="carmain" style="padding-top:8px">
+        <div class="carlyric">
+          <div class="cl">一群嗜血的蚂蚁 被腐肉所吸引</div>
+          <div class="cl">我面无表情 看孤独的风景</div>
+          <div class="cl cur">失去你 爱恨 开始分明<span class="tr">Without you, love and hate start to blur</span></div>
+          <div class="cl">失去你 还有什么事好关心</div>
+          <div class="cl">当鸽子不再象征和平</div>
+        </div>
+        <div class="carnow">
+          <div>
+            <div class="cnt">夜曲</div>
+            <div class="cna">周杰伦</div>
+          </div>
+          <svg class="ic fav-on"><use href="#i-heart"/></svg>
+        </div>
+        <div class="cartrack" style="margin-bottom:8px"><span class="cplayed" style="width:37%"></span><span class="cthumb" style="left:37%"></span></div>
+        <div style="display:flex;justify-content:space-between;font-size:15px;color:var(--on-surface-variant);margin-bottom:6px">
+          <span>1:24</span><span>3:46</span>
+        </div>
+        <div class="carctl" style="justify-content:center">
+          <button class="cbtn" style="width:76px;height:76px"><svg class="ic" style="width:32px;height:32px"><use href="#i-repeat"/></svg></button>
+          <button class="cbtn"><svg class="ic"><use href="#i-prev"/></svg></button>
+          <button class="cmain"><svg class="ic"><use href="#i-pause"/></svg></button>
+          <button class="cbtn"><svg class="ic"><use href="#i-next"/></svg></button>
+          <button class="cbtn" style="width:76px;height:76px"><svg class="ic" style="width:32px;height:32px"><use href="#i-queue"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>这是<b>独立全屏页</b>（`PlayerScreen`，与手机版同一个组件），盖在两栏主页之上，
+  与手机版唯一的差别是<b>限宽 760dp 后水平居中</b>——车机横屏 1707dp 若让竖屏版式铺满，返回键与设置键会被拉到
+  屏幕两端、视线来回扫一两千像素，歌词一行也会长到需要扭头读；限宽后版式与手机同构，只是更宽松。<br>
+  <b>歌名行红心紧跟在歌名/歌手后面</b>（车机版式，标题列不占满剩余宽度；手机版标题占满、红心贴右）——
+  1707dp 宽屏上红心贴最右缘驾驶时够不着也看不清。<br>
+  歌词字号：车载模式在用户设定的 [lyricScale] 上<b>再乘 1.5</b>（正文 15.5 → 约 23sp，当前行 17.5 → 约 26sp），
+  因为车机离驾驶位约 60~70cm，手机那套字号瞄一眼读不清。<br>
+  沉浸态：5 秒无触摸后收起顶栏 / 控制键 / 状态行，<b>保留歌名行（含红心）+ 歌词区 + 进度条 + 时间</b>；
+  沉浸态下<b>限宽失效、歌词重新占满全宽</b>（此时诉求就是歌词尽量大）；任意触摸立即恢复完整界面并重新计时 5 秒。<br>
+  封面态不收起：封面本身就是主要视觉，计时暂停保持完整控件。<br>
+  控制键沿用手机版尺寸（主键 66dp、两侧 34dp 图标）；触控目标 ≥48dp。</p>
+</figure>
+
+<figure class="fig car" id="scr-car-settings">
+  <div class="cap"><b>㊳ 车机 · 设置（分栏卡片式）</b><em>CarSettingsScreen.kt —— 左分类 + 右内容，替代手机的长列表</em></div>
+  <div class="carphone">
+    <div class="carbar">
+      <span>9:41</span><span class="cb-item">🌡 24°C</span>
+      <span class="sp"></span><span class="cb-item">听风</span>
+    </div>
+    <div class="cargrid">
+      <nav class="carnav">
+        <div class="cni on"><svg class="ic"><use href="#i-tune"/></svg>外观</div>
+        <div class="cni"><svg class="ic"><use href="#i-lyrics"/></svg>歌词</div>
+        <div class="cni"><svg class="ic"><use href="#i-play"/></svg>播放</div>
+        <div class="cni"><svg class="ic"><use href="#i-speed"/></svg>音效</div>
+        <div class="cni"><svg class="ic"><use href="#i-info"/></svg>数据</div>
+        <div class="cni"><svg class="ic"><use href="#i-cloud"/></svg>更新</div>
+        <div class="cngap"></div>
+        <div class="cni"><svg class="ic"><use href="#i-back"/></svg>返回</div>
+      </nav>
+      <div class="carmain" style="background:var(--bg);gap:12px">
+        <div style="font-size:30px;font-weight:700;color:var(--on-bg);flex:none;padding-bottom:4px">外观</div>
+        <div style="display:flex;gap:14px;flex:none">
+          <div style="flex:1;background:var(--c-low);border-radius:16px;padding:16px 18px">
+            <div style="font-size:20px;color:var(--on-bg)">主题跟随封面取色</div>
+            <div style="font-size:14px;color:var(--on-surface-variant);margin-top:4px">从当前歌曲封面提取主色</div>
+            <div style="display:flex;justify-content:flex-end;margin-top:12px"><span class="switch lg"></span></div>
+          </div>
+          <div style="flex:1;background:var(--c-low);border-radius:16px;padding:16px 18px;outline:2px solid var(--primary)">
+            <div style="font-size:20px;color:var(--on-bg);font-weight:600">车载模式</div>
+            <div style="font-size:14px;color:var(--on-surface-variant);margin-top:4px">启动直进播放页 · 5 秒收起界面</div>
+            <div style="display:flex;justify-content:flex-end;margin-top:12px"><span class="switch lg"></span></div>
+          </div>
+        </div>
+        <div style="display:flex;gap:14px;flex:none">
+          <div style="flex:1;background:var(--c-low);border-radius:16px;padding:16px 18px;outline:2px solid var(--primary)">
+            <div style="font-size:20px;color:var(--on-bg);font-weight:600">桌面悬浮歌词</div>
+            <div style="font-size:14px;color:var(--on-surface-variant);margin-top:4px">退到桌面后最上层显示单行字幕 · 锁定后点击穿透</div>
+            <div style="display:flex;justify-content:flex-end;margin-top:12px"><span class="switch lg"></span></div>
+            <div style="display:flex;align-items:center;gap:10px;background:var(--c-high);border-radius:10px;padding:10px 12px;margin-top:12px">
+              <svg class="ic" style="color:var(--primary);width:20px;height:20px"><use href="#i-tune"/></svg>
+              <div style="flex:1;font-size:15px;color:var(--on-bg)">调整悬浮歌词位置</div>
+            </div>
+          </div>
+          <div style="flex:1"></div>
+        </div>
+        <div style="font-size:20px;color:var(--on-bg);margin-top:6px;flex:none">深色 / 浅色</div>
+        <div style="display:flex;gap:14px;flex:none">
+          <div style="flex:1;height:76px;border-radius:14px;background:var(--c-high);display:grid;place-items:center">
+            <span style="font-size:17px;color:var(--on-bg)">跟随系统</span></div>
+          <div style="flex:1;height:76px;border-radius:14px;background:var(--c-high);display:grid;place-items:center">
+            <span style="font-size:17px;color:var(--on-bg)">浅色</span></div>
+          <div style="flex:1;height:76px;border-radius:14px;background:var(--primary);display:grid;place-items:center">
+            <span style="font-size:17px;color:var(--on-primary);font-weight:700">深色</span></div>
+        </div>
+        <div style="flex:1"></div>
+      </div>
+      <aside class="carside">
+        <div class="cst">当前设置</div>
+        <div class="csrow"><span class="k">车载模式</span><span class="v">已开启</span></div>
+        <div class="csrow"><span class="k">启动页</span><span class="v">播放页</span></div>
+        <div class="csrow"><span class="k">歌词字号</span><span class="v">1.1x</span></div>
+        <div class="csrow"><span class="k">桌面悬浮歌词</span><span class="v">已开启 · 已锁定</span></div>
+      </aside>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>车机设置不用手机那种纵向长列表（在横屏上会拉得很长、左右空），改成<b>左分类导航 + 右内容分栏</b>，
+  宽控件用两列卡片平铺，短选项用等宽按钮组。<br>
+  开关行改为卡片：内边距 28dp、标题 34sp、副标题 24sp、开关放大到 76dp 触控区。<br>
+  右侧保留「当前设置」摘要栏，行驶中不用滚回去确认改了什么。底部固定「返回」入口（左上角也有）。<br>
+  <b>「桌面悬浮歌词」卡片</b>（外观分组第二张）：开关开启后，卡内下方追加「调整悬浮歌词位置」入口，点击进入可拖动状态；摘要栏同步显示「已开启 · 已锁定」。三种实际状态见 ㊴ 屏。<br>
+  <b>v1.1.20：全屏高度开启时</b>，同一位置的入口文案改为「在桌面上左右调整位置」——此时只跟横向，且支持<b>双击浮层锁定</b>。宽度与水平位置两个滑块 + 靠左 / 居中 / 靠右三个按钮都在开关下方，满宽时按钮组置灰并说明「没有余量」。</p>
+</figure>
+
+<figure class="fig car" id="scr-car-overlay">
+  <div class="cap"><b>㊴ 车机 · 桌面悬浮歌词（四种状态）</b><em>LyricOverlayService.kt —— 对齐可配（默认居中）· 锁定态穿透 · 调整态可拖 · App 前台自动隐藏</em></div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:14px">
+
+    <!-- ============ 状态一：锁定态 ============ -->
+    <div style="flex:1 1 320px;min-width:0">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px">
+        <span style="width:8px;height:8px;border-radius:50%;background:#238636;flex:none"></span>
+        <span style="font-size:12px;font-weight:700;color:var(--board-fg)">① 锁定态 · 日常</span>
+      </div>
+      <div style="position:relative;height:300px;border-radius:12px;overflow:hidden;border:1px solid var(--c-low);display:flex;flex-direction:column">
+        <div style="height:22px;display:flex;align-items:center;gap:7px;padding:0 9px;font-size:9px;font-weight:600;color:var(--on-bg);opacity:.7;background:var(--player-top);flex:none">
+          <span>9:41</span><span>🌡 24°C</span><span style="flex:1"></span><span>听风</span>
+        </div>
+        <div style="flex:1;padding:18px 12px 10px;background:linear-gradient(180deg,var(--player-top) 0%,var(--player-mid) 55%,var(--bg) 100%);position:relative;display:flex;flex-direction:column">
+          <!-- 字幕 -->
+          <div style="text-align:center;flex:none">
+            <span style="color:#fff;font-weight:700;font-size:13px;text-shadow:0 2px 6px rgba(0,0,0,.6)">是你陪我走过 那段最美的时光</span>
+          </div>
+          <!-- 桌面图标 -->
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:16px;flex:none">
+            <div style="height:26px;border-radius:6px;background:var(--c-low);display:grid;place-items:center;font-size:8px;color:var(--on-bg)">导航</div>
+            <div style="height:26px;border-radius:6px;background:var(--c-low);display:grid;place-items:center;font-size:8px;color:var(--on-bg)">音乐</div>
+            <div style="height:26px;border-radius:6px;background:var(--c-low);display:grid;place-items:center;font-size:8px;color:var(--on-bg)">电台</div>
+            <div style="height:26px;border-radius:6px;background:var(--c-low);display:grid;place-items:center;font-size:8px;color:var(--on-bg)">电话</div>
+          </div>
+          <div style="flex:1"></div>
+          <div style="display:flex;align-items:center;gap:7px;background:var(--c-low);border-radius:8px;padding:6px 8px;flex:none">
+            <div style="width:22px;height:22px;border-radius:5px;background:var(--primary-container);flex:none"></div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:9px;color:var(--on-bg);font-weight:600">听风</div>
+              <div style="font-size:7.5px;color:var(--on-surface-variant)">正在播放</div>
+            </div>
+            <span style="font-size:7.5px;color:var(--on-surface-variant)">1:24</span>
+          </div>
+          <!-- 穿透标注 -->
+          <div style="position:absolute;right:7px;top:15px;background:rgba(0,0,0,.72);border:1px dashed rgba(88,166,255,.6);border-radius:5px;padding:3px 6px;font-size:7.5px;color:#79c0ff;line-height:1.3">👆 点击穿透<br>不挡导航</div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:var(--board-dim);margin-top:6px;line-height:1.6">窗口带 <code>FLAG_NOT_TOUCHABLE</code>，手指划过字幕区直接落到桌面图标上</div>
+    </div>
+
+    <!-- ============ 状态二：调整态 ============ -->
+    <div style="flex:1 1 320px;min-width:0">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px">
+        <span style="width:8px;height:8px;border-radius:50%;background:#1f6feb;flex:none"></span>
+        <span style="font-size:12px;font-weight:700;color:var(--board-fg)">② 调整态 · 可拖动</span>
+      </div>
+      <div style="position:relative;height:300px;border-radius:12px;overflow:hidden;border:1px solid var(--c-low);display:flex;flex-direction:column">
+        <div style="height:22px;display:flex;align-items:center;gap:7px;padding:0 9px;font-size:9px;font-weight:600;color:var(--on-bg);opacity:.7;background:var(--player-top);flex:none">
+          <span>9:41</span><span>🌡 24°C</span><span style="flex:1"></span><span>听风</span>
+        </div>
+        <div style="flex:1;padding:18px 12px 10px;background:linear-gradient(180deg,var(--player-top) 0%,var(--player-mid) 55%,var(--bg) 100%);position:relative;display:flex;flex-direction:column">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;flex:none">
+            <div style="height:26px;border-radius:6px;background:var(--c-low);display:grid;place-items:center;font-size:8px;color:var(--on-bg)">导航</div>
+            <div style="height:26px;border-radius:6px;background:var(--c-low);display:grid;place-items:center;font-size:8px;color:var(--on-bg)">音乐</div>
+            <div style="height:26px;border-radius:6px;background:var(--c-low);display:grid;place-items:center;font-size:8px;color:var(--on-bg)">电台</div>
+            <div style="height:26px;border-radius:6px;background:var(--c-low);display:grid;place-items:center;font-size:8px;color:var(--on-bg)">电话</div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:6px;flex:none">
+            <div style="height:26px;border-radius:6px;background:var(--c-low);display:grid;place-items:center;font-size:8px;color:var(--on-bg)">空调</div>
+            <div style="height:26px;border-radius:6px;background:var(--c-low);display:grid;place-items:center;font-size:8px;color:var(--on-bg)">设置</div>
+            <div style="height:26px;border-radius:6px;background:var(--c-low);display:grid;place-items:center;font-size:8px;color:var(--on-bg)">蓝牙</div>
+            <div style="height:26px;border-radius:6px;background:var(--c-low);display:grid;place-items:center;font-size:8px;color:var(--on-bg)">天气</div>
+          </div>
+          <div style="flex:1"></div>
+          <!-- 字幕（被拖到右下，带蓝框） -->
+          <div style="display:flex;justify-content:flex-end;flex:none">
+            <div style="border:2px solid #58a6ff;border-radius:8px;background:rgba(0,0,0,.28);padding:5px 9px;font-size:13px;color:#fff;font-weight:700;text-shadow:0 2px 6px rgba(0,0,0,.6)">拖动到想要的位置</div>
+          </div>
+          <!-- 拖动标注 -->
+          <div style="position:absolute;right:8px;top:44px;background:rgba(0,0,0,.72);border:1px solid rgba(88,166,255,.6);border-radius:5px;padding:3px 6px;font-size:7.5px;color:#79c0ff;line-height:1.3">✋ 横竖都可拖<br>松手即落盘</div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:var(--board-dim);margin-top:6px;line-height:1.6">摘掉 <code>NOT_TOUCHABLE</code>；2dp 蓝色圆角描边提示可拖；位置可移到屏幕任意处</div>
+    </div>
+
+    <!-- ============ 状态三：App 前台 ============ -->
+    <div style="flex:1 1 320px;min-width:0">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px">
+        <span style="width:8px;height:8px;border-radius:50%;background:#d29922;flex:none"></span>
+        <span style="font-size:12px;font-weight:700;color:var(--board-fg)">③ App 前台 · 隐藏</span>
+      </div>
+      <div style="position:relative;height:300px;border-radius:12px;overflow:hidden;border:1px solid var(--c-low);display:flex;flex-direction:column">
+        <div style="height:22px;display:flex;align-items:center;gap:7px;padding:0 9px;font-size:9px;font-weight:600;color:var(--on-bg);opacity:.7;background:var(--player-top);flex:none">
+          <span>9:41</span><span>🎵 正在播放</span><span style="flex:1"></span><span>听风</span>
+        </div>
+        <!-- App 播放页 -->
+        <div style="flex:1;padding:10px 12px;background:linear-gradient(180deg,var(--player-top) 0%,var(--player-mid) 48%,var(--bg) 100%);display:flex;flex-direction:column;position:relative">
+          <div style="text-align:center;font-size:9.5px;color:var(--on-bg);font-weight:600;flex:none">听风</div>
+          <div style="text-align:center;font-size:7.5px;color:var(--on-surface-variant);margin-top:1px;flex:none">WindTone</div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px">
+            <span style="font-size:8.5px;color:var(--on-surface-variant);opacity:.42">城市的夜 灯火阑珊</span>
+            <span style="font-size:11px;color:var(--primary);font-weight:700">是你陪我走过 那段最美的时光</span>
+            <span style="font-size:8.5px;color:var(--on-surface-variant);opacity:.42">风轻轻吹过 谁的头发</span>
+          </div>
+          <div style="height:3px;border-radius:2px;background:var(--c-low);flex:none">
+            <div style="width:36%;height:100%;border-radius:2px;background:var(--primary)"></div>
+          </div>
+          <!-- 隐藏标注 -->
+          <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.75);border-radius:6px;padding:4px 8px;font-size:7.5px;color:#e3b341;white-space:nowrap">字幕不显示 · 播放页已有歌词</div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:var(--board-dim);margin-top:6px;line-height:1.6">用 <code>ON_START</code>/<code>ON_STOP</code> 判定；避免与播放页歌词重复</div>
+    </div>
+
+    <!-- ============ 状态四：默认居中位置（v1.0.5 修正） ============ -->
+    <div style="flex:1 1 320px;min-width:0">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px">
+        <span style="width:8px;height:8px;border-radius:50%;background:#a371f7;flex:none"></span>
+        <span style="font-size:12px;font-weight:700;color:var(--board-fg)">④ 默认位置 · 水平居中</span>
+      </div>
+      <div style="position:relative;height:300px;border-radius:12px;overflow:hidden;border:1px solid var(--c-low);display:flex;flex-direction:column">
+        <div style="height:22px;display:flex;align-items:center;gap:7px;padding:0 9px;font-size:9px;font-weight:600;color:var(--on-bg);opacity:.7;background:var(--player-top);flex:none">
+          <span>9:41</span><span>🌡 24°C</span><span style="flex:1"></span><span>听风</span>
+        </div>
+        <div style="flex:1;padding:0;background:linear-gradient(180deg,var(--player-top) 0%,var(--player-mid) 55%,var(--bg) 100%);position:relative">
+          <!-- 距顶 48dp 参考线 -->
+          <div style="position:absolute;left:0;right:0;top:18px;border-top:1px dashed rgba(163,113,247,.55)"></div>
+          <div style="position:absolute;left:6px;top:20px;font-size:7.5px;color:#a371f7">48dp</div>
+          <!-- 居中字幕 -->
+          <div style="position:absolute;left:0;right:0;top:18px;display:flex;justify-content:center">
+            <span style="color:#fff;font-weight:700;font-size:13px;text-shadow:0 2px 6px rgba(0,0,0,.6)">是你陪我走过 那段最美的时光</span>
+          </div>
+          <!-- 中心对齐参考线 -->
+          <div style="position:absolute;left:50%;top:0;bottom:0;border-left:1px dashed rgba(163,113,247,.35)"></div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:86px 12px 0">
+            <div style="height:26px;border-radius:6px;background:var(--c-low);display:grid;place-items:center;font-size:8px;color:var(--on-bg)">导航</div>
+            <div style="height:26px;border-radius:6px;background:var(--c-low);display:grid;place-items:center;font-size:8px;color:var(--on-bg)">音乐</div>
+            <div style="height:26px;border-radius:6px;background:var(--c-low);display:grid;place-items:center;font-size:8px;color:var(--on-bg)">电台</div>
+            <div style="height:26px;border-radius:6px;background:var(--c-low);display:grid;place-items:center;font-size:8px;color:var(--on-bg)">电话</div>
+          </div>
+          <div style="position:absolute;left:12px;right:12px;bottom:12px;display:flex;align-items:center;gap:7px;background:var(--c-low);border-radius:8px;padding:6px 8px">
+            <div style="width:22px;height:22px;border-radius:5px;background:var(--primary-container);flex:none"></div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:9px;color:var(--on-bg);font-weight:600">听风</div>
+              <div style="font-size:7.5px;color:var(--on-surface-variant)">正在播放</div>
+            </div>
+            <span style="font-size:7.5px;color:var(--on-surface-variant)">1:24</span>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:var(--board-dim);margin-top:6px;line-height:1.6">从未调整过时走这一态：<code>TOP|CENTER_HORIZONTAL</code> + 状态栏下方 64dp（让开状态栏与桌面媒体胶囊）</div>
+    </div>
+
+  </div>
+
+  <p class="note"><b>关键点：</b>用户可在 ㊳ 车机设置 / ㉙ 设置页 →「歌词」→「桌面悬浮歌词」里开关（默认关）；播放页「播放设置」弹层的歌词分组里也有同一个开关（不必钻进三级菜单）。<br>  <b>只在 App 退到后台时显示</b>：回到本应用界面（正在看播放页歌词）自动隐藏，离开前台再放出来——避免和播放页歌词重复。判定用 Activity 的 <code>ON_START</code> / <code>ON_STOP</code>（不是 RESUME/PAUSE，后者会让系统权限弹窗等短暂遮挡闪一下）。<b>另外灭屏也隐藏</b>（<code>ACTION_SCREEN_OFF</code>：看不见还继续画是白耗电，导航整段灭屏时这点电要省）。<b>三个例外</b>：调整模式下、开启开关后的 6 秒前台预览、改外观设置后的即时预览。<br>
+  <b>形态</b>：1~3 行文字，外加「当前行有翻译时」的一行双语副行。锁定态<b>默认有一层半透明深色圆角底板</b>——早期是「纯白字 + 黑色投影、无底板」，实机在亮色壁纸 / 桌面白色搜索框上完全看不清（投影半径按像素算，3x 屏上只有 2dp），这是踩过的坑，不是审美偏好。底板可切成「无 / 半透明 / 深色实底」三档。<br>
+  字号 20sp 基准、小 / 中 / 大三档，宽度夹在屏宽 90% 以内（大字号 + 长句不会横向溢出被裁）；暂停时淡出到 55% 或隐藏（可配）；行切换带 120ms 淡入淡出；当前行靠「颜色 / 字号 / 字重 / 亮度」四件事突出，<b>不随播放进度变化</b>（v1.1.8 起整窗只有「文字颜色」一处可调）。<br>
+  <b>窗内文字对齐可配</b>（居中 / 居左，默认居中）：对齐<b>只管歌词文字在窗口内部怎么排</b>——居中 = 折行后各行也居中；居左 = 文字 <code>gravity</code> 切到 <code>START</code>，每行从同一条竖线起排。<b>与窗口摆在屏幕哪儿无关</b>：窗口位置完全由拖动决定（2026-10-16 用户拍板，推翻「横向归对齐」，见下方「位置记忆」）。<br>
+  <b>窗口宽度决定横向可拖多远</b>：可移动量 = <code>屏宽 − 窗宽</code>，所以「悬浮歌词宽度」既是换行上限、也是横向活动余量；<b>默认 80%</b>（100% 时余量归零，窗口只能上下移动）。宽度行右侧的 ↺ 可一键回到 80%。<br>
+  <b>前奏 / 间奏不会让字幕整体消失</b>（这是修过的真实缺陷）：前奏（还没到第一句）回落显示<b>歌名</b>并把第一句作为「下一句」预告；间奏（LRC 里带时间戳的空行）<b>停在上一句并压暗</b>。判定逻辑收在 <code>OverlayContentResolver</code>（纯函数，有单测覆盖）。<br>
+  <b>两种模式</b>：<br>
+  &nbsp;&nbsp;① <b>锁定态（日常）</b>——窗口带 <code>FLAG_NOT_TOUCHABLE</code>，手指划过去直接穿透到桌面，不影响导航操作。<br>
+  &nbsp;&nbsp;② <b>调整态</b>——设置页 / 播放设置里点「调整悬浮歌词位置」进入，摘掉 <code>NOT_TOUCHABLE</code> 变成可拖，字幕四周出现 2dp 蓝色圆角描边 + 淡黑底提示「拖动到合适位置，松手即保存」；拖动按<b>手指位移增量</b>推动窗口（不是绝对定位，避免按下瞬间跳位）；<b>横纵两轴都可拖</b>，松手即把坐标落盘。点「完成调整」锁回穿透态。<b>60 秒没人动会自动锁定</b>并弹一条提示——否则用户忘了点「完成调整」退到桌面，屏幕上会一直留着一条吃触摸的横条。<br>
+  <b>位置记忆</b>：<b>窗口位置完全由拖动决定</b>（2026-10-16 用户拍板，推翻此前「横向归对齐设置」——用户要的是悬浮窗能自由拖到任意位置；「对齐」只管窗内文字排版）。<br>
+  &nbsp;&nbsp;横向存 <code>lyric_overlay_x</code>（键本来就在，2026-10-15 一度废弃、现恢复）、纵向存 <code>lyric_overlay_y</code>，<code>Int.MIN_VALUE</code> = 没拖过：横向走「(屏宽 − 窗宽) / 2」真居中，纵向走「<b>状态栏下方 + 64dp</b>」（64dp 是实测让开荣耀 / Honor 桌面顶部媒体胶囊条的值）。默认横向必须用「屏宽 − 窗宽」算而不能用 gravity 的 <code>CENTER_HORIZONTAL</code>——后者的 <code>x=0</code> 是「相对屏幕中心的偏移」，与拖动坐标系（<code>x</code> = 距左沿像素）不能共存，拖一下就会跳半屏。拖动过则沿用绝对值，并在横竖屏切换 / 换分辨率后按「屏幕尺寸 − 窗口尺寸」自动夹取回屏幕内。窗口被推到屏幕外时，设置页「悬浮歌词自检」里的「重置位置并预览」是唯一出路（桌面上根本抓不到它）。<br>
+  <b>边界与坐标系（v1.0.5 修正 · 2026-10-15 收窄为纵向 · 2026-10-16 恢复双轴）</b>：<br>
+  &nbsp;&nbsp;① <b>默认居中</b>——未拖过时横向 = <code>(屏宽 − 窗宽) / 2</code>、纵向 = 状态栏下方 64dp。<br>
+  &nbsp;&nbsp;② <b>拖动不越界</b>——夹取上限为「屏幕尺寸 − 窗口尺寸」（横纵两轴同理），否则能把窗口整个推到边缘之外，松手后再也抓不回来。<br>
+  &nbsp;&nbsp;③ <b>横向可移动量 = 屏宽 − 窗宽</b>——由 ② 直接推出一条容易被当成 bug 的几何事实：<b>窗口宽度越大，横向能拖的余量越小</b>；宽度调到 <b>100% 时正好为 0</b>，悬浮窗在横向上被钉死，表现为「只能上下移动」（2026-10-16 用户报回的问题就是这个，不是接线错误）。因此「悬浮歌词宽度」的<b>默认值是 80% 而非 100%</b>，且宽度设为 100% 时该行副标题会直接写明「已占满屏宽，无法左右移动」。<code>OverlayPositionerTest</code> 里专门钉了一条「窗口宽度等于屏幕宽度时横向锁死在 0」。<br>
+  &nbsp;&nbsp;④ <b>坐标系已统一</b>——v1.0.5 曾因「居中下 <code>x</code> 是相对屏幕中心的偏移、拖动却是绝对左上角」做过归一化又删除；2026-10-16 起窗口位置全部走拖动坐标（<code>x</code> / <code>y</code> 都是距屏幕左 / 顶沿的像素），<code>lastRawX</code> / <code>lastRawY</code> 双轴增量累加，没有两套坐标打架的问题了。<br>
+  <b>权限</b>：需 <code>SYSTEM_ALERT_WINDOW</code>（「出现在其他应用上」）。开启开关时若未授权自动跳系统授权页，返回后自动打开开关。<br>
+  <b>比亚迪 DiLink 提示</b>：部分车型需把应用加入白名单，或先强停一次应用进程，否则授权后可能黑屏。</p>
+</figure>
+
+  </div>
+</section>
+
+  <div class="pagenav">
+    <a href="05-extras.html">← 小组件·通知</a>
+    <a href="index.html">↑ 全部屏</a>
+    <a href="07-spec.html">颜色与尺寸 →</a>
+  </div>
+</div>
+
+<script src="ui.js"></script>
+</body>
+</html>

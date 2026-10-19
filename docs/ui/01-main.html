@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>一、主界面 · 听风 WindTone UI 效果图</title>
+<script>
+/* 主题必须在样式之前定位，避免首帧闪错色：
+   1) 用户手动切过 → 用记住的选择（localStorage）
+   2) 没切过 → 跟随系统 prefers-color-scheme（App 也是跟随系统主题） */
+(function(){
+  try{
+    var saved=localStorage.getItem('wt-ui-theme');
+    var theme=saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme',theme);
+  }catch(e){
+    document.documentElement.setAttribute('data-theme','dark');
+  }
+})();
+</script>
+<link rel="stylesheet" href="ui.css">
+</head>
+<body>
+<script src="ui-sprite.js"></script>
+
+<header class="board-head">
+  <div class="bh-row">
+    <a class="backdocs" href="index.html">← 效果图总览</a>
+    <div class="bh-title">一、主界面<small>UI 效果图 · 设计基准（第 1 / 7 章）</small></div>
+    <span class="bh-badge"><span id="pageCount">14</span> 屏</span>
+    <span class="bh-badge">对齐 v1.1.29</span>
+    <button class="tgl" id="themeBtn">🌙 深色主题</button>
+  </div>
+  <nav class="bh-nav"><a href="01-main.html" class="on">主界面</a><a href="02-player.html">播放页</a><a href="03-sheets.html">抽屉与弹窗</a><a href="04-settings.html">设置页</a><a href="05-extras.html">小组件·通知</a><a href="06-car.html">车机版</a><a href="07-spec.html">颜色与尺寸</a></nav>
+</header>
+
+<div class="wrap">
+<section class="sec" id="sec-main">
+  <div class="sec-hd"><h2>一、主界面</h2><span>MainScreen.kt · Common.kt —— 顶栏（汉堡开抽屉）+ 列表 + 迷你播放条 + 侧边抽屉</span></div>
+  <div class="board">
+<figure class="fig" id="scr-songs">
+  <div class="cap"><b>① 歌曲列表（主态）</b><em>MainScreen · SongsList / Common.SongRow</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="topbar">
+        <div class="tb-row">
+          <button class="ibtn" data-menu title="打开侧边抽屉"><svg class="ic"><use href="#i-menu"/></svg></button>
+          <h1 class="lib-title">本地音乐</h1><span class="pill">500 首</span><div class="sp"></div>
+          <button class="ibtn"><svg class="ic"><use href="#i-search"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-sort"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="stat-row">
+          <span class="chip-scope"><svg class="ic ic-13"><use href="#i-folder"/></svg>指定目录 2 个</span>
+          <span class="sp"></span><span class="stat-text">共 500 首 · 含歌词文件 318 首</span>
+        </div>
+      </div>
+      <div class="list" style="position:relative">
+        <div class="song-row">
+          <div class="cov cov-48 c1"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">晴天</div>
+            <div class="song-sub"><span>周杰伦</span><span class="badge badge-lrc">LRC</span></div></div>
+          <div class="song-time">4:29</div>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="song-row playing">
+          <div class="cov cov-48 c2"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">夜曲</div>
+            <div class="song-sub"><span>周杰伦</span><span class="badge badge-emb">内嵌</span></div></div>
+          <div class="song-time">3:46</div>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="song-row">
+          <div class="cov cov-48 c3"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">富士山下</div>
+            <div class="song-sub"><span>陈奕迅</span><span class="badge badge-lrc">LRC</span></div></div>
+          <div class="song-time">4:19</div>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="song-row">
+          <div class="cov cov-48 c4"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">平凡之路</div>
+            <div class="song-sub"><span>朴树</span><span class="badge badge-emb">内嵌</span></div></div>
+          <div class="song-time">5:03</div>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="song-row">
+          <div class="cov cov-48 c5"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">海阔天空</div>
+            <div class="song-sub"><span>Beyond</span><span class="badge badge-lrc">LRC</span></div></div>
+          <div class="song-time">5:22</div>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="song-row">
+          <div class="cov cov-48 c6"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">起风了</div>
+            <div class="song-sub"><span>买辣椒也用券</span><span class="badge badge-emb">内嵌</span></div></div>
+          <div class="song-time">5:11</div>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="idx-bar"><b>#</b><span>A</span><span>B</span><span>C</span><span>D</span><span>F</span><span>H</span><span>J</span><span>L</span><span>P</span><span>Q</span><span>S</span><span>W</span><span>X</span><span>Y</span><span>Z</span></div>
+        <div class="fab"><svg class="ic ic-18"><use href="#i-play"/></svg>回到当前播放</div>
+      </div>
+      <div class="mini">
+        <div class="mini-track"><i style="width:56%"></i></div>
+        <div class="mini-row">
+          <div class="cov cov-46 c2"><svg><use href="#i-note"/></svg></div>
+          <div class="mini-main"><div class="mini-title">夜曲</div><div class="mini-sub">周杰伦 · 叶惠美</div></div>
+          <button class="ibtn fav-on" title="取消收藏"><svg class="ic ic-20"><use href="#i-heart"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-pause"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-next"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>① 顶部「本地音乐 + 数量胶囊 + 3 图标（搜索/排序/更多）」；② 统计行左侧扫描范围胶囊、右侧「共 N 首 · 含歌词文件 N 首」；
+  ③ 歌曲行：封面 48dp/圆角10 · 标题 15sp（当前播放项 primary 加粗）· 副行 = 歌手 + 歌词来源徽标（有 .lrc 显示 <b>LRC</b>，否则 <b>内嵌</b>）· 右侧时长 + ⋮；
+  ④ 行底色：普通 surfaceContainerLow，当前播放 primaryContainer 55%；⑤ 右侧字母索引仅在字母数 &gt; 4 时出现；⑥ 当前曲不在首位时右下浮出「回到当前播放」胶囊；
+  ⑦ 行点击 = 从该位置起播，长按 / 点 ⋮ = 打开歌曲操作抽屉；⑧ 迷你播放条 = 封面（左右滑切歌/双击暂停）+ 标题/歌手 + <b>收藏红心</b> + 播放暂停 + 下一首（无上一首键，上一首靠封面右滑）；
+  ⑨ <b>顶栏左侧汉堡按钮打开侧边抽屉</b>（见 ①C）——原底部五视图导航已整体移除，列表纵向空间因此多出一条导航栏的高度；
+  ⑩ <b>排序按视图各存一份</b>（v1.1.4「排序下沉」）：此前全 App 只有一份排序，在「专辑」里改成按歌手，切回「歌曲」也跟着变。现在<b>五个视图各记各的</b>，且排序菜单<b>只列该视图讲得通的项</b> —— 歌曲=标题/歌手/专辑/时长/添加时间/文件名；专辑=专辑名/歌手/添加时间；歌手=歌手名/添加时间；文件夹=文件夹名/路径/添加时间；歌单=歌单内顺序/标题/添加时间。文案也跟着视图变（同一枚举在文件夹视图下显示「按文件夹名」）。</p>
+</figure>
+
+<figure class="fig" id="scr-moremenu">
+  <div class="cap"><b>①B 顶栏「更多」下拉菜单（展开态）</b><em>MainScreen · LibraryHeader DropdownMenu</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="topbar">
+        <div class="tb-row">
+          <button class="ibtn" data-menu title="打开侧边抽屉"><svg class="ic"><use href="#i-menu"/></svg></button>
+          <h1 class="lib-title">本地音乐</h1><span class="pill">500 首</span><div class="sp"></div>
+          <button class="ibtn"><svg class="ic"><use href="#i-search"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-sort"/></svg></button>
+          <button class="ibtn" style="background:var(--c-highest)"><svg class="ic"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="stat-row">
+          <span class="chip-scope"><svg class="ic ic-13"><use href="#i-folder"/></svg>指定目录 2 个</span>
+          <span class="sp"></span><span class="stat-text">共 500 首 · 含歌词文件 318 首</span>
+        </div>
+      </div>
+      <div class="list" style="position:relative">
+        <div class="song-row"><div class="cov cov-48 c1"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">晴天</div><div class="song-sub"><span>周杰伦</span><span class="badge badge-lrc">LRC</span></div></div><div class="song-time">4:29</div></div>
+        <div class="song-row playing"><div class="cov cov-48 c2"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">夜曲</div><div class="song-sub"><span>周杰伦</span><span class="badge badge-emb">内嵌</span></div></div><div class="song-time">3:46</div></div>
+        <div class="song-row"><div class="cov cov-48 c3"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">富士山下</div><div class="song-sub"><span>陈奕迅</span><span class="badge badge-lrc">LRC</span></div></div><div class="song-time">4:19</div></div>
+        <div class="song-row"><div class="cov cov-48 c4"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">平凡之路</div><div class="song-sub"><span>朴树</span><span class="badge badge-emb">内嵌</span></div></div><div class="song-time">5:03</div></div>
+        <div class="menu" style="top:96px;right:12px;min-width:216px">
+          <div class="menu-item">扫描范围：指定目录 2 个</div>
+          <div class="menu-item">重新扫描当前范围</div>
+          <div class="menu-item">扫描全盘音乐…</div>
+          <div class="menu-item">导入音乐目录…</div>
+          <div class="menu-item">重新匹配 .lrc 歌词</div>
+          <div class="menu-item">导入 M3U 歌单…</div>
+          <div class="menu-item">所有文件访问权限（深度扫描）</div>
+        </div>
+      </div>
+      <div class="mini">
+        <div class="mini-track"><i style="width:56%"></i></div>
+        <div class="mini-row">
+          <div class="cov cov-46 c2"><svg><use href="#i-note"/></svg></div>
+          <div class="mini-main"><div class="mini-title">夜曲</div><div class="mini-sub">周杰伦 · 叶惠美</div></div>
+          <button class="ibtn fav-on" title="取消收藏"><svg class="ic ic-20"><use href="#i-heart"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-pause"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-next"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>菜单项按状态变化</b>（截图为「指定目录 + 已授权」状态）：<br>
+  · 首行扫描范围三态：「扫描范围：未选择」/「扫描范围：全盘扫描」/「扫描范围：指定目录 N 个」（点击打开扫描范围抽屉，见 ㉔）；范围 ≠ 未选择时其后多一行「重新扫描当前范围」；<br>
+  · 「扫描全盘音乐…」在已授权时显示，未授权时变为「授权并扫描全盘…」（仅范围 ≠ 全盘时出现）；<br>
+  · 「导入音乐目录…」「重新匹配 .lrc 歌词」「导入 M3U 歌单…」恒定；<br>
+  · 深度扫描项：未开启「所有文件访问权限（深度扫描）」/ 已开启「深度扫描：已开启（点击管理）」；<br>
+  · 范围 ≠ 全盘且未授权时插入「授予音频读取权限」。<b>v1.1.10 起本菜单不再放跳转项</b>——原来的末两项「检查更新」「设置」已删：设置只剩左侧抽屉一个入口，检查更新只在设置 → 更新里（同一个目的地三处入口没必要）。</p>
+</figure>
+
+<figure class="fig" id="scr-drawer">
+  <div class="cap"><b>①C 主界面 · 侧边抽屉（展开态）</b><em>MainScreen · ModalNavigationDrawer（顶栏汉堡按钮开合）</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app drawer-open">
+      <div class="topbar">
+        <div class="tb-row">
+          <button class="ibtn" data-menu title="收起抽屉"><svg class="ic"><use href="#i-menu"/></svg></button>
+          <h1 class="lib-title">本地音乐</h1><span class="pill">500 首</span><div class="sp"></div>
+          <button class="ibtn"><svg class="ic"><use href="#i-search"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-sort"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="stat-row">
+          <span class="chip-scope"><svg class="ic ic-13"><use href="#i-folder"/></svg>指定目录 2 个</span>
+          <span class="sp"></span><span class="stat-text">共 500 首 · 含歌词文件 318 首</span>
+        </div>
+      </div>
+      <div class="list">
+        <div class="song-row">
+          <div class="cov cov-48 c1"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">晴天</div>
+            <div class="song-sub"><span>周杰伦</span><span class="badge badge-lrc">LRC</span></div></div>
+          <div class="song-time">4:29</div>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="song-row playing">
+          <div class="cov cov-48 c2"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">夜曲</div>
+            <div class="song-sub"><span>周杰伦</span><span class="badge badge-emb">内嵌</span></div></div>
+          <div class="song-time">3:46</div>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="song-row">
+          <div class="cov cov-48 c3"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">富士山下</div>
+            <div class="song-sub"><span>陈奕迅</span><span class="badge badge-lrc">LRC</span></div></div>
+          <div class="song-time">4:19</div>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+      </div>
+      <div class="mini">
+        <div class="mini-track"><i style="width:56%"></i></div>
+        <div class="mini-row">
+          <div class="cov cov-46 c2"><svg><use href="#i-note"/></svg></div>
+          <div class="mini-main"><div class="mini-title">夜曲</div><div class="mini-sub">周杰伦 · 叶惠美</div></div>
+          <button class="ibtn fav-on" title="取消收藏"><svg class="ic ic-20"><use href="#i-heart"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-pause"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-next"/></svg></button>
+        </div>
+      </div>
+      <div class="dim d-dim"></div>
+      <nav class="drawer">
+        <div class="d-brand">
+          <span class="d-halo"><svg class="ic"><use href="#i-note"/></svg></span>
+          <span><span class="d-t">听风</span><span class="d-s">WindTone · 本地音乐</span></span>
+        </div>
+        <div class="d-label">音乐库</div>
+        <div class="d-item on"><svg class="ic ic-22"><use href="#i-note"/></svg>歌曲</div>
+        <div class="d-item"><svg class="ic ic-22"><use href="#i-album"/></svg>专辑</div>
+        <div class="d-item"><svg class="ic ic-22"><use href="#i-artist"/></svg>歌手</div>
+        <div class="d-item"><svg class="ic ic-22"><use href="#i-folder"/></svg>文件夹</div>
+        <div class="d-item"><svg class="ic ic-22"><use href="#i-library"/></svg>歌单</div>
+        <div class="d-gap"></div>
+        <div class="d-label">更多</div>
+        <div class="d-item"><svg class="ic ic-22"><use href="#i-folder"/></svg>扫描范围</div>
+        <div class="d-item"><svg class="ic ic-22"><use href="#i-tune"/></svg>设置</div>
+      </nav>
+    </div>
+  </div>
+  <p class="note"><b>v1.1.3 重构：底部五视图导航 → 侧边抽屉。</b>原底部的「歌曲 / 专辑 / 歌手 / 文件夹 / 歌单」五个浏览视图整体收入左侧抽屉，<b>可收起、可展开</b>：<br>
+  · <b>展开</b>：点顶栏左侧<b>汉堡按钮</b>（列表纵向空间因此多出一整条导航栏的高度）；<b>收起</b>：点遮罩、再点汉堡、或系统返回键；<br>
+  · 抽屉宽 280dp、右缘圆角 28dp（与底部弹层顶部同档）、滑入动画 220ms；<br>
+  · <b>第一组「音乐库」</b>= 原五个浏览视图，选中项 secondaryContainer 实底胶囊 + 加粗，切换视图不关闭抽屉（点视图即切换并收起，与 App 内实现一致）；<br>
+  · <b>第二组「更多」</b>=「扫描范围 / 设置」两个快捷入口。<b>入口收敛（v1.1.10）</b>：原来还有一项「检查更新」、并且本组目的地与顶栏「⋮」菜单重复，现已收口 ——<b>设置只有本抽屉一个入口</b>（顶栏菜单里那一项已删），<b>「检查更新」只在设置 → 更新里</b>（抽屉与顶栏各挂的那份都已删）；顶栏「⋮」菜单从此只放就地动作（扫描 / 导入 / 重匹配 / 收听报告），不放跳转项；<b>打开方式有两个</b>（v1.1.4 起）：顶栏左上角的汉堡按钮，或在内容区<b>任意位置向右滑动</b> —— 刻意不做成「从左边缘起手」，边缘手势的起手带只有十几 dp，车机上单手够不着，而且屏幕左缘正是系统「返回」手势区，抢不过它；<br>
+  · 抽屉盖在迷你播放条之上（遮罩拦住下层触摸），搜索态、首次进入态、扫描中态同样可从汉堡打开。</p>
+</figure>
+
+<figure class="fig" id="scr-search">
+  <div class="cap"><b>② 歌曲列表 · 搜索态</b><em>MainScreen · LibraryHeader.searchMode</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="topbar">
+        <div class="tb-row">
+          <div class="field" style="flex:1;margin-top:0;padding:10px 12px">
+            <label>搜索</label><div class="val" style="color:var(--on-surface-variant)">zjl</div>
+          </div>
+          <button class="ibtn"><svg class="ic"><use href="#i-close"/></svg></button>
+        </div>
+        <div class="stat-row">
+          <span style="font-size:11px;color:var(--on-surface-variant);font-weight:700">历史</span>
+          <span class="chip-scope">周杰伦</span><span class="chip-scope">夜曲</span><span class="chip-scope">粤语</span>
+          <span class="sp"></span><button class="txtbtn" style="font-size:12px">清空</button>
+        </div>
+      </div>
+      <div class="list">
+        <div class="song-row">
+          <div class="cov cov-48 c1"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">晴天</div>
+            <div class="song-sub"><span>周杰伦</span><span class="badge badge-lrc">LRC</span></div></div>
+          <div class="song-time">4:29</div>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="song-row">
+          <div class="cov cov-48 c2"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">夜曲</div>
+            <div class="song-sub"><span>周杰伦</span><span class="badge badge-emb">内嵌</span></div></div>
+          <div class="song-time">3:46</div>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="song-row">
+          <div class="cov cov-48 c7"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">稻香</div>
+            <div class="song-sub"><span>周杰伦</span><span class="badge badge-lrc">LRC</span></div></div>
+          <div class="song-time">3:43</div>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="song-row">
+          <div class="cov cov-48 c4"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">七里香</div>
+            <div class="song-sub"><span>周杰伦</span><span class="badge badge-emb">内嵌</span></div></div>
+          <div class="song-time">4:59</div>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+      </div>
+      <div class="mini">
+        <div class="mini-track"><i style="width:56%"></i></div>
+        <div class="mini-row">
+          <div class="cov cov-46 c2"><svg><use href="#i-note"/></svg></div>
+          <div class="mini-main"><div class="mini-title">夜曲</div><div class="mini-sub">周杰伦 · 叶惠美</div></div>
+          <button class="ibtn fav-on" title="取消收藏"><svg class="ic ic-20"><use href="#i-heart"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-pause"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-next"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>搜索框 placeholder「搜索歌名 / 歌手 / 专辑 / 文件名 / 拼音」，圆角 10dp；输入为空且存在历史时展示「历史 + 关键词 AssistChip + 清空」；
+  支持拼音首字母（如 <b>zjl</b> → 周杰伦）。无结果时切换为「没有匹配的结果」空态（见 ⑪）。</p>
+</figure>
+
+<figure class="fig" id="scr-album">
+  <div class="cap"><b>③ 专辑视图</b><em>MainScreen · GroupListView（ALBUM）</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="topbar">
+        <div class="tb-row">
+          <button class="ibtn" data-menu title="打开侧边抽屉"><svg class="ic"><use href="#i-menu"/></svg></button>
+          <h1 class="lib-title">本地音乐</h1><span class="pill">500 首</span><div class="sp"></div>
+          <button class="ibtn"><svg class="ic"><use href="#i-search"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-sort"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="stat-row"><span class="chip-scope"><svg class="ic ic-13"><use href="#i-folder"/></svg>指定目录 2 个</span><span class="sp"></span><span class="stat-text">共 500 首 · 含歌词文件 318 首</span></div>
+      </div>
+      <div class="list">
+        <div class="group-row">
+          <div class="cov cov-52 c1"><svg><use href="#i-note"/></svg></div>
+          <div class="group-main"><div class="group-title">叶惠美</div><div class="group-sub">周杰伦</div></div>
+          <span class="pill-n">11</span>
+        </div>
+        <div class="group-row">
+          <div class="cov cov-52 c3"><svg><use href="#i-note"/></svg></div>
+          <div class="group-main"><div class="group-title">What's Going On…?</div><div class="group-sub">陈奕迅</div></div>
+          <span class="pill-n">10</span>
+        </div>
+        <div class="group-row">
+          <div class="cov cov-52 c4"><svg><use href="#i-note"/></svg></div>
+          <div class="group-main"><div class="group-title">生如夏花</div><div class="group-sub">朴树</div></div>
+          <span class="pill-n">11</span>
+        </div>
+        <div class="group-row">
+          <div class="cov cov-52 c5"><svg><use href="#i-note"/></svg></div>
+          <div class="group-main"><div class="group-title">乐与怒</div><div class="group-sub">Beyond</div></div>
+          <span class="pill-n">12</span>
+        </div>
+        <div class="group-row">
+          <div class="cov cov-52 c6"><svg><use href="#i-note"/></svg></div>
+          <div class="group-main"><div class="group-title">山丘</div><div class="group-sub">李宗盛</div></div>
+          <span class="pill-n">10</span>
+        </div>
+        <div class="group-row">
+          <div class="cov cov-52 c8"><svg><use href="#i-note"/></svg></div>
+          <div class="group-main"><div class="group-title">范特西</div><div class="group-sub">周杰伦</div></div>
+          <span class="pill-n">10</span>
+        </div>
+      </div>
+      <div class="mini">
+        <div class="mini-track"><i style="width:56%"></i></div>
+        <div class="mini-row">
+          <div class="cov cov-46 c2"><svg><use href="#i-note"/></svg></div>
+          <div class="mini-main"><div class="mini-title">夜曲</div><div class="mini-sub">周杰伦 · 叶惠美</div></div>
+          <button class="ibtn fav-on" title="取消收藏"><svg class="ic ic-20"><use href="#i-heart"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-pause"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-next"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>分组行 = 52dp 封面（圆角 12）+ 标题（专辑名）+ 副标题（歌手）+ 右侧数量胶囊；副标题为空时回退显示「N 首」；
+  点击整行进分组详情；空库时显示「暂无分组 / 扫描完成后即可按此维度浏览」。歌手视图同构（标题=歌手、副标题=N 首）。</p>
+</figure>
+
+<figure class="fig" id="scr-artist">
+  <div class="cap"><b>④ 歌手视图</b><em>MainScreen · GroupListView（ARTIST）</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="topbar">
+        <div class="tb-row">
+          <button class="ibtn" data-menu title="打开侧边抽屉"><svg class="ic"><use href="#i-menu"/></svg></button>
+          <h1 class="lib-title">本地音乐</h1><span class="pill">500 首</span><div class="sp"></div>
+          <button class="ibtn"><svg class="ic"><use href="#i-search"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-sort"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="stat-row"><span class="chip-scope"><svg class="ic ic-13"><use href="#i-folder"/></svg>指定目录 2 个</span><span class="sp"></span><span class="stat-text">共 500 首 · 含歌词文件 318 首</span></div>
+      </div>
+      <div class="list">
+        <div class="group-row">
+          <div class="cov cov-52 c1"><svg style="fill:currentColor;opacity:.9"><use href="#i-artist"/></svg></div>
+          <div class="group-main"><div class="group-title">周杰伦</div><div class="group-sub">128 首</div></div>
+          <span class="pill-n">128</span>
+        </div>
+        <div class="group-row">
+          <div class="cov cov-52 c3"><svg style="fill:currentColor;opacity:.9"><use href="#i-artist"/></svg></div>
+          <div class="group-main"><div class="group-title">陈奕迅</div><div class="group-sub">96 首</div></div>
+          <span class="pill-n">96</span>
+        </div>
+        <div class="group-row">
+          <div class="cov cov-52 c5"><svg style="fill:currentColor;opacity:.9"><use href="#i-artist"/></svg></div>
+          <div class="group-main"><div class="group-title">Beyond</div><div class="group-sub">61 首</div></div>
+          <span class="pill-n">61</span>
+        </div>
+        <div class="group-row">
+          <div class="cov cov-52 c4"><svg style="fill:currentColor;opacity:.9"><use href="#i-artist"/></svg></div>
+          <div class="group-main"><div class="group-title">朴树</div><div class="group-sub">43 首</div></div>
+          <span class="pill-n">43</span>
+        </div>
+        <div class="group-row">
+          <div class="cov cov-52 c6"><svg style="fill:currentColor;opacity:.9"><use href="#i-artist"/></svg></div>
+          <div class="group-main"><div class="group-title">李宗盛</div><div class="group-sub">37 首</div></div>
+          <span class="pill-n">37</span>
+        </div>
+        <div class="group-row">
+          <div class="cov cov-52 c8"><svg style="fill:currentColor;opacity:.9"><use href="#i-artist"/></svg></div>
+          <div class="group-main"><div class="group-title">王菲</div><div class="group-sub">29 首</div></div>
+          <span class="pill-n">29</span>
+        </div>
+      </div>
+      <div class="mini">
+        <div class="mini-track"><i style="width:56%"></i></div>
+        <div class="mini-row">
+          <div class="cov cov-46 c2"><svg><use href="#i-note"/></svg></div>
+          <div class="mini-main"><div class="mini-title">夜曲</div><div class="mini-sub">周杰伦 · 叶惠美</div></div>
+          <button class="ibtn fav-on" title="取消收藏"><svg class="ic ic-20"><use href="#i-heart"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-pause"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-next"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>无封面时用「歌手」图标占位（primaryContainer 底 + onPrimaryContainer 图标）。</p>
+</figure>
+
+<figure class="fig" id="scr-folder">
+  <div class="cap"><b>⑤ 文件夹视图（⋮ 菜单展开）</b><em>MainScreen · GroupListView（FOLDER，canRemove=true）</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="topbar">
+        <div class="tb-row">
+          <button class="ibtn" data-menu title="打开侧边抽屉"><svg class="ic"><use href="#i-menu"/></svg></button>
+          <h1 class="lib-title">本地音乐</h1><span class="pill">500 首</span><div class="sp"></div>
+          <button class="ibtn"><svg class="ic"><use href="#i-search"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-sort"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="stat-row"><span class="chip-scope"><svg class="ic ic-13"><use href="#i-folder"/></svg>指定目录 2 个</span><span class="sp"></span><span class="stat-text">共 500 首 · 含歌词文件 318 首</span></div>
+      </div>
+      <div class="list" style="position:relative">
+        <div class="group-row">
+          <div class="cov cov-52 c1"><svg style="fill:currentColor;opacity:.9"><use href="#i-folder"/></svg></div>
+          <div class="group-main"><div class="group-title">华语流行</div><div class="group-sub">168 首</div></div>
+          <span class="pill-n">168</span>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="group-row">
+          <div class="cov cov-52 c3"><svg style="fill:currentColor;opacity:.9"><use href="#i-folder"/></svg></div>
+          <div class="group-main"><div class="group-title">粤语经典</div><div class="group-sub">92 首</div></div>
+          <span class="pill-n">92</span>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="group-row">
+          <div class="cov cov-52 c4"><svg style="fill:currentColor;opacity:.9"><use href="#i-folder"/></svg></div>
+          <div class="group-main"><div class="group-title">无损合集</div><div class="group-sub">214 首</div></div>
+          <span class="pill-n">214</span>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="group-row">
+          <div class="cov cov-52 c5"><svg style="fill:currentColor;opacity:.9"><use href="#i-folder"/></svg></div>
+          <div class="group-main"><div class="group-title">纯音乐</div><div class="group-sub">26 首</div></div>
+          <span class="pill-n">26</span>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="menu" style="top:196px;right:22px">
+          <div class="menu-item">移除扫描结果</div>
+        </div>
+      </div>
+      <div class="mini">
+        <div class="mini-track"><i style="width:56%"></i></div>
+        <div class="mini-row">
+          <div class="cov cov-46 c2"><svg><use href="#i-note"/></svg></div>
+          <div class="mini-main"><div class="mini-title">夜曲</div><div class="mini-sub">周杰伦 · 叶惠美</div></div>
+          <button class="ibtn fav-on" title="取消收藏"><svg class="ic ic-20"><use href="#i-heart"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-pause"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-next"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>只有文件夹视图的分组行带 ⋮（专辑/歌手视图没有），菜单唯一项「移除扫描结果」，点击弹确认框（见 ⑳）；
+  <b>「未知目录」不再作为分组显示</b>（folders → filterKeys { it != "未知目录" }）。<br>
+  <b>组标题口径</b>：只显示<b>最后一个文件夹名字</b>——SAF 导入的目录直接用所选目录名，全盘扫描下的真实父目录取路径最后一段
+  （<code>/storage/emulated/0/Music/华语</code> →「华语」）；分组键仍是完整路径，同名目录不会互相合并（详见 ⑤B）。</p>
+</figure>
+
+<figure class="fig" id="scr-folder-grouping">
+  <div class="cap"><b>⑤B 文件夹视图 · 分组规则（按所选目录）</b><em>FolderScanner.kt → folderPath = 所选目录完整文档 ID；组标题 = 最后一个文件夹名字</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="topbar">
+        <div class="tb-row">
+          <button class="ibtn" data-menu title="打开侧边抽屉"><svg class="ic"><use href="#i-menu"/></svg></button>
+          <h1 class="lib-title">本地音乐</h1><span class="pill">1,784 首</span><div class="sp"></div>
+          <button class="ibtn"><svg class="ic"><use href="#i-search"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-sort"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="stat-row"><span class="chip-scope"><svg class="ic ic-13"><use href="#i-folder"/></svg>指定目录 2 个</span><span class="sp"></span><span class="stat-text">共 1,784 首 · 含歌词文件 921 首</span></div>
+      </div>
+      <div class="list">
+        <div class="group-row">
+          <div class="cov cov-52 c1"><svg style="fill:currentColor;opacity:.9"><use href="#i-folder"/></svg></div>
+          <div class="group-main"><div class="group-title">Music</div><div class="group-sub">452 首 · 含子目录</div></div>
+          <span class="pill-n">452</span>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="group-row">
+          <div class="cov cov-52 c3"><svg style="fill:currentColor;opacity:.9"><use href="#i-folder"/></svg></div>
+          <div class="group-main"><div class="group-title">Music</div><div class="group-sub">/storage/emulated/0/Download/Music · 1,284 首</div></div>
+          <span class="pill-n">1,284</span>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="group-row">
+          <div class="cov cov-52 c5"><svg style="fill:currentColor;opacity:.9"><use href="#i-folder"/></svg></div>
+          <div class="group-main"><div class="group-title">Download</div><div class="group-sub">48 首 · 含子目录</div></div>
+          <span class="pill-n">48</span>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+      </div>
+      <div class="mini">
+        <div class="mini-track"><i style="width:56%"></i></div>
+        <div class="mini-row">
+          <div class="cov cov-46 c2"><svg><use href="#i-note"/></svg></div>
+          <div class="mini-main"><div class="mini-title">夜曲</div><div class="mini-sub">周杰伦 · 叶惠美</div></div>
+          <button class="ibtn fav-on" title="取消收藏"><svg class="ic ic-20"><use href="#i-heart"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-pause"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-next"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>分组规则（v1.0.5 起，v1.0.7 强化）</b>：分组粒度 = <b>用户在系统文件选择器里挑中的那一层目录</b>，其下所有子目录的歌曲都归到这一组，子目录不再单独成组。<br>
+  · <b>分组键（key）</b>：SAF 导入目录用<b>解码后的完整文档 ID</b>（如 <code>primary:Music/华语</code>），全盘扫描用绝对父路径 —— 两个不同位置的同名目录<b>各自成组，不会互相合并</b>；<br>
+  · <b>组标题</b>：仍然只显示<b>最后一个文件夹名字</b>（<code>folderDisplayName()</code> 取路径最后一段）；当多个分组的叶名相同时，<b>副标题带父路径消歧</b>（如「Download/Music · 1,284 首」，见第二行示例）；<br>
+  · <b>目录登记表</b>：每次扫描成功后把导入目录 upsert 进 Room 表 <code>scanned_folders</code>（自增 id / treeUri / docId / fullPath / name / addedAt），移除目录时同步删行 —— 这就是「按添加的目录显示、移除时目录一并移除」的数据基础；<br>
+  · <b>全盘扫描 / 深度扫描</b>：没有「所选目录」概念，按音频真实父目录分组，口径同上；<br>
+  · <b>混合来源去重</b>：同一首歌若同时被媒体库与 SAF 扫到，按 stableKey 去重，先到的来源决定它落在哪一组。<br>
+  <b>升级提示</b>：分组键从「叶名」改为「完整文档 ID」需要重扫才生效——升级后请手动触发一次「重新扫描」（或等下次冷启动自动扫描）。</p>
+</figure>
+
+<figure class="fig" id="scr-playlist">
+  <div class="cap"><b>⑥ 歌单列表</b><em>MainScreen · PlaylistListView</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="topbar">
+        <div class="tb-row">
+          <button class="ibtn" data-menu title="打开侧边抽屉"><svg class="ic"><use href="#i-menu"/></svg></button>
+          <h1 class="lib-title">本地音乐</h1><span class="pill">500 首</span><div class="sp"></div>
+          <button class="ibtn"><svg class="ic"><use href="#i-search"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-sort"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="stat-row"><span class="chip-scope"><svg class="ic ic-13"><use href="#i-folder"/></svg>指定目录 2 个</span><span class="sp"></span><span class="stat-text">共 500 首 · 含歌词文件 318 首</span></div>
+      </div>
+      <div class="list">
+        <div class="list-hd"><b>我的歌单</b><button class="txtbtn">导入 M3U</button></div>
+        <div class="group-row">
+          <div class="cov cov-52" style="background:var(--primary-container);color:var(--on-primary-container)"><svg style="fill:currentColor;opacity:.9"><use href="#i-queue"/></svg></div>
+          <div class="group-main"><div class="group-title">最近播放</div><div class="group-sub">60 首</div></div>
+          <span class="pill-n">60</span>
+        </div>
+        <div class="group-row">
+          <div class="cov cov-52" style="background:var(--primary-container);color:var(--on-primary-container)"><svg style="fill:currentColor;opacity:.9"><use href="#i-queue"/></svg></div>
+          <div class="group-main"><div class="group-title">最常播放</div><div class="group-sub">40 首</div></div>
+          <span class="pill-n">40</span>
+        </div>
+        <div class="group-row">
+          <div class="cov cov-52 c6"><svg><use href="#i-note"/></svg></div>
+          <div class="group-main"><div class="group-title">深夜单曲循环</div><div class="group-sub">18 首</div></div>
+          <span class="pill-n">18</span>
+        </div>
+        <div class="group-row">
+          <div class="cov cov-52 c3"><svg><use href="#i-note"/></svg></div>
+          <div class="group-main"><div class="group-title">通勤路上的歌</div><div class="group-sub">26 首</div></div>
+          <span class="pill-n">26</span>
+        </div>
+      </div>
+      <div class="mini">
+        <div class="mini-track"><i style="width:56%"></i></div>
+        <div class="mini-row">
+          <div class="cov cov-46 c2"><svg><use href="#i-note"/></svg></div>
+          <div class="mini-main"><div class="mini-title">夜曲</div><div class="mini-sub">周杰伦 · 叶惠美</div></div>
+          <button class="ibtn fav-on" title="取消收藏"><svg class="ic ic-20"><use href="#i-heart"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-pause"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-next"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>头部「我的歌单」+「导入 M3U」；两条虚拟歌单「最近播放 / 最常播放」固定在最前（无封面用图标占位，且不可重命名/删除/导出）；
+  没有自建歌单时插入空提示「还没有自建歌单 / 在歌曲列表点行尾「⋮」即可加入或新建歌单」。</p>
+</figure>
+
+<figure class="fig" id="scr-groupdetail">
+  <div class="cap"><b>⑦ 分组详情（专辑）</b><em>MainScreen · GroupDetail + DetailHeader</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">叶惠美</div><div class="detail-sub">11 首</div></div>
+        <button class="txtbtn">播放全部</button>
+      </div>
+      <div class="list">
+        <div class="song-row">
+          <div class="cov cov-48 c1"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">以父之名</div>
+            <div class="song-sub"><span>周杰伦</span><span class="badge badge-lrc">LRC</span></div></div>
+          <div class="song-time">5:42</div>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="song-row">
+          <div class="cov cov-48 c2"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">懦夫</div>
+            <div class="song-sub"><span>周杰伦</span><span class="badge badge-emb">内嵌</span></div></div>
+          <div class="song-time">4:08</div>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="song-row playing">
+          <div class="cov cov-48 c3"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">晴天</div>
+            <div class="song-sub"><span>周杰伦</span><span class="badge badge-lrc">LRC</span></div></div>
+          <div class="song-time">4:29</div>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="song-row">
+          <div class="cov cov-48 c4"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">三年二班</div>
+            <div class="song-sub"><span>周杰伦</span><span class="badge badge-emb">内嵌</span></div></div>
+          <div class="song-time">4:43</div>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="song-row">
+          <div class="cov cov-48 c5"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">东风破</div>
+            <div class="song-sub"><span>周杰伦</span><span class="badge badge-lrc">LRC</span></div></div>
+          <div class="song-time">5:13</div>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="song-row">
+          <div class="cov cov-48 c6"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">你听得到</div>
+            <div class="song-sub"><span>周杰伦</span><span class="badge badge-emb">内嵌</span></div></div>
+          <div class="song-time">4:22</div>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+      </div>
+      <div class="mini">
+        <div class="mini-track"><i style="width:30%"></i></div>
+        <div class="mini-row">
+          <div class="cov cov-46 c3"><svg><use href="#i-note"/></svg></div>
+          <div class="mini-main"><div class="mini-title">晴天</div><div class="mini-sub">周杰伦 · 叶惠美</div></div>
+          <button class="ibtn" title="收藏"><svg class="ic ic-20 ic-outline"><use href="#i-heart"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-pause"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-next"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>DetailHeader = 返回箭头 + 标题（19sp 粗体）+ 副标题「N 首」+ 右侧「播放全部」；
+  列表行与歌曲视图完全同构；返回键 / 返回箭头都关闭详情回到分组列表。</p>
+</figure>
+
+<figure class="fig" id="scr-playlistdetail">
+  <div class="cap"><b>⑧ 歌单详情</b><em>MainScreen · PlaylistDetail + PlaylistActionsMenu</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">深夜单曲循环</div><div class="detail-sub">18 首</div></div>
+        <button class="txtbtn">播放全部</button>
+        <button class="ibtn"><svg class="ic"><use href="#i-more"/></svg></button>
+      </div>
+      <div class="list" style="position:relative">
+        <div class="song-row">
+          <div class="cov cov-48 c6"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">夜曲</div>
+            <div class="song-sub"><span>周杰伦</span><span class="badge badge-emb">内嵌</span></div></div>
+          <div class="song-time">3:46</div>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-close"/></svg></button>
+        </div>
+        <div class="song-row">
+          <div class="cov cov-48 c3"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">富士山下</div>
+            <div class="song-sub"><span>陈奕迅</span><span class="badge badge-lrc">LRC</span></div></div>
+          <div class="song-time">4:19</div>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-close"/></svg></button>
+        </div>
+        <div class="song-row">
+          <div class="cov cov-48 c8"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">山丘</div>
+            <div class="song-sub"><span>李宗盛</span><span class="badge badge-emb">内嵌</span></div></div>
+          <div class="song-time">5:31</div>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-close"/></svg></button>
+        </div>
+        <div class="song-row">
+          <div class="cov cov-48 c5"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">海阔天空</div>
+            <div class="song-sub"><span>Beyond</span><span class="badge badge-lrc">LRC</span></div></div>
+          <div class="song-time">5:22</div>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-close"/></svg></button>
+        </div>
+        <div class="menu" style="top:12px;right:22px">
+          <div class="menu-item">重命名…</div>
+          <div class="menu-item">导出为 M3U…</div>
+          <div class="menu-item">删除歌单</div>
+        </div>
+      </div>
+      <div class="mini">
+        <div class="mini-track"><i style="width:56%"></i></div>
+        <div class="mini-row">
+          <div class="cov cov-46 c2"><svg><use href="#i-note"/></svg></div>
+          <div class="mini-main"><div class="mini-title">夜曲</div><div class="mini-sub">周杰伦 · 叶惠美</div></div>
+          <button class="ibtn fav-on" title="取消收藏"><svg class="ic ic-20"><use href="#i-heart"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-pause"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-next"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>歌单行的尾部按钮是 ✕「从歌单移除」而不是 ⋮；头部右侧 ⋮ 菜单含「重命名… / 导出为 M3U… / 删除歌单」；
+  虚拟歌单（最近播放 / 最常播放）无此菜单、行尾也没有 ✕；空歌单时「播放全部」禁用并显示「歌单是空的」空态。</p>
+</figure>
+
+<figure class="fig" id="scr-setup">
+  <div class="cap"><b>⑨ 首次进入 · 选择音乐位置</b><em>MainScreen · ScanSetupView（扫描范围 UNSET 且库为空）</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="topbar">
+        <div class="tb-row">
+          <button class="ibtn" data-menu title="打开侧边抽屉"><svg class="ic"><use href="#i-menu"/></svg></button>
+          <h1 class="lib-title">本地音乐</h1><div class="sp"></div>
+          <button class="ibtn"><svg class="ic"><use href="#i-search"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-sort"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="stat-row">
+          <span class="chip-scope"><svg class="ic ic-13"><use href="#i-folder"/></svg>未选择扫描范围</span>
+          <span class="sp"></span><span class="stat-text">共 0 首</span>
+        </div>
+      </div>
+      <div class="setup">
+        <div class="halo"><svg><use href="#i-note"/></svg></div>
+        <div class="setup-title">选择音乐位置</div>
+        <div class="setup-sub">本应用默认不会扫描整个手机存储。
+请选择一种方式建立你的音乐库：</div>
+        <button class="btn"><svg class="ic ic-18"><use href="#i-sort"/></svg>扫描全盘音乐</button>
+        <div class="btn-note">读取系统媒体库里已有的音乐；授予「所有文件访问权限」后还能连带识别同目录 .lrc 歌词</div>
+        <button class="btn ghost" style="margin-top:6px"><svg class="ic ic-18"><use href="#i-folder"/></svg>选择音乐目录</button>
+        <div class="btn-note">只扫描你指定的文件夹，可以选多个目录，之后也能随时追加</div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>安装后不自动申请任何权限，所有权限都由这里的按钮触发；主按钮 48dp 高、圆角 20dp；按钮下方两行 11sp 说明小字是重要信任信息，不要删。</p>
+</figure>
+
+<figure class="fig" id="scr-scanning">
+  <div class="cap"><b>⑩ 扫描中 · 骨架屏</b><em>MainScreen · ScanningState + Common.LibrarySkeleton</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="topbar">
+        <div class="tb-row">
+          <button class="ibtn" data-menu title="打开侧边抽屉"><svg class="ic"><use href="#i-menu"/></svg></button>
+          <h1 class="lib-title">本地音乐</h1><div class="sp"></div>
+          <button class="ibtn"><svg class="ic"><use href="#i-search"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-sort"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="stat-row">
+          <span class="chip-scope"><svg class="ic ic-13"><use href="#i-folder"/></svg>指定目录 2 个</span>
+          <span class="sp"></span><span class="stat-text">正在扫描导入文件夹 1/2…</span>
+        </div>
+      </div>
+      <div class="list">
+        <div style="display:flex;align-items:center;gap:10px;padding:2px 16px 10px">
+          <span class="spin"></span><span style="font-size:12px;color:var(--on-surface-variant)">正在扫描导入文件夹 1/2… · 已找到 348 首</span>
+        </div>
+        <div class="skel-row"><div class="skel-sq"></div><div class="skel-main"><div class="skel-a"></div><div class="skel-b"></div></div><div class="skel-c"></div></div>
+        <div class="skel-row"><div class="skel-sq"></div><div class="skel-main"><div class="skel-a"></div><div class="skel-b"></div></div><div class="skel-c"></div></div>
+        <div class="skel-row"><div class="skel-sq"></div><div class="skel-main"><div class="skel-a"></div><div class="skel-b"></div></div><div class="skel-c"></div></div>
+        <div class="skel-row"><div class="skel-sq"></div><div class="skel-main"><div class="skel-a"></div><div class="skel-b"></div></div><div class="skel-c"></div></div>
+        <div class="skel-row"><div class="skel-sq"></div><div class="skel-main"><div class="skel-a"></div><div class="skel-b"></div></div><div class="skel-c"></div></div>
+        <div class="skel-row"><div class="skel-sq"></div><div class="skel-main"><div class="skel-a"></div><div class="skel-b"></div></div><div class="skel-c"></div></div>
+        <div class="skel-row"><div class="skel-sq"></div><div class="skel-main"><div class="skel-a"></div><div class="skel-b"></div></div><div class="skel-c"></div></div>
+        <div class="skel-row"><div class="skel-sq"></div><div class="skel-main"><div class="skel-a"></div><div class="skel-b"></div></div><div class="skel-c"></div></div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>扫描时无迷你播放条（还没有曲目）；骨架屏 8 行 = 48dp 方块 + 62%/35% 两条占位 + 右侧 30×11，带 1400ms 微光扫过；
+  状态文案由扫描阶段推送（「正在读取系统媒体库…」「正在扫描导入文件夹 N/M…」「已找到 N 首…」「正在深度扫描本地文件…」）。</p>
+</figure>
+
+<figure class="fig" id="scr-emptyscan">
+  <div class="cap"><b>⑪ 空状态 · 未扫到音频 / 无匹配结果</b><em>Common.EmptyHint（黑胶插画 128dp）</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="topbar">
+        <div class="tb-row">
+          <button class="ibtn" data-menu title="打开侧边抽屉"><svg class="ic"><use href="#i-menu"/></svg></button>
+          <h1 class="lib-title">本地音乐</h1><div class="sp"></div>
+          <button class="ibtn"><svg class="ic"><use href="#i-search"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-sort"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="stat-row">
+          <span class="chip-scope"><svg class="ic ic-13"><use href="#i-folder"/></svg>指定目录 1 个</span>
+          <span class="sp"></span><span class="stat-text">共 0 首</span>
+        </div>
+      </div>
+      <div class="hint-center">
+        <div class="vinyl"><div class="hub"><i></i></div></div>
+        <div class="hint-title">所选目录里没有音频</div>
+        <div class="hint-sub">确认目录里有 mp3 / flac 等音频，或换一个目录。
+同目录的 .lrc 歌词会被自动识别。</div>
+        <button class="btn" style="margin-top:6px">更换目录</button>
+        <button class="btn ghost">扫描范围设置</button>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>空态共 4 套文案</b>（同一视觉骨架：黑胶插画 + 标题 + 说明 + 主/次按钮）：<br>
+  · 指定目录空库 → 「所选目录里没有音频」/「更换目录」+「扫描范围设置」<br>
+  · 未授权空库 → 「全盘扫描没找到音频」/「授予权限并扫描全盘」+「扫描范围设置」<br>
+  · 已授权空库 → 「全盘扫描没找到音频」/「重新扫描全盘」+「扫描范围设置」<br>
+  · 搜索无结果 → 「没有匹配的结果」/「换个关键词试试，支持歌名、歌手、专辑、文件名，也支持拼音首字母（如 zjl）」（无按钮）</p>
+</figure>
+
+  </div>
+</section>
+
+  <div class="pagenav">
+    <a href="index.html">← 总览</a>
+    <a href="index.html">↑ 全部屏</a>
+    <a href="02-player.html">播放页 →</a>
+  </div>
+</div>
+
+<script src="ui.js"></script>
+</body>
+</html>
