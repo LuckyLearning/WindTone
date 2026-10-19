@@ -563,7 +563,8 @@ internal fun SettingsDiagnosticsPage(
         "歌单、收藏、播放统计、歌词等全部数据都只保存在本机；" +
             "歌词优先读取音频同目录的 .lrc / .krc / .yrc 文件，其次读取音频内嵌歌词。\n" +
             "联网行为只有一处：「检查更新 / 下载新版本」访问 GitHub 上的公共分发仓库" +
-            "（LuckyLearning/Release；检查更新只走 GitHub 官方地址，下载安装包可选择第三方加速镜像，可在「下载线路」中调整）。" +
+            "（LuckyLearning/Release；先直连官方地址，连不上时自动切换第三方加速镜像，" +
+            "也可在「下载线路」中手动指定）。" +
             "不采集、不上传任何信息。",
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -810,7 +811,7 @@ internal fun SettingsUpdatePage(
         }
     }
 
-    // 下载线路选择：检查更新永远走 GitHub 官方地址，这里只管安装包走哪条线
+    // 线路选择：检查更新与下载安装包共用，直连不通都会退到镜像
     if (showRouteDialog) {
         AlertDialog(
             onDismissRequest = { showRouteDialog = false },
@@ -818,8 +819,9 @@ internal fun SettingsUpdatePage(
             text = {
                 Column {
                     Text(
-                        "「检查更新」始终访问 GitHub 官方地址；只有下载安装包时可以选择走加速镜像。" +
-                            "镜像有缓存，偶尔会慢或滞后，下载失败时换一条线路再试即可。",
+                        "检查更新与下载安装包都走这条线路：「自动」先直连 GitHub 官方地址，" +
+                            "连不上时依次尝试加速镜像；手动选定则只走那一条。" +
+                            "镜像有缓存，偶尔会慢或滞后，失败时换一条线路再试即可。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

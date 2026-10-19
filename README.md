@@ -90,7 +90,7 @@ WindTone/
 | 歌词装配 | `lyrics/LyricsLoader.kt` | **唯一加载漏斗**：旁挂 / 内嵌多来源的取词优先级 |
 | 音乐库聚合 | `data/MusicRepository.kt` | 按扫描范围分流、三来源合并去重 |
 | 数据库 | `data/db/MusicDb.kt` | Room：9 表（曲库 / 目录 / 每曲状态 / 歌单 / 歌单曲目 / 队列 / 播放态 / 搜索历史 / 收听日志） |
-| 应用内更新 | `data/UpdateChecker.kt` | GitHub Releases 查询、APK 下载校验、FileProvider 安装 |
+| 应用内更新 | `data/UpdateChecker.kt` | 公共分发仓库 `latest.json` 查询（直连不通退镜像）、APK 下载校验、FileProvider 安装 |
 | 播放引擎 | `playback/PlaybackEngine.kt` | 应用级单例：队列持久化与恢复、播放统计、歌词装载、全部播放动作（尾随 `PlayerActions` 接口） |
 | 音效 / 变调 / 定时 | `playback/AudioFx.kt` · `EqPresets.kt` · `ReverbPresets.kt` · `Pitch.kt` · `SleepTimer.kt` | 均衡器（16 个内置预设 + 自定义频段）与增强音效（低音 / 环绕 / 响度 / 混响）、半音↔倍率换算、三档睡眠定时；弹层在 `ui/EqSheet.kt` |
 | 设置页 | `ui/SettingsScreen.kt` + `SettingsPages / SettingsLyricsPage / SettingsSystemPages / SettingsRows / SettingsColors / SettingsDialogs` | 顶层编排（一主六子）+ 各子页正文 / 行组件 / 歌词配色 / 对话框 |

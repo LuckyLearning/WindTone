@@ -55,7 +55,14 @@ sealed interface UpdateCheckResult {
     data class Available(val info: UpdateInfo) : UpdateCheckResult
 
     /** 已是最新 */
-    data class UpToDate(val latestVersion: String) : UpdateCheckResult
+    data class UpToDate(
+        val latestVersion: String,
+        /**
+         * 这个结论来自镜像线路（直连失败后的兜底）。镜像有 CDN 缓存，
+         * 刚发布的版本可能还没同步 —— 界面据此提示「可能有延迟」。
+         */
+        val viaMirror: Boolean = false,
+    ) : UpdateCheckResult
 
     /** 检查失败（离线 / 未发布等），[reason] 可直接展示给用户 */
     data class Failed(val reason: String) : UpdateCheckResult
@@ -82,12 +89,18 @@ sealed interface UpdateCheckResult {
  *
  * ## 关于「镜像 / 代理」（重要）
  *
- * **检查更新永远只访问 GitHub 官方地址**（`raw.githubusercontent.com`）——镜像有缓存，
- * 刚发布的版本在镜像上可能还不存在，会误判成「已是最新」。镜像只用于**下载安装包**，
- * 线路由用户在「设置 → 更新 → 下载线路」里决定（[DownloadRoute]，默认自动降级）。
+ * **检查更新与下载安装包共用同一套线路**（[DownloadRoute]，默认自动）：
+ * 先直连 GitHub 官方地址（`raw.githubusercontent.com`），直连不通（超时 / 被阻断）时
+ * 依次退到 ghproxy.net → gh-proxy.com → jsDelivr。
+ *
+ * 为什么检查更新也要兜底：`raw.githubusercontent.com` 在国内经常整段连不通，
+ * 只走一条线时「检查更新」必然报「连接超时」——功能等于不可用（2026-10-19 用户反馈）。
+ *
+ * 镜像有 CDN 缓存，刚发布的版本可能稍有滞后：只有**直连失败**才用镜像，且
+ * 经镜像得到的「已是最新」结论会在界面注明「可能有延迟」，不会把新版本悄悄报成最新。
  *
  * 全流程只在用户点击「检查更新 / 下载」或启动时自动检查（可关闭）时发生，
- * 不上报任何设备信息，也不访问除 GitHub 之外的任何域名。
+ * 不上报任何设备信息，也不访问除 GitHub 与其加速镜像之外的任何域名。
  */
 object UpdateChecker {
 
@@ -133,25 +146,68 @@ object UpdateChecker {
     // ------------------------------------------------------------ 查询
 
     /**
+     * 检查更新的候选线路（按尝试优先级）。
+     *
+     * - [DownloadRoute.AUTO]：官方直连 → ghproxy.net → gh-proxy.com → jsDelivr。
+     *   镜像顺序是按「实时性」排的：两个 ghproxy 都是整串转发、基本不缓存，jsDelivr 走 CDN
+     *   有小时级缓存，所以放最后 —— 它只在直连和 ghproxy 全挂时才用得上。
+     * - [DownloadRoute.DIRECT]：只走官方直连（用户明确选的）。
+     * - 指定镜像：只走那一条，与下载侧同语义 —— 既然手动选了线路，就不该偷偷换线。
+     */
+    internal fun checkCandidates(route: DownloadRoute = DownloadRoute.AUTO): List<String> {
+        val base = manifestUrl
+        val prefix = route.prefix ?: return buildList {
+            add(base)
+            MIRROR_PREFIXES.forEach { add(it + base) }
+            jsdelivr(base)?.let { add(it) }
+        }
+        return listOf(if (prefix.isEmpty()) base else prefix + base)
+    }
+
+    /**
      * 查询最新版本。永不抛异常，失败一律折成 [UpdateCheckResult.Failed]。
      *
-     * 只发一次请求：`latest.json` 里已经包含版本号、说明、每个包的大小与摘要。
+     * 按 [route] 依次尝试候选线路（见 [checkCandidates]）：直连超时 / 被阻断时自动退到镜像，
+     * 总耗时受 [CHECK_BUDGET_MS] 约束 —— 国内网络下「一路干等到十几秒再报错」是最糟的体验。
+     *
+     * 采用第一个**解析成功**的响应：某条线路返回坏数据（代理错误页、半截 JSON）时继续换线，
+     * 而不是把「格式不正确」直接甩给用户。
      */
-    suspend fun checkLatest(current: String = currentVersion): UpdateCheckResult =
-        withContext(Dispatchers.IO) {
+    suspend fun checkLatest(
+        current: String = currentVersion,
+        route: DownloadRoute = DownloadRoute.AUTO,
+    ): UpdateCheckResult = withContext(Dispatchers.IO) {
+        val candidates = checkCandidates(route)
+        val deadline = System.currentTimeMillis() + CHECK_BUDGET_MS
+        var lastError: Throwable? = null
+        var lastCode = 0
+
+        for ((index, url) in candidates.withIndex()) {
+            // 第一条之外的线路先看预算：剩余时间不够就别开新连接了，早点给出可操作的提示
+            if (index > 0 && deadline - System.currentTimeMillis() < MIN_LINE_BUDGET_MS) break
             try {
-                val resp = httpGet(manifestUrl, accept = "application/json")
-                when (resp.code) {
-                    200 -> parseManifest(resp.body, current)
-                    404 -> UpdateCheckResult.Failed("公共仓库还没有发布版本")
-                    else -> UpdateCheckResult.Failed("检查更新失败（HTTP ${resp.code}）")
+                val resp = httpGet(url, accept = "application/json")
+                lastCode = resp.code
+                if (resp.code == 200) {
+                    val parsed = parseManifest(resp.body, current, viaMirror = index > 0)
+                    if (parsed !is UpdateCheckResult.Failed) return@withContext parsed
+                    if (verbose) Log.w(TAG, "线路返回的清单不可用，换下一条：$url")
+                    continue
                 }
+                if (verbose) Log.w(TAG, "线路返回 HTTP ${resp.code}：$url")
             } catch (t: Throwable) {
-                val reason = describe(t)
-                if (verbose) Log.w(TAG, "检查更新失败", t)
-                UpdateCheckResult.Failed(reason)
+                lastError = t
+                if (verbose) Log.w(TAG, "线路失败：$url", t)
             }
         }
+
+        when {
+            // 404 是确定性结论：文件在仓库里就是不存在，换线路也变不出来
+            lastCode == 404 -> UpdateCheckResult.Failed("公共仓库还没有发布版本")
+            lastCode != 0 -> UpdateCheckResult.Failed("检查更新失败（HTTP $lastCode）")
+            else -> UpdateCheckResult.Failed(describe(lastError ?: IOException("网络异常")))
+        }
+    }
 
     /**
      * 解析 `latest.json` 并做出结论。纯函数、可单测。
@@ -171,12 +227,13 @@ object UpdateChecker {
         body: String,
         current: String,
         abis: List<String> = deviceAbis(),
+        viaMirror: Boolean = false,
     ): UpdateCheckResult {
         val json = runCatching { JSONObject(body) }.getOrNull()
             ?: return UpdateCheckResult.Failed("版本清单格式不正确")
         val version = normalizeVersion(json.optString("version"))
         if (version.isBlank()) return UpdateCheckResult.Failed("版本清单里没有版本号")
-        if (!isNewer(version, current)) return UpdateCheckResult.UpToDate(version)
+        if (!isNewer(version, current)) return UpdateCheckResult.UpToDate(version, viaMirror)
 
         val tag = json.optString("tag").ifBlank { "v$version" }
         val versionDir = "$appBase/$tag"
@@ -529,8 +586,10 @@ object UpdateChecker {
     ): HttpResp {
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
-            connectTimeout = 10_000
-            readTimeout = 15_000
+            // 清单只有几 KB：超时给短一点，多出来的时间留给后续镜像线路。
+            // 旧版 10s/15s 且只有一条线，国内直连被阻断时用户要干等 25 秒才看到「超时」。
+            connectTimeout = CHECK_CONNECT_TIMEOUT_MS
+            readTimeout = CHECK_READ_TIMEOUT_MS
             instanceFollowRedirects = true
             setRequestProperty("Accept", accept)
             setRequestProperty("User-Agent", "WindTone-Android/$currentVersion")
@@ -661,10 +720,13 @@ object UpdateChecker {
         }
     }
 
-    /** 把异常翻译成用户能看懂的一句话 */
+    /** 把异常翻译成用户能看懂、且**能照着做**的一句话 */
     private fun describe(t: Throwable): String = when (t) {
-        is java.net.UnknownHostException -> "网络不可用，请检查网络后重试"
-        is java.net.SocketTimeoutException -> "连接 GitHub 超时，请稍后重试"
+        // DNS 污染在国内很常见，表现就是「网络明明通着却解析不了」，
+        // 直接说「网络不可用」会让用户去白折腾路由器。
+        is java.net.UnknownHostException -> "无法解析更新服务器地址，请检查网络后重试"
+        is java.net.SocketTimeoutException ->
+            "连接更新服务器超时，请稍后重试，或点「打开发布页面」手动下载"
         is javax.net.ssl.SSLException -> "安全连接失败，请检查网络环境"
         is IOException -> "网络异常：${t.message ?: "请稍后重试"}"
         else -> "检查更新失败：${t.message ?: t.javaClass.simpleName}"
@@ -691,4 +753,14 @@ object UpdateChecker {
 
     /** 慢线路判定阈值：8 秒内不足 512KB（≈64KB/s）即切换 */
     private const val STALL_MIN_BYTES = 512L * 1024
+
+    /** 检查更新：单条线路的连接 / 读取超时。清单只有几 KB，连不上就尽快换线 */
+    private const val CHECK_CONNECT_TIMEOUT_MS = 6_000
+    private const val CHECK_READ_TIMEOUT_MS = 8_000
+
+    /** 检查更新的总预算：用完就停，别让用户盯着「正在检查更新…」干等 */
+    private const val CHECK_BUDGET_MS = 18_000L
+
+    /** 剩余预算低于这个值就不再开新连接（开了也来不及读完） */
+    private const val MIN_LINE_BUDGET_MS = 3_000L
 }

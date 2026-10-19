@@ -16,8 +16,8 @@
 | `WindTone-v{version}-x86_64.apk` | 模拟器 / ChromeOS |
 | `WindTone-v{version}-universal.apk` | 不确定架构时选它 |
 
-**升级**：也可以在应用内「设置 → 更新 → 检查更新」一键升级（检查更新只访问 GitHub 官方地址）。
+**升级**：也可以在应用内「设置 → 更新 → 检查更新」一键升级（安装包由 GitHub 上的公共分发仓库提供，直连不通时会自动切换镜像线路）。
 
-**隐私**：音频与歌词只在本机读写；联网只有一处——检查/下载更新（GitHub Releases）。不采集、不上传任何信息。
+**隐私**：音频与歌词只在本机读写；联网只有一处——检查/下载更新（GitHub 公共分发仓库）。不采集、不上传任何信息。
 
 <sub>{version}（versionCode {version_code}）· 构建于 {date}</sub>

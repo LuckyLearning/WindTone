@@ -57,7 +57,8 @@ class UpdateRepository(
             delay(4_000)
             if (!prefs.autoCheckUpdate) return@launch
             prefs.lastUpdateCheckAt = System.currentTimeMillis()
-            when (val r = UpdateChecker.checkLatest()) {
+            // 检查更新也走用户选的线路：直连不通时自动退到镜像（见 UpdateChecker.checkCandidates）
+            when (val r = UpdateChecker.checkLatest(route = prefs.updateDownloadRoute)) {
                 is UpdateCheckResult.Available -> {
                     _update.update { it.copy(info = r.info) }
                     // 指路要指到**实际那一级**：设置主页上是「更新」分类卡，
@@ -77,13 +78,24 @@ class UpdateRepository(
         scope.launch {
             _update.update { it.copy(checking = true, message = null) }
             prefs.lastUpdateCheckAt = System.currentTimeMillis()
-            when (val r = UpdateChecker.checkLatest()) {
+            // 检查更新也走用户选的线路：直连不通时自动退到镜像（见 UpdateChecker.checkCandidates）
+            when (val r = UpdateChecker.checkLatest(route = prefs.updateDownloadRoute)) {
                 is UpdateCheckResult.Available ->
                     _update.update { it.copy(checking = false, info = r.info, dialogVisible = true, message = null) }
 
                 is UpdateCheckResult.UpToDate ->
                     _update.update {
-                        it.copy(checking = false, info = null, message = "已是最新版本（v${r.latestVersion}）")
+                        it.copy(
+                            checking = false,
+                            info = null,
+                            // 走镜像拿到「已是最新」时明说一句：镜像有 CDN 缓存，
+                            // 刚发布的版本可能还没同步过来，免得用户以为「明明发了却查不到」。
+                            message = if (r.viaMirror) {
+                                "已是最新版本（v${r.latestVersion}）· 经镜像线路检查，刚发布的版本可能有延迟"
+                            } else {
+                                "已是最新版本（v${r.latestVersion}）"
+                            },
+                        )
                     }
 
                 is UpdateCheckResult.Failed ->
@@ -221,7 +233,7 @@ class UpdateRepository(
     /** 下载线路（设置页读到当前值） */
     override fun downloadRoute(): DownloadRoute = prefs.updateDownloadRoute
 
-    /** 切换下载线路（只影响 APK 下载；检查更新永远走 GitHub 官方地址） */
+    /** 切换线路（同时影响检查更新与 APK 下载：检查更新直连不通时也会退到镜像） */
     override fun setDownloadRoute(route: DownloadRoute) {
         prefs.updateDownloadRoute = route
         _update.update { it.copy(route = route) }

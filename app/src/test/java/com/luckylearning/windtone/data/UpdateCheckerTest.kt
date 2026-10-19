@@ -217,6 +217,48 @@ class UpdateCheckerTest {
         assertTrue(msg.contains("浏览器"))
     }
 
+    // ------------------------------------------------------------ 检查更新线路
+
+    @Test
+    fun checkCandidatesStartWithOfficialThenFallBackToMirrors() {
+        val list = UpdateChecker.checkCandidates(DownloadRoute.AUTO)
+        assertTrue(
+            "第一条必须是官方直连：镜像有 CDN 缓存，不能抢在直连前面给出旧结论",
+            list.first().startsWith("https://raw.githubusercontent.com/"),
+        )
+        assertTrue(list.any { it.startsWith("https://ghproxy.net/") })
+        assertTrue(list.any { it.startsWith("https://gh-proxy.com/") })
+        assertTrue(list.first().endsWith("/WindTone/latest.json"))
+        assertTrue(
+            "jsDelivr 缓存最久，必须排在最后一条",
+            list.last().startsWith("https://cdn.jsdelivr.net/gh/"),
+        )
+    }
+
+    @Test
+    fun checkCandidatesDirectRouteNeverUsesMirror() {
+        val list = UpdateChecker.checkCandidates(DownloadRoute.DIRECT)
+        assertEquals(1, list.size)
+        assertTrue(list.first().startsWith("https://raw.githubusercontent.com/"))
+    }
+
+    @Test
+    fun checkCandidatesManualMirrorUsesOnlyThatMirror() {
+        val list = UpdateChecker.checkCandidates(DownloadRoute.GH_PROXY_COM)
+        assertEquals(1, list.size)
+        assertTrue(list.first().startsWith("https://gh-proxy.com/https://raw.githubusercontent.com/"))
+        assertTrue(list.first().endsWith("/WindTone/latest.json"))
+    }
+
+    @Test
+    fun mirrorConclusionIsFlaggedSoUiCanWarnAboutStaleCache() {
+        val body = manifest(version = "1.1.30")
+        val direct = UpdateChecker.parseManifest(body, "1.1.30", emptyList(), viaMirror = false)
+        val mirror = UpdateChecker.parseManifest(body, "1.1.30", emptyList(), viaMirror = true)
+        assertEquals(false, (direct as UpdateCheckResult.UpToDate).viaMirror)
+        assertEquals(true, (mirror as UpdateCheckResult.UpToDate).viaMirror)
+    }
+
     // ------------------------------------------------------------ 摘要校验
 
     @Test

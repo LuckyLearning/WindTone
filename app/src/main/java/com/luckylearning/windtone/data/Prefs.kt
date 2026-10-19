@@ -192,11 +192,13 @@ enum class ScanScope(val label: String) {
 }
 
 /**
- * 更新包下载线路。
+ * 更新线路（**检查更新与 APK 下载共用**）。
  *
- * 检查更新永远只访问 GitHub 官方地址（镜像有缓存延迟，会把刚发布的版本当成「已是最新」），
- * 只有**下载安装包**才允许走第三方加速镜像 —— 该选择由用户决定：
- *  - [AUTO]：直连优先，起步太慢自动切到镜像（默认，适合大多数网络）；
+ * 先直连 GitHub 官方地址；直连不通（国内很常见）时自动退到第三方加速镜像 ——
+ * 检查更新本身只是一次几 KB 的 GET，多试几条线的代价远小于「直接超时、什么都查不到」。
+ * 镜像有 CDN 缓存，刚发布的版本可能稍有滞后，因此**只在直连失败后才用**，
+ * 且经镜像得出的「已是最新」会在界面注明可能延迟：
+ *  - [AUTO]：直连优先，不通就依次退到镜像（默认，适合大多数网络）；
  *  - [DIRECT]：只用 GitHub 官方直链（最权威、最及时，但国内可能很慢）；
  *  - [GHPROXY_NET] / [GH_PROXY_COM]：固定走某条公共加速镜像（镜像只转发字节，不改内容）。
  *
@@ -204,7 +206,7 @@ enum class ScanScope(val label: String) {
  * 其余为镜像前缀（给原始 github.com 地址拼前缀即生效）。
  */
 enum class DownloadRoute(val label: String, val hint: String, val prefix: String?) {
-    AUTO("自动", "直连优先，太慢会自动切换镜像", null),
+    AUTO("自动", "直连优先，连不上自动换镜像", null),
     DIRECT("直连 GitHub", "只用官方地址，最及时；国内可能较慢", ""),
     GHPROXY_NET("ghproxy.net", "公共加速镜像，速度较快", "https://ghproxy.net/"),
     GH_PROXY_COM("gh-proxy.com", "公共加速镜像，ghproxy 不通时备用", "https://gh-proxy.com/"),
@@ -664,8 +666,8 @@ class Prefs(context: Context) {
         set(value) = sp.edit().putLong(KEY_LAST_UPDATE_CHECK, value).apply()
 
     /**
-     * 下载新版本安装包时使用的线路。默认 [DownloadRoute.AUTO]。
-     * 只影响 APK 下载，不影响「检查更新」（后者永远走 GitHub 官方地址）。
+     * 更新线路（检查更新与下载安装包都走它）。默认 [DownloadRoute.AUTO]。
+     * 直连不通时会自动退到镜像；手动选定则只走那一条。
      */
     var updateDownloadRoute: DownloadRoute
         get() = runCatching {
