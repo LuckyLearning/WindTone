@@ -17,8 +17,12 @@ import re
 import sys
 
 ABI_ORDER = ["arm64-v8a", "armeabi-v7a", "x86_64", "x86", "universal"]
-DISPLAY_NAMES = {"WindTone": "听风 WindTone"}
-DISPLAY_DESC = {"WindTone": "Android 本地音乐播放器"}
+
+# 每个软件的展示名与一句话说明：**唯一出处**，同时用于 latest.json 与 README。
+# 新增软件时只在这里加一行，其它全由脚本推导。
+APP_DISPLAY = {
+    "WindTone": ("听风 WindTone", "Android 本地音乐播放器"),
+}
 
 
 def sha256(path):
@@ -77,7 +81,7 @@ def main():
     manifest = {
         "schema": 1,
         "app": args.app_dir,
-        "displayName": DISPLAY_NAMES.get(args.app_dir, args.app_dir),
+        "displayName": APP_DISPLAY.get(args.app_dir, (args.app_dir, ""))[0],
         "version": args.version,
         "versionCode": int(args.code),
         "tag": args.tag,
@@ -91,24 +95,120 @@ def main():
         f.write("\n")
     print("latest.json -> %s (code %s, %d 个包)" % (args.version, args.code, len(assets)))
 
-    readme = os.path.join(args.root, "README.md")
-    if os.path.isfile(readme):
-        with open(readme, encoding="utf-8") as f:
-            text = f.read()
-        name = DISPLAY_NAMES.get(args.app_dir, args.app_dir)
-        desc = DISPLAY_DESC.get(args.app_dir, "")
-        label = ("%s（%s）" % (name, desc)) if desc else name
-        row = "| %s | [`%s/`](%s/) | [v%s](%s/v%s/) |" % (
-            label, args.app_dir, args.app_dir, args.version, args.app_dir, args.version
+    write_readme(args.root)
+
+
+README_TEMPLATE = """# Release
+
+本仓库用于分发各软件的安装包（源码仓库为私有）。目录按 **软件名 / 版本号** 组织，每个软件**只保留最近 {keep} 个版本**，更旧的版本在发布新版本时自动清理。
+
+> 本文件由发布流水线自动生成（`scripts/gen-release-manifest.py`），**请勿手工修改** —— 下次发版会被覆盖。
+
+## 目录结构
+
+```
+Release/
+├─ README.md                       # 本文件（自动生成）
+{tree}
+```
+
+命名约定（固定，便于机器解析）：
+
+| 项 | 规则 | 示例 |
+|---|---|---|
+| 软件目录 | 英文名，驼峰 | `WindTone` |
+| 版本目录 | `v` + 语义化版本 | `v{example_version}` |
+| 安装包 | `<软件>-v<版本>-<abi>.apk` | `WindTone-v{example_version}-arm64-v8a.apk` |
+| 元数据 | 每个软件根目录一份 `latest.json` | `WindTone/latest.json` |
+
+## 软件列表
+
+| 软件 | 目录 | 最新版本 | 在库版本 |
+|---|---|---|---|
+{rows}
+
+## 下载
+
+每个版本目录下按 CPU 架构分 4 个包：
+
+| 安装包 | 适用设备 |
+|---|---|
+| `*-arm64-v8a.apk` | 绝大多数手机 / 车机（64 位 ARM） |
+| `*-armeabi-v7a.apk` | 较老的 32 位 ARM 设备 |
+| `*-x86_64.apk` | 模拟器 / x86 设备 |
+| `*-universal.apk` | 全架构合一，体积略大；拿不准架构时用它 |
+
+直链格式：
+
+```
+https://raw.githubusercontent.com/{owner}/{repo}/main/<软件>/v<版本>/<文件名>
+```
+
+## 校验
+
+每个版本目录下的 `checksums.txt` 是各包的 SHA-256：
+
+```bash
+cd <软件>/v<版本> && sha256sum -c checksums.txt
+```
+
+## 保留策略
+
+每个软件目录下**只保留最近 {keep} 个版本**（按版本号排序）。发布流水线在写入新版本后会自动删除更旧的目录，
+并同步刷新本文件与 `latest.json`。
+"""
+
+
+def version_key(name):
+    nums = re.findall(r"\d+", name)
+    return tuple(int(x) for x in nums)
+
+
+def write_readme(root, keep=5, repo_slug="LuckyLearning/Release"):
+    """全量重写 README —— 内容只来自目录扫描，不夹带任何手写文案。"""
+    apps = []
+    for name in sorted(os.listdir(root)):
+        app_dir = os.path.join(root, name)
+        if not os.path.isdir(app_dir) or name.startswith("."):
+            continue
+        versions = [d for d in os.listdir(app_dir) if d.startswith("v") and os.path.isdir(os.path.join(app_dir, d))]
+        if not versions:
+            continue
+        versions.sort(key=version_key, reverse=True)
+        latest = versions[0]
+        title, desc = APP_DISPLAY.get(name, (name, ""))
+        apps.append((name, title, desc, versions))
+
+    tree_lines = []
+    rows = []
+    for name, title, desc, versions in apps:
+        tree_lines.append("├─ %s/" % name)
+        tree_lines.append("│  ├─ latest.json")
+        for v in versions:
+            tree_lines.append("│  ├─ %s/" % v)
+        tree_lines.append("│  └─ …（最多 %d 个版本目录）" % keep)
+        label = ("%s（%s）" % (title, desc)) if desc else title
+        rows.append(
+            "| %s | [`%s/`](%s/) | [%s](%s/%s/) | %s |"
+            % (label, name, name, versions[0], name, versions[0], "、".join(versions))
         )
-        pattern = re.compile(r"^\| .*?%s.*?\|$" % re.escape("[" + "%s/" % args.app_dir + "]"), re.M)
-        if pattern.search(text):
-            text = pattern.sub(row.replace("\\", "\\\\"), text, count=1)
-        else:
-            text = text.rstrip("\n") + "\n" + row + "\n"
-        with open(readme, "w", encoding="utf-8", newline="\n") as f:
-            f.write(text)
-        print("README 版本行已刷新")
+
+    if not rows:
+        rows.append("| — | — | — | — |")
+    example_version = apps[0][3][0].lstrip("v") if apps else "1.0.0"
+    owner, repo = repo_slug.split("/", 1)
+
+    text = README_TEMPLATE.format(
+        keep=keep,
+        tree="\n".join(tree_lines) if tree_lines else "└─ （暂无软件）",
+        rows="\n".join(rows),
+        example_version=example_version,
+        owner=owner,
+        repo=repo,
+    )
+    with open(os.path.join(root, "README.md"), "w", encoding="utf-8", newline="\n") as f:
+        f.write(text)
+    print("README.md 已按目录扫描重写（%d 个软件）" % len(apps))
 
 
 if __name__ == "__main__":
