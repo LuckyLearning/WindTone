@@ -178,6 +178,12 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
         // 否则它会把「已经清空的曲库」重新写回内存与 Room 缓存（见 removeFolder）。
         scanJob?.cancel()
         scanJob = scope.launch {
+            // 冷启动节流：曲库没变化时不必把整个存储再走一遍（详见 autoScanCanBeSkipped）
+            if (auto && autoScanCanBeSkipped()) {
+                Log.i(TAG, "自动扫描跳过：距上次扫描不足 ${AUTO_SCAN_MIN_INTERVAL_MS / 60_000} 分钟且曲库指纹未变")
+                _library.update { it.copy(libraryLoaded = true) }
+                return@launch
+            }
             val scopeAtStart = prefs.scanScope
             val urisAtStart = session.folders.folderUriList()
             _library.update {
@@ -223,6 +229,7 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
             val persisted = withContext(Dispatchers.IO) { persistSongs(result.songs, scanStart) }
             applyLibrary(persisted, result.skippedUnsupported, fromCache = false)
             session.folders.rememberScannedFolders()
+            rememberScanFingerprint()
             playback.restoreQueueIfNeeded()
             if (!auto && result.songs.isEmpty()) {
                 pushMessage(
@@ -233,6 +240,37 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
                 )
             }
         }
+    }
+
+    /**
+     * 冷启动的自动扫描要不要跳过。
+     *
+     * 背景：以前每次冷启动都会在 600ms 后无条件全量重扫。曲库上千首时，用户
+     * 「打开 App 就卡一下」「列表自己刷一下」都来自这里——而绝大多数时候曲库里
+     * 根本没变。这里用「时间 + 指纹」双条件判断，两个都成立才跳过：
+     *
+     *  - 距上次扫描不足 [AUTO_SCAN_MIN_INTERVAL_MS]；
+     *  - 媒体库指纹（最新 _ID : 总条数）与上次一致。
+     *
+     * 指纹取不到（权限被回收 / ROM 异常）一律不跳过：宁可慢一次，也不能漏歌。
+     * 只有 `auto = true` 走这里 —— 用户点「扫描」、改范围、增删目录都是 `auto = false`，
+     * 那些场景必须真实执行。
+     */
+    private suspend fun autoScanCanBeSkipped(): Boolean {
+        val current = withContext(Dispatchers.IO) { repository.libraryFingerprint() }
+        return shouldSkipAutoScan(
+            lastScanAt = prefs.lastScanAt,
+            lastFingerprint = prefs.lastScanFingerprint,
+            now = System.currentTimeMillis(),
+            currentFingerprint = current,
+        )
+    }
+
+    /** 扫描成功后记录指纹与时间，供下次冷启动判断要不要跳过 */
+    private suspend fun rememberScanFingerprint() {
+        val fp = withContext(Dispatchers.IO) { repository.libraryFingerprint() }
+        if (fp.isNotBlank()) prefs.lastScanFingerprint = fp
+        prefs.lastScanAt = System.currentTimeMillis()
     }
 
     /**
@@ -801,6 +839,33 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
         private const val TAG = "LibraryViewModel"
         /** 搜索历史保留条数 */
         private const val SEARCH_HISTORY_LIMIT = 10
+
+        /**
+         * 冷启动自动扫描的最小间隔。
+         * 在这段时间内、且曲库指纹没变时跳过自动扫描；手动扫描不受限制。
+         * 10 分钟是个折中：足够躲开「反复开关 App」的重复扫描，又不至于让新下载的歌
+         * 等太久才出现（用户也可以随时下拉/点扫描立即刷新）。
+         */
+        private const val AUTO_SCAN_MIN_INTERVAL_MS = 10 * 60 * 1000L
+
+        /**
+         * 冷启动自动扫描的跳过判定（纯函数，便于单测）。
+         *
+         * 两个条件同时成立才跳过：距上次扫描不足 [AUTO_SCAN_MIN_INTERVAL_MS]，
+         * 且曲库指纹与上次完全一致。指纹为空（拿不到 / 从未记录）时不跳过 ——
+         * 宁可多扫一次，也不能因为查询失败就把新歌漏在曲库外。
+         */
+        internal fun shouldSkipAutoScan(
+            lastScanAt: Long,
+            lastFingerprint: String,
+            now: Long,
+            currentFingerprint: String,
+        ): Boolean {
+            if (lastScanAt <= 0L) return false
+            if (now - lastScanAt !in 0 until AUTO_SCAN_MIN_INTERVAL_MS) return false
+            if (lastFingerprint.isBlank() || currentFingerprint.isBlank()) return false
+            return lastFingerprint == currentFingerprint
+        }
     }
 }
 

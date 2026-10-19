@@ -17,11 +17,7 @@ class MediaStoreScanner(private val context: Context) {
         val songs = ArrayList<Song>()
         var skipped = 0
 
-        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
-        } else {
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-        }
+        val collection = audioCollection()
 
         // RELATIVE_PATH 是 API 29 才有的列，老系统查询会直接抛异常，必须按版本拼装
         val projection = buildList {
@@ -42,8 +38,13 @@ class MediaStoreScanner(private val context: Context) {
             }
         }.toTypedArray()
 
-        val selection = "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR " +
-            "${MediaStore.Audio.Media.MIME_TYPE} LIKE 'audio/%')"
+        val selection = audioSelection()
+
+        // 同一个目录里通常有好几首歌：目录列举是一次系统调用，逐首 list 同一目录纯属浪费。
+        // 3000 首 / 200 个目录时，这一步从 3000 次降到 200 次（深扫模式下尤其明显）。
+        val dirNamesCache = HashMap<String, List<String>>()
+        fun namesOf(dir: File): List<String> =
+            dirNamesCache.getOrPut(dir.absolutePath) { dir.list()?.toList().orEmpty() }
 
         runCatching {
             context.contentResolver.query(
@@ -87,7 +88,7 @@ class MediaStoreScanner(private val context: Context) {
                 if (deepAccess && parentDir != null) {
                     val base = name.substringBeforeLast('.')
                     val dir = File(parentDir)
-                    val hit = dir.list()?.toList()?.let { names -> pickBestLyric(names, base) }
+                    val hit = pickBestLyric(namesOf(dir), base)
                     if (hit != null) lrcUri = android.net.Uri.fromFile(File(dir, hit))
                 }
 
@@ -120,4 +121,43 @@ class MediaStoreScanner(private val context: Context) {
     private fun pickBestLyric(names: List<String>, baseName: String): String? =
         names.mapNotNull { n -> LyricsMatcher.score(n, baseName).takeIf { it >= 0 }?.let { it to n } }
             .maxByOrNull { it.first }?.second
+
+    /**
+     * 曲库指纹：`最新一条 _ID : 总条数`。
+     *
+     * 只用来回答一个问题 —— **曲库变了没有**。冷启动的自动扫描据此做节流：
+     * 指纹没变且距上次扫描不久，就没有必要把整个存储再走一遍。
+     *
+     * 之所以不用 `COUNT(*) + MAX(date_modified)`：`date_modified` 在部分 ROM 上
+     * 对「只改了标签」的文件也会变，而那种变化本来就要重扫，两者语义不同；
+     * `_ID` 是插入序，新歌必然更大，删歌必然改变总数 —— 判断「有没有新东西」
+     * 比时间戳更直接。
+     *
+     * 查询失败（权限被回收 / ROM 异常）返回空串，调用方必须把它当成「指纹未知」，
+     * 走全量扫描，宁可慢也不能漏歌。
+     */
+    fun fingerprint(): String = runCatching {
+        context.contentResolver.query(
+            audioCollection(),
+            arrayOf(MediaStore.Audio.Media._ID),
+            audioSelection(),
+            null,
+            "${MediaStore.Audio.Media._ID} DESC",
+        )?.use { c ->
+            val newest = if (c.moveToFirst()) c.getLong(0) else 0L
+            "$newest:${c.count}"
+        }
+    }.getOrNull().orEmpty()
+
+    /** 与 [scan] 完全一致的筛选条件：媒体库标记，或 MIME 是音频 */
+    private fun audioSelection(): String =
+        "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR " +
+            "${MediaStore.Audio.Media.MIME_TYPE} LIKE 'audio/%')"
+
+    private fun audioCollection(): android.net.Uri =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+        } else {
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+        }
 }

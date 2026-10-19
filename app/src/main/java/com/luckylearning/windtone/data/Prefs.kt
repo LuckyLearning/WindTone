@@ -235,6 +235,21 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_SCAN_SCOPE_CHOSEN, sp.contains(KEY_SCAN_SCOPE))
         set(value) = sp.edit().putBoolean(KEY_SCAN_SCOPE_CHOSEN, value).apply()
 
+    /**
+     * 上一次**自动**扫描结束时记录的曲库指纹（见 `MediaStoreScanner.fingerprint`）。
+     *
+     * 只服务于冷启动节流：指纹没变就没必要把整个存储再走一遍。
+     * 空串 = 从未记过，调用方应当照常扫描。
+     */
+    var lastScanFingerprint: String
+        get() = sp.getString(KEY_LAST_SCAN_FP, "").orEmpty()
+        set(value) = sp.edit().putString(KEY_LAST_SCAN_FP, value).apply()
+
+    /** 上一次扫描完成的时间戳（毫秒），0 表示从未扫过 */
+    var lastScanAt: Long
+        get() = sp.getLong(KEY_LAST_SCAN_AT, 0L)
+        set(value) = sp.edit().putLong(KEY_LAST_SCAN_AT, value).apply()
+
     /** 是否启用「深度扫描」（读取同目录 .lrc 歌词文件） */
     var deepScanEnabled: Boolean
         get() = sp.getBoolean(KEY_DEEP_SCAN, false)
@@ -680,6 +695,8 @@ class Prefs(context: Context) {
     private companion object {
         const val KEY_SCAN_SCOPE = "scan_scope"
         const val KEY_SCAN_SCOPE_CHOSEN = "scan_scope_chosen"
+        const val KEY_LAST_SCAN_FP = "last_scan_fingerprint"
+        const val KEY_LAST_SCAN_AT = "last_scan_at"
         const val KEY_DEEP_SCAN = "deep_scan"
         const val KEY_MIN_DURATION_SEC = "min_song_duration_sec"
         /** 短音频过滤默认阈值：60 秒 */
