@@ -158,4 +158,30 @@ class LayoutContractTest {
             xml.contains("canRetrieveWindowContent=\"false\""),
         )
     }
+
+    /**
+     * v1.1.29 回归：**悬浮窗服务必须订阅前台包名，不能只在判可见性时读一次 `.value`**。
+     *
+     * 真机反馈「名单勾了几个，但没起效，悬浮窗还在」。根因不是判定逻辑（`OverlayVisibility`
+     * 单测全绿），而是**通道没接上**：检测端（无障碍服务 / UsageStats 轮询）只往
+     * `ForegroundAppState.currentPkg` 写值，而 `LyricOverlayService` 的 combine 里
+     * 只有 content / editing / foreground / preview / appearance 五路 ——
+     * 「写包名」不产生任何一路的事件，于是切到名单应用后**没有任何东西触发重判**，
+     * 只能等下一句歌词（暂停或歌词无变化时永不发生）碰巧重算。
+     *
+     * 这类缺陷的形态是「代码全对、就是没接上」，纯函数测试永远抓不到，
+     * 所以在源码层钉一句：`currentPkg` 必须作为 combine 的输入出现。
+     */
+    @Test
+    fun overlayServiceSubscribesToForegroundPackage() {
+        val src = sourceFile("src/main/java/com/luckylearning/windtone/overlay/LyricOverlayService.kt").readText()
+        assertTrue(
+            "LyricOverlayService 必须把 ForegroundAppState.currentPkg 接进 combine（否则按应用隐藏不生效）",
+            Regex("""combine\(\s*visuals\s*,\s*ForegroundAppState\.currentPkg\s*\)""").containsMatchIn(src),
+        )
+        assertFalse(
+            "判可见性时不要再直接读 ForegroundAppState.currentPkg.value（那是快照，收不到后续变化）",
+            src.contains("pkg = ForegroundAppState.currentPkg.value"),
+        )
+    }
 }

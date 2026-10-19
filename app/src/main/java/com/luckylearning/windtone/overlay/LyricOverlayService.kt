@@ -740,7 +740,7 @@ class LyricOverlayService : Service() {
             // 内容 + 编辑态 + 前台态 + 预览态 + 外观版本 五路合并：
             // 任一变化都重新决定「显不显示 / 长什么样」。
             // 外观那一路是给设置页用的——服务独立存活，改完字号得有人把它叫醒。
-            combine(
+            val visuals = combine(
                 LyricOverlayBus.content,
                 LyricOverlayBus.editing,
                 LyricOverlayBus.foreground,
@@ -749,7 +749,16 @@ class LyricOverlayService : Service() {
             ) { content, isEditing, isForeground, isPreview, _ ->
                 OverlayVisualState(content, isEditing, isForeground, isPreview)
             }
-                .collect { (content, isEditing, isForeground, isPreview) ->
+            // ⚠️ **第六路：前台应用包名必须订阅，不能只在判可见性时读一次**
+            //（v1.1.29 真机回归：名单勾了没生效）。检测端（无障碍服务 / UsageStats 轮询）
+            // 只往 ForegroundAppState 写值；「写」不产生任何既有通道的事件，
+            // 于是切到名单应用后没有任何东西触发重判 —— 只能等下一句歌词或暂停恢复
+            // 碰巧重算，暂停 / 无歌词变化时就是永远不收起。
+            combine(visuals, ForegroundAppState.currentPkg) { state, pkg ->
+                state to pkg
+            }
+                .collect { (visual, foregroundPkg) ->
+                    val (content, isEditing, isForeground, isPreview) = visual
                     val box = container ?: return@collect
                     val tv = lyricView ?: return@collect
                     val prefs = Prefs(this@LyricOverlayService)
@@ -791,7 +800,7 @@ class LyricOverlayService : Service() {
                         screenInteractive = screenInteractive,
                         hasContent = content.visible,
                         foregroundHidden = overlayHiddenForForeground(
-                            pkg = ForegroundAppState.currentPkg.value,
+                            pkg = foregroundPkg,
                             hiddenApps = prefs.lyricOverlayHiddenApps,
                         ),
                     )

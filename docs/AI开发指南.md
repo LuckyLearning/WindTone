@@ -1742,6 +1742,11 @@ UsageStats 要「使用情况访问」授权且只能轮询。两者任一可用
 2. 只存本机文件（不是 DB——**故意不加 schema**，300 条滚动截断，坏了只丢日志不伤曲库）；
 3. 副标题 / 诊断页文案要把「记录关了但名单仍生效」「（应用名解析不到）」这类**中间态说清楚**（真机验证过 launcher 包名取不到 label 的降级显示）。
 
+**⚠️ 一次真实回归（2026-10-19）**：名单勾了不生效。根因是 `ForegroundAppState.currentPkg` 只被 `.value` **读一次**、
+没进 `combine` —— 检测端写包名不产生任何既有事件，切应用后没人重判（暂停 / 歌词不长时永不重判）。
+修法 = 作为**第六路**并入收集循环；`LayoutContractTest.overlayServiceSubscribesToForegroundPackage` 在源码层钉死。
+**通用教训：写端与读端之间必须有一条订阅关系**，否则纯函数测试全绿也没用。
+
 **UI 两处**：设置 → 歌词 底部「不显示悬浮窗的应用」（`SettingsLyricsOverlayAppsDialog.kt`：
 launcher 应用列表 + 搜索 + 图标，`Drawable→Bitmap` 转换要在 `remember` 外先取 `LocalContext`）
 与「前台应用记录」开关；诊断页新增同名区块（通道状态 / 跳转 / 历史列表 / 复制 / 清空）。

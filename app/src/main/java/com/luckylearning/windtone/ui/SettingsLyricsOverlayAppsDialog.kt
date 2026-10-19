@@ -86,6 +86,23 @@ internal fun OverlayHiddenAppsDialog(
             apps.filter { it.label.contains(q, ignoreCase = true) || it.pkg.contains(q, ignoreCase = true) }
         }
     }
+    // ① 已在名单里、但**不在可启动列表**的包：系统里有些「影像 / 桌面挂件」类应用
+    //    不注册 LAUNCHER 入口，从列表里根本点不到。名单里留着的必须能被看见、能被取消，
+    //    否则用户勾错了改不回来。
+    val hiddenUnlisted = remember(hiddenApps, apps) {
+        val launchable = apps.mapTo(HashSet()) { it.pkg }
+        hiddenApps.filter { it.isNotBlank() && it !in launchable }.sorted()
+    }
+    // ② 允许手动输入包名（配合诊断页「前台应用记录」里抄到的包名）：
+    //    搜索框里像包名的串且列表里没有 → 直接把这一条加进名单。
+    val manualCandidate = remember(query, apps, hiddenApps) {
+        val q = query.trim()
+        val looksLikePkg = q.length >= 5 && q.count { it == '.' } >= 2 && q.none { it.isWhitespace() } &&
+            q.all { it.isLetterOrDigit() || it == '.' || it == '_' }
+        if (!looksLikePkg) null
+        else if (apps.any { it.pkg.equals(q, ignoreCase = true) } || hiddenApps.any { it.equals(q, ignoreCase = true) }) null
+        else q
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -114,6 +131,69 @@ internal fun OverlayHiddenAppsDialog(
                     modifier = Modifier.heightIn(max = 360.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
+                    // 手动包名（搜索框里输入完整包名时出现）
+                    manualCandidate?.let { pkg ->
+                        item(key = "manual") {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(64.dp)
+                                    .clickable { onToggle(pkg, true) }
+                                    .padding(horizontal = 4.dp),
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text("加入包名", fontSize = 16.sp, maxLines = 1)
+                                    Text(
+                                        text = pkg,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                                Switch(checked = false, onCheckedChange = { onToggle(pkg, true) })
+                            }
+                        }
+                    }
+                    // 已在名单但不在可启动列表的（系统里没有 LAUNCHER 入口的应用）
+                    if (hiddenUnlisted.isNotEmpty()) {
+                        item(key = "hdr-unlisted") {
+                            Text(
+                                "已加入（这些应用没有桌面图标，从这里也能取消）",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
+                            )
+                        }
+                        items(hiddenUnlisted, key = { "u-$it" }) { pkg ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(64.dp)
+                                    .clickable { onToggle(pkg, false) }
+                                    .padding(horizontal = 4.dp),
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        text = appLabel(context, pkg),
+                                        fontSize = 16.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        text = pkg,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                                Switch(checked = true, onCheckedChange = { onToggle(pkg, false) })
+                            }
+                        }
+                    }
                     items(filtered, key = { it.pkg }) { app ->
                         val checked = app.pkg in hiddenApps
                         Row(
@@ -147,7 +227,7 @@ internal fun OverlayHiddenAppsDialog(
                             )
                         }
                     }
-                    if (filtered.isEmpty()) {
+                    if (filtered.isEmpty() && manualCandidate == null) {
                         item {
                             Text(
                                 "没有匹配的应用",
@@ -223,3 +303,13 @@ private fun AppIcon(pkg: String) {
         }
     }
 }
+
+/**
+ * 任意包名的显示名（名单里可能有不在「可启动应用」列表里的条目）。
+ *
+ * 取不到就回落成包名本身 —— 宁可难看，也不能让这一行变成空白、点不到取消。
+ */
+private fun appLabel(context: android.content.Context, pkg: String): String = runCatching {
+    val pm = context.packageManager
+    pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+}.getOrDefault(pkg)

@@ -330,7 +330,7 @@
   </div>
   <p class="note"><b>关键点：</b>列表来自 <code>PackageManager.queryIntentActivities(MAIN/LAUNCHER)</code>（按包名去重、按应用名排序），行 = 图标 + 应用名 + 包名 + Switch；顶部搜索框按应用名或包名实时过滤；标题下方的计数随勾选实时变（「还没有设置…」→「已设 N 个…」）。<br>
   <b>清空要二次确认</b>；「完成」落盘。图标的 <code>Drawable→ImageBitmap</code> 转换要先在 <code>remember</code> 外取好 <code>LocalContext</code>（Compose 网关坑，见实现注释）。<br>
-  <b>为什么列的是 launcher 应用</b>：能被用户打开的应用才可能「到前台挡住悬浮窗」；无界面组件与系统进程不在列表里，属预期。<br>
+  <b>为什么列的是 launcher 应用</b>：能被用户打开的应用才可能「到前台挡住悬浮窗」；无界面组件与系统进程不在列表里，属预期。<br>  <b>v1.1.30 补的两条入口</b>：① 搜索框里粘贴完整包名（如从诊断页「前台应用记录」抄来的）→ 列表顶部出现「加入包名」一行，可直接勾上；② 已在名单、但没有桌面图标的应用单独列在顶部（「已加入（这些应用没有桌面图标，从这里也能取消）」），否则勾错了改不回来。<br>
   <b>判定口径</b>：名单命中 → <code>OverlayVisibility.foregroundHidden = true</code> 硬隐藏（仅次灭屏 / 无内容，压过编辑态与预览）；检测通道不可用 → 按「不隐藏」放行，悬浮窗不会凭空消失。</p>
 </figure>
 
