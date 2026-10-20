@@ -10,6 +10,7 @@ import com.luckylearning.windtone.data.SongIndex
 import com.luckylearning.windtone.data.UpdateRepository
 import com.luckylearning.windtone.data.db.MusicDb
 import com.luckylearning.windtone.playback.PlaybackEngine
+import com.luckylearning.windtone.playback.PlaybackStore
 
 /**
  * 应用级依赖容器（手写服务定位器）。
@@ -44,9 +45,12 @@ class AppContainer(private val app: Application) {
     /** 数据自检 / 清理 / 重置 */
     val maintenance: DataMaintenance by lazy { DataMaintenance(app, db) }
 
+    /** 播放域的持久化门面：把 DAO / schema 细节挡在引擎之外 */
+    val playbackStore: PlaybackStore by lazy { PlaybackStore(db) }
+
     /** 播放域状态持有者：应用级单例，生命周期长于任何界面 */
     val playback: PlaybackEngine by lazy {
-        PlaybackEngine(app, prefs, db, lyricsLoader, songIndex, messages)
+        PlaybackEngine(app, prefs, playbackStore, lyricsLoader, songIndex, messages)
     }
 
     /** 应用内更新域 */

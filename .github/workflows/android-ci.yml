@@ -50,6 +50,25 @@ jobs:
       - name: 单元测试
         run: ./gradlew testDebugUnitTest --stacktrace
 
+      # 注意：app/build.gradle.kts 里 lint { abortOnError = false }，所以
+      # “构建成功 ≠ lint 干净”。这里显式解析 XML，把 Error 级作为合入门禁：
+      # 本地保留不阻断（发版不受影响），CI 上不允许 Error 级新增。
+      - name: Lint（Error 级门禁）
+        run: |
+          ./gradlew lintDebug --stacktrace
+          report=app/build/reports/lint-results-debug.xml
+          if [ ! -f "$report" ]; then
+            echo "::error::未生成 lint 报告：$report"
+            exit 1
+          fi
+          errors=$(grep -c 'severity="Error"' "$report" || true)
+          echo "lint Error 级数量：$errors"
+          if [ "$errors" -ne 0 ]; then
+            grep -B1 -A3 'severity="Error"' "$report" | head -100
+            echo "::error::lint 存在 $errors 个 Error，请先修复（构建成功不等于 lint 干净）"
+            exit 1
+          fi
+
       - name: 编译 Debug 包
         run: ./gradlew assembleDebug --stacktrace
 
@@ -67,5 +86,14 @@ jobs:
         with:
           name: test-reports
           path: app/build/reports/tests/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: 上传 lint 报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: app/build/reports/lint-results-debug.*
           if-no-files-found: ignore
           retention-days: 7

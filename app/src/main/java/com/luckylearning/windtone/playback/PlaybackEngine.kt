@@ -17,11 +17,8 @@ import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.data.SongIndex
 import com.luckylearning.windtone.data.ThemeColorExtractor
-import com.luckylearning.windtone.data.db.ListenLogEntity
-import com.luckylearning.windtone.data.db.MusicDb
 import com.luckylearning.windtone.data.db.PlayerStateEntity
 import com.luckylearning.windtone.data.db.QueueSongEntity
-import com.luckylearning.windtone.data.db.toSong
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.lyrics.BilingualLyrics
 import com.luckylearning.windtone.lyrics.BilingualMode
@@ -66,7 +63,7 @@ import kotlinx.coroutines.withContext
 class PlaybackEngine(
     private val app: Application,
     private val prefs: Prefs,
-    private val db: MusicDb,
+    private val store: PlaybackStore,
     private val lyricsLoader: LyricsLoader,
     private val index: SongIndex,
     private val messages: MessageBus,
@@ -357,11 +354,7 @@ class PlaybackEngine(
         scope.launch {
             val now = System.currentTimeMillis()
             withContext(Dispatchers.IO) {
-                runCatching {
-                    val dao = db.songStateDao()
-                    dao.ensure(songId, now)
-                    dao.bump(songId, now)
-                }
+                runCatching { store.recordPlay(songId, now) }
             }
             index.bump(songId) { it.copy(playCount = it.playCount + 1, lastPlayedAt = now) }
         }
@@ -380,15 +373,7 @@ class PlaybackEngine(
         scope.launch {
             val now = System.currentTimeMillis()
             withContext(Dispatchers.IO) {
-                runCatching {
-                    val dao = db.songStateDao()
-                    dao.ensure(songId, now)
-                    dao.addPlayedMs(songId, ms, now)
-                    // 收听日志：记进小时桶，并顺手裁掉保留期之外的桶（表大小恒定有界）
-                    val log = db.listenLogDao()
-                    log.add(hour, ms)
-                    log.prune(hour - ListenLogEntity.RETENTION_DAYS * 24L)
-                }
+                runCatching { store.addListenTime(songId, ms, hour, now) }
             }
             index.bump(songId) { it.copy(playedMs = it.playedMs + ms) }
         }
@@ -416,10 +401,7 @@ class PlaybackEngine(
         val state = snapshotPlayerState(c)
         scope.launch {
             withContext(Dispatchers.IO) {
-                runCatching {
-                    db.queueDao().replaceAll(rows)
-                    db.playerStateDao().put(state)
-                }
+                runCatching { store.saveQueueAndState(rows, state) }
             }
         }
     }
@@ -429,7 +411,7 @@ class PlaybackEngine(
         val c = controller ?: return
         val state = snapshotPlayerState(c)
         scope.launch {
-            withContext(Dispatchers.IO) { runCatching { db.playerStateDao().put(state) } }
+            withContext(Dispatchers.IO) { runCatching { store.saveState(state) } }
         }
     }
 
@@ -540,10 +522,7 @@ class PlaybackEngine(
      */
     private suspend fun attemptBootPlayback(): BootAttempt {
         val songs = withContext(Dispatchers.IO) {
-            runCatching {
-                val states = db.songStateDao().all().associateBy { it.songId }
-                db.songDao().visible().mapNotNull { it.toSong(states[it.id]) }
-            }.getOrNull()
+            runCatching { store.loadVisibleSongs() }.getOrNull()
         } ?: return BootAttempt("读曲库失败（数据库还没就绪）")
         if (songs.isEmpty()) {
             return BootAttempt("曲库是空的（可能还没扫描完，或歌曲都在未挂载的存储上）")
@@ -614,11 +593,11 @@ class PlaybackEngine(
             return
         }
 
-        val state = withContext(Dispatchers.IO) { db.playerStateDao().get() }
+        val state = withContext(Dispatchers.IO) { store.loadPlayerState() }
         val position = (state?.positionMs ?: 0L).coerceAtLeast(0L)
 
         // 1) 优先整队列恢复
-        val queueIds = withContext(Dispatchers.IO) { db.queueDao().songIds() }
+        val queueIds = withContext(Dispatchers.IO) { store.loadQueueSongIds() }
         if (queueIds.isNotEmpty()) {
             val byId = songs.associateBy { it.dbId }
             val restored = queueIds.mapNotNull { byId[it] }
@@ -1047,11 +1026,7 @@ class PlaybackEngine(
         scope.launch {
             val now = System.currentTimeMillis()
             withContext(Dispatchers.IO) {
-                runCatching {
-                    val dao = db.songStateDao()
-                    dao.ensure(songId, now)
-                    dao.setLyricOffset(songId, offsetMs, now)
-                }
+                runCatching { store.setLyricOffset(songId, offsetMs, now) }
             }
         }
     }
@@ -1591,7 +1566,7 @@ class PlaybackEngine(
                     // 进度落库：只更新 player_state 唯一那一行（单行 UPDATE，开销极小）
                     scope.launch {
                         withContext(Dispatchers.IO) {
-                            runCatching { db.playerStateDao().updatePosition(pos, System.currentTimeMillis()) }
+                            runCatching { store.updatePosition(pos, System.currentTimeMillis()) }
                         }
                     }
                 }

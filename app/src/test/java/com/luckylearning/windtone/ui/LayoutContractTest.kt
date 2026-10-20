@@ -60,7 +60,7 @@ class LayoutContractTest {
      * v1.1.14：双栏整体停用。
      *
      * 车机（比亚迪宋 L DM-i）实测两条问题：左侧导航底部的「设置」被车机固定按钮栏
-     * 压住点不到；用户也明确表示不要双栏。于是车机两栏（[CarHomeScreen]）与平板双栏
+     * 压住点不到；用户也明确表示不要双栏。于是车机两栏（`CarHomeScreen`，已删除）与平板双栏
      * 一起下线，统一走单栏 + 抽屉导航。
      *
      * 这条测试防「顺手恢复」：MainScreen 里一旦又出现分隔线或车载两栏调用，
@@ -74,7 +74,7 @@ class LayoutContractTest {
             source.contains("VerticalDivider("),
         )
         assertFalse(
-            "MainScreen 不应再调用车载两栏布局 CarHomeScreen（v1.1.14 起停用）",
+            "MainScreen 不应再调用车载两栏布局（v1.1.14 起停用，CarHomeScreen 已删除）",
             source.contains("CarHomeScreen("),
         )
     }
