@@ -212,7 +212,7 @@ enum class DownloadRoute(val label: String, val hint: String, val prefix: String
     GH_PROXY_COM("gh-proxy.com", "公共加速镜像，ghproxy 不通时备用", "https://gh-proxy.com/"),
 }
 
-class Prefs(context: Context) {
+class Prefs private constructor(context: Context) {
 
     private val sp: SharedPreferences =
         context.getSharedPreferences("music_player_prefs", Context.MODE_PRIVATE)
@@ -692,7 +692,23 @@ class Prefs(context: Context) {
 
     // ================================================================ 私有
 
-    private companion object {
+    companion object {
+
+        /**
+         * 按 Application 缓存的进程内实例（P2-2）。
+         *
+         * 生产环境 Application 只有一个 → 实际就是单例，30 多处 `Prefs(context)`
+         * 不再反复新建 wrapper；用 WeakHashMap 而不是硬单例，是为了让 Robolectric
+         * 每个测试的新 Application 各自拿到独立实例，不串数据。
+         */
+        private val instances = java.util.WeakHashMap<Context, Prefs>()
+
+        operator fun invoke(context: Context): Prefs {
+            val app = context.applicationContext ?: context
+            synchronized(instances) {
+                return instances.getOrPut(app) { Prefs(app) }
+            }
+        }
         const val KEY_SCAN_SCOPE = "scan_scope"
         const val KEY_SCAN_SCOPE_CHOSEN = "scan_scope_chosen"
         const val KEY_LAST_SCAN_FP = "last_scan_fingerprint"

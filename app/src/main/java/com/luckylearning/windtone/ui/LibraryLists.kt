@@ -44,6 +44,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,6 +68,7 @@ import com.luckylearning.windtone.state.PlaylistInfo
 import com.luckylearning.windtone.state.VirtualPlaylist
 import com.luckylearning.windtone.state.virtualPlaylistInfo
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.yield
 
 /**
  * 曲库与歌单的**列表区**（原来长在 `MainScreen.kt` 里）。
@@ -80,6 +82,15 @@ import kotlinx.coroutines.launch
  */
 
 // ================================================================ 歌曲列表（含字母索引）
+
+/**
+ * 曲库分页渲染的每页条数（P2-1）。
+ *
+ * 大库里一次把上万首塞进 LazyColumn 并不会全部组合，但列表项数量会影响
+ * 滚动测量与「回到当前播放 / 字母索引」的定位成本。首屏只铺 200 首，
+ * 滚到底再追加一页；跳远时先把窗口撑到目标下标。
+ */
+private const val SONG_PAGE_SIZE = 200
 
 @Composable
 internal fun SongsList(
@@ -103,6 +114,14 @@ internal fun SongsList(
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+
+    // P2-1：分页窗口。列表内容 / 视图变化时重置到第一页。
+    var renderedCount by rememberSaveable(library.view, library.visible.size) {
+        mutableIntStateOf(minOf(SONG_PAGE_SIZE, library.visible.size))
+    }
+    val renderedSongs = remember(library.visible, renderedCount) {
+        library.visible.take(renderedCount)
+    }
 
     if (library.visible.isEmpty()) {
         val emptyLibrary = library.songs.isEmpty()
@@ -148,7 +167,7 @@ internal fun SongsList(
             contentPadding = PaddingValues(top = 4.dp, bottom = 16.dp),
         ) {
             itemsIndexed(
-                items = library.visible,
+                items = renderedSongs,
                 key = { _, item -> item.stableKey },
                 contentType = { _, _ -> "song" },
             ) { index, song ->
@@ -180,6 +199,27 @@ internal fun SongsList(
                     selected = if (library.selecting) selected else null,
                 )
             }
+
+            // P2-1：滚到分页窗口末尾时自动追加一页（footer 被组合即触发）
+            if (renderedCount < library.visible.size) {
+                item(key = "__song_load_more__") {
+                    LaunchedEffect(renderedCount, library.visible.size) {
+                        renderedCount = minOf(renderedCount + SONG_PAGE_SIZE, library.visible.size)
+                    }
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            "正在加载更多…",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
         }
 
         // 字母索引导航条（车载模式不画：9sp 的小字在车上点不中，靠 Tab 与搜索更快）
@@ -202,7 +242,15 @@ internal fun SongsList(
                             .clip(RoundedCornerShape(8.dp))
                             .clickable {
                                 library.letterIndex[letter]?.let { idx ->
-                                    scope.launch { listState.scrollToItem(idx.coerceIn(0, library.visible.size - 1)) }
+                                    // 目标可能在尚未渲染的后续页：先把窗口撑到它之后
+                                    renderedCount = maxOf(
+                                        renderedCount,
+                                        (idx + SONG_PAGE_SIZE).coerceAtMost(library.visible.size),
+                                    )
+                                    scope.launch {
+                                        yield()
+                                        listState.scrollToItem(idx.coerceIn(0, library.visible.size - 1))
+                                    }
                                 }
                             }
                             .padding(horizontal = 4.dp, vertical = 1.dp),
@@ -222,7 +270,16 @@ internal fun SongsList(
                     .padding(end = 16.dp, bottom = 16.dp)
                     .clip(CircleShape)
                     .clickable {
-                        scope.launch { listState.animateScrollToItem(currentIndex.firstVisibleSafe()) }
+                        scope.launch {
+                            if (currentIndex >= renderedCount) {
+                                renderedCount = minOf(
+                                    currentIndex + SONG_PAGE_SIZE,
+                                    library.visible.size,
+                                )
+                                yield()
+                            }
+                            listState.animateScrollToItem(currentIndex.firstVisibleSafe())
+                        }
                     },
             ) {
                 Row(

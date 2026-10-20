@@ -425,9 +425,18 @@ fun MainScreen(
             // 必须声明在 when 之外 —— 进详情时下面的 else 分支会离开组合，
             // holder 若随之被 forget，存下的位置会一起丢掉。
             val listStateHolder = rememberSaveableStateHolder()
-            when {
+            // P2-4：主内容区的分支收敛到纯函数（MainNavigation.kt），便于单测与扩展。
+            when (
+                mainRouteOf(
+                    scanScope = library.scanScope,
+                    songsEmpty = library.songs.isEmpty(),
+                    scanning = library.scanning,
+                    hasSelectedPlaylist = library.selectedPlaylist != null,
+                    hasSelectedGroup = library.selectedGroup != null,
+                )
+            ) {
                 // 首次进入 / 移除全部目录后：等待用户指定扫描范围，不自动扫任何位置
-                library.scanScope == ScanScope.UNSET && library.songs.isEmpty() ->
+                MainRoute.SCAN_SETUP ->
                     ScanSetupView(
                         scanning = library.scanning,
                         statusText = library.statusText,
@@ -436,9 +445,9 @@ fun MainScreen(
                         modifier = Modifier.fillMaxSize(),
                     )
 
-                library.scanning && library.songs.isEmpty() -> ScanningState(library.statusText)
+                MainRoute.SCANNING -> ScanningState(library.statusText)
 
-                library.selectedPlaylist != null -> PlaylistDetail(
+                MainRoute.PLAYLIST_DETAIL -> PlaylistDetail(
                     lib = lib,
                     playerVm = playerVm,
                     library = library,
@@ -450,7 +459,7 @@ fun MainScreen(
                     },
                 )
 
-                library.selectedGroup != null -> GroupDetail(
+                MainRoute.GROUP_DETAIL -> GroupDetail(
                     playerVm = playerVm,
                     library = library,
                     player = player,
@@ -462,7 +471,7 @@ fun MainScreen(
                 // 一级列表：用 view 作为 key，每个视图各记一份滚动位置，互不干扰。
                 // 详情页（PlaylistDetail / GroupDetail）刻意留在这层之外 —— 每次进
                 // 详情都从顶部开始，符合「打开一个新的分组 / 歌单」的预期。
-                else -> listStateHolder.SaveableStateProvider(library.view.name) {
+                MainRoute.LIBRARY -> listStateHolder.SaveableStateProvider(library.view.name) {
                     when (library.view) {
                         LibraryView.SONGS -> SongsList(
                             playerVm = playerVm,

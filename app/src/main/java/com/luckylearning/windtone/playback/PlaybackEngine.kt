@@ -12,7 +12,6 @@ import com.luckylearning.windtone.data.BootStatus
 import com.luckylearning.windtone.data.CoverRepository
 import com.luckylearning.windtone.data.LyricsLoader
 import com.luckylearning.windtone.data.MessageBus
-import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.data.SongIndex
 import com.luckylearning.windtone.data.ThemeColorExtractor
@@ -118,6 +117,34 @@ class PlaybackEngine(
     private val _themeSeed = MutableStateFlow<Int?>(null)
     val themeSeed: StateFlow<Int?> = _themeSeed.asStateFlow()
 
+    /**
+     * 悬浮歌词 / 外观设置：整簇动作委托给它，引擎只提供 [OverlaySettings.Host] 的窄接口。
+     * 见 `playback/OverlaySettings.kt`。
+     */
+    private val overlaySettings = OverlaySettings(
+        app = app,
+        prefs = prefs,
+        messages = messages,
+        scope = scope,
+        state = _player,
+        themeSeed = _themeSeed,
+        host = object : OverlaySettings.Host {
+            override val hasController: Boolean get() = controller != null
+            override val currentPositionMs: Long
+                get() = controller?.currentPosition?.coerceAtLeast(0L) ?: 0L
+            override val isPlaying: Boolean get() = controller?.isPlaying ?: false
+
+            override fun publishOverlay(positionMs: Long, playing: Boolean) =
+                publishLyricToOverlay(positionMs, playing)
+
+            override fun startTicker() = startPositionTicker()
+
+            override fun setAppForegroundFlag(foreground: Boolean) {
+                appForeground = foreground
+            }
+        },
+    )
+
     /** 桌面悬浮窗运行状态（设置页展示；失败时由 init 里的收集器做回退） */
     val overlayHealth: StateFlow<LyricOverlayBus.Health> = LyricOverlayBridge.health
 
@@ -137,7 +164,6 @@ class PlaybackEngine(
     private var healLyricsJob: Job? = null
     private var artworkJob: Job? = null
     private var positionJob: Job? = null
-    private var previewJob: Job? = null
     /** 本次恢复是否**强制**起播（开机后台播放用；不受「打开应用继续上次播放」开关限制） */
     private var forceAutoplayOnRestore = false
 
@@ -992,7 +1018,7 @@ class PlaybackEngine(
                 lyrics = BilingualLyrics.apply(rawLyrics, BilingualMode.of(normalized)),
             )
         }
-        previewOverlayAfterConfigChange()
+        overlaySettings.previewOverlayAfterConfigChange()
     }
 
     /** 导出用的原始歌词：带双语副行，不受「双语歌词」显示模式影响 */
@@ -1023,305 +1049,50 @@ class PlaybackEngine(
         }
     }
 
-    /**
-     * 桌面悬浮歌词开关。
-     *
-     * 落盘 + 更新界面状态 + 同步起停悬浮窗服务。
-     * 若用户开着开关但尚未授权「出现在其他应用上」，`sync` 内部会拒绝启动，
-     * 设置页据此把开关弹回并提示去授权。
-     *
-     * 刚打开时会启动一段**前台预览**（见 [startOverlayPreview]）：
-     * 按设计悬浮窗只在 App 退到后台时显示，而在设置页里打开的这一刻
-     * App 恰恰在前台 —— 没有预览的话用户点完开关看不到任何变化，
-     * 会直接把功能判定为「没有效果」。
-     */
-    override fun setLyricOverlay(enabled: Boolean) {
-        prefs.lyricOverlay = enabled
-        _player.update { it.copy(lyricOverlay = enabled) }
-        LyricOverlayBridge.sync(app, enabled)
-        if (enabled) {
-            // 刚打开时立刻按当前进度填一行，不必等下一个 tick
-            val c = controller
-            if (c != null) publishLyricToOverlay(c.currentPosition.coerceAtLeast(0L), c.isPlaying)
-            startOverlayPreview()
-        } else {
-            // 关掉时顺手退出调整态：v1.1.21 起设置页的「调整位置」入口在关闭后
-            // 整块隐藏，若此时 overlayEditing 还是 true，状态就成了没有出口的孤儿
-            // —— 下次打开开关，页面会直接显示「完成调整」，而用户从没进过调整态。
-            if (_player.value.overlayEditing) {
-                LyricOverlayBridge.setEditing(false)
-                _player.update { it.copy(overlayEditing = false) }
-            }
-        }
-    }
+    // ---------------------------------------------------------------- 悬浮窗设置（转发）
+    //
+    // 实现全部在 OverlaySettings；这里只保留接口形状。Kotlin 的接口委托表达式不能
+    // 引用类体属性（构造期尚未初始化），所以用显式转发而不是 `by overlaySettings`。
 
-    /**
-     * 桌面悬浮歌词一次显示几行（1..5）：1 = 只显示当前行，3 = 上 1 + 当前 + 下 1，5 = 上 2 + 当前 + 下 2。
-     *
-     * 只改配置，不重启服务：服务每次收到新歌词时自己读 Prefs 决定排版，
-     * 所以下一次歌词刷新（最多几十毫秒）就会按新行数显示，
-     * 顺便给一次前台预览让用户当场看见效果。
-     */
-    override fun setLyricOverlayLines(lines: Int) {
-        val normalized = lines.coerceIn(
-            SettingsDefaults.OVERLAY_LINES_RANGE.first,
-            SettingsDefaults.OVERLAY_LINES_RANGE.last,
-        )
-        prefs.lyricOverlayLines = normalized
-        _player.update { it.copy(lyricOverlayLines = normalized) }
-        previewOverlayAfterConfigChange()
-    }
+    override fun setLyricOverlay(enabled: Boolean) = overlaySettings.setLyricOverlay(enabled)
+    override fun setLyricOverlayLines(lines: Int) = overlaySettings.setLyricOverlayLines(lines)
+    override fun setLyricOverlayFullHeight(enabled: Boolean) =
+        overlaySettings.setLyricOverlayFullHeight(enabled)
 
-    /**
-     * 悬浮歌词「全屏高度」：铺满屏宽、高度 = 屏高 − 56dp（让开车机 Dock），
-     * 内容改按播放页歌词区排版（当前行居中放大，上下各 5 句压暗）。
-     *
-     * 只改配置，不重启服务；服务下一帧读 Prefs 就会换外形，
-     * 顺手给一次 6 秒前台预览，让用户当场看见「整屏歌词」长什么样。
-     */
-    override fun setLyricOverlayFullHeight(enabled: Boolean) {
-        prefs.lyricOverlayFullHeight = enabled
-        _player.update { it.copy(lyricOverlayFullHeight = enabled) }
-        previewOverlayAfterConfigChange()
-    }
+    override fun setLyricOverlayFullWidthPercent(percent: Int) =
+        overlaySettings.setLyricOverlayFullWidthPercent(percent)
 
-    /**
-     * 全屏歌词的宽度（屏宽百分比，30..100）。
-     *
-     * 与单条字幕的宽度分开存，互不影响。宽度一变窗口就重算：余量（屏宽 − 窗宽）
-     * 跟着变，水平位置仍按 [lyricOverlayFullOffsetPercent] 的百分比取位，
-     * 所以「靠右」在缩窄后仍然靠右，不需要用户再挪一次。
-     */
-    override fun setLyricOverlayFullWidthPercent(percent: Int) {
-        val normalized = percent.coerceIn(
-            SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE.first,
-            SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE.last,
-        )
-        prefs.lyricOverlayFullWidthPercent = normalized
-        _player.update { it.copy(lyricOverlayFullWidthPercent = normalized) }
-        previewOverlayAfterConfigChange()
-    }
+    override fun setLyricOverlayFullOffsetPercent(percent: Int) =
+        overlaySettings.setLyricOverlayFullOffsetPercent(percent)
 
-    /**
-     * 全屏歌词的水平位置：0 = 最左 / 50 = 居中 / 100 = 最右（可移动余量的百分比）。
-     *
-     * 桌面左右拖动时由服务反算出同一个百分比落盘，两处控制同一份数据。
-     */
-    override fun setLyricOverlayFullOffsetPercent(percent: Int) {
-        val normalized = percent.coerceIn(
-            SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE.first,
-            SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE.last,
-        )
-        prefs.lyricOverlayFullOffsetPercent = normalized
-        _player.update { it.copy(lyricOverlayFullOffsetPercent = normalized) }
-        previewOverlayAfterConfigChange()
-    }
+    override fun setLyricOverlayShowTitle(show: Boolean) =
+        overlaySettings.setLyricOverlayShowTitle(show)
 
-    /** 悬浮窗顶部的「歌名 + 歌手」两行小字：开 / 关 */
-    override fun setLyricOverlayShowTitle(show: Boolean) {
-        prefs.lyricOverlayShowTitle = show
-        _player.update { it.copy(lyricOverlayShowTitle = show) }
-        previewOverlayAfterConfigChange()
-    }
+    override fun setLyricOverlayTitleScale(scale: Int) = overlaySettings.setLyricOverlayTitleScale(scale)
+    override fun setLyricOverlayTextScale(scale: Int) = overlaySettings.setLyricOverlayTextScale(scale)
+    override fun setLyricOverlayBackdrop(mode: Int) = overlaySettings.setLyricOverlayBackdrop(mode)
+    override fun setLyricOverlayPauseMode(mode: Int) = overlaySettings.setLyricOverlayPauseMode(mode)
+    override fun setLyricOverlayAlign(align: Int) = overlaySettings.setLyricOverlayAlign(align)
 
-    /** 歌名 / 歌手两行小字的字号档位：0 小 / 1 中 / 2 大 */
-    override fun setLyricOverlayTitleScale(scale: Int) {
-        val normalized = scale.coerceIn(0, 2)
-        prefs.lyricOverlayTitleScale = normalized
-        _player.update { it.copy(lyricOverlayTitleScale = normalized) }
-        previewOverlayAfterConfigChange()
-    }
+    override fun setLyricOverlayHiddenApps(apps: Set<String>) =
+        overlaySettings.setLyricOverlayHiddenApps(apps)
 
-    /** 悬浮歌词字号档位：0 小 / 1 中 / 2 大 */
-    override fun setLyricOverlayTextScale(scale: Int) {
-        val normalized = scale.coerceIn(0, 2)
-        prefs.lyricOverlayTextScale = normalized
-        _player.update { it.copy(lyricOverlayTextScale = normalized) }
-        previewOverlayAfterConfigChange()
-    }
+    override fun setForegroundLogEnabled(enabled: Boolean) =
+        overlaySettings.setForegroundLogEnabled(enabled)
 
-    /** 悬浮歌词底板：0 无 / 1 半透明 / 2 深色实底 */
-    override fun setLyricOverlayBackdrop(mode: Int) {
-        val normalized = mode.coerceIn(0, 2)
-        prefs.lyricOverlayBackdrop = normalized
-        _player.update { it.copy(lyricOverlayBackdrop = normalized) }
-        previewOverlayAfterConfigChange()
-    }
+    override fun setDebugUnlocked(enabled: Boolean) = overlaySettings.setDebugUnlocked(enabled)
 
-    /** 暂停时的表现：0 淡出 / 1 隐藏 */
-    override fun setLyricOverlayPauseMode(mode: Int) {
-        val normalized = mode.coerceIn(0, 1)
-        prefs.lyricOverlayPauseMode = normalized
-        _player.update { it.copy(lyricOverlayPauseMode = normalized) }
-        previewOverlayAfterConfigChange()
-    }
+    override fun setLyricOverlayWidthPercent(percent: Int) =
+        overlaySettings.setLyricOverlayWidthPercent(percent)
 
-    /**
-     * 「不显示悬浮窗的应用」名单（v1.1.29）。
-     *
-     * 存的时候顺手剔掉空白项 —— 名单来自用户勾选，理论上不会脏，
-     * 但 Set 是不可变副本进来的，防一手比事后排查便宜。
-     */
-    override fun setLyricOverlayHiddenApps(apps: Set<String>) {
-        val normalized = apps.filterTo(LinkedHashSet()) { it.isNotBlank() }
-        prefs.lyricOverlayHiddenApps = normalized
-        _player.update { it.copy(lyricOverlayHiddenApps = normalized) }
-        // 不预览（隐藏效果在 App 内看不到），但要把服务叫醒去启停检测
-        LyricOverlayBridge.bumpAppearance()
-    }
-
-    /** 「前台应用记录」开关（v1.1.29）：记录只写本机文件，同样不预览 */
-    override fun setForegroundLogEnabled(enabled: Boolean) {
-        prefs.foregroundLogEnabled = enabled
-        _player.update { it.copy(foregroundLogEnabled = enabled) }
-        LyricOverlayBridge.bumpAppearance()
-    }
-
-    /**
-     * 调试分区解锁开关（v1.1.31）。
-     *
-     * 纯界面态：不碰播放、不叫醒悬浮窗服务，也不触发预览。之所以仍然走 Prefs 而不是
-     * `rememberSaveable`，是因为它必须跨进程重启保留 —— 用户解锁过一次，下次进设置
-     * 就该还在，否则每次都要连点 5 次。
-     */
-    override fun setDebugUnlocked(enabled: Boolean) {
-        prefs.debugUnlocked = enabled
-        _player.update { it.copy(debugUnlocked = enabled) }
-    }
-
-    /**
-     * 悬浮歌词水平对齐：0 居中 / 1 居左。
-     *
-     * 与其它外观项的区别：它同时改**文字对齐**与**窗口重心**，所以服务侧
-     * 收到外观版本号后还会顺带重摆一次窗口位置（见 `applyAppearance`）。
-     * 服务每帧自己读 Prefs，这里只负责通知 + 预览。
-     */
-    override fun setLyricOverlayAlign(align: Int) {
-        val normalized = align.coerceIn(0, 1)
-        prefs.lyricOverlayAlign = normalized
-        _player.update { it.copy(lyricOverlayAlign = normalized) }
-        previewOverlayAfterConfigChange()
-    }
-
-    /**
-     * 悬浮窗宽度（屏幕宽度百分比，1..100）。
-     *
-     * 服务侧在 `applyAppearance` 里改 `LayoutParams.width` 并**重摆一次位置**：
-     * 夹取上限是「屏宽 − 窗口宽」，窗口变宽后能移动的余量会变小。
-     */
-    override fun setLyricOverlayWidthPercent(percent: Int) {
-        val normalized = percent.coerceIn(
-            SettingsDefaults.OVERLAY_WIDTH_RANGE.first,
-            SettingsDefaults.OVERLAY_WIDTH_RANGE.last,
-        )
-        prefs.lyricOverlayWidthPercent = normalized
-        _player.update { it.copy(lyricOverlayWidthPercent = normalized) }
-        previewOverlayAfterConfigChange()
-    }
-
-    /** 悬浮窗歌词文字颜色 */
-    override fun setLyricOverlayTextColor(color: Int) {
-        prefs.lyricOverlayTextColor = color
-        _player.update { it.copy(lyricOverlayTextColor = color) }
-        previewOverlayAfterConfigChange()
-    }
-
-    /**
-     * 外观 / 排版配置改完的统一收尾。
-     *
-     * 服务是独立存活的，光写 Prefs 它不知道（没有新歌词就不会重绘），
-     * 所以这里做两件事：通知重绘 + 给一次前台预览。
-     * 用户改完字号 / 底板 / 行数能**当场**看到效果，不用退到桌面去验证。
-     */
-    private fun previewOverlayAfterConfigChange() {
-        LyricOverlayBridge.bumpAppearance()
-        if (!prefs.lyricOverlay) return
-        val c = controller
-        if (c != null) publishLyricToOverlay(c.currentPosition.coerceAtLeast(0L), c.isPlaying)
-        startOverlayPreview()
-    }
-
-    /**
-     * 前台预览：开启开关后让悬浮窗在前台也显示一小段时间。
-     *
-     * 与「调整位置」复用同一条可见性豁免，只是不进入可拖动状态。
-     */
-    private fun startOverlayPreview() {
-        previewJob?.cancel()
-        LyricOverlayBridge.setPreview(true)
-        previewJob = scope.launch {
-            delay(OVERLAY_PREVIEW_MS)
-            LyricOverlayBridge.setPreview(false)
-        }
-    }
-
-    /**
-     * 重新触发一次前台预览（设置页自检对话框的「显示预览」按钮）。
-     *
-     * 用户报"没反应"时，这一个按钮就能把「窗口到底能不能挂上」与
-     * 「是不是只是被前台隐藏」区分开——不必退到桌面、不必重装。
-     */
-    override fun previewOverlay() {
-        if (!prefs.lyricOverlay) return
-        LyricOverlayBridge.sync(app, true)
-        // 全屏这一档在 App 前台不画（整屏浮层会盖住设置页，见 LyricOverlayService
-        // 的 fullInApp）。自检里的「显示预览」在这种情况下必然看不到东西，
-        // 与其静默无反应，不如直接告诉用户去哪儿看。
-        if (prefs.lyricOverlayFullHeight) {
-            messages.post("全屏歌词不在设置页内显示（否则会盖住控件），退到桌面即可看到")
-            return
-        }
-        startOverlayPreview()
-    }
-
-    /** 悬浮歌词是否已获得「出现在其他应用上」权限 */
-    override fun canDrawOverlay(): Boolean = LyricOverlayBridge.canDraw(app)
-
-    /**
-     * 进入 / 退出悬浮歌词的「调整位置」模式。
-     *
-     * 进入后窗口临时可拖动（吃触摸），退出后位置落盘并恢复点击穿透。
-     * 只更新会话级状态，不落盘——「是否正在调整」不是需要记住的偏好。
-     */
-    override fun setOverlayEditing(editing: Boolean) {
-        LyricOverlayBridge.setEditing(editing)
-        _player.update { it.copy(overlayEditing = editing) }
-    }
-
-    /**
-     * App 前后台切换时同步给悬浮窗，并决定进度计时器是否该歇下来。
-     *
-     * 悬浮窗只在 App 退到后台时显示；回到前台时用户看的是播放页歌词，
-     * 桌面字幕属于重复信息，直接隐藏。
-     */
-    override fun setAppForeground(foreground: Boolean) {
-        appForeground = foreground
-        LyricOverlayBridge.setAppForeground(foreground)
-        if (foreground) startPositionTicker()
-    }
-
-    /**
-     * App 启动时对齐一次悬浮窗服务状态。
-     *
-     * 场景：用户上次开着悬浮歌词，但中途在系统设置里撤了授权，
-     * 或者车机重启后服务被系统清掉——启动时对一次账，避免开关与实际不符。
-     */
-    override fun restoreLyricOverlay() {
-        val enabled = prefs.lyricOverlay && canDrawOverlay()
-        if (prefs.lyricOverlay && !enabled) {
-            // 授权已被撤销：开关回置为关，避免界面骗人
-            setLyricOverlay(false)
-        } else {
-            LyricOverlayBridge.sync(app, enabled)
-        }
-    }
-
-    override fun setDynamicTheme(enabled: Boolean) {
-        prefs.dynamicTheme = enabled
-        if (!enabled) _themeSeed.value = null
-    }
-
-    override fun dynamicThemeEnabled(): Boolean = prefs.dynamicTheme
+    override fun setLyricOverlayTextColor(color: Int) = overlaySettings.setLyricOverlayTextColor(color)
+    override fun canDrawOverlay(): Boolean = overlaySettings.canDrawOverlay()
+    override fun setOverlayEditing(editing: Boolean) = overlaySettings.setOverlayEditing(editing)
+    override fun setAppForeground(foreground: Boolean) = overlaySettings.setAppForeground(foreground)
+    override fun restoreLyricOverlay() = overlaySettings.restoreLyricOverlay()
+    override fun previewOverlay() = overlaySettings.previewOverlay()
+    override fun setDynamicTheme(enabled: Boolean) = overlaySettings.setDynamicTheme(enabled)
+    override fun dynamicThemeEnabled(): Boolean = overlaySettings.dynamicThemeEnabled()
 
     // ---------------------------------------------------------------- 音频技术信息
 
@@ -1577,9 +1348,6 @@ class PlaybackEngine(
     companion object {
         private const val TAG = "PlaybackEngine"
 
-        /** 开启桌面悬浮歌词后的前台预览时长：够用户看清「确实开了」，又不至于碍事 */
-        private const val OVERLAY_PREVIEW_MS = 6_000L
-
         /**
          * 悬浮窗服务被系统杀掉后的重建节流间隔。
          *
@@ -1599,7 +1367,7 @@ class PlaybackEngine(
  * 抽成接口的唯一目的：让 `PlayerViewModel` 用 Kotlin 的委托（`by`）把它整块转出去，
  * 而不是手写四十个转发方法——转发代码既没有信息量，又会在加新动作时被漏掉。
  */
-interface PlayerActions {
+interface PlayerActions : OverlayActions {
     fun restoreQueueIfNeeded()
 
     /** 开机后台起播：不经界面恢复上次队列并直接开播（v1.1.24） */
@@ -1656,52 +1424,6 @@ interface PlayerActions {
     fun lyricsForExport(): Lyrics
     fun setLyricsPaneVisible(visible: Boolean)
     fun setCarMode(enabled: Boolean)
-    fun setLyricOverlay(enabled: Boolean)
-    fun setLyricOverlayLines(lines: Int)
-
-    /** 悬浮歌词全屏高度（铺满屏宽、避开底部车机 Dock，内容按播放页歌词区排版） */
-    fun setLyricOverlayFullHeight(enabled: Boolean)
-
-    /** 全屏歌词的宽度：屏宽百分比（30..100），与单条字幕的宽度各存一份 */
-    fun setLyricOverlayFullWidthPercent(percent: Int)
-
-    /** 全屏歌词的水平位置：余量百分比（0 最左 / 50 居中 / 100 最右） */
-    fun setLyricOverlayFullOffsetPercent(percent: Int)
-    fun setLyricOverlayShowTitle(show: Boolean)
-    fun setLyricOverlayTitleScale(scale: Int)
-    fun setLyricOverlayTextScale(scale: Int)
-    fun setLyricOverlayBackdrop(mode: Int)
-    fun setLyricOverlayPauseMode(mode: Int)
-    fun setLyricOverlayAlign(align: Int)
-
-    /**
-     * 「不显示悬浮窗的应用」名单（v1.1.29）。
-     *
-     * 不触发预览 —— 隐藏不是能在设置页里「看一眼」的效果；但必须推高外观版本
-     * 把悬浮窗服务叫醒：它靠这个信号决定启停前台检测轮询（见
-     * `LyricOverlayService.syncForegroundTracking`）。
-     */
-    fun setLyricOverlayHiddenApps(apps: Set<String>)
-
-    /** 「前台应用记录」开关（v1.1.29，默认关）；同样只叫醒服务、不预览 */
-    fun setForegroundLogEnabled(enabled: Boolean)
-
-    /** 调试分区解锁开关（v1.1.31，默认关 = 隐藏） */
-    fun setDebugUnlocked(enabled: Boolean)
-
-    /** 悬浮窗宽度：屏幕宽度百分比（1..100） */
-    fun setLyricOverlayWidthPercent(percent: Int)
-
-    /** 悬浮窗歌词文字颜色（ARGB） */
-    fun setLyricOverlayTextColor(color: Int)
-
-    fun canDrawOverlay(): Boolean
-    fun setOverlayEditing(editing: Boolean)
-    fun setAppForeground(foreground: Boolean)
-    fun restoreLyricOverlay()
-    fun previewOverlay()
-    fun setDynamicTheme(enabled: Boolean)
-    fun dynamicThemeEnabled(): Boolean
     fun inspectAudio(song: Song)
     fun clearAudioInfo()
 }
