@@ -36,7 +36,7 @@
 
 <div class="wrap">
 <section class="sec" id="sec-player">
-  <div class="sec-hd"><h2>二、播放页</h2><span>PlayerScreen.kt · LyricsPane.kt —— 歌词态 / 封面态 / 音量浮层 / 暂无歌词 / 纯文本 / 车载沉浸态</span></div>
+  <div class="sec-hd"><h2>二、播放页</h2><span>PlayerScreen.kt · LyricsPane.kt —— 歌词态 / 封面态 / 音量浮层 / 暂无歌词 / 纯文本 / 沉浸态（手机 + 车机）</span></div>
   <div class="board">
 <figure class="fig" id="scr-player-lyrics">
   <div class="cap"><b>⑫ 播放页 · 歌词态（默认）</b><em>PlayerScreen.kt · LyricsPane（showLyrics = true）</em></div>
@@ -99,7 +99,7 @@
 </figure>
 
 <figure class="fig" id="scr-player-car">
-  <div class="cap"><b>⑫D 播放页 · 沉浸态（歌词态 · 5 秒无操作）</b><em>PlayerScreen.kt · immersive —— 车载模式下触发；车机横屏见第六节 ㊲（v3 布局：左导航 + 内容区 + 底部播放条）</em></div>
+  <div class="cap"><b>⑫D 播放页 · 沉浸态（歌词态 · 5 秒无操作）</b><em>PlayerScreen.kt · immersive —— 歌词态 5 秒无操作触发（手机 / 车机通用）；车机横屏见第六节 ㊲（v3 布局：左导航 + 内容区 + 底部播放条）</em></div>
   <div class="phone">
     <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
     <div class="app">
@@ -128,7 +128,7 @@
       </div>
     </div>
   </div>
-  <p class="note"><b>关键点（车载沉浸态）：</b>仅<b>车载模式 + 歌词态</b>下生效（<code>immersive = carMode && showLyrics</code>，封面态不收起）。
+  <p class="note"><b>关键点（沉浸态 · 手机 / 车机通用）：</b>歌词态下生效（<code>immersive = showLyrics</code>，封面态不收起）。
   播放页歌词态 <b>5 秒无触摸</b>后进入沉浸态：<b>顶栏、控制键行、底部状态行收起</b>，
   <b>歌名行（歌名 + 歌手 + 红心）保留</b>，贴在进度条上方——即保留<b>歌词区（占满剩余空间）+ 歌名行 + 进度条 + 时间</b>；
   车机版式下红心<b>紧跟在歌名/歌手后面</b>（不贴屏幕最右缘——驾驶时视线不用扫到边上），手机版仍为「标题占满 + 红心贴右」；
@@ -136,7 +136,7 @@
   进入沉浸态时内容区最大宽度限制（760dp）解除，歌词铺满整屏宽度。<br>
   车载模式歌词整体放大 <b>1.5 倍</b>（在用户「歌词大小」缩放基础上再乘：正文 15.5sp→约 23sp、当前行 17.5sp→约 26sp），
   行距与「颜色 / 字号 / 字重 / 底色」的强调规则与普通模式一致（普通模式另见 ⑫）——车机屏离驾驶位 60~70cm，手机字号瞄一眼读不清。<br>
-  触发前提：设置 → 外观 →「车载模式」开启（启动直接进播放页、锁横屏）；车机横屏见第六节 ㊲（同一个 <code>PlayerScreen</code>，外壳换成左导航 + 内容区），本屏是播放页自身的沉浸态。</p>
+  触发前提：无 —— 打开播放页并停在歌词态即可（手机 / 车机一致）。车载模式在此之上额外提供「启动直进播放页 + 锁横屏 + 歌词放大 1.5 倍」；车机横屏见第六节 ㊲（同一个 <code>PlayerScreen</code>，外壳换成左导航 + 内容区）。</p>
 </figure>
 
 <figure class="fig" id="scr-player-cover">

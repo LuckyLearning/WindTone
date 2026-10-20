@@ -400,7 +400,7 @@
   </div>
   <p class="note"><b>关键点：</b>封面态与歌词态<b>共用同一个播放页</b>，顶部右侧「歌词↔封面」按钮切换；驾驶时默认进歌词态（信息密度更高），想看大封面点一下即可。
   封面占位沿用「首字 + 六档确定性渐变」规则（与列表、专辑网格一致），不画灰色音符。<b>封面下方一行播放模式提示</b>：顺序播放 / 单曲循环 / 随机播放，当前模式高亮，避免驾驶中低头进菜单。<br>
-  <b>封面不进入沉浸态</b>——沉浸态只在歌词态生效（<code>immersive = carMode &amp;&amp; showLyrics</code>），封面本身就是主要视觉，收起控件没意义。</p>
+  <b>封面不进入沉浸态</b>——沉浸态只在歌词态生效（<code>immersive = showLyrics</code>），封面本身就是主要视觉，收起控件没意义。</p>
 </figure>
 
 <figure class="fig car" id="scr-car-player-nolyr">
@@ -525,7 +525,7 @@
 </figure>
 
 <figure class="fig car" id="scr-car-player-immersive">
-  <div class="cap"><b>㊲D 车机 · 播放页 · 沉浸态（歌词态 · 5 秒无触摸）</b><em>PlayerScreen.kt · immersive —— 仅车载模式 + 歌词态触发；左导航与控制键一并收起，歌词铺满全宽</em></div>
+  <div class="cap"><b>㊲D 车机 · 播放页 · 沉浸态（歌词态 · 5 秒无触摸）</b><em>PlayerScreen.kt · immersive —— 歌词态 5 秒无触摸触发（手机 / 车机通用）；车机收起左导航与控制键，歌词铺满全宽</em></div>
   <div class="carphone v3">
     <div class="carbar">
       <span>9:41</span><span class="cb-item">🌡 24°C</span>
@@ -560,7 +560,7 @@
     </div>
     <div class="cv3-dock"><i></i><i></i><i></i><span>车机 Dock（系统浮层 · App 只让出 56dp）</span></div>
   </div>
-  <p class="note"><b>关键点：</b>仅<b>车载模式 + 歌词态</b>下生效（<code>immersive = carMode &amp;&amp; showLyrics</code>，封面态不进入）。播放页歌词态 <b>5 秒无触摸</b>后收起<b>左导航 + 控制键行 + 顶栏</b>，
+  <p class="note"><b>关键点：</b>歌词态下生效（<code>immersive = showLyrics</code>，手机 / 车机通用，封面态不进入）。播放页歌词态 <b>5 秒无触摸</b>后收起<b>左导航 + 控制键行 + 顶栏</b>，
   只留<b>歌名行（含红心）+ 歌词 + 进度条 + 时间</b>；歌词因此拿到内容区全宽。<br>
   任意触摸立即恢复并重新计时 5 秒 —— 包括按返回键：<b>此时返回键先恢复界面而不是退出播放页</b>，避免误触退出。<br>
   歌词整体放大 <b>1.5 倍</b>（正文 26px / 当前行 32px 已含这层放大）：车机屏离驾驶位 60~70cm，手机字号瞄一眼读不清。

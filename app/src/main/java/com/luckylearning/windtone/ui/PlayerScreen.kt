@@ -182,10 +182,11 @@ fun PlayerScreen(
         ActivityResultContracts.CreateDocument("text/plain")
     ) { uri -> if (uri != null) onExportLyrics(uri) }
 
-    // ------------------------------------------------------ 车载沉浸态
+    // ------------------------------------------------------ 沉浸态（手机 + 车机）
     //
-    // 车载模式下歌词态 5 秒无触摸 → 收起顶栏 / 歌名行 / 控制键行 / 底部状态行，
-    // 屏幕上只剩「歌词 + 进度条 + 时间」，把纵向空间全让给歌词（见 docs/ui ⑫D 屏）。
+    // 歌词态 5 秒无触摸 → 收起顶栏 / 控制键行 / 底部状态行；保留歌名行（含红心）
+    // + 歌词 + 进度条 + 时间，把纵向空间全让给歌词（见 docs/ui ⑫D 屏）。
+    // 2026-10-20 用户确认：沉浸态不是车机专属，手机版歌词态同样生效。
     //
     // 计时模型：把「最后一次用户操作时刻」记在 [lastActionAt]，
     // 再让协程睡满 5 秒后把 [immersive] 置真。三处状态的分工：
@@ -195,7 +196,7 @@ fun PlayerScreen(
     //  · [immersiveOn]：由协程置真、由交互置假，保证「任意触摸立即恢复」。
     var lastActionAt by remember { mutableStateOf(0L) }
     var immersiveOn by remember { mutableStateOf(false) }
-    val immersive = state.carMode && showLyrics && immersiveOn
+    val immersive = showLyrics && immersiveOn
 
     /** 任意交互：立刻退出沉浸态，并让 5 秒从头计起 */
     val keepAwake: () -> Unit = {
@@ -208,16 +209,23 @@ fun PlayerScreen(
         if (state.carMode) keepAwake()
     }
 
+    // 手机版同样有沉浸态：进入 / 切回歌词态时把计时起点重新种下。
+    // 否则 lastActionAt 恒为 0，手机端没人碰过屏幕就永远不会开始倒数。
+    LaunchedEffect(showLyrics) {
+        if (showLyrics) lastActionAt = System.currentTimeMillis()
+    }
+
     // 空闲 5 秒 → 收起。关键：这里的重启条件是 [lastActionAt] + [showLyrics]，
     // 两者都不含 [immersiveOn]，所以本协程自己置真后不会被自己的写入取消，
     // 否则 setState 会让 LaunchedEffect 重启，「5 秒后收起」永远执行不完。
-    LaunchedEffect(state.carMode, showLyrics, lastActionAt) {
-        if (!state.carMode || !showLyrics || lastActionAt <= 0L) return@LaunchedEffect
+    // 2026-10-20：不再限定车载模式，手机歌词态同样生效。
+    LaunchedEffect(showLyrics, lastActionAt) {
+        if (!showLyrics || lastActionAt <= 0L) return@LaunchedEffect
         delay(CAR_IMMERSIVE_DELAY_MS)
         immersiveOn = true
     }
 
-    // 车载沉浸态下按返回：先恢复完整界面，而不是直接收起播放页。
+    // 沉浸态下按返回：先恢复完整界面，而不是直接收起播放页（手机 / 车机一致）。
     // enabled 只在沉浸态为真，其余情况不拦截，交给上层原有的返回逻辑。
     BackHandler(enabled = immersive) { keepAwake() }
 
@@ -298,14 +306,14 @@ fun PlayerScreen(
                 // 只观察不消费，所有既有手势（滑动切歌、拖动进度、点击按钮）保持原样。
                 // 注意：同一个手势会同时命中这里和子按钮的 onClick，但两者都只是把
                 // 时间戳往前推，重复刷新无副作用。
-                .pointerInput(state.carMode) {
-                    if (state.carMode) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                awaitPointerEvent()
-                                immersiveOn = false
-                                lastActionAt = System.currentTimeMillis()
-                            }
+                .pointerInput(Unit) {
+                    // 2026-10-20：手机也进沉浸态，所以「任意触摸即恢复并重新计时」两端都要挂。
+                    // 只观察不消费，既有手势（滑动切歌 / 拖进度）不受影响。
+                    awaitPointerEventScope {
+                        while (true) {
+                            awaitPointerEvent()
+                            immersiveOn = false
+                            lastActionAt = System.currentTimeMillis()
                         }
                     }
                 }
@@ -609,7 +617,7 @@ fun PlayerScreen(
                 // 状态信息（内置歌词 / 偏移 / 队列数）只在手机显示：
                 // 车机这一行要占 30dp 高度，而它能提供的信息在播放页并不是驾驶时要看的
                 // （v1.1.23，用户要求「不要播放按钮的占高度」，这一行同理让位给歌词）。
-                if (!state.carMode) Row(
+                if (!state.carMode && !immersive) Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
