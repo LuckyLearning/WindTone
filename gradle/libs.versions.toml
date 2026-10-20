@@ -47,6 +47,11 @@ guava = "33.0.0-android"
 junit = "4.13.2"
 robolectric = "4.14.1"
 androidxTestCore = "1.6.1"
+androidxTestRunner = "1.5.0"
+androidxTestExtJunit = "1.1.5"
+# runner/ext-junit 传递依赖 monitor 1.7.1，但本机缓存是 1.7.2；显式抬到缓存版本，
+# 让离线构建也能解析（Gradle 冲突默认取最高版本）。
+androidxTestMonitor = "1.7.2"
 
 [libraries]
 # ── AndroidX 基础 ──
@@ -98,6 +103,10 @@ junit = { group = "junit", name = "junit", version.ref = "junit" }
 # Robolectric + androidx.test:core：让 Room（真实 SQLite）能在 JVM 单测里跑
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 androidx-test-core = { group = "androidx.test", name = "core", version.ref = "androidxTestCore" }
+# 仪器化测试（androidTest）：ActivityScenario 启动主界面 + AndroidJUnitRunner
+androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }
+androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestExtJunit" }
+androidx-test-monitor = { group = "androidx.test", name = "monitor", version.ref = "androidxTestMonitor" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

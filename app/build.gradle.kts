@@ -130,6 +130,8 @@ android {
         versionName = appVersionName
         vectorDrawables { useSupportLibrary = true }
         resourceConfigurations += listOf("zh", "en")
+        // 仪器化测试跑在模拟器/真机上；JVM 单测（Robolectric）不需要它
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // 应用内更新：源码仓库是**私有**的，安装包改由公共分发仓库
         // LuckyLearning/Release 按 <软件>/<版本> 目录分发（只保留最近 5 个版本）。
@@ -312,4 +314,12 @@ dependencies {
     testImplementation(libs.androidx.compose.ui.test.junit4)
     // createComposeRule() 需要一个空壳 ComponentActivity，由它提供（只进 debug 变体）
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+
+    // 仪器化冒烟测试（模拟器 / 真机）：ActivityScenario 启动主界面，
+    // 验证 Room / PlaybackEngine / ViewModel 这棵应用图能真正装配起来。
+    // JDK 侧已缓存，离线也能解析。
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.monitor)
 }
