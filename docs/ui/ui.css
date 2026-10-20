@@ -773,7 +773,7 @@ body{
 /* ---- 右内容区 ---- */
 .cv3-right{flex:1;min-width:0;display:flex;flex-direction:column}
 .cv3-main{flex:1;min-height:0;display:flex;flex-direction:column;padding:18px 24px 10px;
-  background:var(--bg)}
+  background:var(--bg);position:relative}
 .cv3-hd{display:flex;align-items:center;gap:12px;flex:none}
 .cv3-title{font-size:22px;font-weight:800;color:var(--on-bg);letter-spacing:.2px}
 .cv3-list{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;margin-top:10px}
@@ -852,6 +852,23 @@ body{
 .cv3 .cset-row{background:var(--surface);box-shadow:var(--sh-1);min-height:48px;padding:6px 14px}
 .cv3 .cset-sec{font-size:14px;margin:8px 0 0}
 .cv3 .cset-k{font-size:17px}
+
+/* ---- 播放页附加态：封面 / 暂无歌词 / 音量浮层 / 沉浸态 ---- */
+.cv3-coverwrap{flex:1;min-height:0;display:grid;place-items:center;align-content:center;gap:14px}
+.cv3-coverwrap .cv3-cover{width:340px;height:340px;border-radius:24px;font-size:140px}
+.cv3-coverwrap .cv3-t{font-size:18px;font-weight:600;color:var(--on-bg);margin-top:4px}
+.cv3-coverwrap .cv3-s{font-size:14px;color:var(--on-surface-variant)}
+.cv3-nolyr{flex:1;min-height:0;display:grid;place-items:center;text-align:center;color:var(--on-surface-variant)}
+.cv3-nolyr .nic{width:56px;height:56px;opacity:.4}
+.cv3-nolyr .big{font-size:32px;font-weight:700;color:var(--on-bg);opacity:.55;margin-top:12px}
+.cv3-nolyr .sub{font-size:14px;margin-top:8px;opacity:.8;line-height:1.6}
+.cv3-immersive{flex:1;min-height:0;display:flex;flex-direction:column;gap:14px;justify-content:center}
+.cv3-voldock{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  background:var(--surface);box-shadow:var(--sh-3);border-radius:18px;padding:18px 22px;width:360px;z-index:5}
+.cv3-voldock .vrow{display:flex;align-items:center;gap:12px;font-size:14px;color:var(--on-surface-variant)}
+.cv3-voldock .vrow .ic{width:22px;height:22px;color:var(--on-surface-variant)}
+.cv3-voldock b{font-size:20px;color:var(--on-bg);min-width:48px;text-align:right;font-variant-numeric:tabular-nums}
+.cv3-voldock .slider{margin:0}
 .cv3 .cset-s{font-size:12px}
 .cv3 .cset-v{font-size:17px;min-width:66px}
 .cv3 .cset-step{width:40px;height:40px;background:var(--c-low)}

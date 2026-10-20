@@ -42,7 +42,7 @@
     于是把 v1.1.19 的「单栏 + 顶部横向 Tab」改回<b>左侧导航</b>——
     但<b>不是</b>恢复 v1.1.14 被否决的那套两栏：导航收窄到 188px 并卡片化、播放条只铺右侧内容区、Dock 安全区照留，
     三点差异写在第 ㊱ 屏的说明里。<br>
-    <b>页面顺序</b>：㊱ 全部歌曲（最近播放）→ ㊱B 专辑网格 → ㊲ 播放页（歌词态）→ ㊳ 设置 → ㊴ 桌面悬浮歌词（四态）。
+    <b>页面顺序</b>：㊱ 全部歌曲（最近播放）→ ㊱B 专辑网格 → ㊲ 播放页（歌词态）→ ㊲A 封面态 → ㊲B 暂无歌词 → ㊲C 音量浮层 → ㊲D 沉浸态 → ㊳ 设置 → ㊴ 桌面悬浮歌词（四态）。
     <b>v1.1.19 的单栏方案（㊱B / ㊲B）与 v1.1.32 的「一页到底」设置（㊵）已被本版吸收，不再单独出图。</b>
   </div>
   <div class="legend" style="margin-bottom:18px">
@@ -345,6 +345,226 @@
   <b>控制键</b>：<code>.cbtn</code> 76px / 主键 <code>.cmain</code> 112px、间距 26px——行车中靠边缘一按就中，不需要瞄。<br>
   <b>沉浸态</b>：5 秒无触摸收起顶栏与控制键，只留歌名行（含红心）+ 歌词 + 进度条 + 时间；任意触摸立即恢复并重新计时。
   导航栏在沉浸态<b>一起收起</b>（它也是控件），这样歌词能拿到全宽。</p>
+</figure>
+
+<figure class="fig car" id="scr-car-player-cover">
+  <div class="cap"><b>㊲A 车机 · 播放页 · 封面态</b><em>PlayerScreen.kt · CoverPane —— 歌词↔封面切换；含播放模式提示（顺序 / 单曲 / 随机）</em></div>
+  <div class="carphone v3">
+    <div class="carbar">
+      <span>9:41</span><span class="cb-item">🌡 24°C</span>
+      <span class="sp"></span><span class="cb-item">听风</span>
+    </div>
+    <div class="cv3">
+      <nav class="cv3-nav">
+        <div class="cv3-brand"><span class="cv3-logo"></span>听风</div>
+        <div class="cv3-item ac-songs"><svg class="ic"><use href="#i-note"/></svg>全部歌曲</div>
+        <div class="cv3-item ac-album"><svg class="ic"><use href="#i-album"/></svg>专辑</div>
+        <div class="cv3-item ac-artist"><svg class="ic"><use href="#i-artist"/></svg>歌手</div>
+        <div class="cv3-item ac-folder"><svg class="ic"><use href="#i-folder"/></svg>文件夹</div>
+        <div class="cv3-item ac-pl"><svg class="ic"><use href="#i-library"/></svg>歌单</div>
+        <div class="cv3-gap"></div>
+        <div class="cv3-item"><svg class="ic"><use href="#i-gear"/></svg>设置</div>
+      </nav>
+      <div class="cv3-right">
+        <div class="cv3-main">
+          <div class="cv3-phead">
+            <span class="cv3-tile w2">听风</span>
+            <div>
+              <div class="cv3-t">听风（主题曲）</div>
+              <div class="cv3-s">WindTone · 原声集</div>
+            </div>
+            <svg class="ic fav-on"><use href="#i-heart"/></svg>
+            <div class="sp"></div>
+            <button class="ibtn"><svg class="ic"><use href="#i-queue"/></svg></button>
+          </div>
+          <div class="cv3-coverwrap">
+            <div class="cv3-cover t3">听</div>
+            <div class="cv3-t">听风（主题曲）</div>
+            <div class="cv3-s">WindTone · 原声集</div>
+          </div>
+          <div class="cv3-prog">
+            <div class="cartrack"><span class="cplayed" style="width:37%"></span><span class="cthumb" style="left:37%"></span></div>
+            <div class="cv3-ptime"><span>1:24</span><span>3:52</span></div>
+          </div>
+          <div class="carctl" style="justify-content:center">
+            <button class="cbtn"><svg class="ic"><use href="#i-repeat"/></svg></button>
+            <button class="cbtn"><svg class="ic"><use href="#i-prev"/></svg></button>
+            <button class="cmain"><svg class="ic"><use href="#i-pause"/></svg></button>
+            <button class="cbtn"><svg class="ic"><use href="#i-next"/></svg></button>
+            <button class="cbtn"><svg class="ic"><use href="#i-queue"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="cv3-dock"><i></i><i></i><i></i><span>车机 Dock（系统浮层 · App 只让出 56dp）</span></div>
+  </div>
+  <p class="note"><b>关键点：</b>封面态与歌词态<b>共用同一个播放页</b>，顶部右侧「歌词↔封面」按钮切换；驾驶时默认进歌词态（信息密度更高），想看大封面点一下即可。
+  封面占位沿用「首字 + 六档确定性渐变」规则（与列表、专辑网格一致），不画灰色音符。<b>封面下方一行播放模式提示</b>：顺序播放 / 单曲循环 / 随机播放，当前模式高亮，避免驾驶中低头进菜单。<br>
+  <b>封面不进入沉浸态</b>——沉浸态只在歌词态生效（<code>immersive = carMode &amp;&amp; showLyrics</code>），封面本身就是主要视觉，收起控件没意义。</p>
+</figure>
+
+<figure class="fig car" id="scr-car-player-nolyr">
+  <div class="cap"><b>㊲B 车机 · 播放页 · 暂无歌词</b><em>PlayerScreen.kt —— 本地无 .lrc / 内嵌歌词时的占位态，绝不联网抓取</em></div>
+  <div class="carphone v3">
+    <div class="carbar">
+      <span>9:41</span><span class="cb-item">🌡 24°C</span>
+      <span class="sp"></span><span class="cb-item">听风</span>
+    </div>
+    <div class="cv3">
+      <nav class="cv3-nav">
+        <div class="cv3-brand"><span class="cv3-logo"></span>听风</div>
+        <div class="cv3-item ac-songs"><svg class="ic"><use href="#i-note"/></svg>全部歌曲</div>
+        <div class="cv3-item ac-album"><svg class="ic"><use href="#i-album"/></svg>专辑</div>
+        <div class="cv3-item ac-artist"><svg class="ic"><use href="#i-artist"/></svg>歌手</div>
+        <div class="cv3-item ac-folder"><svg class="ic"><use href="#i-folder"/></svg>文件夹</div>
+        <div class="cv3-item ac-pl"><svg class="ic"><use href="#i-library"/></svg>歌单</div>
+        <div class="cv3-gap"></div>
+        <div class="cv3-item"><svg class="ic"><use href="#i-gear"/></svg>设置</div>
+      </nav>
+      <div class="cv3-right">
+        <div class="cv3-main">
+          <div class="cv3-phead">
+            <span class="cv3-tile w2">听风</span>
+            <div>
+              <div class="cv3-t">听风（主题曲）</div>
+              <div class="cv3-s">WindTone · 原声集</div>
+            </div>
+            <svg class="ic fav-on"><use href="#i-heart"/></svg>
+            <div class="sp"></div>
+            <button class="ibtn"><svg class="ic"><use href="#i-queue"/></svg></button>
+          </div>
+          <div class="cv3-nolyr">
+            <svg class="ic nic"><use href="#i-note"/></svg>
+            <div class="big">暂无歌词</div>
+            <div class="sub">未找到本地歌词文件，也不会自动联网获取</div>
+            <div class="sub">把同名 .lrc 放进歌曲目录即可自动匹配</div>
+          </div>
+          <div class="cv3-prog">
+            <div class="cartrack"><span class="cplayed" style="width:37%"></span><span class="cthumb" style="left:37%"></span></div>
+            <div class="cv3-ptime"><span>1:24</span><span>3:52</span></div>
+          </div>
+          <div class="carctl" style="justify-content:center">
+            <button class="cbtn"><svg class="ic"><use href="#i-repeat"/></svg></button>
+            <button class="cbtn"><svg class="ic"><use href="#i-prev"/></svg></button>
+            <button class="cmain"><svg class="ic"><use href="#i-pause"/></svg></button>
+            <button class="cbtn"><svg class="ic"><use href="#i-next"/></svg></button>
+            <button class="cbtn"><svg class="ic"><use href="#i-queue"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="cv3-dock"><i></i><i></i><i></i><span>车机 Dock（系统浮层 · App 只让出 56dp）</span></div>
+  </div>
+  <p class="note"><b>关键点：</b>无歌词时给<b>明确占位</b>（图标 + 标题 + 一句引导），不画空歌词行、不让布局塌陷成一块黑；进度条与控制键照常可用，这一屏照样能完整操作。
+  歌词来源仅限本地：同目录同名 <code>.lrc</code> / 内嵌同步歌词 / 内嵌文本歌词，<b>绝不联网抓取</b>（隐私红线）。<br>
+  引导语指向唯一可执行动作（「把同名 .lrc 放进歌曲目录」），而不是空泛的一句话——驾驶场景下用户没工夫猜。</p>
+</figure>
+
+<figure class="fig car" id="scr-car-player-vol">
+  <div class="cap"><b>㊲C 车机 · 播放页 · 音量浮层</b><em>PlayerScreen.kt · VolumeHud —— 方向盘音量键 / 旋钮触发，2 秒无操作自动消失</em></div>
+  <div class="carphone v3">
+    <div class="carbar">
+      <span>9:41</span><span class="cb-item">🌡 24°C</span>
+      <span class="sp"></span><span class="cb-item">听风</span>
+    </div>
+    <div class="cv3">
+      <nav class="cv3-nav">
+        <div class="cv3-brand"><span class="cv3-logo"></span>听风</div>
+        <div class="cv3-item ac-songs"><svg class="ic"><use href="#i-note"/></svg>全部歌曲</div>
+        <div class="cv3-item ac-album"><svg class="ic"><use href="#i-album"/></svg>专辑</div>
+        <div class="cv3-item ac-artist"><svg class="ic"><use href="#i-artist"/></svg>歌手</div>
+        <div class="cv3-item ac-folder"><svg class="ic"><use href="#i-folder"/></svg>文件夹</div>
+        <div class="cv3-item ac-pl"><svg class="ic"><use href="#i-library"/></svg>歌单</div>
+        <div class="cv3-gap"></div>
+        <div class="cv3-item"><svg class="ic"><use href="#i-gear"/></svg>设置</div>
+      </nav>
+      <div class="cv3-right">
+        <div class="cv3-main">
+          <div class="cv3-phead">
+            <span class="cv3-tile w2">听风</span>
+            <div>
+              <div class="cv3-t">听风（主题曲）</div>
+              <div class="cv3-s">WindTone · 原声集</div>
+            </div>
+            <svg class="ic fav-on"><use href="#i-heart"/></svg>
+            <div class="sp"></div>
+            <button class="ibtn"><svg class="ic"><use href="#i-queue"/></svg></button>
+          </div>
+          <div class="carlyric">
+            <div class="cl">风从很远的地方吹来</div>
+            <div class="cl">吹过屋檐 吹过窗台</div>
+            <div class="cl cur">听风的人 都还没睡<span class="tr">Those who listen to the wind are still awake</span></div>
+            <div class="cl">把心事交给夜里慢慢吹</div>
+          </div>
+          <div class="cv3-prog">
+            <div class="cartrack"><span class="cplayed" style="width:37%"></span><span class="cthumb" style="left:37%"></span></div>
+            <div class="cv3-ptime"><span>1:24</span><span>3:52</span></div>
+          </div>
+          <div class="carctl" style="justify-content:center">
+            <button class="cbtn"><svg class="ic"><use href="#i-repeat"/></svg></button>
+            <button class="cbtn"><svg class="ic"><use href="#i-prev"/></svg></button>
+            <button class="cmain"><svg class="ic"><use href="#i-pause"/></svg></button>
+            <button class="cbtn"><svg class="ic"><use href="#i-next"/></svg></button>
+            <button class="cbtn"><svg class="ic"><use href="#i-queue"/></svg></button>
+          </div>
+          <div class="cv3-voldock">
+            <div class="vrow">
+              <svg class="ic"><use href="#i-vol"/></svg>
+              <div class="slider" style="flex:1"><span class="fill" style="width:64%"></span><span class="knob" style="left:64%"></span></div>
+              <b>64%</b>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="cv3-dock"><i></i><i></i><i></i><span>车机 Dock（系统浮层 · App 只让出 56dp）</span></div>
+  </div>
+  <p class="note"><b>关键点：</b>音量浮层是<b>瞬时 HUD</b>：按方向盘音量键、转旋钮或拖到音量条时弹出，显示大滑块 + 百分比（64%），<b>2 秒无操作自动消失</b>，不打断歌词阅读，也不占常驻版面。
+  浮层居中、卡片化（<code>--sh-3</code> 投影，比普通卡片更浮一层以示「临时」），绝不全屏抢占。<br>
+  <b>为什么车机尤其需要它</b>：音量通常在方向盘上，调完要能立刻看见结果；把它做成浮层而不是某个页面里的滑条，是为了「在哪一屏按音量键，反馈就出现在哪儿」。</p>
+</figure>
+
+<figure class="fig car" id="scr-car-player-immersive">
+  <div class="cap"><b>㊲D 车机 · 播放页 · 沉浸态（歌词态 · 5 秒无触摸）</b><em>PlayerScreen.kt · immersive —— 仅车载模式 + 歌词态触发；左导航与控制键一并收起，歌词铺满全宽</em></div>
+  <div class="carphone v3">
+    <div class="carbar">
+      <span>9:41</span><span class="cb-item">🌡 24°C</span>
+      <span class="sp"></span><span class="cb-item">听风</span>
+    </div>
+    <div class="cv3">
+      <div class="cv3-right">
+        <div class="cv3-immersive">
+          <div class="cv3-phead">
+            <span class="cv3-tile w2">听风</span>
+            <div>
+              <div class="cv3-t">听风（主题曲）</div>
+              <div class="cv3-s">WindTone · 原声集</div>
+            </div>
+            <svg class="ic fav-on"><use href="#i-heart"/></svg>
+            <div class="sp"></div>
+            <button class="ibtn"><svg class="ic"><use href="#i-queue"/></svg></button>
+          </div>
+          <div class="carlyric">
+            <div class="cl">风从很远的地方吹来</div>
+            <div class="cl">吹过屋檐 吹过窗台</div>
+            <div class="cl cur">听风的人 都还没睡<span class="tr">Those who listen to the wind are still awake</span></div>
+            <div class="cl">把心事交给夜里慢慢吹</div>
+            <div class="cl">夜色里只有风知道</div>
+          </div>
+          <div class="cv3-prog">
+            <div class="cartrack"><span class="cplayed" style="width:37%"></span><span class="cthumb" style="left:37%"></span></div>
+            <div class="cv3-ptime"><span>1:24</span><span>3:52</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="cv3-dock"><i></i><i></i><i></i><span>车机 Dock（系统浮层 · App 只让出 56dp）</span></div>
+  </div>
+  <p class="note"><b>关键点：</b>仅<b>车载模式 + 歌词态</b>下生效（<code>immersive = carMode &amp;&amp; showLyrics</code>，封面态不进入）。播放页歌词态 <b>5 秒无触摸</b>后收起<b>左导航 + 控制键行 + 顶栏</b>，
+  只留<b>歌名行（含红心）+ 歌词 + 进度条 + 时间</b>；歌词因此拿到内容区全宽。<br>
+  任意触摸立即恢复并重新计时 5 秒 —— 包括按返回键：<b>此时返回键先恢复界面而不是退出播放页</b>，避免误触退出。<br>
+  歌词整体放大 <b>1.5 倍</b>（正文 26px / 当前行 32px 已含这层放大）：车机屏离驾驶位 60~70cm，手机字号瞄一眼读不清。
+  与手机版 ⑫D 是同一套逻辑、同一个 <code>PlayerScreen</code>，只是外壳换成车机 v3。</p>
 </figure>
 
 <figure class="fig car" id="scr-car-settings-flat">
