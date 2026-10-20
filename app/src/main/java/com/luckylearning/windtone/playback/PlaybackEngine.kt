@@ -527,61 +527,47 @@ class PlaybackEngine(
             resumeIfWanted(c)
             return
         }
-        val songs = librarySongs
-        if (songs.isEmpty()) {
-            // 曲库还没推过来（冷启动时曲库域的装载与这里是一条竞速链）。
-            // **不置 queueRestored**：下一次调用（扫描完成后）还要再来一遍。
+        // 曲库还没推过来（冷启动时曲库域的装载与这里是一条竞速链）。
+        // **不置 queueRestored**：下一次调用（扫描完成后）还要再来一遍。
+        if (librarySongs.isEmpty()) {
             Log.i(TAG, "断点续播：曲库尚未就绪，等下一次调用")
             return
         }
 
         val state = withContext(Dispatchers.IO) { store.loadPlayerState() }
-        val position = (state?.positionMs ?: 0L).coerceAtLeast(0L)
-
-        // 1) 优先整队列恢复
         val queueIds = withContext(Dispatchers.IO) { store.loadQueueSongIds() }
-        if (queueIds.isNotEmpty()) {
-            val byId = songs.associateBy { it.dbId }
-            val restored = queueIds.mapNotNull { byId[it] }
-            if (restored.isNotEmpty()) {
-                val index = restored.indexOfFirst { it.dbId == state?.currentSongId }.takeIf { it >= 0 } ?: 0
-                currentQueue = restored
-                c.setMediaItems(restored.map { PlaybackConnection.toMediaItem(it) }, index, position)
-                applyPersistedPlayMode(c, state)
-                c.prepare()
-                _progress.value = PlaybackProgress(position, restored[index].durationMs, 0L)
-                syncCurrentSong(force = true)
-                scheduleLyricsHeal(restored[index].stableKey)
+
+        // 决策交给纯函数（见 RestorePlan.kt），这里只负责把计划落到播放器上。
+        when (val plan = planRestore(librarySongs, queueIds, state)) {
+            RestorePlan.WaitForLibrary -> Log.i(TAG, "断点续播：曲库尚未就绪，等下一次调用")
+            RestorePlan.NothingToRestore -> Log.i(TAG, "断点续播：没有可恢复的播放态")
+            RestorePlan.StaleState -> {
+                // 那首歌已不在曲库里（被删 / 被移出）：没什么可恢复的，别再重试
                 queueRestored = true
-                Log.i(TAG, "断点续播：恢复队列 ${restored.size} 首，第 ${index + 1} 首，位置 ${position}ms")
+                Log.i(TAG, "断点续播：上次的歌曲已不在曲库（id=${state?.currentSongId}）")
+            }
+            is RestorePlan.Restore -> {
+                val song = plan.songs[plan.index]
+                currentQueue = plan.songs
+                c.setMediaItems(
+                    plan.songs.map { PlaybackConnection.toMediaItem(it) },
+                    plan.index,
+                    plan.positionMs,
+                )
+                applyPersistedPlayMode(c, plan.state)
+                c.prepare()
+                _progress.value = PlaybackProgress(plan.positionMs, song.durationMs, 0L)
+                syncCurrentSong(force = true)
+                scheduleLyricsHeal(song.stableKey)
+                queueRestored = true
+                val how = if (plan.fromQueue) "恢复队列" else "单曲恢复（整库当队列）"
+                Log.i(
+                    TAG,
+                    "断点续播：$how ${plan.songs.size} 首，第 ${plan.index + 1} 首，位置 ${plan.positionMs}ms",
+                )
                 resumeIfWanted(c)
-                return
             }
         }
-
-        // 2) 退化为单曲恢复（只记得当前曲）：整库当队列
-        val currentId = state?.currentSongId
-        if (currentId == null) {
-            Log.i(TAG, "断点续播：没有可恢复的播放态")
-            return
-        }
-        val idx = songs.indexOfFirst { it.dbId == currentId }
-        if (idx < 0) {
-            // 那首歌已不在曲库里（被删 / 被移出）：没什么可恢复的，别再重试
-            queueRestored = true
-            Log.i(TAG, "断点续播：上次的歌曲已不在曲库（id=$currentId）")
-            return
-        }
-        currentQueue = songs
-        c.setMediaItems(songs.map { PlaybackConnection.toMediaItem(it) }, idx, position)
-        applyPersistedPlayMode(c, state)
-        c.prepare()
-        _progress.value = PlaybackProgress(position, songs[idx].durationMs, 0L)
-        syncCurrentSong(force = true)
-        scheduleLyricsHeal(songs[idx].stableKey)
-        queueRestored = true
-        Log.i(TAG, "断点续播：单曲恢复（整库 ${songs.size} 首当队列），位置 ${position}ms")
-        resumeIfWanted(c)
     }
 
     /**
