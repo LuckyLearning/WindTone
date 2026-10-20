@@ -36,6 +36,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luckylearning.windtone.state.LibraryView
+import com.luckylearning.windtone.ui.theme.AppVisual
+import com.luckylearning.windtone.ui.theme.windShadow
 
 /**
  * 侧边抽屉（v1.1.3 重构：替代原底部五视图导航）。
@@ -47,7 +49,7 @@ import com.luckylearning.windtone.state.LibraryView
  *  - 遮罩 `--dim`（深色 .62 / 浅色 .34）**盖住下层内容并吃掉触摸**，点它收起；
  *  - 品牌块 = 44dp 圆形 halo（primaryContainer）+「听风」16sp/800 +「WindTone · 本地音乐」11sp；
  *  - 两组：**音乐库**（原底部导航的五个浏览视图）/ **更多**（扫描范围 · 设置）；
- *  - 选中项：secondaryContainer 实底胶囊 + 加粗 + onSecondaryContainer 文字。
+ *  - 选中项：风之渐变实底胶囊 + 加粗 + 白字 + 靛蓝投影（v2，对应 `.d-item.on`）。
  *
  * ⚠️ 抽屉盖在迷你播放条之上、但不盖播放页 / 设置页这类全屏覆盖层 ——
  * 那些页面在效果图里各有自己的返回按钮，没有汉堡入口（见 MainScreen 里的挂载位置）。
@@ -165,19 +167,20 @@ private fun DrawerBrand() {
             .fillMaxWidth()
             .padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 12.dp),
     ) {
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.primaryContainer,
-            modifier = Modifier.size(44.dp),
+        // 设计规范 v2：品牌 halo 用风之渐变（对应 .d-halo{background:var(--grad-brand)}）
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(AppVisual.WindGradient),
+            contentAlignment = Alignment.Center,
         ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = AppIcons.MusicNote,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(24.dp),
-                )
-            }
+            Icon(
+                imageVector = AppIcons.MusicNote,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(24.dp),
+            )
         }
         Spacer(Modifier.width(12.dp))
         Column {
@@ -218,25 +221,21 @@ private fun DrawerItem(
     onClick: () -> Unit,
 ) {
     val shape = CircleShape
+    // 设计规范 v2：选中项改风之渐变实底 + 白字 + 靛蓝投影（对应 .d-item.on）
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
+            .then(if (selected) Modifier.windShadow(level = 2, shape = shape) else Modifier)
             .clip(shape)
-            .background(
-                if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent
-            )
+            .then(if (selected) Modifier.background(AppVisual.WindGradient) else Modifier)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 11.dp),
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = if (selected) {
-                MaterialTheme.colorScheme.onSecondaryContainer
-            } else {
-                MaterialTheme.colorScheme.onBackground
-            },
+            tint = if (selected) Color.White else MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.size(22.dp),
         )
         Spacer(Modifier.width(14.dp))
@@ -244,11 +243,7 @@ private fun DrawerItem(
             text = label,
             fontSize = 14.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (selected) {
-                MaterialTheme.colorScheme.onSecondaryContainer
-            } else {
-                MaterialTheme.colorScheme.onBackground
-            },
+            color = if (selected) Color.White else MaterialTheme.colorScheme.onBackground,
         )
     }
 }

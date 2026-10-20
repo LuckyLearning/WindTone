@@ -21,6 +21,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -61,6 +62,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -77,6 +79,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.luckylearning.windtone.data.CoverRepository
 import com.luckylearning.windtone.data.model.Song
+import com.luckylearning.windtone.ui.theme.AppVisual
+import com.luckylearning.windtone.ui.theme.windShadow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -143,17 +147,11 @@ fun CoverArt(
 
     val shape = if (circular) CircleShape else RoundedCornerShape(cornerRadius)
     val sized = if (fillContainer) modifier.fillMaxSize() else modifier.size(size)
+    val coverKey = song?.stableKey ?: ""
     Box(
         modifier = sized
             .clip(shape)
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.primaryContainer,
-                        MaterialTheme.colorScheme.secondaryContainer,
-                    )
-                )
-            ),
+            .background(AppVisual.coverBrush(coverKey)),
         contentAlignment = Alignment.Center,
     ) {
         val bmp = bitmap
@@ -165,11 +163,15 @@ fun CoverArt(
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
-            Icon(
-                imageVector = AppIcons.MusicNote,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.65f),
-                modifier = Modifier.size(size * 0.4f),
+            // 设计规范 v2：缺省封面不再画统一的灰音符，改成「首字 + 六档确定性渐变」。
+            // 取档按 stableKey 哈希（见 AppVisual.coverPaletteIndex），同一首歌永远同一色，
+            // 扫一眼就能靠颜色定位；六档都过白字对比，深色主题下不改色、只压亮度。
+            Text(
+                text = AppVisual.coverInitial(song?.title.orEmpty()),
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = (size.value * 0.34f).coerceIn(11f, 96f).sp,
+                maxLines = 1,
             )
         }
     }
@@ -354,13 +356,17 @@ fun MiniPlayer(
     val btnSize = if (large) 64.dp else 46.dp
     val iconSize = if (large) 32.dp else 24.dp
 
+    val dark = isSystemInDarkTheme()
     Surface(
-        color = scheme.surfaceContainerHigh,
+        color = AppVisual.glassBg(dark),
         shape = MaterialTheme.shapes.large,
-        shadowElevation = 6.dp,
+        shadowElevation = 0.dp,
+        border = BorderStroke(1.dp, AppVisual.glassBorder(dark)),
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 10.dp, vertical = 6.dp)
+            // v2：靛蓝投影 —— 不用 Surface 的固定黑色 shadowElevation，改 Modifier.shadow 上色
+            .windShadow(level = 2, shape = MaterialTheme.shapes.large)
             .clip(MaterialTheme.shapes.large)
             .clickable(onClick = onExpand),
     ) {
@@ -492,7 +498,8 @@ private fun MiniProgressBar(
         }
         if (played > 0f) {
             drawRoundRect(
-                color = scheme.primary,
+                // v2：播放进度改风之渐变（对应设计稿 .mini-track i{background:var(--grad-brand)}）
+                brush = AppVisual.WindGradient,
                 topLeft = Offset(0f, cy - radius),
                 size = Size(size.width * played, trackH),
                 cornerRadius = androidx.compose.ui.geometry.CornerRadius(radius, radius),
@@ -638,7 +645,8 @@ private fun EmptyVinyl(size: Dp) {
                 )
             }
             drawCircle(
-                color = scheme.primary.copy(alpha = 0.85f),
+                // v2：唱片 hub 用风之渐变（对应设计稿 .vinyl .hub{background:var(--grad-brand)}）
+                brush = AppVisual.WindGradient,
                 radius = r * 0.20f,
                 center = c,
             )
