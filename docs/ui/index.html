@@ -28,7 +28,7 @@
     <a class="backdocs" href="https://luckylearning.github.io/WindTone/">← 文档站</a>
     <div class="bh-title">听风 WindTone · UI 效果图<small>设计基准 / Design Source of Truth</small></div>
     <span class="bh-badge"><span id="screenCount">57</span> 屏 · 7 章</span>
-    <span class="bh-badge">对齐 v1.1.29 · 悬浮窗按应用隐藏 + 前台应用记录</span>
+    <span class="bh-badge">对齐 v1.1.33 · 视觉 v2（设计规范）</span>
     <button class="tgl" id="themeBtn">🌙 深色主题</button>
   </div>
   <nav class="bh-nav"><a href="01-main.html">主界面</a><a href="02-player.html">播放页</a><a href="03-sheets.html">抽屉与弹窗</a><a href="04-settings.html">设置页</a><a href="05-extras.html">小组件·通知</a><a href="06-car.html">车机版</a><a href="07-spec.html">颜色与尺寸</a></nav>
@@ -39,6 +39,7 @@
   <b>固定顺序</b>：① 改对应分章文件（HTML）→ ② 预览确认视觉（主题默认跟随系统，右上角可切）→ ③ 按该屏标注重写 Compose（<code>app/src/main/java/com/luckylearning/windtone/ui/*.kt</code>）→ ④ 出包真机核对。<br>
   <b>资产约定</b>：样式全在 <code>ui.css</code>、行为全在 <code>ui.js</code>、图标池与抽屉模板在 <code>ui-sprite.js</code> —— <b>分章文件里不写内联样式、不写内联脚本</b>。<br>
   <b>屏数、章节徽标、屏索引都由脚本现算</b>：新增屏只需在对应分章里写一个 <code>&lt;figure class="fig"&gt;</code>，计数自动跟上，不要手改任何数字。
+  <b>视觉已升级到设计规范 v2</b>：「风之渐变 + 玻璃拟态 + 靛蓝投影 + 统一动效」全部沉淀在 <code>ui.css</code> 的「视觉升级层」，改视觉只动这一处，分章零改动。
 </div>
 
 <div class="hub-grid">

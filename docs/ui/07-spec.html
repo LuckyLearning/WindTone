@@ -28,7 +28,7 @@
     <a class="backdocs" href="index.html">← 效果图总览</a>
     <div class="bh-title">七、颜色与尺寸规范<small>UI 效果图 · 设计基准（第 7 / 7 章）</small></div>
     <span class="bh-badge">设计令牌 · 尺寸口径</span>
-    <span class="bh-badge">对齐 v1.1.29</span>
+    <span class="bh-badge">对齐 v1.1.33 · 视觉 v2（设计规范）</span>
     <button class="tgl" id="themeBtn">🌙 深色主题</button>
   </div>
   <nav class="bh-nav"><a href="01-main.html">主界面</a><a href="02-player.html">播放页</a><a href="03-sheets.html">抽屉与弹窗</a><a href="04-settings.html">设置页</a><a href="05-extras.html">小组件·通知</a><a href="06-car.html">车机版</a><a href="07-spec.html" class="on">颜色与尺寸</a></nav>
@@ -76,6 +76,21 @@
     <b>播放页配色</b>：整页垂直渐变 = lerp(background, primary, 0.32) → lerp(background, primary, 0.10) → background（必须不透明混色，不能用半透明，否则会透出底层列表）。<br>
     <b>图标尺寸</b>：抽屉项 22 · 顶栏按钮 24 · 上一首/下一首 34 · 播放主键 34（按钮 66）· 缩略操作 20 · 字母索引 9。
     <br><b>v1.1.3 结构变化</b>：① 手机版底部五视图导航整体移除，改为顶栏汉堡按钮 + <b>侧边抽屉</b>（宽 280dp、右缘圆角 28dp、遮罩收起；「更多」组三个入口与顶栏 ⋮ 菜单同目的地）；② 设置主页改为<b>二级分类入口卡</b>（<code>CategoryRow</code>：40dp 图标容器 + 标题 + 摘要 + chevron），外观 / 播放 / 歌词下沉为子页，全部分类两级直达。车机版左导航不受影响。
+  </div>
+</section>
+
+<section class="sec" id="sec-v2">
+  <div class="sec-hd"><h2>七·B、视觉升级层（设计规范 v2）</h2><span>在 M3 / Indigo 令牌之上叠加 · 2026-10-20</span></div>
+  <div class="legend">
+    <b>品牌概念「声随风动」</b>：主色保持 Indigo <code>#5B4BE0</code>，新增 <b>风之渐变</b>（靛 → 紫 → 青，<code>--grad-brand</code>）作为唯一「品牌签名」，仅用于：激活态导航 / 主播放键 / 封面光晕 / 进度填充 / 品牌标记。页面底色加一抹径向风之渐变光晕，避免死板纯色。<br>
+    <b>风之渐变令牌</b>：<code>--grad-brand: linear-gradient(135deg,#5B4BE0,#8B5CF6 48%,#22D3EE)</code>；光晕 <code>--wind-glow</code>（顶部 16% primary 径向）。<br>
+    <b>玻璃拟态</b>：迷你播放条 / 顶栏 / 侧边抽屉 / 底部弹窗 / 菜单 / 对话框 / 车机常驻条，统一半透明 + <code>backdrop-filter: blur</code> + 彩色描边 <code>--glass-bd</code>。深色 <code>rgba(28,26,37,.72)</code>、浅色 <code>rgba(255,255,255,.66)</code>。<br>
+    <b>层级投影（靛蓝 tint）</b>：<code>--sh-1/2/3</code> 三级取代原中性灰阴影，悬浮即有品牌色漫反射。<br>
+    <b>统一动效</b>：缓动 <code>--ease: cubic-bezier(.2,.8,.2,1)</code>；时长 <code>--dur-1 .18s / --dur-2 .26s / --dur-3 .4s</code>。歌词 120ms 淡入、封面呼吸/旋转、播放键按压回弹，全部 <code>prefers-reduced-motion</code> 兜底。<br>
+    <b>图标风格</b>：24dp 光学方格、2px 圆角描边（<code>stroke-linecap:round</code>）、<code>currentColor</code> 着色；同簇不混用实心/空心，视觉权重统一。生产 App 采用描边集（见下方 do / don't）；文档站 glyph 为 Material fill 集（保真原型，<code>.ic{fill:currentColor}</code>）。<br>
+    <b>交互反馈五态</b>：默认 / 悬停（底色 +10% on-bg）/ 按下（缩放 .88~.97 + 底色 +16%）/ 焦点（3px 靛蓝环 <code>--ring</code>）/ 禁用（opacity .4）。列表行悬停微抬升 1px。<br>
+    <b>无障碍</b>：≥44dp 触控、3px 焦点环、200% 缩放、正文/背景过 WCAG AA（既有令牌已满足）。<br>
+    <b>落地点</b>：改视觉只改 <code>ui.css</code> 顶部令牌与「视觉升级层」，勿在分章写内联样式；发布前真机核对玻璃模糊性能（车机低端屏可降级为不透明）。
   </div>
 </section>
 

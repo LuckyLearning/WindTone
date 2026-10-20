@@ -13,6 +13,7 @@
   --player-top:#49475F; --player-mid:#211F2B;
   --dim:rgba(0,0,0,.62); --phone-frame:#2C2A33; --fav:#FF7A8A;
   --board-bg:#08070B; --board-fg:#D9D5E0; --board-dim:#8D8998; --board-line:#26242E; --board-card:#121017;
+  --glass-bg:rgba(28,26,37,.72); --glass-bd:rgba(197,191,255,.22);
 }
 [data-theme="light"]{
   --primary:#5B4BE0; --on-primary:#FFFFFF; --primary-container:#E4E0FF; --on-primary-container:#16005C;
@@ -25,6 +26,7 @@
   --player-top:#C5BFF3; --player-mid:#E7E4F8;
   --dim:rgba(0,0,0,.34); --phone-frame:#C8C5D2; --fav:#D93852;
   --board-bg:#EFEEF4; --board-fg:#2A2833; --board-dim:#6B6875; --board-line:#DBD8E3; --board-card:#FFFFFF;
+  --glass-bg:rgba(255,255,255,.66); --glass-bd:rgba(91,75,224,.20);
 }
 
 /* ============================================================ 画板外壳 */
@@ -582,3 +584,154 @@ a{color:inherit;text-decoration:none}
 .hub-card .hub-n{position:absolute;right:14px;top:14px;font-size:11px;color:var(--primary);
   border:1px solid var(--board-line);border-radius:999px;padding:2px 9px;margin:0}
 .idx-hint{padding:10px 0 14px;font-size:11.5px;color:var(--board-dim);line-height:1.7}
+
+/* ============================================================ WindTone 视觉升级层（设计规范 v2 · 2026-10-20）
+   在既有 M3 / Indigo 令牌之上叠加「风之渐变 + 玻璃拟态 + 靛蓝投影 + 统一动效」。
+   仅增强视觉，不改任何布局与颜色令牌（令牌仍与 Theme.kt 一一对应）。 */
+:root{
+  --grad-brand:linear-gradient(135deg,#5B4BE0 0%,#8B5CF6 48%,#22D3EE 100%);
+  --grad-brand-soft:linear-gradient(135deg,#7C6BFF,#22D3EE);
+  --wind-glow:radial-gradient(150% 60% at 50% -8%, color-mix(in srgb,var(--primary) 16%, transparent), transparent 56%);
+  --ease:cubic-bezier(.2,.8,.2,1);
+  --dur-1:.18s; --dur-2:.26s; --dur-3:.4s;
+  --sh-1:0 4px 14px rgba(76,53,176,.18);
+  --sh-2:0 10px 30px rgba(76,53,176,.22);
+  --sh-3:0 20px 52px rgba(40,26,120,.30);
+  --glow:0 8px 26px rgba(91,75,224,.45);
+  --ring:0 0 0 3px color-mix(in srgb,var(--primary) 45%, transparent);
+}
+
+/* 文档站整体品牌光晕 */
+body{
+  background:
+    radial-gradient(120% 46% at 50% -4%, color-mix(in srgb,var(--primary) 8%, transparent), transparent 54%),
+    var(--board-bg);
+}
+
+/* 手机壳：顶部一抹风之渐变光晕（不透明混色，不透视底层） */
+.phone{
+  background:
+    radial-gradient(150% 56% at 50% -6%, color-mix(in srgb,var(--primary) 14%, transparent), transparent 55%),
+    var(--bg);
+  transition:background var(--dur-3) var(--ease);
+}
+
+/* 顶栏：半透明玻璃 + 底部细描边 */
+.topbar{
+  background:linear-gradient(180deg, color-mix(in srgb,var(--glass-bg) 82%, transparent), transparent);
+  -webkit-backdrop-filter:blur(10px) saturate(1.2);
+  backdrop-filter:blur(10px) saturate(1.2);
+  border-bottom:1px solid color-mix(in srgb,var(--glass-bd) 60%, transparent);
+}
+
+/* 侧边抽屉：玻璃 + 品牌光晕 */
+.drawer{
+  background:color-mix(in srgb,var(--c-low) 88%, transparent);
+  -webkit-backdrop-filter:blur(22px) saturate(1.2);
+  backdrop-filter:blur(22px) saturate(1.2);
+  border:1px solid var(--glass-bd);
+}
+.d-halo{background:var(--grad-brand);color:#fff;box-shadow:var(--glow)}
+.d-item.on{background:var(--grad-brand);color:#fff;box-shadow:var(--sh-2)}
+
+/* 迷你播放条：玻璃拟态 + 渐变进度 */
+.mini{
+  background:linear-gradient(180deg, var(--glass-bg), color-mix(in srgb,var(--glass-bg) 90%, #000 10%));
+  border:1px solid var(--glass-bd);
+  -webkit-backdrop-filter:blur(16px) saturate(1.3);
+  backdrop-filter:blur(16px) saturate(1.3);
+  border-radius:var(--r-l);
+  box-shadow:var(--sh-2);
+  transition:transform var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+}
+.mini:hover{box-shadow:var(--sh-3);transform:translateY(-1px)}
+.mini .cov{box-shadow:var(--glow)}
+.mini-track i{background:var(--grad-brand);border-radius:2px}
+
+/* 浮层：遮罩 / 抽屉 / 菜单 / 对话框 统一玻璃 */
+.sheet{
+  background:color-mix(in srgb,var(--c-low) 90%, transparent);
+  -webkit-backdrop-filter:blur(24px) saturate(1.2);
+  backdrop-filter:blur(24px) saturate(1.2);
+  border-top:1px solid var(--glass-bd);
+}
+.menu{
+  background:color-mix(in srgb,var(--c) 92%, transparent);
+  -webkit-backdrop-filter:blur(20px) saturate(1.2);
+  backdrop-filter:blur(20px) saturate(1.2);
+  border:1px solid var(--glass-bd);
+}
+.dialog{
+  background:color-mix(in srgb,var(--c) 94%, transparent);
+  -webkit-backdrop-filter:blur(20px) saturate(1.2);
+  backdrop-filter:blur(20px) saturate(1.2);
+  border:1px solid var(--glass-bd);
+  box-shadow:var(--sh-3);
+}
+
+/* 列表行：悬浮微抬升 + 过渡 */
+.song-row,.group-row,.cat-row,.c1row,.queue-item,.row-action,.row-opt{
+  transition:transform var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease), background var(--dur-1) var(--ease);
+}
+.song-row:hover,.group-row:hover,.cat-row:hover,.c1row:hover{
+  transform:translateY(-1px);
+  box-shadow:var(--sh-1);
+}
+
+/* 图标按钮：统一交互五态（悬停 / 按下 / 焦点） */
+.ibtn{
+  cursor:pointer;
+  transition:background var(--dur-1) var(--ease), transform var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.ibtn:hover{background:color-mix(in srgb,var(--on-bg) 10%, transparent)}
+.ibtn:active{transform:scale(.88);background:color-mix(in srgb,var(--on-bg) 16%, transparent)}
+
+/* 主按钮 / 文字按钮 */
+.btn{transition:transform var(--dur-1) var(--ease), box-shadow var(--dur-2) var(--ease), filter var(--dur-1) var(--ease)}
+.btn:hover{box-shadow:var(--glow)}
+.btn:active{transform:scale(.97)}
+.txtbtn{transition:color var(--dur-1) var(--ease), opacity var(--dur-1) var(--ease)}
+.txtbtn:hover{opacity:.78}
+
+/* 播放主键：品牌渐变 + 光晕 */
+.play-main{
+  background:var(--grad-brand);
+  box-shadow:var(--glow);
+  transition:transform var(--dur-1) var(--ease), box-shadow var(--dur-2) var(--ease);
+}
+.play-main:hover{box-shadow:0 12px 34px rgba(91,75,224,.6)}
+.play-main:active{transform:scale(.94)}
+
+/* 封面与唱片：渐变压暗 + 大封面悬浮放大 */
+.cov{transition:transform var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease)}
+.cov-292{box-shadow:var(--sh-3)}
+.cov-292:hover{transform:scale(1.02)}
+.vinyl .hub{background:var(--grad-brand);box-shadow:var(--glow)}
+
+/* 播放页顶部融入品牌色 */
+.player{
+  background:linear-gradient(180deg,
+    color-mix(in srgb,var(--player-top) 92%, var(--primary) 8%) 0%,
+    var(--player-mid) 46%, var(--bg) 100%);
+}
+
+/* 车机底部常驻条：玻璃 */
+.carnowbar{
+  background:color-mix(in srgb,var(--c-low) 86%, transparent);
+  -webkit-backdrop-filter:blur(18px) saturate(1.2);
+  backdrop-filter:blur(18px) saturate(1.2);
+  border-top:1px solid var(--glass-bd);
+}
+.carnowbar .nb-cov{background:var(--grad-brand);color:#fff;box-shadow:var(--glow)}
+
+/* 焦点可见性（无障碍 · ≥3px 靛蓝环） */
+.ibtn:focus-visible,.btn:focus-visible,.d-item:focus-visible,.txtbtn:focus-visible,
+.fchip:focus-visible,.c1tab:focus-visible,.cset-btn:focus-visible,.tgl:focus-visible,.cat-row:focus-visible{
+  outline:none;
+  box-shadow:var(--ring);
+}
+
+/* 减弱动效：尊重系统设置 */
+@media (prefers-reduced-motion:reduce){
+  *{transition-duration:.001ms!important;animation-duration:.001ms!important;animation-iteration-count:1!important}
+}
