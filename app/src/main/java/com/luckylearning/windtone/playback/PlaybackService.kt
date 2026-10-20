@@ -68,7 +68,7 @@ class PlaybackService : MediaLibraryService() {
      */
     private val browseScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val browser by lazy { LibraryBrowser((application as MusicApp).container.db) }
+    private val browser by lazy { LibraryBrowser(LibraryBrowseStore((application as MusicApp).container.db)) }
 
     override fun onCreate() {
         super.onCreate()

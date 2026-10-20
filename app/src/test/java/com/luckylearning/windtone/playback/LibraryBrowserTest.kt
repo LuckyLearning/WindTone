@@ -46,7 +46,7 @@ class LibraryBrowserTest {
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
         db = Room.inMemoryDatabaseBuilder(context, MusicDb::class.java).build()
-        browser = LibraryBrowser(db)
+        browser = LibraryBrowser(LibraryBrowseStore(db))
     }
 
     @After

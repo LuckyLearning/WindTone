@@ -2,7 +2,6 @@ package com.luckylearning.windtone.playback
 
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
-import com.luckylearning.windtone.data.db.MusicDb
 import com.luckylearning.windtone.data.db.toSong
 import com.luckylearning.windtone.data.model.Song
 import kotlinx.coroutines.Dispatchers
@@ -123,7 +122,7 @@ internal fun browseSongItem(song: Song): MediaItem {
  *
  * 只做查询，不做权限判断：能连上本服务的浏览器要么是系统车机面板，要么是本应用自己。
  */
-internal class LibraryBrowser(private val db: MusicDb) {
+internal class LibraryBrowser(private val store: LibraryBrowseStore) {
 
     /**
      * 某个节点的子节点。
@@ -140,11 +139,11 @@ internal class LibraryBrowser(private val db: MusicDb) {
             val nodes = when {
                 parentId == BrowseIds.ROOT -> rootNodes()
                 parentId == BrowseIds.FAVORITES ->
-                    songNodes(db.songStateDao().favoriteIdsByRecent())
+                    songNodes(store.favoriteIdsByRecent())
                 parentId == BrowseIds.RECENT ->
-                    songNodes(db.songStateDao().recentIds(VIRTUAL_LIMIT))
+                    songNodes(store.recentIds(VIRTUAL_LIMIT))
                 parentId == BrowseIds.MOST_PLAYED ->
-                    songNodes(db.songStateDao().mostPlayedIds(VIRTUAL_LIMIT))
+                    songNodes(store.mostPlayedIds(VIRTUAL_LIMIT))
                 else -> BrowseIds.playlistIdOf(parentId)
                     ?.let { songNodes(playlistSongIds(it)) }
                     .orEmpty()
@@ -167,17 +166,17 @@ internal class LibraryBrowser(private val db: MusicDb) {
         when {
             mediaId == BrowseIds.ROOT -> browseRootItem()
             mediaId == BrowseIds.FAVORITES -> browseFolderItem(
-                mediaId, "我的收藏", db.songStateDao().favoriteIdsByRecent().size,
+                mediaId, "我的收藏", store.favoriteIdsByRecent().size,
             )
             mediaId == BrowseIds.RECENT -> browseFolderItem(
-                mediaId, "最近播放", db.songStateDao().recentIds(VIRTUAL_LIMIT).size,
+                mediaId, "最近播放", store.recentIds(VIRTUAL_LIMIT).size,
             )
             mediaId == BrowseIds.MOST_PLAYED -> browseFolderItem(
-                mediaId, "最常播放", db.songStateDao().mostPlayedIds(VIRTUAL_LIMIT).size,
+                mediaId, "最常播放", store.mostPlayedIds(VIRTUAL_LIMIT).size,
             )
             else -> BrowseIds.playlistIdOf(mediaId)?.let { id ->
-                db.playlistDao().byId(id)?.let {
-                    browseFolderItem(mediaId, it.name, db.playlistDao().songsOf(id).size)
+                store.playlist(id)?.let {
+                    browseFolderItem(mediaId, it.name, store.playlistSongCount(id))
                 }
             }
         }
@@ -232,26 +231,26 @@ internal class LibraryBrowser(private val db: MusicDb) {
      * 这是冷路径（掀开车机面板才发生一次），换来的是界面上不出现「我的收藏（？）」。
      */
     private suspend fun rootNodes(): List<MediaItem> {
-        val linkCounts = db.playlistDao().allSongs().groupingBy { it.playlistId }.eachCount()
+        val linkCounts = store.playlistLinkCounts()
         val virtual = listOf(
             browseFolderItem(
-                BrowseIds.FAVORITES, "我的收藏", db.songStateDao().favoriteIdsByRecent().size,
+                BrowseIds.FAVORITES, "我的收藏", store.favoriteIdsByRecent().size,
             ),
             browseFolderItem(
-                BrowseIds.RECENT, "最近播放", db.songStateDao().recentIds(VIRTUAL_LIMIT).size,
+                BrowseIds.RECENT, "最近播放", store.recentIds(VIRTUAL_LIMIT).size,
             ),
             browseFolderItem(
-                BrowseIds.MOST_PLAYED, "最常播放", db.songStateDao().mostPlayedIds(VIRTUAL_LIMIT).size,
+                BrowseIds.MOST_PLAYED, "最常播放", store.mostPlayedIds(VIRTUAL_LIMIT).size,
             ),
         )
-        val user = db.playlistDao().all().map { p ->
+        val user = store.allPlaylists().map { p ->
             browseFolderItem(BrowseIds.playlist(p.id), p.name, linkCounts[p.id] ?: 0)
         }
         return virtual + user
     }
 
     private suspend fun playlistSongIds(playlistId: Long): List<Long> =
-        db.playlistDao().songsOf(playlistId).map { it.songId }
+        store.playlistSongIds(playlistId)
 
     /**
      * 主键 → 歌曲节点，**顺序沿用传入的 id 顺序**
@@ -259,8 +258,8 @@ internal class LibraryBrowser(private val db: MusicDb) {
      */
     private suspend fun songNodes(ids: List<Long>): List<MediaItem> {
         if (ids.isEmpty()) return emptyList()
-        val rows = db.songDao().byIds(ids).associateBy { it.id }
-        val states = db.songStateDao().bySongIds(ids).associateBy { it.songId }
+        val rows = store.songRowsByIds(ids).associateBy { it.id }
+        val states = store.songStatesByIds(ids).associateBy { it.songId }
         return ids.mapNotNull { id -> rows[id]?.toSong(states[id]) }.map { browseSongItem(it) }
     }
 }

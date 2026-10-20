@@ -10,7 +10,6 @@ import androidx.media3.session.MediaController
 import com.luckylearning.windtone.data.AudioInspector
 import com.luckylearning.windtone.data.BootStatus
 import com.luckylearning.windtone.data.CoverRepository
-import com.luckylearning.windtone.data.HOUR_MS
 import com.luckylearning.windtone.data.LyricsLoader
 import com.luckylearning.windtone.data.MessageBus
 import com.luckylearning.windtone.data.SettingsDefaults
@@ -169,14 +168,8 @@ class PlaybackEngine(
     private var queueRestoreRunning = false
     private var appForeground = true
 
-    // 收听时长统计：仅在播放中累加，切歌 / 暂停时结算
-    private var listenForKey: String? = null
-    private var listenAccumMs = 0L
-    private var lastTickAt = 0L
-
-    // 播放计数去重
-    private var lastCountedMediaId: String? = null
-    private var lastCountedAt = 0L
+    /** 播放统计（次数 / 收听时长 / 去重）——已抽出，可独立单测 */
+    private val stats = PlaybackStats(store, index, scope)
 
     /** 上一次尝试把悬浮窗服务拉回来的时间，用于 30 秒节流（见 [reviveOverlayIfNeeded]） */
     private var lastOverlayReviveAt = 0L
@@ -298,7 +291,7 @@ class PlaybackEngine(
             }
             consecutiveErrors = 0
             syncCurrentSong()
-            mediaItem?.mediaId?.takeIf { shouldCountPlay(it) }?.let { recordPlay(it) }
+            mediaItem?.mediaId?.takeIf { stats.shouldCountPlay(it) }?.let { stats.recordPlay(it) }
         }
 
         override fun onRepeatModeChanged(repeatMode: Int) {
@@ -330,59 +323,8 @@ class PlaybackEngine(
 
     // ================================================================ 播放统计
 
-    /**
-     * 是否把这次曲目切换计为一次播放。
-     *
-     * `replaceMediaItem`（回填封面）同样会触发 onMediaItemTransition，
-     * 若不加判别，每首歌会被多计若干次播放。同一首歌在 15 秒内的重复切换视为非用户行为。
-     */
-    private fun shouldCountPlay(mediaId: String): Boolean {
-        val now = SystemClock.elapsedRealtime()
-        if (mediaId == lastCountedMediaId && now - lastCountedAt < 15_000L) return false
-        lastCountedMediaId = mediaId
-        lastCountedAt = now
-        return true
-    }
-
-    /**
-     * 记录一次播放。
-     * 必须先 ensure（INSERT OR IGNORE）再 bump——历史实现只有 UPDATE，
-     * 没收藏过的歌永远写不进统计表。
-     */
-    private fun recordPlay(mediaId: String) {
-        val songId = index.idOf(mediaId) ?: return
-        scope.launch {
-            val now = System.currentTimeMillis()
-            withContext(Dispatchers.IO) {
-                runCatching { store.recordPlay(songId, now) }
-            }
-            index.bump(songId) { it.copy(playCount = it.playCount + 1, lastPlayedAt = now) }
-        }
-    }
-
-    /** 把累计的收听时长写回数据库（切歌 / 暂停 / 落盘时调用） */
-    private fun flushListen() {
-        val key = listenForKey ?: return
-        val ms = listenAccumMs
-        listenAccumMs = 0L
-        if (ms < 1000L) return
-        val songId = index.idOf(key) ?: return
-        // 收听报告的小时桶按**本次结算时刻**归属（一次累计最多 30 秒，
-        // 恰好跨整点的情况误差可以忽略）
-        val hour = System.currentTimeMillis() / HOUR_MS
-        scope.launch {
-            val now = System.currentTimeMillis()
-            withContext(Dispatchers.IO) {
-                runCatching { store.addListenTime(songId, ms, hour, now) }
-            }
-            index.bump(songId) { it.copy(playedMs = it.playedMs + ms) }
-        }
-    }
-
     /** 丢弃尚未落库的累计收听时长（「清空统计」前必须调用，否则它会被写回去） */
-    fun resetListenAccumulator() {
-        listenAccumMs = 0L
-    }
+    fun resetListenAccumulator() = stats.resetListenAccumulator()
 
     // ================================================================ 队列持久化
 
@@ -1412,7 +1354,7 @@ class PlaybackEngine(
     private fun syncCurrentSong(force: Boolean = false) {
         val c = controller ?: return
         val mediaId = c.currentMediaItem?.mediaId ?: run {
-            flushListen()
+            stats.flushListen()
             _player.update { it.copy(current = null, lyrics = Lyrics.EMPTY) }
             LyricOverlayBridge.clear()
             return
@@ -1425,7 +1367,7 @@ class PlaybackEngine(
             ?: librarySongs.firstOrNull { it.stableKey == mediaId }
             ?: return
 
-        flushListen()
+        stats.flushListen()
         saveQueue()
         currentLyricsSong = mediaId
         _player.update {
@@ -1571,7 +1513,7 @@ class PlaybackEngine(
                     }
                 }
 
-                accumulateListening(c.currentMediaItem?.mediaId, playing)
+                stats.accumulateListening(c.currentMediaItem?.mediaId, playing)
                 // 睡眠定时淡出：与进度同频（播放中 200ms）把音量拉下来，比 500ms 一档的
                 // 剩余时间流更细腻；定时未开启时只是一个常数比较。
                 applySleepFade(SleepTimer.remainingMs.value)
@@ -1586,28 +1528,6 @@ class PlaybackEngine(
                 // 播放中 200ms 刷新，暂停时降到 1s，避免空转耗电
                 delay(if (c.isPlaying) 200L else 1_000L)
             }
-        }
-    }
-
-    /** 累计收听时长：仅播放中累加，切歌 / 每 30 秒落库一次 */
-    private fun accumulateListening(mediaId: String?, playing: Boolean) {
-        val now = SystemClock.elapsedRealtime()
-        val delta = if (lastTickAt > 0L) (now - lastTickAt).coerceIn(0L, 2_000L) else 0L
-        lastTickAt = now
-
-        if (mediaId == null) {
-            flushListen()
-            listenForKey = null
-            return
-        }
-        if (listenForKey != null && listenForKey != mediaId) flushListen()
-        if (listenForKey != mediaId) {
-            listenForKey = mediaId
-            listenAccumMs = 0L
-        }
-        if (playing) {
-            listenAccumMs += delta
-            if (listenAccumMs >= 30_000L) flushListen()
         }
     }
 
