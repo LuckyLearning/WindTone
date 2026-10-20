@@ -1,10 +1,6 @@
 package com.luckylearning.windtone.overlay
 
 import android.annotation.SuppressLint
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -15,11 +11,6 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
-import android.text.SpannableStringBuilder
-import android.text.Spanned
-import android.text.style.ForegroundColorSpan
-import android.text.style.RelativeSizeSpan
-import android.text.style.StyleSpan
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
@@ -30,9 +21,6 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.TextView
-import androidx.core.app.NotificationCompat
-import com.luckylearning.windtone.MainActivity
-import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.CrashLog
 import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.data.SettingsDefaults
@@ -197,7 +185,7 @@ class LyricOverlayService : Service() {
     override fun onCreate() {
         super.onCreate()
         serviceAlive = true
-        startForeground(NOTIFICATION_ID, buildNotification())
+        startForeground(OverlayNotification.ID, OverlayNotification.build(this))
         windowManager = getSystemService(Context.WINDOW_SERVICE) as? WindowManager
         // 灭屏 / 亮屏：只在代码里注册才收得到（清单注册 Android 不会派发）
         runCatching {
@@ -277,7 +265,7 @@ class LyricOverlayService : Service() {
 
         val tv = TextView(this).apply {
             // 正文色取自设置（默认纯白）。已唱部分的颜色**不在这里设**——它要按行内
-            // 位置逐段染色，每次渲染都读最新值（见 buildSpanned）。
+            // 位置逐段染色，每次渲染都读最新值（见 OverlayTextStyler.build）。
             setTextColor(Prefs(this@LyricOverlayService).lyricOverlayTextColor)
             // 投影只是锦上添花的第二重保险；真正的可读性由 box 的深色底板兜底
             // （见 [refreshModeChrome]）。投影半径必须按 dp 换算——写死 6f 时，
@@ -309,7 +297,7 @@ class LyricOverlayService : Service() {
         // 放在独立的 TextView 里而不是拼进歌词串，是为了让两处字号 / 行距各自独立 ——
         // 标题调大不该把歌词顶出去，歌词换行数也不该影响标题。
         val title = TextView(this).apply {
-            setTextColor(withAlpha(Prefs(this@LyricOverlayService).lyricOverlayTextColor, TITLE_ALPHA))
+            setTextColor(OverlayTextStyler.withAlpha(Prefs(this@LyricOverlayService).lyricOverlayTextColor, TITLE_ALPHA))
             setPadding(dp(18), dp(8), dp(18), 0)
             includeFontPadding = false
             maxLines = 2
@@ -914,7 +902,7 @@ class LyricOverlayService : Service() {
             tv.setTextColor(textColor)
             // 标题用同一个色相、压低透明度：换歌词颜色时两处一起走，不会出现
             // 「歌词变黄、标题还是白的」这种半截生效
-            titleView?.setTextColor(withAlpha(textColor, TITLE_ALPHA))
+            titleView?.setTextColor(OverlayTextStyler.withAlpha(textColor, TITLE_ALPHA))
         }
 
         val scale = prefs.lyricOverlayTextScale
@@ -993,7 +981,7 @@ class LyricOverlayService : Service() {
      *
      * 全屏 = 宽度按设置（默认整屏）+ 高度 = 屏高 − 底部 56dp（让开车机 Dock）+
      * 纵向贴顶 + 横向按「余量百分比」取位；文字改走 11 行排版（行距放大），
-     * 由 [buildSpanned] 的 full 分支负责角色样式。
+     * 由 [OverlayTextStyler.build] 的 full 分支负责角色样式。
      *
      * 关掉时把外形完整还原：宽度回到百分比、高度回到 WRAP_CONTENT、行距复原，
      * 再重摆一次位置。**必须把 appliedWidthPercent 置回 -1** —— 否则宽度分支
@@ -1081,9 +1069,6 @@ class LyricOverlayService : Service() {
     private fun titleTextSp(scale: Int): Float =
         OVERLAY_TEXT_SP * TEXT_SCALE_FACTORS[scale.coerceIn(0, 2)] * TITLE_TEXT_SCALE
 
-    /** 给颜色换一个透明度通道（用于把标题压暗；保留用户自选的色相） */
-    private fun withAlpha(color: Int, alpha: Int): Int =
-        (color and 0x00FFFFFF) or (alpha.coerceIn(0, 255) shl 24)
 
     /**
      * 把组装好的几行画到 [TextView] 上。
@@ -1103,7 +1088,15 @@ class LyricOverlayService : Service() {
         fullHeight: Boolean = false,
     ) {
         val targetAlpha = if (opaque) 1f else PAUSED_ALPHA
-        val spanned = buildSpanned(lines, fullHeight)
+        // 样式需要的两个输入在服务侧现读：正文色用「已应用值」兜底用户最新设置，
+        // 是否有底板决定配角/译文的压暗程度。
+        val baseColor = if (appliedTextColor != COLOR_NOT_APPLIED) {
+            appliedTextColor
+        } else {
+            Prefs(this).lyricOverlayTextColor
+        }
+        val noBackdrop = Prefs(this).lyricOverlayBackdrop == BACKDROP_NONE
+        val spanned = OverlayTextStyler.build(lines, fullHeight, baseColor, noBackdrop)
         val sameText = tv.text.toString() == spanned.toString()
         // 「角色 + 文字」一起做去重键：全屏模式下间奏 ⇄ 演唱是同一串文字、不同角色，
         // 只比文字的话这次重绘会被跳过，画面停在旧的强调状态。
@@ -1145,115 +1138,6 @@ class LyricOverlayService : Service() {
             // 暂停 / 恢复：只改透明度，不动文字
             tv.animate().cancel()
             tv.alpha = targetAlpha
-        }
-    }
-
-    /**
-     * 组装可绘制文本。
-     *
-     * 单行 && 主角时走纯字符串快路径：主角**不需要任何 span**（它的颜色由
-     * TextView 的文字色决定，本来就是最亮的那一行），而 1 行模式正是最常见的
-     * 情形，没必要每帧造一个 `SpannableStringBuilder`。
-     */
-    private fun buildSpanned(
-        lines: List<OverlayTextComposer.StyledLine>,
-        fullHeight: Boolean = false,
-    ): CharSequence {
-        if (lines.isEmpty()) return ""
-        val only = lines.singleOrNull()
-        // 单行 && 主角 && 不是全屏模式时走纯字符串快路径：主角**不需要任何 span**
-        // （颜色由 TextView 的文字色决定），而 1 行模式正是最常见的字幕形态。
-        if (!fullHeight && only != null && only.role == OverlayTextComposer.Role.CURRENT) {
-            return only.text
-        }
-        // 全屏模式下配角要跟着用户的文字色走（只是压暗），不能在深色底板上
-        // 突然出现纯白 / 纯灰两种色相。单条字幕保持历史配色不动。
-        val baseColor = if (appliedTextColor != COLOR_NOT_APPLIED) {
-            appliedTextColor
-        } else {
-            Prefs(this).lyricOverlayTextColor
-        }
-        // 无底板时不能把上下句压到 42%：浅底（泊车影像 / 地图）上那就是一片雾。
-        // 底板本身提供的对比度没了，只能靠提高不透明度补回来（v1.1.25）。
-        val noBackdrop = Prefs(this).lyricOverlayBackdrop == BACKDROP_NONE
-        val contextAlpha = OverlayLegibility.contextAlpha(noBackdrop)
-        val translationAlpha = OverlayLegibility.translationAlpha(noBackdrop)
-        return SpannableStringBuilder().apply {
-            lines.forEachIndexed { index, line ->
-                if (index > 0) append("\n")
-                val start = length
-                append(line.text)
-                val end = length
-                when (line.role) {
-                    OverlayTextComposer.Role.CURRENT -> if (fullHeight) {
-                        // 播放页的当前行：字号放大一档 + 加粗 + 满不透明
-                        setSpan(
-                            RelativeSizeSpan(FULL_CURRENT_SCALE),
-                            start,
-                            end,
-                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                        )
-                        setSpan(
-                            StyleSpan(Typeface.BOLD),
-                            start,
-                            end,
-                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                        )
-                    }
-                    OverlayTextComposer.Role.CONTEXT -> {
-                        setSpan(
-                            ForegroundColorSpan(
-                                if (fullHeight) {
-                                    withAlpha(baseColor, contextAlpha)
-                                } else {
-                                    CONTEXT_TEXT_COLOR
-                                },
-                            ),
-                            start,
-                            end,
-                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                        )
-                        if (fullHeight) {
-                            setSpan(
-                                StyleSpan(Typeface.NORMAL),
-                                start,
-                                end,
-                                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                            )
-                        }
-                    }
-                    OverlayTextComposer.Role.TRANSLATION -> {
-                        setSpan(
-                            ForegroundColorSpan(
-                                if (fullHeight) {
-                                    withAlpha(baseColor, translationAlpha)
-                                } else {
-                                    CONTEXT_TEXT_COLOR
-                                },
-                            ),
-                            start,
-                            end,
-                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                        )
-                        setSpan(
-                            RelativeSizeSpan(
-                                if (fullHeight) FULL_TRANSLATION_SCALE else TRANSLATION_SCALE,
-                            ),
-                            start,
-                            end,
-                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                        )
-                        if (fullHeight) {
-                            setSpan(
-                                StyleSpan(Typeface.NORMAL),
-                                start,
-                                end,
-                                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                            )
-                        }
-                    }
-                }
-            }
         }
     }
 
@@ -1337,48 +1221,10 @@ class LyricOverlayService : Service() {
 
     private fun canDraw(): Boolean = canDrawOverlay(this)
 
-    // ------------------------------------------------------------------ 通知
-
-    private fun buildNotification(): Notification {
-        val nm = getSystemService(NotificationManager::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-            nm?.getNotificationChannel(CHANNEL_ID) == null
-        ) {
-            nm?.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "悬浮歌词", NotificationManager.IMPORTANCE_MIN).apply {
-                    description = "在桌面最上层显示当前歌词行"
-                    setShowBadge(false)
-                },
-            )
-        }
-
-        val openApp = PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            },
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
-
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_widget_music)
-            .setContentTitle("悬浮歌词已开启")
-            .setContentText("退到桌面后显示当前歌词行")
-            .setContentIntent(openApp)
-            .setOngoing(true)
-            .setSilent(true)
-            .setPriority(NotificationCompat.PRIORITY_MIN)
-            .build()
-    }
-
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density).toInt().coerceAtLeast(1)
 
     companion object {
-        private const val CHANNEL_ID = "lyric_overlay"
-        private const val NOTIFICATION_ID = 0x7701
-
         /** 复位悬浮窗位置的 Intent action（见 [resetPosition]） */
         private const val ACTION_RESET_POSITION = "com.luckylearning.windtone.RESET_OVERLAY_POSITION"
 
@@ -1448,20 +1294,6 @@ class LyricOverlayService : Service() {
          */
         private const val MAX_FULL_LINES_CAP = 36
 
-        /** 全屏模式：当前行字号相对倍率（播放页 17.5 / 15.5 ≈ 1.13） */
-        private const val FULL_CURRENT_SCALE = 1.13f
-
-        /** 全屏模式：上下句的不透明度（与播放页 0.42 对齐），0x6B = 107 */
-        private const val FULL_CONTEXT_ALPHA = 0x6B
-
-        /** 全屏模式：译文行的不透明度，比上下文略亮（播放页 0.8 × 0.8） */
-        private const val FULL_TRANSLATION_ALPHA = 0xA0
-
-        // 无底板时的不透明度见 [OverlayLegibility]（抽出去是为了能被单测钉住）
-
-        /** 全屏模式：译文行字号相对倍率（播放页 13 / 15.5 ≈ 0.84） */
-        private const val FULL_TRANSLATION_SCALE = 0.84f
-
         /** 全屏模式：行间距（额外像素 + 倍率），让 11 行铺满一屏时呼吸感接近播放页 */
         private const val FULL_LINE_SPACING_EXTRA_DP = 10
         private const val FULL_LINE_SPACING_MULT = 1.2f
@@ -1493,11 +1325,7 @@ class LyricOverlayService : Service() {
         private val EDIT_BACKDROP_COLOR = Color.argb(150, 0, 0, 0)
         private val EDIT_STROKE_COLOR = Color.argb(220, 88, 166, 255)
 
-        /** 配角（上下句、间奏时的主角）的压暗色 */
-        private val CONTEXT_TEXT_COLOR = Color.argb(150, 255, 255, 255)
 
-        /** 双语副行的字号倍率（相对主角） */
-        private const val TRANSLATION_SCALE = 0.82f
 
         /**
          * 歌名 / 歌手小字的字号倍率（相对歌词基准，再叠加标题档位）。
