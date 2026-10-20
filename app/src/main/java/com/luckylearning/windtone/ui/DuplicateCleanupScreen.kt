@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import com.luckylearning.windtone.data.DuplicateGroup
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.state.LibraryUiState
+import com.luckylearning.windtone.ui.theme.windShadow
 
 /**
  * 重复歌曲清理（批次 10.2）。
@@ -131,7 +132,8 @@ fun DuplicateCleanupScreen(
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceVariant,
                             shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth()
+                                .windShadow(level = 1, shape = RoundedCornerShape(12.dp)),
                         ) {
                             Text(
                                 "没有发现重复歌曲。",
@@ -212,7 +214,7 @@ private fun GroupCard(group: DuplicateGroup) {
     Surface(
         color = scheme.surfaceContainerLow,
         shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().windShadow(level = 1, shape = RoundedCornerShape(12.dp)),
     ) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
             Text(

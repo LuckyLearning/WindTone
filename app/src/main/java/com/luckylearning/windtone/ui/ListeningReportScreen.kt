@@ -44,6 +44,7 @@ import com.luckylearning.windtone.data.formatListenDuration
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.state.ReportUiState
 import com.luckylearning.windtone.state.TopSong
+import com.luckylearning.windtone.ui.theme.windShadow
 import java.util.TimeZone
 
 /** 可选的统计跨度（天） */
@@ -174,7 +175,7 @@ private fun StatGrid(report: ListeningReport) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
         shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().windShadow(level = 1, shape = RoundedCornerShape(12.dp)),
     ) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
             rows.forEach { (k, v) ->

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -45,6 +46,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -55,6 +57,7 @@ import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.state.LibraryUiState
 import com.luckylearning.windtone.state.LibraryView
 import com.luckylearning.windtone.state.PlaybackProgress
+import com.luckylearning.windtone.ui.theme.AppVisual
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -70,8 +73,10 @@ import kotlinx.coroutines.flow.StateFlow
  *
  * 布局约束（不要再踩）：
  *  · 车机底部 Dock 是车机自己画的浮层，`WindowInsets` 不报，必须由 `MainScreen` 留出 56dp；
- *  · 单栏到底，**不做左右分栏**（v1.1.14 用户明确否决）；
- *  · 内容区限宽 [CAR_CONTENT_MAX_WIDTH]，但底部播放条与顶栏保持横贯全宽。
+ *  · **v3（2026-10-20）改为左常驻导航 + 右内容区**：左导航 [CAR_NAV_WIDTH] 贯穿全高，
+ *    播放条只铺右侧内容区（不再横贯全宽）。与 v1.1.14 被否决的「两栏」不同：导航收窄成卡式、
+ *    播放条不压导航、Dock 安全区照留，三处都处理过；
+ *  · 内容区限宽 [CAR_CONTENT_MAX_WIDTH]（约束的是列表，不含车机左导航）。
  */
 internal val CAR_TOUCH_TARGET: Dp = 76.dp
 internal val CAR_BAR_HEIGHT: Dp = 112.dp
@@ -87,13 +92,12 @@ internal fun carViewLabel(view: LibraryView): String = when (view) {
     LibraryView.PLAYLIST -> "歌单"
 }
 
-/** 车机首页顶栏：标题 + 首数 + 搜索 / 设置。搜索就地展开，不跳页、不弹键盘二级页 */
+/** 车机首页顶栏：标题 + 首数 + 搜索。搜索就地展开，不跳页、不弹键盘二级页（设置移入左侧导航） */
 @Composable
 internal fun CarLibraryHeader(
     library: LibraryUiState,
     onQuery: (String) -> Unit,
     onSubmitSearch: (String) -> Unit,
-    onOpenSettings: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
     var searchMode by remember { mutableStateOf(false) }
@@ -168,57 +172,123 @@ internal fun CarLibraryHeader(
             CarIconButton(onClick = { searchMode = true }) {
                 Icon(Icons.Filled.Search, contentDescription = "搜索", tint = scheme.onBackground)
             }
-            CarIconButton(onClick = onOpenSettings) {
-                Icon(AppIcons.Tune, contentDescription = "设置", tint = scheme.onBackground)
-            }
         }
     }
 }
 
-/** 视图 Tab：五个浏览视图横向平铺，一步到位（抽屉要点两次） */
+/** 车机 v3 左导航宽度：设计稿 188px × (1707dp/1000px) ≈ 320dp，占屏宽约 19% */
+private val CAR_NAV_WIDTH = 320.dp
+
+/** 车机左常驻导航（v3）：品牌 + 五个浏览视图 + 底部设置。选中项用 primary 淡底。 */
 @Composable
-internal fun CarViewTabs(
+internal fun CarNavRail(
     current: LibraryView,
     onSelect: (LibraryView) -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
     Row(
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 2.dp),
+            .width(CAR_NAV_WIDTH)
+            .fillMaxHeight()
+            .background(scheme.surface),
     ) {
-        LibraryView.entries.forEach { view ->
-            val selected = view == current
-            var focused by remember { mutableStateOf(false) }
-            Surface(
-                color = if (selected) scheme.primaryContainer else scheme.surfaceContainerLow,
-                contentColor = if (selected) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
-                shape = RoundedCornerShape(14.dp),
-                border = if (focused || selected) {
-                    androidx.compose.foundation.BorderStroke(2.dp, scheme.primary)
-                } else {
-                    null
-                },
-                modifier = Modifier
-                    .height(64.dp)
-                    .onFocusChanged { focused = it.isFocused }
-                    .focusable()
-                    .clip(RoundedCornerShape(14.dp))
-                    .clickable { onSelect(view) },
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .padding(horizontal = 16.dp, vertical = 18.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(start = 8.dp, bottom = 20.dp),
             ) {
                 Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(AppVisual.WindGradient),
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier.padding(horizontal = 26.dp),
                 ) {
-                    Text(
-                        text = carViewLabel(view),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                    Icon(
+                        AppIcons.MusicNote,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp),
                     )
                 }
+                Spacer(Modifier.width(12.dp))
+                Text("听风", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = scheme.onBackground)
             }
+            LibraryView.entries.forEach { view ->
+                CarNavItem(
+                    label = carViewLabel(view),
+                    icon = view.icon,
+                    accent = carViewAccent(view),
+                    selected = view == current,
+                    onClick = { onSelect(view) },
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            CarNavItem(
+                label = "设置",
+                icon = AppIcons.Tune,
+                accent = scheme.onSurfaceVariant,
+                selected = false,
+                onClick = onOpenSettings,
+            )
         }
+        // 右缘 1px 分隔线（设计稿 .cv3-nav 的右边框）
+        Box(Modifier.width(1.dp).fillMaxHeight().background(scheme.outlineVariant))
+    }
+}
+
+/** 五个浏览视图的语义色（与设计稿 `.ac-*` 一致） */
+private fun carViewAccent(view: LibraryView): Color = when (view) {
+    LibraryView.SONGS -> AppVisual.Accent.Songs
+    LibraryView.ALBUM -> AppVisual.Accent.Album
+    LibraryView.ARTIST -> AppVisual.Accent.Artist
+    LibraryView.FOLDER -> AppVisual.Accent.Folder
+    LibraryView.PLAYLIST -> AppVisual.Accent.Playlist
+}
+
+/** 导航项：圆角卡、图标语义色、选中项 primary 淡底 + 加粗 + 可见焦点环 */
+@Composable
+private fun CarNavItem(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    accent: Color,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    var focused by remember { mutableStateOf(false) }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .then(if (selected) Modifier.background(scheme.primary.copy(alpha = 0.10f)) else Modifier)
+            .then(if (focused) Modifier.border(2.dp, scheme.primary, RoundedCornerShape(14.dp)) else Modifier)
+            .onFocusChanged { focused = it.isFocused }
+            .focusable()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 13.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (selected) scheme.primary else accent,
+            modifier = Modifier.size(24.dp),
+        )
+        Spacer(Modifier.width(14.dp))
+        Text(
+            text = label,
+            fontSize = 17.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = if (selected) scheme.onBackground else scheme.onSurfaceVariant,
+        )
     }
 }
 

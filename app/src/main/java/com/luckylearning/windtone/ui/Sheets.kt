@@ -61,6 +61,7 @@ import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.playback.Pitch
 import com.luckylearning.windtone.playback.SleepTimer
 import com.luckylearning.windtone.state.FolderItem
+import com.luckylearning.windtone.ui.theme.glassContainerColor
 import kotlin.math.roundToInt
 
 // ================================================================ 播放队列
@@ -74,7 +75,7 @@ fun QueueSheet(
     onMove: (Int, Int) -> Unit,
     onSaveAsPlaylist: () -> Unit = {},
 ) {
-    ModalBottomSheet(onDismissRequest = onClose) {
+    ModalBottomSheet(onDismissRequest = onClose, containerColor = glassContainerColor()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -166,7 +167,7 @@ fun SleepSheet(
     onCancel: () -> Unit,
 ) {
     val remaining by SleepTimer.remainingMs.collectAsState()
-    ModalBottomSheet(onDismissRequest = onClose) {
+    ModalBottomSheet(onDismissRequest = onClose, containerColor = glassContainerColor()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
             Text("睡眠定时", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             if (remaining > 0) {
@@ -246,7 +247,7 @@ fun SongActionsSheet(
     onAudioInfo: () -> Unit,
     onDelete: () -> Unit = {},
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
             Text(
                 song.title,
@@ -285,7 +286,7 @@ fun SongInfoSheet(
     loading: Boolean,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
             Text(
                 "音频信息",
@@ -421,7 +422,7 @@ fun AddToPlaylistSheet(
 ) {
     var creating by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("") }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
             Text(
                 song?.let { "把「${it.title}」加入歌单" } ?: "把所选的 $count 首加入歌单",
@@ -590,7 +591,7 @@ fun ScanScopeSheet(
 ) {
     val activeCount = folders.count { !it.excluded }
     val folderCount = folders.size
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
             Text("扫描范围", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
@@ -751,7 +752,7 @@ fun PlayerOptionsSheet(
     onToggleLyricOverlay: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
             Text("播放设置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
 

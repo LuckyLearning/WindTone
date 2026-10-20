@@ -39,10 +39,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -61,11 +59,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -79,6 +77,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.luckylearning.windtone.data.model.Song
+import com.luckylearning.windtone.ui.theme.AppVisual
+import com.luckylearning.windtone.ui.theme.windShadow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.abs
@@ -559,20 +559,19 @@ fun PlayerScreen(
                                 modifier = Modifier.size(if (state.carMode) 36.dp else 34.dp),
                             )
                         }
-                        FilledIconButton(
+                        // 设计规范 v2：主播放键改风之渐变 + 靛蓝投影（--grad-action / --glow）
+                        IconButton(
                             onClick = { onToggle(); keepAwake() },
-                            shape = CircleShape,
-                            colors = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = scheme.primary,
-                                contentColor = scheme.onPrimary,
-                            ),
                             modifier = Modifier
                                 .size(if (state.carMode) CAR_MAIN_BUTTON else 66.dp)
-                                .shadow(10.dp, CircleShape),
+                                .windShadow(level = 3, shape = CircleShape)
+                                .clip(CircleShape)
+                                .background(AppVisual.ActionGradient),
                         ) {
                             Icon(
                                 imageVector = if (state.isPlaying) AppIcons.Pause else Icons.Filled.PlayArrow,
                                 contentDescription = if (state.isPlaying) "暂停" else "播放",
+                                tint = Color.White,
                                 modifier = Modifier.size(if (state.carMode) 40.dp else 34.dp),
                             )
                         }
@@ -865,7 +864,8 @@ private fun PlaybackSlider(
             }
             if (playedFraction > 0f) {
                 drawRoundRect(
-                    color = scheme.primary,
+                    // v2：播放进度用风之渐变
+                    brush = AppVisual.WindGradient,
                     topLeft = Offset(0f, cy - r),
                     size = Size(size.width * playedFraction, h),
                     cornerRadius = radius,
@@ -989,7 +989,7 @@ private fun CoverPane(
                     scaleY = breath
                 }
                 .size(292.dp)
-                .shadow(18.dp, RoundedCornerShape(24.dp))
+                .windShadow(level = 3, shape = RoundedCornerShape(24.dp))
                 .clip(RoundedCornerShape(24.dp)),
             contentAlignment = Alignment.Center,
         ) {

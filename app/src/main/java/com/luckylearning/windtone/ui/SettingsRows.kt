@@ -73,6 +73,7 @@ import com.luckylearning.windtone.data.DownloadRoute
 import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.data.UpdateChecker
 import com.luckylearning.windtone.playback.Pitch
+import com.luckylearning.windtone.ui.theme.windShadow
 import kotlin.math.abs
 
 @Composable
@@ -231,6 +232,7 @@ internal fun CategoryRow(
             .fillMaxWidth()
             // .cat-row{margin-top:8px} —— 卡与卡之间靠它分隔，不加 SectionTitle
             .padding(top = 8.dp)
+            .windShadow(level = 1, shape = RoundedCornerShape(14.dp))
             .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick),
     ) {
@@ -318,6 +320,7 @@ internal fun ActionRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
+            .windShadow(level = 1, shape = RoundedCornerShape(12.dp))
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick),
     ) {
@@ -385,7 +388,7 @@ internal fun StatCard(rows: List<Pair<String, String>>, onClick: (() -> Unit)? =
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
         shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth().then(
+        modifier = Modifier.fillMaxWidth().windShadow(level = 1, shape = RoundedCornerShape(12.dp)).then(
             if (onClick == null) Modifier else Modifier.clickable(onClick = onClick),
         ),
     ) {

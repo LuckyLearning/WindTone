@@ -3,12 +3,15 @@ package com.luckylearning.windtone.ui.theme
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -146,3 +149,11 @@ fun Modifier.windShadow(
         spotColor = tint,
     )
 }
+
+/** 当前配色是否为深色：按**实际绘制亮度**判断，兼容「主题跟随封面取色」派生出来的深浅。 */
+@Composable
+fun isDarkScheme(): Boolean = MaterialTheme.colorScheme.background.luminance() < 0.5f
+
+/** 玻璃容器底色（弹层 / 浮层直接用 `containerColor = glassContainerColor()`）。 */
+@Composable
+fun glassContainerColor(): Color = AppVisual.glassBg(isDarkScheme())

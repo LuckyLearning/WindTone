@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.sp
 import com.luckylearning.windtone.playback.AudioFx
 import com.luckylearning.windtone.playback.EqPresets
 import com.luckylearning.windtone.playback.ReverbPresets
+import com.luckylearning.windtone.ui.theme.glassContainerColor
 
 /**
  * 「均衡器与音效」弹层（效果图 ⑲）。
@@ -76,7 +77,7 @@ fun EqSheet(onClose: () -> Unit) {
             state.bandLevels.any { it != 0 }
         )
 
-    ModalBottomSheet(onDismissRequest = onClose) {
+    ModalBottomSheet(onDismissRequest = onClose, containerColor = glassContainerColor()) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

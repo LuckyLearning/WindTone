@@ -94,21 +94,24 @@ class LayoutContractTest {
     }
 
     /**
-     * v1.1.19 车载版：单栏 + 顶部横向 Tab。
+     * 车机首页（v3，2026-10-20）：左常驻导航 + 右内容区。
      *
-     * 钉四件事，任何一条被"顺手改回去"都会立刻变红：
-     *  1. `carMode` 分支必须真的接线（顶栏 / Tab / 大播放条三个组件都在 MainScreen 里出现）；
-     *  2. 车机首页里不许有 `VerticalDivider`（双栏残留）；
-     *  3. 播放条不许再挂「歌词」快捷键 —— 用户 2026-10-17 明确要求删掉，进播放页就是看歌词；
-     *  4. 开关必须立即生效：MainScreen 要在 carMode 变化时改 `requestedOrientation`，
-     *     否则又回到"拨了开关没反应"（本轮重设计的起因）。
+     * 历史沿革（这条测试为什么改过两次）：
+     *  · v1.1.14 因「底部按钮栏压住设置 / 像后台管理界面」否决双栏；
+     *  · v1.1.19 改成单栏 + 顶部横向 Tab；
+     *  · v3 重新采用左导航，但三处都处理过（导航收窄成卡、播放条只铺内容区、Dock 安全区照留）。
+     * 所以现在锁定「左导航 + 车机组件接线」，并显式禁止旧的横向 Tab 回潮。
      */
     @Test
-    fun carModeUsesSingleColumnHome() {
+    fun carModeUsesLeftNavPlusContent() {
         val main = sourceFile("src/main/java/com/luckylearning/windtone/ui/MainScreen.kt").readText()
-        listOf("CarLibraryHeader(", "CarViewTabs(", "CarPlayerBar(").forEach { component ->
+        listOf("CarNavRail(", "CarLibraryHeader(", "CarPlayerBar(").forEach { component ->
             assertTrue("MainScreen 的车载分支没有接 $component", main.contains(component))
         }
+        assertFalse(
+            "v3 已改用左导航，旧的横向 Tab 组件（CarViewTabs）不应再被引用",
+            main.contains("CarViewTabs("),
+        )
         assertTrue(
             "车机模式必须能立即改屏幕方向（requestedOrientation），否则开关等于没反应",
             main.contains("requestedOrientation"),
@@ -121,10 +124,7 @@ class LayoutContractTest {
         val car = sourceFile(
             "src/main/java/com/luckylearning/windtone/ui/CarLibraryScreen.kt",
         ).readText()
-        assertFalse(
-            "车机首页出现 VerticalDivider —— 单栏是用户明确要求（v1.1.14 起双栏永久停用）",
-            car.contains("VerticalDivider("),
-        )
+        assertTrue("车机左常驻导航必须存在（v3）", car.contains("internal fun CarNavRail("))
         assertFalse(
             "车机播放条不应再有歌词快捷入口（用户 2026-10-17 要求删掉）",
             car.contains("AppIcons.Lyrics"),

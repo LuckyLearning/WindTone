@@ -85,6 +85,7 @@ import androidx.compose.ui.unit.sp
 import com.luckylearning.windtone.BuildConfig
 import com.luckylearning.windtone.lyrics.BilingualMode
 import com.luckylearning.windtone.playback.Pitch
+import com.luckylearning.windtone.ui.theme.windShadow
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -498,7 +499,8 @@ internal fun SettingsLyricsPage(
             shape = RoundedCornerShape(10.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 4.dp),
+                .padding(vertical = 4.dp)
+                .windShadow(level = 1, shape = RoundedCornerShape(10.dp)),
         ) {
             Text(
                 text = if (overlayJumpFailed) {

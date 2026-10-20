@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.sp
 import com.luckylearning.windtone.playback.Pitch
 import com.luckylearning.windtone.state.PlayerUiState
 import com.luckylearning.windtone.state.UpdateUiState
+import com.luckylearning.windtone.ui.theme.windShadow
 
 /**
  * 车载模式专用设置页（v1.1.32）。
@@ -358,6 +359,7 @@ private fun CarToggleRow(
             .heightIn(min = CAR_ROW_MIN_HEIGHT)
             .onFocusChanged { focused = it.isFocused }
             .focusable()
+            .windShadow(level = 1, shape = RoundedCornerShape(16.dp))
             .clip(RoundedCornerShape(16.dp))
             .clickable { onCheckedChange(!checked) },
     ) {
@@ -403,7 +405,8 @@ private fun CarStepperRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 5.dp)
-            .heightIn(min = CAR_ROW_MIN_HEIGHT),
+            .heightIn(min = CAR_ROW_MIN_HEIGHT)
+            .windShadow(level = 1, shape = RoundedCornerShape(16.dp)),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -468,6 +471,7 @@ private fun CarWideButton(
             .height(CAR_ROW_MIN_HEIGHT)
             .onFocusChanged { focused = it.isFocused }
             .focusable()
+            .windShadow(level = 1, shape = RoundedCornerShape(16.dp))
             .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick),
     ) {
@@ -497,6 +501,7 @@ private fun CarEntryRow(title: String, subtitle: String, onClick: () -> Unit) {
             .heightIn(min = CAR_ROW_MIN_HEIGHT)
             .onFocusChanged { focused = it.isFocused }
             .focusable()
+            .windShadow(level = 1, shape = RoundedCornerShape(16.dp))
             .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick),
     ) {

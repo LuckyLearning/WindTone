@@ -506,21 +506,28 @@ fun MainScreen(
         Box(Modifier.fillMaxSize().padding(bottom = bottomSafe)) {
             // v1.1.14：双栏（车载两栏 / 平板双栏）整体停用 —— 车机上底部固定按钮栏会
             // 压住左下角「设置」，且用户明确不要双栏；统一走单栏（抽屉导航 + 迷你播放条）。
-            Column(
+            // v3（2026-10-20）：车机改「左常驻导航 + 右内容区」，播放条只铺内容区；
+            // 手机无左导航，仍是单列（抽屉 + 迷你播放条）。
+            Row(
                 Modifier
                     .fillMaxSize()
                     .statusBarsPadding()
             ) {
                 if (carMode) {
-                    // 车机：标题行（搜索 / 设置）+ 横向视图 Tab，一步到位；
-                    // 手机仍走抽屉式顶栏，一行不改。
+                    CarNavRail(
+                        current = library.view,
+                        onSelect = lib::setView,
+                        onOpenSettings = { showSettings = true },
+                    )
+                }
+                Column(Modifier.weight(1f)) {
+                if (carMode) {
+                    // 车机：标题行（搜索）；视图切换在左侧常驻导航
                     CarLibraryHeader(
                         library = library,
                         onQuery = lib::setQuery,
                         onSubmitSearch = lib::submitSearch,
-                        onOpenSettings = { showSettings = true },
                     )
-                    CarViewTabs(current = library.view, onSelect = lib::setView)
                 } else {
                     LibraryHeader(
                         library = library,
@@ -598,6 +605,7 @@ fun MainScreen(
                     // v1.1.3：底部五视图导航整体移除，五个浏览视图收进左侧抽屉
                     // （顶栏汉堡按钮开合，见 LibraryDrawer.kt）。列表因此多出
                     // 一整条导航栏的纵向空间 —— 这是这次重构的直接收益。
+                }
                 }
             }
 
