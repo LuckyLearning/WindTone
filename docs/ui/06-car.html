@@ -42,7 +42,7 @@
     于是把 v1.1.19 的「单栏 + 顶部横向 Tab」改回<b>左侧导航</b>——
     但<b>不是</b>恢复 v1.1.14 被否决的那套两栏：导航收窄到 188px 并卡片化、播放条只铺右侧内容区、Dock 安全区照留，
     三点差异写在第 ㊱ 屏的说明里。<br>
-    <b>页面顺序</b>：㊱ 音乐库（最近播放）→ ㊱B 专辑网格 → ㊲ 播放页（歌词态）→ ㊳ 设置 → ㊴ 桌面悬浮歌词（四态）。
+    <b>页面顺序</b>：㊱ 全部歌曲（最近播放）→ ㊱B 专辑网格 → ㊲ 播放页（歌词态）→ ㊳ 设置 → ㊴ 桌面悬浮歌词（四态）。
     <b>v1.1.19 的单栏方案（㊱B / ㊲B）与 v1.1.32 的「一页到底」设置（㊵）已被本版吸收，不再单独出图。</b>
   </div>
   <div class="legend" style="margin-bottom:18px">
@@ -54,7 +54,7 @@
   <div class="board">
 
 <figure class="fig car" id="scr-car-library">
-  <div class="cap"><b>㊱ 车机 · 音乐库 · 最近播放（v3 布局 · 现行）</b><em>CarLibraryScreen.kt —— 左导航 188px + 内容区 + 底部常驻播放条 92px</em></div>
+  <div class="cap"><b>㊱ 车机 · 全部歌曲 · 最近播放（v3 布局 · 现行）</b><em>CarLibraryScreen.kt —— 左导航 188px + 内容区 + 底部常驻播放条 92px</em></div>
   <div class="carphone v3">
     <div class="carbar">
       <span>9:41</span><span class="cb-item">🌡 24°C</span>
@@ -63,10 +63,10 @@
     <div class="cv3">
       <nav class="cv3-nav">
         <div class="cv3-brand"><span class="cv3-logo"></span>听风</div>
-        <div class="cv3-item ac-songs on"><svg class="ic"><use href="#i-note"/></svg>音乐库</div>
-        <div class="cv3-item ac-fav"><svg class="ic"><use href="#i-star"/></svg>我喜欢的</div>
+        <div class="cv3-item ac-songs on"><svg class="ic"><use href="#i-note"/></svg>全部歌曲</div>
         <div class="cv3-item ac-album"><svg class="ic"><use href="#i-album"/></svg>专辑</div>
         <div class="cv3-item ac-artist"><svg class="ic"><use href="#i-artist"/></svg>歌手</div>
+        <div class="cv3-item ac-folder"><svg class="ic"><use href="#i-folder"/></svg>文件夹</div>
         <div class="cv3-item ac-pl"><svg class="ic"><use href="#i-library"/></svg>歌单</div>
         <div class="cv3-gap"></div>
         <div class="cv3-item"><svg class="ic"><use href="#i-gear"/></svg>设置</div>
@@ -74,7 +74,7 @@
       <div class="cv3-right">
         <div class="cv3-main">
           <div class="cv3-hd">
-            <div class="cv3-title">音乐库 · 最近播放</div>
+            <div class="cv3-title">全部歌曲 · 最近播放</div>
             <span class="pill">500 首</span>
             <div class="sp"></div>
             <button class="ibtn"><svg class="ic ic-22"><use href="#i-search"/></svg></button>
@@ -155,9 +155,8 @@
   ② 「像后台管理界面」→ 导航收窄到 <b>188px</b>（旧版 256dp）、条目做成 44px 圆角卡片、去掉整块底色，
   只剩当前项一块淡淡的靛蓝底 + 1px 投影。<b>Dock 安全区照留</b>（导航底部 56dp / 画布 30px）：
   这是 v1.1.14「设置点不到」的根因，换了布局也不能忘。<br>
-  <b>导航五项</b>：音乐库 / 我喜欢的 / 专辑 / 歌手 / 歌单。「专辑 / 歌手 / 歌单」即 <code>LibraryView</code> 的枚举值，与手机抽屉共用同一份状态；「音乐库」= 全部歌曲视图。
-  设置固定在最底部，<b>仍是唯一入口</b>（入口收敛口径不变）。<br>
-  <b>图标带语义色、文字保持中性</b>：星=琥珀、专辑=橙、歌手=紫、歌单=青，一眼区分入口，又不至于让导航变调色盘。<br>
+  <b>导航五项</b>：全部歌曲 / 专辑 / 歌手 / 文件夹 / 歌单。与真车机 <code>CarLibraryScreen</code> 的 <code>LibraryView.entries</code> 完全一致（车机短名「全部歌曲」）；设置固定在最底部，<b>仍是唯一入口</b>（入口收敛口径不变）。<br>
+  <b>图标带语义色、文字保持中性</b>：全部歌曲=靛、专辑=橙、歌手=紫、文件夹=蓝、歌单=青，一眼区分入口，又不至于让导航变调色盘。<br>
   <b>封面缺省色块</b>：没有内嵌封面时不再画灰色音符，改成<b>首字 + 六档确定性渐变</b>（按 <code>stableKey</code> 哈希取档），
   同一首歌永远同一色，扫一眼就能靠颜色定位；有真封面时直接用封面，色块只是兜底。
   六档底色都过白字对比（≥4.5:1），深色主题下不改色、只压 8% 亮度。<br>
@@ -178,10 +177,10 @@
     <div class="cv3">
       <nav class="cv3-nav">
         <div class="cv3-brand"><span class="cv3-logo"></span>听风</div>
-        <div class="cv3-item ac-songs"><svg class="ic"><use href="#i-note"/></svg>音乐库</div>
-        <div class="cv3-item ac-fav"><svg class="ic"><use href="#i-star"/></svg>我喜欢的</div>
+        <div class="cv3-item ac-songs"><svg class="ic"><use href="#i-note"/></svg>全部歌曲</div>
         <div class="cv3-item ac-album on"><svg class="ic"><use href="#i-album"/></svg>专辑</div>
         <div class="cv3-item ac-artist"><svg class="ic"><use href="#i-artist"/></svg>歌手</div>
+        <div class="cv3-item ac-folder"><svg class="ic"><use href="#i-folder"/></svg>文件夹</div>
         <div class="cv3-item ac-pl"><svg class="ic"><use href="#i-library"/></svg>歌单</div>
         <div class="cv3-gap"></div>
         <div class="cv3-item"><svg class="ic"><use href="#i-gear"/></svg>设置</div>
@@ -294,10 +293,10 @@
     <div class="cv3">
       <nav class="cv3-nav">
         <div class="cv3-brand"><span class="cv3-logo"></span>听风</div>
-        <div class="cv3-item ac-songs"><svg class="ic"><use href="#i-note"/></svg>音乐库</div>
-        <div class="cv3-item ac-fav"><svg class="ic"><use href="#i-star"/></svg>我喜欢的</div>
+        <div class="cv3-item ac-songs"><svg class="ic"><use href="#i-note"/></svg>全部歌曲</div>
         <div class="cv3-item ac-album"><svg class="ic"><use href="#i-album"/></svg>专辑</div>
         <div class="cv3-item ac-artist"><svg class="ic"><use href="#i-artist"/></svg>歌手</div>
+        <div class="cv3-item ac-folder"><svg class="ic"><use href="#i-folder"/></svg>文件夹</div>
         <div class="cv3-item ac-pl"><svg class="ic"><use href="#i-library"/></svg>歌单</div>
         <div class="cv3-gap"></div>
         <div class="cv3-item"><svg class="ic"><use href="#i-gear"/></svg>设置</div>
@@ -337,7 +336,7 @@
     <div class="cv3-dock"><i></i><i></i><i></i><span>车机 Dock（系统浮层 · App 只让出 56dp）</span></div>
   </div>
   <p class="note"><b>关键点：</b>播放页不是一个盖住一切的全屏页，而是<b>同一个壳里换了内容区</b>——
-  导航还在，「音乐库」一点就回到列表，不需要先退出播放页。<b>底部播放条在这一屏不出现</b>：
+  导航还在，「全部歌曲」一点就回到列表，不需要先退出播放页。<b>底部播放条在这一屏不出现</b>：
   内容区本身就是播放器，再加一条是重复信息（这是「一条信息只出现一次」的落地）。<br>
   <b>歌名行</b>：封面 56 + 歌名 23sp/800 + 歌手 14sp + 红心紧跟其后（不贴到屏幕最右缘，1707dp 上够不着也看不清）+ 右侧队列。
   <b>进度条</b> 10px 粗、滑块 26px，位于控制键正上方——手指从控制键往上挪一点点就能拖。<br>
@@ -358,10 +357,10 @@
     <div class="cv3">
       <nav class="cv3-nav">
         <div class="cv3-brand"><span class="cv3-logo"></span>听风</div>
-        <div class="cv3-item ac-songs"><svg class="ic"><use href="#i-note"/></svg>音乐库</div>
-        <div class="cv3-item ac-fav"><svg class="ic"><use href="#i-star"/></svg>我喜欢的</div>
+        <div class="cv3-item ac-songs"><svg class="ic"><use href="#i-note"/></svg>全部歌曲</div>
         <div class="cv3-item ac-album"><svg class="ic"><use href="#i-album"/></svg>专辑</div>
         <div class="cv3-item ac-artist"><svg class="ic"><use href="#i-artist"/></svg>歌手</div>
+        <div class="cv3-item ac-folder"><svg class="ic"><use href="#i-folder"/></svg>文件夹</div>
         <div class="cv3-item ac-pl"><svg class="ic"><use href="#i-library"/></svg>歌单</div>
         <div class="cv3-gap"></div>
         <div class="cv3-item on"><svg class="ic"><use href="#i-gear"/></svg>设置</div>

@@ -761,9 +761,9 @@ body{
 .cv3-item .ic{width:21px;height:21px;flex:none}
 /* 图标带语义色、文字保持中性：一眼区分入口，又不让导航变调色盘 */
 .cv3-item.ac-songs .ic{color:var(--primary)}
-.cv3-item.ac-fav .ic{color:#E8A317}
 .cv3-item.ac-album .ic{color:#E8793B}
 .cv3-item.ac-artist .ic{color:#7C6BF0}
+.cv3-item.ac-folder .ic{color:#3B82C4}
 .cv3-item.ac-pl .ic{color:#17A398}
 .cv3-item.on{background:color-mix(in srgb,var(--primary) 10%,var(--surface));
   box-shadow:var(--sh-1);font-weight:700;color:var(--on-bg)}
