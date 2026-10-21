@@ -74,6 +74,10 @@ class PlaybackService : MediaLibraryService() {
         super.onCreate()
 
         val player = ExoPlayer.Builder(this)
+            // 在线音频的磁盘缓存（v1.1.38）：http(s) 走 CacheDataSource，本地文件不受影响。
+            // 放在这里而不是 PlaybackEngine，是因为 ExoPlayer 只在这个服务里创建 ——
+            // 换实例就得跟着换缓存源，否则缓存只对创建它的那个实例有效。
+            .setMediaSourceFactory(OnlineMediaCache.mediaSourceFactory(this))
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
@@ -286,6 +290,9 @@ class PlaybackService : MediaLibraryService() {
 
     override fun onDestroy() {
         AudioFx.release()
+        // 缓存持有目录锁与索引文件：不释放的话，进程内下次建 SimpleCache 会直接抛
+        // 「Another SimpleCache instance uses the folder」，在线播放从此永久没缓存。
+        OnlineMediaCache.release()
         SleepTimer.cancel()
         PlayerHandle.player = null
         mediaSession?.run {
