@@ -288,7 +288,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             // 这里只给多行留好行距——单行时它不产生任何效果。
             setLineSpacing(dp(2).toFloat(), 1f)
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, OVERLAY_TEXT_SP)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, OverlayAppearance.OVERLAY_TEXT_SP)
             // ⚠️ 这里**不能**设 INVISIBLE：显隐只由 observeState 切外层 box，
             // 子 View 一旦被设成 INVISIBLE 就再也没人把它设回来——
             // 结果是底板（画在 box 上）照常出现、文字（画在 tv 上）永远消失，
@@ -305,8 +305,8 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             maxLines = 2
             ellipsize = android.text.TextUtils.TruncateAt.END
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, titleTextSp(Prefs(this@LyricOverlayService).lyricOverlayTitleScale))
-            gravity = alignGravity(Prefs(this@LyricOverlayService).lyricOverlayAlign)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, OverlayAppearance.titleTextSp(Prefs(this@LyricOverlayService).lyricOverlayTitleScale))
+            gravity = OverlayAppearance.alignGravity(Prefs(this@LyricOverlayService).lyricOverlayAlign)
             visibility = View.GONE
         }
 
@@ -793,7 +793,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             appliedScale = scale
             tv.setTextSize(
                 TypedValue.COMPLEX_UNIT_SP,
-                OVERLAY_TEXT_SP * TEXT_SCALE_FACTORS[scale.coerceIn(0, 2)],
+                OverlayAppearance.bodyTextSp(scale),
             )
             // 这里不再设 maxWidth：宽度已由窗口（屏宽 × 百分比）统一控制，
             // 两处都限宽只会让「调了没反应」变得难以解释。
@@ -803,7 +803,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         val titleScale = prefs.lyricOverlayTitleScale
         if (appliedTitleScale != titleScale) {
             appliedTitleScale = titleScale
-            titleView?.setTextSize(TypedValue.COMPLEX_UNIT_SP, titleTextSp(titleScale))
+            titleView?.setTextSize(TypedValue.COMPLEX_UNIT_SP, OverlayAppearance.titleTextSp(titleScale))
         }
 
         // 行数变了窗口高度就变了，夹取上限（屏高 − 窗高）跟着变。
@@ -830,9 +830,9 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         val align = prefs.lyricOverlayAlign
         if (appliedAlign != align) {
             appliedAlign = align
-            tv.gravity = alignGravity(align)
+            tv.gravity = OverlayAppearance.alignGravity(align)
             // 标题跟着歌词一起对齐，否则「居左」时标题还悬在中间，看着像两个控件
-            titleView?.gravity = alignGravity(align)
+            titleView?.gravity = OverlayAppearance.alignGravity(align)
         }
     }
 
@@ -849,12 +849,14 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
      * 有底板时保持原来的柔光（底板已经给了对比度，再加深会显脏）。
      */
     private fun applyTextLegibility(tv: TextView, backdrop: Int) {
-        if (backdrop == BACKDROP_NONE) {
-            // 半径取 2dp：远小于字重，只加粗边缘而不会糊掉笔画之间的空隙
-            tv.setShadowLayer(dp(2).toFloat(), 0f, 0f, Color.argb(255, 0, 0, 0))
-        } else {
-            tv.setShadowLayer(dp(3).toFloat(), 0f, dp(1).toFloat(), Color.argb(220, 0, 0, 0))
-        }
+        val shadow = OverlayAppearance.shadowFor(backdrop)
+        // 无底板时半径取 2dp：远小于字重，只加粗边缘而不会糊掉笔画之间的空隙
+        tv.setShadowLayer(
+            dp(shadow.radiusDp).toFloat(),
+            0f,
+            dp(shadow.offsetYDp).toFloat(),
+            Color.argb(shadow.colorAlpha, 0, 0, 0),
+        )
         // 描边变了必须重画：span 里的颜色没变，但字形渲染变了
         lastRenderKey = ""
     }
@@ -893,9 +895,10 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             // 于是每帧 updateViewLayout，屏幕上表现为歌词不停轻微抖动
             appliedFullWidthPercent = prefs.lyricOverlayFullWidthPercent
             appliedFullOffsetPercent = prefs.lyricOverlayFullOffsetPercent
+            val (lsExtra, lsMult) = OverlayAppearance.fullHeightLineSpacing()
             tv.setLineSpacing(
-                dp(FULL_LINE_SPACING_EXTRA_DP).toFloat(),
-                FULL_LINE_SPACING_MULT,
+                dp(lsExtra).toFloat(),
+                lsMult,
             )
         } else {
             p.width = overlayWidthPx(Prefs(this).lyricOverlayWidthPercent)
@@ -944,15 +947,6 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         return changed
     }
 
-    /** 文字在窗内的对齐：居左 = 从同一条竖线起排；否则居中（折行也居中） */
-    private fun alignGravity(align: Int): Int =
-        if (align == OverlayPositioner.ALIGN_LEFT) Gravity.START or Gravity.CENTER_VERTICAL else Gravity.CENTER
-
-    /** 歌名 / 歌手小字的字号（sp）：以正文字号为基准，再乘标题档位与固定缩小比例 */
-    private fun titleTextSp(scale: Int): Float =
-        OVERLAY_TEXT_SP * TEXT_SCALE_FACTORS[scale.coerceIn(0, 2)] * TITLE_TEXT_SCALE
-
-
     /**
      * 把组装好的几行画到 [TextView] 上。
      *
@@ -970,7 +964,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         opaque: Boolean,
         fullHeight: Boolean,
     ) {
-        val targetAlpha = if (opaque) 1f else PAUSED_ALPHA
+        val targetAlpha = OverlayAppearance.targetAlpha(opaque)
         // 样式需要的两个输入在服务侧现读：正文色用「已应用值」兜底用户最新设置，
         // 是否有底板决定配角/译文的压暗程度。
         val baseColor = if (appliedTextColor != COLOR_NOT_APPLIED) {
@@ -978,7 +972,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         } else {
             Prefs(this).lyricOverlayTextColor
         }
-        val noBackdrop = Prefs(this).lyricOverlayBackdrop == BACKDROP_NONE
+        val noBackdrop = Prefs(this).lyricOverlayBackdrop == OverlayAppearance.BACKDROP_NONE
         val spanned = OverlayTextStyler.build(lines, fullHeight, baseColor, noBackdrop)
         val sameText = tv.text.toString() == spanned.toString()
         // 「角色 + 文字」一起做去重键：全屏模式下间奏 ⇄ 演唱是同一串文字、不同角色，
@@ -1096,8 +1090,8 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
                 setStroke(dp(if (fullHeight) 3 else 2), EDIT_STROKE_COLOR)
                 cornerRadius = corner
             }
-            backdrop == BACKDROP_NONE -> null
-            backdrop == BACKDROP_SOLID -> GradientDrawable().apply {
+            backdrop == OverlayAppearance.BACKDROP_NONE -> null
+            backdrop == OverlayAppearance.BACKDROP_SOLID -> GradientDrawable().apply {
                 setColor(SOLID_BACKDROP_COLOR)
                 cornerRadius = corner
             }
@@ -1147,12 +1141,6 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         var windowVisible: Boolean = false
             private set
 
-        /** 悬浮字幕基准字号（中档）：车机屏大、观看距离远，比手机正文大一档 */
-        private const val OVERLAY_TEXT_SP = 20f
-
-        /** 字号三档的倍率：小 / 中 / 大。存的是档位不是具体 sp，日后调基准能带上老用户 */
-        private val TEXT_SCALE_FACTORS = floatArrayOf(0.82f, 1f, 1.25f)
-
         /**
          * 「还没应用过」的哨兵，用于缓存上一次的正文色 / 已唱色。
          * 取 `Int.MIN_VALUE` —— 它是合法 `Int`，但不可能是一个正常的 ARGB 颜色。
@@ -1172,10 +1160,6 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
          */
         private const val MIN_OVERLAY_WIDTH_DP = 48
 
-        /** 全屏模式：行间距（额外像素 + 倍率），让 11 行铺满一屏时呼吸感接近播放页 */
-        private const val FULL_LINE_SPACING_EXTRA_DP = 10
-        private const val FULL_LINE_SPACING_MULT = 1.2f
-
         /**
          * 默认位置：状态栏高度再往下让这么多 dp。
          *
@@ -1184,13 +1168,6 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
          * 64dp 实测能让开胶囊底沿；各机型可拖动微调，这里只管默认观感。
          */
         private const val TOP_OFFSET_DP = 64
-
-        /** 暂停时的不透明度：不隐藏，方便看清唱到哪一句 */
-        private const val PAUSED_ALPHA = 0.55f
-
-        /** 底板档位：无底板 / 深色实底（另一档是半透明，默认） */
-        private const val BACKDROP_NONE = 0
-        private const val BACKDROP_SOLID = 2
 
         /** 锁定态底板：半透明（默认档）与实底 */
         private val TRANSLUCENT_BACKDROP_COLOR = Color.argb(140, 0, 0, 0)
@@ -1201,14 +1178,6 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         private val EDIT_STROKE_COLOR = Color.argb(220, 88, 166, 255)
 
 
-
-        /**
-         * 歌名 / 歌手小字的字号倍率（相对歌词基准，再叠加标题档位）。
-         *
-         * 0.62 是「一眼能认出是哪首歌、但不抢歌词」的比例；
-         * 车机上由标题档位单独调大一档即可，不必动歌词字号。
-         */
-        private const val TITLE_TEXT_SCALE = 0.62f
 
         /** 歌名 / 歌手小字的不透明度：压暗到 ~70%，层级自然落在歌词之下 */
         private const val TITLE_ALPHA = 0xB4
