@@ -51,6 +51,20 @@ object OnlineMediaCache {
     @Volatile
     private var failed = false
 
+    /**
+     * 百度网盘的 access_token 提供方（v1.1.40）。
+     *
+     * 网盘 dlink **必须**拼 `&access_token=` 才能下载（官方文档的硬要求），而 dlink 是随
+     * [com.luckylearning.windtone.data.baidu.BaiduPan.dlinks] 一起进队列的，URI 里不该带
+     * token —— token 会被写进 Room 的播放队列、也可能进日志。所以放在这一层按请求补齐：
+     * 由 [com.luckylearning.windtone.MusicApp] 在启动时注入，取不到就原样放行（不该因为
+     * 这个装饰把本地/普通在线播放一起搞坏）。
+     */
+    @Volatile
+    var panTokenProvider: (() -> String?)? = null
+
+    fun panToken(): String? = runCatching { panTokenProvider?.invoke() }.getOrNull()
+
     /** 只有网络流进缓存；本地 URI 一律走原路径 */
     fun shouldCache(scheme: String?): Boolean =
         scheme.equals("http", ignoreCase = true) || scheme.equals("https", ignoreCase = true)
@@ -180,10 +194,16 @@ private class SchemeRoutingDataSource(
         val source = factory.createDataSource()
         listeners.forEach(source::addTransferListener)
         delegate = source
-        // 百度网盘的直链要求 UA 伪装成网盘客户端（见 BaiduRules.needsPanUserAgent）。
-        // 放在这一层是因为「每个文件一个 DataSource」，而 UA 只能在请求头里按请求设置。
+        // 百度网盘的直链要求 UA 伪装成网盘客户端（见 BaiduRules.needsPanUserAgent），
+        // 并且**必须**在 URL 上补 access_token —— 两样缺一个都是 403，而 403 在播放器里
+        // 只会表现为「不出声」，没有可读的错误。
+        // 放在这一层是因为「每个文件一个 DataSource」，而 UA / token 只能按请求设置。
         val effective = if (BaiduRules.needsPanUserAgent(dataSpec.uri.host)) {
-            dataSpec.buildUpon().setHttpRequestHeaders(BaiduRules.panHeaders()).build()
+            val url = BaiduRules.withAccessToken(dataSpec.uri.toString(), OnlineMediaCache.panToken())
+            dataSpec.buildUpon()
+                .setUri(Uri.parse(url))
+                .setHttpRequestHeaders(BaiduRules.panHeaders())
+                .build()
         } else {
             dataSpec
         }

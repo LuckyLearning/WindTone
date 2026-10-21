@@ -171,24 +171,41 @@ internal fun BaiduPanPage(
     )
 
     val audioEntries = entries.filter { it.isPlayableAudio }
+
+    /**
+     * 播放：队列始终是「本目录全部音频」，[startFsId] 指定从哪一首开始（null = 第一首）。
+     *
+     * 队列取全目录而不是单个文件，是为了「往下一首」能连续播放；直链一次批量取回，
+     * 跳过的条目（没拿到直链）不会出现在队列里，所以起始位置按 `Song.id` 反查，
+     * 不能用 audioEntries 的下标 —— 那会在有文件失败时播错歌。
+     */
+    fun playFrom(startFsId: Long?) {
+        if (audioEntries.isEmpty()) return
+        loading = true
+        error = null
+        scope.launch {
+            pan.dlinks(audioEntries.map { it.fsId })
+                .onSuccess { batch ->
+                    val songs = pan.toSongs(audioEntries, batch.links)
+                    if (songs.isEmpty()) {
+                        // note 里带着「请求几个 / 返回几条 / 成功几个」，比一句「没取到直链」有用得多
+                        error = batch.note.ifBlank { "没有取到可播放的直链（文件可能被移出或没有权限）" }
+                    } else {
+                        val idx = startFsId
+                            ?.let { id -> songs.indexOfFirst { it.id == -id } }
+                            ?.takeIf { it >= 0 } ?: 0
+                        onPlay(songs, idx)
+                    }
+                }
+                .onFailure { error = it.message ?: "获取播放地址失败" }
+            loading = false
+        }
+    }
+
     if (audioEntries.isNotEmpty()) {
         TextButton(
             enabled = !loading,
-            onClick = {
-                loading = true
-                scope.launch {
-                    val links = pan.dlinks(audioEntries.map { it.fsId })
-                    links.onSuccess { map ->
-                        val songs = pan.toSongs(audioEntries, map)
-                        if (songs.isEmpty()) {
-                            error = "没有取到可播放的直链（文件可能被移出或没有权限）"
-                        } else {
-                            onPlay(songs, 0)
-                        }
-                    }.onFailure { error = it.message ?: "获取播放地址失败" }
-                    loading = false
-                }
-            },
+            onClick = { playFrom(null) },
         ) { Text("播放本目录全部音频（${audioEntries.size}）") }
     }
 
@@ -216,23 +233,7 @@ internal fun BaiduPanPage(
         BaiduEntryRow(
             entry = entry,
             onOpenDir = { load(entry.path) },
-            onPlayFile = {
-                loading = true
-                scope.launch {
-                    pan.dlinks(audioEntries.map { it.fsId })
-                        .onSuccess { map ->
-                            val songs = pan.toSongs(audioEntries, map)
-                            if (songs.isEmpty()) {
-                                error = "没有取到可播放的直链（文件可能被移出或没有权限）"
-                            } else {
-                                val idx = songs.indexOfFirst { it.title == BaiduRules.displayTitle(entry.name) }
-                                onPlay(songs, idx.coerceAtLeast(0))
-                            }
-                        }
-                        .onFailure { error = it.message ?: "获取播放地址失败" }
-                    loading = false
-                }
-            },
+            onPlayFile = { playFrom(entry.fsId) },
         )
     }
 

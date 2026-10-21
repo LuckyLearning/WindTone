@@ -14,6 +14,8 @@ import org.junit.Test
  */
 class BaiduRulesTest {
 
+    private val TOKEN = "12.abcdef.86400.1292922000-2346678-124328"
+
     @Test
     fun `只把播放器能解码的后缀算作可播放`() {
         listOf("a.mp3", "b.FLAC", "c.m4a", "d.ogg", "e.wav", "f.opus").forEach {
@@ -66,6 +68,28 @@ class BaiduRulesTest {
     @Test
     fun `直链请求头带网盘 UA`() {
         assertEquals("pan.baidu.com", BaiduRules.panHeaders()["User-Agent"])
+    }
+
+    @Test
+    fun `直链必须补 access_token 且用正确的分隔符`() {
+        val dlink = "https://d.pcs.baidu.com/file/abc?fid=1&sign=2"
+        assertEquals(
+            "$dlink&access_token=$TOKEN",
+            BaiduRules.withAccessToken(dlink, TOKEN),
+        )
+        // 没有查询串时要用 ?，否则参数会粘在路径上
+        assertEquals(
+            "https://d.pcs.baidu.com/file/abc?access_token=$TOKEN",
+            BaiduRules.withAccessToken("https://d.pcs.baidu.com/file/abc", TOKEN),
+        )
+    }
+
+    @Test
+    fun `已有 token 或没有 token 时保持原样`() {
+        val signed = "https://d.pcs.baidu.com/f?a=1&access_token=old"
+        assertEquals(signed, BaiduRules.withAccessToken(signed, TOKEN))
+        assertEquals("https://d.pcs.baidu.com/f?a=1", BaiduRules.withAccessToken("https://d.pcs.baidu.com/f?a=1", null))
+        assertEquals("https://d.pcs.baidu.com/f?a=1", BaiduRules.withAccessToken("https://d.pcs.baidu.com/f?a=1", "  "))
     }
 
     @Test

@@ -13,6 +13,82 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
+/**
+ * 一次批量取直链的结果。
+ *
+ * 之所以不只返回 `Map<fsId, dlink>`：**「拿到 0 条直链」是最难向用户解释的失败**。
+ * 接口 `errno` 常常是 0（请求本身成功），只是没有 dlink —— 可能是文件不在应用目录、
+ * 被判违规屏蔽、或参数没被接受。把「请求了几个 / 接口返回几条记录 / 成功几个」都带出来，
+ * 界面才能给出可操作的提示，而不是一句「没有取到直链」让用户无处下手。
+ */
+data class DlinkBatch(
+    val links: Map<Long, String>,
+    /** 请求了多少个 fsid */
+    val requested: Int,
+    /** 接口实际返回的记录数（含没有 dlink 的） */
+    val records: Int,
+    /** 拿不全时的人话原因；全部成功时为空串 */
+    val note: String,
+) {
+    val isEmpty: Boolean get() = links.isEmpty()
+}
+
+/**
+ * 直链响应解析（v1.1.40）。
+ *
+ * ⚠️ 这里踩过一个「功能整体不可用」的坑：`/xpan/multimedia?method=filemetas` 的
+ * 成功响应把记录放在 **`list`** 里，而更老的 `/xpan/file?method=filemetas` 放在 `info` 里。
+ * 第一版只读 `info`，结果「目录能列出来、点播放永远提示没有直链」—— `errno` 是 0，
+ * 所以没有任何错误日志可看。两种形态都兼容，也把 `info` 是对象映射的形态兜住。
+ */
+object BaiduLinkParse {
+
+    fun links(json: JSONObject): Map<Long, String> {
+        val out = LinkedHashMap<Long, String>()
+        readArray(json.optJSONArray("list"), out)
+        readArray(json.optJSONArray("info"), out)
+        json.optJSONObject("info")?.let { map ->
+            for (key in map.keys()) {
+                val item = map.optJSONObject(key) ?: continue
+                val fsId = item.optLong("fs_id", key.toLongOrNull() ?: 0L)
+                val link = item.optString("dlink")
+                if (fsId != 0L && isHttp(link)) out.putIfAbsent(fsId, link)
+            }
+        }
+        return out
+    }
+
+    /** 接口返回了多少条记录（用来区分「没数据」和「有数据但没直链」） */
+    fun recordCount(json: JSONObject): Int =
+        (json.optJSONArray("list")?.length() ?: 0) +
+            (json.optJSONArray("info")?.length() ?: 0) +
+            (json.optJSONObject("info")?.length() ?: 0)
+
+    /** 拿不全直链时给出可操作的说明 */
+    fun note(requested: Int, links: Map<Long, String>, records: Int): String = when {
+        requested == 0 || links.size >= requested -> ""
+        records == 0 ->
+            "网盘没有返回这些文件的资料（接口 0 条记录）。请确认音乐在「我的应用数据/<应用名>」目录下，" +
+                "或先把文件在网盘 App 里点开一次再回来重试。"
+        else ->
+            "有 ${requested - links.size} 个文件没拿到播放地址（可能已被移出、被屏蔽，或需要网盘转码）。"
+    }
+
+    private fun readArray(arr: JSONArray?, out: MutableMap<Long, String>) {
+        if (arr == null) return
+        for (i in 0 until arr.length()) {
+            val item = arr.optJSONObject(i) ?: continue
+            val fsId = item.optLong("fs_id", 0L)
+            val link = item.optString("dlink")
+            if (fsId != 0L && isHttp(link)) out[fsId] = link
+        }
+    }
+
+    /** 只认真正的 http(s) 地址：接口失败时会返回空串或错误短语，不能当成可播地址 */
+    private fun isHttp(link: String): Boolean =
+        link.startsWith("http://", true) || link.startsWith("https://", true)
+}
+
 /** 网盘里的一个条目（文件或文件夹） */
 @Immutable
 data class BaiduEntry(
@@ -111,6 +187,24 @@ object BaiduRules {
         "Referer" to "https://pan.baidu.com/",
     )
 
+    /**
+     * 给 dlink 拼上 `access_token`（v1.1.40）。
+     *
+     * 官方文档写得很死：**「使用 dlink 时，必须拼接 &access_token=xxx 参数」**，
+     * 同时请求头 UA 必须是 `pan.baidu.com`。第一版只带了 UA，结果是「拿到地址但播放器
+     * 一声不响」—— 403 不会进 UI，只有一行 ExoPlayer 的错误日志，非常难查。
+     *
+     * 这里用纯字符串拼接（不依赖 `Uri`），一是这个模块要保持可 JVM 单测，
+     * 二是 dlink 自带的查询串里已经有 `sign=...&...`，必须用 `&` 而不是 `?`。
+     * 已有 `access_token` 的直接返回：重定向后可能已经是带 token 的地址。
+     */
+    fun withAccessToken(dlink: String, token: String?): String {
+        if (token.isNullOrBlank()) return dlink
+        if (dlink.contains("access_token=")) return dlink
+        val sep = if (dlink.contains('?')) "&" else "?"
+        return dlink + sep + "access_token=" + URLEncoder.encode(token, "UTF-8")
+    }
+
     /** 展示用文件名（去掉扩展名） */
     fun displayTitle(fileName: String): String =
         fileName.substringBeforeLast('.', fileName).ifBlank { fileName }
@@ -154,30 +248,37 @@ class BaiduPan(private val auth: BaiduAuth) {
     /**
      * 批量取直链。
      *
-     * 接口一次最多 100 个 fsid；调用方按需切分。返回**只包含成功项**的映射：
-     * 单个文件失败（被删 / 无权限）不该让整批播放失败。
+     * 接口一次最多 100 个 fsid，调用方按需切分。返回 [DlinkBatch]：
+     * 单个文件失败（被删 / 无权限）不该让整批播放失败，所以只要有一部分成功就正常返回，
+     * 缺的个数放在 [DlinkBatch.note] 里；**全部失败且接口明确报错**才抛异常。
      */
-    suspend fun dlinks(fsIds: List<Long>): Result<Map<Long, String>> = withContext(Dispatchers.IO) {
+    suspend fun dlinks(fsIds: List<Long>): Result<DlinkBatch> = withContext(Dispatchers.IO) {
         runCatching {
-            if (fsIds.isEmpty()) return@runCatching emptyMap()
+            if (fsIds.isEmpty()) return@runCatching DlinkBatch(emptyMap(), 0, 0, "")
             val token = auth.accessToken() ?: error("尚未登录")
             val out = LinkedHashMap<Long, String>()
+            var records = 0
+            var firstError = ""
             fsIds.chunked(MAX_FSIDS_PER_CALL).forEach { chunk ->
                 val ids = chunk.joinToString(",", prefix = "[", postfix = "]")
                 val url = "$MULTIMEDIA_URL?method=filemetas&access_token=${enc(token)}" +
                     "&fsids=${enc(ids)}&dlink=1&thumb=0&extra=0"
                 val json = request(url)
                 val errno = json.optInt("errno", 0)
-                if (errno != 0) error(BaiduErrors.hint(errno))
-                val arr = json.optJSONArray("info") ?: JSONArray()
-                for (i in 0 until arr.length()) {
-                    val item = arr.optJSONObject(i) ?: continue
-                    val fsId = item.optLong("fs_id", 0L)
-                    val dlink = item.optString("dlink")
-                    if (fsId != 0L && dlink.isNotBlank()) out[fsId] = dlink
+                if (errno != 0) {
+                    if (firstError.isEmpty()) firstError = BaiduErrors.hint(errno)
+                    return@forEach
                 }
+                records += BaiduLinkParse.recordCount(json)
+                out.putAll(BaiduLinkParse.links(json))
             }
-            out
+            if (out.isEmpty() && firstError.isNotEmpty()) error(firstError)
+            DlinkBatch(
+                links = out,
+                requested = fsIds.size,
+                records = records,
+                note = BaiduLinkParse.note(fsIds.size, out, records),
+            )
         }
     }
 
