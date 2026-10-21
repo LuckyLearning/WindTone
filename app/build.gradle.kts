@@ -18,7 +18,7 @@ plugins {
  * 搬到 TOML 会连带改掉整条发版链路。第三方依赖版本在 catalog 里，产品版本在这里。
  */
 val appVersionName = "1.1.37"
-val appVersionCode = 47
+val appVersionCode = 48
 
 /**
  * ABI 分包开关。
