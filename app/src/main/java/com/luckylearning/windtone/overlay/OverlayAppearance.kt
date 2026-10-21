@@ -3,7 +3,7 @@ package com.luckylearning.windtone.overlay
 import android.view.Gravity
 
 /**
- * 悬浮歌词「外观」的纯计算集合（v1.1.38 重构抽出）。
+ * 悬浮歌词「外观」的纯计算集合（v1.1.37 重构抽出）。
  *
  * ## 为什么单独抽出来
  * [LyricOverlayService] 里散落着一批「只算数、不碰 View、不读上下文」的判定：

@@ -164,7 +164,7 @@ class LayoutContractTest {
      *
      * 真机反馈「名单勾了几个，但没起效，悬浮窗还在」。根因不是判定逻辑（`OverlayVisibility`
      * 单测全绿），而是**通道没接上**：检测端（无障碍服务 / UsageStats 轮询）只往
-     * `ForegroundAppState.currentPkg` 写值，而状态接线（v1.1.38 重构后落在
+     * `ForegroundAppState.currentPkg` 写值，而状态接线（v1.1.37 重构后落在
      * `OverlayStateBinder` 的 combine 里）只有 content / editing / foreground /
      * preview / appearance 五路 ——
      * 「写包名」不产生任何一路的事件，于是切到名单应用后**没有任何东西触发重判**，
