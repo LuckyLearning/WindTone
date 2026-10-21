@@ -49,6 +49,31 @@ class BaiduRulesTest {
     }
 
     @Test
+    fun `不允许从应用目录再往上走`() {
+        val root = "/apps/windtone"
+        // 在应用目录本身：没有「返回上级」（上去就是 /apps，全是别的应用/私人目录）
+        assertFalse(BaiduRules.canGoUp(root, root))
+        // 子目录可以回应用目录
+        assertTrue(BaiduRules.canGoUp("/apps/windtone/Music", root))
+        // 没找到应用目录时退回整个网盘，此时仍可逐级向上
+        assertTrue(BaiduRules.canGoUp("/apps", "/"))
+    }
+
+    @Test
+    fun `路径显示成用户在网盘里看到的名字`() {
+        val root = "/apps/windtone"
+        assertEquals("我的应用数据/windtone", BaiduRules.displayPath(root, root))
+        assertEquals(
+            "我的应用数据/windtone/Music/2024",
+            BaiduRules.displayPath("/apps/windtone/Music/2024", root),
+        )
+        // root 未知（退回 /）时原样显示
+        assertEquals("/", BaiduRules.displayPath("/", "/"))
+        // 不在应用目录下的路径不该被乱改
+        assertEquals("/other", BaiduRules.displayPath("/other", root))
+    }
+
+    @Test
     fun `展示标题去掉扩展名`() {
         assertEquals("夜航", BaiduRules.displayTitle("夜航.flac"))
         assertEquals("无扩展名", BaiduRules.displayTitle("无扩展名"))

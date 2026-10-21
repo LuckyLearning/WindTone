@@ -71,7 +71,17 @@ internal fun BaiduPanPage(
 
     var loggedIn by remember { mutableStateOf(auth.isLoggedIn()) }
     var nickname by remember { mutableStateOf("") }
-    var path by remember { mutableStateOf("/") }
+    var path by remember { mutableStateOf("") }
+    /**
+     * 应用真正有权限的目录（`/apps/<应用名>`，用户看到的是「我的应用数据/<应用名>」）。
+     *
+     * 为什么要单独记：百度网盘给第三方应用的权限只在 `/apps` 下，**但 `list` 接口
+     * 能列出用户整个网盘**（token 是用户自己的）。于是「进页面先列 `/`」会看到
+     * 2023 / A卡整合包 / XXX 等全部私人目录 —— 看着能用，实际点播放必然拿不到直链，
+     * 而且把用户的私人目录摊在车机屏幕上并不合适。所以进来直接落到权限目录，
+     * 「返回上级」也不允许越过它。
+     */
+    var rootPath by remember { mutableStateOf("") }
     var entries by remember { mutableStateOf<List<BaiduEntry>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -94,7 +104,12 @@ internal fun BaiduPanPage(
     LaunchedEffect(loggedIn) {
         if (!loggedIn) return@LaunchedEffect
         pan.nickname().onSuccess { nickname = it }
-        load(path)
+        if (rootPath.isBlank()) {
+            loading = true
+            rootPath = pan.appRoot()
+            loading = false
+        }
+        load(rootPath.ifBlank { "/" })
     }
 
     SectionTitle("百度网盘")
@@ -149,8 +164,12 @@ internal fun BaiduPanPage(
     )
     Row(verticalAlignment = Alignment.CenterVertically) {
         TextButton(onClick = { load(path) }) { Text("刷新") }
-        BaiduRules.parentPath(path)?.let { parent ->
-            TextButton(onClick = { load(parent) }) { Text("返回上级") }
+        // 「返回上级」不允许越过应用目录：上去就是 /apps 或 /，那边全是用户私人目录，
+        // 点进去也播放不了，只会让人以为「功能坏了」
+        if (BaiduRules.canGoUp(path, rootPath)) {
+            BaiduRules.parentPath(path)?.let { parent ->
+                TextButton(onClick = { load(parent) }) { Text("返回上级") }
+            }
         }
         Spacer(Modifier.weight(1f))
         TextButton(onClick = { openBaiduNetdisk(context) }) { Text("打开网盘 App") }
@@ -158,17 +177,27 @@ internal fun BaiduPanPage(
             auth.signOut()
             loggedIn = false
             entries = emptyList()
-            path = "/"
+            path = ""
+            rootPath = ""
             nickname = ""
         }) { Text("退出登录") }
     }
     Text(
-        text = "当前位置：$path",
+        text = "当前位置：${BaiduRules.displayPath(path, rootPath)}",
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
     )
+    if (rootPath == "/") {
+        Text(
+            "没找到「我的应用数据」目录，当前显示的是整个网盘。网盘只给应用数据目录里的文件提供播放地址，" +
+                "其它目录的文件即使能点开也放不出声音。",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+    }
 
     val audioEntries = entries.filter { it.isPlayableAudio }
 

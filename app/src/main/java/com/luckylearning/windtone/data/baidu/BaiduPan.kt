@@ -167,6 +167,37 @@ object BaiduRules {
     }
 
     /**
+     * 「返回上级」是否可用。
+     *
+     * [root] 是应用有权限的目录（`/apps/<应用名>`）。到了这一层就该停住：
+     * 再往上要么是 `/apps`，要么是 `/`，全是用户私人目录 —— 能看到、能点，
+     * 但文件拿不到播放地址，纯属把功能做得像坏的。
+     */
+    fun canGoUp(path: String, root: String): Boolean {
+        if (parentPath(path) == null) return false
+        if (root.isBlank() || root == "/") return true
+        return path.trimEnd('/') != root.trimEnd('/')
+    }
+
+    /**
+     * 给人看的路径：把 `/apps/windtone` 显示成「我的应用数据/windtone」。
+     *
+     * 车机上显示的路径要能被用户对上手机里看到的目录名 —— 百度网盘 App 里
+     * 那一级叫「我的应用数据」，不是 `apps`。
+     */
+    fun displayPath(path: String, root: String): String {
+        if (path.isBlank()) return "…"
+        if (root.isBlank() || root == "/") return path
+        val base = root.trimEnd('/')
+        val friendly = "我的应用数据/" + base.substringAfterLast('/')
+        return when {
+            path.trimEnd('/') == base -> friendly
+            path.startsWith("$base/") -> friendly + path.removePrefix(base)
+            else -> path
+        }
+    }
+
+    /**
      * 播放直链时是否要给请求加「网盘客户端」UA。
      *
      * 百度对 dlink 的校验包含 UA：用应用自己的 UA 去拉会直接被拒（表现为「能拿到地址、
@@ -228,6 +259,30 @@ class BaiduPan(private val auth: BaiduAuth) {
             if (errno != 0) error(BaiduErrors.hint(errno))
             json.optString("baidu_name").ifBlank { "百度网盘用户" }
         }
+    }
+
+    /**
+     * 找到应用**真正有权限**的目录，返回 `/apps/<应用名>`（找不到就退回 `/`）。
+     *
+     * 为什么必须由客户端自己找：`list` 用的是用户自己的 token，能列出整个网盘 ——
+     * 车机屏幕上会直接铺开「2023 / A卡整合包 / XXX」这些私人目录。而 dlink 只对
+     * `/apps` 下的文件发放，那些目录里的文件看着能点、点了必然失败。所以进页面
+     * 先落到权限目录，用户不必知道 `/apps` 这层。
+     *
+     * 顺序：`/apps` 下匹配应用名的子目录 → 唯一的子目录 → 约定的 `/apps/windtone`
+     * → 都没有才退回 `/`（界面会提示原因，而不是假装一切正常）。
+     */
+    suspend fun appRoot(): String = withContext(Dispatchers.IO) {
+        val dirs = list("/apps").getOrNull().orEmpty().filter { it.isDir }
+        val preferred = dirs.firstOrNull { it.name.contains("windtone", ignoreCase = true) }
+            ?: dirs.singleOrNull()
+            ?: dirs.firstOrNull()
+        if (preferred != null) {
+            return@withContext BaiduRules.childPath("/apps", preferred.name)
+        }
+        val fallback = "/apps/windtone"
+        if (list(fallback).isSuccess) return@withContext fallback
+        "/"
     }
 
     suspend fun list(dir: String): Result<List<BaiduEntry>> = withContext(Dispatchers.IO) {
