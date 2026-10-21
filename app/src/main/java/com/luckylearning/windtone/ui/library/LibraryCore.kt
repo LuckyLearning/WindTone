@@ -808,7 +808,7 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
                 extraRecent = it.extraRecent.filterNot { s -> s.stableKey in keys },
                 extraMostPlayed = it.extraMostPlayed.filterNot { s -> s.stableKey in keys },
                 extraFavorites = it.extraFavorites.filterNot { s -> s.stableKey in keys },
-                selection = it.selection - keys,
+                selection = SelectionMath.drop(it.selection, keys),
             )
         }
         refreshGroups()

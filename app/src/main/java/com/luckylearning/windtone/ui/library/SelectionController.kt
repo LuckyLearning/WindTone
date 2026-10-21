@@ -26,29 +26,27 @@ internal class SelectionController(private val session: LibrarySession) : Select
 
     /** 进入多选态并选中这一首（长按歌曲行触发） */
     override fun enterSelection(song: Song) {
-        _library.update { it.copy(selecting = true, selection = it.selection + song.stableKey) }
+        _library.update { it.copy(selecting = true, selection = SelectionMath.enter(it.selection, song.stableKey)) }
     }
 
     /** 多选态下点行 = 勾选 / 取消勾选 */
     override fun toggleSelected(song: Song) {
         val key = song.stableKey
-        _library.update {
-            it.copy(selection = if (key in it.selection) it.selection - key else it.selection + key)
-        }
+        _library.update { it.copy(selection = SelectionMath.toggle(it.selection, key)) }
     }
 
     /** 全选**当前列表**（搜索过滤后看到的那批，而不是整库） */
     override fun selectAllVisible() {
         _library.update {
-            it.copy(selecting = true, selection = it.visible.map { s -> s.stableKey }.toSet())
+            it.copy(selecting = true, selection = SelectionMath.selectAll(it.visible.map { s -> s.stableKey }))
         }
     }
 
     /** 反选当前列表 */
     override fun invertSelection() {
         _library.update {
-            val visibleKeys = it.visible.map { s -> s.stableKey }.toSet()
-            it.copy(selecting = true, selection = visibleKeys - it.selection)
+            val visibleKeys = it.visible.map { s -> s.stableKey }
+            it.copy(selecting = true, selection = SelectionMath.invert(it.selection, visibleKeys))
         }
     }
 
@@ -56,11 +54,7 @@ internal class SelectionController(private val session: LibrarySession) : Select
     override fun exitSelection() = _library.update { it.copy(selecting = false, selection = emptySet()) }
 
     /** 勾选集合对应的 Song（按曲库顺序返回，顺序稳定） */
-    internal fun selectedSongs(): List<Song> {
-        val keys = _library.value.selection
-        if (keys.isEmpty()) return emptyList()
-        return _library.value.songs.filter { it.stableKey in keys }
-    }
+    internal fun selectedSongs(): List<Song> = SelectionMath.selectedSongs(_library.value.songs, _library.value.selection)
 
     /** 批量加入歌单 */
     override fun bulkAddToPlaylist(playlistId: Long, playlistName: String) {
