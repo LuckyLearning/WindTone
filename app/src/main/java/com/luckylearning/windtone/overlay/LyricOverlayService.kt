@@ -83,35 +83,37 @@ import kotlin.math.roundToInt
  * 目标车机（比亚迪宋 L DM-i 26 款，DiLink 100 / Android 12）用 `mediaPlayback`
  * 类型即可，不需要 Android 14 才引入的 `specialUse`。
  */
-class LyricOverlayService : Service() {
+class LyricOverlayService : Service(), OverlayStateBinder.Host {
 
     private var windowManager: WindowManager? = null
 
     /** 外层容器：拖动时整体移动，虚线边框画在它身上 */
-    private var container: FrameLayout? = null
+    override var container: FrameLayout? = null
 
     /** 真正显示歌词的子 View */
-    private var lyricView: TextView? = null
+    override var lyricView: TextView? = null
 
     /** 顶部「歌名 / 歌手」两行小字（v1.1.15，可选显示） */
     private var titleView: TextView? = null
 
-    private var layoutParams: WindowManager.LayoutParams? = null
+    override var layoutParams: WindowManager.LayoutParams? = null
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private var windowJob: Job? = null
+
+    /** 状态接线（内容/编辑/前台/预览/外观 → 窗口外观与可见性），见 [OverlayStateBinder] */
+    private val stateBinder = OverlayStateBinder(this, scope)
 
     /** 调整态的超时任务：长时间没人动，就请播放域把「调整位置」收回去 */
     private var editingTimeoutJob: Job? = null
 
     /** 当前是否处于调整（拖动）模式；拖动逻辑里高频读，用普通字段 */
-    private var editing = false
+    override var editing = false
 
     /** 屏幕是否亮着。灭屏时窗口整体隐藏——看不见还继续画纯属白耗电。 */
-    private var screenInteractive = true
+    override var screenInteractive = true
 
     /** 上一次算出来的「该不该显示」，亮屏 / 前台切换时据此立刻恢复，不必等下一句歌词 */
-    private var desiredVisible = false
+    override var desiredVisible = false
 
     /** 窗口首次测量完成后是否需要补一次位置夹取（挂载瞬间拿不到自身宽高） */
     private var pendingMeasureClamp = false
@@ -245,7 +247,7 @@ class LyricOverlayService : Service() {
         windowAttached = false
         windowVisible = false
         windowGeometry = "未挂载"
-        windowJob?.cancel()
+        stateBinder.dispose()
         editingTimeoutJob?.cancel()
         foregroundJob?.cancel()
         runCatching { unregisterReceiver(screenReceiver) }
@@ -434,7 +436,7 @@ class LyricOverlayService : Service() {
      * 只有参数真的变了才 `updateViewLayout`：本方法会被布局回调反过来调用，
      * 无条件更新会构成「布局 → 更新 → 布局」的死循环。
      */
-    private fun applyPosition() {
+    override fun applyPosition() {
         val p = layoutParams ?: return
         val prefs = Prefs(this)
         // 全屏模式（v1.1.20）：位置不再钉死在左上角，而是按「宽度 + 水平位置百分比」
@@ -524,7 +526,7 @@ class LyricOverlayService : Service() {
      * 窗口被推到屏幕外、尺寸量成 0、子 View 被藏起来，都会让用户看到
      * 「什么都没有」而各项检查全绿——所以外层窗口和文字 View **各自**都要报。
      */
-    private fun updateGeometryReport() {
+    override fun updateGeometryReport() {
         val box = container
         val tv = lyricView
         if (box == null || tv == null) {
@@ -556,7 +558,7 @@ class LyricOverlayService : Service() {
     private var lastRawY = 0f
 
     /** 本次触摸里是否真的移动过窗口；只有真移动过才允许把坐标写进 Prefs */
-    private var pendingPositionSave = false
+    override var pendingPositionSave = false
 
     /** 上次抬手的时间 / 位置，用来在编辑态识别「双击锁定」 */
     private var lastTapUpAt = 0L
@@ -701,7 +703,7 @@ class LyricOverlayService : Service() {
      * 由收集循环每帧调用（设置变更会推高外观版本，必然触发），
      * 所以用户在设置里勾名单 / 开记录的**下一帧**就生效，不用重启服务。
      */
-    private fun syncForegroundTracking(hiddenApps: Set<String>, logEnabled: Boolean) {
+    override fun syncForegroundTracking(hiddenApps: Set<String>, logEnabled: Boolean) {
         if (!foregroundDetectionNeeded(hiddenApps, logEnabled)) {
             foregroundJob?.cancel()
             foregroundJob = null
@@ -719,127 +721,11 @@ class LyricOverlayService : Service() {
         }
     }
 
-    private fun observeState() {
-        windowJob?.cancel()
-        windowJob = scope.launch {
-            // 内容 + 编辑态 + 前台态 + 预览态 + 外观版本 五路合并：
-            // 任一变化都重新决定「显不显示 / 长什么样」。
-            // 外观那一路是给设置页用的——服务独立存活，改完字号得有人把它叫醒。
-            val visuals = combine(
-                LyricOverlayBus.content,
-                LyricOverlayBus.editing,
-                LyricOverlayBus.foreground,
-                LyricOverlayBus.preview,
-                LyricOverlayBus.appearance,
-            ) { content, isEditing, isForeground, isPreview, _ ->
-                OverlayVisualState(content, isEditing, isForeground, isPreview)
-            }
-            // ⚠️ **第六路：前台应用包名必须订阅，不能只在判可见性时读一次**
-            //（v1.1.29 真机回归：名单勾了没生效）。检测端（无障碍服务 / UsageStats 轮询）
-            // 只往 ForegroundAppState 写值；「写」不产生任何既有通道的事件，
-            // 于是切到名单应用后没有任何东西触发重判 —— 只能等下一句歌词或暂停恢复
-            // 碰巧重算，暂停 / 无歌词变化时就是永远不收起。
-            combine(visuals, ForegroundAppState.currentPkg) { state, pkg ->
-                state to pkg
-            }
-                .collect { (visual, foregroundPkg) ->
-                    val (content, isEditing, isForeground, isPreview) = visual
-                    val box = container ?: return@collect
-                    val tv = lyricView ?: return@collect
-                    val prefs = Prefs(this@LyricOverlayService)
-                    if (editing != isEditing) {
-                        editing = isEditing
-                        if (!isEditing) {
-                            // 退出编辑态时固化坐标——但只在本次真的拖动过时。
-                            // 没拖过就落盘的话，等于「随手点一下就改了位置」。
-                            if (pendingPositionSave) {
-                                layoutParams?.let { p ->
-                                    Prefs(this@LyricOverlayService).lyricOverlayX = p.x
-                                    Prefs(this@LyricOverlayService).lyricOverlayY = p.y
-                                }
-                            }
-                            pendingPositionSave = false
-                            editingTimeoutJob?.cancel()
-                        } else {
-                            armEditingTimeout()
-                        }
-                        refreshModeChrome()
-                    }
-
-                    // 外观（字号 / 底板 / 暂停表现）每帧对一次账：
-                    // 用户改完设置，下一帧就生效，不必重启服务、也不必等下一句歌词。
-                    applyAppearance(prefs)
-
-                    // 显不显示交给 [OverlayVisibility] 判（v1.1.22 抽出并上单测）：
-                    // 规则里叠着「仅后台 / 调整 / 预览 / 暂停隐藏」四种例外，
-                    // 而全屏形态在 App 前台必须一律不画 —— 否则整屏歌词会压在
-                    // 设置页的宽度滑块和位置按钮上，一边调一边看不见（真机照片为证）。
-                    // v1.1.29 加第五种：前台应用命中「不显示悬浮窗的应用」名单。
-                    val visible = OverlayVisibility.show(
-                        fullHeight = prefs.lyricOverlayFullHeight,
-                        foreground = isForeground,
-                        editing = isEditing,
-                        preview = isPreview,
-                        playing = content.playing,
-                        pauseHide = prefs.lyricOverlayPauseMode == PAUSE_HIDE,
-                        screenInteractive = screenInteractive,
-                        hasContent = content.visible,
-                        foregroundHidden = overlayHiddenForForeground(
-                            pkg = foregroundPkg,
-                            hiddenApps = prefs.lyricOverlayHiddenApps,
-                        ),
-                    )
-                    // 名单或记录开着才需要知道前台是谁（否则一个字节都不查）；
-                    // 两者都关了就撤掉轮询协程，并把残留包名清掉。
-                    syncForegroundTracking(
-                        hiddenApps = prefs.lyricOverlayHiddenApps,
-                        logEnabled = prefs.foregroundLogEnabled,
-                    )
-                    desiredVisible = visible
-                    if (!visible) {
-                        applyVisibility()
-                        return@collect
-                    }
-
-                    // 行数由用户选（1..5）；标题两行小字单独一个 View，见 applyTitle。
-                    // 标题显隐会改变窗口高度，需要重新夹一次位置（否则窗口变高后可能出屏）。
-                    if (applyTitle(content, prefs) && !editing) {
-                        container?.post { applyPosition() }
-                    }
-                    // 全屏高度模式（v1.1.19）：行数不再由用户选，而是铺满一屏的
-                    // 11 行（上 5 + 当前 + 下 5），与播放页歌词区的观感一致。
-                    val full = prefs.lyricOverlayFullHeight
-                    val lines = when {
-                        content.visible -> OverlayTextComposer.compose(
-                            resolved = content.resolved,
-                            lineCount = if (full) {
-                                OverlayTextComposer.FULL_HEIGHT_LINES
-                            } else {
-                                prefs.lyricOverlayLines
-                            },
-                            // 双语副行不设开关：它是**同一句**的翻译，属于内容完整性
-                            // 而不是排版选择——能拿到双语歌词的用户本来就想要它。
-                            showTranslation = true,
-                        )
-                        isEditing -> listOf(if (full) HINT_EDITING_FULL else HINT_EDITING)
-                        else -> listOf(HINT_PREVIEW)
-                    }
-                    // 行数上限按实际要画的行数放宽（每行都可能折成两行）；
-                    // 全屏模式窗口更窄时可能折三行，额度按 3 倍给。
-                    val cap = if (full) MAX_FULL_LINES_CAP else MAX_LINES_CAP
-                    val maxLines = (lines.size * if (full) 3 else 2).coerceIn(2, cap)
-                    if (tv.maxLines != maxLines) {
-                        tv.maxLines = maxLines
-                        tv.ellipsize = android.text.TextUtils.TruncateAt.END
-                    }
-                    // 「强调当前行」在播放时、以及调整 / 预览态下都要给 ——
-                    // 调整态可能没在放歌，但用户正看着它摆位置。
-                    renderLines(tv, lines, content.playing || isEditing || isPreview, full)
-                    applyVisibility()
-                    updateGeometryReport()
-                }
-        }
-    }
+    /**
+     * 订阅各路状态并逐帧重算窗口外观与可见性。
+     * 实际接线已抽到 [OverlayStateBinder]，服务只负责窗口生命周期。
+     */
+    private fun observeState() = stateBinder.observe()
 
     /**
      * 应用外观配置里「和上一次不同才动手」的那几项。
@@ -847,7 +733,7 @@ class LyricOverlayService : Service() {
      * 每帧调用，所以每一步都要先和自己记的值比一次——不然每帧重建
      * `GradientDrawable` 会造成无谓的分配与重排。
      */
-    private fun applyAppearance(prefs: Prefs) {
+    override fun applyAppearance(prefs: Prefs) {
         val tv = lyricView ?: return
 
         // 底板档位变了就重算一次文字的「可读性包」：无底板时文字直接压在任何画面上，
@@ -1032,7 +918,7 @@ class LyricOverlayService : Service() {
      * 两个字段各自可能为空：歌名必有，歌手可能拿不到（`<unknown>` 已被上游清成空串）。
      * 只有一行时就显示一行，不硬凑。
      */
-    private fun applyTitle(content: LyricOverlayBus.Content, prefs: Prefs): Boolean {
+    override fun applyTitle(content: LyricOverlayBus.Content, prefs: Prefs): Boolean {
         val tv = titleView ?: return false
         val text = if (prefs.lyricOverlayShowTitle) {
             listOf(content.title, content.artist)
@@ -1078,11 +964,11 @@ class LyricOverlayService : Service() {
      * 行切换时做一次短促的淡入淡出——长句之间硬切会有「跳一下」的突兀感。
      * 动画期间不再手动改 alpha（[fading] 挡住），否则两处会互相打架。
      */
-    private fun renderLines(
+    override fun renderLines(
         tv: TextView,
         lines: List<OverlayTextComposer.StyledLine>,
         opaque: Boolean,
-        fullHeight: Boolean = false,
+        fullHeight: Boolean,
     ) {
         val targetAlpha = if (opaque) 1f else PAUSED_ALPHA
         // 样式需要的两个输入在服务侧现读：正文色用「已应用值」兜底用户最新设置，
@@ -1144,7 +1030,7 @@ class LyricOverlayService : Service() {
      * 与前台 / 灭屏两件事统一在这里判定：窗口在灭屏时依旧会被系统合成，
      * 看不见还继续画是纯浪费——车机导航整段灭屏时这点电费是要省的。
      */
-    private fun applyVisibility() {
+    override fun applyVisibility() {
         val box = container ?: return
         val show = desiredVisible && screenInteractive
         val target = if (show) View.VISIBLE else View.INVISIBLE
@@ -1159,7 +1045,7 @@ class LyricOverlayService : Service() {
      * 屏幕上会留一条挡操作的横条，而且桌面上的点击落在哪儿都说不清。
      * 服务只能判定「该收了」，状态归播放域所有，所以发一条请求让它来收。
      */
-    private fun armEditingTimeout() {
+    override fun armEditingTimeout() {
         editingTimeoutJob?.cancel()
         editingTimeoutJob = scope.launch {
             delay(EDITING_TIMEOUT_MS)
@@ -1173,7 +1059,13 @@ class LyricOverlayService : Service() {
      * 这是「锁定后点击穿透」的落点：编辑态摘掉 `FLAG_NOT_TOUCHABLE` 变成可拖，
      * 退出编辑态加回去，窗口重新变成完全穿透。
      */
-    private fun refreshModeChrome() {
+    override fun prefs(): Prefs = Prefs(this@LyricOverlayService)
+
+    override fun cancelEditingTimeout() {
+        editingTimeoutJob?.cancel()
+    }
+
+    override fun refreshModeChrome() {
         val p = layoutParams ?: return
         val box = container ?: return
 
@@ -1280,17 +1172,6 @@ class LyricOverlayService : Service() {
          */
         private const val MIN_OVERLAY_WIDTH_DP = 48
 
-        /** 窗口最多画几行（含折行）：再多就不是「悬浮字幕」而是一块遮屏的板子了 */
-        private const val MAX_LINES_CAP = 12
-
-        /**
-         * 全屏高度模式下每行都可能折行，上限放宽。
-         *
-         * 11 行 × 3 = 33：全屏宽度调到 50% 以下时，长句会折成三行，
-         * 按 2 倍（22）截断的话末尾几句会静默消失 —— 宁可多给几行额度。
-         */
-        private const val MAX_FULL_LINES_CAP = 36
-
         /** 全屏模式：行间距（额外像素 + 倍率），让 11 行铺满一屏时呼吸感接近播放页 */
         private const val FULL_LINE_SPACING_EXTRA_DP = 10
         private const val FULL_LINE_SPACING_MULT = 1.2f
@@ -1306,9 +1187,6 @@ class LyricOverlayService : Service() {
 
         /** 暂停时的不透明度：不隐藏，方便看清唱到哪一句 */
         private const val PAUSED_ALPHA = 0.55f
-
-        /** 暂停表现：隐藏（另一档是淡出） */
-        private const val PAUSE_HIDE = 1
 
         /** 底板档位：无底板 / 深色实底（另一档是半透明，默认） */
         private const val BACKDROP_NONE = 0
@@ -1346,16 +1224,6 @@ class LyricOverlayService : Service() {
          * 长时间有一条吃触摸的横条挡在桌面上。
          */
         private const val EDITING_TIMEOUT_MS = 60_000L
-
-        /** 调整态 / 预览态在无歌词时显示的提示行 */
-        private val HINT_EDITING =
-            OverlayTextComposer.StyledLine("拖动到合适位置，松手即保存", OverlayTextComposer.Role.CONTEXT)
-
-        /** 全屏编辑态：只跟横向，且双击可收工 —— 文案必须说清楚，否则用户会试着上下拖 */
-        private val HINT_EDITING_FULL =
-            OverlayTextComposer.StyledLine("左右拖动调整位置，双击锁定", OverlayTextComposer.Role.CONTEXT)
-        private val HINT_PREVIEW =
-            OverlayTextComposer.StyledLine("悬浮歌词已开启，退到桌面后持续显示", OverlayTextComposer.Role.CONTEXT)
 
         /** 是否已获得「出现在其他应用上」授权 */
         fun canDrawOverlay(context: Context): Boolean = Settings.canDrawOverlays(context)
@@ -1427,11 +1295,3 @@ class LyricOverlayService : Service() {
 internal object OverlayPrefs {
     fun enabled(context: Context): Boolean = Prefs(context).lyricOverlay
 }
-
-/** [LyricOverlayService.observeState] 合并四路状态后的快照（`kotlinx` 的 Quadruple 是 internal 的） */
-private data class OverlayVisualState(
-    val content: LyricOverlayBus.Content,
-    val editing: Boolean,
-    val foreground: Boolean,
-    val preview: Boolean,
-)
