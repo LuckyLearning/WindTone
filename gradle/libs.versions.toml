@@ -39,6 +39,8 @@ media3 = "1.4.1"
 
 # ── 数据与通用工具 ───────────────────────────────────────────────────────────
 room = "2.6.1"
+# DataStore（Preferences）：v1.1.38 起的设置新存储，与 SharedPreferences 双写过渡
+datastore = "1.1.1"
 pinyin4j = "2.5.1"
 coroutines = "1.8.1"
 guava = "33.0.0-android"
@@ -94,6 +96,8 @@ androidx-media3-exoplayer-hls = { group = "androidx.media3", name = "media3-exop
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+# DataStore Preferences：设置域的异步 KV 存储（与 SharedPreferences 双写过渡，见 data/SettingsDataStore.kt）
+androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 
 # ── 通用工具 ──
 pinyin4j = { group = "com.belerweb", name = "pinyin4j", version.ref = "pinyin4j" }

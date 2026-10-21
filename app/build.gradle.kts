@@ -300,6 +300,9 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
+    // 设置域新存储：与 SharedPreferences 双写过渡，见 data/SettingsDataStore.kt
+    implementation(libs.androidx.datastore.preferences)
+
     implementation(libs.pinyin4j)
 
     implementation(libs.kotlinx.coroutines.android)

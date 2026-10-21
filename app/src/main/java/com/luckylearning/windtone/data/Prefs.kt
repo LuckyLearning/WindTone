@@ -2,6 +2,10 @@ package com.luckylearning.windtone.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * 歌曲排序方式。
@@ -225,7 +229,7 @@ enum class DownloadRoute(val label: String, val hint: String, val prefix: String
 /**
  * 全应用共享偏好（SharedPreferences 薄封装）。
  *
- * ## 按域分组（v1.1.38 起）
+ * ## 按域分组（v1.1.37 起）
  * 历史上各设置项是「谁加谁往末尾追加」的（文件里曾留下「批次 2/3 新增」这类时间戳注释），
  * 读起来像编年史而不是说明书。现按**功能域**重新分区，域名与 `SettingsDefaultsTest`
  * 的对账分组、设置页的分区一一对应：
@@ -236,11 +240,58 @@ enum class DownloadRoute(val label: String, val hint: String, val prefix: String
  *
  * 分区只是可读性；属性名、存储键、默认值、夹取逻辑全部保持不变，调用方无感。
  * 下方 companion 的键常量按同一域名分区，与属性一一对位。
+ *
+ * ## 双写迁移（v1.1.37）
+ * 存储正从 SharedPreferences 迁往 DataStore（见 [SettingsDataStore]）。分三步走，**本版只做第一步**：
+ *
+ *  - **第一步（本版）双写 + 搬存量**：每个 setter 同时写 SharedPreferences（同步）与
+ *    DataStore（异步）；首次启动由 [SettingsDataStore.backfillFrom] 把存量灌进 DataStore。
+ *    **读仍然只走 SharedPreferences** —— 见下方「为什么这一步不切读路径」。
+ *  - **第二步（后续版本）切读**：待 DataStore 在真机上稳定跑够一个版本，再把 getter 改为读
+ *    DataStore 的内存快照。届时 setter 需同步更新快照，否则「写完立刻回读」会读到旧值。
+ *  - **第三步（再后续）删 SharedPreferences**：读已不依赖它，双写与 backfill 一并拆除。
+ *
+ * 双写放在这里而不是调用方，是为了「不管谁落盘，新存储都不会变旧」。
+ *
+ * ### 为什么这一步不切读路径
+ * DataStore 的写是异步的，读它的内存快照就意味着「写完不能立刻读到」——
+ * 单测里 `setSpeed(2.0f)` 紧接着回读得到 0.5f，正是这么翻车的。
+ * 而 setter 同步更新的快照又会和「预热时装填的快照」抢先后（启动头几毫秒的竞态），
+ * 治干净要么加锁要么加版本号，代价远大于收益。**先让新存储在只写模式下跑稳，再切读**，
+ * 是存储迁移的标准做法：写切换与读切换分开，任何一步都能独立回滚。
  */
 class Prefs private constructor(context: Context) {
 
     private val sp: SharedPreferences =
         context.getSharedPreferences("music_player_prefs", Context.MODE_PRIVATE)
+
+    /** 新存储（DataStore）；与 [sp] 双写过渡 */
+    private val store = SettingsDataStore(context)
+
+    /**
+     * 双写与预热用的作用域。
+     *
+     * 随本实例存活 —— 而本实例按 Application 缓存（见 companion 的 `invoke`），
+     * 所以它实际上与应用同寿。
+     *
+     * 两个刻意的选择：
+     *  1. **不用 `Dispatchers.Main`**：这些都是「落个盘、搬个存量」的杂活，没有任何理由
+     *     占用主线程；更要紧的是主 looper 一旦繁忙（首帧、曲库全量扫描），迁移就会被拖着，
+     *     而 Robolectric 的主 looper 是暂停的，挂上去的协程会直接挂死。
+     *  2. **并行度锁成 1**（`limitedParallelism(1)`）：连续两次改同一个设置
+     *     （如先 1.5 倍速再 2 倍速）必须**按派发顺序**落到 DataStore。若用线程池，
+     *     两次异步写可能乱序落地，DataStore 停在旧值而 SharedPreferences 已是新值 ——
+     *     两边从此分家。单线程串行则天然保序。
+     *
+     * DataStore 自己的磁盘 IO 在它内部另切线程，这里只是排队。
+     */
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
+
+    init {
+        // 搬存量。失败不影响启动：读一直走 SharedPreferences（那边数据始终完整），
+        // 下次启动会再试一次（KEY_MIGRATED 没落下，backfill 会重跑）。
+        ioScope.launch { runCatching { store.warmUp(sp) } }
+    }
 
     // ============================================================ 1. 音乐库与扫描
 
@@ -248,7 +299,10 @@ class Prefs private constructor(context: Context) {
     var scanScope: ScanScope
         get() = runCatching { ScanScope.valueOf(sp.getString(KEY_SCAN_SCOPE, ScanScope.UNSET.name)!!) }
             .getOrDefault(ScanScope.UNSET)
-        set(value) = sp.edit().putString(KEY_SCAN_SCOPE, value.name).apply()
+        set(value) {
+            sp.edit().putString(KEY_SCAN_SCOPE, value.name).apply()
+            ioScope.launch { store.putString(KEY_SCAN_SCOPE, value.name) }
+        }
 
     /**
      * 用户是否**主动选过**扫描范围（含「移除全部目录后回到未选择」这种显式选择）。
@@ -260,7 +314,10 @@ class Prefs private constructor(context: Context) {
      */
     var scanScopeChosen: Boolean
         get() = sp.getBoolean(KEY_SCAN_SCOPE_CHOSEN, sp.contains(KEY_SCAN_SCOPE))
-        set(value) = sp.edit().putBoolean(KEY_SCAN_SCOPE_CHOSEN, value).apply()
+        set(value) {
+            sp.edit().putBoolean(KEY_SCAN_SCOPE_CHOSEN, value).apply()
+            ioScope.launch { store.putBoolean(KEY_SCAN_SCOPE_CHOSEN, value) }
+        }
 
     /**
      * 上一次**自动**扫描结束时记录的曲库指纹（见 `MediaStoreScanner.fingerprint`）。
@@ -270,17 +327,26 @@ class Prefs private constructor(context: Context) {
      */
     var lastScanFingerprint: String
         get() = sp.getString(KEY_LAST_SCAN_FP, "").orEmpty()
-        set(value) = sp.edit().putString(KEY_LAST_SCAN_FP, value).apply()
+        set(value) {
+            sp.edit().putString(KEY_LAST_SCAN_FP, value).apply()
+            ioScope.launch { store.putString(KEY_LAST_SCAN_FP, value) }
+        }
 
     /** 上一次扫描完成的时间戳（毫秒），0 表示从未扫过 */
     var lastScanAt: Long
         get() = sp.getLong(KEY_LAST_SCAN_AT, 0L)
-        set(value) = sp.edit().putLong(KEY_LAST_SCAN_AT, value).apply()
+        set(value) {
+            sp.edit().putLong(KEY_LAST_SCAN_AT, value).apply()
+            ioScope.launch { store.putLong(KEY_LAST_SCAN_AT, value) }
+        }
 
     /** 是否启用「深度扫描」（读取同目录 .lrc 歌词文件） */
     var deepScanEnabled: Boolean
         get() = sp.getBoolean(KEY_DEEP_SCAN, false)
-        set(value) = sp.edit().putBoolean(KEY_DEEP_SCAN, value).apply()
+        set(value) {
+            sp.edit().putBoolean(KEY_DEEP_SCAN, value).apply()
+            ioScope.launch { store.putBoolean(KEY_DEEP_SCAN, value) }
+        }
 
     /**
      * 短音频过滤阈值（秒）。
@@ -289,7 +355,10 @@ class Prefs private constructor(context: Context) {
      */
     var minSongDurationSec: Int
         get() = sp.getInt(KEY_MIN_DURATION_SEC, SettingsDefaults.MIN_DURATION_SEC)
-        set(value) = sp.edit().putInt(KEY_MIN_DURATION_SEC, value.coerceIn(0, 3600)).apply()
+        set(value) {
+            sp.edit().putInt(KEY_MIN_DURATION_SEC, value.coerceIn(0, 3600)).apply()
+            ioScope.launch { store.putInt(KEY_MIN_DURATION_SEC, value.coerceIn(0, 3600)) }
+        }
 
     /**
      * 某个浏览视图的排序方式 —— **v1.1.4 起按视图各存一份**。
@@ -301,32 +370,43 @@ class Prefs private constructor(context: Context) {
      * 视图继承一次，之后各自独立。默认值由调用方按视图给（见 `LibraryView.defaultSort`）。
      */
     fun sortOrder(viewName: String, default: SortOrder): SortOrder {
-        val raw = sp.getString(KEY_SORT_PREFIX + viewName, null)
+        val perView = KEY_SORT_PREFIX + viewName
+        val raw = sp.getString(perView, null)
             ?: sp.getString(KEY_SORT, null)
             ?: return default
         return runCatching { SortOrder.valueOf(raw) }.getOrDefault(default)
     }
 
     fun setSortOrder(viewName: String, order: SortOrder) {
-        sp.edit().putString(KEY_SORT_PREFIX + viewName, order.name).apply()
+        val perView = KEY_SORT_PREFIX + viewName
+        sp.edit().putString(perView, order.name).apply()
+        ioScope.launch { store.putString(perView, order.name) }
     }
 
     /** 清掉某个视图的排序覆盖，让它回到 [LibraryView.defaultSort] */
     fun resetSortOrder(viewName: String) {
-        sp.edit().remove(KEY_SORT_PREFIX + viewName).apply()
+        val perView = KEY_SORT_PREFIX + viewName
+        sp.edit().remove(perView).apply()
+        ioScope.launch { store.remove(perView) }
     }
 
     /** 上次停留的浏览视图（歌曲 / 专辑 / 歌手 / 文件夹 / 歌单），重启后恢复 */
     var libraryView: String
         get() = sp.getString(KEY_VIEW, "SONGS").orEmpty()
-        set(value) = sp.edit().putString(KEY_VIEW, value).apply()
+        set(value) {
+            sp.edit().putString(KEY_VIEW, value).apply()
+            ioScope.launch { store.putString(KEY_VIEW, value) }
+        }
 
     // ============================================================ 2. 播放
 
     /** 播放速度 */
     var playbackSpeed: Float
         get() = sp.getFloat(KEY_SPEED, SettingsDefaults.SPEED)
-        set(value) = sp.edit().putFloat(KEY_SPEED, value).apply()
+        set(value) {
+            sp.edit().putFloat(KEY_SPEED, value).apply()
+            ioScope.launch { store.putFloat(KEY_SPEED, value) }
+        }
 
     /**
      * 变调（半音，-12..+12；0 = 原调）。
@@ -337,12 +417,18 @@ class Prefs private constructor(context: Context) {
      */
     var playbackPitchSemitones: Int
         get() = sp.getInt(KEY_PITCH, SettingsDefaults.PITCH_SEMITONES)
-        set(value) = sp.edit().putInt(KEY_PITCH, value).apply()
+        set(value) {
+            sp.edit().putInt(KEY_PITCH, value).apply()
+            ioScope.launch { store.putInt(KEY_PITCH, value) }
+        }
 
     /** 跳过音频文件里的静音段（整轨/现场录音常用） */
     var skipSilence: Boolean
         get() = sp.getBoolean(KEY_SKIP_SILENCE, SettingsDefaults.SKIP_SILENCE)
-        set(value) = sp.edit().putBoolean(KEY_SKIP_SILENCE, value).apply()
+        set(value) {
+            sp.edit().putBoolean(KEY_SKIP_SILENCE, value).apply()
+            ioScope.launch { store.putBoolean(KEY_SKIP_SILENCE, value) }
+        }
 
     /**
      * 打开应用时是否从上次的进度接着播（默认开启）。
@@ -353,7 +439,10 @@ class Prefs private constructor(context: Context) {
      */
     var autoResume: Boolean
         get() = sp.getBoolean(KEY_AUTO_RESUME, SettingsDefaults.AUTO_RESUME)
-        set(value) = sp.edit().putBoolean(KEY_AUTO_RESUME, value).apply()
+        set(value) {
+            sp.edit().putBoolean(KEY_AUTO_RESUME, value).apply()
+            ioScope.launch { store.putBoolean(KEY_AUTO_RESUME, value) }
+        }
 
     /**
      * 开机后台自启播放（v1.1.24，默认关）。
@@ -364,14 +453,20 @@ class Prefs private constructor(context: Context) {
      */
     var autoPlayOnBoot: Boolean
         get() = sp.getBoolean(KEY_AUTO_PLAY_ON_BOOT, SettingsDefaults.AUTO_PLAY_ON_BOOT)
-        set(value) = sp.edit().putBoolean(KEY_AUTO_PLAY_ON_BOOT, value).apply()
+        set(value) {
+            sp.edit().putBoolean(KEY_AUTO_PLAY_ON_BOOT, value).apply()
+            ioScope.launch { store.putBoolean(KEY_AUTO_PLAY_ON_BOOT, value) }
+        }
 
     // ============================================================ 3. 播放页歌词
 
     /** 歌词字号缩放 */
     var lyricScale: Float
         get() = sp.getFloat(KEY_LYRIC_SCALE, SettingsDefaults.LYRIC_SCALE)
-        set(value) = sp.edit().putFloat(KEY_LYRIC_SCALE, value).apply()
+        set(value) {
+            sp.edit().putFloat(KEY_LYRIC_SCALE, value).apply()
+            ioScope.launch { store.putFloat(KEY_LYRIC_SCALE, value) }
+        }
 
     /**
      * 点击歌词行是否跳转到那一句（默认**关闭**，2026-10-18 用户要求）。
@@ -382,7 +477,10 @@ class Prefs private constructor(context: Context) {
      */
     var lyricTapSeeks: Boolean
         get() = sp.getBoolean(KEY_LYRIC_TAP_SEEKS, SettingsDefaults.LYRIC_TAP_SEEKS)
-        set(value) = sp.edit().putBoolean(KEY_LYRIC_TAP_SEEKS, value).apply()
+        set(value) {
+            sp.edit().putBoolean(KEY_LYRIC_TAP_SEEKS, value).apply()
+            ioScope.launch { store.putBoolean(KEY_LYRIC_TAP_SEEKS, value) }
+        }
 
     /**
      * 双语歌词显示模式：0 中英都显示（默认）/ 1 只显示中文 / 2 只显示英文。
@@ -392,7 +490,11 @@ class Prefs private constructor(context: Context) {
      */
     var lyricBilingual: Int
         get() = sp.getInt(KEY_LYRIC_BILINGUAL, SettingsDefaults.BILINGUAL).coerceIn(0, 2)
-        set(value) = sp.edit().putInt(KEY_LYRIC_BILINGUAL, value.coerceIn(0, 2)).apply()
+        set(value) {
+            val v = value.coerceIn(0, 2)
+            sp.edit().putInt(KEY_LYRIC_BILINGUAL, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_BILINGUAL, v) }
+        }
 
     /**
      * 播放页中部显示的是歌词（true，默认）还是封面（false）。
@@ -403,14 +505,20 @@ class Prefs private constructor(context: Context) {
      */
     var lyricsPaneVisible: Boolean
         get() = sp.getBoolean(KEY_LYRICS_PANE, true)
-        set(value) = sp.edit().putBoolean(KEY_LYRICS_PANE, value).apply()
+        set(value) {
+            sp.edit().putBoolean(KEY_LYRICS_PANE, value).apply()
+            ioScope.launch { store.putBoolean(KEY_LYRICS_PANE, value) }
+        }
 
     // ============================================================ 4. 均衡器与音效
 
     /** 均衡器总开关 */
     var eqEnabled: Boolean
         get() = sp.getBoolean(KEY_EQ_ENABLED, false)
-        set(value) = sp.edit().putBoolean(KEY_EQ_ENABLED, value).apply()
+        set(value) {
+            sp.edit().putBoolean(KEY_EQ_ENABLED, value).apply()
+            ioScope.launch { store.putBoolean(KEY_EQ_ENABLED, value) }
+        }
 
     /**
      * 当前均衡器预设 = [com.luckylearning.windtone.playback.EqPresets] 的 id。
@@ -422,27 +530,43 @@ class Prefs private constructor(context: Context) {
      */
     var eqPresetId: String
         get() = sp.getString(KEY_EQ_PRESET_ID, "").orEmpty()
-        set(value) = sp.edit().putString(KEY_EQ_PRESET_ID, value).apply()
+        set(value) {
+            sp.edit().putString(KEY_EQ_PRESET_ID, value).apply()
+            ioScope.launch { store.putString(KEY_EQ_PRESET_ID, value) }
+        }
 
     /** 各频段的增益（JSON 数组），空串 = 平台默认（未手动调过） */
     var eqBands: String
         get() = sp.getString(KEY_EQ_BANDS, "").orEmpty()
-        set(value) = sp.edit().putString(KEY_EQ_BANDS, value).apply()
+        set(value) {
+            sp.edit().putString(KEY_EQ_BANDS, value).apply()
+            ioScope.launch { store.putString(KEY_EQ_BANDS, value) }
+        }
 
     /** 低音增强强度（0 = 关） */
     var eqBassBoost: Int
         get() = sp.getInt(KEY_EQ_BASS, 0)
-        set(value) = sp.edit().putInt(KEY_EQ_BASS, value).apply()
+        set(value) {
+            sp.edit().putInt(KEY_EQ_BASS, value).apply()
+            ioScope.launch { store.putInt(KEY_EQ_BASS, value) }
+        }
 
     /** 虚拟环绕声强度（0 = 关） */
     var eqVirtualizer: Int
         get() = sp.getInt(KEY_EQ_VIRTUAL, 0)
-        set(value) = sp.edit().putInt(KEY_EQ_VIRTUAL, value).apply()
+        set(value) {
+            sp.edit().putInt(KEY_EQ_VIRTUAL, value).apply()
+            ioScope.launch { store.putInt(KEY_EQ_VIRTUAL, value) }
+        }
 
     /** 响度增强（LoudnessEnhancer 目标增益，单位 mB） */
     var eqLoudness: Int
         get() = sp.getInt(KEY_EQ_LOUDNESS, 0)
-        set(value) = sp.edit().putInt(KEY_EQ_LOUDNESS, value.coerceIn(0, 1500)).apply()
+        set(value) {
+            val v = value.coerceIn(0, 1500)
+            sp.edit().putInt(KEY_EQ_LOUDNESS, v).apply()
+            ioScope.launch { store.putInt(KEY_EQ_LOUDNESS, v) }
+        }
 
     /**
      * 混响档位 = [com.luckylearning.windtone.playback.ReverbPresets] 的 id。
@@ -453,7 +577,10 @@ class Prefs private constructor(context: Context) {
      */
     var eqReverbId: String
         get() = sp.getString(KEY_EQ_REVERB_ID, "").orEmpty()
-        set(value) = sp.edit().putString(KEY_EQ_REVERB_ID, value).apply()
+        set(value) {
+            sp.edit().putString(KEY_EQ_REVERB_ID, value).apply()
+            ioScope.launch { store.putString(KEY_EQ_REVERB_ID, value) }
+        }
 
     // ============================================================ 5. 桌面悬浮歌词
 
@@ -467,7 +594,10 @@ class Prefs private constructor(context: Context) {
      */
     var lyricOverlay: Boolean
         get() = sp.getBoolean(KEY_LYRIC_OVERLAY, SettingsDefaults.LYRIC_OVERLAY)
-        set(value) = sp.edit().putBoolean(KEY_LYRIC_OVERLAY, value).apply()
+        set(value) {
+            sp.edit().putBoolean(KEY_LYRIC_OVERLAY, value).apply()
+            ioScope.launch { store.putBoolean(KEY_LYRIC_OVERLAY, value) }
+        }
 
     /**
      * 桌面悬浮歌词一次显示几行：1..5（默认 1 = 只显示当前行）。
@@ -480,15 +610,19 @@ class Prefs private constructor(context: Context) {
     var lyricOverlayLines: Int
         get() = sp.getInt(KEY_LYRIC_OVERLAY_LINES, SettingsDefaults.OVERLAY_LINES)
             .coerceIn(SettingsDefaults.OVERLAY_LINES_RANGE.first, SettingsDefaults.OVERLAY_LINES_RANGE.last)
-        set(value) = sp.edit().putInt(
-            KEY_LYRIC_OVERLAY_LINES,
-            value.coerceIn(SettingsDefaults.OVERLAY_LINES_RANGE.first, SettingsDefaults.OVERLAY_LINES_RANGE.last),
-        ).apply()
+        set(value) {
+            val v = value.coerceIn(SettingsDefaults.OVERLAY_LINES_RANGE.first, SettingsDefaults.OVERLAY_LINES_RANGE.last)
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_LINES, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_LINES, v) }
+        }
 
     /** 悬浮窗最上面是否显示「歌名 + 歌手」两行小字（默认关闭） */
     var lyricOverlayShowTitle: Boolean
         get() = sp.getBoolean(KEY_LYRIC_OVERLAY_TITLE, SettingsDefaults.OVERLAY_SHOW_TITLE)
-        set(value) = sp.edit().putBoolean(KEY_LYRIC_OVERLAY_TITLE, value).apply()
+        set(value) {
+            sp.edit().putBoolean(KEY_LYRIC_OVERLAY_TITLE, value).apply()
+            ioScope.launch { store.putBoolean(KEY_LYRIC_OVERLAY_TITLE, value) }
+        }
 
     /**
      * 歌名 / 歌手两行小字的字号档位：0 小（默认）/ 1 中 / 2 大。
@@ -498,7 +632,11 @@ class Prefs private constructor(context: Context) {
      */
     var lyricOverlayTitleScale: Int
         get() = sp.getInt(KEY_LYRIC_OVERLAY_TITLE_SCALE, SettingsDefaults.OVERLAY_TITLE_SCALE).coerceIn(0, 2)
-        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_TITLE_SCALE, value.coerceIn(0, 2)).apply()
+        set(value) {
+            val v = value.coerceIn(0, 2)
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_TITLE_SCALE, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_TITLE_SCALE, v) }
+        }
 
     /**
      * 悬浮歌词字号档位：0 小 / 1 中（默认）/ 2 大。
@@ -508,7 +646,11 @@ class Prefs private constructor(context: Context) {
      */
     var lyricOverlayTextScale: Int
         get() = sp.getInt(KEY_LYRIC_OVERLAY_TEXT_SCALE, SettingsDefaults.OVERLAY_TEXT_SCALE).coerceIn(0, 2)
-        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_TEXT_SCALE, value.coerceIn(0, 2)).apply()
+        set(value) {
+            val v = value.coerceIn(0, 2)
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_TEXT_SCALE, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_TEXT_SCALE, v) }
+        }
 
     /**
      * 悬浮歌词底板：0 无底板 / 1 半透明深色（默认）/ 2 深色实底。
@@ -519,12 +661,20 @@ class Prefs private constructor(context: Context) {
      */
     var lyricOverlayBackdrop: Int
         get() = sp.getInt(KEY_LYRIC_OVERLAY_BACKDROP, SettingsDefaults.OVERLAY_BACKDROP).coerceIn(0, 2)
-        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_BACKDROP, value.coerceIn(0, 2)).apply()
+        set(value) {
+            val v = value.coerceIn(0, 2)
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_BACKDROP, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_BACKDROP, v) }
+        }
 
     /** 暂停时的表现：0 淡出（默认，保留最后一句便于看清唱到哪）/ 1 隐藏 */
     var lyricOverlayPauseMode: Int
         get() = sp.getInt(KEY_LYRIC_OVERLAY_PAUSE_MODE, SettingsDefaults.OVERLAY_PAUSE_MODE).coerceIn(0, 1)
-        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_PAUSE_MODE, value.coerceIn(0, 1)).apply()
+        set(value) {
+            val v = value.coerceIn(0, 1)
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_PAUSE_MODE, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_PAUSE_MODE, v) }
+        }
 
     /**
      * 悬浮歌词窗内文字的对齐：0 居中（默认）/ 1 居左。
@@ -535,7 +685,11 @@ class Prefs private constructor(context: Context) {
      */
     var lyricOverlayAlign: Int
         get() = sp.getInt(KEY_LYRIC_OVERLAY_ALIGN, SettingsDefaults.OVERLAY_ALIGN).coerceIn(0, 1)
-        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_ALIGN, value.coerceIn(0, 1)).apply()
+        set(value) {
+            val v = value.coerceIn(0, 1)
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_ALIGN, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_ALIGN, v) }
+        }
 
     /**
      * 悬浮歌词窗口的宽度，**按屏幕宽度的百分比**（1..100，默认 80）。
@@ -551,15 +705,19 @@ class Prefs private constructor(context: Context) {
     var lyricOverlayWidthPercent: Int
         get() = sp.getInt(KEY_LYRIC_OVERLAY_WIDTH, SettingsDefaults.OVERLAY_WIDTH_PERCENT)
             .coerceIn(SettingsDefaults.OVERLAY_WIDTH_RANGE.first, SettingsDefaults.OVERLAY_WIDTH_RANGE.last)
-        set(value) = sp.edit().putInt(
-            KEY_LYRIC_OVERLAY_WIDTH,
-            value.coerceIn(SettingsDefaults.OVERLAY_WIDTH_RANGE.first, SettingsDefaults.OVERLAY_WIDTH_RANGE.last),
-        ).apply()
+        set(value) {
+            val v = value.coerceIn(SettingsDefaults.OVERLAY_WIDTH_RANGE.first, SettingsDefaults.OVERLAY_WIDTH_RANGE.last)
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_WIDTH, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_WIDTH, v) }
+        }
 
     /** 悬浮窗里的歌词文字颜色（ARGB，默认纯白） */
     var lyricOverlayTextColor: Int
         get() = sp.getInt(KEY_LYRIC_OVERLAY_TEXT_COLOR, SettingsDefaults.OVERLAY_TEXT_COLOR)
-        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_TEXT_COLOR, value).apply()
+        set(value) {
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_TEXT_COLOR, value).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_TEXT_COLOR, value) }
+        }
 
     /**
      * 悬浮歌词「全屏高度」（默认关闭）。
@@ -574,7 +732,10 @@ class Prefs private constructor(context: Context) {
      */
     var lyricOverlayFullHeight: Boolean
         get() = sp.getBoolean(KEY_LYRIC_OVERLAY_FULL_HEIGHT, SettingsDefaults.OVERLAY_FULL_HEIGHT)
-        set(value) = sp.edit().putBoolean(KEY_LYRIC_OVERLAY_FULL_HEIGHT, value).apply()
+        set(value) {
+            sp.edit().putBoolean(KEY_LYRIC_OVERLAY_FULL_HEIGHT, value).apply()
+            ioScope.launch { store.putBoolean(KEY_LYRIC_OVERLAY_FULL_HEIGHT, value) }
+        }
 
     /**
      * 全屏模式下的窗口宽度（屏宽百分比）。
@@ -586,17 +747,12 @@ class Prefs private constructor(context: Context) {
      */
     var lyricOverlayFullWidthPercent: Int
         get() = sp.getInt(KEY_LYRIC_OVERLAY_FULL_WIDTH, SettingsDefaults.OVERLAY_FULL_WIDTH_PERCENT)
-            .coerceIn(
-                SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE.first,
-                SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE.last,
-            )
-        set(value) = sp.edit().putInt(
-            KEY_LYRIC_OVERLAY_FULL_WIDTH,
-            value.coerceIn(
-                SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE.first,
-                SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE.last,
-            ),
-        ).apply()
+            .coerceIn(SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE.first, SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE.last)
+        set(value) {
+            val v = value.coerceIn(SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE.first, SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE.last)
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_FULL_WIDTH, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_FULL_WIDTH, v) }
+        }
 
     /**
      * 全屏模式下的水平位置：存「可移动余量的百分比」（0 最左 / 50 居中 / 100 最右）。
@@ -606,17 +762,12 @@ class Prefs private constructor(context: Context) {
      */
     var lyricOverlayFullOffsetPercent: Int
         get() = sp.getInt(KEY_LYRIC_OVERLAY_FULL_OFFSET, SettingsDefaults.OVERLAY_FULL_OFFSET_PERCENT)
-            .coerceIn(
-                SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE.first,
-                SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE.last,
-            )
-        set(value) = sp.edit().putInt(
-            KEY_LYRIC_OVERLAY_FULL_OFFSET,
-            value.coerceIn(
-                SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE.first,
-                SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE.last,
-            ),
-        ).apply()
+            .coerceIn(SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE.first, SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE.last)
+        set(value) {
+            val v = value.coerceIn(SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE.first, SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE.last)
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_FULL_OFFSET, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_FULL_OFFSET, v) }
+        }
 
     /**
      * 悬浮歌词的横向偏移（像素，相对屏幕左边缘）。
@@ -627,7 +778,10 @@ class Prefs private constructor(context: Context) {
      */
     var lyricOverlayX: Int
         get() = sp.getInt(KEY_LYRIC_OVERLAY_X, Int.MIN_VALUE)
-        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_X, value).apply()
+        set(value) {
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_X, value).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_X, value) }
+        }
 
     /**
      * 悬浮歌词的纵向偏移（像素，相对屏幕顶端）。
@@ -636,7 +790,10 @@ class Prefs private constructor(context: Context) {
      */
     var lyricOverlayY: Int
         get() = sp.getInt(KEY_LYRIC_OVERLAY_Y, Int.MIN_VALUE)
-        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_Y, value).apply()
+        set(value) {
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_Y, value).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_Y, value) }
+        }
 
     // ============================================================ 6. 前台检测与调试
 
@@ -658,7 +815,10 @@ class Prefs private constructor(context: Context) {
     var lyricOverlayHiddenApps: Set<String>
         get() = sp.getStringSet(KEY_LYRIC_OVERLAY_HIDDEN_APPS, SettingsDefaults.OVERLAY_HIDDEN_APPS)
             ?: SettingsDefaults.OVERLAY_HIDDEN_APPS
-        set(value) = sp.edit().putStringSet(KEY_LYRIC_OVERLAY_HIDDEN_APPS, HashSet(value)).apply()
+        set(value) {
+            sp.edit().putStringSet(KEY_LYRIC_OVERLAY_HIDDEN_APPS, HashSet(value)).apply()
+            ioScope.launch { store.putStringSet(KEY_LYRIC_OVERLAY_HIDDEN_APPS, HashSet(value)) }
+        }
 
     /**
      * 是否记录「前台应用切换」历史（默认 **false**）。
@@ -671,7 +831,10 @@ class Prefs private constructor(context: Context) {
      */
     var foregroundLogEnabled: Boolean
         get() = sp.getBoolean(KEY_FOREGROUND_LOG_ENABLED, SettingsDefaults.FOREGROUND_LOG_ENABLED)
-        set(value) = sp.edit().putBoolean(KEY_FOREGROUND_LOG_ENABLED, value).apply()
+        set(value) {
+            sp.edit().putBoolean(KEY_FOREGROUND_LOG_ENABLED, value).apply()
+            ioScope.launch { store.putBoolean(KEY_FOREGROUND_LOG_ENABLED, value) }
+        }
 
     /**
      * 调试分区是否已解锁（默认 **false**，即隐藏）。
@@ -681,14 +844,20 @@ class Prefs private constructor(context: Context) {
      */
     var debugUnlocked: Boolean
         get() = sp.getBoolean(KEY_DEBUG_UNLOCKED, SettingsDefaults.DEBUG_UNLOCKED)
-        set(value) = sp.edit().putBoolean(KEY_DEBUG_UNLOCKED, value).apply()
+        set(value) {
+            sp.edit().putBoolean(KEY_DEBUG_UNLOCKED, value).apply()
+            ioScope.launch { store.putBoolean(KEY_DEBUG_UNLOCKED, value) }
+        }
 
     // ============================================================ 7. 外观与主题
 
     /** 主题是否跟随封面取色 */
     var dynamicTheme: Boolean
         get() = sp.getBoolean(KEY_DYNAMIC_THEME, SettingsDefaults.DYNAMIC_THEME)
-        set(value) = sp.edit().putBoolean(KEY_DYNAMIC_THEME, value).apply()
+        set(value) {
+            sp.edit().putBoolean(KEY_DYNAMIC_THEME, value).apply()
+            ioScope.launch { store.putBoolean(KEY_DYNAMIC_THEME, value) }
+        }
 
     /**
      * 车载模式（默认关闭）。
@@ -696,7 +865,10 @@ class Prefs private constructor(context: Context) {
      */
     var carMode: Boolean
         get() = sp.getBoolean(KEY_CAR_MODE, SettingsDefaults.CAR_MODE)
-        set(value) = sp.edit().putBoolean(KEY_CAR_MODE, value).apply()
+        set(value) {
+            sp.edit().putBoolean(KEY_CAR_MODE, value).apply()
+            ioScope.launch { store.putBoolean(KEY_CAR_MODE, value) }
+        }
 
     // ============================================================ 8. 应用内更新
 
@@ -708,12 +880,18 @@ class Prefs private constructor(context: Context) {
      */
     var autoCheckUpdate: Boolean
         get() = sp.getBoolean(KEY_AUTO_UPDATE, SettingsDefaults.AUTO_UPDATE)
-        set(value) = sp.edit().putBoolean(KEY_AUTO_UPDATE, value).apply()
+        set(value) {
+            sp.edit().putBoolean(KEY_AUTO_UPDATE, value).apply()
+            ioScope.launch { store.putBoolean(KEY_AUTO_UPDATE, value) }
+        }
 
     /** 上次检查更新的时间戳（毫秒），用于限制自动检查频率 */
     var lastUpdateCheckAt: Long
         get() = sp.getLong(KEY_LAST_UPDATE_CHECK, 0L)
-        set(value) = sp.edit().putLong(KEY_LAST_UPDATE_CHECK, value).apply()
+        set(value) {
+            sp.edit().putLong(KEY_LAST_UPDATE_CHECK, value).apply()
+            ioScope.launch { store.putLong(KEY_LAST_UPDATE_CHECK, value) }
+        }
 
     /**
      * 更新线路（检查更新与下载安装包都走它）。默认 [DownloadRoute.AUTO]。
@@ -721,9 +899,14 @@ class Prefs private constructor(context: Context) {
      */
     var updateDownloadRoute: DownloadRoute
         get() = runCatching {
-            DownloadRoute.valueOf(sp.getString(KEY_UPDATE_ROUTE, SettingsDefaults.UPDATE_ROUTE.name)!!)
+            DownloadRoute.valueOf(
+                 sp.getString(KEY_UPDATE_ROUTE, SettingsDefaults.UPDATE_ROUTE.name)!!,
+            )
         }.getOrDefault(DownloadRoute.AUTO)
-        set(value) = sp.edit().putString(KEY_UPDATE_ROUTE, value.name).apply()
+        set(value) {
+            sp.edit().putString(KEY_UPDATE_ROUTE, value.name).apply()
+            ioScope.launch { store.putString(KEY_UPDATE_ROUTE, value.name) }
+        }
 
     // ================================================================ 私有
 
@@ -743,6 +926,17 @@ class Prefs private constructor(context: Context) {
             synchronized(instances) {
                 return instances.getOrPut(app) { Prefs(app) }
             }
+        }
+
+        /**
+         * 供测试：清掉按 Application 缓存的实例。
+         *
+         * 单元测试里多个用例共用同一个 Application，若不清缓存，后一个用例拿到的
+         * `Prefs` 是前一个用例建的（它的预热协程早已跑完），「构造即预热」就没法验证。
+         * 生产永不调用。
+         */
+        internal fun clearCacheForTest() {
+            synchronized(instances) { instances.clear() }
         }
 
         // ---- 1. 音乐库与扫描 ----
