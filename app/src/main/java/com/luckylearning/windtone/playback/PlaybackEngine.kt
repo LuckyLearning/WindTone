@@ -205,9 +205,6 @@ class PlaybackEngine(
     /** 本次恢复是否**强制**起播（开机后台播放用；不受「打开应用继续上次播放」开关限制） */
     private var forceAutoplayOnRestore = false
 
-    /** 开机起播的重试节奏（毫秒）：首试立刻，之后 4s / 10s 各补一次 */
-    private val BOOT_RETRY_DELAYS = longArrayOf(0L, 4_000L, 10_000L)
-
     /** `play()` 之后等多久再确认「真的播起来了」—— 车机音频链路起振慢，800ms 常不够 */
     private val BOOT_PLAY_CONFIRM_MS = 1_200L
     private var currentLyricsSong: String? = null
@@ -498,8 +495,9 @@ class PlaybackEngine(
             // 一次不成就放弃的话，用户看到的就是「开关打开了，开机没反应」。
             // 所以按 0s / 4s / 10s 三次重试 —— 三次的总时长仍在 20 秒内，
             // 不会让「开机没播」变成「开机十几秒后才突然出声」这种更糟的体验。
+            // 重试时机抽到 BootRetryPolicy，便于单测覆盖与失败兜底判定。
             var lastReason = ""
-            for ((attempt, waitMs) in BOOT_RETRY_DELAYS.withIndex()) {
+            for ((attempt, waitMs) in BootRetryPolicy.DELAYS.withIndex()) {
                 if (waitMs > 0) delay(waitMs)
                 val result = runCatching { attemptBootPlayback() }
                     .getOrElse {
