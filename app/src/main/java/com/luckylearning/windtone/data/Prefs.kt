@@ -32,6 +32,7 @@ enum class SortOrder(val label: String) {
  * `Prefs` 的 getter 和设置页的常量里两处，迟早会出现「重置按钮写回的值」
  * 与「首次安装拿到的值」不一致 —— 那种 bug 用户很难描述清楚。
  * **改默认值只改这里**，`Prefs` 的 getter 与设置页的重置都引用它。
+ * 一致性由 `SettingsDefaultsTest.prefsGettersAgreeWithSettingsDefaults` 逐项对质。
  */
 object SettingsDefaults {
     const val DYNAMIC_THEME = true
@@ -212,10 +213,27 @@ enum class DownloadRoute(val label: String, val hint: String, val prefix: String
     GH_PROXY_COM("gh-proxy.com", "公共加速镜像，ghproxy 不通时备用", "https://gh-proxy.com/"),
 }
 
+/**
+ * 全应用共享偏好（SharedPreferences 薄封装）。
+ *
+ * ## 按域分组（v1.1.38 起）
+ * 历史上各设置项是「谁加谁往末尾追加」的（文件里曾留下「批次 2/3 新增」这类时间戳注释），
+ * 读起来像编年史而不是说明书。现按**功能域**重新分区，域名与 `SettingsDefaultsTest`
+ * 的对账分组、设置页的分区一一对应：
+ *
+ *  1. 音乐库与扫描   2. 播放       3. 播放页歌词
+ *  4. 均衡器与音效   5. 桌面悬浮歌词              6. 前台检测与调试
+ *  7. 外观与主题     8. 应用内更新
+ *
+ * 分区只是可读性；属性名、存储键、默认值、夹取逻辑全部保持不变，调用方无感。
+ * 下方 companion 的键常量按同一域名分区，与属性一一对位。
+ */
 class Prefs private constructor(context: Context) {
 
     private val sp: SharedPreferences =
         context.getSharedPreferences("music_player_prefs", Context.MODE_PRIVATE)
+
+    // ============================================================ 1. 音乐库与扫描
 
     /** 扫描范围：默认未选择，装机后不自动扫描 */
     var scanScope: ScanScope
@@ -261,7 +279,7 @@ class Prefs private constructor(context: Context) {
      * 0 表示不过滤。默认 60 秒。时长未知的歌曲不受影响。
      */
     var minSongDurationSec: Int
-        get() = sp.getInt(KEY_MIN_DURATION_SEC, DEFAULT_MIN_DURATION_SEC)
+        get() = sp.getInt(KEY_MIN_DURATION_SEC, SettingsDefaults.MIN_DURATION_SEC)
         set(value) = sp.edit().putInt(KEY_MIN_DURATION_SEC, value.coerceIn(0, 3600)).apply()
 
     /**
@@ -294,6 +312,40 @@ class Prefs private constructor(context: Context) {
         get() = sp.getString(KEY_VIEW, "SONGS").orEmpty()
         set(value) = sp.edit().putString(KEY_VIEW, value).apply()
 
+    // ============================================================ 2. 播放
+
+    /** 播放速度 */
+    var playbackSpeed: Float
+        get() = sp.getFloat(KEY_SPEED, SettingsDefaults.SPEED)
+        set(value) = sp.edit().putFloat(KEY_SPEED, value).apply()
+
+    /**
+     * 变调（半音，-12..+12；0 = 原调）。
+     *
+     * 存半音而不是倍率：界面上用户看到的、能理解的单位就是「半音」，
+     * 倍率只在写进 `PlaybackParameters` 那一刻由 [com.luckylearning.windtone.playback.Pitch] 换算。
+     * 存倍率的话，界面每次都要反算 `12*log2(f)`，浮点误差会让「+0 半音」显示成「-0 半音」。
+     */
+    var playbackPitchSemitones: Int
+        get() = sp.getInt(KEY_PITCH, SettingsDefaults.PITCH_SEMITONES)
+        set(value) = sp.edit().putInt(KEY_PITCH, value).apply()
+
+    /** 跳过音频文件里的静音段（整轨/现场录音常用） */
+    var skipSilence: Boolean
+        get() = sp.getBoolean(KEY_SKIP_SILENCE, SettingsDefaults.SKIP_SILENCE)
+        set(value) = sp.edit().putBoolean(KEY_SKIP_SILENCE, value).apply()
+
+    /**
+     * 打开应用时是否从上次的进度接着播（默认开启）。
+     *
+     * 与「自动续播」相关的另一半在数据库里：`player_state` 每 5 秒把当前曲目与
+     * 进度写一次，`queue_songs` 存整个队列。本键只决定「恢复完要不要顺手 play」，
+     * 关掉它不影响恢复 —— 队列、当前曲、进度依旧会摆好，只是停在暂停态。
+     */
+    var autoResume: Boolean
+        get() = sp.getBoolean(KEY_AUTO_RESUME, SettingsDefaults.AUTO_RESUME)
+        set(value) = sp.edit().putBoolean(KEY_AUTO_RESUME, value).apply()
+
     /**
      * 开机后台自启播放（v1.1.24，默认关）。
      *
@@ -305,6 +357,13 @@ class Prefs private constructor(context: Context) {
         get() = sp.getBoolean(KEY_AUTO_PLAY_ON_BOOT, SettingsDefaults.AUTO_PLAY_ON_BOOT)
         set(value) = sp.edit().putBoolean(KEY_AUTO_PLAY_ON_BOOT, value).apply()
 
+    // ============================================================ 3. 播放页歌词
+
+    /** 歌词字号缩放 */
+    var lyricScale: Float
+        get() = sp.getFloat(KEY_LYRIC_SCALE, SettingsDefaults.LYRIC_SCALE)
+        set(value) = sp.edit().putFloat(KEY_LYRIC_SCALE, value).apply()
+
     /**
      * 点击歌词行是否跳转到那一句（默认**关闭**，2026-10-18 用户要求）。
      *
@@ -315,11 +374,6 @@ class Prefs private constructor(context: Context) {
     var lyricTapSeeks: Boolean
         get() = sp.getBoolean(KEY_LYRIC_TAP_SEEKS, SettingsDefaults.LYRIC_TAP_SEEKS)
         set(value) = sp.edit().putBoolean(KEY_LYRIC_TAP_SEEKS, value).apply()
-
-    /** 歌词字号缩放 */
-    var lyricScale: Float
-        get() = sp.getFloat(KEY_LYRIC_SCALE, SettingsDefaults.LYRIC_SCALE)
-        set(value) = sp.edit().putFloat(KEY_LYRIC_SCALE, value).apply()
 
     /**
      * 双语歌词显示模式：0 中英都显示（默认）/ 1 只显示中文 / 2 只显示英文。
@@ -342,13 +396,57 @@ class Prefs private constructor(context: Context) {
         get() = sp.getBoolean(KEY_LYRICS_PANE, true)
         set(value) = sp.edit().putBoolean(KEY_LYRICS_PANE, value).apply()
 
+    // ============================================================ 4. 均衡器与音效
+
+    /** 均衡器总开关 */
+    var eqEnabled: Boolean
+        get() = sp.getBoolean(KEY_EQ_ENABLED, false)
+        set(value) = sp.edit().putBoolean(KEY_EQ_ENABLED, value).apply()
+
     /**
-     * 车载模式（默认关闭）。
-     * 开启后：启动直进播放页；播放页 5 秒无操作收起全部控件只留歌词与进度。
+     * 当前均衡器预设 = [com.luckylearning.windtone.playback.EqPresets] 的 id。
+     * 空串 = 自定义（用户手动拖过频段滑块）。
+     *
+     * 2026-10-16 起不再是平台预设的索引（Int）：平台预设名各 ROM 不一致且无法
+     * 本地化，改为内置曲线（[EqPresets]）。旧 key `eq_preset`（Int）残留在
+     * SharedPreferences 里，不再读取。
      */
-    var carMode: Boolean
-        get() = sp.getBoolean(KEY_CAR_MODE, false)
-        set(value) = sp.edit().putBoolean(KEY_CAR_MODE, value).apply()
+    var eqPresetId: String
+        get() = sp.getString(KEY_EQ_PRESET_ID, "").orEmpty()
+        set(value) = sp.edit().putString(KEY_EQ_PRESET_ID, value).apply()
+
+    /** 各频段的增益（JSON 数组），空串 = 平台默认（未手动调过） */
+    var eqBands: String
+        get() = sp.getString(KEY_EQ_BANDS, "").orEmpty()
+        set(value) = sp.edit().putString(KEY_EQ_BANDS, value).apply()
+
+    /** 低音增强强度（0 = 关） */
+    var eqBassBoost: Int
+        get() = sp.getInt(KEY_EQ_BASS, 0)
+        set(value) = sp.edit().putInt(KEY_EQ_BASS, value).apply()
+
+    /** 虚拟环绕声强度（0 = 关） */
+    var eqVirtualizer: Int
+        get() = sp.getInt(KEY_EQ_VIRTUAL, 0)
+        set(value) = sp.edit().putInt(KEY_EQ_VIRTUAL, value).apply()
+
+    /** 响度增强（LoudnessEnhancer 目标增益，单位 mB） */
+    var eqLoudness: Int
+        get() = sp.getInt(KEY_EQ_LOUDNESS, 0)
+        set(value) = sp.edit().putInt(KEY_EQ_LOUDNESS, value.coerceIn(0, 1500)).apply()
+
+    /**
+     * 混响档位 = [com.luckylearning.windtone.playback.ReverbPresets] 的 id。
+     *
+     * 空串 = 从未选过（等价于「关闭」），与 [eqPresetId] 的「空串 = 没选过 / 自定义」同一口径：
+     * 出厂的语义是「什么都没选过」，而不是「选了关闭这一档」。
+     * 界面读到空串时把「关闭」显示成选中，写回时一律写具体 id。
+     */
+    var eqReverbId: String
+        get() = sp.getString(KEY_EQ_REVERB_ID, "").orEmpty()
+        set(value) = sp.edit().putString(KEY_EQ_REVERB_ID, value).apply()
+
+    // ============================================================ 5. 桌面悬浮歌词
 
     /**
      * 桌面悬浮歌词（默认关闭）。
@@ -359,19 +457,8 @@ class Prefs private constructor(context: Context) {
      * 设置 → 应用 → 权限 → 出现在其他应用上。
      */
     var lyricOverlay: Boolean
-        get() = sp.getBoolean(KEY_LYRIC_OVERLAY, false)
+        get() = sp.getBoolean(KEY_LYRIC_OVERLAY, SettingsDefaults.LYRIC_OVERLAY)
         set(value) = sp.edit().putBoolean(KEY_LYRIC_OVERLAY, value).apply()
-
-    /**
-     * 悬浮歌词的横向偏移（像素，相对屏幕左边缘）。
-     *
-     * 2026-10-16 起重新启用：窗口位置完全由拖动决定（此前横向曾归
-     * [lyricOverlayAlign] 管、此键一度废弃）。`Int.MIN_VALUE` 表示未拖过，
-     * 走默认的水平居中。
-     */
-    var lyricOverlayX: Int
-        get() = sp.getInt(KEY_LYRIC_OVERLAY_X, Int.MIN_VALUE)
-        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_X, value).apply()
 
     /**
      * 桌面悬浮歌词一次显示几行：1..5（默认 1 = 只显示当前行）。
@@ -393,6 +480,77 @@ class Prefs private constructor(context: Context) {
     var lyricOverlayShowTitle: Boolean
         get() = sp.getBoolean(KEY_LYRIC_OVERLAY_TITLE, SettingsDefaults.OVERLAY_SHOW_TITLE)
         set(value) = sp.edit().putBoolean(KEY_LYRIC_OVERLAY_TITLE, value).apply()
+
+    /**
+     * 歌名 / 歌手两行小字的字号档位：0 小（默认）/ 1 中 / 2 大。
+     *
+     * 与正文 [lyricOverlayTextScale] 分开存：标题是配角，需要能独立调小，
+     * 否则「正文调大」会连带把两行标题也顶上去，挤掉歌词。
+     */
+    var lyricOverlayTitleScale: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_TITLE_SCALE, SettingsDefaults.OVERLAY_TITLE_SCALE).coerceIn(0, 2)
+        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_TITLE_SCALE, value.coerceIn(0, 2)).apply()
+
+    /**
+     * 悬浮歌词字号档位：0 小 / 1 中（默认）/ 2 大。
+     *
+     * 存档位而不是存裸的 sp 值，是为了**改基准字号时老用户跟着走**——
+     * 裸值一旦存下来，日后调整基准就只对新用户生效了。
+     */
+    var lyricOverlayTextScale: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_TEXT_SCALE, SettingsDefaults.OVERLAY_TEXT_SCALE).coerceIn(0, 2)
+        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_TEXT_SCALE, value.coerceIn(0, 2)).apply()
+
+    /**
+     * 悬浮歌词底板：0 无底板 / 1 半透明深色（默认）/ 2 深色实底。
+     *
+     * 默认为 1 而不是 0：锁定态曾经是「纯白字 + 投影、无底板」，
+     * 在亮色壁纸 / 桌面白色搜索框上白字直接糊掉——那是被真机证实过的坑。
+     * 允许选 0 是尊重「壁纸很干净、不想有块底色」的需求，但设置页要写明代价。
+     */
+    var lyricOverlayBackdrop: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_BACKDROP, SettingsDefaults.OVERLAY_BACKDROP).coerceIn(0, 2)
+        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_BACKDROP, value.coerceIn(0, 2)).apply()
+
+    /** 暂停时的表现：0 淡出（默认，保留最后一句便于看清唱到哪）/ 1 隐藏 */
+    var lyricOverlayPauseMode: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_PAUSE_MODE, SettingsDefaults.OVERLAY_PAUSE_MODE).coerceIn(0, 1)
+        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_PAUSE_MODE, value.coerceIn(0, 1)).apply()
+
+    /**
+     * 悬浮歌词窗内文字的对齐：0 居中（默认）/ 1 居左。
+     *
+     * 2026-10-16 起语义收窄：**只管歌词文字在窗口内部怎么排**
+     * （居中 = 折行后各行也居中；居左 = 每行从左沿同一条竖线起排），
+     * 与窗口摆在屏幕哪儿无关 —— 窗口位置完全由拖动决定（[lyricOverlayX] / [lyricOverlayY]）。
+     */
+    var lyricOverlayAlign: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_ALIGN, SettingsDefaults.OVERLAY_ALIGN).coerceIn(0, 1)
+        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_ALIGN, value.coerceIn(0, 1)).apply()
+
+    /**
+     * 悬浮歌词窗口的宽度，**按屏幕宽度的百分比**（1..100，默认 80）。
+     *
+     * 此前窗口宽度是 `WRAP_CONTENT`（内容多宽就多宽），长句会一路顶到屏幕边缘、
+     * 短句又只有一小条 —— 同一首歌里宽度不停跳。改成固定百分比后宽度稳定，
+     * 文字超出就折行。
+     *
+     * ⚠️ 宽度变了必须重新摆一次窗口：`OverlayPositioner` 的夹取上限是
+     * 「屏宽 − 窗口宽」，宽窗口留的空间更小（见 `LyricOverlayService.applyAppearance`）。
+     * 默认 80% 的缘由见 [SettingsDefaults.OVERLAY_WIDTH_PERCENT]。
+     */
+    var lyricOverlayWidthPercent: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_WIDTH, SettingsDefaults.OVERLAY_WIDTH_PERCENT)
+            .coerceIn(SettingsDefaults.OVERLAY_WIDTH_RANGE.first, SettingsDefaults.OVERLAY_WIDTH_RANGE.last)
+        set(value) = sp.edit().putInt(
+            KEY_LYRIC_OVERLAY_WIDTH,
+            value.coerceIn(SettingsDefaults.OVERLAY_WIDTH_RANGE.first, SettingsDefaults.OVERLAY_WIDTH_RANGE.last),
+        ).apply()
+
+    /** 悬浮窗里的歌词文字颜色（ARGB，默认纯白） */
+    var lyricOverlayTextColor: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_TEXT_COLOR, SettingsDefaults.OVERLAY_TEXT_COLOR)
+        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_TEXT_COLOR, value).apply()
 
     /**
      * 悬浮歌词「全屏高度」（默认关闭）。
@@ -452,14 +610,15 @@ class Prefs private constructor(context: Context) {
         ).apply()
 
     /**
-     * 歌名 / 歌手两行小字的字号档位：0 小（默认）/ 1 中 / 2 大。
+     * 悬浮歌词的横向偏移（像素，相对屏幕左边缘）。
      *
-     * 与正文 [lyricOverlayTextScale] 分开存：标题是配角，需要能独立调小，
-     * 否则「正文调大」会连带把两行标题也顶上去，挤掉歌词。
+     * 2026-10-16 起重新启用：窗口位置完全由拖动决定（此前横向曾归
+     * [lyricOverlayAlign] 管、此键一度废弃）。`Int.MIN_VALUE` 表示未拖过，
+     * 走默认的水平居中。
      */
-    var lyricOverlayTitleScale: Int
-        get() = sp.getInt(KEY_LYRIC_OVERLAY_TITLE_SCALE, SettingsDefaults.OVERLAY_TITLE_SCALE).coerceIn(0, 2)
-        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_TITLE_SCALE, value.coerceIn(0, 2)).apply()
+    var lyricOverlayX: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_X, Int.MIN_VALUE)
+        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_X, value).apply()
 
     /**
      * 悬浮歌词的纵向偏移（像素，相对屏幕顶端）。
@@ -470,69 +629,7 @@ class Prefs private constructor(context: Context) {
         get() = sp.getInt(KEY_LYRIC_OVERLAY_Y, Int.MIN_VALUE)
         set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_Y, value).apply()
 
-    /**
-     * 悬浮歌词字号档位：0 小 / 1 中（默认）/ 2 大。
-     *
-     * 存档位而不是存裸的 sp 值，是为了**改基准字号时老用户跟着走**——
-     * 裸值一旦存下来，日后调整基准就只对新用户生效了。
-     */
-    var lyricOverlayTextScale: Int
-        get() = sp.getInt(KEY_LYRIC_OVERLAY_TEXT_SCALE, 1).coerceIn(0, 2)
-        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_TEXT_SCALE, value.coerceIn(0, 2)).apply()
-
-    /**
-     * 悬浮歌词底板：0 无底板 / 1 半透明深色（默认）/ 2 深色实底。
-     *
-     * 默认为 1 而不是 0：锁定态曾经是「纯白字 + 投影、无底板」，
-     * 在亮色壁纸 / 桌面白色搜索框上白字直接糊掉——那是被真机证实过的坑。
-     * 允许选 0 是尊重「壁纸很干净、不想有块底色」的需求，但设置页要写明代价。
-     */
-    var lyricOverlayBackdrop: Int
-        get() = sp.getInt(KEY_LYRIC_OVERLAY_BACKDROP, 1).coerceIn(0, 2)
-        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_BACKDROP, value.coerceIn(0, 2)).apply()
-
-    /** 暂停时的表现：0 淡出（默认，保留最后一句便于看清唱到哪）/ 1 隐藏 */
-    var lyricOverlayPauseMode: Int
-        get() = sp.getInt(KEY_LYRIC_OVERLAY_PAUSE_MODE, 0).coerceIn(0, 1)
-        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_PAUSE_MODE, value.coerceIn(0, 1)).apply()
-
-    /**
-     * 悬浮歌词窗内文字的对齐：0 居中（默认）/ 1 居左。
-     *
-     * 2026-10-16 起语义收窄：**只管歌词文字在窗口内部怎么排**
-     * （居中 = 折行后各行也居中；居左 = 每行从左沿同一条竖线起排），
-     * 与窗口摆在屏幕哪儿无关 —— 窗口位置完全由拖动决定（[lyricOverlayX] / [lyricOverlayY]）。
-     */
-    var lyricOverlayAlign: Int
-        get() = sp.getInt(KEY_LYRIC_OVERLAY_ALIGN, 0).coerceIn(0, 1)
-        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_ALIGN, value.coerceIn(0, 1)).apply()
-
-    // ---------------- v1.1.4 新增：悬浮窗宽度与歌词颜色 ----------------
-
-    /**
-     * 悬浮歌词窗口的宽度，**按屏幕宽度的百分比**（1..100，默认 100）。
-     *
-     * 此前窗口宽度是 `WRAP_CONTENT`（内容多宽就多宽），长句会一路顶到屏幕边缘、
-     * 短句又只有一小条 —— 同一首歌里宽度不停跳。改成固定百分比后宽度稳定，
-     * 文字超出就折行。
-     *
-     * ⚠️ 宽度变了必须重新摆一次窗口：`OverlayPositioner` 的夹取上限是
-     * 「屏宽 − 窗口宽」，宽窗口留的空间更小（见 `LyricOverlayService.applyAppearance`）。
-     */
-    var lyricOverlayWidthPercent: Int
-        get() = sp.getInt(KEY_LYRIC_OVERLAY_WIDTH, SettingsDefaults.OVERLAY_WIDTH_PERCENT)
-            .coerceIn(SettingsDefaults.OVERLAY_WIDTH_RANGE.first, SettingsDefaults.OVERLAY_WIDTH_RANGE.last)
-        set(value) = sp.edit().putInt(
-            KEY_LYRIC_OVERLAY_WIDTH,
-            value.coerceIn(SettingsDefaults.OVERLAY_WIDTH_RANGE.first, SettingsDefaults.OVERLAY_WIDTH_RANGE.last),
-        ).apply()
-
-    /** 悬浮窗里的歌词文字颜色（ARGB，默认纯白） */
-    var lyricOverlayTextColor: Int
-        get() = sp.getInt(KEY_LYRIC_OVERLAY_TEXT_COLOR, SettingsDefaults.OVERLAY_TEXT_COLOR)
-        set(value) = sp.edit().putInt(KEY_LYRIC_OVERLAY_TEXT_COLOR, value).apply()
-
-    // ---------------- v1.1.29 新增：悬浮窗按应用隐藏 ----------------
+    // ============================================================ 6. 前台检测与调试
 
     /**
      * 这些应用（包名）在前台时，收起悬浮歌词 —— 默认**空**，即功能完全不介入。
@@ -577,93 +674,22 @@ class Prefs private constructor(context: Context) {
         get() = sp.getBoolean(KEY_DEBUG_UNLOCKED, SettingsDefaults.DEBUG_UNLOCKED)
         set(value) = sp.edit().putBoolean(KEY_DEBUG_UNLOCKED, value).apply()
 
-    // ---------------- 批次 6 新增 ----------------
-
-    /** 跳过音频文件里的静音段（整轨/现场录音常用） */
-    var skipSilence: Boolean
-        get() = sp.getBoolean(KEY_SKIP_SILENCE, false)
-        set(value) = sp.edit().putBoolean(KEY_SKIP_SILENCE, value).apply()
-
-    /**
-     * 打开应用时是否从上次的进度接着播（默认开启）。
-     *
-     * 与「自动续播」相关的另一半在数据库里：`player_state` 每 5 秒把当前曲目与
-     * 进度写一次，`queue_songs` 存整个队列。本键只决定「恢复完要不要顺手 play」，
-     * 关掉它不影响恢复 —— 队列、当前曲、进度依旧会摆好，只是停在暂停态。
-     */
-    var autoResume: Boolean
-        get() = sp.getBoolean(KEY_AUTO_RESUME, SettingsDefaults.AUTO_RESUME)
-        set(value) = sp.edit().putBoolean(KEY_AUTO_RESUME, value).apply()
-
-    // ---------------- 批次 2/3 新增 ----------------
+    // ============================================================ 7. 外观与主题
 
     /** 主题是否跟随封面取色 */
     var dynamicTheme: Boolean
-        get() = sp.getBoolean(KEY_DYNAMIC_THEME, true)
+        get() = sp.getBoolean(KEY_DYNAMIC_THEME, SettingsDefaults.DYNAMIC_THEME)
         set(value) = sp.edit().putBoolean(KEY_DYNAMIC_THEME, value).apply()
 
-    /** 播放速度 */
-    var playbackSpeed: Float
-        get() = sp.getFloat(KEY_SPEED, 1.0f)
-        set(value) = sp.edit().putFloat(KEY_SPEED, value).apply()
-
     /**
-     * 变调（半音，-12..+12；0 = 原调）。
-     *
-     * 存半音而不是倍率：界面上用户看到的、能理解的单位就是「半音」，
-     * 倍率只在写进 `PlaybackParameters` 那一刻由 [com.luckylearning.windtone.playback.Pitch] 换算。
-     * 存倍率的话，界面每次都要反算 `12*log2(f)`，浮点误差会让「+0 半音」显示成「-0 半音」。
+     * 车载模式（默认关闭）。
+     * 开启后：启动直进播放页；播放页 5 秒无操作收起全部控件只留歌词与进度。
      */
-    var playbackPitchSemitones: Int
-        get() = sp.getInt(KEY_PITCH, 0)
-        set(value) = sp.edit().putInt(KEY_PITCH, value).apply()
+    var carMode: Boolean
+        get() = sp.getBoolean(KEY_CAR_MODE, SettingsDefaults.CAR_MODE)
+        set(value) = sp.edit().putBoolean(KEY_CAR_MODE, value).apply()
 
-    // 均衡器
-    var eqEnabled: Boolean
-        get() = sp.getBoolean(KEY_EQ_ENABLED, false)
-        set(value) = sp.edit().putBoolean(KEY_EQ_ENABLED, value).apply()
-
-    /**
-     * 当前均衡器预设 = [com.luckylearning.windtone.playback.EqPresets] 的 id。
-     * 空串 = 自定义（用户手动拖过频段滑块）。
-     *
-     * 2026-10-16 起不再是平台预设的索引（Int）：平台预设名各 ROM 不一致且无法
-     * 本地化，改为内置曲线（[EqPresets]）。旧 key `eq_preset`（Int）残留在
-     * SharedPreferences 里，不再读取。
-     */
-    var eqPresetId: String
-        get() = sp.getString(KEY_EQ_PRESET_ID, "").orEmpty()
-        set(value) = sp.edit().putString(KEY_EQ_PRESET_ID, value).apply()
-
-    var eqBands: String
-        get() = sp.getString(KEY_EQ_BANDS, "").orEmpty()
-        set(value) = sp.edit().putString(KEY_EQ_BANDS, value).apply()
-
-    var eqBassBoost: Int
-        get() = sp.getInt(KEY_EQ_BASS, 0)
-        set(value) = sp.edit().putInt(KEY_EQ_BASS, value).apply()
-
-    var eqVirtualizer: Int
-        get() = sp.getInt(KEY_EQ_VIRTUAL, 0)
-        set(value) = sp.edit().putInt(KEY_EQ_VIRTUAL, value).apply()
-
-    /** 响度增强（LoudnessEnhancer 目标增益，单位 mB） */
-    var eqLoudness: Int
-        get() = sp.getInt(KEY_EQ_LOUDNESS, 0)
-        set(value) = sp.edit().putInt(KEY_EQ_LOUDNESS, value.coerceIn(0, 1500)).apply()
-
-    /**
-     * 混响档位 = [com.luckylearning.windtone.playback.ReverbPresets] 的 id。
-     *
-     * 空串 = 从未选过（等价于「关闭」），与 [eqPresetId] 的「空串 = 没选过 / 自定义」同一口径：
-     * 出厂的语义是「什么都没选过」，而不是「选了关闭这一档」。
-     * 界面读到空串时把「关闭」显示成选中，写回时一律写具体 id。
-     */
-    var eqReverbId: String
-        get() = sp.getString(KEY_EQ_REVERB_ID, "").orEmpty()
-        set(value) = sp.edit().putString(KEY_EQ_REVERB_ID, value).apply()
-
-    // ---------------- 应用内更新 ----------------
+    // ============================================================ 8. 应用内更新
 
     /**
      * 启动时自动检查更新。
@@ -672,7 +698,7 @@ class Prefs private constructor(context: Context) {
      * 用户可以在设置页一键关闭，关闭后应用完全不联网。
      */
     var autoCheckUpdate: Boolean
-        get() = sp.getBoolean(KEY_AUTO_UPDATE, true)
+        get() = sp.getBoolean(KEY_AUTO_UPDATE, SettingsDefaults.AUTO_UPDATE)
         set(value) = sp.edit().putBoolean(KEY_AUTO_UPDATE, value).apply()
 
     /** 上次检查更新的时间戳（毫秒），用于限制自动检查频率 */
@@ -686,7 +712,7 @@ class Prefs private constructor(context: Context) {
      */
     var updateDownloadRoute: DownloadRoute
         get() = runCatching {
-            DownloadRoute.valueOf(sp.getString(KEY_UPDATE_ROUTE, DownloadRoute.AUTO.name)!!)
+            DownloadRoute.valueOf(sp.getString(KEY_UPDATE_ROUTE, SettingsDefaults.UPDATE_ROUTE.name)!!)
         }.getOrDefault(DownloadRoute.AUTO)
         set(value) = sp.edit().putString(KEY_UPDATE_ROUTE, value.name).apply()
 
@@ -709,30 +735,48 @@ class Prefs private constructor(context: Context) {
                 return instances.getOrPut(app) { Prefs(app) }
             }
         }
+
+        // ---- 1. 音乐库与扫描 ----
         const val KEY_SCAN_SCOPE = "scan_scope"
         const val KEY_SCAN_SCOPE_CHOSEN = "scan_scope_chosen"
         const val KEY_LAST_SCAN_FP = "last_scan_fingerprint"
         const val KEY_LAST_SCAN_AT = "last_scan_at"
         const val KEY_DEEP_SCAN = "deep_scan"
         const val KEY_MIN_DURATION_SEC = "min_song_duration_sec"
-        /** 短音频过滤默认阈值：60 秒 */
-        const val DEFAULT_MIN_DURATION_SEC = 60
         /** 旧的**全局**排序键：v1.1.4 起排序按视图各存一份，它只作老数据兼容回落 */
         const val KEY_SORT = "sort"
 
         /** 各视图的排序键前缀：`sort_SONGS` / `sort_ALBUM` / `sort_ARTIST` / `sort_FOLDER` / `sort_PLAYLIST` */
         const val KEY_SORT_PREFIX = "sort_"
         const val KEY_VIEW = "library_view"
+
+        // ---- 2. 播放 ----
+        const val KEY_SPEED = "playback_speed"
+        const val KEY_PITCH = "playback_pitch_semitones"
+        const val KEY_SKIP_SILENCE = "skip_silence"
+        const val KEY_AUTO_RESUME = "auto_resume_playback"
+        const val KEY_AUTO_PLAY_ON_BOOT = "auto_play_on_boot"
+
+        // ---- 3. 播放页歌词 ----
         const val KEY_LYRIC_SCALE = "lyric_scale"
         const val KEY_LYRIC_TAP_SEEKS = "lyric_tap_seeks"
-        const val KEY_AUTO_PLAY_ON_BOOT = "auto_play_on_boot"
         const val KEY_LYRIC_BILINGUAL = "lyric_bilingual_mode"
+        const val KEY_LYRICS_PANE = "lyrics_pane_visible"
         // ⚠️ 逐字歌词移除后（v1.1.8）有三个键不再读写：`lyric_word_by_word` /
         //    `lyric_sung_color` / `lyric_overlay_sung_color`。它们仍留在老用户的
         //    SharedPreferences 里，**刻意不做清理** —— 为三个死键写迁移代码不划算，
         //    且新装用户根本不会产生它们。看到它们别再当 bug 排查。
-        const val KEY_LYRICS_PANE = "lyrics_pane_visible"
-        const val KEY_CAR_MODE = "car_mode"
+
+        // ---- 4. 均衡器与音效 ----
+        const val KEY_EQ_ENABLED = "eq_enabled"
+        const val KEY_EQ_PRESET_ID = "eq_preset_id"
+        const val KEY_EQ_BANDS = "eq_bands"
+        const val KEY_EQ_BASS = "eq_bass"
+        const val KEY_EQ_VIRTUAL = "eq_virtual"
+        const val KEY_EQ_LOUDNESS = "eq_loudness"
+        const val KEY_EQ_REVERB_ID = "eq_reverb_id"
+
+        // ---- 5. 桌面悬浮歌词 ----
         const val KEY_LYRIC_OVERLAY = "lyric_overlay"
         const val KEY_LYRIC_OVERLAY_X = "lyric_overlay_x"
         const val KEY_LYRIC_OVERLAY_Y = "lyric_overlay_y"
@@ -742,28 +786,24 @@ class Prefs private constructor(context: Context) {
         const val KEY_LYRIC_OVERLAY_TEXT_SCALE = "lyric_overlay_text_scale"
         const val KEY_LYRIC_OVERLAY_BACKDROP = "lyric_overlay_backdrop"
         const val KEY_LYRIC_OVERLAY_PAUSE_MODE = "lyric_overlay_pause_mode"
-        const val KEY_LYRIC_OVERLAY_HIDDEN_APPS = "lyric_overlay_hidden_apps"
-        const val KEY_FOREGROUND_LOG_ENABLED = "foreground_log_enabled"
-        const val KEY_DEBUG_UNLOCKED = "settings_debug_unlocked"
         const val KEY_LYRIC_OVERLAY_ALIGN = "lyric_overlay_align"
         const val KEY_LYRIC_OVERLAY_WIDTH = "lyric_overlay_width_percent"
+        const val KEY_LYRIC_OVERLAY_TEXT_COLOR = "lyric_overlay_text_color"
         const val KEY_LYRIC_OVERLAY_FULL_HEIGHT = "lyric_overlay_full_height"
         /** 全屏模式的宽度（屏宽百分比）与水平位置（余量百分比），与单条字幕分开存 */
         const val KEY_LYRIC_OVERLAY_FULL_WIDTH = "lyric_overlay_full_width_percent"
         const val KEY_LYRIC_OVERLAY_FULL_OFFSET = "lyric_overlay_full_offset_percent"
-        const val KEY_LYRIC_OVERLAY_TEXT_COLOR = "lyric_overlay_text_color"
+
+        // ---- 6. 前台检测与调试 ----
+        const val KEY_LYRIC_OVERLAY_HIDDEN_APPS = "lyric_overlay_hidden_apps"
+        const val KEY_FOREGROUND_LOG_ENABLED = "foreground_log_enabled"
+        const val KEY_DEBUG_UNLOCKED = "settings_debug_unlocked"
+
+        // ---- 7. 外观与主题 ----
         const val KEY_DYNAMIC_THEME = "dynamic_theme"
-        const val KEY_SPEED = "playback_speed"
-        const val KEY_PITCH = "playback_pitch_semitones"
-        const val KEY_EQ_ENABLED = "eq_enabled"
-        const val KEY_EQ_PRESET_ID = "eq_preset_id"
-        const val KEY_EQ_BANDS = "eq_bands"
-        const val KEY_EQ_BASS = "eq_bass"
-        const val KEY_EQ_VIRTUAL = "eq_virtual"
-        const val KEY_EQ_LOUDNESS = "eq_loudness"
-        const val KEY_EQ_REVERB_ID = "eq_reverb_id"
-        const val KEY_SKIP_SILENCE = "skip_silence"
-        const val KEY_AUTO_RESUME = "auto_resume_playback"
+        const val KEY_CAR_MODE = "car_mode"
+
+        // ---- 8. 应用内更新 ----
         const val KEY_AUTO_UPDATE = "auto_check_update"
         const val KEY_LAST_UPDATE_CHECK = "last_update_check_at"
         const val KEY_UPDATE_ROUTE = "update_download_route"
