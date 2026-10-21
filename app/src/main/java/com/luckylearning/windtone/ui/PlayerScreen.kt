@@ -9,6 +9,8 @@ import android.media.AudioManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
@@ -21,6 +23,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -59,6 +62,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -350,15 +354,52 @@ fun PlayerScreen(
                             )
                         }
                     }
-                    // 顶栏中间留空 —— 歌名 / 歌手在顶栏下方的常驻歌名行里
-                    // （效果图 ⑫ 的 p-nowrow），这里不重复显示。
-                    Spacer(Modifier.weight(1f))
-                    IconButton(onClick = { keepAwake(); onLyricsPaneVisible(!showLyrics) }) {
-                        Icon(
-                            imageVector = if (showLyrics) AppIcons.Album else AppIcons.Lyrics,
-                            contentDescription = if (showLyrics) "切换为封面" else "切换为歌词",
-                            tint = scheme.onSurface,
-                        )
+                    if (state.carMode) {
+                        // 车机（v1.1.44 参考车机版布局）：歌名 / 歌手居中放在顶栏正中，
+                        // 下方左歌词右唱片；底部只留进度与控制键，不再重复一行歌名。
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text(
+                                text = song?.title ?: "未在播放",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center,
+                            )
+                            Text(
+                                text = song?.artistOrUnknown ?: "",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = scheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                        if (song != null) {
+                            IconButton(onClick = { onToggleFavorite(song); keepAwake() }) {
+                                Icon(
+                                    imageVector = if (isFavorite) AppIcons.Favorite
+                                    else AppIcons.FavoriteBorder,
+                                    contentDescription = if (isFavorite) "取消收藏" else "收藏",
+                                    tint = if (isFavorite) scheme.primary else scheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    } else {
+                        // 手机顶栏中间留空 —— 歌名 / 歌手在下方常驻歌名行里（效果图 ⑫ 的 p-nowrow）
+                        Spacer(Modifier.weight(1f))
+                        IconButton(onClick = { keepAwake(); onLyricsPaneVisible(!showLyrics) }) {
+                            Icon(
+                                imageVector = if (showLyrics) AppIcons.Album else AppIcons.Lyrics,
+                                contentDescription = if (showLyrics) "切换为封面" else "切换为歌词",
+                                tint = scheme.onSurface,
+                            )
+                        }
                     }
                     IconButton(onClick = { keepAwake(); showOptions = true }) {
                         Icon(
@@ -374,21 +415,47 @@ fun PlayerScreen(
 
             // --------------------------------------------- 中部：封面 / 歌词
             Box(Modifier.weight(1f)) {
-                if (showLyrics) {
-                    LyricsPane(
-                        lyrics = state.lyrics,
-                        loading = state.lyricsLoading,
+                // 长按哪一行就在哪一刻对表：位置在这里取一次快照
+                val onLineLongPress: (Long) -> Unit = { lineMs ->
+                    keepAwake()
+                    offsetCalibrate = lineMs to progressState.value.positionMs
+                }
+                if (state.carMode) {
+                    // 车机（v1.1.44）：参考车机版音乐应用的版式 —— **左歌词、右唱片**，
+                    // 两者同时在场，不再「二选一」。宽屏上这样排的信息密度最高：
+                    // 歌词占主视区（瞄一眼就能读），唱片在右侧做视觉锚点。
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        PlayerLyrics(
+                            state = state,
+                            progressState = progressState,
+                            onSeekTo = onSeekTo,
+                            onLineLongPress = onLineLongPress,
+                            modifier = Modifier
+                                .weight(1.08f)
+                                .fillMaxHeight()
+                                .padding(end = 24.dp),
+                        )
+                        CarVinylPane(
+                            song = song,
+                            isPlaying = state.isPlaying,
+                            onToggle = onToggle,
+                            modifier = Modifier
+                                .weight(0.92f)
+                                .fillMaxHeight()
+                                // 右侧留一点边，唱片不要贴到屏幕右缘（参考车机版布局是居中偏右）
+                                .padding(end = 16.dp),
+                        )
+                    }
+                } else if (showLyrics) {
+                    PlayerLyrics(
+                        state = state,
                         progressState = progressState,
-                        offsetMs = state.lyricOffsetMs,
-                        scale = state.lyricScale,
                         onSeekTo = onSeekTo,
-                        carMode = state.carMode,
-                        tapSeeks = state.lyricTapSeeks,
-                        // 长按哪一行就在哪一刻对表：位置在这里取一次快照
-                        onLineLongPress = { lineMs ->
-                            keepAwake()
-                            offsetCalibrate = lineMs to progressState.value.positionMs
-                        },
+                        onLineLongPress = onLineLongPress,
+                        modifier = Modifier.fillMaxSize(),
                     )
                 } else {
                     CoverPane(
@@ -432,7 +499,7 @@ fun PlayerScreen(
             // 这一行是唯一保留的歌曲标识（效果图 ⑫D 的红框保留项）；
             // 手机版顶栏中间是留空的，歌名同样靠这一行显示（早先误把它做成车机专属，
             // 导致手机版顶栏空一截、歌名消失，已修回）。
-            Row(
+            if (!state.carMode || immersive) Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -787,5 +854,119 @@ fun PlayerScreen(
                 }
             },
         )
+    }
+}
+
+// ================================================================ 车机播放页（v1.1.44）
+
+/**
+ * 歌词面板的薄包装。
+ *
+ * 车机（左歌词）与手机（整屏歌词）用的是同一个 [LyricsPane]，只有 modifier 不同；
+ * 抽出来是为了让"长按对表"的回调只写一次 —— 两处各写一遍很容易只改一边。
+ */
+@Composable
+private fun PlayerLyrics(
+    state: PlayerUiState,
+    progressState: State<PlaybackProgress>,
+    onSeekTo: (Long) -> Unit,
+    onLineLongPress: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LyricsPane(
+        lyrics = state.lyrics,
+        loading = state.lyricsLoading,
+        progressState = progressState,
+        offsetMs = state.lyricOffsetMs,
+        scale = state.lyricScale,
+        onSeekTo = onSeekTo,
+        modifier = modifier,
+        carMode = state.carMode,
+        tapSeeks = state.lyricTapSeeks,
+        onLineLongPress = onLineLongPress,
+    )
+}
+
+/**
+ * 车机右侧的旋转黑胶（v1.1.44）。
+ *
+ * 为什么自己画而不是直接放方形封面：车机版音乐应用的一致视觉就是「转动的唱片」，
+ * 它同时承担三件事 —— 这是哪首歌（中心贴封面）、在不在播（转 / 停）、
+ * 以及把右侧那片宽屏填满（方形封面在大横屏上会显得很空）。
+ *
+ * 旋转用 [Animatable] 而不是 `rememberInfiniteTransition`：后者在暂停时会把角度
+ * 跳回起点，观感像"唱片被拨回原位"。这里暂停即停在当前角度，继续播接着转。
+ * 一圈 24 秒，接近真实 33 转唱片的观感，也不会让人眼晕。
+ */
+@Composable
+private fun CarVinylPane(
+    song: Song?,
+    isPlaying: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val angle = remember { Animatable(0f) }
+    LaunchedEffect(isPlaying) {
+        if (!isPlaying) return@LaunchedEffect
+        while (true) {
+            angle.animateTo(
+                targetValue = angle.value + 360f,
+                animationSpec = tween(durationMillis = 24_000, easing = LinearEasing),
+            )
+            // 360° 与 0° 视觉等价，重置一下避免浮点无限累加后丢精度
+            angle.snapTo(0f)
+        }
+    }
+
+    BoxWithConstraints(
+        modifier = modifier.pointerInput(Unit) {
+            // 双击唱片 = 播放 / 暂停，和手机封面一致（行车中不敢去点小按钮时的兜底）
+            detectTapGestures(onDoubleTap = { onToggle() })
+        },
+        contentAlignment = Alignment.Center,
+    ) {
+        // 留一点边距，避免唱片顶到歌词或控制行；边长取可用空间的短边
+        val side = minOf(maxWidth, maxHeight) * 0.86f
+        Box(
+            modifier = Modifier
+                .size(side)
+                .graphicsLayer { rotationZ = angle.value },
+            contentAlignment = Alignment.Center,
+        ) {
+            Canvas(Modifier.fillMaxSize()) {
+                val radius = size.minDimension / 2f
+                drawCircle(Color(0xFF121214), radius = radius)
+                // 细密同心纹：黑胶的"沟槽"。透明度压得很低，只是让深色盘面有层次
+                val rings = 18
+                for (i in 1..rings) {
+                    val r = radius * (0.58f + 0.42f * i / rings)
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.05f),
+                        radius = r,
+                        style = Stroke(width = 1.dp.toPx()),
+                    )
+                }
+                // 外沿高光：让盘面从背景里"浮"出来
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.10f),
+                    radius = radius - 1.dp.toPx(),
+                    style = Stroke(width = 1.dp.toPx()),
+                )
+            }
+            // 中心贴纸（封面）
+            CoverArt(
+                song = song,
+                size = side * 0.54f,
+                modifier = Modifier.size(side * 0.54f),
+                circular = true,
+            )
+            // 轴孔
+            Box(
+                modifier = Modifier
+                    .size(side * 0.035f)
+                    .clip(CircleShape)
+                    .background(Color(0xFF08080A)),
+            )
+        }
     }
 }
