@@ -1,7 +1,7 @@
 package com.luckylearning.windtone.data
 
 /**
- * 设置域的**持久化门面**（v1.1.38 重构抽出）。
+ * 设置域的**持久化门面**（v1.1.37 重构抽出）。
  *
  * ## 为什么需要它
  * 设置写入原先散落在两处：`OverlaySettings`（悬浮歌词 / 外观，17 个 setter）与
