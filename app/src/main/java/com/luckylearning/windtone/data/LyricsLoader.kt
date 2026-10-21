@@ -3,15 +3,19 @@ package com.luckylearning.windtone.data
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import com.luckylearning.windtone.data.baidu.BaiduAuth
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.lyrics.BinaryReader
+import com.luckylearning.windtone.lyrics.EmbeddedTagResult
 import com.luckylearning.windtone.lyrics.EmbeddedTags
 import com.luckylearning.windtone.lyrics.KrcParser
 import com.luckylearning.windtone.lyrics.LrcParser
 import com.luckylearning.windtone.lyrics.LyricSource
 import com.luckylearning.windtone.lyrics.Lyrics
+import com.luckylearning.windtone.lyrics.RemoteTagFetcher
 import com.luckylearning.windtone.lyrics.TextCodec
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InputStream
@@ -29,6 +33,22 @@ import java.io.InputStream
 class LyricsLoader(private val context: Context) {
 
     private val maxSidecarBytes = 2 * 1024 * 1024
+
+    /**
+     * 远程内嵌歌词的进程内缓存（v1.1.43）。
+     *
+     * 每首歌都要多发一次 128KB 的 Range 请求，反复切歌会把这笔开销放大；缓存最近 8 首的
+     * 结果，切回来就不再发请求。键用 [Song.id]：网盘歌是 `-fsId`，稳定且唯一。
+     * 只缓存**真的读到歌词**的结果 —— 把「空」也缓存住，用户补好标签后必须重启才生效。
+     */
+    private val remoteEmbeddedCache =
+        object : LinkedHashMap<Long, EmbeddedTagResult>(8, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, EmbeddedTagResult>) =
+                size > 8
+        }
+
+    /** 网盘直链要 access_token，这里只读不刷新（8 小时内的 dlink 场景足够） */
+    private val baiduAuth by lazy { BaiduAuth(context) }
 
     suspend fun load(song: Song): Lyrics = withContext(Dispatchers.IO) {
         loadRaw(song)
@@ -140,17 +160,44 @@ class LyricsLoader(private val context: Context) {
         return out.toByteArray()
     }
 
-    private fun readEmbedded(song: Song): com.luckylearning.windtone.lyrics.EmbeddedTagResult? = runCatching {
+    private suspend fun readEmbedded(song: Song): EmbeddedTagResult? {
         val ext = song.displayName.substringAfterLast('.', "").lowercase()
-        // 只关闭 ParcelFileDescriptor，底层 fd 随之释放；FileInputStream 无需单独关闭
-        context.contentResolver.openFileDescriptor(song.uri, "r")?.use { pfd ->
-            val fis = java.io.FileInputStream(pfd.fileDescriptor)
-            val reader = BinaryReader.open(fis)
-            if (reader == null) null else EmbeddedTags.parse(reader, ext, song.mimeType)
-        }
-    }.onFailure { Log.w(TAG, "解析内嵌歌词失败: ${song.uri}", it) }.getOrNull()
+        // 远程（网盘 / 在线歌单）拿不到文件描述符，只能按 Range 取文件头解析
+        if (isRemote(song.uri)) return readRemoteEmbedded(song, ext)
+        return runCatching {
+            // 只关闭 ParcelFileDescriptor，底层 fd 随之释放；FileInputStream 无需单独关闭
+            context.contentResolver.openFileDescriptor(song.uri, "r")?.use { pfd ->
+                val fis = java.io.FileInputStream(pfd.fileDescriptor)
+                val reader = BinaryReader.open(fis)
+                if (reader == null) null else EmbeddedTags.parse(reader, ext, song.mimeType)
+            }
+        }.onFailure { Log.w(TAG, "解析内嵌歌词失败: ${song.uri}", it) }.getOrNull()
+    }
+
+    private fun isRemote(uri: Uri): Boolean =
+        uri.scheme.equals("http", true) || uri.scheme.equals("https", true)
+
+    /**
+     * 远程内嵌歌词。
+     *
+     * 先等 600ms 再发请求：切歌瞬间正在建流、拉首包，这时再抢一条连接只会让「开头卡一下」
+     * 更明显；歌词比声音晚半秒没人会注意。
+     */
+    private suspend fun readRemoteEmbedded(song: Song, ext: String): EmbeddedTagResult? {
+        if (ext !in RemoteTagFetcher.SUPPORTED_EXTENSIONS) return null
+        remoteEmbeddedCache[song.id]?.let { return it }
+        delay(REMOTE_LYRIC_DELAY_MS)
+        val result = runCatching {
+            RemoteTagFetcher.read(song.uri, ext, baiduAuth.currentToken()?.accessToken)
+        }.onFailure { Log.w(TAG, "读取远程内嵌歌词失败: ${song.uri}", it) }.getOrNull() ?: return null
+        if (result.hasLyrics) remoteEmbeddedCache[song.id] = result
+        return result
+    }
 
     private companion object {
         const val TAG = "LyricsLoader"
+
+        /** 远程歌词请求的起步延迟：先让音频把首包拉起来 */
+        const val REMOTE_LYRIC_DELAY_MS = 600L
     }
 }

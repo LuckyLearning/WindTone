@@ -390,7 +390,9 @@ class BaiduPan(private val auth: BaiduAuth) {
             val link = dlinks[e.fsId] ?: return@mapNotNull null
             Song(
                 id = -(e.fsId),
-                uri = Uri.parse(link),
+                // fragment 里带上 fsId：dlink 每次签名都不同，直接拿 URI 当缓存键等于永不命中，
+                // 而 fragment 不进 HTTP 请求，只给播放缓存层当稳定键（见 OnlineMediaCache.panCacheKey）
+                uri = Uri.parse(link).buildUpon().fragment("wt=${e.fsId}").build(),
                 title = BaiduRules.displayTitle(e.name),
                 artist = null,
                 album = "百度网盘",

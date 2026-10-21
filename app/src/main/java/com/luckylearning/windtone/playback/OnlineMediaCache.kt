@@ -11,6 +11,7 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.TransferListener
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.CacheKeyFactory
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -64,6 +65,26 @@ object OnlineMediaCache {
     var panTokenProvider: (() -> String?)? = null
 
     fun panToken(): String? = runCatching { panTokenProvider?.invoke() }.getOrNull()
+
+    /** 网盘直链的稳定缓存键前缀（fragment 里带 `wt=<fsId>`，见 BaiduPan.toSongs） */
+    private const val PAN_FRAGMENT_PREFIX = "wt="
+
+    /**
+     * 网盘直链的稳定缓存键（v1.1.43）。
+     *
+     * 百度 dlink 每次播放都带新的签名，拿整个 URI 当键永远不可能命中 —— 之前因此**完全跳过**
+     * 网盘文件的缓存，代价是「同一首重听一遍就要重新下 28MB」，弱网下就是无尽卡顿。
+     * 现在按 fsId 做键：同一文件不同签名指向同一份缓存。
+     *
+     * 用 fragment 而不是查询参数，是因为查询参数会参与百度那边的签名校验，改成 fragment
+     * 则完全不进 HTTP 请求。
+     */
+    fun panCacheKey(uri: Uri?): String? {
+        val frag = uri?.fragment ?: return null
+        if (!frag.startsWith(PAN_FRAGMENT_PREFIX)) return null
+        val fsId = frag.removePrefix(PAN_FRAGMENT_PREFIX).trim()
+        return if (fsId.isEmpty()) null else "pan:$fsId"
+    }
 
     /** 只有网络流进缓存；本地 URI 一律走原路径 */
     fun shouldCache(scheme: String?): Boolean =
@@ -123,6 +144,11 @@ object OnlineMediaCache {
             val cached = CacheDataSource.Factory()
                 .setCache(cache)
                 .setUpstreamDataSourceFactory(http)
+                // 网盘直链按 fsId 做键，避免「每次签名不同 → 永不命中」
+                .setCacheKeyFactory(object : CacheKeyFactory {
+                    override fun buildCacheKey(dataSpec: DataSpec): String =
+                        panCacheKey(dataSpec.uri) ?: dataSpec.key ?: dataSpec.uri.toString()
+                })
                 // 缓存写失败（磁盘满 / 权限）时退化成直连，不要因此中断播放
                 .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
             SchemeRoutingFactory(cached, DefaultDataSource.Factory(context))
@@ -186,10 +212,12 @@ private class SchemeRoutingDataSource(
     }
 
     override fun open(dataSpec: DataSpec): Long {
-        // 百度直链带时效签名，每次播放的 URI 都不同 —— 缓存 key 跟着变，等于永远不命中，
-        // 只会白占 512MB 淘汰配额。所以对网盘直链跳过缓存，但保留下面的 UA 注入。
+        // 网盘直链带时效签名，每次播放的 URI 都不同。v1.1.43 起用 fsId 做稳定缓存键
+        // （见 panCacheKey），所以**能缓存的就缓存**；只有拿不到 fsId 的网盘请求才跳过，
+        // 否则会白占 512MB 淘汰配额。UA / token 注入不受影响，仍在下面统一处理。
+        val pan = BaiduRules.needsPanUserAgent(dataSpec.uri.host)
         val cacheable = OnlineMediaCache.shouldCache(dataSpec.uri) &&
-            !BaiduRules.needsPanUserAgent(dataSpec.uri.host)
+            (!pan || OnlineMediaCache.panCacheKey(dataSpec.uri) != null)
         val factory = if (cacheable) remote else local
         val source = factory.createDataSource()
         listeners.forEach(source::addTransferListener)

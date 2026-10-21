@@ -4,14 +4,18 @@ import java.io.Closeable
 import java.io.FileInputStream
 import java.io.InputStream
 import java.nio.ByteBuffer
+import java.nio.channels.ClosedChannelException
 import java.nio.channels.FileChannel
+import java.nio.channels.NonWritableChannelException
+import java.nio.channels.SeekableByteChannel
 
 /**
  * 带随机访问能力的小型二进制读取器。
- * 基于 FileChannel，可对 content:// 提供的文件描述符做 seek + 顺序读取，
+ * 基于 [SeekableByteChannel]：本地文件走 FileChannel（content:// 的文件描述符也算），
+ * 远程音频则用内存里的一段字节（[open] 的 ByteArray 重载），
  * 用于解析 ID3v2 / FLAC / Ogg / MP4 的标签块。
  */
-internal class BinaryReader(private val channel: FileChannel) : Closeable {
+internal class BinaryReader(private val channel: SeekableByteChannel) : Closeable {
 
     private val buf1 = ByteBuffer.allocate(1)
 
@@ -86,6 +90,56 @@ internal class BinaryReader(private val channel: FileChannel) : Closeable {
                 null
             }
         }
+
+        /**
+         * 用一段内存字节构造（v1.1.43）。
+         *
+         * 远程音频（网盘 / 在线歌单）拿不到 fd，只能按 Range 取前若干字节回来解析标签。
+         * 取不到的部分读作 -1，解析器据此判断「标签不在这一段里」——所以调用方必须
+         * 只对「标签一定在文件开头」的容器走这条路（flac / mp3 / ogg），m4a 的 moov
+         * 可能在尾部，不在此列。
+         */
+        fun open(bytes: ByteArray): BinaryReader = BinaryReader(ByteArrayChannel(bytes))
+    }
+}
+
+/**
+ * 把 ByteArray 包成只读的随机访问通道（够 [BinaryReader] 用）。
+ *
+ * 注意 [size] 返回的是**这段字节的长度**，不是原文件大小：解析器若 seek 到「文件尾」
+ * 会看到这一段数据的末尾。对标签在头部的容器（flac / mp3 / ogg）这正是我们要的语义。
+ */
+private class ByteArrayChannel(private val data: ByteArray) : SeekableByteChannel {
+
+    private var pos = 0L
+    private var open = true
+
+    override fun read(dst: ByteBuffer): Int {
+        if (!open) throw ClosedChannelException()
+        if (pos >= data.size) return -1
+        val count = minOf(dst.remaining(), (data.size - pos).toInt())
+        dst.put(data, pos.toInt(), count)
+        pos += count
+        return count
+    }
+
+    override fun write(src: ByteBuffer): Int = throw NonWritableChannelException()
+
+    override fun position(): Long = pos
+
+    override fun position(newPosition: Long): SeekableByteChannel {
+        pos = newPosition.coerceIn(0L, data.size.toLong())
+        return this
+    }
+
+    override fun size(): Long = data.size.toLong()
+
+    override fun truncate(size: Long): SeekableByteChannel = this
+
+    override fun isOpen(): Boolean = open
+
+    override fun close() {
+        open = false
     }
 }
 
