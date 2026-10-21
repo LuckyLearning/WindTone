@@ -29,6 +29,11 @@ internal object OnlinePlaylistRules {
      *
      * 用户从浏览器复制常丢掉协议头（`example.com/list.m3u`），补 https 而不是直接拒绝 ——
      * 拒绝的话用户只会看到「地址格式不对」，不知道怎么修。
+     *
+     * ⚠️ 域名合法性**显式判定**，不能依赖 `new URL(...)` 的抛错：它的校验行为随
+     * JDK 版本漂移（v1.1.37 实锤：`https://a b.com/x` 在 JDK 21 抛 MalformedURLException，
+     * JDK 17 静默接受，CI 单测当场红），Android 的 libcore 又是第三套。URL() 只用来
+     * 兜底解析出 host，畸形输入在下面就已被拦下。
      */
     fun normalizeUrl(raw: String): String {
         val t = raw.trim()
@@ -37,6 +42,13 @@ internal object OnlinePlaylistRules {
             t.startsWith("http://", true) || t.startsWith("https://", true) -> t
             else -> "https://$t"
         }
+        val hostPart = withScheme.substringAfter("://", "")
+            .substringBefore('/').substringBefore('?').substringBefore('#')
+        if (hostPart.isBlank()) error("地址里缺少域名")
+        if (hostPart.count { it == '[' } != hostPart.count { it == ']' }) error("地址格式不对")
+        val bare = hostPart.substringBeforeLast(':').trim('[', ']') // 剥端口 / IPv6 括号
+        if (bare.isBlank()) error("地址里缺少域名")
+        if (hostPart.any { it.isWhitespace() }) error("地址格式不对")
         val parsed = runCatching { URL(withScheme) }.getOrNull() ?: error("地址格式不对")
         if (parsed.host.isNullOrBlank()) error("地址里缺少域名")
         return withScheme

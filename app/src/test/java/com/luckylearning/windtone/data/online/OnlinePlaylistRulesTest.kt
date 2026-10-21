@@ -71,9 +71,18 @@ class OnlinePlaylistRulesTest {
 
     @Test
     fun `畸形地址报格式错误`() {
-        // 未闭合的 IPv6 字面量 / 主机里有空格：URL 构造器直接抛 MalformedURLException
+        // 未闭合的 IPv6 字面量 / 主机里有空格：显式校验拦下（JDK 17 与 21 对 URL() 的
+        // 抛错行为不同，v1.1.37 CI 实锤 —— 校验不能依赖 JDK 版本行为）
         assertEquals("地址格式不对", failureOf { OnlinePlaylistRules.normalizeUrl("https://[invalid") })
         assertEquals("地址格式不对", failureOf { OnlinePlaylistRules.normalizeUrl("https://a b.com/x") })
+        // 域名缺失：与上面同一条显式校验路径，任何 JDK 行为一致
+        assertEquals("地址里缺少域名", failureOf { OnlinePlaylistRules.normalizeUrl("https://:8080/x") })
+        assertEquals("地址里缺少域名", failureOf { OnlinePlaylistRules.normalizeUrl("https:///x") })
+        // 合法 IPv6 带端口不受影响
+        assertEquals(
+            "https://[2001:db8::1]:8080/x",
+            OnlinePlaylistRules.normalizeUrl("https://[2001:db8::1]:8080/x"),
+        )
     }
 
     // ------------------------------------------------------------ defaultName
