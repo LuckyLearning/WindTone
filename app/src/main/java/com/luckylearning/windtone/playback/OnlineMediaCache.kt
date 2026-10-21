@@ -161,6 +161,15 @@ object OnlineMediaCache {
         return DefaultMediaSourceFactory(dataSource)
     }
 
+    /**
+     * 后台预取要用同一个 `SimpleCache` 实例（v1.1.46）。
+     *
+     * 单独开一个实例会直接抛 `Another SimpleCache instance uses the folder`，所以只能借。
+     * 返回 null 表示缓存起不来（存储紧张），调用方必须放弃预取而不是自己再建一份。
+     */
+    @androidx.annotation.OptIn(UnstableApi::class)
+    internal fun cacheForPrefetch(context: Context): SimpleCache? = get(context)
+
     /** 当前缓存占用（字节）；拿不到实例返回 0 */
     @androidx.annotation.OptIn(UnstableApi::class)
     fun sizeBytes(context: Context): Long =

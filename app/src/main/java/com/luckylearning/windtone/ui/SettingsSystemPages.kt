@@ -3,6 +3,7 @@ package com.luckylearning.windtone.ui
 import android.content.Context
 import android.widget.Toast
 import com.luckylearning.windtone.data.formatByteSize
+import com.luckylearning.windtone.playback.CachePrefetcher
 import com.luckylearning.windtone.playback.OnlineMediaCache
 import com.luckylearning.windtone.data.BootStatus
 import com.luckylearning.windtone.data.BootStatusText
@@ -518,6 +519,21 @@ internal fun SettingsDiagnosticsPage(
                 if (ok) "已清除在线缓存" else "当前没有可清除的缓存",
                 Toast.LENGTH_SHORT,
             ).show()
+        },
+    )
+
+    // 后台预取（v1.1.46）：网盘按「单连接」限速，当前这首绕不过去，但下一首可以在
+    // 用户没注意时先用两条连接拉好。这里把它的实时状态摆出来 —— 用户报「还是慢」时，
+    // 一眼就能判断是「预取没跑起来」还是「跑了但线路就这速度」。
+    val prefetchStatus by CachePrefetcher.status.collectAsStateWithLifecycle()
+    ActionRow(
+        title = "后台预取",
+        subtitle = "当前曲缓冲领先 20 秒后，用 2 个连接把接下来两首先拉进缓存（每个连接限速 320 KB/s）；" +
+            "点这一行可立刻停止",
+        trailing = prefetchStatus,
+        onClick = {
+            CachePrefetcher.cancel()
+            Toast.makeText(context, "已停止后台预取", Toast.LENGTH_SHORT).show()
         },
     )
 

@@ -246,6 +246,9 @@ class PlaybackEngine(
     /** 上一次尝试把悬浮窗服务拉回来的时间，用于 30 秒节流（见 [OverlayTickHelper.shouldReviveOverlay]） */
     private var lastOverlayReviveAt = 0L
 
+    /** 上一次规划后台预取的时间（ticker 每 200ms 走一次，靠它节流到 3 秒） */
+    private var lastPrefetchPlanAt = 0L
+
     init {
         AudioFx.init(app)
         scope.launch {
@@ -995,6 +998,28 @@ class PlaybackEngine(
 
     // ================================================================ 内部
 
+    /**
+     * 按 MediaController 的真实队列取「接下来要播的远程歌」（v1.1.46）。
+     *
+     * 必须用 controller 的队列而不是 [currentQueue]：随机播放时两者顺序不同，按曲库顺序
+     * 预取等于把没打算听的歌先下了一遍（费流量还挤占缓存）。
+     */
+    private fun upcomingSongs(c: MediaController): List<Song> {
+        val count = c.mediaItemCount
+        if (count <= 1) return emptyList()
+        val from = c.currentMediaItemIndex + 1
+        if (from >= count) return emptyList()
+        // 只需要看最近几首：候选只取两首，没必要把三百首队列整个映射一遍
+        val window = (from until minOf(count, from + 6)).mapNotNull { i ->
+            songByMediaId(c.getMediaItemAt(i).mediaId)
+        }
+        return CachePrefetchPolicy.candidates(window.map { it.uri.scheme }).map { window[it] }
+    }
+
+    private fun songByMediaId(mediaId: String): Song? =
+        currentQueue.firstOrNull { it.stableKey == mediaId }
+            ?: librarySongs.firstOrNull { it.stableKey == mediaId }
+
     private fun syncCurrentSong(force: Boolean = false) {
         val c = controller ?: return
         val mediaId = c.currentMediaItem?.mediaId ?: run {
@@ -1147,6 +1172,17 @@ class PlaybackEngine(
                 _progress.value = PlaybackProgress(pos, duration, buffered)
 
                 val now = SystemClock.elapsedRealtime()
+
+                // 后台预取（v1.1.46）：缓冲领先 20 秒（或已暂停）才动手，每 3 秒最多规划一次。
+                // 之所以放在这条 ticker 里：这里刚好有最新 position / buffered / isPlaying，
+                // 不必再开一条计时器。预取失败一律静默，不影响播放。
+                if (now - lastPrefetchPlanAt >= CachePrefetchPolicy.PLAN_INTERVAL_MS) {
+                    lastPrefetchPlanAt = now
+                    if (CachePrefetchPolicy.shouldStart(playing, buffered - pos)) {
+                        runCatching { CachePrefetcher.plan(app, upcomingSongs(c)) }
+                    }
+                }
+
                 if (pos > 0 && now - lastSavedAt >= 5_000L) {
                     lastSavedAt = now
                     // 进度落库：只更新 player_state 唯一那一行（单行 UPDATE，开销极小）
