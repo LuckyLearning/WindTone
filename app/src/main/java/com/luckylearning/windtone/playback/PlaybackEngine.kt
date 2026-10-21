@@ -25,11 +25,9 @@ import com.luckylearning.windtone.lyrics.OverlayContentResolver
 import com.luckylearning.windtone.overlay.LyricOverlayBridge
 import com.luckylearning.windtone.overlay.LyricOverlayBus
 import com.luckylearning.windtone.overlay.LyricOverlayService
-import com.luckylearning.windtone.state.PlayMode
 import com.luckylearning.windtone.state.PlaybackProgress
 import com.luckylearning.windtone.state.PlayerUiState
 import com.luckylearning.windtone.state.QueueEntry
-import com.luckylearning.windtone.state.playModeOf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -144,6 +142,47 @@ class PlaybackEngine(
             }
         },
     )
+
+    /**
+     * 播放队列的所有增删 / 跳转 / 乱序 / 模式操作。
+     * 只认窄接口 [QueuePlayer]，状态同步 / 落库 / 提示通过 [QueueHostImpl] 交回引擎，
+     * 自身不持有任何 Android / 引擎状态，可完全单测。见 `playback/QueueManager.kt`。
+     */
+    private val queueManager = QueueManager(
+        scope = scope,
+        connect = { ensureController()?.let { MediaControllerQueuePlayer(it) } },
+        toMediaItem = { PlaybackConnection.toMediaItem(it) },
+        host = QueueHostImpl(),
+    )
+
+    /** [QueueManager.QueueHost] 的引擎实现：把状态同步 / 落库 / 提示交回引擎自身。 */
+    private inner class QueueHostImpl : QueueManager.QueueHost {
+        override fun setCurrentQueue(queue: List<Song>) { currentQueue = queue }
+        override fun notifyQueueSize(size: Int) = _player.update { it.copy(queueSize = size) }
+        override fun notifyQueueEntries(entries: List<QueueEntry>) =
+            _player.update { it.copy(queue = entries, queueSize = entries.size) }
+        override fun updateProgress(positionMs: Long) = _progress.update { it.copy(positionMs = positionMs) }
+        override fun postMessage(text: String) = messages.post(text)
+        override fun persistQueue() = saveQueue()
+        override fun applyPlaybackParams() { controller?.let { applyPlaybackParams(it) } }
+        override fun onPlaybackStarted(currentIndex: Int, durationMs: Long, queueSize: Int) {
+            val c = controller
+            _progress.value = PlaybackProgress(0L, durationMs, 0L)
+            _player.update {
+                it.copy(
+                    queueSize = queueSize,
+                    // 显式写回：onShuffleModeEnabledChanged 只在真正变化时回调，
+                    // 「本来就是随机又点一次随机」不会触发，图标会停在上一档。
+                    repeatMode = c?.repeatMode ?: Player.REPEAT_MODE_OFF,
+                    shuffle = c?.shuffleModeEnabled ?: false,
+                )
+            }
+            syncCurrentSong(force = true)
+            startPositionTicker()
+        }
+        override fun currentLibrary(): List<Song> = librarySongs
+        override fun startLibraryPlayback() = this@PlaybackEngine.playQueue(librarySongs, 0)
+    }
 
     /** 桌面悬浮窗运行状态（设置页展示；失败时由 init 里的收集器做回退） */
     val overlayHealth: StateFlow<LyricOverlayBus.Health> = LyricOverlayBridge.health
@@ -623,199 +662,19 @@ class PlaybackEngine(
 
     // ================================================================ 播放动作
 
-    override fun playQueue(queue: List<Song>, startIndex: Int) {
-        startQueue(queue, startIndex, shuffled = false)
-    }
-
-    /**
-     * 随机播放一整批歌（桌面启动器快捷方式「随机播放」）。
-     *
-     * 与 [playQueue] 只差一件事：**先**把「随机 + 列表循环」两个开关落定，再起播。
-     * 不能写成 `playQueue(...)` 之后另起一个协程去改模式——两个协程谁先跑完不确定，
-     * 用户会听到"第一首按原顺序播、之后才乱序"的半随机状态。
-     *
-     * 起始下标交给 `setMediaItems` 的 shuffle 逻辑处理（Media3 会在乱序后
-     * 记住当前项），这里仍传 0，避免我们自己再算一遍顺序反而和播放器不一致。
-     */
-    override fun playShuffled(songs: List<Song>) {
-        startQueue(songs, 0, shuffled = true)
-    }
-
-    private fun startQueue(queue: List<Song>, startIndex: Int, shuffled: Boolean) {
-        scope.launch {
-            val c = ensureController() ?: return@launch
-            if (queue.isEmpty()) return@launch
-            if (shuffled) {
-                c.repeatMode = Player.REPEAT_MODE_ALL
-                c.shuffleModeEnabled = true
-            }
-            val i = startIndex.coerceIn(0, queue.size - 1)
-            currentQueue = queue
-            c.setMediaItems(queue.map { PlaybackConnection.toMediaItem(it) }, i, 0L)
-            c.prepare()
-            c.play()
-            applyPlaybackParams(c)
-            _progress.value = PlaybackProgress(0L, queue[i].durationMs, 0L)
-            _player.update {
-                it.copy(
-                    queueSize = queue.size,
-                    // 显式写回：`onShuffleModeEnabledChanged` 只有真的变化时才回调，
-                    // 「本来就是随机 + 用户又点了一次随机播放」时不会触发，界面上的
-                    // 模式图标就会停在上一档。
-                    repeatMode = c.repeatMode,
-                    shuffle = c.shuffleModeEnabled,
-                )
-            }
-            saveQueue()
-            syncCurrentSong(force = true)
-            startPositionTicker()
-        }
-    }
-
-    override fun togglePlay() {
-        scope.launch {
-            val c = ensureController() ?: return@launch
-            if (c.mediaItemCount == 0) {
-                val list = librarySongs
-                if (list.isNotEmpty()) playQueue(list, 0)
-                return@launch
-            }
-            if (c.isPlaying) c.pause() else c.play()
-        }
-    }
-
-    override fun next() {
-        scope.launch { ensureController()?.seekToNextMediaItem() }
-    }
-
-    override fun previous() {
-        scope.launch {
-            val c = ensureController() ?: return@launch
-            if (c.currentPosition > 3000L) c.seekTo(0L) else c.seekToPreviousMediaItem()
-        }
-    }
-
-    override fun seekTo(ms: Long) {
-        scope.launch {
-            val c = ensureController() ?: return@launch
-            val target = ms.coerceIn(0L, c.duration.coerceAtLeast(0L))
-            c.seekTo(target)
-            _progress.update { it.copy(positionMs = target) }
-        }
-    }
-
-    /**
-     * 播放模式轮换：顺序 → 列表循环 → 单曲循环 → 随机 → 顺序。
-     *
-     * 合并到播放页的同一个按钮上，不再让「随机」和「循环」各占一个位置。
-     */
-    override fun cyclePlayMode() {
-        scope.launch {
-            val c = ensureController() ?: return@launch
-            val (repeatMode, shuffle) = playModeOf(c.repeatMode, c.shuffleModeEnabled).next.targets()
-            // 接线顺序刻意保留：关随机要先于设循环、开随机要在 repeatMode 之后，
-            // 否则会闪过一帧「随机 + 循环」之类的中间态。
-            if (shuffle) {
-                c.repeatMode = repeatMode
-                c.shuffleModeEnabled = true
-            } else {
-                c.shuffleModeEnabled = false
-                c.repeatMode = repeatMode
-            }
-        }
-    }
-
-    override fun playNext(song: Song) {
-        scope.launch {
-            val c = ensureController() ?: return@launch
-            val insertAt = QueuePolicies.playNextInsertIndex(c.currentMediaItemIndex, c.mediaItemCount)
-            val exists = (0 until c.mediaItemCount).firstOrNull { c.getMediaItemAt(it).mediaId == song.stableKey }
-            if (exists != null) {
-                c.moveMediaItem(exists, QueuePolicies.playNextMoveTarget(exists, insertAt))
-            } else {
-                c.addMediaItem(insertAt, PlaybackConnection.toMediaItem(song))
-            }
-            _player.update { it.copy(queueSize = c.mediaItemCount) }
-            saveQueue()
-            messages.post("已加入播放队列：${song.title}")
-        }
-    }
-
-    /**
-     * 批量追加到播放队列（多选态的「加入队列」）。
-     *
-     * 已在队列里的歌**跳过**：批量操作最容易踩的坑就是连点两次之后队列里
-     * 出现一堆重复条目，用户还得逐个删。队列为空时顺带把第一首变成当前曲目
-     * （否则用户加了歌却按不动播放）。
-     */
-    override fun enqueue(songs: List<Song>) {
-        if (songs.isEmpty()) return
-        scope.launch {
-            val c = ensureController() ?: return@launch
-            val existing = (0 until c.mediaItemCount).map { c.getMediaItemAt(it).mediaId }.toSet()
-            val fresh = QueuePolicies.enqueueNewSongs(songs, existing)
-            if (fresh.isEmpty()) {
-                messages.post("所选歌曲都在播放队列里了")
-                return@launch
-            }
-            c.addMediaItems(fresh.map { PlaybackConnection.toMediaItem(it) })
-            _player.update { it.copy(queueSize = c.mediaItemCount) }
-            saveQueue()
-            refreshQueue()
-        }
-    }
-
-    // ---------------------------------------------------------------- 队列抽屉
-
-    override fun refreshQueue() {
-        scope.launch {
-            val c = ensureController() ?: return@launch
-            val count = c.mediaItemCount
-            val entries = ArrayList<QueueEntry>(count)
-            for (i in 0 until count) {
-                val item = c.getMediaItemAt(i)
-                entries.add(
-                    QueueEntry(
-                        index = i,
-                        mediaId = item.mediaId,
-                        title = item.mediaMetadata.title?.toString() ?: "",
-                        artist = item.mediaMetadata.artist?.toString() ?: "",
-                        isCurrent = i == c.currentMediaItemIndex,
-                    )
-                )
-            }
-            _player.update { it.copy(queue = entries, queueSize = entries.size) }
-        }
-    }
-
-    override fun jumpToQueue(index: Int) {
-        scope.launch {
-            val c = ensureController() ?: return@launch
-            c.seekToDefaultPosition(index)
-            c.play()
-            saveQueue()
-        }
-    }
-
-    override fun removeQueueItem(index: Int) {
-        scope.launch {
-            val c = ensureController() ?: return@launch
-            if (index in 0 until c.mediaItemCount) c.removeMediaItem(index)
-            saveQueue()
-            refreshQueue()
-        }
-    }
-
-    override fun moveQueueItem(from: Int, to: Int) {
-        scope.launch {
-            val c = ensureController() ?: return@launch
-            if (from in 0 until c.mediaItemCount && to in 0 until c.mediaItemCount) {
-                c.moveMediaItem(from, to)
-                saveQueue()
-                refreshQueue()
-            }
-        }
-    }
+    override fun playQueue(queue: List<Song>, startIndex: Int) = queueManager.playQueue(queue, startIndex)
+    override fun playShuffled(songs: List<Song>) = queueManager.playShuffled(songs)
+    override fun togglePlay() = queueManager.togglePlay()
+    override fun next() = queueManager.next()
+    override fun previous() = queueManager.previous()
+    override fun seekTo(ms: Long) = queueManager.seekTo(ms)
+    override fun cyclePlayMode() = queueManager.cyclePlayMode()
+    override fun playNext(song: Song) = queueManager.playNext(song)
+    override fun enqueue(songs: List<Song>) = queueManager.enqueue(songs)
+    override fun refreshQueue() = queueManager.refreshQueue()
+    override fun jumpToQueue(index: Int) = queueManager.jumpToQueue(index)
+    override fun removeQueueItem(index: Int) = queueManager.removeQueueItem(index)
+    override fun moveQueueItem(from: Int, to: Int) = queueManager.moveQueueItem(from, to)
 
     // ---------------------------------------------------------------- 速度 / 定时 / 音效
 
