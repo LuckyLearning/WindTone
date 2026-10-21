@@ -25,6 +25,7 @@ import com.luckylearning.windtone.lyrics.Lyrics
 import com.luckylearning.windtone.overlay.LyricOverlayBridge
 import com.luckylearning.windtone.overlay.LyricOverlayBus
 import com.luckylearning.windtone.overlay.LyricOverlayService
+import com.luckylearning.windtone.playback.parallel.ParallelDownloadRegistry
 import com.luckylearning.windtone.state.PlaybackProgress
 import com.luckylearning.windtone.state.PlayerUiState
 import com.luckylearning.windtone.state.QueueEntry
@@ -1036,6 +1037,11 @@ class PlaybackEngine(
             ?: librarySongs.firstOrNull { it.stableKey == mediaId }
             ?: return
 
+        // 并行分片只服务「当前这一首」（v1.1.47）：本地文件传 null，等于关掉这层
+        ParallelDownloadRegistry.setCurrentKey(
+            if (CachePrefetchPolicy.isRemote(song.uri.scheme)) ParallelDownloadRegistry.keyOf(song.uri) else null,
+        )
+
         stats.flushListen()
         saveQueue()
         currentLyricsSong = mediaId
@@ -1178,7 +1184,10 @@ class PlaybackEngine(
                 // 不必再开一条计时器。预取失败一律静默，不影响播放。
                 if (now - lastPrefetchPlanAt >= CachePrefetchPolicy.PLAN_INTERVAL_MS) {
                     lastPrefetchPlanAt = now
-                    if (CachePrefetchPolicy.shouldStart(playing, buffered - pos)) {
+                    // 并行分片正在吃带宽时不再预取：两条路抢同一根管子，只会两边都慢
+                    if (!ParallelDownloadRegistry.isActive() &&
+                        CachePrefetchPolicy.shouldStart(playing, buffered - pos)
+                    ) {
                         runCatching { CachePrefetcher.plan(app, upcomingSongs(c)) }
                     }
                 }

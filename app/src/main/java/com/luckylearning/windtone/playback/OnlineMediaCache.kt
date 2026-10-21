@@ -15,6 +15,7 @@ import androidx.media3.datasource.cache.CacheKeyFactory
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import com.luckylearning.windtone.playback.parallel.ParallelRoutingFactory
 import androidx.media3.exoplayer.source.MediaSource
 import java.io.File
 
@@ -158,7 +159,9 @@ object OnlineMediaCache {
                 .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
             SchemeRoutingFactory(cached, DefaultDataSource.Factory(context))
         }
-        return DefaultMediaSourceFactory(dataSource)
+        // 最外层再套一层并行分片路由（v1.1.47）：只有「当前正在播放的那一首」会被认领，
+        // 其余请求原样落到上面这套缓存 / 单连接链路上
+        return DefaultMediaSourceFactory(ParallelRoutingFactory(context.applicationContext, dataSource))
     }
 
     /**
@@ -178,6 +181,8 @@ object OnlineMediaCache {
     /** 清空缓存。返回是否真的清掉了（缓存没初始化时返回 false） */
     @androidx.annotation.OptIn(UnstableApi::class)
     fun clear(context: Context): Boolean = runCatching {
+        // 并行分片的 .part 也在 cacheDir 下，用户点「清除在线缓存」时应当一并清掉
+        com.luckylearning.windtone.playback.parallel.ParallelDownloadRegistry.clearTemp(context)
         val c = get(context) ?: return false
         // 逐个 key 移除而不是删目录：SimpleCache 还持有文件句柄与索引，
         // 直接删目录会让它在下次写入时报错

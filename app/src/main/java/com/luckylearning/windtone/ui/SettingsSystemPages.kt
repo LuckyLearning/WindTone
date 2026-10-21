@@ -4,6 +4,7 @@ import android.content.Context
 import android.widget.Toast
 import com.luckylearning.windtone.data.formatByteSize
 import com.luckylearning.windtone.playback.CachePrefetcher
+import com.luckylearning.windtone.playback.parallel.ParallelDownloadRegistry
 import com.luckylearning.windtone.playback.OnlineMediaCache
 import com.luckylearning.windtone.data.BootStatus
 import com.luckylearning.windtone.data.BootStatusText
@@ -535,6 +536,18 @@ internal fun SettingsDiagnosticsPage(
             CachePrefetcher.cancel()
             Toast.makeText(context, "已停止后台预取", Toast.LENGTH_SHORT).show()
         },
+    )
+
+    // 并行分片（v1.1.47）：网盘按单连接限速，所以当前这一首会切成 5 段同时拉。
+    // 状态放在这里是因为它的失败方式很「安静」：服务器不支持 Range 就自动退回单连接，
+    // 用户只会觉得「还是慢」，看不到任何错误。
+    val parallelStatus by ParallelDownloadRegistry.status.collectAsStateWithLifecycle()
+    ActionRow(
+        title = "并行分片",
+        subtitle = "当前播放的在线歌曲按 5 段同时下载（不限速）；服务器不支持分段时自动退回单连接。" +
+            "只在播放当前曲时生效，切歌即换人",
+        trailing = parallelStatus,
+        onClick = { },
     )
 
     // ------------------------------------------------ 开机自启
