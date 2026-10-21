@@ -3,6 +3,7 @@ package com.luckylearning.windtone.ui.library
 import android.util.Log
 import androidx.room.withTransaction
 import com.luckylearning.windtone.data.CoverRepository
+import com.luckylearning.windtone.data.LibrarySearch
 import com.luckylearning.windtone.data.PinyinIndex
 import com.luckylearning.windtone.data.ScanScope
 import com.luckylearning.windtone.data.SongDeleter
@@ -410,26 +411,12 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
         session.playlists.refreshPlaylists()
     }
 
-    internal fun searchSongs(songs: List<Song>, query: String): List<Song> {
-        val q = query.trim().lowercase()
-        if (q.isEmpty()) return songs
-        return songs.filter { song ->
-            repository.matches(song, q) ||
-                PinyinIndex.full(song.stableKey).contains(q) ||
-                PinyinIndex.initials(song.stableKey).contains(q)
-        }
-    }
+    internal fun searchSongs(songs: List<Song>, query: String): List<Song> =
+        LibrarySearch.search(songs, query)
 
     /** 首字母 → 首个下标（A-Z 索引导航）；用 LinkedHashMap 保持字母顺序 */
-    internal fun buildLetterIndex(list: List<Song>): Map<Char, Int> {
-        if (list.isEmpty()) return emptyMap()
-        val map = LinkedHashMap<Char, Int>()
-        list.forEachIndexed { i, song ->
-            val ch = PinyinIndex.initialOf(song.title)
-            if (!map.containsKey(ch)) map[ch] = i
-        }
-        return map
-    }
+    internal fun buildLetterIndex(list: List<Song>): Map<Char, Int> =
+        LibrarySearch.letterIndex(list)
 
     /**
      * 搜索输入。

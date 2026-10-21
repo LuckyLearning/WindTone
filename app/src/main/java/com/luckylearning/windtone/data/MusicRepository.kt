@@ -162,14 +162,8 @@ class MusicRepository(
         return songs.sortedWith(cmp)
     }
 
-    /** 单曲文本匹配（标题/歌手/专辑/文件名），供拼音搜索组合使用 */
-    fun matches(song: Song, queryLower: String): Boolean {
-        if (queryLower.isEmpty()) return false
-        return song.title.lowercase().contains(queryLower) ||
-            song.artistOrUnknown.lowercase().contains(queryLower) ||
-            song.albumOrUnknown.lowercase().contains(queryLower) ||
-            song.displayName.lowercase().contains(queryLower)
-    }
+    /** 单曲文本匹配（标题/歌手/专辑/文件名），供拼音搜索组合使用。逻辑住在 [LibrarySearch] */
+    fun matches(song: Song, queryLower: String): Boolean = LibrarySearch.matches(song, queryLower)
 
     /**
      * 曲库指纹（给冷启动节流用）：媒体库最新一条 _ID + 总条数。
