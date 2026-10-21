@@ -72,6 +72,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luckylearning.windtone.BuildConfig
+import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.data.DataMaintenance
 import com.luckylearning.windtone.data.DownloadRoute
 import com.luckylearning.windtone.data.SettingsDefaults
@@ -104,6 +105,9 @@ internal enum class SettingsPage(val title: String) {
     LIBRARY("音乐库"),
     UPDATE("更新"),
     DIAGNOSTICS("关于与诊断"),
+
+    /** 在线歌单（M3U / M3U8 / PLS）—— v1.1.37 */
+    ONLINE("在线歌单"),
 }
 
 /**
@@ -139,6 +143,8 @@ fun SettingsScreen(
     onLyricOverlay: (Boolean) -> Unit,
     /** 立刻走一次「开机后台起播」（v1.1.27，诊断页用） */
     onTestBootPlayback: () -> Unit,
+    /** 播放一批在线条目（v1.1.37）：(队列, 起始下标) */
+    onPlayQueue: (List<Song>, Int) -> Unit,
     onLyricOverlayLines: (Int) -> Unit,
     /** 悬浮歌词全屏高度（v1.1.19） */
     onLyricOverlayFullHeight: (Boolean) -> Unit,
@@ -280,7 +286,7 @@ fun SettingsScreen(
     // ⚠️ 长度必须等于 SettingsPage 的项数（现为 7），否则 index 越界；
     // 以后加子页记得一起加一个 0。
     val pagePositions = rememberSaveable(saver = PagePositionsSaver) {
-        mutableStateListOf(0, 0, 0, 0, 0, 0, 0)
+        mutableStateListOf(0, 0, 0, 0, 0, 0, 0, 0)
     }
     val pageIndex = page.ordinal
     val pageScroll = remember(pageIndex) { ScrollState(pagePositions[pageIndex]) }
@@ -432,8 +438,11 @@ fun SettingsScreen(
                         onOpenReport = onOpenReport,
                         onOpenDuplicates = onOpenDuplicates,
                         onOpenStats = onOpenStats,
+                        onOpenOnline = { page = SettingsPage.ONLINE },
                         library = library,
                     )
+
+                    SettingsPage.ONLINE -> OnlinePlaylistsPage(onPlay = onPlayQueue)
 
                     SettingsPage.DIAGNOSTICS -> SettingsDiagnosticsPage(
                         player = player,

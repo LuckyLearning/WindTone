@@ -3,8 +3,13 @@ package com.luckylearning.windtone.data.model
 import android.net.Uri
 import androidx.compose.runtime.Immutable
 
-/** 歌曲来源：系统媒体库 / SAF 导入的文件夹 / 直接文件路径（深度扫描） */
-enum class SongSource { MEDIA_STORE, FOLDER, FILE }
+/**
+ * 歌曲来源：系统媒体库 / SAF 导入的文件夹 / 直接文件路径（深度扫描）/ 在线列表（M3U·PLS）。
+ *
+ * [REMOTE] 是唯一「没有本地文件」的来源：它的 uri 是 http(s) 地址，歌词 / 内嵌封面 / 文件大小
+ * 这些基于文件的能力对它一律不成立，界面与数据层必须显式判断，不能假设「有 uri 就有文件」。
+ */
+enum class SongSource { MEDIA_STORE, FOLDER, FILE, REMOTE }
 
 /**
  * 标注 @Immutable：本类所有字段都是 val，且 `Uri` 本身不可变，

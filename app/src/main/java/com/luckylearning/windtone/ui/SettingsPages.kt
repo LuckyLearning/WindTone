@@ -323,6 +323,8 @@ internal fun SettingsLibraryPage(
     onOpenReport: () -> Unit,
     onOpenDuplicates: () -> Unit,
     onOpenStats: () -> Unit,
+    /** 打开「在线歌单」子页（v1.1.37） */
+    onOpenOnline: () -> Unit,
     library: LibraryUiState,
 ) {
     var showMinDurationDialog by remember { mutableStateOf(false) }
@@ -354,6 +356,13 @@ internal fun SettingsLibraryPage(
         onReset = resetAction(minSongDurationSec != SettingsDefaults.MIN_DURATION_SEC) {
             onMinSongDurationSec(SettingsDefaults.MIN_DURATION_SEC)
         },
+    )
+
+    ActionRow(
+        title = "在线歌单（M3U）",
+        subtitle = "添加 m3u / m3u8 / pls 直链并播放；在线条目独立于曲库，不参与扫描与统计",
+        onClick = onOpenOnline,
+        chevron = true,
     )
 
     if (showMinDurationDialog) {

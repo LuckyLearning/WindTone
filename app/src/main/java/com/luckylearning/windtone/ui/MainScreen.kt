@@ -681,6 +681,7 @@ fun MainScreen(
                     onCarMode = playerVm::setCarMode,
                     onLyricOverlay = playerVm::setLyricOverlay,
                     onTestBootPlayback = playerVm::startPlaybackInBackground,
+                    onPlayQueue = playerVm::playQueue,
                     onLyricOverlayLines = playerVm::setLyricOverlayLines,
                     onLyricOverlayFullHeight = playerVm::setLyricOverlayFullHeight,
                     onLyricOverlayFullWidthPercent = playerVm::setLyricOverlayFullWidthPercent,

@@ -65,6 +65,9 @@ object SongDeleter {
                     context.contentResolver.delete(song.uri, null, null) > 0 ||
                         song.path?.let { File(it).delete() } == true
                 SongSource.FILE -> song.path?.let { File(it).delete() } ?: false
+                // 在线歌曲没有本地文件可删；它的「删除」语义是「从在线列表移除条目」，
+                // 不归文件删除器处理（因此这里明确返回 false，而不是让 when 落到 else）
+                SongSource.REMOTE -> false
             }
         }.getOrDefault(false)
         if (ok) deleteSidecarLyric(context, song)

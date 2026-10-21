@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  明文（http）策略 —— v1.1.37 引入在线歌单后新增。
+
+  为什么必须放开：大量公开电台 / 自建 M3U 清单里的流地址仍是 `http://`（ICECast、SHOUTcast
+  居多），而 targetSdk 28+ 默认禁止明文，表现是「加进去了、点了播放没声音」，且没有任何提示
+  —— 这是最难排查的一类失败。这些地址由用户自己填，域名不可枚举，无法用 domain-config 收口。
+
+  同时把「更新」用到的域显式钉回 https：在线歌单放开的是**用户自填地址**，
+  不该顺带把下载安装包的链路也降级。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">github.com</domain>
+        <domain includeSubdomains="true">api.github.com</domain>
+        <domain includeSubdomains="true">objects.githubusercontent.com</domain>
+        <domain includeSubdomains="true">raw.githubusercontent.com</domain>
+    </domain-config>
+</network-security-config>

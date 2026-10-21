@@ -105,6 +105,7 @@ class SettingsScreenTest {
                     onOverlayEditing = {},
                     onOverlayPreview = {},
                     onTestBootPlayback = {},
+                    onPlayQueue = { _, _ -> },
                     canDrawOverlay = false,
                     overlayHealth = LyricOverlayBus.Health(),
                     onLyricScale = onLyricScale,

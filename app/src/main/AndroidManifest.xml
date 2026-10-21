@@ -52,6 +52,7 @@
     -->
     <application
         android:name=".MusicApp"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:allowBackup="true"
         android:hardwareAccelerated="${hwAccel}"
         android:icon="@mipmap/ic_launcher"

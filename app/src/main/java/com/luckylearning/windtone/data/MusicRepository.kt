@@ -234,6 +234,7 @@ class MusicRepository(
             SongSource.MEDIA_STORE -> "媒体库"
             SongSource.FOLDER -> "导入文件夹"
             SongSource.FILE -> "本地文件"
+            SongSource.REMOTE -> "在线"
         }
 
         /**

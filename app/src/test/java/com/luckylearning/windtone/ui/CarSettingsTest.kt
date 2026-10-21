@@ -124,6 +124,7 @@ class CarSettingsTest {
                     onIgnoreUpdate = {},
                     onDismissUpdateDialog = {},
                     onOpenPlayer = onOpenPlayer,
+                    onPlayQueue = { _, _ -> },
                 )
             }
         }

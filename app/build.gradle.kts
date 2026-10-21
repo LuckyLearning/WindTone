@@ -17,8 +17,8 @@ plugins {
  * `.github/release-notes` 渲染器都用 `grep` 按这个固定文本格式解析它们，
  * 搬到 TOML 会连带改掉整条发版链路。第三方依赖版本在 catalog 里，产品版本在这里。
  */
-val appVersionName = "1.1.36"
-val appVersionCode = 46
+val appVersionName = "1.1.37"
+val appVersionCode = 47
 
 /**
  * ABI 分包开关。
@@ -294,6 +294,7 @@ dependencies {
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.session)
     implementation(libs.androidx.media3.common)
+    implementation(libs.androidx.media3.exoplayer.hls)
 
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
