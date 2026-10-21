@@ -7,7 +7,12 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -17,40 +22,55 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.util.UUID
 
 /**
  * [SettingsDataStore] —— DataStore 迁移的「新存储侧」。
  *
  * 钉四件事：存量能按**运行时类型**通盘搬过来（含动态的 `sort_<视图>` 键）、
  * 搬完幂等不会重搬、typed 读写能 round-trip、以及 remove 对只知道键名的动态键也管用。
+ *
+ * ## 为什么每个用例都造独立实例
+ * 全局单例绑定「首个访问者的文件目录」，跨用例共享一个文件（Robolectric 每个方法
+ * 换新 Application，单例却不换）——通过与否取决于方法执行顺序，CI（JDK 17）上
+ * 实锤过顺序敏感 flaky。这里给每个用例注入一个带独立临时文件的实例，天然隔离，
+ * `clearForTest` 也不再需要。
  */
 @RunWith(RobolectricTestRunner::class)
 class SettingsDataStoreTest {
 
     private lateinit var context: Context
     private lateinit var store: SettingsDataStore
+    private lateinit var scope: CoroutineScope
+
+    @get:Rule
+    val tmp = TemporaryFolder()
 
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
-        clearBoth()
-        store = SettingsDataStore(context)
+        sp().edit().clear().commit()
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        store = SettingsDataStore(
+            context,
+            PreferenceDataStoreFactory.create(scope = scope) {
+                tmp.newFile("test_${UUID.randomUUID()}.preferences_pb")
+            },
+        )
     }
 
     @After
     fun tearDown() {
-        clearBoth()
+        sp().edit().clear().commit()
+        scope.cancel()
     }
 
     private fun sp() = context.getSharedPreferences("music_player_prefs", Context.MODE_PRIVATE)
-
-    private fun clearBoth() {
-        sp().edit().clear().commit()
-        runBlocking { SettingsDataStore(context).clearForTest() }
-    }
 
     @Test
     fun `backfill 把各类型存量搬进 DataStore`() = runBlocking {

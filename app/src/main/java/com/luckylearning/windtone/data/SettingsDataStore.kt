@@ -41,9 +41,22 @@ import kotlinx.coroutines.flow.first
  */
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "windtone_settings")
 
-class SettingsDataStore(private val context: Context) {
+class SettingsDataStore(
+    private val context: Context,
+    /**
+     * 测试注入口：传入独立 DataStore 实例（自带独立文件）时本类不再碰全局单例。
+     *
+     * 为什么必须有：全局单例是**进程级**的，首次访问时绑定当时的 Application 文件目录；
+     * 而 Robolectric 每个测试方法换新 Application（新 filesDir），单例却仍指向旧目录 ——
+     * 测试之间实际共用同一个文件，通过与否取决于方法执行顺序（v1.1.37 CI 实锤的
+     * 顺序敏感 flaky 就出在这）。测试传一个 `PreferenceDataStoreFactory.create` 造的
+     * 独立实例即可隔离。生产调用点（`Prefs`）不传，恒走单例。
+     */
+    private val dataStoreOverride: DataStore<Preferences>? = null,
+) {
 
-    private val dataStore: DataStore<Preferences> get() = context.settingsDataStore
+    private val dataStore: DataStore<Preferences>
+        get() = dataStoreOverride ?: context.settingsDataStore
 
     // ---------------------------------------------------------------- 写（异步，内部切 IO）
 

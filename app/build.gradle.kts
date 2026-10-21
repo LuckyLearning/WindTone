@@ -233,7 +233,15 @@ android {
         unitTests.isReturnDefaultValues = true
         // Room 迁移/DAO 回归测试需要真实 SQLite 与应用 Context，走 Robolectric
         unitTests.isIncludeAndroidResources = true
-        unitTests.all { it.useJUnit() }
+        unitTests.all {
+            it.useJUnit()
+            // 失败用例打全堆栈：CI（JDK 17）与本地（JDK 21）行为有差异时，
+            // 只有 "AssertionError at Xxx.kt:56" 这种一行字没法定位是哪条断言
+            it.testLogging {
+                events("failed")
+                exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+            }
+        }
     }
 }
 
