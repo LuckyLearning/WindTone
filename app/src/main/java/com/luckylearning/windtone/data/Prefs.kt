@@ -40,6 +40,15 @@ object SettingsDefaults {
 
     const val SPEED = 1.0f
 
+    /**
+     * 播放速度的合法区间（0.5..2.0）。
+     *
+     * 与其它区间常量放一起：速度是唯一「Prefs setter 不夹取」的数值设置
+     * （`Prefs.playbackSpeed` 原样落盘），区间定义在这儿，
+     * 由 `data/SettingsRepository.setSpeed` 读取后夹取。
+     */
+    val PLAYBACK_SPEED_RANGE = 0.5f..2.0f
+
     /** 变调默认 = 原调（半音）。合法区间见 `playback/Pitch` */
     const val PITCH_SEMITONES = 0
 

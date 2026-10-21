@@ -6,6 +6,7 @@ import com.luckylearning.windtone.data.LyricsLoader
 import com.luckylearning.windtone.data.MessageBus
 import com.luckylearning.windtone.data.MusicRepository
 import com.luckylearning.windtone.data.Prefs
+import com.luckylearning.windtone.data.SettingsRepository
 import com.luckylearning.windtone.data.SongIndex
 import com.luckylearning.windtone.data.UpdateRepository
 import com.luckylearning.windtone.data.db.MusicDb
@@ -29,6 +30,12 @@ class AppContainer(private val app: Application) {
 
     val prefs: Prefs by lazy { Prefs(app) }
 
+    /**
+     * 设置域持久化门面：所有设置写入的唯一接缝（DataStore 迁移时只改它内部）。
+     * 与 [prefs] 包同一份 SharedPreferences —— 读仍直通 [prefs]，写走这里。
+     */
+    val settings: SettingsRepository by lazy { SettingsRepository(prefs) }
+
     val db: MusicDb by lazy { MusicDb.get(app) }
 
     /** 曲库扫描与排序（无状态，按调用传参） */
@@ -50,7 +57,7 @@ class AppContainer(private val app: Application) {
 
     /** 播放域状态持有者：应用级单例，生命周期长于任何界面 */
     val playback: PlaybackEngine by lazy {
-        PlaybackEngine(app, prefs, playbackStore, lyricsLoader, songIndex, messages)
+        PlaybackEngine(app, prefs, settings, playbackStore, lyricsLoader, songIndex, messages)
     }
 
     /** 应用内更新域 */

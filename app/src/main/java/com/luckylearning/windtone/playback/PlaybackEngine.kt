@@ -13,6 +13,7 @@ import com.luckylearning.windtone.data.CoverRepository
 import com.luckylearning.windtone.data.LyricsLoader
 import com.luckylearning.windtone.data.MessageBus
 import com.luckylearning.windtone.data.Prefs
+import com.luckylearning.windtone.data.SettingsRepository
 import com.luckylearning.windtone.data.SongIndex
 import com.luckylearning.windtone.data.ThemeColorExtractor
 import com.luckylearning.windtone.data.db.PlayerStateEntity
@@ -58,6 +59,7 @@ import kotlinx.coroutines.withContext
 class PlaybackEngine(
     private val app: Application,
     private val prefs: Prefs,
+    private val settings: SettingsRepository,
     private val store: PlaybackStore,
     private val lyricsLoader: LyricsLoader,
     private val index: SongIndex,
@@ -120,7 +122,7 @@ class PlaybackEngine(
      */
     private val overlaySettings = OverlaySettings(
         app = app,
-        prefs = prefs,
+        settings = settings,
         messages = messages,
         scope = scope,
         state = _player,
@@ -676,8 +678,7 @@ class PlaybackEngine(
     // ---------------------------------------------------------------- 速度 / 定时 / 音效
 
     override fun setSpeed(speed: Float) {
-        val s = speed.coerceIn(0.5f, 2.0f)
-        prefs.playbackSpeed = s
+        val s = settings.setSpeed(speed)
         _player.update { it.copy(speed = s) }
         scope.launch { ensureController()?.let { applyPlaybackParams(it) } }
     }
@@ -690,7 +691,7 @@ class PlaybackEngine(
      */
     override fun setPitchSemitones(semitones: Int) {
         val n = semitones.coerceIn(Pitch.MIN_SEMITONES, Pitch.MAX_SEMITONES)
-        prefs.playbackPitchSemitones = n
+        settings.setPitchSemitones(n)
         _player.update { it.copy(pitchSemitones = n) }
         scope.launch { ensureController()?.let { applyPlaybackParams(it) } }
     }
@@ -752,7 +753,7 @@ class PlaybackEngine(
     override fun cancelSleep() = SleepTimer.cancel()
 
     override fun setSkipSilence(enabled: Boolean) {
-        prefs.skipSilence = enabled
+        settings.setSkipSilence(enabled)
         _player.update { it.copy(skipSilence = enabled) }
         // 跳过静音是 ExoPlayer 专有开关，Player 接口上没有，走进程内句柄
         PlayerHandle.setSkipSilence(enabled)
@@ -766,12 +767,12 @@ class PlaybackEngine(
      */
     /** 开机后台起播（v1.1.24）：只落盘 + 更新界面状态，实际动作在开机广播里 */
     override fun setAutoPlayOnBoot(enabled: Boolean) {
-        prefs.autoPlayOnBoot = enabled
+        settings.setAutoPlayOnBoot(enabled)
         _player.update { it.copy(autoPlayOnBoot = enabled) }
     }
 
     override fun setAutoResume(enabled: Boolean) {
-        prefs.autoResume = enabled
+        settings.setAutoResume(enabled)
         _player.update { it.copy(autoResume = enabled) }
     }
 

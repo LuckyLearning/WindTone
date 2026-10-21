@@ -3,7 +3,7 @@ package com.luckylearning.windtone.playback
 import android.app.Application
 import com.luckylearning.windtone.data.MessageBus
 import com.luckylearning.windtone.data.Prefs
-import com.luckylearning.windtone.data.SettingsDefaults
+import com.luckylearning.windtone.data.SettingsRepository
 import com.luckylearning.windtone.overlay.LyricOverlayBridge
 import com.luckylearning.windtone.state.PlayerUiState
 import kotlinx.coroutines.CoroutineScope
@@ -22,16 +22,23 @@ import kotlinx.coroutines.launch
  *
  * 与世界的边界用 [Host] 表达：读当前进度 / 是否在播、把一帧歌词推给悬浮窗、
  * 起进度计时器、记录前后台状态。引擎实现这个接口，其余全部留在这里。
+ *
+ * 设置落盘一律走 [settings]（`data/SettingsRepository`）—— 那是唯一接缝，
+ * DataStore 迁移时只改那一处。读仍直通 `prefs`：外观每帧都要对一次账，
+ * 需要同步读，reactive 读随迁移一起到位。
  */
 class OverlaySettings(
     private val app: Application,
-    private val prefs: Prefs,
+    private val settings: SettingsRepository,
     private val messages: MessageBus,
     private val scope: CoroutineScope,
     private val state: MutableStateFlow<PlayerUiState>,
     private val themeSeed: MutableStateFlow<Int?>,
     private val host: Host,
 ) : OverlayActions {
+
+    /** 读直通：本类的读全是「单值同步判断」，与落盘解耦 */
+    private val prefs: Prefs get() = settings.prefs
 
     /** 引擎侧需要提供的少量能力；刻意保持窄，避免又变成对引擎的全面依赖 */
     interface Host {
@@ -54,7 +61,7 @@ class OverlaySettings(
      * 看不到任何变化，会直接把功能判定为「没有效果」。
      */
     override fun setLyricOverlay(enabled: Boolean) {
-        prefs.lyricOverlay = enabled
+        settings.setOverlayEnabled(enabled)
         state.update { it.copy(lyricOverlay = enabled) }
         LyricOverlayBridge.sync(app, enabled)
         if (enabled) {
@@ -72,113 +79,92 @@ class OverlaySettings(
     }
 
     override fun setLyricOverlayLines(lines: Int) {
-        val normalized = lines.coerceIn(
-            SettingsDefaults.OVERLAY_LINES_RANGE.first,
-            SettingsDefaults.OVERLAY_LINES_RANGE.last,
-        )
-        prefs.lyricOverlayLines = normalized
+        val normalized = settings.setOverlayLines(lines)
         state.update { it.copy(lyricOverlayLines = normalized) }
         previewOverlayAfterConfigChange()
     }
 
     override fun setLyricOverlayFullHeight(enabled: Boolean) {
-        prefs.lyricOverlayFullHeight = enabled
+        settings.setOverlayFullHeight(enabled)
         state.update { it.copy(lyricOverlayFullHeight = enabled) }
         previewOverlayAfterConfigChange()
     }
 
     override fun setLyricOverlayFullWidthPercent(percent: Int) {
-        val normalized = percent.coerceIn(
-            SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE.first,
-            SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE.last,
-        )
-        prefs.lyricOverlayFullWidthPercent = normalized
+        val normalized = settings.setOverlayFullWidthPercent(percent)
         state.update { it.copy(lyricOverlayFullWidthPercent = normalized) }
         previewOverlayAfterConfigChange()
     }
 
     override fun setLyricOverlayFullOffsetPercent(percent: Int) {
-        val normalized = percent.coerceIn(
-            SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE.first,
-            SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE.last,
-        )
-        prefs.lyricOverlayFullOffsetPercent = normalized
+        val normalized = settings.setOverlayFullOffsetPercent(percent)
         state.update { it.copy(lyricOverlayFullOffsetPercent = normalized) }
         previewOverlayAfterConfigChange()
     }
 
     override fun setLyricOverlayShowTitle(show: Boolean) {
-        prefs.lyricOverlayShowTitle = show
+        settings.setOverlayShowTitle(show)
         state.update { it.copy(lyricOverlayShowTitle = show) }
         previewOverlayAfterConfigChange()
     }
 
     override fun setLyricOverlayTitleScale(scale: Int) {
-        val normalized = scale.coerceIn(0, 2)
-        prefs.lyricOverlayTitleScale = normalized
+        val normalized = settings.setOverlayTitleScale(scale)
         state.update { it.copy(lyricOverlayTitleScale = normalized) }
         previewOverlayAfterConfigChange()
     }
 
     override fun setLyricOverlayTextScale(scale: Int) {
-        val normalized = scale.coerceIn(0, 2)
-        prefs.lyricOverlayTextScale = normalized
+        val normalized = settings.setOverlayTextScale(scale)
         state.update { it.copy(lyricOverlayTextScale = normalized) }
         previewOverlayAfterConfigChange()
     }
 
     override fun setLyricOverlayBackdrop(mode: Int) {
-        val normalized = mode.coerceIn(0, 2)
-        prefs.lyricOverlayBackdrop = normalized
+        val normalized = settings.setOverlayBackdrop(mode)
         state.update { it.copy(lyricOverlayBackdrop = normalized) }
         previewOverlayAfterConfigChange()
     }
 
     override fun setLyricOverlayPauseMode(mode: Int) {
-        val normalized = mode.coerceIn(0, 1)
-        prefs.lyricOverlayPauseMode = normalized
+        val normalized = settings.setOverlayPauseMode(mode)
         state.update { it.copy(lyricOverlayPauseMode = normalized) }
         previewOverlayAfterConfigChange()
     }
 
     override fun setLyricOverlayAlign(align: Int) {
-        val normalized = align.coerceIn(0, 1)
-        prefs.lyricOverlayAlign = normalized
+        val normalized = settings.setOverlayAlign(align)
         state.update { it.copy(lyricOverlayAlign = normalized) }
         previewOverlayAfterConfigChange()
     }
 
     override fun setLyricOverlayHiddenApps(apps: Set<String>) {
         val normalized = apps.filterTo(LinkedHashSet()) { it.isNotBlank() }
-        prefs.lyricOverlayHiddenApps = normalized
+        settings.setOverlayHiddenApps(normalized)
         state.update { it.copy(lyricOverlayHiddenApps = normalized) }
         // 不预览（隐藏效果在 App 内看不到），但要把服务叫醒去启停检测
         LyricOverlayBridge.bumpAppearance()
     }
 
     override fun setForegroundLogEnabled(enabled: Boolean) {
-        prefs.foregroundLogEnabled = enabled
+        settings.setForegroundLogEnabled(enabled)
         state.update { it.copy(foregroundLogEnabled = enabled) }
         LyricOverlayBridge.bumpAppearance()
     }
 
     override fun setDebugUnlocked(enabled: Boolean) {
-        prefs.debugUnlocked = enabled
+        settings.setDebugUnlocked(enabled)
         state.update { it.copy(debugUnlocked = enabled) }
     }
 
     override fun setLyricOverlayWidthPercent(percent: Int) {
-        val normalized = percent.coerceIn(
-            SettingsDefaults.OVERLAY_WIDTH_RANGE.first,
-            SettingsDefaults.OVERLAY_WIDTH_RANGE.last,
-        )
-        prefs.lyricOverlayWidthPercent = normalized
+        val normalized = settings.setOverlayWidthPercent(percent)
         state.update { it.copy(lyricOverlayWidthPercent = normalized) }
         previewOverlayAfterConfigChange()
     }
 
     override fun setLyricOverlayTextColor(color: Int) {
-        prefs.lyricOverlayTextColor = color
+        settings.setOverlayTextColor(color)
         state.update { it.copy(lyricOverlayTextColor = color) }
         previewOverlayAfterConfigChange()
     }
@@ -218,7 +204,7 @@ class OverlaySettings(
     }
 
     override fun setDynamicTheme(enabled: Boolean) {
-        prefs.dynamicTheme = enabled
+        settings.setDynamicTheme(enabled)
         if (!enabled) themeSeed.value = null
     }
 
