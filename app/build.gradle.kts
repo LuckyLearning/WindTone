@@ -17,8 +17,8 @@ plugins {
  * `.github/release-notes` 渲染器都用 `grep` 按这个固定文本格式解析它们，
  * 搬到 TOML 会连带改掉整条发版链路。第三方依赖版本在 catalog 里，产品版本在这里。
  */
-val appVersionName = "1.1.38"
-val appVersionCode = 48
+val appVersionName = "1.1.39"
+val appVersionCode = 49
 
 /**
  * ABI 分包开关。
@@ -118,6 +118,20 @@ val keystoreKeyAlias = signingValue("keyAlias", "WINDTONE_KEY_ALIAS", "keyAlias"
 val keystoreKeyPassword = signingValue("keyPassword", "WINDTONE_KEY_PASSWORD", "keyPassword")
     ?: keystoreStorePassword
 
+// ---------------------------------------------------------------- 第三方凭据
+// 百度网盘开放平台的 AppKey / SecretKey：
+//   · 本机开发：工程根目录下的 baiduAppKey / SecretKey（已 gitignore，不入库）
+//   · CI 构建：仓库 Secrets 注入的环境变量 BAIDU_APP_KEY / BAIDU_SECRET_KEY
+// 两者都没有时留空 —— 应用里百度网盘入口会显示「当前构建未配置应用凭据」，
+// 而不是让用户对着一个点不动的按钮猜。
+fun credential(envName: String, fileName: String): String {
+    val fromFile = rootProject.file(fileName).takeIf { it.exists() }?.readText()?.trim().orEmpty()
+    return fromFile.ifBlank { System.getenv(envName).orEmpty() }.trim()
+}
+
+val baiduAppKey = credential("BAIDU_APP_KEY", "baiduAppKey")
+val baiduSecretKey = credential("BAIDU_SECRET_KEY", "SecretKey")
+
 android {
     namespace = "com.luckylearning.windtone"
     compileSdk = 35
@@ -145,6 +159,10 @@ android {
             "RELEASE_PAGE_URL",
             "\"https://github.com/LuckyLearning/Release/tree/main/WindTone\""
         )
+
+        // 百度网盘（v1.1.39）：Key 从文件/环境变量读，见文件顶部 credential()
+        buildConfigField("String", "BAIDU_APP_KEY", "\"$baiduAppKey\"")
+        buildConfigField("String", "BAIDU_SECRET_KEY", "\"$baiduSecretKey\"")
 
         // 启动诊断页（见文件顶部 diagBuild 的说明），默认关闭
         buildConfigField("boolean", "BOOT_DIAG", diagBuild.toString())

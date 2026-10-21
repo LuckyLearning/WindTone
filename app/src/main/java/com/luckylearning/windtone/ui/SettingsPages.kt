@@ -325,6 +325,8 @@ internal fun SettingsLibraryPage(
     onOpenStats: () -> Unit,
     /** 打开「在线歌单」子页（v1.1.37） */
     onOpenOnline: () -> Unit,
+    /** 打开「百度网盘」子页（v1.1.39） */
+    onOpenBaidu: () -> Unit,
     library: LibraryUiState,
 ) {
     var showMinDurationDialog by remember { mutableStateOf(false) }
@@ -362,6 +364,12 @@ internal fun SettingsLibraryPage(
         title = "在线歌单（M3U）",
         subtitle = "添加 m3u / m3u8 / pls 直链并播放；在线条目独立于曲库，不参与扫描与统计",
         onClick = onOpenOnline,
+        chevron = true,
+    )
+    ActionRow(
+        title = "百度网盘",
+        subtitle = "扫码授权后直接播放网盘里的音乐（只读；需放在「我的应用数据/<应用名>」目录）",
+        onClick = onOpenBaidu,
         chevron = true,
     )
 

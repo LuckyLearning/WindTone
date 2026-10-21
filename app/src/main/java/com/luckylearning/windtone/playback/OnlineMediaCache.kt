@@ -2,6 +2,7 @@ package com.luckylearning.windtone.playback
 
 import android.content.Context
 import android.net.Uri
+import com.luckylearning.windtone.data.baidu.BaiduRules
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DataSource
@@ -95,7 +96,9 @@ object OnlineMediaCache {
     fun mediaSourceFactory(context: Context): MediaSource.Factory {
         val cache = get(context)
         val dataSource: DataSource.Factory = if (cache == null) {
-            DefaultDataSource.Factory(context)
+            // 缓存不可用时仍然要经过路由包装：百度直链需要改 UA，
+            // 直接返回 DefaultDataSource 会让「没缓存」这种边缘状态连播放一起丢。
+            SchemeRoutingFactory(DefaultDataSource.Factory(context), DefaultDataSource.Factory(context))
         } else {
             val http = DefaultHttpDataSource.Factory()
                 .setUserAgent(USER_AGENT)
@@ -169,11 +172,22 @@ private class SchemeRoutingDataSource(
     }
 
     override fun open(dataSpec: DataSpec): Long {
-        val factory = if (OnlineMediaCache.shouldCache(dataSpec.uri)) remote else local
+        // 百度直链带时效签名，每次播放的 URI 都不同 —— 缓存 key 跟着变，等于永远不命中，
+        // 只会白占 512MB 淘汰配额。所以对网盘直链跳过缓存，但保留下面的 UA 注入。
+        val cacheable = OnlineMediaCache.shouldCache(dataSpec.uri) &&
+            !BaiduRules.needsPanUserAgent(dataSpec.uri.host)
+        val factory = if (cacheable) remote else local
         val source = factory.createDataSource()
         listeners.forEach(source::addTransferListener)
         delegate = source
-        return source.open(dataSpec)
+        // 百度网盘的直链要求 UA 伪装成网盘客户端（见 BaiduRules.needsPanUserAgent）。
+        // 放在这一层是因为「每个文件一个 DataSource」，而 UA 只能在请求头里按请求设置。
+        val effective = if (BaiduRules.needsPanUserAgent(dataSpec.uri.host)) {
+            dataSpec.buildUpon().setHttpRequestHeaders(BaiduRules.panHeaders()).build()
+        } else {
+            dataSpec
+        }
+        return source.open(effective)
     }
 
     override fun read(buffer: ByteArray, offset: Int, length: Int): Int {

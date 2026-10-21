@@ -102,6 +102,10 @@ jobs:
           WINDTONE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           WINDTONE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           WINDTONE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          # 百度网盘开放平台凭据（v1.1.39）：构建脚本从环境变量读，
+          # 未配置时构建仍能成功，只是应用里的网盘入口会提示「未配置凭据」
+          BAIDU_APP_KEY: ${{ secrets.BAIDU_APP_KEY }}
+          BAIDU_SECRET_KEY: ${{ secrets.BAIDU_SECRET_KEY }}
         # -PabiSplits=true：按 ABI 分包并额外产出 universal 包（本地开发默认关闭）
         run: ./gradlew assembleRelease -PabiSplits=true --stacktrace
 

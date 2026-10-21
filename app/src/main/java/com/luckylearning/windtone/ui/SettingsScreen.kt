@@ -108,6 +108,9 @@ internal enum class SettingsPage(val title: String) {
 
     /** 在线歌单（M3U / M3U8 / PLS）—— v1.1.37 */
     ONLINE("在线歌单"),
+
+    /** 百度网盘 —— v1.1.39 */
+    BAIDU("百度网盘"),
 }
 
 /**
@@ -286,7 +289,7 @@ fun SettingsScreen(
     // ⚠️ 长度必须等于 SettingsPage 的项数（现为 7），否则 index 越界；
     // 以后加子页记得一起加一个 0。
     val pagePositions = rememberSaveable(saver = PagePositionsSaver) {
-        mutableStateListOf(0, 0, 0, 0, 0, 0, 0, 0)
+        mutableStateListOf(0, 0, 0, 0, 0, 0, 0, 0, 0)
     }
     val pageIndex = page.ordinal
     val pageScroll = remember(pageIndex) { ScrollState(pagePositions[pageIndex]) }
@@ -439,10 +442,13 @@ fun SettingsScreen(
                         onOpenDuplicates = onOpenDuplicates,
                         onOpenStats = onOpenStats,
                         onOpenOnline = { page = SettingsPage.ONLINE },
+                        onOpenBaidu = { page = SettingsPage.BAIDU },
                         library = library,
                     )
 
                     SettingsPage.ONLINE -> OnlinePlaylistsPage(onPlay = onPlayQueue)
+
+                    SettingsPage.BAIDU -> BaiduPanPage(onPlay = onPlayQueue)
 
                     SettingsPage.DIAGNOSTICS -> SettingsDiagnosticsPage(
                         player = player,
