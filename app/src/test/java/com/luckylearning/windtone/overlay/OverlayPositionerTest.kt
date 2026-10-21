@@ -263,4 +263,26 @@ class OverlayPositionerTest {
         assertEquals("偏左 30%", OverlayPositioner.offsetLabel(30))
         assertEquals("偏右 75%", OverlayPositioner.offsetLabel(75))
     }
+
+    @Test
+    fun `拖拽坐标逆运算回余量百分比，与 fullFrame 互逆`() {
+        // 屏宽 1000、窗宽 500 → 余量 500；x=250 即居中 50%
+        assertEquals(50, OverlayPositioner.offsetPercentFromX(250, 500, 0..100))
+        // x=0 即最左 0%
+        assertEquals(0, OverlayPositioner.offsetPercentFromX(0, 500, 0..100))
+        // x=500 即最右 100%
+        assertEquals(100, OverlayPositioner.offsetPercentFromX(500, 500, 0..100))
+    }
+
+    @Test
+    fun `拖拽逆运算越界夹取到范围两端`() {
+        assertEquals(0, OverlayPositioner.offsetPercentFromX(-999, 500, 0..100))
+        assertEquals(100, OverlayPositioner.offsetPercentFromX(9999, 500, 0..100))
+    }
+
+    @Test
+    fun `满宽不可横向拖动时返回范围起点，保持原偏好`() {
+        // 余量 0（窗口宽度 = 屏宽）时 x 恒 0，不应把靠右偏好抹成居中
+        assertEquals(0, OverlayPositioner.offsetPercentFromX(0, 0, 0..100))
+    }
 }

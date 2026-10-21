@@ -40,4 +40,13 @@ class PlayModeTest {
     fun everyModeHasLabel() {
         PlayMode.entries.forEach { assertTrue(it.label.isNotBlank()) }
     }
+
+    @Test
+    fun `档位映射到 Media3 开关（targets）`() {
+        // 随机优先：SHUFFLE 同时打开列表循环
+        assertEquals(Player.REPEAT_MODE_OFF to false, PlayMode.SEQUENTIAL.targets())
+        assertEquals(Player.REPEAT_MODE_ALL to false, PlayMode.REPEAT_ALL.targets())
+        assertEquals(Player.REPEAT_MODE_ONE to false, PlayMode.REPEAT_ONE.targets())
+        assertEquals(Player.REPEAT_MODE_ALL to true, PlayMode.SHUFFLE.targets())
+    }
 }

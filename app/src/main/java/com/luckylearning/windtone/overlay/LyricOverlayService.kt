@@ -676,10 +676,7 @@ class LyricOverlayService : Service() {
         // 免得「满宽时随手拖一下」把设置里的靠右偏好抹成居中。
         if (maxX <= 0) return
         prefs.lyricOverlayFullOffsetPercent =
-            (p.x * 100f / maxX).roundToInt().coerceIn(
-                SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE.first,
-                SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE.last,
-            )
+            OverlayPositioner.offsetPercentFromX(p.x, maxX, SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE)
         // 落盘后把「已应用的位置」对齐，避免下一帧外观对账时又按旧百分比挪回去
         appliedFullOffsetPercent = prefs.lyricOverlayFullOffsetPercent
         // 通知播放域回读一次：设置页的水平位置滑块与这里是同一份数据

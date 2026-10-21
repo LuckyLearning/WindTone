@@ -712,28 +712,15 @@ class PlaybackEngine(
     override fun cyclePlayMode() {
         scope.launch {
             val c = ensureController() ?: return@launch
-            when (playModeOf(c.repeatMode, c.shuffleModeEnabled).next) {
-                // 先关随机再设循环，避免中间态变成「随机 + 循环」
-                PlayMode.SEQUENTIAL -> {
-                    c.shuffleModeEnabled = false
-                    c.repeatMode = Player.REPEAT_MODE_OFF
-                }
-
-                PlayMode.REPEAT_ALL -> {
-                    c.shuffleModeEnabled = false
-                    c.repeatMode = Player.REPEAT_MODE_ALL
-                }
-
-                PlayMode.REPEAT_ONE -> {
-                    c.shuffleModeEnabled = false
-                    c.repeatMode = Player.REPEAT_MODE_ONE
-                }
-
-                // 随机播放 = 乱序 + 列表循环；同理先设好 repeatMode 再开随机
-                PlayMode.SHUFFLE -> {
-                    c.repeatMode = Player.REPEAT_MODE_ALL
-                    c.shuffleModeEnabled = true
-                }
+            val (repeatMode, shuffle) = playModeOf(c.repeatMode, c.shuffleModeEnabled).next.targets()
+            // 接线顺序刻意保留：关随机要先于设循环、开随机要在 repeatMode 之后，
+            // 否则会闪过一帧「随机 + 循环」之类的中间态。
+            if (shuffle) {
+                c.repeatMode = repeatMode
+                c.shuffleModeEnabled = true
+            } else {
+                c.shuffleModeEnabled = false
+                c.repeatMode = repeatMode
             }
         }
     }
@@ -741,11 +728,10 @@ class PlaybackEngine(
     override fun playNext(song: Song) {
         scope.launch {
             val c = ensureController() ?: return@launch
-            val idx = c.currentMediaItemIndex
-            val insertAt = if (c.mediaItemCount == 0) 0 else (idx + 1).coerceAtMost(c.mediaItemCount)
+            val insertAt = QueuePolicies.playNextInsertIndex(c.currentMediaItemIndex, c.mediaItemCount)
             val exists = (0 until c.mediaItemCount).firstOrNull { c.getMediaItemAt(it).mediaId == song.stableKey }
             if (exists != null) {
-                c.moveMediaItem(exists, if (exists < insertAt) insertAt - 1 else insertAt)
+                c.moveMediaItem(exists, QueuePolicies.playNextMoveTarget(exists, insertAt))
             } else {
                 c.addMediaItem(insertAt, PlaybackConnection.toMediaItem(song))
             }
@@ -767,7 +753,7 @@ class PlaybackEngine(
         scope.launch {
             val c = ensureController() ?: return@launch
             val existing = (0 until c.mediaItemCount).map { c.getMediaItemAt(it).mediaId }.toSet()
-            val fresh = songs.filterNot { it.stableKey in existing }
+            val fresh = QueuePolicies.enqueueNewSongs(songs, existing)
             if (fresh.isEmpty()) {
                 messages.post("所选歌曲都在播放队列里了")
                 return@launch

@@ -1,6 +1,7 @@
 package com.luckylearning.windtone.overlay
 
 import android.view.Gravity
+import kotlin.math.roundToInt
 
 /**
  * 悬浮歌词窗口的摆放计算 —— 纯函数，不碰 `WindowManager` / `Prefs`。
@@ -87,6 +88,17 @@ object OverlayPositioner {
             v < 50 -> "偏左 ${v}%"
             else -> "偏右 ${v}%"
         }
+    }
+
+    /**
+     * 拖拽落盘的逆运算：把全屏模式下的窗口横坐标 `x` 翻回「余量百分比」。
+     *
+     * 与 [fullFrame] 的 `x = maxX * offsetPercent / 100` 互逆，单测钉死：
+     * `[maxX] <= 0`（满宽、水平不可拖动）时返回 [range] 起点，保持用户原偏好不被抹成居中。
+     */
+    fun offsetPercentFromX(x: Int, maxX: Int, range: IntRange): Int {
+        if (maxX <= 0) return range.first
+        return (x * 100f / maxX).roundToInt().coerceIn(range.first, range.last)
     }
 
     /**

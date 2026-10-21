@@ -276,6 +276,18 @@ enum class PlayMode {
             REPEAT_ONE -> "单曲循环"
             SHUFFLE -> "随机播放"
         }
+
+    /**
+     * 该档位对应的 Media3 底层开关（随机优先：SHUFFLE 同时打开列表循环）。
+     * [cyclePlayMode] 据此落定控制器；接线顺序（先关随机再设循环 / 先设 repeatMode 再开随机）
+     * 由调用方负责，避免闪过中间态。
+     */
+    fun targets(): Pair<Int, Boolean> = when (this) {
+        SEQUENTIAL -> Player.REPEAT_MODE_OFF to false
+        REPEAT_ALL -> Player.REPEAT_MODE_ALL to false
+        REPEAT_ONE -> Player.REPEAT_MODE_ONE to false
+        SHUFFLE -> Player.REPEAT_MODE_ALL to true
+    }
 }
 
 /** 由 Media3 的 repeatMode + shuffle 两个开关推导当前档位（随机优先） */
