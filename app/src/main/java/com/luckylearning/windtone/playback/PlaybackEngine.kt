@@ -21,7 +21,6 @@ import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.lyrics.BilingualLyrics
 import com.luckylearning.windtone.lyrics.BilingualMode
 import com.luckylearning.windtone.lyrics.Lyrics
-import com.luckylearning.windtone.lyrics.OverlayContentResolver
 import com.luckylearning.windtone.overlay.LyricOverlayBridge
 import com.luckylearning.windtone.overlay.LyricOverlayBus
 import com.luckylearning.windtone.overlay.LyricOverlayService
@@ -133,7 +132,7 @@ class PlaybackEngine(
             override val isPlaying: Boolean get() = controller?.isPlaying ?: false
 
             override fun publishOverlay(positionMs: Long, playing: Boolean) =
-                publishLyricToOverlay(positionMs, playing)
+                OverlayTickHelper.publishLyric(positionMs, playing, _player.value)
 
             override fun startTicker() = startPositionTicker()
 
@@ -236,7 +235,7 @@ class PlaybackEngine(
     /** 播放统计（次数 / 收听时长 / 去重）——已抽出，可独立单测 */
     private val stats = PlaybackStats(store, index, scope)
 
-    /** 上一次尝试把悬浮窗服务拉回来的时间，用于 30 秒节流（见 [reviveOverlayIfNeeded]） */
+    /** 上一次尝试把悬浮窗服务拉回来的时间，用于 30 秒节流（见 [OverlayTickHelper.shouldReviveOverlay]） */
     private var lastOverlayReviveAt = 0L
 
     init {
@@ -1119,75 +1118,25 @@ class PlaybackEngine(
                 // 睡眠定时淡出：与进度同频（播放中 200ms）把音量拉下来，比 500ms 一档的
                 // 剩余时间流更细腻；定时未开启时只是一个常数比较。
                 applySleepFade(SleepTimer.remainingMs.value)
-                // 悬浮歌词：与进度同频驱动，内部按「行文字是否变化」去重，
-                // 未开启开关时是纯字段比较，开销可忽略。
-                publishLyricToOverlay(pos, playing)
-                // 顺便看一眼服务还在不在（进程被 ROM 杀掉的情况）——内部带 30 秒节流，
-                // 正常情况下就是读一个 volatile boolean。
-                reviveOverlayIfNeeded()
+                // 悬浮歌词：与进度同频驱动，去重在 LyricOverlayBridge 内部按内容比对完成。
+                // 转发逻辑抽到 OverlayTickHelper，开关关闭时直接跳过。
+                if (prefs.lyricOverlay) OverlayTickHelper.publishLyric(pos, playing, _player.value)
+                // 顺便看一眼服务还在不在（进程被 ROM 杀掉的情况）——带 30 秒节流，
+                // 正常情况下就是读一个 volatile boolean。决策抽到 OverlayTickHelper。
+                if (OverlayTickHelper.shouldReviveOverlay(
+                        prefs.lyricOverlay, LyricOverlayService.serviceAlive,
+                        lastOverlayReviveAt, now, OVERLAY_REVIVE_INTERVAL_MS,
+                    )
+                ) {
+                    lastOverlayReviveAt = now
+                    LyricOverlayBridge.sync(app, true)
+                }
 
                 if (!playing && !appForeground) break
                 // 播放中 200ms 刷新，暂停时降到 1s，避免空转耗电
                 delay(if (c.isPlaying) 200L else 1_000L)
             }
         }
-    }
-
-    /**
-     * 把当前歌词行送到桌面悬浮窗。
-     *
-     * 「该显示哪一句」交给 [OverlayContentResolver]——前奏回落歌名、间奏回溯上一句、
-     * 上下文行、双语副行都由它一次算清；这里只负责把播放位置和曲目信息喂进去。
-     * 好处是那段最容易出错、也最需要测试的逻辑，终于能在 JVM 单测里跑。
-     *
-     * **每 tick 都推**，去重放在 [LyricOverlayBridge] 内部按内容比对完成。这样暂停 /
-     * 恢复播放导致的透明度变化也能立刻反映到悬浮窗上，而纯文字不变时不会真的去动 View。
-     *
-     * 无歌词（纯音乐 / 未匹配到）时不会推送空内容——resolver 会回落成歌名，
-     * 真的连歌名都没有时才算「没东西可显示」，窗口保持隐藏。
-     */
-    private fun publishLyricToOverlay(positionMs: Long, playing: Boolean) {
-        if (!prefs.lyricOverlay) return
-        val state = _player.value
-        val resolved = OverlayContentResolver.resolve(
-            lyrics = state.lyrics,
-            positionMs = positionMs,
-            offsetMs = state.lyricOffsetMs,
-            title = state.current?.title.orEmpty(),
-        )
-        // 不再下发播放位置：它唯一的用途是逐字染色（v1.1.8 已移除）。位置每 200ms
-        // 变一次，下发它会把「内容不变就不重组」的去重彻底废掉。
-        // 歌名 / 歌手一起下发：悬浮窗可以选择在最上面显示这两行小字（v1.1.15）。
-        // 它们只在切歌时变，不会影响「内容不变就不刷新」的去重。
-        LyricOverlayBridge.publish(
-            resolved = resolved,
-            playing = playing,
-            title = state.current?.title.orEmpty(),
-            // 歌手未知时留空，让悬浮窗只显示歌名一行 —— 谁也不想看一行「未知歌手」
-            artist = state.current?.artist
-                ?.takeIf { it.isNotBlank() && it != "<unknown>" }
-                .orEmpty(),
-        )
-    }
-
-    /**
-     * 悬浮窗服务被系统杀掉之后把它拉回来。
-     *
-     * 为什么必须有：`START_STICKY` 在 Android 12+ 的后台限制下并不可靠，
-     * 而 `sync()` 原先只在「App 启动 / 开关切换 / 自检 / 预览」四处被调用——
-     * 于是长途导航途中服务一旦被杀，用户侧就是「开关明明开着，字幕再也没出现过」，
-     * 且没有任何自救路径。
-     *
-     * 节流 30 秒是必须的：ROM 若持续拒绝挂窗，无节流会退化成「每切一首歌重启一次服务」
-     * 的死循环，反而更费电。
-     */
-    private fun reviveOverlayIfNeeded() {
-        if (!prefs.lyricOverlay) return
-        if (LyricOverlayService.serviceAlive) return
-        val now = SystemClock.elapsedRealtime()
-        if (now - lastOverlayReviveAt < OVERLAY_REVIVE_INTERVAL_MS) return
-        lastOverlayReviveAt = now
-        LyricOverlayBridge.sync(app, true)
     }
 
     companion object {
