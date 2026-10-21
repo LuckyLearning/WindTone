@@ -29,6 +29,13 @@ data class DlinkBatch(
     val records: Int,
     /** 拿不全时的人话原因；全部成功时为空串 */
     val note: String,
+    /**
+     * 一行接口摘要（`errno=0，记录 2，直链 0`）。
+     *
+     * 只在失败时随弹窗以小字显示：这类问题在用户侧没有任何日志可看，
+     * 让他截一张图就是最省事的排障入口。
+     */
+    val detail: String = "",
 ) {
     val isEmpty: Boolean get() = links.isEmpty()
 }
@@ -306,26 +313,35 @@ class BaiduPan(private val auth: BaiduAuth) {
      * 接口一次最多 100 个 fsid，调用方按需切分。返回 [DlinkBatch]：
      * 单个文件失败（被删 / 无权限）不该让整批播放失败，所以只要有一部分成功就正常返回，
      * 缺的个数放在 [DlinkBatch.note] 里；**全部失败且接口明确报错**才抛异常。
+     *
+     * 一条重要兜底（v1.1.42）：`xpan/multimedia?method=filemetas` 与更老的
+     * `xpan/file?method=filemetas` 都会返回 dlink，但**两者对第三方应用的发放策略并不一致**——
+     * 线上出现过「multimedia 返回 errno=0、记录也在，就是没有 dlink」。所以主接口拿不到直链时
+     * 立刻换老接口再试一次；两次都空才判定失败。
      */
     suspend fun dlinks(fsIds: List<Long>): Result<DlinkBatch> = withContext(Dispatchers.IO) {
         runCatching {
-            if (fsIds.isEmpty()) return@runCatching DlinkBatch(emptyMap(), 0, 0, "")
+            if (fsIds.isEmpty()) return@runCatching DlinkBatch(emptyMap(), 0, 0, "", "")
             val token = auth.accessToken() ?: error("尚未登录")
             val out = LinkedHashMap<Long, String>()
             var records = 0
             var firstError = ""
+            var detail = ""
             fsIds.chunked(MAX_FSIDS_PER_CALL).forEach { chunk ->
                 val ids = chunk.joinToString(",", prefix = "[", postfix = "]")
-                val url = "$MULTIMEDIA_URL?method=filemetas&access_token=${enc(token)}" +
-                    "&fsids=${enc(ids)}&dlink=1&thumb=0&extra=0"
-                val json = request(url)
-                val errno = json.optInt("errno", 0)
-                if (errno != 0) {
-                    if (firstError.isEmpty()) firstError = BaiduErrors.hint(errno)
-                    return@forEach
+                val primary = runCatching { fetchMetas(MULTIMEDIA_URL, ids, token) }
+                    .getOrElse { MetaFetch(emptyMap(), 0, -1, it.message.orEmpty()) }
+                // 主接口没给出任何直链 → 换老接口再问一次（不是重试，是换实现）
+                val used = if (primary.links.isEmpty()) {
+                    runCatching { fetchMetas(FILE_URL, ids, token) }.getOrNull()
+                        ?.takeIf { it.links.isNotEmpty() } ?: primary
+                } else {
+                    primary
                 }
-                records += BaiduLinkParse.recordCount(json)
-                out.putAll(BaiduLinkParse.links(json))
+                records += used.records
+                out.putAll(used.links)
+                if (used.errno != 0 && firstError.isEmpty()) firstError = BaiduErrors.hint(used.errno)
+                detail = used.describe()
             }
             if (out.isEmpty() && firstError.isNotEmpty()) error(firstError)
             DlinkBatch(
@@ -333,8 +349,39 @@ class BaiduPan(private val auth: BaiduAuth) {
                 requested = fsIds.size,
                 records = records,
                 note = BaiduLinkParse.note(fsIds.size, out, records),
+                detail = detail,
             )
         }
+    }
+
+    /** 一次 filemetas 调用的结果（两个接口的响应形态不同，统一收敛到这里） */
+    private data class MetaFetch(
+        val links: Map<Long, String>,
+        val records: Int,
+        val errno: Int,
+        val errmsg: String,
+    ) {
+        /** 给用户/排障看的一行摘要；不出错时界面不显示，出错时能直接截图定位 */
+        fun describe(): String = buildString {
+            append("errno=").append(errno)
+            if (errmsg.isNotBlank()) append(' ').append(errmsg)
+            append("，记录 ").append(records)
+            append("，直链 ").append(links.size)
+        }
+    }
+
+    private fun fetchMetas(api: String, ids: String, token: String): MetaFetch {
+        val json = request(
+            "$api?method=filemetas&access_token=${enc(token)}" +
+                "&fsids=${enc(ids)}&dlink=1&thumb=0&extra=0",
+        )
+        val errno = json.optInt("errno", 0)
+        return MetaFetch(
+            links = if (errno == 0) BaiduLinkParse.links(json) else emptyMap(),
+            records = if (errno == 0) BaiduLinkParse.recordCount(json) else 0,
+            errno = errno,
+            errmsg = json.optString("errmsg"),
+        )
     }
 
     /** 把选中的条目转成播放队列（没有直链的条目直接跳过） */

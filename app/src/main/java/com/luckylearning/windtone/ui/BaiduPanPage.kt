@@ -85,6 +85,7 @@ internal fun BaiduPanPage(
     var entries by remember { mutableStateOf<List<BaiduEntry>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var errorDetail by remember { mutableStateOf("") }
     var showLogin by remember { mutableStateOf(false) }
 
     fun load(dir: String) {
@@ -212,6 +213,7 @@ internal fun BaiduPanPage(
         if (audioEntries.isEmpty()) return
         loading = true
         error = null
+        errorDetail = ""
         scope.launch {
             pan.dlinks(audioEntries.map { it.fsId })
                 .onSuccess { batch ->
@@ -219,6 +221,7 @@ internal fun BaiduPanPage(
                     if (songs.isEmpty()) {
                         // note 里带着「请求几个 / 返回几条 / 成功几个」，比一句「没取到直链」有用得多
                         error = batch.note.ifBlank { "没有取到可播放的直链（文件可能被移出或没有权限）" }
+                        errorDetail = batch.detail
                     } else {
                         val idx = startFsId
                             ?.let { id -> songs.indexOfFirst { it.id == -id } }
@@ -268,10 +271,31 @@ internal fun BaiduPanPage(
 
     error?.let { msg ->
         AlertDialog(
-            onDismissRequest = { error = null },
+            onDismissRequest = {
+                error = null
+                errorDetail = ""
+            },
             title = { Text("没能完成") },
-            text = { Text(msg) },
-            confirmButton = { TextButton(onClick = { error = null }) { Text("好") } },
+            text = {
+                Column {
+                    Text(msg)
+                    // 接口摘要只在这一类「说不清为什么」的失败里出现，方便用户直接截图反馈
+                    if (errorDetail.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            errorDetail,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    error = null
+                    errorDetail = ""
+                }) { Text("好") }
+            },
         )
     }
 }
