@@ -36,10 +36,10 @@
 
 <div class="wrap">
 <section class="sec" id="sec-sheet">
-  <div class="sec-hd"><h2>三、抽屉与弹窗</h2><span>Sheets.kt · MainScreen.kt —— ModalBottomSheet / AlertDialog / DropdownMenu</span></div>
+  <div class="sec-hd"><h2>三、抽屉与弹窗</h2><span>Sheets*.kt · MainScreen.kt —— ModalBottomSheet / AlertDialog / DropdownMenu</span></div>
   <div class="board">
 <figure class="fig" id="scr-queue">
-  <div class="cap"><b>⑰ 播放队列</b><em>Sheets.kt · QueueSheet（播放页顶栏「队列」图标打开）</em></div>
+  <div class="cap"><b>⑰ 播放队列</b><em>SheetsPlayback.kt · QueueSheet（播放页顶栏「队列」图标打开）</em></div>
   <div class="phone">
     <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
     <div class="app">
@@ -85,7 +85,7 @@
 </figure>
 
 <figure class="fig" id="scr-options">
-  <div class="cap"><b>⑱ 播放设置</b><em>Sheets.kt · PlayerOptionsSheet（播放页 Tune 图标打开）</em></div>
+  <div class="cap"><b>⑱ 播放设置</b><em>SheetsPlayback.kt · PlayerOptionsSheet（播放页 Tune 图标打开）</em></div>
   <div class="phone">
     <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
     <div class="app">
@@ -149,7 +149,7 @@
   <code>SongInfoSheet</code>（见 ㉒）。<br>
   <b>「歌词」分组第一项是「桌面悬浮歌词」</b>：播放页顺手就能开关，不必钻进「设置 → 歌词」子页（功能再好，找不到就等于没有）。
   它是 <code>OptionRow</code>——左侧有图标、右侧只有选中 ✓（✓ = 已开启），未授权时点击会跳到系统「显示悬浮窗」授权页，
-  授权返回后由 <code>MainActivity.onResume</code> 对账并自动打开开关。<br><b>行组件规范（防画错）</b>：底部弹层里的可点行是 <code>OptionRow</code>（Sheets.kt）——<b>左侧有语义图标、右侧没有箭头</b>，唯一右侧元素是选中态的 ✓；设置页的可点行是 <code>ActionRow</code>（SettingsScreen.kt）——左侧没有图标（纯文字卡），<b>右侧可以有「当前值摘要」和右箭头</b>：摘要把状态前置（如「过滤 < 60 秒」），箭头只给<b>点开会进入另一个界面</b>的行（子页入口、打开弹层 / 弹窗的行），就地执行动作（「检查更新」）或就地展开（「查看日志」）的行不加。<b>v1.0.7 起「全 App 不存在 chevron」的规范放宽为「只有 ActionRow 能带 chevron」</b>，<code>OptionRow</code> 与其它地方仍然不画。</p>
+  授权返回后由 <code>MainActivity.onResume</code> 对账并自动打开开关。<br><b>行组件规范（防画错）</b>：底部弹层里的可点行是 <code>OptionRow</code>（Sheets*.kt）——<b>左侧有语义图标、右侧没有箭头</b>，唯一右侧元素是选中态的 ✓；设置页的可点行是 <code>ActionRow</code>（SettingsScreen.kt）——左侧没有图标（纯文字卡），<b>右侧可以有「当前值摘要」和右箭头</b>：摘要把状态前置（如「过滤 < 60 秒」），箭头只给<b>点开会进入另一个界面</b>的行（子页入口、打开弹层 / 弹窗的行），就地执行动作（「检查更新」）或就地展开（「查看日志」）的行不加。<b>v1.0.7 起「全 App 不存在 chevron」的规范放宽为「只有 ActionRow 能带 chevron」</b>，<code>OptionRow</code> 与其它地方仍然不画。</p>
 </figure>
 
 <figure class="fig" id="scr-eq">
@@ -290,7 +290,7 @@
 </figure>
 
 <figure class="fig" id="scr-sleep">
-  <div class="cap"><b>⑳ 睡眠定时</b><em>Sheets.kt · SleepSheet</em></div>
+  <div class="cap"><b>⑳ 睡眠定时</b><em>SheetsPlayback.kt · SleepSheet</em></div>
   <div class="phone">
     <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
     <div class="app">
@@ -322,7 +322,7 @@
 </figure>
 
 <figure class="fig" id="scr-songactions">
-  <div class="cap"><b>㉑ 歌曲操作（长按 / 点 ⋮）</b><em>Sheets.kt · SongActionsSheet</em></div>
+  <div class="cap"><b>㉑ 歌曲操作（长按 / 点 ⋮）</b><em>SheetsSong.kt · SongActionsSheet</em></div>
   <div class="phone">
     <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
     <div class="app">
@@ -359,7 +359,7 @@
 </figure>
 
 <figure class="fig" id="scr-songinfo">
-  <div class="cap"><b>㉒ 音频信息</b><em>Sheets.kt · SongInfoSheet · AudioInspector</em></div>
+  <div class="cap"><b>㉒ 音频信息</b><em>SheetsSong.kt · SongInfoSheet · AudioInspector</em></div>
   <div class="phone">
     <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
     <div class="app">
@@ -393,7 +393,7 @@
 </figure>
 
 <figure class="fig" id="scr-addplaylist">
-  <div class="cap"><b>㉓ 加入歌单</b><em>Sheets.kt · AddToPlaylistSheet</em></div>
+  <div class="cap"><b>㉓ 加入歌单</b><em>SheetsPlaylist.kt · AddToPlaylistSheet</em></div>
   <div class="phone">
     <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
     <div class="app">
@@ -420,7 +420,7 @@
 </figure>
 
 <figure class="fig" id="scr-scanscope">
-  <div class="cap"><b>㉔ 扫描范围</b><em>Sheets.kt · ScanScopeSheet（顶栏「更多」→ 扫描范围）</em></div>
+  <div class="cap"><b>㉔ 扫描范围</b><em>SheetsScanScope.kt · ScanScopeSheet（顶栏「更多」→ 扫描范围）</em></div>
   <div class="phone">
     <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
     <div class="app">

@@ -318,7 +318,11 @@ ui/                       ── 展示层 ──
   MainScreen.kt           主界面（列表 / 分组 / 歌单 / 扫描引导）—— 把分域 VM **按需**传给子组件
   PlayerScreen.kt         全屏播放页（**手机与车机共用**；改它之前务必先读 docs/ui/02-player.html 与 06-car.html 核对两版）
   LyricsPane.kt           歌词面板（滚动居中、当前行高亮、偏移调节）
-  Sheets.kt               各类抽屉与弹窗（队列、播放设置、扫描范围、睡眠定时、歌曲操作……）
+  SheetsPlayback.kt        播放域弹层（队列、睡眠定时、播放设置）
+  SheetsSong.kt            单曲域弹层（长按操作、音频信息、编辑歌曲信息）
+  SheetsPlaylist.kt        歌单域弹层（加入歌单、新建歌单、歌单菜单）
+  SheetsScanScope.kt       扫描范围（弹层 + 顶栏芯片）
+  Common.kt                共享 UI 原语（封面 / 歌曲行 / 迷你播放条 / 弹层通用行组件……）
   EqSheet.kt              「均衡器与音效」弹层（预设网 / 曲线预览 / 频段 / 增强音效，见 §6.10）
   SettingsScreen.kt       设置页（一主六子：外观 / 播放 / 歌词 / 音乐库 / 更新 / 关于与诊断）
   Common.kt               通用组件（封面、歌曲行、空态、骨架屏……）
