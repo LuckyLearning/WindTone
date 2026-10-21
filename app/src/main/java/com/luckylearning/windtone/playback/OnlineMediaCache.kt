@@ -82,7 +82,10 @@ object OnlineMediaCache {
     fun panCacheKey(uri: Uri?): String? {
         val frag = uri?.fragment ?: return null
         if (!frag.startsWith(PAN_FRAGMENT_PREFIX)) return null
-        val fsId = frag.removePrefix(PAN_FRAGMENT_PREFIX).trim()
+        // 只取到第一个 `&` 为止：v1.1.43 里 token 曾被我误拼进 fragment，
+        // 于是键变成 `pan:123&access_token=...` —— 既不稳定（换 token 就换键、缓存全废），
+        // 也把凭据写进了缓存索引。这里兜一层，无论 fragment 后面还挂什么都不会带进来。
+        val fsId = frag.removePrefix(PAN_FRAGMENT_PREFIX).substringBefore('&').trim()
         return if (fsId.isEmpty()) null else "pan:$fsId"
     }
 
@@ -144,10 +147,12 @@ object OnlineMediaCache {
             val cached = CacheDataSource.Factory()
                 .setCache(cache)
                 .setUpstreamDataSourceFactory(http)
-                // 网盘直链按 fsId 做键，避免「每次签名不同 → 永不命中」
+                // 网盘直链按 fsId 做键，避免「每次签名不同 → 永不命中」。
+                // 注意优先用 `dataSpec.key`：网盘请求的真实 URI 里已经摘掉了 `#wt=…`
+                // （见 SchemeRoutingDataSource.open），键由那里显式塞进来。
                 .setCacheKeyFactory(object : CacheKeyFactory {
                     override fun buildCacheKey(dataSpec: DataSpec): String =
-                        panCacheKey(dataSpec.uri) ?: dataSpec.key ?: dataSpec.uri.toString()
+                        dataSpec.key ?: panCacheKey(dataSpec.uri) ?: dataSpec.uri.toString()
                 })
                 // 缓存写失败（磁盘满 / 权限）时退化成直连，不要因此中断播放
                 .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
@@ -216,8 +221,10 @@ private class SchemeRoutingDataSource(
         // （见 panCacheKey），所以**能缓存的就缓存**；只有拿不到 fsId 的网盘请求才跳过，
         // 否则会白占 512MB 淘汰配额。UA / token 注入不受影响，仍在下面统一处理。
         val pan = BaiduRules.needsPanUserAgent(dataSpec.uri.host)
+        // fragment 只用于「算缓存键」，不能留在真实请求里（见下面的 withAccessToken 注释）
+        val panKey = if (pan) OnlineMediaCache.panCacheKey(dataSpec.uri) else null
         val cacheable = OnlineMediaCache.shouldCache(dataSpec.uri) &&
-            (!pan || OnlineMediaCache.panCacheKey(dataSpec.uri) != null)
+            (!pan || panKey != null)
         val factory = if (cacheable) remote else local
         val source = factory.createDataSource()
         listeners.forEach(source::addTransferListener)
@@ -226,10 +233,13 @@ private class SchemeRoutingDataSource(
         // 并且**必须**在 URL 上补 access_token —— 两样缺一个都是 403，而 403 在播放器里
         // 只会表现为「不出声」，没有可读的错误。
         // 放在这一层是因为「每个文件一个 DataSource」，而 UA / token 只能按请求设置。
-        val effective = if (BaiduRules.needsPanUserAgent(dataSpec.uri.host)) {
+        val effective = if (pan) {
             val url = BaiduRules.withAccessToken(dataSpec.uri.toString(), OnlineMediaCache.panToken())
             dataSpec.buildUpon()
-                .setUri(Uri.parse(url))
+                // 摘掉 `#wt=<fsId>`：它只是缓存键的载体，不该出现在真实请求里。
+                // 留着它曾把 access_token 拼进了 fragment（v1.1.43 的播放全失败）。
+                .setUri(Uri.parse(url).buildUpon().fragment(null).build())
+                .setKey(panKey ?: dataSpec.key)
                 .setHttpRequestHeaders(BaiduRules.panHeaders())
                 .build()
         } else {

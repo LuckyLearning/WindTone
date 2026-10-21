@@ -110,6 +110,27 @@ class BaiduRulesTest {
     }
 
     @Test
+    fun `直链带 fragment 时 access_token 必须插在问号后面而非拼进 fragment`() {
+        // v1.1.43 的播放全失败就是这里：fragment 里的 `#wt=<fsId>` 被当成了普通尾巴，
+        // token 拼到了 `#` 之后 —— fragment 不发往服务器，等于每个请求都没带 token → 全 403。
+        val dlink = "https://d.pcs.baidu.com/file/abc?fid=1&sign=2#wt=414244021542671"
+        assertEquals(
+            "https://d.pcs.baidu.com/file/abc?fid=1&sign=2&access_token=$TOKEN#wt=414244021542671",
+            BaiduRules.withAccessToken(dlink, TOKEN),
+        )
+        // 没有查询串时也一样：? 要在 # 之前
+        assertEquals(
+            "https://d.pcs.baidu.com/file/abc?access_token=$TOKEN#wt=42",
+            BaiduRules.withAccessToken("https://d.pcs.baidu.com/file/abc#wt=42", TOKEN),
+        )
+        // 已经有 token 时不该再拼一次
+        assertEquals(
+            "https://d.pcs.baidu.com/f?a=1&access_token=old#wt=42",
+            BaiduRules.withAccessToken("https://d.pcs.baidu.com/f?a=1&access_token=old#wt=42", TOKEN),
+        )
+    }
+
+    @Test
     fun `已有 token 或没有 token 时保持原样`() {
         val signed = "https://d.pcs.baidu.com/f?a=1&access_token=old"
         assertEquals(signed, BaiduRules.withAccessToken(signed, TOKEN))

@@ -225,6 +225,15 @@ class PlaybackEngine(
     private var lyricsSeq = 0
     private var consecutiveErrors = 0
 
+    /**
+     * 这次切歌是「上一个文件播放失败」触发的（v1.1.45）。
+     *
+     * 之前 `onMediaItemTransition` 无条件把 [consecutiveErrors] 清零，而失败跳曲本身也会
+     * 触发一次过渡 —— 于是计数永远回到 0，队列里每一首都被试一遍、循环往复，用户看到的是
+     * 「一直自动切歌、完全播不了」。这个标记让「因失败而跳」不计入清零。
+     */
+    private var skippingAfterError = false
+
     private var queueRestored = false
 
     /** 恢复动作正在进行中：防止两次调用并发各恢复一遍（曲库缓存与扫描完成各调一次） */
@@ -352,7 +361,12 @@ class PlaybackEngine(
                     durationMs = c.duration.coerceAtLeast(0L),
                 )
             }
-            consecutiveErrors = 0
+            // 因失败而跳曲时**不能**清零：否则「失败 → 跳下一首 → 清零 → 再失败」会无限循环
+            if (skippingAfterError) {
+                skippingAfterError = false
+            } else {
+                consecutiveErrors = 0
+            }
             syncCurrentSong()
             mediaItem?.mediaId?.takeIf { stats.shouldCountPlay(it) }?.let { stats.recordPlay(it) }
         }
@@ -372,15 +386,45 @@ class PlaybackEngine(
             val name = _player.value.current?.displayName ?: ""
             _player.update { it.copy(isPlaying = false) }
             consecutiveErrors++
+            val reason = describePlaybackError(error)
             val c = controller
             val count = c?.mediaItemCount ?: 0
-            if (count > 1 && consecutiveErrors < count) {
-                messages.post("播放失败：$name，已跳到下一首")
+            // 连续失败到上限就停：一路静默跳完整张队列，用户只会看到「一直在切歌、播不了」，
+            // 反而看不到真正的原因（v1.1.45）
+            if (ErrorSkipPolicy.shouldSkip(count, consecutiveErrors)) {
+                skippingAfterError = true
+                messages.post("播放失败：$name（$reason），已跳到下一首")
                 c?.seekToNextMediaItem()
                 c?.play()
             } else {
-                messages.post("播放失败：$name")
+                messages.post(
+                    if (count > 1) ErrorSkipPolicy.stopMessage(consecutiveErrors, reason)
+                    else "播放失败：$name（$reason）",
+                )
             }
+        }
+    }
+
+    /**
+     * 把 [androidx.media3.common.PlaybackException] 翻成一句能截图反馈的话（v1.1.45）。
+     *
+     * 只报 `errorCodeName` 对用户没意义（如 `ERROR_CODE_IO_BAD_HTTP_STATUS`）；真正有用的是
+     * HTTP 状态码 —— 403 意味着直链没带 token 或已过期，404 是文件被移走，416 是缓存片段坏了。
+     * 这类问题在车机上没有任何日志可看，所以必须让它出现在提示条里。
+     */
+    private fun describePlaybackError(error: androidx.media3.common.PlaybackException): String {
+        val bad = generateSequence<Throwable>(error) { it.cause }
+            .filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>()
+            .firstOrNull()
+        val network = bad ?: generateSequence<Throwable>(error) { it.cause }
+            .filterIsInstance<androidx.media3.datasource.HttpDataSource.HttpDataSourceException>()
+            .firstOrNull()
+        return when (val code = bad?.responseCode ?: 0) {
+            401, 403 -> "HTTP $code，直链没有权限或已过期"
+            404 -> "HTTP 404，文件已不在原位置"
+            416 -> "HTTP 416，缓存片段不完整"
+            0 -> if (network != null) "网络连接失败" else error.errorCodeName
+            else -> "HTTP $code"
         }
     }
 

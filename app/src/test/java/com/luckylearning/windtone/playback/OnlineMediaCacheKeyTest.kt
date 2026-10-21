@@ -25,6 +25,14 @@ class OnlineMediaCacheKeyTest {
     }
 
     @Test
+    fun `fragment 里混进 token 也只取 fsId`() {
+        // v1.1.43 曾把 access_token 拼进 fragment，键变成 `pan:123&access_token=...`：
+        // 换 token 就换键（缓存全废），凭据还会进缓存索引。这里钉住「只认 & 之前的部分」。
+        val dirty = Uri.parse("https://d.pcs.baidu.com/file/abc?fid=1#wt=414244021542671&access_token=abc")
+        assertEquals("pan:414244021542671", OnlineMediaCache.panCacheKey(dirty))
+    }
+
+    @Test
     fun `没有 fsId fragment 的地址不走网盘键`() {
         assertNull(OnlineMediaCache.panCacheKey(Uri.parse("https://cdn.example.com/a.mp3")))
         assertNull(OnlineMediaCache.panCacheKey(Uri.parse("https://d.pcs.baidu.com/file/x#wt=")))

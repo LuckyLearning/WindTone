@@ -239,8 +239,15 @@ object BaiduRules {
     fun withAccessToken(dlink: String, token: String?): String {
         if (token.isNullOrBlank()) return dlink
         if (dlink.contains("access_token=")) return dlink
-        val sep = if (dlink.contains('?')) "&" else "?"
-        return dlink + sep + "access_token=" + URLEncoder.encode(token, "UTF-8")
+        // fragment 必须切下来再拼（v1.1.45）：
+        // 网盘歌的 URI 带 `#wt=<fsId>` 当缓存键，直接在整串后面接 `&access_token=`
+        // 会把参数拼进 fragment —— fragment 根本不发给服务器，等于 token 从没带上，
+        // 于是每一个请求都 403，播放器只看到「每个文件都失败」。
+        val hash = dlink.indexOf('#')
+        val base = if (hash >= 0) dlink.substring(0, hash) else dlink
+        val fragment = if (hash >= 0) dlink.substring(hash) else ""
+        val sep = if (base.contains('?')) "&" else "?"
+        return base + sep + "access_token=" + URLEncoder.encode(token, "UTF-8") + fragment
     }
 
     /** 展示用文件名（去掉扩展名） */
