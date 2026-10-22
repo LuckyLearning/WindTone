@@ -263,6 +263,7 @@ class PlaybackEngine(
 
     init {
         AudioFx.init(app)
+        TrackVolume.init(app)
         scope.launch {
             SleepTimer.remainingMs.collect { ms ->
                 _player.update { it.copy(sleepRemainingMs = ms) }
@@ -958,6 +959,9 @@ class PlaybackEngine(
      */
     override fun setCarMode(enabled: Boolean) {
         prefs.carMode = enabled
+        // 车载音效档案（v1.1.52）：进车先快照手机侧音效值再套车载方案，出车原样还原。
+        // 没选过车载方案（carSchemeId 空）时两边都不动 —— 方案在「均衡器与音效」弹层里选。
+        if (enabled) AudioFx.enterCarProfile() else AudioFx.exitCarProfile()
         _player.update {
             it.copy(
                 carMode = enabled,

@@ -102,7 +102,7 @@ LibraryViewModel   PlayerViewModel    UpdateViewModel    SettingsViewModel
 | **扫描** | **默认不扫全盘**（`ScanScope.UNSET`），首次进入停在「选择音乐位置」页；可选全盘 / 指定目录；扫描结果落 **`songs` 曲库**（增量 upsert + 软删），二次启动直接读曲库 |
 | **歌词** | 同名 `.lrc`/`.krc`/`.yrc`/`.txt` 旁挂、音频内嵌标签、双语（原文+翻译）、逐曲偏移（±20s）、字号缩放、桌面悬浮歌词（1·3 行 / 字号 / 对齐 / 底板 / 颜色 / 双语副行） |
 | **播放** | Media3 ExoPlayer + MediaSessionService；后台播放、耳机/蓝牙控制；播放队列整队列持久化（`queue_songs` 表）；变速（0.5x–2.0x）；跳过静音；睡眠定时（定时/播完当前曲）；响度增强 |
-| **音效** | 均衡器（16 个内置预设 + 5/6/10 段自定义）、低音增强、虚拟环绕、响度增强、**混响**（`AudioFx`，基于系统 `AudioEffect`，见 §6.10） |
+| **音效** | 音效方案一键包（8 条，`SoundSchemes`）、均衡器（16 个内置预设 + 5/6/10 段自定义）、低音增强、虚拟环绕、响度增强、**混响**（`AudioFx`，基于系统 `AudioEffect`，见 §6.10）；播放过渡：切歌淡入淡出 + 曲间音量平衡 + A/B 对比原声（`TrackVolume`，v1.1.52） |
 | **歌单/收藏** | 自建歌单（增删改、排序）、收藏、最近播放、最常播放、播放统计（次数/累计时长） |
 | **数据维护** | 诊断页「数据与存储」：曲库/目录/歌单/缓存占用快照、清理失效歌曲、清空封面缓存、重置用户数据（保留曲库） |
 | **个性化** | 封面主色动态主题、Material 3 色板、浮动迷你条、封面上下滑调音量、迷你条拖拽跳转 |
@@ -289,6 +289,13 @@ playback/                 ── 播放层 ──
   AudioFx.kt              均衡器/低音/虚拟环绕/响度增强/混响（AudioEffect 封装，单例，见 §6.10）
   EqPresets.kt            16 个内置均衡器预设曲线（听感 8 / 流派 8）+ log 轴插值 + 曲线预览归一化
   ReverbPresets.kt        7 档内置混响（关闭 / 小房间…板式）→ 平台 PresetReverb 档位的纯数据映射
+  SoundSchemes.kt         8 条音效方案一键包（曲线+低音+环绕+响度+混响；纯数据，含车载方案，见 §6.10）
+  SoundStash.kt           进车音效快照的纯文本编解码（车载档案：手机听感不被车载方案覆盖）
+  TrackVolume.kt          播放过渡单例：切歌淡入淡出斜坡 + 曲间响度平衡（服务端音量执行者）
+  FadeRamp.kt             淡入淡出纯函数曲线（线性、夹取、接缝连续，有形状单测）
+  LoudnessScan.kt         响度数学纯函数（RMS/dBFS、增益夹取、衰减因子；衰减制不抬升）
+  LoudnessCache.kt        曲目响度文件缓存（filesDir 文本文件，不进 Room——纯缓存不配 schema 升版）
+  TrackLoudnessAnalyzer.kt MediaCodec 解码薄壳：前 120s → RMS 增益；失败静默返回 null
   Pitch.kt                变调：半音 ↔ 倍率换算
   SleepTimer.kt           睡眠定时（单例，StateFlow 暴露剩余时间）
 
@@ -331,7 +338,7 @@ ui/                       ── 展示层 ──
   SheetsPlaylist.kt        歌单域弹层（加入歌单、新建歌单、歌单菜单）
   SheetsScanScope.kt       扫描范围（弹层 + 顶栏芯片）
   Common.kt                共享 UI 原语（封面 / 歌曲行 / 迷你播放条 / 弹层通用行组件……）
-  EqSheet.kt              「均衡器与音效」弹层（预设网 / 曲线预览 / 频段 / 增强音效，见 §6.10）
+  EqSheet.kt              「均衡器与音效」弹层（方案网 / 预设网 / 曲线预览 / 频段 / 增强音效 / 播放过渡 / A/B 对比，见 §6.10）
   SettingsScreen.kt       设置页（一主六子：外观 / 播放 / 歌词 / 音乐库 / 更新 / 关于与诊断）
   Common.kt               通用组件（封面、歌曲行、空态、骨架屏……）
   AppIcons.kt             图标封装
@@ -822,11 +829,34 @@ AudioFx（进程内单例，UI 与服务同进程直连）
    新增一项时**两处都要动**（`SettingsDefaultsTest` 只覆盖了 `SettingsDefaults` 里登记过的键，
    音效这一组没登记，所以这里靠人工比对 + `AudioFx.reset()` 的注释）。
 
-**页面侧**（`ui/EqSheet.kt`，效果图 ⑲ / ⑲B）按**决策顺序**分三段：预设 → 频段（先画曲线再拖滑块）→ 增强音效。
-两处口径沿用既有约定：**手动拖频段滑块 = 离开预设进入「自定义」**（`presetId` 清空）；
+**页面侧**（`ui/EqSheet.kt`，效果图 ⑲ / ⑲B）按**决策顺序**分五段（2026-10-22 起；此前为三段）：
+方案 → 预设 → 频段（先画曲线再拖滑块）→ 增强音效 → 播放过渡。
+两处口径沿用既有约定：**手动拖频段滑块 / 任一增强滑块 = 离开预设与方案进入「自定义」**（`presetId` 与方案 id 清空）；
 标题行的 ↺ **只在偏离出厂状态时出现**（判据含混响）。曲线预览的高度用
 `EqPresets.previewHeights` 按**设备量程**归一化 —— 形状可信、绝对高度不代表真实增益，
 真实数值看滑块右侧的 dB 标签。
+
+**音效方案（v1.1.52，`playback/SoundSchemes.kt`，参考主流音乐 App 的「主题音效」形态）**：
+8 条一键包 = 曲线 + 低音 + 环绕 + 响度 + 混响，`AudioFx.setScheme(id)` 一次写齐并**打开总开关**；
+微调任一参数 = 离开方案（id 清空）。引用的曲线 / 混响 id、强度区间由 `SoundSchemesTest` 对质。
+id 持久化后**不可改名**（改了用户已选方案丢失）。
+
+**播放过渡（v1.1.52，`playback/TrackVolume.kt`）**：与 `AudioFx` 同一套「进程内单例」思路，
+但管的是**播放器音量**（`player.volume`），不依赖效果器可用性（车机上效果器建不出来也照常可用）：
+  - **淡入淡出**：`FadeRamp` 纯函数曲线（线性、接缝连续），自动切歌时曲尾淡出 / 新曲淡入；
+    手动暂停 / 拖动 / 关开关立即恢复基线。注意 Media3 的 `onPositionDiscontinuity` 在
+    **自动切歌时也会回调**（reason = AUTO_TRANSITION），那条路径必须放行给淡入。
+  - **音量平衡**：衰减制——按曲目 RMS（`TrackLoudnessAnalyzer` 解码前 120s）把过响的歌压到
+    -20 dBFS（`LoudnessScan` 纯函数），增益缓存进 `LoudnessCache`（filesDir 文本文件，
+    **不进 Room**：纯缓存不配 schema 升版，否则 `fallbackToDestructiveMigration` 会拿真数据陪葬）。
+    没分析过的曲目先原音量播，分析完下一遍生效；分析失败静默跳过。
+
+**车载音效档案（v1.1.52）**：`PlaybackEngine.setCarMode` 进车时把手机侧音效值整体快照
+（`SoundStash` 编码进 `Prefs.soundStash`）再套用车载方案，出车原样还原 ——
+车载模式里调的声音只留在车载模式。没选过车载方案（`carSchemeId` 空）则两边都不动。
+
+**A/B 对比原声（v1.1.52）**：`AudioFx.setBypassed(true)` 临时旁路全部效果器（只动运行态开关，
+不碰落盘值），松手按用户原设置恢复。
 
 ---
 

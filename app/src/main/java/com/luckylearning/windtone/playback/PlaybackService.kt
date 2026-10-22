@@ -146,6 +146,8 @@ class PlaybackService : MediaLibraryService() {
 
         // audioSessionId 可能尚未就绪，就绪后由监听器再绑
         AudioFx.attach(player.audioSessionId)
+        // 切歌淡入淡出 + 曲间响度平衡（v1.1.52）：挂自己的 Player.Listener 管理 player.volume
+        TrackVolume.attach(player, this)
         pushWidget()
     }
 
@@ -305,6 +307,7 @@ class PlaybackService : MediaLibraryService() {
 
     override fun onDestroy() {
         AudioFx.release()
+        TrackVolume.release()
         // 缓存持有目录锁与索引文件：不释放的话，进程内下次建 SimpleCache 会直接抛
         // 「Another SimpleCache instance uses the folder」，在线播放从此永久没缓存。
         OnlineMediaCache.release()

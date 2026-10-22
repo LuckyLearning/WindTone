@@ -105,7 +105,7 @@
 </div>
           <div class="section-label">音效</div>
           <div class="row-action"><svg class="ic" style="color:var(--primary)"><use href="#i-tune"/></svg>
-            <div class="ra-main"><div class="ra-title">均衡器与音效</div><div class="ra-sub">预设 / 频段曲线 / 低音增强 / 环绕声 / 响度增强 / 混响</div></div>
+            <div class="ra-main"><div class="ra-title">均衡器与音效</div><div class="ra-sub">方案 / 预设 / 频段曲线 / 低音 / 环绕 / 响度 / 混响 / 淡入淡出 / 音量平衡</div></div>
 </div>
           <div class="section-label">睡眠定时</div>
           <div class="row-action"><svg class="ic" style="color:var(--primary)"><use href="#i-bed"/></svg>
@@ -167,6 +167,23 @@
         <div class="handle"></div>
         <div class="sheet-title" style="justify-content:space-between">均衡器与音效<span style="display:flex;align-items:center;gap:8px"><svg class="ic ic-18 rst"><use href="#i-reset"/></svg><span class="switch"><i></i></span></span></div>
 
+        <div class="section-label">方案</div>
+        <div style="font-size:11px;color:var(--on-surface-variant)">一键应用完整听感；微调下方任一参数即离开方案</div>
+        <div class="chips">
+          <span class="fchip">原声</span>
+          <span class="fchip">重低音</span>
+          <span class="fchip on">清澈人声</span>
+          <span class="fchip">现场临感</span>
+          <span class="fchip">沉浸环绕</span>
+          <span class="fchip">音乐厅</span>
+          <span class="fchip">派对电音</span>
+          <span class="fchip">车载驾驶·车载</span>
+        </div>
+        <div style="background:var(--secondary-container);color:var(--on-secondary-container);border-radius:12px;padding:10px 12px;margin-top:10px">
+          <div style="font-size:13px;font-weight:700">清澈人声</div>
+          <div style="font-size:11px;margin-top:2px;line-height:1.5">中频突出，人声播客更易听清</div>
+        </div>
+
         <div class="section-label">预设</div>
         <div style="display:flex;gap:6px">
           <span class="fchip on" style="padding:7px 16px">听感</span>
@@ -213,7 +230,14 @@
     </div>
   </div>
   <p class="note"><b>关键点：</b>标题行右侧是总开关；设备不可用 / 播放器未启动时整片替换为提示「当前设备不可用或播放器尚未启动。开始播放任意一首歌曲后即可调节。」<br>
-  <b>2026-10-17 重排：三段＝决策顺序（先选预设 → 再看曲线调频段 → 最后加增强音效）</b>。<br>
+  <b>2026-10-22 起：五段＝决策顺序（方案 → 预设 → 曲线调频段 → 增强音效 → 播放过渡；2026-10-17 为三段）</b>。<br>
+  &nbsp;&nbsp;① <b>方案（v1.1.52）</b>——<code>SoundSchemes</code> 八条一键包（曲线 + 低音 + 环绕 + 响度 + 混响打包），
+  用户选的是「想要什么感觉」而不是参数；<b>应用方案即打开总开关</b>，微调任一参数 = 离开方案（id 清空，与预设同口径）。
+  车载方案带「车载」标（供车载音效档案用，手机模式同样可选）。<br>
+  &nbsp;&nbsp;⑤ <b>播放过渡（v1.1.52）</b>——淡入淡出（自动切歌生效，时长 0.5–6 秒，手动操作立即恢复）+
+  音量平衡（按曲目 RMS <b>衰减</b>过响的歌；后台懒分析、按曲目缓存在应用私有目录，见 <code>TrackVolume</code> / <code>LoudnessScan</code> / <code>LoudnessCache</code>）。
+  这两项走<b>播放器音量</b>而非音频效果器，<b>效果器建不出来的车机上也照常可用</b>，所以渲染在可用性判断之外。<br>
+  &nbsp;&nbsp;另有<b>「按住对比原声」</b>按钮（总开关开着时出现）：按住期间全部效果器临时旁路（<code>AudioFx.setBypassed</code>），松手恢复，不碰任何落盘值。<br>
   &nbsp;&nbsp;① <b>预设</b>——「听感 / 流派」两组 tab + <b>自动换行</b>的预设网 + <b>选中项说明卡</b>（预设名 + 一句话，看描述就能做决定，不必懂频段）。
   原先是一组横向滚动 chips，一组 8 个片时最后两个永远在屏幕外，「有没有我想要的」本身就得靠滑一下才知道；换行之后整组一屏看全。
   听感组 8 个：原声 / 低音增强 / 高音增强 / 人声清晰 / 动感 / <b>温暖 / 明亮 / 通透</b>；
@@ -235,7 +259,7 @@
 </figure>
 
 <figure class="fig" id="scr-eq-fx">
-  <div class="cap"><b>⑲B 均衡器与音效 · 下半屏</b><em>ui/EqSheet.kt · 同一页向下滚：增强音效（低音 / 环绕 / 响度 / 混响）</em></div>
+  <div class="cap"><b>⑲B 均衡器与音效 · 下半屏</b><em>ui/EqSheet.kt · 同一页向下滚：增强音效（低音 / 环绕 / 响度 / 混响）+ 播放过渡（淡入淡出 / 音量平衡 / 按住对比原声）</em></div>
   <div class="phone">
     <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
     <div class="app">
@@ -274,6 +298,11 @@
           <span class="fchip">板式</span>
         </div>
         <div style="font-size:11px;color:var(--on-surface-variant);margin-top:4px">明显的房间感，流行与人声都合适</div>
+
+        <div class="section-label" style="margin-top:14px">播放过渡</div>
+        <div style="display:flex;align-items:center"><div style="flex:1"><div style="font-size:14px;color:var(--on-bg)">淡入淡出</div><div style="font-size:11px;color:var(--on-surface-variant)">自动切歌时旧曲结尾淡出、新曲开头淡入</div></div><span class="switch"><i></i></span></div>
+        <div style="display:flex;align-items:center;margin-top:8px"><div style="flex:1"><div style="font-size:14px;color:var(--on-bg)">音量平衡</div><div style="font-size:11px;color:var(--on-surface-variant)">自动压低响度过大的歌，切歌不再忽大忽小；首次播放某首时后台分析，稍后生效</div></div><span class="switch off"><i></i></span></div>
+        <div style="text-align:center;margin-top:12px;border:1px solid var(--outline);border-radius:20px;padding:8px 0;font-size:13px;color:var(--on-bg)">按住对比原声</div>
       </div>
     </div>
   </div>

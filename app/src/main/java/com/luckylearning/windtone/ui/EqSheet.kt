@@ -5,6 +5,8 @@
 
 package com.luckylearning.windtone.ui
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,6 +22,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -28,6 +31,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,25 +49,37 @@ import androidx.compose.ui.unit.sp
 import com.luckylearning.windtone.playback.AudioFx
 import com.luckylearning.windtone.playback.EqPresets
 import com.luckylearning.windtone.playback.ReverbPresets
+import com.luckylearning.windtone.playback.SoundSchemes
+import com.luckylearning.windtone.playback.TrackVolume
 import com.luckylearning.windtone.ui.theme.glassContainerColor
 
 /**
  * 「均衡器与音效」弹层（效果图 ⑲）。
  *
  * 2026-10-17 从 `Sheets.kt` 拆出并重排：原先是「一组横向滚动的预设片 + 一长条滑块」，
- * 预设只能横向翻着找、四组可调项挤在一起看不出层次。现在按**决策顺序**分三段：
- *  ① 预设——先给一张自动换行、一屏能看全的预设网，选中项下面说明「这条曲线到底做了什么」；
- *  ② 频段——先把当前曲线画出来（折线预览），再给频段滑块；曲线是「调之前先看一眼」的依据；
- *  ③ 增强音效——低音 / 环绕 / 响度 / 混响，每项一行「标题 + 右侧当前值」，值不再藏在滑块里。
+ * 预设只能横向翻着找、四组可调项挤在一起看不出层次。现在按**决策顺序**分四段：
+ *  ① 方案——一键应用一组完整听感（[SoundSchemes]：曲线 + 低音 + 环绕 + 响度 + 混响打包），
+ *     选的是「想要什么感觉」，不想调参数的用户到这一层就能走（v1.1.52）；
+ *  ② 预设——均衡器曲线（[EqPresets]），方案之上的单维选择；
+ *  ③ 频段——先把当前曲线画出来（折线预览），再给频段滑块；
+ *  ④ 增强音效——低音 / 环绕 / 响度 / 混响，每项一行「标题 + 右侧当前值」；
+ *  ⑤ 播放过渡——淡入淡出与曲间音量平衡（[TrackVolume]），不依赖效果器可用性，
+ *     所以放在 `available` 判断之外（v1.1.52）。
  *
- * 三处口径沿用既有约定，不要改：
- *  - 预设曲线全部内置（[EqPresets]，不用平台预设——各 ROM 名字不一致且无法本地化）；
- *  - 手动拖频段滑块 = 离开预设，进入「自定义」（`presetId` 清空）；
- *  - 标题行的 ↺ 只在偏离出厂状态时出现，点它 = 关掉均衡器 + 频段全平 + 全部增强归零。
+ * 另有「按住对比原声」按钮：按住期间全部效果器临时旁路（[AudioFx.setBypassed]），
+ * 供 A/B 对比 —— 音效好不好，当下听一耳朵比看曲线直观得多。
+ *
+ * 四处口径沿用既有约定，不要改：
+ *  - 预设曲线全部内置（不用平台预设——各 ROM 名字不一致且无法本地化）；
+ *  - 手动拖频段滑块 / 任一增强滑块 = 离开预设与方案，进入「自定义」（id 清空）；
+ *  - 标题行的 ↺ 只在偏离出厂状态时出现，点它 = 关掉均衡器 + 频段全平 + 全部增强归零
+ *    + 方案与进车快照一并回厂；
+ *  - 播放过渡两项不受「设备不支持」影响（走的是播放器音量，不是音频效果器）。
  */
 @Composable
 fun EqSheet(onClose: () -> Unit) {
     val state by AudioFx.state.collectAsState()
+    val trackVolume by TrackVolume.state.collectAsState()
     // 只有真的偏离出厂状态才画 ↺（与设置页同一条口径：默认状态下不摆按钮）。
     // 混响也在判据里：单开了混响同样是「动过」。
     val reverbPreset = ReverbPresets.byId(state.reverbId)
@@ -132,16 +148,139 @@ fun EqSheet(onClose: () -> Unit) {
                     )
                 }
             } else {
+                SchemeSection(state)
                 PresetSection(state)
                 CurveSection(state)
                 EnhancementSection(state, reverbPreset)
+                if (state.enabled) AbCompareButton()
             }
+            // 淡入淡出 / 音量平衡走的是播放器音量，与效果器可用性无关：
+            // 车机上效果器建不出来时这两项照常能用，所以放在 available 判断之外
+            PlaybackTransitionSection(trackVolume)
             Spacer(Modifier.height(24.dp))
         }
     }
 }
 
-// ================================================================ ① 预设
+// ================================================================ ① 方案
+
+/**
+ * 音效方案：一键应用一组完整听感（[SoundSchemes]）。
+ *
+ * 形态与预设网一致（自动换行 + 选中说明卡），但它排在预设**之前** ——
+ * 决策顺序是「先选感觉，再选曲线，最后才谈参数」。
+ * 车载方案带「车载」标但手机模式同样可见可选：一辆车一个听感是常态，
+ * 但没必要为它做模式判断把界面搞复杂。
+ */
+@Composable
+private fun SchemeSection(state: AudioFx.EqState) {
+    SectionLabel("方案")
+    Text(
+        "一键应用完整听感；微调下方任一参数即离开方案",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+    ) {
+        SoundSchemes.ALL.forEach { s ->
+            FilterChip(
+                selected = state.schemeId == s.id,
+                onClick = { AudioFx.setScheme(s.id) },
+                label = { Text(if (s.forCar) "${s.name}·车载" else s.name) },
+            )
+        }
+    }
+    val current = SoundSchemes.byId(state.schemeId)
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp),
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Text(
+                current?.name ?: "未使用方案",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            Text(
+                current?.desc ?: "从上面选一个，一键换一组完整听感；下面各段仍可单独细调。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+        }
+    }
+}
+
+/** 按住期间全部效果器旁路，松手恢复 —— 音效好不好，当场对比才知道 */
+@Composable
+private fun AbCompareButton() {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    LaunchedEffect(pressed) { AudioFx.setBypassed(pressed) }
+    Button(
+        onClick = { /* 按住即生效，点击无动作 */ },
+        interactionSource = interaction,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 14.dp),
+    ) {
+        Text(if (pressed) "已旁路音效（原始声音）" else "按住对比原声")
+    }
+}
+
+// ================================================================ ⑤ 播放过渡
+
+/**
+ * 淡入淡出 + 曲间音量平衡（[TrackVolume]）。
+ *
+ * 这两项走的是**播放器音量**而不是音频效果器：车机上效果器建不出来时
+ * 照常可用，所以渲染在 `available` 判断之外。响度平衡是衰减制（只压
+ * 响度大的歌），分析在后台做、按曲目缓存，首次播放某首时还没结果属预期。
+ */
+@Composable
+private fun PlaybackTransitionSection(tv: TrackVolume.State) {
+    SectionLabel("播放过渡")
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("淡入淡出", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                "自动切歌时旧曲结尾淡出、新曲开头淡入",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = tv.fadeEnabled, onCheckedChange = TrackVolume::setFadeEnabled)
+    }
+    if (tv.fadeEnabled) {
+        FxSlider(
+            title = "时长",
+            valueText = "%.1f 秒".format(tv.fadeDurationMs / 1000f),
+            value = tv.fadeDurationMs.toFloat(),
+            range = 500f..6000f,
+            onValueChange = { TrackVolume.setFadeDurationMs(it.toInt()) },
+        )
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 10.dp)) {
+        Column(Modifier.weight(1f)) {
+            Text("音量平衡", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                "自动压低响度过大的歌，切歌不再忽大忽小；首次播放某首时后台分析，稍后生效",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = tv.loudnessBalance, onCheckedChange = TrackVolume::setLoudnessBalance)
+    }
+}
+
+// ================================================================ ② 预设
 
 /**
  * 预设选择：分组 tab + **自动换行**的预设片 + 选中项说明卡。
@@ -213,7 +352,7 @@ private fun PresetSection(state: AudioFx.EqState) {
     }
 }
 
-// ================================================================ ② 频段与曲线
+// ================================================================ ③ 频段与曲线
 
 /** 频段：曲线预览在上（调之前先看一眼形状），频段滑块在下 */
 @Composable
@@ -313,7 +452,7 @@ private fun EqCurvePreview(
     }
 }
 
-// ================================================================ ③ 增强音效
+// ================================================================ ④ 增强音效
 
 /** 低音增强 / 环绕声 / 响度增强 / 混响 */
 @Composable

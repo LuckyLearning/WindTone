@@ -6,6 +6,7 @@ import android.media.audiofx.LoudnessEnhancer
 import android.media.audiofx.PresetReverb
 import android.media.audiofx.Virtualizer
 import com.luckylearning.windtone.data.Prefs
+import com.luckylearning.windtone.data.SettingsDefaults
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -66,6 +67,8 @@ object AudioFx {
          * 代价是作用范围变成整个系统混音，界面上必须说清楚。
          */
         val globalEffects: Boolean = false,
+        /** 当前音效方案（[SoundSchemes] 的 id）；空串 = 没选过方案 / 手动微调过（v1.1.52） */
+        val schemeId: String = "",
     ) {
         override fun equals(other: Any?): Boolean = this === other
         override fun hashCode(): Int = System.identityHashCode(this)
@@ -84,8 +87,156 @@ object AudioFx {
     private var reverb: PresetReverb? = null
     private var sessionId: Int = 0
 
+    /** A/B 试听（按住对比原声）：true 期间所有效果器临时旁路，状态与落盘值不动 */
+    @Volatile private var bypassed = false
+
     fun init(context: android.content.Context) {
         if (prefs == null) prefs = Prefs(context.applicationContext)
+    }
+
+    // ------------------------------------------------------- 音效方案（v1.1.52）
+
+    /** 当前生效的方案 id：车载 / 手机两个存储位按模式取用；空串 = 没选过方案 */
+    private fun activeSchemeId(p: Prefs): String = if (p.carMode) p.carSchemeId else p.soundSchemeId
+
+    /** 手动微调任一参数 = 离开当前方案（与「拖频段滑块即自定义」同一口径） */
+    private fun clearActiveSchemeId() {
+        val p = prefs ?: return
+        if (p.carMode) p.carSchemeId = "" else p.soundSchemeId = ""
+    }
+
+    /** 方案值 → Prefs（启用总开关；频段曲线由 [pushValuesToEffects] 按设备频段生成回写） */
+    private fun writeSchemeValues(p: Prefs, scheme: SoundSchemes.Scheme) {
+        p.eqEnabled = true
+        p.eqPresetId = scheme.eqPresetId
+        p.eqBassBoost = scheme.bass.coerceIn(0, 1000)
+        p.eqVirtualizer = scheme.virtual.coerceIn(0, 1000)
+        p.eqLoudness = scheme.loudness.coerceIn(0, 1500)
+        p.eqReverbId = scheme.reverbId
+    }
+
+    /** 把一组音效值推到已绑定的效果器与状态上；效果器未绑定时只更新状态（值已在 Prefs，绑定时会重建） */
+    private fun pushValuesToEffects(
+        enabled: Boolean,
+        presetId: String,
+        bandsCsvOverride: String?,
+        bassMb: Int,
+        virtualMb: Int,
+        loudnessMb: Int,
+        reverbId: String,
+        schemeId: String,
+    ) {
+        val p = prefs ?: return
+        val s = _state.value
+        if (!s.available || s.bandCount <= 0) {
+            _state.value = s.copy(enabled = enabled, presetId = presetId, schemeId = schemeId)
+            return
+        }
+        val preset = EqPresets.byId(presetId)
+        val bands = when {
+            preset != null -> EqPresets.curveFor(preset, s.bandCenterHz)
+            else -> decodeBands(bandsCsvOverride ?: p.eqBands, s.bandCount, s.bandMinMb, s.bandMaxMb)
+        }
+        equalizer?.let { applyBands(it, bands) }
+        // 曲线生成后回写频段：bindEffects 与「恢复默认」都依赖 eqBands 是当前曲线的真实值
+        if (preset != null) p.eqBands = encodeBands(bands)
+        runCatching { bass?.setStrength(bassMb.coerceIn(0, 1000).toShort()) }
+        runCatching { virtualizer?.setStrength(virtualMb.coerceIn(0, 1000).toShort()) }
+        runCatching { loudness?.setTargetGain(loudnessMb.coerceIn(0, 1500)) }
+        runCatching {
+            reverb?.setPreset(ReverbPresets.byId(reverbId)?.platform ?: ReverbPresets.OFF.platform)
+        }
+        _state.value = s.copy(
+            enabled = enabled,
+            presetId = presetId,
+            bandLevels = bands,
+            bassStrength = bassMb.coerceIn(0, 1000),
+            virtualStrength = virtualMb.coerceIn(0, 1000),
+            loudnessGain = loudnessMb.coerceIn(0, 1500),
+            reverbId = reverbId,
+            schemeId = schemeId,
+        )
+    }
+
+    /**
+     * 一键应用音效方案（[SoundSchemes.byId]）。
+     *
+     * 方案的语义强于单选预设：应用即**打开总开关**（用户选的是「我要这个声音」，
+     * 替他把开关打开比「选了方案却没声音」的困惑小得多）。应用后每个参数
+     * 仍可单独微调，微调即离开方案（id 清空，界面不再显示选中态）。
+     */
+    fun setScheme(id: String) {
+        val p = prefs ?: return
+        val scheme = SoundSchemes.byId(id) ?: return
+        writeSchemeValues(p, scheme)
+        if (p.carMode) p.carSchemeId = scheme.id else p.soundSchemeId = scheme.id
+        pushValuesToEffects(
+            true, scheme.eqPresetId, null,
+            scheme.bass, scheme.virtual, scheme.loudness, scheme.reverbId, scheme.id,
+        )
+        apply(true)
+    }
+
+    /**
+     * 进入车载模式（[com.luckylearning.windtone.playback.PlaybackEngine.setCarMode] 调用）。
+     *
+     * 先把手机侧的音效值**整体快照**（[SoundStash]），再套用车载方案 ——
+     * 快照让「车载模式里调的声音只在车载模式生效」，退出时原样还回来，
+     * 手机听感不会被车载方案覆盖。没选过车载方案（`carSchemeId` 空）则完全不动。
+     */
+    fun enterCarProfile() {
+        val p = prefs ?: return
+        val scheme = SoundSchemes.byId(p.carSchemeId) ?: return
+        if (p.soundStash.isEmpty()) {
+            p.soundStash = SoundStash.encode(
+                enabled = p.eqEnabled,
+                presetId = p.eqPresetId,
+                bandsCsv = p.eqBands,
+                bass = p.eqBassBoost,
+                virtual = p.eqVirtualizer,
+                loudness = p.eqLoudness,
+                reverbId = p.eqReverbId,
+            )
+        }
+        writeSchemeValues(p, scheme)
+        pushValuesToEffects(
+            true, scheme.eqPresetId, null,
+            scheme.bass, scheme.virtual, scheme.loudness, scheme.reverbId, scheme.id,
+        )
+        apply(true)
+    }
+
+    /** 退出车载模式：还原进车前的音效值快照；坏快照按「没快照」处理，保住现状不清值 */
+    fun exitCarProfile() {
+        val p = prefs ?: return
+        if (p.soundStash.isEmpty()) return
+        val snap = SoundStash.decode(p.soundStash)
+        p.soundStash = SettingsDefaults.SOUND_STASH
+        if (snap == null) return
+        p.eqEnabled = snap.enabled
+        p.eqPresetId = snap.presetId
+        p.eqBands = snap.bandsCsv
+        p.eqBassBoost = snap.bass.coerceIn(0, 1000)
+        p.eqVirtualizer = snap.virtual.coerceIn(0, 1000)
+        p.eqLoudness = snap.loudness.coerceIn(0, 1500)
+        p.eqReverbId = snap.reverbId
+        pushValuesToEffects(
+            snap.enabled, snap.presetId, snap.bandsCsv,
+            snap.bass, snap.virtual, snap.loudness, snap.reverbId, activeSchemeId(p),
+        )
+        apply(snap.enabled)
+    }
+
+    /**
+     * A/B 试听（按住对比原声）：[bypassed] 期间所有效果器临时旁路。
+     * 只动**运行态开关**，不碰任何落盘值 —— 松手即按用户原设置恢复，
+     * 中途杀进程也只会丢掉「正在按着」这个瞬态。
+     */
+    fun setBypassed(value: Boolean) {
+        bypassed = value
+        val s = _state.value
+        if (!s.available) return
+        apply(if (value) false else s.enabled)
     }
 
     /** 绑定播放会话（服务端调用；sessionId 未就绪时传入 0 延后绑定） */
@@ -173,6 +324,7 @@ object AudioFx {
             reverbId = p.eqReverbId,
             reverbAvailable = rev != null,
             globalEffects = global,
+            schemeId = activeSchemeId(p),
         )
         apply(p.eqEnabled)
     }
@@ -242,7 +394,8 @@ object AudioFx {
         // 手动拖滑块 = 离开预设，进入自定义
         prefs?.eqPresetId = ""
         prefs?.eqBands = encodeBands(levels)
-        _state.value = s.copy(bandLevels = levels, presetId = "")
+        clearActiveSchemeId()
+        _state.value = s.copy(bandLevels = levels, presetId = "", schemeId = "")
     }
 
     /**
@@ -257,21 +410,24 @@ object AudioFx {
         applyBands(eq, levels)
         prefs?.eqPresetId = preset.id
         prefs?.eqBands = encodeBands(levels)
-        _state.value = s.copy(presetId = preset.id, bandLevels = levels)
+        clearActiveSchemeId()
+        _state.value = s.copy(presetId = preset.id, bandLevels = levels, schemeId = "")
     }
 
     fun setBassStrength(strength: Int) {
         val v = strength.coerceIn(0, 1000)
         prefs?.eqBassBoost = v
         bass?.setStrength(v.toShort())
-        _state.value = _state.value.copy(bassStrength = v)
+        clearActiveSchemeId()
+        _state.value = _state.value.copy(bassStrength = v, schemeId = "")
     }
 
     fun setVirtualStrength(strength: Int) {
         val v = strength.coerceIn(0, 1000)
         prefs?.eqVirtualizer = v
         virtualizer?.setStrength(v.toShort())
-        _state.value = _state.value.copy(virtualStrength = v)
+        clearActiveSchemeId()
+        _state.value = _state.value.copy(virtualStrength = v, schemeId = "")
     }
 
     /** 响度增强：0 = 关闭，单位 mB（毫贝） */
@@ -279,7 +435,8 @@ object AudioFx {
         val v = gainMb.coerceIn(0, 1500)
         prefs?.eqLoudness = v
         runCatching { loudness?.setTargetGain(v) }
-        _state.value = _state.value.copy(loudnessGain = v)
+        clearActiveSchemeId()
+        _state.value = _state.value.copy(loudnessGain = v, schemeId = "")
         apply(_state.value.enabled)
     }
 
@@ -294,7 +451,8 @@ object AudioFx {
         val preset = ReverbPresets.byId(id) ?: ReverbPresets.OFF
         prefs?.eqReverbId = preset.id
         runCatching { reverb?.setPreset(preset.platform) }
-        _state.value = _state.value.copy(reverbId = preset.id)
+        clearActiveSchemeId()
+        _state.value = _state.value.copy(reverbId = preset.id, schemeId = "")
         apply(_state.value.enabled)
     }
 
@@ -317,6 +475,11 @@ object AudioFx {
             eqVirtualizer = 0
             eqLoudness = 0
             eqReverbId = ""
+            // 音效方案与进车快照一并回厂（v1.1.52）：快照留着会在下次退出车载时
+            // 把旧值还回来，盖掉这次 reset 的效果
+            soundSchemeId = SettingsDefaults.SOUND_SCHEME_ID
+            carSchemeId = SettingsDefaults.CAR_SCHEME_ID
+            soundStash = SettingsDefaults.SOUND_STASH
         }
 
         val s = _state.value

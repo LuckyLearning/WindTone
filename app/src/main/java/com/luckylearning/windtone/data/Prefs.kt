@@ -269,6 +269,32 @@ object SettingsDefaults {
      * 只记「是否解锁」，不记连点次数 —— 次数是界面态，重启即清零。
      */
     const val DEBUG_UNLOCKED = false
+
+    // ================================================================ 音效方案与播放过渡（v1.1.52）
+
+    /** 手机模式当前音效方案（[com.luckylearning.windtone.playback.SoundSchemes] 的 id）；空串 = 没选过方案 */
+    const val SOUND_SCHEME_ID = ""
+
+    /** 车载模式当前音效方案；空串 = 进入车载模式不改声音 */
+    const val CAR_SCHEME_ID = ""
+
+    /**
+     * 进入车载模式前的音效值快照（[com.luckylearning.windtone.playback.SoundStash] 编码）。
+     * 空串 = 没有在车载模式里换过声音，退出时无需恢复。
+     */
+    const val SOUND_STASH = ""
+
+    /** 切歌淡入淡出：出厂关（突然改变切歌手感比收益更吵） */
+    const val FADE_ENABLED = false
+
+    /** 淡入淡出时长（毫秒），单向各计 */
+    const val FADE_DURATION_MS = 2000
+
+    /** 淡入淡出时长的合法区间（毫秒）：0.5 秒以下基本无感，6 秒以上像卡带 */
+    val FADE_DURATION_RANGE = 500..6000
+
+    /** 曲间响度平衡：出厂关（需要后台分析音频，用户显式开启） */
+    const val LOUDNESS_BALANCE = false
 }
 
 /**
@@ -659,6 +685,62 @@ class Prefs private constructor(context: Context) {
         set(value) {
             sp.edit().putString(KEY_EQ_REVERB_ID, value).apply()
             ioScope.launch { store.putString(KEY_EQ_REVERB_ID, value) }
+        }
+
+    // ---------------- 音效方案与播放过渡（v1.1.52） ----------------
+
+    /**
+     * 手机模式当前音效方案 = [com.luckylearning.windtone.playback.SoundSchemes] 的 id。
+     * 空串 = 没选过方案 / 手动微调过（与 [eqPresetId] 的「空串 = 自定义」同一口径）。
+     */
+    var soundSchemeId: String
+        get() = sp.getString(KEY_SOUND_SCHEME_ID, SettingsDefaults.SOUND_SCHEME_ID).orEmpty()
+        set(value) {
+            sp.edit().putString(KEY_SOUND_SCHEME_ID, value).apply()
+            ioScope.launch { store.putString(KEY_SOUND_SCHEME_ID, value) }
+        }
+
+    /** 车载模式当前音效方案。空串 = 进入车载模式不改声音。 */
+    var carSchemeId: String
+        get() = sp.getString(KEY_CAR_SCHEME_ID, SettingsDefaults.CAR_SCHEME_ID).orEmpty()
+        set(value) {
+            sp.edit().putString(KEY_CAR_SCHEME_ID, value).apply()
+            ioScope.launch { store.putString(KEY_CAR_SCHEME_ID, value) }
+        }
+
+    /**
+     * 进入车载模式前的音效值快照（[com.luckylearning.windtone.playback.SoundStash] 编码）。
+     * 空串 = 当前不在「换过声音的车载会话」里。
+     */
+    var soundStash: String
+        get() = sp.getString(KEY_SOUND_STASH, SettingsDefaults.SOUND_STASH).orEmpty()
+        set(value) {
+            sp.edit().putString(KEY_SOUND_STASH, value).apply()
+            ioScope.launch { store.putString(KEY_SOUND_STASH, value) }
+        }
+
+    /** 切歌淡入淡出（自动切歌时旧曲结尾淡出、新曲开头淡入） */
+    var fadeEnabled: Boolean
+        get() = sp.getBoolean(KEY_FADE_ENABLED, SettingsDefaults.FADE_ENABLED)
+        set(value) {
+            sp.edit().putBoolean(KEY_FADE_ENABLED, value).apply()
+            ioScope.launch { store.putBoolean(KEY_FADE_ENABLED, value) }
+        }
+
+    /** 淡入 / 淡出单向时长（毫秒），合法区间见 [SettingsDefaults.FADE_DURATION_RANGE] */
+    var fadeDurationMs: Int
+        get() = sp.getInt(KEY_FADE_DURATION_MS, SettingsDefaults.FADE_DURATION_MS)
+        set(value) {
+            sp.edit().putInt(KEY_FADE_DURATION_MS, value).apply()
+            ioScope.launch { store.putInt(KEY_FADE_DURATION_MS, value) }
+        }
+
+    /** 曲间响度平衡（自动压低响度过大的歌，分析结果缓存在应用私有目录） */
+    var loudnessBalance: Boolean
+        get() = sp.getBoolean(KEY_LOUDNESS_BALANCE, SettingsDefaults.LOUDNESS_BALANCE)
+        set(value) {
+            sp.edit().putBoolean(KEY_LOUDNESS_BALANCE, value).apply()
+            ioScope.launch { store.putBoolean(KEY_LOUDNESS_BALANCE, value) }
         }
 
     // ============================================================ 5. 桌面悬浮歌词
@@ -1194,6 +1276,12 @@ class Prefs private constructor(context: Context) {
         const val KEY_EQ_VIRTUAL = "eq_virtual"
         const val KEY_EQ_LOUDNESS = "eq_loudness"
         const val KEY_EQ_REVERB_ID = "eq_reverb_id"
+        const val KEY_SOUND_SCHEME_ID = "sound_scheme_id"
+        const val KEY_CAR_SCHEME_ID = "car_scheme_id"
+        const val KEY_SOUND_STASH = "sound_stash"
+        const val KEY_FADE_ENABLED = "fade_enabled"
+        const val KEY_FADE_DURATION_MS = "fade_duration_ms"
+        const val KEY_LOUDNESS_BALANCE = "loudness_balance"
 
         // ---- 5. 桌面悬浮歌词 ----
         const val KEY_LYRIC_OVERLAY = "lyric_overlay"

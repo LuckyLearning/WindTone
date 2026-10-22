@@ -103,10 +103,28 @@ class SettingsDefaultsTest {
         check("autoCheckUpdate", prefs.autoCheckUpdate, SettingsDefaults.AUTO_UPDATE)
         check("updateDownloadRoute", prefs.updateDownloadRoute, SettingsDefaults.UPDATE_ROUTE)
 
+        // 音效方案与播放过渡（v1.1.52）
+        check("soundSchemeId", prefs.soundSchemeId, SettingsDefaults.SOUND_SCHEME_ID)
+        check("carSchemeId", prefs.carSchemeId, SettingsDefaults.CAR_SCHEME_ID)
+        check("soundStash", prefs.soundStash, SettingsDefaults.SOUND_STASH)
+        check("fadeEnabled", prefs.fadeEnabled, SettingsDefaults.FADE_ENABLED)
+        check("fadeDurationMs", prefs.fadeDurationMs, SettingsDefaults.FADE_DURATION_MS)
+        check("loudnessBalance", prefs.loudnessBalance, SettingsDefaults.LOUDNESS_BALANCE)
+
         assertTrue(
             "出厂默认值出现了两处定义（Prefs getter 与 SettingsDefaults 不一致）：\n" +
                 drift.joinToString("\n"),
             drift.isEmpty(),
+        )
+    }
+
+    /** 淡入淡出时长默认值必须落在自己的合法区间里，否则一读出来就被夹走 */
+    @Test
+    fun fadeDurationDefaultSitsInsideItsRange() {
+        assertTrue(
+            "FADE_DURATION_MS=${SettingsDefaults.FADE_DURATION_MS} 不在 " +
+                "FADE_DURATION_RANGE=${SettingsDefaults.FADE_DURATION_RANGE} 里",
+            SettingsDefaults.FADE_DURATION_MS in SettingsDefaults.FADE_DURATION_RANGE,
         )
     }
 
