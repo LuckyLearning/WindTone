@@ -80,8 +80,14 @@ object AppVisual {
     fun favColor(dark: Boolean): Color = if (dark) Color(0xFFFF7A8A) else Color(0xFFD93852)
 
     // ============================================================ 玻璃拟态
-    /** 玻璃底色（--glass-bg）。无真模糊（minSdk 24 无 RenderEffect），用高不透明度近似。 */
-    fun glassBg(dark: Boolean): Color = if (dark) Color(0xB81C1A25) else Color(0xA8FFFFFF)
+    /**
+     * 玻璃底色（--glass-bg）。无真模糊（minSdk 24 无 RenderEffect），用高不透明度近似。
+     *
+     * 2026-10-22 用户反馈「抽屉透明度太高，底下内容全透出来」：暗色 0xB8(72%) → 0xE6(90%)、
+     * 浅色 0xA8(66%) → 0xF0(94%)。玻璃感靠 [glassBorder] 描边与渐变维持，底色必须压得住
+     * 播放页的歌词 / 唱片，否则弹层上的字与底下内容糊成一片。
+     */
+    fun glassBg(dark: Boolean): Color = if (dark) Color(0xE61C1A25) else Color(0xF0FFFFFF)
 
     /** 玻璃描边（--glass-bd）。 */
     fun glassBorder(dark: Boolean): Color =

@@ -13,7 +13,7 @@
   --player-top:#49475F; --player-mid:#211F2B;
   --dim:rgba(0,0,0,.62); --phone-frame:#2C2A33; --fav:#FF7A8A;
   --board-bg:#08070B; --board-fg:#D9D5E0; --board-dim:#8D8998; --board-line:#26242E; --board-card:#121017;
-  --glass-bg:rgba(28,26,37,.72); --glass-bd:rgba(197,191,255,.22);
+  --glass-bg:rgba(28,26,37,.90); --glass-bd:rgba(197,191,255,.22);
 }
 [data-theme="light"]{
   --primary:#5B4BE0; --on-primary:#FFFFFF; --primary-container:#E4E0FF; --on-primary-container:#16005C;
@@ -26,7 +26,7 @@
   --player-top:#C5BFF3; --player-mid:#E7E4F8;
   --dim:rgba(0,0,0,.34); --phone-frame:#C8C5D2; --fav:#D93852;
   --board-bg:#EFEEF4; --board-fg:#2A2833; --board-dim:#6B6875; --board-line:#DBD8E3; --board-card:#FFFFFF;
-  --glass-bg:rgba(255,255,255,.66); --glass-bd:rgba(91,75,224,.20);
+  --glass-bg:rgba(255,255,255,.94); --glass-bd:rgba(91,75,224,.20);
 }
 
 /* ============================================================ 画板外壳 */

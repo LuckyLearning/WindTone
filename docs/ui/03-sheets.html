@@ -139,7 +139,13 @@
       </div>
     </div>
   </div>
-  <p class="note"><b>关键点：</b>分组标题用 primary 加粗小标题（SectionLabel，上边距 18dp）；
+  <p class="note"><b>关键点：</b><b>限高 70% + 内部滚动</b>（2026-10-22 用户反馈：平板横屏上整层被顶到
+  底部控制键底下、尾项看不见）——弹层内容最高占屏高 70%（<code>sheetMaxHeight()</code>，
+  队列弹层 60%），超出的部分 <code>verticalScroll</code> 上下滚，不许弹层自己顶到近全屏；
+  均衡器弹层（⑲）同一口径（原固定 560dp 已废除）。<b>玻璃底色整体提不透明度</b>（2026-10-22 用户反馈
+  「透明度太高压不住底下内容」）：深色 .72 → <code>.90</code>、浅色 .66 → <code>.94</code>
+  （<code>--glass-bg</code>，07-spec 已同步），玻璃感靠 <code>--glass-bd</code> 彩色描边维持。
+  分组标题用 primary 加粗小标题（SectionLabel，上边距 18dp）；
   <b>速度与变调同组</b>（v1.1.6）——两者在播放器里是同一个 <code>PlaybackParameters</code>，
   界面上分开摆会让人以为互不影响（实际会互相覆盖，<code>setPlaybackSpeed</code> 内部就是
   <code>PlaybackParameters(speed, 1f)</code>，单调它会把变调打回原调）；<b>变调的单位是半音</b>

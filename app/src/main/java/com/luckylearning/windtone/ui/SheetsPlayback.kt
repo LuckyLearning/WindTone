@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -86,7 +89,9 @@ fun QueueSheet(
                 ) { Text("存为歌单") }
             }
             Spacer(Modifier.height(8.dp))
-            LazyColumn(Modifier.height(420.dp)) {
+            // 固定 420dp 在矮屏（平板横屏 / 车机）会连标题一起越过屏高 70%，
+            // 改为「上限 = 屏高 60%」，队列短时按内容收缩。
+            LazyColumn(Modifier.heightIn(max = sheetMaxHeight(0.60f))) {
                 itemsIndexed(queue, key = { _, e -> "${e.index}-${e.mediaId}" }) { _, entry ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -253,7 +258,15 @@ fun PlayerOptionsSheet(
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                // 2026-10-22 用户要求：最高屏高 70%，内容比这长就内部滚动 ——
+                // 平板横屏上这层会被顶到底部控制键底下，最后一项「导出歌词」看不见。
+                .heightIn(max = sheetMaxHeight())
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+        ) {
             Text("播放设置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
 
             SectionLabel("当前歌曲")

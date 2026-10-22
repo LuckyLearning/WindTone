@@ -97,8 +97,9 @@ fun EqSheet(onClose: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                // 内容比屏幕长时整页滚（预设网 + 曲线 + 频段 + 四项增强，一屏放不下）
-                .heightIn(max = 560.dp)
+                // 内容比屏幕长时整页滚（预设网 + 曲线 + 频段 + 四项增强，一屏放不下）。
+                // 上限从固定 560dp 改为屏高 70%（2026-10-22 用户要求，与播放设置同一口径）
+                .heightIn(max = sheetMaxHeight())
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp),
         ) {

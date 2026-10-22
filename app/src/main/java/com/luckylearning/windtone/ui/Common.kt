@@ -68,6 +68,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -751,6 +752,21 @@ private fun rememberShimmerBrush(): Brush {
             end = Offset(progress * 600f, 300f),
         )
     }
+}
+
+/**
+ * 底部弹层内容的最大高度：屏高的 70%（2026-10-22 用户要求）。
+ *
+ * 弹层比这高就要内部滚动（`verticalScroll` / `LazyColumn`），不能再让
+ * `ModalBottomSheet` 自己顶到逼近全屏——平板横屏上「播放设置」就是被顶到
+ * 底部控制键底下、尾项看不见才立的规矩。
+ *
+ * @param fraction 占可用屏高的比例；列表型弹层（自带标题行）给小一点
+ */
+@Composable
+fun sheetMaxHeight(fraction: Float = 0.70f): Dp {
+    val conf = LocalConfiguration.current
+    return (conf.screenHeightDp * fraction).dp
 }
 
 /** 分组 / 歌单列表右侧的数量胶囊 */
