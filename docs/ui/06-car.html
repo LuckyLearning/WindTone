@@ -309,26 +309,33 @@
               <div class="cv3-t">听风（主题曲）</div>
               <div class="cv3-s">WindTone · 原声集</div>
             </div>
-            <svg class="ic fav-on"><use href="#i-heart"/></svg>
-            <div class="sp"></div>
-            <button class="ibtn"><svg class="ic"><use href="#i-queue"/></svg></button>
           </div>
-          <div class="carlyric">
-            <div class="cl">风从很远的地方吹来</div>
-            <div class="cl">吹过屋檐 吹过窗台</div>
-            <div class="cl cur">听风的人 都还没睡<span class="tr">Those who listen to the wind are still awake</span></div>
-            <div class="cl">把心事交给夜里慢慢吹</div>
-          </div>
-          <div class="cv3-prog">
-            <div class="cartrack"><span class="cplayed" style="width:37%"></span><span class="cthumb" style="left:37%"></span></div>
-            <div class="cv3-ptime"><span>1:24</span><span>3:52</span></div>
-          </div>
-          <div class="carctl" style="justify-content:center">
-            <button class="cbtn"><svg class="ic"><use href="#i-repeat"/></svg></button>
-            <button class="cbtn"><svg class="ic"><use href="#i-prev"/></svg></button>
-            <button class="cmain"><svg class="ic"><use href="#i-pause"/></svg></button>
-            <button class="cbtn"><svg class="ic"><use href="#i-next"/></svg></button>
-            <button class="cbtn"><svg class="ic"><use href="#i-queue"/></svg></button>
+          <div class="cv3-prow">
+            <div class="cv3-side">
+              <button class="cv3-sbtn on"><svg class="ic"><use href="#i-heart"/></svg></button>
+              <button class="cv3-sbtn"><svg class="ic"><use href="#i-queue"/></svg></button>
+              <button class="cv3-sbtn mute"><svg class="ic"><use href="#i-tune"/></svg></button>
+            </div>
+            <div class="cv3-pbody">
+              <div class="carlyric">
+                <div class="cl">风从很远的地方吹来</div>
+                <div class="cl">吹过屋檐 吹过窗台</div>
+                <div class="cl cur">听风的人 都还没睡<span class="tr">Those who listen to the wind are still awake</span></div>
+                <div class="cl">把心事交给夜里慢慢吹</div>
+              </div>
+              <div class="cv3-prog">
+                <div class="cartrack"><span class="cplayed" style="width:37%"></span><span class="cthumb" style="left:37%"></span></div>
+                <div class="cv3-ptime"><span>1:24</span><span>3:52</span></div>
+              </div>
+              <div class="carctl">
+                <span class="sp"></span>
+                <button class="cbtn"><svg class="ic"><use href="#i-repeat"/></svg></button>
+                <button class="cbtn"><svg class="ic"><use href="#i-prev"/></svg></button>
+                <button class="cmain"><svg class="ic"><use href="#i-pause"/></svg></button>
+                <button class="cbtn"><svg class="ic"><use href="#i-next"/></svg></button>
+                <span class="sp"></span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -338,12 +345,16 @@
   <p class="note"><b>关键点：</b>播放页不是一个盖住一切的全屏页，而是<b>同一个壳里换了内容区</b>——
   导航还在，「全部歌曲」一点就回到列表，不需要先退出播放页。<b>底部播放条在这一屏不出现</b>：
   内容区本身就是播放器，再加一条是重复信息（这是「一条信息只出现一次」的落地）。<br>
-  <b>歌名行</b>：封面 56 + 歌名 23sp/800 + 歌手 14sp + 红心紧跟其后（不贴到屏幕最右缘，1707dp 上够不着也看不清）+ 右侧队列。
+  <b>歌名行</b>：封面 56 + 歌名 23sp/800 + 歌手 14sp，红心与队列不再挤在顶栏最右端（v1.1.53 起移进左侧功能列）。
   <b>进度条</b> 10px 粗、滑块 26px，位于控制键正上方——手指从控制键往上挪一点点就能拖。<br>
+  <b>左侧功能列（v1.1.53）</b>：<b>收藏 / 播放队列 / 播放设置</b> 三键竖排一列，64px 见方、间距 24px、圆角 20px，
+  整列在歌词区垂直居中。为什么从「顶栏右上 + 底部最右」收进来：1707dp 屏上三点分散在屏幕两端，视线要横穿整块屏；
+  竖排一列后驾驶位一只手沿列下按即可，且底部控制行只剩「播放模式 + ⏮⏯⏭」，主键居中不再被右槽抢位。
+  底片 6% 白、选中态 20% 主色——车机背景是渐变 + 模糊，纯图标在浅色区域会「消失」。<br>
   <b>歌词</b>：正文 26px / 当前行 32px / 译文 19px（= 用户字号 × 1.5），当前行靠<b>底色 + 字号 + 颜色</b>区分，无竖线；
   双语三种模式（中英 / 只中文 / 只英文）在这一屏同样生效。<br>
   <b>控制键</b>：<code>.cbtn</code> 76px / 主键 <code>.cmain</code> 112px、间距 26px——行车中靠边缘一按就中，不需要瞄。<br>
-  <b>沉浸态</b>：5 秒无触摸收起顶栏与控制键，只留歌名行（含红心）+ 歌词 + 进度条 + 时间；任意触摸立即恢复并重新计时。
+  <b>沉浸态</b>：5 秒无触摸收起顶栏、左侧功能列与控制键，只留歌名行（含红心）+ 歌词 + 进度条 + 时间；任意触摸立即恢复并重新计时。
   导航栏在沉浸态<b>一起收起</b>（它也是控件），这样歌词能拿到全宽。</p>
 </figure>
 
@@ -373,25 +384,32 @@
               <div class="cv3-t">听风（主题曲）</div>
               <div class="cv3-s">WindTone · 原声集</div>
             </div>
-            <svg class="ic fav-on"><use href="#i-heart"/></svg>
-            <div class="sp"></div>
-            <button class="ibtn"><svg class="ic"><use href="#i-queue"/></svg></button>
           </div>
-          <div class="cv3-coverwrap">
-            <div class="cv3-cover t3">听</div>
-            <div class="cv3-t">听风（主题曲）</div>
-            <div class="cv3-s">WindTone · 原声集</div>
-          </div>
-          <div class="cv3-prog">
-            <div class="cartrack"><span class="cplayed" style="width:37%"></span><span class="cthumb" style="left:37%"></span></div>
-            <div class="cv3-ptime"><span>1:24</span><span>3:52</span></div>
-          </div>
-          <div class="carctl" style="justify-content:center">
-            <button class="cbtn"><svg class="ic"><use href="#i-repeat"/></svg></button>
-            <button class="cbtn"><svg class="ic"><use href="#i-prev"/></svg></button>
-            <button class="cmain"><svg class="ic"><use href="#i-pause"/></svg></button>
-            <button class="cbtn"><svg class="ic"><use href="#i-next"/></svg></button>
-            <button class="cbtn"><svg class="ic"><use href="#i-queue"/></svg></button>
+          <div class="cv3-prow">
+            <div class="cv3-side">
+              <button class="cv3-sbtn on"><svg class="ic"><use href="#i-heart"/></svg></button>
+              <button class="cv3-sbtn"><svg class="ic"><use href="#i-queue"/></svg></button>
+              <button class="cv3-sbtn mute"><svg class="ic"><use href="#i-tune"/></svg></button>
+            </div>
+            <div class="cv3-pbody">
+              <div class="cv3-coverwrap">
+                <div class="cv3-cover t3">听</div>
+                <div class="cv3-t">听风（主题曲）</div>
+                <div class="cv3-s">WindTone · 原声集</div>
+              </div>
+              <div class="cv3-prog">
+                <div class="cartrack"><span class="cplayed" style="width:37%"></span><span class="cthumb" style="left:37%"></span></div>
+                <div class="cv3-ptime"><span>1:24</span><span>3:52</span></div>
+              </div>
+              <div class="carctl">
+                <span class="sp"></span>
+                <button class="cbtn"><svg class="ic"><use href="#i-repeat"/></svg></button>
+                <button class="cbtn"><svg class="ic"><use href="#i-prev"/></svg></button>
+                <button class="cmain"><svg class="ic"><use href="#i-pause"/></svg></button>
+                <button class="cbtn"><svg class="ic"><use href="#i-next"/></svg></button>
+                <span class="sp"></span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -429,26 +447,33 @@
               <div class="cv3-t">听风（主题曲）</div>
               <div class="cv3-s">WindTone · 原声集</div>
             </div>
-            <svg class="ic fav-on"><use href="#i-heart"/></svg>
-            <div class="sp"></div>
-            <button class="ibtn"><svg class="ic"><use href="#i-queue"/></svg></button>
           </div>
-          <div class="cv3-nolyr">
-            <svg class="ic nic"><use href="#i-note"/></svg>
-            <div class="big">暂无歌词</div>
-            <div class="sub">未找到本地歌词文件，也不会自动联网获取</div>
-            <div class="sub">把同名 .lrc 放进歌曲目录即可自动匹配</div>
-          </div>
-          <div class="cv3-prog">
-            <div class="cartrack"><span class="cplayed" style="width:37%"></span><span class="cthumb" style="left:37%"></span></div>
-            <div class="cv3-ptime"><span>1:24</span><span>3:52</span></div>
-          </div>
-          <div class="carctl" style="justify-content:center">
-            <button class="cbtn"><svg class="ic"><use href="#i-repeat"/></svg></button>
-            <button class="cbtn"><svg class="ic"><use href="#i-prev"/></svg></button>
-            <button class="cmain"><svg class="ic"><use href="#i-pause"/></svg></button>
-            <button class="cbtn"><svg class="ic"><use href="#i-next"/></svg></button>
-            <button class="cbtn"><svg class="ic"><use href="#i-queue"/></svg></button>
+          <div class="cv3-prow">
+            <div class="cv3-side">
+              <button class="cv3-sbtn on"><svg class="ic"><use href="#i-heart"/></svg></button>
+              <button class="cv3-sbtn"><svg class="ic"><use href="#i-queue"/></svg></button>
+              <button class="cv3-sbtn mute"><svg class="ic"><use href="#i-tune"/></svg></button>
+            </div>
+            <div class="cv3-pbody">
+              <div class="cv3-nolyr">
+                <svg class="ic nic"><use href="#i-note"/></svg>
+                <div class="big">暂无歌词</div>
+                <div class="sub">未找到本地歌词文件，也不会自动联网获取</div>
+                <div class="sub">把同名 .lrc 放进歌曲目录即可自动匹配</div>
+              </div>
+              <div class="cv3-prog">
+                <div class="cartrack"><span class="cplayed" style="width:37%"></span><span class="cthumb" style="left:37%"></span></div>
+                <div class="cv3-ptime"><span>1:24</span><span>3:52</span></div>
+              </div>
+              <div class="carctl">
+                <span class="sp"></span>
+                <button class="cbtn"><svg class="ic"><use href="#i-repeat"/></svg></button>
+                <button class="cbtn"><svg class="ic"><use href="#i-prev"/></svg></button>
+                <button class="cmain"><svg class="ic"><use href="#i-pause"/></svg></button>
+                <button class="cbtn"><svg class="ic"><use href="#i-next"/></svg></button>
+                <span class="sp"></span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -486,26 +511,33 @@
               <div class="cv3-t">听风（主题曲）</div>
               <div class="cv3-s">WindTone · 原声集</div>
             </div>
-            <svg class="ic fav-on"><use href="#i-heart"/></svg>
-            <div class="sp"></div>
-            <button class="ibtn"><svg class="ic"><use href="#i-queue"/></svg></button>
           </div>
-          <div class="carlyric">
-            <div class="cl">风从很远的地方吹来</div>
-            <div class="cl">吹过屋檐 吹过窗台</div>
-            <div class="cl cur">听风的人 都还没睡<span class="tr">Those who listen to the wind are still awake</span></div>
-            <div class="cl">把心事交给夜里慢慢吹</div>
-          </div>
-          <div class="cv3-prog">
-            <div class="cartrack"><span class="cplayed" style="width:37%"></span><span class="cthumb" style="left:37%"></span></div>
-            <div class="cv3-ptime"><span>1:24</span><span>3:52</span></div>
-          </div>
-          <div class="carctl" style="justify-content:center">
-            <button class="cbtn"><svg class="ic"><use href="#i-repeat"/></svg></button>
-            <button class="cbtn"><svg class="ic"><use href="#i-prev"/></svg></button>
-            <button class="cmain"><svg class="ic"><use href="#i-pause"/></svg></button>
-            <button class="cbtn"><svg class="ic"><use href="#i-next"/></svg></button>
-            <button class="cbtn"><svg class="ic"><use href="#i-queue"/></svg></button>
+          <div class="cv3-prow">
+            <div class="cv3-side">
+              <button class="cv3-sbtn on"><svg class="ic"><use href="#i-heart"/></svg></button>
+              <button class="cv3-sbtn"><svg class="ic"><use href="#i-queue"/></svg></button>
+              <button class="cv3-sbtn mute"><svg class="ic"><use href="#i-tune"/></svg></button>
+            </div>
+            <div class="cv3-pbody">
+              <div class="carlyric">
+                <div class="cl">风从很远的地方吹来</div>
+                <div class="cl">吹过屋檐 吹过窗台</div>
+                <div class="cl cur">听风的人 都还没睡<span class="tr">Those who listen to the wind are still awake</span></div>
+                <div class="cl">把心事交给夜里慢慢吹</div>
+              </div>
+              <div class="cv3-prog">
+                <div class="cartrack"><span class="cplayed" style="width:37%"></span><span class="cthumb" style="left:37%"></span></div>
+                <div class="cv3-ptime"><span>1:24</span><span>3:52</span></div>
+              </div>
+              <div class="carctl">
+                <span class="sp"></span>
+                <button class="cbtn"><svg class="ic"><use href="#i-repeat"/></svg></button>
+                <button class="cbtn"><svg class="ic"><use href="#i-prev"/></svg></button>
+                <button class="cmain"><svg class="ic"><use href="#i-pause"/></svg></button>
+                <button class="cbtn"><svg class="ic"><use href="#i-next"/></svg></button>
+                <span class="sp"></span>
+              </div>
+            </div>
           </div>
           <div class="cv3-voldock">
             <div class="vrow">
@@ -540,9 +572,6 @@
               <div class="cv3-t">听风（主题曲）</div>
               <div class="cv3-s">WindTone · 原声集</div>
             </div>
-            <svg class="ic fav-on"><use href="#i-heart"/></svg>
-            <div class="sp"></div>
-            <button class="ibtn"><svg class="ic"><use href="#i-queue"/></svg></button>
           </div>
           <div class="carlyric">
             <div class="cl">风从很远的地方吹来</div>

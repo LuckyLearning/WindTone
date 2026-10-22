@@ -331,6 +331,10 @@ ui/                       ── 展示层 ──
   MainScreen.kt           主界面（列表 / 分组 / 歌单 / 扫描引导）—— 把分域 VM **按需**传给子组件
   MainScreenParts.kt      主界面子组件（PlayerPane / SelectionBar / SaveQueueAsPlaylistDialog，2026-10-21 拆出）
   PlayerScreen.kt         全屏播放页（**手机与车机共用**；改它之前务必先读 docs/ui/02-player.html 与 06-car.html 核对两版）
+                          ⚠️ 车机分支（`state.carMode`）自 v1.1.53 起是「左功能列 + 左歌词 + 右唱片」：
+                          收藏 / 播放队列 / 播放设置三键竖排在**最左一列**（`CarSideActions`），
+                          顶栏只剩「收起箭头 + 居中歌名/歌手」，底部控制行只剩「播放模式 + ⏮⏯⏭」。
+                          改版式时这三处必须一起动，漏一处就会出现「同一个入口两处」或主键不居中。
   PlayerScreenParts.kt    播放页自绘零件（PlaybackSlider / TimeLabel / CoverPane，2026-10-21 拆出）
   LyricsPane.kt           歌词面板（滚动居中、当前行高亮、偏移调节）
   SheetsPlayback.kt        播放域弹层（队列、睡眠定时、播放设置）

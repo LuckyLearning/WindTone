@@ -380,16 +380,11 @@ fun PlayerScreen(
                                 textAlign = TextAlign.Center,
                             )
                         }
-                        if (song != null) {
-                            IconButton(onClick = { onToggleFavorite(song); keepAwake() }) {
-                                Icon(
-                                    imageVector = if (isFavorite) AppIcons.Favorite
-                                    else AppIcons.FavoriteBorder,
-                                    contentDescription = if (isFavorite) "取消收藏" else "收藏",
-                                    tint = if (isFavorite) scheme.primary else scheme.onSurfaceVariant,
-                                )
-                            }
-                        }
+                        // 收藏 / 播放设置移到左侧竖排（v1.1.53）：
+                        // 顶栏只留「收起箭头 + 居中歌名 / 歌手」。
+                        // 右侧补一个与左箭头等宽的占位，歌名才是**屏幕正中**而不是
+                        // 「箭头右侧那段的正中」（偏右约 24dp，肉眼一眼就看得出）。
+                        if (!pane) Spacer(Modifier.width(48.dp))
                     } else {
                         // 手机顶栏中间留空 —— 歌名 / 歌手在下方常驻歌名行里（效果图 ⑫ 的 p-nowrow）
                         Spacer(Modifier.weight(1f))
@@ -401,12 +396,15 @@ fun PlayerScreen(
                             )
                         }
                     }
-                    IconButton(onClick = { keepAwake(); showOptions = true }) {
-                        Icon(
-                            imageVector = AppIcons.Tune,
-                            contentDescription = "播放设置",
-                            tint = scheme.onSurface,
-                        )
+                    // 车机：播放设置已移进左侧竖排功能列（v1.1.53），顶栏不再出现
+                    if (!state.carMode) {
+                        IconButton(onClick = { keepAwake(); showOptions = true }) {
+                            Icon(
+                                imageVector = AppIcons.Tune,
+                                contentDescription = "播放设置",
+                                tint = scheme.onSurface,
+                            )
+                        }
                     }
                 }
 
@@ -424,10 +422,29 @@ fun PlayerScreen(
                     // 车机（v1.1.44）：参考车机版音乐应用的版式 —— **左歌词、右唱片**，
                     // 两者同时在场，不再「二选一」。宽屏上这样排的信息密度最高：
                     // 歌词占主视区（瞄一眼就能读），唱片在右侧做视觉锚点。
+                    //
+                    // v1.1.53（2026-10-22 用户要求）：收藏 / 播放队列 / 播放设置
+                    // 三键从「顶栏右上 + 底部行最右」**收进最左侧一列竖排** ——
+                    // 1707dp 宽屏上这三点原本散在三个角，视线要横穿整块屏；
+                    // 竖排一列后驾驶位单手一列盲按就行，且底部控制行只剩
+                    // 「播放模式 + ⏮⏯⏭」，主键居中不再被右槽抢视线。
                     Row(
                         modifier = Modifier.fillMaxSize(),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        // 沉浸态（5 秒无触摸）与顶栏 / 控制行同步收起，歌词拿回全宽
+                        if (!immersive) {
+                            CarSideActions(
+                                isFavorite = isFavorite,
+                                canFavorite = song != null,
+                                onFavorite = {
+                                    song?.let { onToggleFavorite(it) }
+                                    keepAwake()
+                                },
+                                onQueue = { keepAwake(); onShowQueue() },
+                                onOptions = { keepAwake(); showOptions = true },
+                            )
+                        }
                         PlayerLyrics(
                             state = state,
                             progressState = progressState,
@@ -662,19 +679,19 @@ fun PlayerScreen(
                             )
                         }
                     }
-                    // 右侧对称槽：与左槽等宽，把中间三键顶回屏幕正中；
+                    // 右侧对称槽：与左槽等宽，把中间三键顶回屏幕正中。
                     // 槽内放播放队列入口（效果图 ⑫ 的 p-ctl 右槽），与左边的播放模式对称。
+                    // ⚠️ 车机不放：队列键已移进左侧竖排功能列（v1.1.53），
+                    // 但**槽位必须留着**——空了也要占着 1f，否则三键会被左槽顶偏。
                     Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-                        IconButton(
-                            onClick = { keepAwake(); onShowQueue() },
-                            modifier = if (state.carMode) Modifier.size(CAR_SECONDARY_BUTTON) else Modifier,
-                        ) {
-                            Icon(
-                                imageVector = AppIcons.QueueMusic,
-                                contentDescription = "播放队列",
-                                tint = scheme.onSurface,
-                                modifier = if (state.carMode) Modifier.size(34.dp) else Modifier,
-                            )
+                        if (!state.carMode) {
+                            IconButton(onClick = { keepAwake(); onShowQueue() }) {
+                                Icon(
+                                    imageVector = AppIcons.QueueMusic,
+                                    contentDescription = "播放队列",
+                                    tint = scheme.onSurface,
+                                )
+                            }
                         }
                     }
                 }
@@ -885,6 +902,100 @@ private fun PlayerLyrics(
         tapSeeks = state.lyricTapSeeks,
         onLineLongPress = onLineLongPress,
     )
+}
+
+/** 车机左侧功能列的键尺寸（v1.1.53）。64dp 触控目标 = 行车中不用瞄。 */
+private val CAR_SIDE_TILE = 64.dp
+
+/**
+ * 车机播放页左侧的功能列：收藏 / 播放队列 / 播放设置（v1.1.53）。
+ *
+ * 为什么要竖排一列：车机屏 1707dp 宽，这三颗原本散在「顶栏右上」和「底部行最右」，
+ * 视线要从歌词横穿到屏幕边缘才能找到；收成最左一列后，驾驶位一只手沿着一列摸下去
+ * 就能按到，且不再和底部的播放控制键抢位置。
+ *
+ * 三颗全程显示、不随状态增删（无当前曲时收藏键置灰）—— 入口时有时无比置灰更难理解。
+ * 沉浸态由调用方整列不渲染（与顶栏 / 控制行同一开关）。
+ *
+ * 间距用 [Arrangement.SpaceEvenly] 而不是固定 gap：矮横屏（如 600px 高的车机档位）
+ * 中部区可能装不下「3 键 + 固定间距」，固定间距会把最下面那颗顶进进度条里；
+ * SpaceEvenly 在高度富余时拉开、紧张时收紧，永不越界。
+ */
+@Composable
+private fun CarSideActions(
+    isFavorite: Boolean,
+    canFavorite: Boolean,
+    onFavorite: () -> Unit,
+    onQueue: () -> Unit,
+    onOptions: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Column(
+        modifier = Modifier
+            .padding(end = 20.dp)
+            .fillMaxHeight(),
+        verticalArrangement = Arrangement.SpaceEvenly,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        CarSideAction(
+            icon = if (isFavorite) AppIcons.Favorite else AppIcons.FavoriteBorder,
+            description = if (isFavorite) "取消收藏" else "收藏",
+            highlighted = isFavorite,
+            enabled = canFavorite,
+            onClick = onFavorite,
+        )
+        CarSideAction(
+            icon = AppIcons.QueueMusic,
+            description = "播放队列",
+            onClick = onQueue,
+        )
+        CarSideAction(
+            icon = AppIcons.Tune,
+            description = "播放设置",
+            tint = scheme.onSurfaceVariant,
+            onClick = onOptions,
+        )
+    }
+}
+
+/**
+ * 左侧功能列里的一颗键：圆角底片 + 图标。
+ *
+ * 底片不是装饰 —— 车机背景是占位图 / 深色渐变混合，纯图标在浅色区域会「消失」；
+ * 一层 6% 的 onSurface 底片保证任何背景下都有可见边界，选中态换 20% 主色。
+ */
+@Composable
+private fun CarSideAction(
+    icon: ImageVector,
+    description: String,
+    onClick: () -> Unit,
+    highlighted: Boolean = false,
+    enabled: Boolean = true,
+    tint: Color? = null,
+) {
+    val scheme = MaterialTheme.colorScheme
+    IconButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier
+            .size(CAR_SIDE_TILE)
+            .clip(RoundedCornerShape(20.dp))
+            .background(
+                if (highlighted) scheme.primary.copy(alpha = 0.20f)
+                else scheme.onSurface.copy(alpha = 0.06f)
+            ),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = description,
+            tint = when {
+                !enabled -> scheme.onSurfaceVariant.copy(alpha = 0.38f)
+                highlighted -> scheme.primary
+                else -> tint ?: scheme.onSurface
+            },
+            modifier = Modifier.size(30.dp),
+        )
+    }
 }
 
 /**

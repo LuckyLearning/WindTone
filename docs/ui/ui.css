@@ -828,6 +828,17 @@ body{
 .cv3-ptime{display:flex;justify-content:space-between;font-size:13px;
   color:var(--on-surface-variant);margin-top:6px}
 
+/* ---- 播放页左侧功能列（v1.1.53）：收藏 / 队列 / 播放设置 竖排一列 ---- */
+.cv3-prow{flex:1;min-height:0;display:flex;align-items:stretch;gap:18px}
+.cv3-side{width:64px;flex:none;display:flex;flex-direction:column;justify-content:center;
+  gap:24px;align-items:center;border-right:1px solid var(--c-low)}
+.cv3-sbtn{width:64px;height:64px;border:0;border-radius:20px;flex:none;display:grid;place-items:center;
+  background:color-mix(in srgb,var(--on-bg) 6%,transparent);color:var(--on-bg)}
+.cv3-sbtn .ic{width:30px;height:30px}
+.cv3-sbtn.on{background:color-mix(in srgb,var(--primary) 20%,transparent);color:var(--primary)}
+.cv3-sbtn.mute{color:var(--on-surface-variant)}
+.cv3-pbody{flex:1;min-width:0;display:flex;flex-direction:column}
+
 /* ---- 专辑网格 ---- */
 .cv3-grid{flex:1;min-height:0;display:grid;grid-template-columns:repeat(6,1fr);
   gap:14px 12px;align-content:start;margin-top:14px;overflow:hidden}
