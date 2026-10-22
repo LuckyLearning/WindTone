@@ -328,12 +328,10 @@ data class PlayerUiState(
     val lyricOverlayLines: Int = 1,
     /** 悬浮窗最上面是否显示「歌名 + 歌手」两行小字 */
     val lyricOverlayShowTitle: Boolean = SettingsDefaults.OVERLAY_SHOW_TITLE,
-    /** 歌名 / 歌手两行小字的字号档位：0 小 / 1 中 / 2 大 */
-    val lyricOverlayTitleScale: Int = SettingsDefaults.OVERLAY_TITLE_SCALE,
-    /** 悬浮歌词字号档位：0 小 / 1 中 / 2 大 */
-    val lyricOverlayTextScale: Int = 1,
-    /** 悬浮歌词底板：0 无 / 1 半透明 / 2 深色实底 */
-    val lyricOverlayBackdrop: Int = 1,
+    /** 歌名 / 歌手两行小字的字号：正文的百分比（40..100，v1.1.51） */
+    val lyricOverlayTitlePercent: Int = SettingsDefaults.OVERLAY_TITLE_PERCENT,
+    /** 悬浮歌词正文字号（sp，12..60，v1.1.51 起任意值） */
+    val lyricOverlayTextSp: Int = SettingsDefaults.OVERLAY_TEXT_SP,
     /** 悬浮歌词暂停时：0 淡出 / 1 隐藏 */
     val lyricOverlayPauseMode: Int = 0,
     /**
@@ -374,8 +372,8 @@ data class PlayerUiState(
     val lyricOverlayYPercent: Int = SettingsDefaults.OVERLAY_Y_PERCENT,
     val lyricOverlayFullYPercent: Int = SettingsDefaults.OVERLAY_FULL_Y_PERCENT,
     val lyricOverlayBgColor: Int = SettingsDefaults.OVERLAY_BG_COLOR,
+    /** 背景不透明度（0..100，0 = 无底板）——v1.1.51 起背景只由颜色 + 这一项决定 */
     val lyricOverlayBgAlphaPercent: Int = SettingsDefaults.OVERLAY_BG_ALPHA_PERCENT,
-    val lyricOverlayCustomBg: Boolean = SettingsDefaults.OVERLAY_CUSTOM_BG,
     /** 悬浮窗里的歌词文字颜色（ARGB，默认纯白） */
     val lyricOverlayTextColor: Int = SettingsDefaults.OVERLAY_TEXT_COLOR,
     /** 悬浮歌词是否处于「调整位置」模式（临时可拖动，会话级，不落盘） */

@@ -108,21 +108,15 @@ class OverlaySettings(
         previewOverlayAfterConfigChange()
     }
 
-    override fun setLyricOverlayTitleScale(scale: Int) {
-        val normalized = settings.setOverlayTitleScale(scale)
-        state.update { it.copy(lyricOverlayTitleScale = normalized) }
+    override fun setLyricOverlayTitlePercent(percent: Int) {
+        val normalized = settings.setOverlayTitlePercent(percent)
+        state.update { it.copy(lyricOverlayTitlePercent = normalized) }
         previewOverlayAfterConfigChange()
     }
 
-    override fun setLyricOverlayTextScale(scale: Int) {
-        val normalized = settings.setOverlayTextScale(scale)
-        state.update { it.copy(lyricOverlayTextScale = normalized) }
-        previewOverlayAfterConfigChange()
-    }
-
-    override fun setLyricOverlayBackdrop(mode: Int) {
-        val normalized = settings.setOverlayBackdrop(mode)
-        state.update { it.copy(lyricOverlayBackdrop = normalized) }
+    override fun setLyricOverlayTextSp(textSp: Int) {
+        val normalized = settings.setOverlayTextSp(textSp)
+        state.update { it.copy(lyricOverlayTextSp = normalized) }
         previewOverlayAfterConfigChange()
     }
 
@@ -211,12 +205,6 @@ class OverlaySettings(
     override fun setLyricOverlayBgAlphaPercent(percent: Int) {
         val normalized = settings.setOverlayBgAlphaPercent(percent)
         state.update { it.copy(lyricOverlayBgAlphaPercent = normalized) }
-        previewOverlayAfterConfigChange()
-    }
-
-    override fun setLyricOverlayCustomBg(enabled: Boolean) {
-        settings.setOverlayCustomBg(enabled)
-        state.update { it.copy(lyricOverlayCustomBg = enabled) }
         previewOverlayAfterConfigChange()
     }
 

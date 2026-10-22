@@ -87,9 +87,8 @@ class PlaybackEngine(
             lyricOverlayFullWidthPercent = prefs.lyricOverlayFullWidthPercent,
             lyricOverlayFullOffsetPercent = prefs.lyricOverlayFullOffsetPercent,
             lyricOverlayShowTitle = prefs.lyricOverlayShowTitle,
-            lyricOverlayTitleScale = prefs.lyricOverlayTitleScale,
-            lyricOverlayTextScale = prefs.lyricOverlayTextScale,
-            lyricOverlayBackdrop = prefs.lyricOverlayBackdrop,
+            lyricOverlayTitlePercent = prefs.lyricOverlayTitlePercent,
+            lyricOverlayTextSp = prefs.lyricOverlayTextSp,
             lyricOverlayPauseMode = prefs.lyricOverlayPauseMode,
             // v1.1.29：悬浮窗按应用隐藏 + 前台应用记录开关
             lyricOverlayHiddenApps = prefs.lyricOverlayHiddenApps,
@@ -110,7 +109,6 @@ class PlaybackEngine(
             lyricOverlayFullYPercent = prefs.lyricOverlayFullYPercent,
             lyricOverlayBgColor = prefs.lyricOverlayBgColor,
             lyricOverlayBgAlphaPercent = prefs.lyricOverlayBgAlphaPercent,
-            lyricOverlayCustomBg = prefs.lyricOverlayCustomBg,
             // 车载模式：启动直接进播放页（跳过库主页）
             playerExpanded = prefs.carMode,
             speed = prefs.playbackSpeed,
@@ -988,9 +986,11 @@ class PlaybackEngine(
     override fun setLyricOverlayShowTitle(show: Boolean) =
         overlaySettings.setLyricOverlayShowTitle(show)
 
-    override fun setLyricOverlayTitleScale(scale: Int) = overlaySettings.setLyricOverlayTitleScale(scale)
-    override fun setLyricOverlayTextScale(scale: Int) = overlaySettings.setLyricOverlayTextScale(scale)
-    override fun setLyricOverlayBackdrop(mode: Int) = overlaySettings.setLyricOverlayBackdrop(mode)
+    override fun setLyricOverlayTitlePercent(percent: Int) =
+        overlaySettings.setLyricOverlayTitlePercent(percent)
+
+    override fun setLyricOverlayTextSp(textSp: Int) = overlaySettings.setLyricOverlayTextSp(textSp)
+
     override fun setLyricOverlayPauseMode(mode: Int) = overlaySettings.setLyricOverlayPauseMode(mode)
     override fun setLyricOverlayAlign(align: Int) = overlaySettings.setLyricOverlayAlign(align)
 
@@ -1027,8 +1027,6 @@ class PlaybackEngine(
     override fun setLyricOverlayBgAlphaPercent(percent: Int) =
         overlaySettings.setLyricOverlayBgAlphaPercent(percent)
 
-    override fun setLyricOverlayCustomBg(enabled: Boolean) =
-        overlaySettings.setLyricOverlayCustomBg(enabled)
     override fun canDrawOverlay(): Boolean = overlaySettings.canDrawOverlay()
     override fun setOverlayEditing(editing: Boolean) = overlaySettings.setOverlayEditing(editing)
     override fun setAppForeground(foreground: Boolean) = overlaySettings.setAppForeground(foreground)

@@ -93,40 +93,36 @@ class OverlayFrameTest {
     }
 
     @Test
-    fun `背景三档保持旧观感`() {
-        val none = OverlayBackground.resolve(OverlayAppearance.BACKDROP_NONE, custom = false, color = 0, alphaPercent = 0)
-        assertNull(none)
+    fun `背景只由颜色与不透明度决定，三档已合并`() {
+        val red = 0xFFFF0000.toInt()
 
-        val solid = OverlayBackground.resolve(OverlayAppearance.BACKDROP_SOLID, custom = false, color = 0, alphaPercent = 0)
-        assertEquals(0xFF, (solid!! ushr 24) and 0xFF)
+        // 不透明度 0 = 无底板，调用方据此把背景置空
+        assertNull(OverlayBackground.resolve(red, alphaPercent = 0))
 
-        val translucent = OverlayBackground.resolve(1, custom = false, color = 0, alphaPercent = 0)!!
-        val alpha = (translucent ushr 24) and 0xFF
-        assertTrue("半透明档不该是不透明：$alpha", alpha in 140..170)
+        // 55% ≈ 5.5 折，颜色位保持不变
+        val half = OverlayBackground.resolve(red, alphaPercent = 55)!!
+        assertEquals(140, (half ushr 24) and 0xFF)
+        assertEquals(0xFF0000, half and 0xFFFFFF)
+
+        // 100% = 实底
+        val solid = OverlayBackground.resolve(red, alphaPercent = 100)!!
+        assertEquals(0xFF, (solid ushr 24) and 0xFF)
     }
 
     @Test
-    fun `自定义背景按颜色与不透明度取色`() {
-        val red = 0xFFFF0000.toInt()
-        val half = OverlayBackground.resolve(1, custom = true, color = red, alphaPercent = 50)!!
-        assertEquals(0x80, (half ushr 24) and 0xFF)
-        assertEquals(0xFF0000, half and 0xFFFFFF)
-
-        // 不透明度拉到 0 = 视觉上无底板
-        assertNull(OverlayBackground.resolve(1, custom = true, color = red, alphaPercent = 0))
-        // 但描边必须跟着按「无底板」算，否则浅色画面上会糊
+    fun `不透明度为 0 时描边按无底板算`() {
+        // 没有底板、描边却按有底板给柔光 → 浅色车机画面上就是一片糊（v1.1.25 的坑）
         assertEquals(
             OverlayAppearance.BACKDROP_NONE,
-            OverlayBackground.legibilityKey(1, custom = true, alphaPercent = 0),
+            OverlayBackground.legibilityKey(alphaPercent = 0),
         )
         assertEquals(
             OverlayAppearance.BACKDROP_SOLID,
-            OverlayBackground.legibilityKey(1, custom = true, alphaPercent = 30),
+            OverlayBackground.legibilityKey(alphaPercent = 30),
         )
-        // 没开自定义时按三档走
         assertEquals(
-            OverlayAppearance.BACKDROP_NONE,
-            OverlayBackground.legibilityKey(OverlayAppearance.BACKDROP_NONE, custom = false, alphaPercent = 0),
+            OverlayAppearance.BACKDROP_SOLID,
+            OverlayBackground.legibilityKey(alphaPercent = 100),
         )
     }
 

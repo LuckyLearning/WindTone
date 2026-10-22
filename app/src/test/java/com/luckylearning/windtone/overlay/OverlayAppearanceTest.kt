@@ -28,32 +28,22 @@ class OverlayAppearanceTest {
     }
 
     @Test
-    fun `bodyTextSp 三档倍率正确`() {
-        // 20f * [0.82, 1.0, 1.25]
-        assertEquals(20f * 0.82f, OverlayAppearance.bodyTextSp(0), 1e-6f)
-        assertEquals(20f * 1.0f, OverlayAppearance.bodyTextSp(1), 1e-6f)
-        assertEquals(20f * 1.25f, OverlayAppearance.bodyTextSp(2), 1e-6f)
+    fun `titleTextSp 是正文乘百分比，不再有档位倍率`() {
+        // 正文 20sp、标题 62% = 12.4sp
+        assertEquals(12.4f, OverlayAppearance.titleTextSp(20, 62), 1e-4f)
+        // 正文调到 28sp，标题跟着放大，不需要用户再动一次
+        assertEquals(17.36f, OverlayAppearance.titleTextSp(28, 62), 1e-4f)
+        // 100% = 与正文同号
+        assertEquals(30f, OverlayAppearance.titleTextSp(30, 100), 1e-4f)
     }
 
     @Test
-    fun `bodyTextSp 越界档位被夹取到端点`() {
-        // -1 当成最小档 0；5 当成最大档 2
-        assertEquals(OverlayAppearance.bodyTextSp(0), OverlayAppearance.bodyTextSp(-1), 1e-6f)
-        assertEquals(OverlayAppearance.bodyTextSp(2), OverlayAppearance.bodyTextSp(5), 1e-6f)
-    }
-
-    @Test
-    fun `titleTextSp 在正文基础上再乘标题缩小比例`() {
-        // 20 * 倍率 * 0.62
-        assertEquals(20f * 0.82f * 0.62f, OverlayAppearance.titleTextSp(0), 1e-6f)
-        assertEquals(20f * 1.0f * 0.62f, OverlayAppearance.titleTextSp(1), 1e-6f)
-        assertEquals(20f * 1.25f * 0.62f, OverlayAppearance.titleTextSp(2), 1e-6f)
-    }
-
-    @Test
-    fun `titleTextSp 越界同样夹取`() {
-        assertEquals(OverlayAppearance.titleTextSp(0), OverlayAppearance.titleTextSp(-9), 1e-6f)
-        assertEquals(OverlayAppearance.titleTextSp(2), OverlayAppearance.titleTextSp(99), 1e-6f)
+    fun `titleTextSp 的正文与百分比越界都被夹取`() {
+        // 正文越界夹到 12..60sp，百分比越界夹到 1..200%
+        assertEquals(OverlayAppearance.titleTextSp(12, 62), OverlayAppearance.titleTextSp(-9, 62), 1e-4f)
+        assertEquals(OverlayAppearance.titleTextSp(60, 62), OverlayAppearance.titleTextSp(999, 62), 1e-4f)
+        assertEquals(OverlayAppearance.titleTextSp(20, 1), OverlayAppearance.titleTextSp(20, 0), 1e-4f)
+        assertEquals(OverlayAppearance.titleTextSp(20, 200), OverlayAppearance.titleTextSp(20, 999), 1e-4f)
     }
 
     @Test

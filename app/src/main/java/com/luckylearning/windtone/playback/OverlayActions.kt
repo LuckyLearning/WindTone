@@ -21,9 +21,12 @@ interface OverlayActions {
     /** 全屏歌词的水平位置：余量百分比（0 最左 / 50 居中 / 100 最右） */
     fun setLyricOverlayFullOffsetPercent(percent: Int)
     fun setLyricOverlayShowTitle(show: Boolean)
-    fun setLyricOverlayTitleScale(scale: Int)
-    fun setLyricOverlayTextScale(scale: Int)
-    fun setLyricOverlayBackdrop(mode: Int)
+
+    /** 标题字号：正文的百分比（40..100，v1.1.51） */
+    fun setLyricOverlayTitlePercent(percent: Int)
+
+    /** 正文字号：sp（12..60，v1.1.51 起任意值） */
+    fun setLyricOverlayTextSp(textSp: Int)
     fun setLyricOverlayPauseMode(mode: Int)
     fun setLyricOverlayAlign(align: Int)
 
@@ -64,11 +67,8 @@ interface OverlayActions {
     /** 悬浮窗背景颜色（ARGB，只用 RGB） */
     fun setLyricOverlayBgColor(color: Int)
 
-    /** 悬浮窗背景不透明度（0..100） */
+    /** 悬浮窗背景不透明度（0..100，0 = 无底板；v1.1.51 起背景只有颜色 + 这一项） */
     fun setLyricOverlayBgAlphaPercent(percent: Int)
-
-    /** 是否启用自定义背景（关闭时走「无 / 半透明 / 实底」三档） */
-    fun setLyricOverlayCustomBg(enabled: Boolean)
 
     /** 悬浮窗歌词文字颜色（ARGB） */
     fun setLyricOverlayTextColor(color: Int)

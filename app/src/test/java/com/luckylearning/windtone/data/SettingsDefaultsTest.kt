@@ -75,9 +75,10 @@ class SettingsDefaultsTest {
         // 桌面悬浮歌词
         check("lyricOverlay", prefs.lyricOverlay, SettingsDefaults.LYRIC_OVERLAY)
         check("lyricOverlayLines", prefs.lyricOverlayLines, SettingsDefaults.OVERLAY_LINES)
-        check("lyricOverlayTextScale", prefs.lyricOverlayTextScale, SettingsDefaults.OVERLAY_TEXT_SCALE)
+        check("lyricOverlayTextSp", prefs.lyricOverlayTextSp, SettingsDefaults.OVERLAY_TEXT_SP)
+        check("lyricOverlayTitlePercent", prefs.lyricOverlayTitlePercent, SettingsDefaults.OVERLAY_TITLE_PERCENT)
         check("lyricOverlayAlign", prefs.lyricOverlayAlign, SettingsDefaults.OVERLAY_ALIGN)
-        check("lyricOverlayBackdrop", prefs.lyricOverlayBackdrop, SettingsDefaults.OVERLAY_BACKDROP)
+        check("lyricOverlayBgAlphaPercent", prefs.lyricOverlayBgAlphaPercent, SettingsDefaults.OVERLAY_BG_ALPHA_PERCENT)
         check("lyricOverlayPauseMode", prefs.lyricOverlayPauseMode, SettingsDefaults.OVERLAY_PAUSE_MODE)
         check("lyricOverlayWidthPercent", prefs.lyricOverlayWidthPercent, SettingsDefaults.OVERLAY_WIDTH_PERCENT)
         check("lyricOverlayFullHeight", prefs.lyricOverlayFullHeight, SettingsDefaults.OVERLAY_FULL_HEIGHT)

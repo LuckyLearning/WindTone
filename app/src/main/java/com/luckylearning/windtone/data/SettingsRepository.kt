@@ -105,22 +105,16 @@ class SettingsRepository(val prefs: Prefs) {
         prefs.lyricOverlayShowTitle = show
     }
 
-    /** @return 夹取到 0..2 后的值 */
-    fun setOverlayTitleScale(scale: Int): Int {
-        prefs.lyricOverlayTitleScale = scale
-        return prefs.lyricOverlayTitleScale
+    /** @return 夹取到 [SettingsDefaults.OVERLAY_TITLE_PERCENT_RANGE] 后的值 */
+    fun setOverlayTitlePercent(percent: Int): Int {
+        prefs.lyricOverlayTitlePercent = percent
+        return prefs.lyricOverlayTitlePercent
     }
 
-    /** @return 夹取到 0..2 后的值 */
-    fun setOverlayTextScale(scale: Int): Int {
-        prefs.lyricOverlayTextScale = scale
-        return prefs.lyricOverlayTextScale
-    }
-
-    /** @return 夹取到 0..2 后的值 */
-    fun setOverlayBackdrop(mode: Int): Int {
-        prefs.lyricOverlayBackdrop = mode
-        return prefs.lyricOverlayBackdrop
+    /** @return 夹取到 [SettingsDefaults.OVERLAY_TEXT_SP_RANGE] 后的值 */
+    fun setOverlayTextSp(textSp: Int): Int {
+        prefs.lyricOverlayTextSp = textSp
+        return prefs.lyricOverlayTextSp
     }
 
     /** @return 夹取到 0..1 后的值 */
@@ -198,10 +192,6 @@ class SettingsRepository(val prefs: Prefs) {
     fun setOverlayBgAlphaPercent(percent: Int): Int {
         prefs.lyricOverlayBgAlphaPercent = percent
         return prefs.lyricOverlayBgAlphaPercent
-    }
-
-    fun setOverlayCustomBg(enabled: Boolean) {
-        prefs.lyricOverlayCustomBg = enabled
     }
 
     fun setOverlayTextColor(color: Int) {

@@ -235,10 +235,13 @@ internal enum class BilingualChoice(
 
 
 /**
- * 悬浮歌词的外观选项（行数 / 标题字号 / 正文字号 / 对齐 / 底板 / 暂停表现）。
+ * 悬浮歌词的外观选项（行数 / 对齐 / 暂停表现）。
  *
  * 把「标题 + 说明 + 选项列表」一起收进枚举，是为了让这些设置项共用同一个弹层实现——
  * 每多一个选项就多复制一份 `AlertDialog` 是不可维护的，而且样式迟早会走样。
+ *
+ * ⚠️ v1.1.51：字号与底板**不再是选项**。字号改成了滑杆（12–60sp，连续可调），
+ * 底板并进「背景颜色 + 不透明度」——「能自由调节的就不要再给固定档位」。
  */
 internal enum class OverlayChoice(
     val title: String,
@@ -253,24 +256,6 @@ internal enum class OverlayChoice(
         listOf(ChoiceOption(0, "自动（按高度适配）", overlayLinesHint(0))) +
             (1..5).map { n -> ChoiceOption(n, "$n 行", overlayLinesHint(n)) },
     ),
-    TITLE_SCALE(
-        "歌名歌手字号",
-        "悬浮窗最上面那两行小字（歌名 / 歌手）的字号，与歌词字号互不影响。",
-        listOf(
-            ChoiceOption(0, "小", "默认，约歌词的六成"),
-            ChoiceOption(1, "中", "约歌词的八成"),
-            ChoiceOption(2, "大", "约与歌词同号，车机远看更清楚"),
-        ),
-    ),
-    TEXT_SCALE(
-        "悬浮歌词字号",
-        "以正文为基准。大屏与车机建议调大一档；一行放不下会自动折行，不会横向溢出屏幕。",
-        listOf(
-            ChoiceOption(0, "小", "约正文的 0.8 倍"),
-            ChoiceOption(1, "中", "默认，与播放页歌词接近"),
-            ChoiceOption(2, "大", "约正文的 1.25 倍"),
-        ),
-    ),
     ALIGN(
         "悬浮歌词对齐",
         "歌词文字在悬浮窗**内部**怎么排（窗口在屏幕上的位置由「调整悬浮歌词位置」自由拖动，与此无关）。" +
@@ -279,15 +264,6 @@ internal enum class OverlayChoice(
         listOf(
             ChoiceOption(0, "居中", "窗内每行居中，默认"),
             ChoiceOption(1, "居左", "窗内每行从左沿起排"),
-        ),
-    ),
-    BACKDROP(
-        "悬浮歌词底板",
-        "字幕下面垫什么。亮色壁纸上「无底板的白字」会看不清——投影在高分屏上几乎等于没有。",
-        listOf(
-            ChoiceOption(0, "无底板", "最干净，需要壁纸足够深"),
-            ChoiceOption(1, "半透明", "默认，任何壁纸上都读得清"),
-            ChoiceOption(2, "深色实底", "对比最强，适合花哨壁纸"),
         ),
     ),
     PAUSE(
@@ -316,7 +292,5 @@ internal fun overlayLinesHint(lines: Int): String = when (lines) {
 }
 
 /** 设置页行尾摘要用的短标签（与弹层选项一一对应，按档位下标取） */
-internal val OVERLAY_TEXT_SCALE_LABELS = listOf("小", "中", "大")
 internal val OVERLAY_ALIGN_LABELS = listOf("居中", "居左")
-internal val OVERLAY_BACKDROP_LABELS = listOf("无底板", "半透明", "深色实底")
 internal val OVERLAY_PAUSE_LABELS = listOf("淡出", "隐藏")

@@ -21,14 +21,14 @@ import android.view.Gravity
  */
 object OverlayAppearance {
 
-    /** 悬浮字幕基准字号（中档，sp）：车机屏大、观看距离远，比手机正文大一档 */
-    const val OVERLAY_TEXT_SP = 20f
-
-    /** 字号三档的倍率：小 / 中 / 大。存档位不存具体 sp，日后调基准能带上老用户 */
-    val TEXT_SCALE_FACTORS = floatArrayOf(0.82f, 1f, 1.25f)
-
-    /** 标题相对正文的固定缩小比例 */
-    const val TITLE_TEXT_SCALE = 0.62f
+    /**
+     * 悬浮歌词字号的合法区间（sp）—— 与 `SettingsDefaults.OVERLAY_TEXT_SP_RANGE` 同源。
+     *
+     * v1.1.51 起字号是连续值（滑杆 12–60），不再只有小 / 中 / 大三档：
+     * 手机竖屏 16–22sp 舒服，车机看距离 24–32sp 才够，固定档位总差一截。
+     */
+    const val MIN_TEXT_SP = 12
+    const val MAX_TEXT_SP = 60
 
     /**
      * 暂停态的不透明度（0..1）。
@@ -65,13 +65,14 @@ object OverlayAppearance {
             Gravity.CENTER
         }
 
-    /** 正文（歌词）字号（sp）：以基准字号乘三档倍率 */
-    fun bodyTextSp(scale: Int): Float =
-        OVERLAY_TEXT_SP * TEXT_SCALE_FACTORS[scale.coerceIn(0, 2)]
-
-    /** 歌名 / 歌手小字的字号（sp）：在正文基础上再乘标题档位与固定缩小比例 */
-    fun titleTextSp(scale: Int): Float =
-        OVERLAY_TEXT_SP * TEXT_SCALE_FACTORS[scale.coerceIn(0, 2)] * TITLE_TEXT_SCALE
+    /**
+     * 歌名 / 歌手两行小字的字号（sp）：**正文 × 用户设的百分比**（v1.1.51）。
+     *
+     * 用比例而不是独立 sp，是因为标题是配角：用户把正文从 20 调到 28 时，
+     * 标题应该跟着放大，而不是要再手动追一次；比例还保证「标题永远比正文小」。
+     */
+    fun titleTextSp(bodySp: Int, percent: Int): Float =
+        bodySp.coerceIn(MIN_TEXT_SP, MAX_TEXT_SP) * percent.coerceIn(1, 200) / 100f
 
     /**
      * 暂停 / 播放的目标透明度。

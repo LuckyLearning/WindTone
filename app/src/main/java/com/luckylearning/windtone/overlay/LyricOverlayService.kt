@@ -124,13 +124,15 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
      * 服务不随设置页刷新（它是独立存活的），所以每帧读一次 Prefs 并和自己记的比，
      * 变了就地重绘。用 Int 比较，开销可以忽略。
      */
-    private var appliedScale = -1
+    /** 已应用的正文字号（sp，v1.1.51） */
+    private var appliedTextSp = -1
 
-    /** 已应用的歌词行数 / 标题字号（v1.1.15）；-1 = 还没应用过 */
+    /** 已应用的歌词行数 / 标题占正文百分比（v1.1.15）；-1 = 还没应用过 */
     private var appliedLines = -1
-    private var appliedTitleScale = -1
+    private var appliedTitlePercent = -1
 
-    private var appliedBackdrop = -1
+    /** 已应用的背景不透明度 / 暂停表现 / 对齐 */
+    private var appliedBgAlpha = -1
     private var appliedPauseMode = -1
     private var appliedAlign = -1
 
@@ -296,7 +298,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             // 这里只给多行留好行距——单行时它不产生任何效果。
             setLineSpacing(dp(STRIP_LINE_SPACING_EXTRA_DP).toFloat(), 1f)
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, OverlayAppearance.OVERLAY_TEXT_SP)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, SettingsDefaults.OVERLAY_TEXT_SP.toFloat())
             // ⚠️ 这里**不能**设 INVISIBLE：显隐只由 observeState 切外层 box，
             // 子 View 一旦被设成 INVISIBLE 就再也没人把它设回来——
             // 结果是底板（画在 box 上）照常出现、文字（画在 tv 上）永远消失，
@@ -313,7 +315,13 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             maxLines = 2
             ellipsize = android.text.TextUtils.TruncateAt.END
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, OverlayAppearance.titleTextSp(Prefs(this@LyricOverlayService).lyricOverlayTitleScale))
+            setTextSize(
+                TypedValue.COMPLEX_UNIT_SP,
+                OverlayAppearance.titleTextSp(
+                    Prefs(this@LyricOverlayService).lyricOverlayTextSp,
+                    Prefs(this@LyricOverlayService).lyricOverlayTitlePercent,
+                ),
+            )
             gravity = OverlayAppearance.alignGravity(Prefs(this@LyricOverlayService).lyricOverlayAlign)
             visibility = View.GONE
         }
@@ -797,12 +805,14 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             STRIP_LINE_SPACING_EXTRA_DP to 1f
         }
         val lineBox = OverlayLineFit.lineBoxPx(
-            textSizePx = spToPx(OverlayAppearance.bodyTextSp(prefs.lyricOverlayTextScale)),
+            textSizePx = spToPx(prefs.lyricOverlayTextSp.toFloat()),
             spacingExtraPx = dp(extraDp).toFloat(),
             spacingMult = mult,
         )
         val titlePx = if (prefs.lyricOverlayShowTitle) {
-            val titleSize = spToPx(OverlayAppearance.titleTextSp(prefs.lyricOverlayTitleScale))
+            val titleSize = spToPx(
+                OverlayAppearance.titleTextSp(prefs.lyricOverlayTextSp, prefs.lyricOverlayTitlePercent),
+            )
             (titleSize * OverlayLineFit.FONT_HEIGHT_FACTOR * TITLE_ROWS).roundToInt() + dp(8)
         } else {
             0
@@ -875,15 +885,10 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
     override fun applyAppearance(prefs: Prefs) {
         val tv = lyricView ?: return
 
-        // 底板档位变了就重算一次文字的「可读性包」：无底板时文字直接压在任何画面上，
-        // 必须有更硬的描边，否则浅色文字落在浅色地图 / 泊车画面上就是一片糊（v1.1.25）。
-        // 自定义背景把不透明度拉到 0 时，视觉上就是「无底板」——描边必须跟着变硬，
-        // 否则会出现「没有底板、描边却按有底板给的柔光」，正是 v1.1.25 那个模糊问题
-        val backdropNow = OverlayBackground.legibilityKey(
-            prefs.lyricOverlayBackdrop,
-            prefs.lyricOverlayCustomBg,
-            prefs.lyricOverlayBgAlphaPercent,
-        )
+        // 底板透明度变了就重算一次文字的「可读性包」：不透明度 0 = 无底板，文字直接
+        // 压在任何画面上，必须有更硬的描边，否则浅色文字落在浅色地图 / 泊车画面上
+        // 就是一片糊（v1.1.25）。v1.1.51 起背景只有「颜色 + 不透明度」一套语义。
+        val backdropNow = OverlayBackground.legibilityKey(prefs.lyricOverlayBgAlphaPercent)
         if (appliedLegibility != backdropNow) {
             appliedLegibility = backdropNow
             applyTextLegibility(tv, backdropNow)
@@ -935,22 +940,24 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             titleView?.setTextColor(OverlayTextStyler.withAlpha(textColor, TITLE_ALPHA))
         }
 
-        val scale = prefs.lyricOverlayTextScale
-        if (appliedScale != scale) {
-            appliedScale = scale
-            tv.setTextSize(
-                TypedValue.COMPLEX_UNIT_SP,
-                OverlayAppearance.bodyTextSp(scale),
-            )
+        val textSp = prefs.lyricOverlayTextSp
+        // 标题字号 = 正文 × 百分比，所以正文一变标题也得跟着重设一遍
+        val textSpChanged = appliedTextSp != textSp
+        if (textSpChanged) {
+            appliedTextSp = textSp
+            tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSp.toFloat())
             // 这里不再设 maxWidth：宽度已由窗口（屏宽 × 百分比）统一控制，
             // 两处都限宽只会让「调了没反应」变得难以解释。
         }
 
-        // 歌名 / 歌手两行小字的字号档位（与正文分开）
-        val titleScale = prefs.lyricOverlayTitleScale
-        if (appliedTitleScale != titleScale) {
-            appliedTitleScale = titleScale
-            titleView?.setTextSize(TypedValue.COMPLEX_UNIT_SP, OverlayAppearance.titleTextSp(titleScale))
+        // 歌名 / 歌手两行小字：字号 = 正文 × 百分比，正文一调它就跟着走（v1.1.51）
+        val titlePercent = prefs.lyricOverlayTitlePercent
+        if (appliedTitlePercent != titlePercent || textSpChanged) {
+            appliedTitlePercent = titlePercent
+            titleView?.setTextSize(
+                TypedValue.COMPLEX_UNIT_SP,
+                OverlayAppearance.titleTextSp(textSp, titlePercent),
+            )
         }
 
         // 行数变了窗口高度就变了，夹取上限（屏高 − 窗高）跟着变。
@@ -958,14 +965,14 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         val lines = prefs.lyricOverlayLines
         if (appliedLines != lines) {
             appliedLines = lines
-            // 全屏模式下行数固定 11，用户那一档不生效，自然也不需要重摆
+            // 全屏模式下行数按面板高度自适应，用户那一档不生效，自然也不需要重摆
             if (!fullHeight) container?.post { if (!editing) applyPosition() }
         }
 
-        val backdrop = prefs.lyricOverlayBackdrop
+        val bgAlpha = prefs.lyricOverlayBgAlphaPercent
         val pauseMode = prefs.lyricOverlayPauseMode
-        if (appliedBackdrop != backdrop || appliedPauseMode != pauseMode) {
-            appliedBackdrop = backdrop
+        if (appliedBgAlpha != bgAlpha || appliedPauseMode != pauseMode) {
+            appliedBgAlpha = bgAlpha
             appliedPauseMode = pauseMode
             refreshModeChrome()
         }
@@ -1148,11 +1155,8 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             Prefs(this).lyricOverlayTextColor
         }
         val renderPrefs = Prefs(this)
-        val noBackdrop = OverlayBackground.legibilityKey(
-            renderPrefs.lyricOverlayBackdrop,
-            renderPrefs.lyricOverlayCustomBg,
-            renderPrefs.lyricOverlayBgAlphaPercent,
-        ) == OverlayAppearance.BACKDROP_NONE
+        val noBackdrop = OverlayBackground.legibilityKey(renderPrefs.lyricOverlayBgAlphaPercent) ==
+            OverlayAppearance.BACKDROP_NONE
         val spanned = OverlayTextStyler.build(lines, fullHeight, baseColor, noBackdrop)
         val sameText = tv.text.toString() == spanned.toString()
         // 「角色 + 文字」一起做去重键：全屏模式下间奏 ⇄ 演唱是同一串文字、不同角色，
@@ -1261,12 +1265,10 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         // （投影半径按像素算，高密度屏上几乎等于没有），这是踩过的坑，不是审美偏好。
         // 编辑态无论如何都有底 + 蓝描边：此刻用户需要看清「这块能拖」的边界。
         // （GradientDrawable 不支持声明式虚线间隔，圆角实线框已足够表达「可拖」）
-        // 背景色（v1.1.48）：三档快捷与「自定义颜色 + 不透明度」共存，
+        // 背景色（v1.1.51）：只有「颜色 + 不透明度」一套，0% 即无底板。
         // 取色逻辑在 OverlayBackground 里（纯函数，单测覆盖）。
         val chromePrefs = Prefs(this)
         val bgColor = OverlayBackground.resolve(
-            chromePrefs.lyricOverlayBackdrop,
-            chromePrefs.lyricOverlayCustomBg,
             chromePrefs.lyricOverlayBgColor,
             chromePrefs.lyricOverlayBgAlphaPercent,
         )
@@ -1288,15 +1290,12 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
     }
 
     /**
-     * 背景配置的「去重键」：颜色 + 不透明度 + 自定义开关 + 三档。
+     * 背景配置的「去重键」：颜色 + 不透明度（v1.1.51 起就这两项决定最终颜色）。
      *
      * 用 Int 拼而不是字符串：每帧都要比一次，字符串拼接近乎白给 GC 找事。
-     * 四者共同决定最终颜色，漏掉任何一个都会出现「调了没反应」。
      */
     private fun backgroundKey(prefs: Prefs): Int {
-        var key = prefs.lyricOverlayBackdrop.coerceIn(0, 2)
-        key = key * 101 + prefs.lyricOverlayBgAlphaPercent.coerceIn(0, 100)
-        key = key * 31 + if (prefs.lyricOverlayCustomBg) 1 else 0
+        var key = prefs.lyricOverlayBgAlphaPercent.coerceIn(0, 100)
         key = key * 31 + (prefs.lyricOverlayBgColor and 0x00FFFFFF)
         return key
     }

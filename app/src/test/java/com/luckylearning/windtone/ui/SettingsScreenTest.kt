@@ -73,7 +73,6 @@ class SettingsScreenTest {
         onLyricOverlayFullYPercent: (Int) -> Unit = {},
         onLyricOverlayBgColor: (Int) -> Unit = {},
         onLyricOverlayBgAlphaPercent: (Int) -> Unit = {},
-        onLyricOverlayCustomBg: (Boolean) -> Unit = {},
         onLyricOverlayHiddenApps: (Set<String>) -> Unit = {},
         onForegroundLogEnabled: (Boolean) -> Unit = {},
         onDebugUnlocked: (Boolean) -> Unit = {},
@@ -100,10 +99,9 @@ class SettingsScreenTest {
                     onLyricOverlayFullWidthPercent = {},
                     onLyricOverlayFullOffsetPercent = {},
                     onLyricOverlayShowTitle = {},
-                    onLyricOverlayTitleScale = {},
-                    onLyricOverlayTextScale = {},
+                    onLyricOverlayTitlePercent = {},
+                    onLyricOverlayTextSp = {},
                     onLyricOverlayAlign = {},
-                    onLyricOverlayBackdrop = {},
                     onLyricOverlayPauseMode = {},
                     onLyricOverlayWidthPercent = {},
                     onLyricOverlayTextColor = onLyricOverlayTextColor,
@@ -114,7 +112,6 @@ class SettingsScreenTest {
                     onLyricOverlayFullYPercent = onLyricOverlayFullYPercent,
                     onLyricOverlayBgColor = onLyricOverlayBgColor,
                     onLyricOverlayBgAlphaPercent = onLyricOverlayBgAlphaPercent,
-                    onLyricOverlayCustomBg = onLyricOverlayCustomBg,
                     onLyricOverlayHiddenApps = onLyricOverlayHiddenApps,
                     onForegroundLogEnabled = onForegroundLogEnabled,
                     onDebugUnlocked = onDebugUnlocked,
@@ -315,9 +312,9 @@ class SettingsScreenTest {
 
         listOf(
             "全屏高度",
-            "悬浮歌词字号",
+            "正文字号",
             "悬浮歌词对齐",
-            "悬浮歌词底板",
+            "背景不透明度",
             "暂停时的悬浮歌词",
             "悬浮歌词文字颜色",
             "显示歌名与歌手",
@@ -349,9 +346,9 @@ class SettingsScreenTest {
             "悬浮歌词行数",
             "悬浮歌词宽度",
             "显示歌名与歌手",
-            "悬浮歌词字号",
+            "正文字号",
             "悬浮歌词对齐",
-            "悬浮歌词底板",
+            "背景不透明度",
             "悬浮歌词文字颜色",
         ).forEach { title ->
             compose.onNodeWithText(title, substring = true).performScrollTo().assertIsDisplayed()
@@ -395,13 +392,12 @@ class SettingsScreenTest {
             player = PlayerUiState(
                 lyricOverlay = true,
                 lyricOverlayFullHeight = false,
-                lyricOverlayCustomBg = true,
             ),
         )
         compose.onNodeWithText("歌词").performClick()
         compose.waitForIdle()
 
-        listOf("高度 自动", "水平位置", "垂直位置", "自定义背景", "选择背景色", "背景颜色", "背景不透明度")
+        listOf("高度 自动", "水平位置", "垂直位置", "选择背景色", "背景颜色", "背景不透明度")
             .forEach { title ->
                 compose.onNodeWithText(title, substring = true).performScrollTo().assertIsDisplayed()
             }
@@ -409,22 +405,34 @@ class SettingsScreenTest {
         compose.onNodeWithText("全屏高度 1", substring = true).assertDoesNotExist()
     }
 
-    /** 关掉「自定义背景」时，色板与不透明度滑块必须一起隐藏（用户 2026-10-21 的要求） */
+    /**
+     * v1.1.51：背景只剩「颜色 + 不透明度」两项，不再有「底板三档 + 自定义背景」
+     * 两套开关同时管同一个结果（用户要求「能自由调节的就不要用固定项」）。
+     */
     @Test
-    fun overlayCustomBackgroundControlsHiddenWhenOff() {
-        render(
-            player = PlayerUiState(
-                lyricOverlay = true,
-                lyricOverlayFullHeight = false,
-                lyricOverlayCustomBg = false,
-            ),
-        )
+    fun overlayBackgroundIsAlwaysCustomizable() {
+        render(player = PlayerUiState(lyricOverlay = true, lyricOverlayFullHeight = false))
+
         compose.onNodeWithText("歌词").performClick()
         compose.waitForIdle()
 
-        compose.onNodeWithText("自定义背景", substring = true).performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("选择背景色", substring = true).assertDoesNotExist()
-        compose.onNodeWithText("背景不透明度", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("背景不透明度", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("选择背景色", substring = true).performScrollTo().assertIsDisplayed()
+        // 旧两套开关必须彻底消失，否则用户又会看到「改了不生效」的那一套
+        compose.onNodeWithText("自定义背景", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("悬浮歌词底板", substring = true).assertDoesNotExist()
+    }
+
+    /** v1.1.51：字号是 12–60sp 的滑杆，不再是「小 / 中 / 大」三档选项 */
+    @Test
+    fun overlayFontSizeIsASliderInSp() {
+        render(player = PlayerUiState(lyricOverlay = true, lyricOverlayTextSp = 28))
+
+        compose.onNodeWithText("歌词").performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText("正文字号 28sp", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("小", substring = false).assertDoesNotExist()
     }
 
     // ================================================================ v1.1.16 继续上次播放

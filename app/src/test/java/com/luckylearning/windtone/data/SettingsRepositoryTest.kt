@@ -107,13 +107,16 @@ class SettingsRepositoryTest {
     }
 
     @Test
-    fun `三档刻度类设置越界夹到 0到2`() {
-        assertEquals(2, settings.setOverlayTextScale(7))
-        assertEquals(0, settings.setOverlayTitleScale(-1))
-        assertEquals(2, settings.setOverlayBackdrop(5))
-        assertEquals(2, prefs.lyricOverlayTextScale)
-        assertEquals(0, prefs.lyricOverlayTitleScale)
-        assertEquals(2, prefs.lyricOverlayBackdrop)
+    fun `字号类设置越界夹到各自区间`() {
+        // 正文 12..60sp、标题 40..100%
+        assertEquals(SettingsDefaults.OVERLAY_TEXT_SP_RANGE.last, settings.setOverlayTextSp(999))
+        assertEquals(SettingsDefaults.OVERLAY_TEXT_SP_RANGE.first, settings.setOverlayTextSp(-1))
+        assertEquals(SettingsDefaults.OVERLAY_TITLE_PERCENT_RANGE.last, settings.setOverlayTitlePercent(999))
+        assertEquals(SettingsDefaults.OVERLAY_TITLE_PERCENT_RANGE.first, settings.setOverlayTitlePercent(0))
+        // 落盘的也必须是夹取后的值，否则重启后读回一个越界数
+        // （最后一次写的是下界：正文 -1 → 12，标题 0 → 40）
+        assertEquals(SettingsDefaults.OVERLAY_TEXT_SP_RANGE.first, prefs.lyricOverlayTextSp)
+        assertEquals(SettingsDefaults.OVERLAY_TITLE_PERCENT_RANGE.first, prefs.lyricOverlayTitlePercent)
     }
 
     @Test

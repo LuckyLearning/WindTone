@@ -151,9 +151,10 @@ object LyricOverlayBridge {
                     }
                     append(" / 宽").append(prefs.lyricOverlayWidthPercent).append("%")
                 }
-                append(" / 字号").append(listOf("小", "中", "大").getOrElse(prefs.lyricOverlayTextScale) { "中" })
+                append(" / 字号").append(prefs.lyricOverlayTextSp).append("sp")
+                    .append("（标题 ").append(prefs.lyricOverlayTitlePercent).append("%）")
                 append(" / 对齐").append(if (prefs.lyricOverlayAlign == 1) "居左" else "居中")
-                append(" / 底板").append(listOf("无", "半透明", "实底").getOrElse(prefs.lyricOverlayBackdrop) { "半透明" })
+                append(" / 背景").append(prefs.lyricOverlayBgAlphaPercent).append("%")
                 append(" / 暂停").append(if (prefs.lyricOverlayPauseMode == 1) "隐藏" else "淡出")
             },
         )

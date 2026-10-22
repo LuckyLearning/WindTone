@@ -85,7 +85,24 @@ object SettingsDefaults {
 
     /** 悬浮歌词行数默认值：1 = 只显示当前行（老行为不变） */
     const val OVERLAY_LINES = 1
-    const val OVERLAY_TEXT_SCALE = 1
+
+    /**
+     * 悬浮歌词正文字号默认值（sp）。
+     *
+     * v1.1.51 起字号改成**任意值**（滑杆 12–60sp），不再只有小 / 中 / 大三档。
+     * 20sp 就是原来「中」档的值 —— 没动过设置的用户升级后看不出变化。
+     */
+    const val OVERLAY_TEXT_SP = 20
+
+    /** 字号的合法区间（sp）：12 以下基本看不清，60 在车机上已经是半屏高的字 */
+    val OVERLAY_TEXT_SP_RANGE = 12..60
+
+    /**
+     * 旧「小 / 中 / 大」三档对应的 sp —— **只用于老用户迁移**，设置页不再出现。
+     *
+     * 数值取自 v1.1.50 的换算（20sp × 0.82 / 1 / 1.25），四舍五入到整 sp。
+     */
+    val OVERLAY_TEXT_SP_BY_SCALE = intArrayOf(16, OVERLAY_TEXT_SP, 25)
 
     /**
      * 悬浮窗最上面是否显示「歌名 + 歌手」两行小字（v1.1.15）。
@@ -94,8 +111,14 @@ object SettingsDefaults {
      */
     const val OVERLAY_SHOW_TITLE = false
 
-    /** 歌名 / 歌手两行小字的字号档位：0 小（默认）/ 1 中 / 2 大 */
-    const val OVERLAY_TITLE_SCALE = 0
+    /** 歌名 / 歌手两行小字的字号，存「正文的百分比」（v1.1.51），默认 62% */
+    const val OVERLAY_TITLE_PERCENT = 62
+
+    /** 标题占正文的百分比区间：再小看不清，再大就会挤掉歌词主体 */
+    val OVERLAY_TITLE_PERCENT_RANGE = 40..100
+
+    /** 旧「小 / 中 / 大」标题档对应的百分比 —— 只用于迁移（0.55 / 0.62 / 0.78） */
+    val OVERLAY_TITLE_PERCENT_BY_SCALE = intArrayOf(55, OVERLAY_TITLE_PERCENT, 78)
 
     /**
      * 悬浮歌词正文行数的合法区间（0..5）。
@@ -176,15 +199,27 @@ object SettingsDefaults {
      */
     const val OVERLAY_BG_COLOR = 0xFF101014.toInt()
 
-    /** 背景不透明度默认值（%）。旧「半透明」档约等于 62%，这里保持一致 */
-    const val OVERLAY_BG_ALPHA_PERCENT = 62
+    /**
+     * 背景不透明度默认值（%）。
+     *
+     * 55% ≈ 旧「半透明深色底板」那档（`Color.argb(140, 0, 0, 0)` = 54.9%）。
+     * v1.1.51 把「无 / 半透明 / 实底」三档并进「不透明度 + 颜色」两项后，
+     * 没动过设置的用户升级后看到的底板仍是同一块。
+     */
+    const val OVERLAY_BG_ALPHA_PERCENT = 55
 
-    /** 是否启用自定义背景（关闭时仍走「无 / 半透明 / 实底」三档，v1.1.48） */
-    const val OVERLAY_CUSTOM_BG = false
+    /** 不透明度区间：0 = 完全透明（无底板），100 = 实底 */
+    val OVERLAY_BG_ALPHA_RANGE = 0..100
+
+    /**
+     * 旧「无 / 半透明 / 实底」三档对应的不透明度 —— 只用于迁移。
+     *
+     * 三档当时的不透明度分别是 0 / 140 与 228（都在纯黑上），换算成百分比是 0 / 55 / 89。
+     */
+    val OVERLAY_BG_ALPHA_BY_BACKDROP = intArrayOf(0, OVERLAY_BG_ALPHA_PERCENT, 89)
 
     /** 悬浮歌词水平对齐：0 居中 / 1 居左（取值与 `overlay/OverlayPositioner` 的 ALIGN_* 一致） */
     const val OVERLAY_ALIGN = 0
-    const val OVERLAY_BACKDROP = 1
     const val OVERLAY_PAUSE_MODE = 0
 
     /**
@@ -674,46 +709,93 @@ class Prefs private constructor(context: Context) {
         }
 
     /**
-     * 歌名 / 歌手两行小字的字号档位：0 小（默认）/ 1 中 / 2 大。
+     * 歌名 / 歌手两行小字的字号，存**正文的百分比**（v1.1.51，默认 62%）。
      *
-     * 与正文 [lyricOverlayTextScale] 分开存：标题是配角，需要能独立调小，
-     * 否则「正文调大」会连带把两行标题也顶上去，挤掉歌词。
+     * 为什么是比例而不是独立 sp：标题是配角，用户调大正文时它应当跟着放大，
+     * 而不是要再手动去追一次；比例还能保证「标题永远比正文小」这条排版约束。
+     *
+     * **迁移**：新键没写过时，按旧的 0/1/2 档换算成 55 / 62 / 78%，观感不变。
      */
-    var lyricOverlayTitleScale: Int
-        get() = sp.getInt(KEY_LYRIC_OVERLAY_TITLE_SCALE, SettingsDefaults.OVERLAY_TITLE_SCALE).coerceIn(0, 2)
+    var lyricOverlayTitlePercent: Int
+        get() {
+            val stored = sp.getInt(KEY_LYRIC_OVERLAY_TITLE_PERCENT, Int.MIN_VALUE)
+            val raw = when {
+                stored != Int.MIN_VALUE -> stored
+                // 老用户：按当时的 0/1/2 档换算（0.55 / 0.62 / 0.78）
+                sp.contains(KEY_LYRIC_OVERLAY_TITLE_SCALE) -> SettingsDefaults.OVERLAY_TITLE_PERCENT_BY_SCALE[
+                    sp.getInt(KEY_LYRIC_OVERLAY_TITLE_SCALE, 0).coerceIn(0, 2),
+                ]
+                else -> SettingsDefaults.OVERLAY_TITLE_PERCENT
+            }
+            return raw.coerceIn(
+                SettingsDefaults.OVERLAY_TITLE_PERCENT_RANGE.first,
+                SettingsDefaults.OVERLAY_TITLE_PERCENT_RANGE.last,
+            )
+        }
         set(value) {
-            val v = value.coerceIn(0, 2)
-            sp.edit().putInt(KEY_LYRIC_OVERLAY_TITLE_SCALE, v).apply()
-            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_TITLE_SCALE, v) }
+            val v = value.coerceIn(
+                SettingsDefaults.OVERLAY_TITLE_PERCENT_RANGE.first,
+                SettingsDefaults.OVERLAY_TITLE_PERCENT_RANGE.last,
+            )
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_TITLE_PERCENT, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_TITLE_PERCENT, v) }
         }
 
     /**
-     * 悬浮歌词字号档位：0 小 / 1 中（默认）/ 2 大。
+     * 悬浮歌词正文字号（sp，v1.1.51 起可调 12–60）。
      *
-     * 存档位而不是存裸的 sp 值，是为了**改基准字号时老用户跟着走**——
-     * 裸值一旦存下来，日后调整基准就只对新用户生效了。
+     * v1.1.50 之前存的是 0/1/2 三档。**迁移**：新键没写过时按旧档位换算
+     * （16 / 20 / 25sp），老用户升级后字号一模一样，不必重设。
      */
-    var lyricOverlayTextScale: Int
-        get() = sp.getInt(KEY_LYRIC_OVERLAY_TEXT_SCALE, SettingsDefaults.OVERLAY_TEXT_SCALE).coerceIn(0, 2)
+    var lyricOverlayTextSp: Int
+        get() {
+            val stored = sp.getInt(KEY_LYRIC_OVERLAY_TEXT_SP, Int.MIN_VALUE)
+            val raw = when {
+                stored != Int.MIN_VALUE -> stored
+                // 老用户：0/1/2 档换算成 16 / 20 / 25sp，升级后字号一模一样
+                sp.contains(KEY_LYRIC_OVERLAY_TEXT_SCALE) -> SettingsDefaults.OVERLAY_TEXT_SP_BY_SCALE[
+                    sp.getInt(KEY_LYRIC_OVERLAY_TEXT_SCALE, 1).coerceIn(0, 2),
+                ]
+                else -> SettingsDefaults.OVERLAY_TEXT_SP
+            }
+            return raw.coerceIn(
+                SettingsDefaults.OVERLAY_TEXT_SP_RANGE.first,
+                SettingsDefaults.OVERLAY_TEXT_SP_RANGE.last,
+            )
+        }
         set(value) {
-            val v = value.coerceIn(0, 2)
-            sp.edit().putInt(KEY_LYRIC_OVERLAY_TEXT_SCALE, v).apply()
-            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_TEXT_SCALE, v) }
+            val v = value.coerceIn(
+                SettingsDefaults.OVERLAY_TEXT_SP_RANGE.first,
+                SettingsDefaults.OVERLAY_TEXT_SP_RANGE.last,
+            )
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_TEXT_SP, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_TEXT_SP, v) }
         }
 
     /**
-     * 悬浮歌词底板：0 无底板 / 1 半透明深色（默认）/ 2 深色实底。
+     * 背景不透明度（%，v1.1.51 起背景只由「颜色 + 不透明度」两项决定）。
      *
-     * 默认为 1 而不是 0：锁定态曾经是「纯白字 + 投影、无底板」，
-     * 在亮色壁纸 / 桌面白色搜索框上白字直接糊掉——那是被真机证实过的坑。
-     * 允许选 0 是尊重「壁纸很干净、不想有块底色」的需求，但设置页要写明代价。
+     * **迁移**：新键没写过时——
+     *  - 老用户开着「自定义背景」→ 用他当时设的 [KEY_LYRIC_OVERLAY_BG_ALPHA] 默认值；
+     *  - 没开（走旧三档）→ 按 无 / 半透明 / 实底 换算成 0 / 55 / 89%。
+     * 0% 即无底板，文字自动换硬描边，不再需要一个「无底板」开关。
      */
-    var lyricOverlayBackdrop: Int
-        get() = sp.getInt(KEY_LYRIC_OVERLAY_BACKDROP, SettingsDefaults.OVERLAY_BACKDROP).coerceIn(0, 2)
+    var lyricOverlayBgAlphaPercent: Int
+        get() {
+            // 新键写过就以它为准；否则按旧数据换算一次（不写回，保持读取无副作用）
+            if (sp.contains(KEY_LYRIC_OVERLAY_BG_ALPHA)) {
+                return sp.getInt(KEY_LYRIC_OVERLAY_BG_ALPHA, SettingsDefaults.OVERLAY_BG_ALPHA_PERCENT)
+                    .coerceIn(0, 100)
+            }
+            val custom = sp.getBoolean(KEY_LYRIC_OVERLAY_CUSTOM_BG, false)
+            if (custom) return SettingsDefaults.OVERLAY_BG_ALPHA_PERCENT
+            val backdrop = sp.getInt(KEY_LYRIC_OVERLAY_BACKDROP, 1).coerceIn(0, 2)
+            return SettingsDefaults.OVERLAY_BG_ALPHA_BY_BACKDROP[backdrop]
+        }
         set(value) {
-            val v = value.coerceIn(0, 2)
-            sp.edit().putInt(KEY_LYRIC_OVERLAY_BACKDROP, v).apply()
-            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_BACKDROP, v) }
+            val v = value.coerceIn(0, 100)
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_BG_ALPHA, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_BG_ALPHA, v) }
         }
 
     /** 暂停时的表现：0 淡出（默认，保留最后一句便于看清唱到哪）/ 1 隐藏 */
@@ -929,29 +1011,6 @@ class Prefs private constructor(context: Context) {
             ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_BG_COLOR, v) }
         }
 
-    /** 背景不透明度（%，0 = 完全透明，100 = 不透明） */
-    var lyricOverlayBgAlphaPercent: Int
-        get() = sp.getInt(KEY_LYRIC_OVERLAY_BG_ALPHA, SettingsDefaults.OVERLAY_BG_ALPHA_PERCENT)
-            .coerceIn(0, 100)
-        set(value) {
-            val v = value.coerceIn(0, 100)
-            sp.edit().putInt(KEY_LYRIC_OVERLAY_BG_ALPHA, v).apply()
-            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_BG_ALPHA, v) }
-        }
-
-    /**
-     * 是否启用自定义背景（颜色 + 不透明度）。
-     *
-     * 关闭时仍按「无 / 半透明 / 实底」三档算，老用户升级上来看到的样子不变；
-     * 打开后三档失效，由 [lyricOverlayBgColor] + [lyricOverlayBgAlphaPercent] 决定。
-     */
-    var lyricOverlayCustomBg: Boolean
-        get() = sp.getBoolean(KEY_LYRIC_OVERLAY_CUSTOM_BG, SettingsDefaults.OVERLAY_CUSTOM_BG)
-        set(value) {
-            sp.edit().putBoolean(KEY_LYRIC_OVERLAY_CUSTOM_BG, value).apply()
-            ioScope.launch { store.putBoolean(KEY_LYRIC_OVERLAY_CUSTOM_BG, value) }
-        }
-
     // ============================================================ 6. 前台检测与调试
 
     /**
@@ -1142,8 +1201,16 @@ class Prefs private constructor(context: Context) {
         const val KEY_LYRIC_OVERLAY_Y = "lyric_overlay_y"
         const val KEY_LYRIC_OVERLAY_LINES = "lyric_overlay_lines"
         const val KEY_LYRIC_OVERLAY_TITLE = "lyric_overlay_show_title"
+
+        /** 字号（sp）与标题占正文的百分比，v1.1.51 起取代下面的 scale 两键 */
+        const val KEY_LYRIC_OVERLAY_TEXT_SP = "lyric_overlay_text_sp"
+        const val KEY_LYRIC_OVERLAY_TITLE_PERCENT = "lyric_overlay_title_percent"
+
+        /** 旧字号档位（0/1/2）—— 只读，用于迁移；别再写 */
         const val KEY_LYRIC_OVERLAY_TITLE_SCALE = "lyric_overlay_title_scale"
         const val KEY_LYRIC_OVERLAY_TEXT_SCALE = "lyric_overlay_text_scale"
+
+        /** 旧底板三档 —— 只读，用于迁移 */
         const val KEY_LYRIC_OVERLAY_BACKDROP = "lyric_overlay_backdrop"
         const val KEY_LYRIC_OVERLAY_PAUSE_MODE = "lyric_overlay_pause_mode"
         const val KEY_LYRIC_OVERLAY_ALIGN = "lyric_overlay_align"
@@ -1159,6 +1226,8 @@ class Prefs private constructor(context: Context) {
         const val KEY_LYRIC_OVERLAY_FULL_Y_PCT = "lyric_overlay_full_y_percent"
         const val KEY_LYRIC_OVERLAY_BG_COLOR = "lyric_overlay_bg_color"
         const val KEY_LYRIC_OVERLAY_BG_ALPHA = "lyric_overlay_bg_alpha_percent"
+
+        /** 旧「自定义背景」开关 —— 只读，用于迁移（v1.1.51 起背景始终可自定义） */
         const val KEY_LYRIC_OVERLAY_CUSTOM_BG = "lyric_overlay_custom_bg"
         const val KEY_LYRIC_OVERLAY_FULL_OFFSET = "lyric_overlay_full_offset_percent"
 

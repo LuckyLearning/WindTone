@@ -96,6 +96,17 @@ internal fun SectionTitle(text: String) {
  */
 @Composable
 internal fun DebugLabel(text: String) {
+    GroupLabel(text)
+}
+
+/**
+ * 分区内的**次级小标题**（v1.1.51 从 [DebugLabel] 提出来复用）。
+ *
+ * 一个分区里塞了太多并列项时（悬浮歌词的尺寸 / 字体 / 背景 / 行为），
+ * 需要一层比 [SectionTitle] 轻的小标题把它们分开，否则一整屏滑块看着像一锅粥。
+ */
+@Composable
+internal fun GroupLabel(text: String) {
     Text(
         text,
         style = MaterialTheme.typography.titleSmall,

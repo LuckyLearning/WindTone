@@ -155,10 +155,11 @@ fun SettingsScreen(
     onLyricOverlayFullWidthPercent: (Int) -> Unit,
     onLyricOverlayFullOffsetPercent: (Int) -> Unit,
     onLyricOverlayShowTitle: (Boolean) -> Unit,
-    onLyricOverlayTitleScale: (Int) -> Unit,
-    onLyricOverlayTextScale: (Int) -> Unit,
+    /** 标题字号：正文的百分比（40..100，v1.1.51） */
+    onLyricOverlayTitlePercent: (Int) -> Unit,
+    /** 正文字号：sp（12..60，v1.1.51） */
+    onLyricOverlayTextSp: (Int) -> Unit,
     onLyricOverlayAlign: (Int) -> Unit,
-    onLyricOverlayBackdrop: (Int) -> Unit,
     onLyricOverlayPauseMode: (Int) -> Unit,
     /** 悬浮窗宽度：屏幕宽度百分比（1..100）—— v1.1.4 */
     onLyricOverlayWidthPercent: (Int) -> Unit,
@@ -169,7 +170,6 @@ fun SettingsScreen(
     onLyricOverlayFullYPercent: (Int) -> Unit,
     onLyricOverlayBgColor: (Int) -> Unit,
     onLyricOverlayBgAlphaPercent: (Int) -> Unit,
-    onLyricOverlayCustomBg: (Boolean) -> Unit,
     /** 悬浮窗歌词文字颜色 —— v1.1.4 */
     onLyricOverlayTextColor: (Int) -> Unit,
     /** 「不显示悬浮窗的应用」名单（v1.1.29） */
@@ -430,10 +430,9 @@ fun SettingsScreen(
                         onLyricOverlayFullWidthPercent = onLyricOverlayFullWidthPercent,
                         onLyricOverlayFullOffsetPercent = onLyricOverlayFullOffsetPercent,
                         onLyricOverlayShowTitle = onLyricOverlayShowTitle,
-                        onLyricOverlayTitleScale = onLyricOverlayTitleScale,
-                        onLyricOverlayTextScale = onLyricOverlayTextScale,
+                        onLyricOverlayTitlePercent = onLyricOverlayTitlePercent,
+                        onLyricOverlayTextSp = onLyricOverlayTextSp,
                         onLyricOverlayAlign = onLyricOverlayAlign,
-                        onLyricOverlayBackdrop = onLyricOverlayBackdrop,
                         onLyricOverlayPauseMode = onLyricOverlayPauseMode,
                         onLyricOverlayWidthPercent = onLyricOverlayWidthPercent,
                         onLyricOverlayBoxHeightPercent = onLyricOverlayBoxHeightPercent,
@@ -443,7 +442,6 @@ fun SettingsScreen(
                         onLyricOverlayFullYPercent = onLyricOverlayFullYPercent,
                         onLyricOverlayBgColor = onLyricOverlayBgColor,
                         onLyricOverlayBgAlphaPercent = onLyricOverlayBgAlphaPercent,
-                        onLyricOverlayCustomBg = onLyricOverlayCustomBg,
                         onLyricOverlayTextColor = onLyricOverlayTextColor,
                         onLyricOverlayHiddenApps = onLyricOverlayHiddenApps,
                         onOverlayEditing = onOverlayEditing,

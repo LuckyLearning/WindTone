@@ -88,47 +88,34 @@ object OverlayFrame {
 }
 
 /**
- * 悬浮窗背景的**取色**（v1.1.48）。
+ * 悬浮窗背景的**取色**（v1.1.48；v1.1.51 起只保留「颜色 + 不透明度」一套语义）。
  *
- * 两套语义并存：
- *  - 老的三档（无 / 半透明 / 实底）：保留，保证升级后看起来一模一样；
- *  - 自定义（颜色 + 不透明度）：用户显式打开才生效。
+ * 早先并存两套：老的三档（无 / 半透明 / 实底）与「自定义颜色 + 不透明度」。同一个
+ * 结果被两种开关控制，设置页看起来像是两份互斥的设置。v1.1.51 把三档并进
+ * 不透明度（0 / 55 / 89%），这里也就只剩一条路径。
  *
  * 返回值 `null` 表示「完全透明」，调用方据此把背景置空 —— 注意这时**文字的描边要按
  * 无底板处理**，否则浅色字压在浅色车机画面上就是一片糊（v1.1.25 真机踩过的坑）。
  */
 object OverlayBackground {
 
-    /** 旧「半透明」档的不透明度：约等于当前默认值，换算法时观感不变 */
-    const val TRANSLUCENT_ALPHA_PERCENT = 62
-
     /**
-     * @param custom 是否启用自定义背景（颜色 + 不透明度）
      * @return ARGB 颜色；`null` = 全透明（不画底板）
      */
-    fun resolve(backdrop: Int, custom: Boolean, color: Int, alphaPercent: Int): Int? {
-        if (custom) {
-            val alpha = alphaPercent.coerceIn(0, 100)
-            if (alpha <= 0) return null
-            return withAlpha(color, alpha)
-        }
-        return when (backdrop) {
-            OverlayAppearance.BACKDROP_NONE -> null
-            OverlayAppearance.BACKDROP_SOLID -> withAlpha(SettingsDefaults.OVERLAY_BG_COLOR, 100)
-            else -> withAlpha(SettingsDefaults.OVERLAY_BG_COLOR, TRANSLUCENT_ALPHA_PERCENT)
-        }
+    fun resolve(color: Int, alphaPercent: Int): Int? {
+        val alpha = alphaPercent.coerceIn(0, 100)
+        if (alpha <= 0) return null
+        return withAlpha(color, alpha)
     }
 
     /**
      * 文字可读性该按哪一档算。
      *
-     * 自定义背景把不透明度拉到 0 时，视觉上就是「无底板」，描边必须跟着变硬 ——
-     * 否则会出现「没有底板、但描边按有底板给的柔光」，正是 v1.1.25 那个模糊问题。
+     * 不透明度拉到 0 时视觉上就是「无底板」，描边必须跟着变硬 —— 否则会出现
+     * 「没有底板、但描边按有底板给的柔光」，正是 v1.1.25 那个模糊问题。
      */
-    fun legibilityKey(backdrop: Int, custom: Boolean, alphaPercent: Int): Int {
-        if (!custom) return backdrop
-        return if (alphaPercent <= 0) OverlayAppearance.BACKDROP_NONE else OverlayAppearance.BACKDROP_SOLID
-    }
+    fun legibilityKey(alphaPercent: Int): Int =
+        if (alphaPercent <= 0) OverlayAppearance.BACKDROP_NONE else OverlayAppearance.BACKDROP_SOLID
 
     fun withAlpha(color: Int, alphaPercent: Int): Int {
         val a = (255 * alphaPercent.coerceIn(0, 100) / 100f).roundToInt().coerceIn(0, 255)
