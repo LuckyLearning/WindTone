@@ -114,6 +114,10 @@ internal object LyricsColors {
  *
  * 选中即落盘（[onPick]）——悬浮窗会顺带触发一次 6 秒前台预览，
  * 不用退到桌面去验证。
+ *
+ * @param showPresets 是否显示上面那排预设色。给「悬浮窗背景色」用时传 false：
+ *                    设置页里已经有一块背景专用的色板，再摆一排文字色只会让人挑错
+ *                    （白 / 暖黄在深色底板上当背景几乎不能看）。
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -123,6 +127,7 @@ internal fun ColorPickerSheet(
     value: Int,
     onPick: (Int) -> Unit,
     onDismiss: () -> Unit,
+    showPresets: Boolean = true,
 ) {
     // 自定义区从当前值起步；不从随机色、也不从上一个弹层留下的色相起步，
     // 滑块初始位置每次一样。
@@ -149,20 +154,22 @@ internal fun ColorPickerSheet(
                 modifier = Modifier.padding(top = 4.dp),
             )
 
-            SectionTitle("预设")
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                LyricsColors.presets.forEach { argb ->
-                    ColorSwatch(
-                        argb = argb,
-                        selected = value == argb,
-                        onClick = {
-                            onPick(argb)
-                            onDismiss()
-                        },
-                    )
+            if (showPresets) {
+                SectionTitle("预设")
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    LyricsColors.presets.forEach { argb ->
+                        ColorSwatch(
+                            argb = argb,
+                            selected = value == argb,
+                            onClick = {
+                                onPick(argb)
+                                onDismiss()
+                            },
+                        )
+                    }
                 }
             }
 

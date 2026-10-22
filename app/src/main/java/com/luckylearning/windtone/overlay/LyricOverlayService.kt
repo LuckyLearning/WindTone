@@ -294,7 +294,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             }
             // 行数与省略策略由 observeState 按模式决定（手机 2 行 / 车载 6 行），
             // 这里只给多行留好行距——单行时它不产生任何效果。
-            setLineSpacing(dp(2).toFloat(), 1f)
+            setLineSpacing(dp(STRIP_LINE_SPACING_EXTRA_DP).toFloat(), 1f)
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, OverlayAppearance.OVERLAY_TEXT_SP)
             // ⚠️ 这里**不能**设 INVISIBLE：显隐只由 observeState 切外层 box，
@@ -756,6 +756,68 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         LyricOverlayBridge.notifyPositionSaved()
     }
 
+    // ------------------------------------------------------------------ 行数
+
+    /**
+     * 这次到底画几行（v1.1.49）。
+     *
+     * 三个来源，优先级从高到低：
+     *  1. 全屏形态：一律按面板高度自适应 —— 面板高度本就是用户可调的（30..100%），
+     *     写死 11 行在面板调矮 / 手机竖屏时会被窗口裁掉最后几行；
+     *  2. 单条字幕 + 用户手选 1..5：照旧，尊重用户的明确选择；
+     *  3. 单条字幕 + 「自动」：按固定高度反推（高度也是自动时按
+     *     [OverlayLineFit.STRIP_FALLBACK_LINES] 行，否则会「行多变高、变高又多行」）。
+     */
+    override fun resolveLineCount(prefs: Prefs, full: Boolean): Int {
+        if (full) return autoLineCount(prefs, full = true)
+        val configured = prefs.lyricOverlayLines
+        if (configured > 0) return configured
+        return autoLineCount(prefs, full = false)
+    }
+
+    /**
+     * 按窗口高度反推行数。
+     *
+     * 固定开销（[chrome]）由三块组成：上下内边距、可选的「歌名 / 歌手」两行小字、
+     * 以及一句译文 / 长句折行的余量 —— 少算最后一块时，双语歌词的当前句会把
+     * 末尾一行顶出窗口，看起来就是「少显示了一句」。
+     */
+    private fun autoLineCount(prefs: Prefs, full: Boolean): Int {
+        val (screenW, screenH) = screenSize()
+        val frame = frameFor(prefs, screenW, screenH)
+        // 高度自动时没有「可用高度」可依据，直接给兜底值（见 resolveLineCount 注释）
+        if (frame.autoHeight) return OverlayLineFit.STRIP_FALLBACK_LINES
+
+        val (extraDp, mult) = if (full) {
+            OverlayAppearance.fullHeightLineSpacing()
+        } else {
+            STRIP_LINE_SPACING_EXTRA_DP to 1f
+        }
+        val lineBox = OverlayLineFit.lineBoxPx(
+            textSizePx = spToPx(OverlayAppearance.bodyTextSp(prefs.lyricOverlayTextScale)),
+            spacingExtraPx = dp(extraDp).toFloat(),
+            spacingMult = mult,
+        )
+        val titlePx = if (prefs.lyricOverlayShowTitle) {
+            val titleSize = spToPx(OverlayAppearance.titleTextSp(prefs.lyricOverlayTitleScale))
+            (titleSize * OverlayLineFit.FONT_HEIGHT_FACTOR * TITLE_ROWS).roundToInt() + dp(8)
+        } else {
+            0
+        }
+        // 上下内边距（歌词 View 的 8dp×2）+ 标题 + 一句译文余量
+        val chrome = dp(16) + titlePx + lineBox
+        return OverlayLineFit.fit(
+            availablePx = frame.height,
+            lineBoxPx = lineBox,
+            chromePx = chrome,
+            maxLines = if (full) OverlayLineFit.MAX_FULL_LINES else OverlayLineFit.MAX_STRIP_LINES,
+        )
+    }
+
+    /** sp → 像素（含系统字体缩放），与 TextView 的字号换算同口径 */
+    private fun spToPx(sp: Float): Float =
+        TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, sp, resources.displayMetrics)
+
     // ------------------------------------------------------------------ 状态
 
     /** v1.1.29 前台检测轮询协程；「不需要知道前台是谁」时撤掉 */
@@ -982,7 +1044,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             val (lsExtra, lsMult) = OverlayAppearance.fullHeightLineSpacing()
             tv.setLineSpacing(dp(lsExtra).toFloat(), lsMult)
         } else {
-            tv.setLineSpacing(dp(2).toFloat(), 1f)
+            tv.setLineSpacing(dp(STRIP_LINE_SPACING_EXTRA_DP).toFloat(), 1f)
         }
         // 排版模式变了，旧的 span 签名作废，下一帧必须重画
         lastRenderKey = ""
@@ -1312,6 +1374,12 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
 
         /** 歌名 / 歌手小字的不透明度：压暗到 ~70%，层级自然落在歌词之下 */
         private const val TITLE_ALPHA = 0xB4
+
+        /** 歌名 / 歌手最多两行（歌名 + 歌手），行数自适应时按它扣高度 */
+        private const val TITLE_ROWS = 2
+
+        /** 单条字幕的行距额外值（dp）：与 [attachWindow] 里 setLineSpacing 保持一致 */
+        private const val STRIP_LINE_SPACING_EXTRA_DP = 2
 
         /** 行切换的淡出 / 淡入时长；再长就会觉得「字幕卡了」 */
         private const val FADE_OUT_MS = 90L

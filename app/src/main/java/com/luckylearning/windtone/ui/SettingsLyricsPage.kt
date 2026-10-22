@@ -161,6 +161,8 @@ internal fun SettingsLyricsPage(
     // 歌词颜色选择弹层是否打开（v1.1.8 起只剩「悬浮窗文字颜色」一处，
     // 原先用 ColorSlot 区分三处颜色，现在一个布尔量就够）
     var colorPickerShown by remember { mutableStateOf(false) }
+    // 背景色的「任意颜色」弹层（v1.1.49）：预设色板之外的颜色走这里
+    var bgColorPickerShown by remember { mutableStateOf(false) }
     var overlayHintVisible by remember { mutableStateOf(false) }
     // 三条跳转路都走不通（ROM 连系统授权页都不给开）→ 指引卡里改显示手动路径
     var overlayJumpFailed by remember { mutableStateOf(false) }
@@ -323,6 +325,15 @@ internal fun SettingsLyricsPage(
                     player.lyricOverlayFullHeightPercent != SettingsDefaults.OVERLAY_FULL_HEIGHT_PERCENT,
                 ) { onLyricOverlayFullHeightPercent(SettingsDefaults.OVERLAY_FULL_HEIGHT_PERCENT) },
             )
+            // 行数在无全屏档不让调，但「高度」会反过来决定能画几行 ——
+            // 不说清楚的话，把高度拉到 30% 后发现只显示 3 行会被当成 bug
+            Text(
+                text = "歌词行数按这块面板的高度自动适配：面板调矮时行数跟着减少，" +
+                    "不会把字挤出窗口；当前高度最多能排 11 行。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 2.dp),
+            )
             SliderRow(
                 title = "垂直位置 " + positionLabel(player.lyricOverlayFullYPercent, horizontal = false),
                 subtitle = if (player.lyricOverlayFullHeightPercent >= 100) {
@@ -356,7 +367,12 @@ internal fun SettingsLyricsPage(
         } else {
             ActionRow(
                 title = "悬浮歌词行数",
-                subtitle = overlayLinesHint(player.lyricOverlayLines),
+                subtitle = if (player.lyricOverlayLines == 0 && player.lyricOverlayBoxHeightPercent == 0) {
+                    "自动：但高度现在是「自动」，没有高度可依据，先按 3 行显示；" +
+                        "把下面的高度拉成百分比后，行数会跟着高度走"
+                } else {
+                    overlayLinesHint(player.lyricOverlayLines)
+                },
                 onClick = { overlayChoice = OverlayChoice.LINES },
                 chevron = true,
                 onReset = resetAction(player.lyricOverlayLines != SettingsDefaults.OVERLAY_LINES) {
@@ -501,7 +517,7 @@ internal fun SettingsLyricsPage(
         SwitchRow(
             title = "自定义背景",
             subtitle = if (player.lyricOverlayCustomBg) {
-                "自己选背景颜色与不透明度；上面的三档此时不生效"
+                "自己挑颜色与不透明度；上面的三档此时不生效"
             } else {
                 "关着时用上面的三档。打开后可自由挑颜色、拉不透明度"
             },
@@ -515,6 +531,18 @@ internal fun SettingsLyricsPage(
             OverlayBgPalette(
                 selected = player.lyricOverlayBgColor,
                 onPick = onLyricOverlayBgColor,
+            )
+            // 预设之外的颜色（v1.1.49）：用户 2026-10-22 要求「背景颜色支持自定义」。
+            // 车机上色相滑块难调，所以预设仍然排在最前面当快选，这里是「就要这个色」的出口。
+            ActionRow(
+                title = "背景颜色",
+                subtitle = "预设色板之外的颜色：色相 / 饱和度 / 亮度三档滑杆，可调出任意颜色",
+                onClick = { bgColorPickerShown = true },
+                swatch = player.lyricOverlayBgColor,
+                chevron = true,
+                onReset = resetAction(
+                    player.lyricOverlayBgColor != SettingsDefaults.OVERLAY_BG_COLOR,
+                ) { onLyricOverlayBgColor(SettingsDefaults.OVERLAY_BG_COLOR) },
             )
             SliderRow(
                 title = "背景不透明度 ${player.lyricOverlayBgAlphaPercent}%",
@@ -843,6 +871,19 @@ internal fun SettingsLyricsPage(
         )
     }
 
+    // 背景色的任意取色（v1.1.49）。预设列表关掉：上面那块色板就是背景专用的快选，
+    // 这里只负责「要一个色板上没有的颜色」。
+    if (bgColorPickerShown) {
+        ColorPickerSheet(
+            title = "悬浮窗背景颜色",
+            intro = "只改色相，不透明度还是用下面那个滑块；调到 0% 就等于没有底板。",
+            value = player.lyricOverlayBgColor,
+            showPresets = false,
+            onPick = { argb -> onLyricOverlayBgColor(argb) },
+            onDismiss = { bgColorPickerShown = false },
+        )
+    }
+
     // 「不显示悬浮窗的应用」弹窗（v1.1.29）：本机全部可启动应用 + 每行开关。
     // 逐个勾选时整体写回（引擎侧去重 + 剔空白项），名单与检测都即时生效。
     if (showHiddenApps) {
@@ -1019,10 +1060,12 @@ private fun OverlayOffsetPresets(
 }
 
 /**
- * 背景色板（v1.1.48）。
+ * 背景色板（v1.1.48）＋「预设之外」的入口（v1.1.49）。
  *
- * 为什么用预设色而不是 HSV 取色器：车机上用手指调色相滑块基本调不准，而背景色
- * 实际只需要「够深、能压住画面」这几档。预设 8 个色相足够，还省掉一个全屏弹层。
+ * 先用预设色而不是直接甩一个 HSV 取色器：车机上用手指调色相滑块基本调不准，
+ * 而背景色实际只需要「够深、能压住画面」这几档，一点就中。
+ * 但「只有这 8 个色」确实不够用（用户 2026-10-22 提的就是这句），
+ * 所以在色板下面补一行 [ActionRow] 打开任意取色弹层 —— 快选与自由取色各司其职。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

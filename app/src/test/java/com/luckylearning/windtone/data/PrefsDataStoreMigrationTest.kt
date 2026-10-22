@@ -172,6 +172,22 @@ class PrefsDataStoreMigrationTest {
     }
 
     @Test
+    fun `行数 0 是自动档，不会被夹成 1`() {
+        val prefs = Prefs(context)
+        prefs.lyricOverlayLines = 0
+        assertEquals(0, prefs.lyricOverlayLines)
+
+        runBlocking {
+            withTimeout(10_000) {
+                while (dsNow()[intPreferencesKey("lyric_overlay_lines")] != 0) delay(20)
+            }
+        }
+        // v1.1.49：0 = 「按高度自动」，是合法档位而不是越界值
+        assertEquals(0, dsNow()[intPreferencesKey("lyric_overlay_lines")])
+        assertEquals(0, sp().getInt("lyric_overlay_lines", -1))
+    }
+
+    @Test
     fun `按视图的排序键同样双写，重置时两边一起清`() {
         val prefs = Prefs(context)
         prefs.setSortOrder("SONGS", SortOrder.ARTIST)

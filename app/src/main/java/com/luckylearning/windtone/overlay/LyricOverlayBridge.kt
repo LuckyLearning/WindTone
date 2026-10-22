@@ -136,14 +136,19 @@ object LyricOverlayBridge {
             contentPlaying = LyricOverlayBus.content.value.playing,
             windowGeometry = LyricOverlayService.windowGeometry,
             appearance = buildString {
-                // 自检里先说形态：全屏高度下列数固定 11，用户那档行数不生效，
-                // 直接写「11 行」会让自检看起来像设置没生效。
+                // 自检里先说形态：全屏高度下行数按面板高度自动适配，
+                // 直接写用户那档会让人误以为设置没生效，所以两处都写清楚。
                 if (prefs.lyricOverlayFullHeight) {
                     append("全屏高度 ")
                     append(prefs.lyricOverlayFullWidthPercent).append("% 宽 / ")
                     append(OverlayPositioner.offsetLabel(prefs.lyricOverlayFullOffsetPercent))
+                    append(" / 自动行数")
                 } else {
-                    append(prefs.lyricOverlayLines).append(" 行")
+                    if (prefs.lyricOverlayLines <= 0) {
+                        append("自动行数")
+                    } else {
+                        append(prefs.lyricOverlayLines).append(" 行")
+                    }
                     append(" / 宽").append(prefs.lyricOverlayWidthPercent).append("%")
                 }
                 append(" / 字号").append(listOf("小", "中", "大").getOrElse(prefs.lyricOverlayTextScale) { "中" })

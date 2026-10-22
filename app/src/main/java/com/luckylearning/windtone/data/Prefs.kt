@@ -82,6 +82,8 @@ object SettingsDefaults {
     const val BILINGUAL = 0
 
     const val LYRIC_OVERLAY = false
+
+    /** 悬浮歌词行数默认值：1 = 只显示当前行（老行为不变） */
     const val OVERLAY_LINES = 1
     const val OVERLAY_TEXT_SCALE = 1
 
@@ -95,8 +97,13 @@ object SettingsDefaults {
     /** 歌名 / 歌手两行小字的字号档位：0 小（默认）/ 1 中 / 2 大 */
     const val OVERLAY_TITLE_SCALE = 0
 
-    /** 悬浮歌词正文行数的合法区间（1..5）：行数越多占屏越高，5 行是上限 */
-    val OVERLAY_LINES_RANGE = 1..5
+    /**
+     * 悬浮歌词正文行数的合法区间（0..5）。
+     *
+     * **0 = 自动**（v1.1.49，见 `overlay/OverlayLineFit`）：按窗口高度算出能放几行。
+     * 1..5 是手选档，行数越多占屏越高。
+     */
+    val OVERLAY_LINES_RANGE = 0..5
 
     /**
      * 悬浮歌词「全屏高度」（v1.1.19，默认关闭）。
@@ -637,10 +644,15 @@ class Prefs private constructor(context: Context) {
         }
 
     /**
-     * 桌面悬浮歌词一次显示几行：1..5（默认 1 = 只显示当前行）。
+     * 桌面悬浮歌词一次显示几行：0 / 1..5（默认 1 = 只显示当前行）。
      *
      * 行数 > 1 时当前行居中最亮，上下各带若干行上下文（压暗），
      * 车机 / 大屏上尤其有用，不必等下一句冒出来才知道上下文。
+     *
+     * **0 = 自动**（v1.1.49）：按窗口高度反推能放几行，见 `overlay/OverlayLineFit`。
+     * 单条字幕只有在高度被固定成某个百分比时才有得算；高度也是「自动」时按
+     * [OverlayLineFit.STRIP_FALLBACK_LINES] 行显示。
+     *
      * 取值范围收在 [SettingsDefaults.OVERLAY_LINES_RANGE] 内，非法值就地夹取
      * （防旧数据 / 手改）；老版本只写过 1 与 3，读出来天然合法。
      */

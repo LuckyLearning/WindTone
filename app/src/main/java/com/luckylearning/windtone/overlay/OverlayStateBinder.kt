@@ -26,8 +26,13 @@ class OverlayStateBinder(
     /** 暂停表现：隐藏（另一档是淡出） */
     private val PAUSE_HIDE = 1
 
-    /** 窗口最多画几行（含折行）：再多就不是「悬浮字幕」而是一块遮屏的板子了 */
-    private val MAX_LINES_CAP = 12
+    /**
+     * 窗口最多画几行（含折行）：再多就不是「悬浮字幕」而是一块遮屏的板子了。
+     *
+     * 12 → 16（v1.1.49）：行数可以「自动」到 7 行，加上双语副行就是 8 句，
+     * 每句按折成两行算要 16 行额度 —— 留在 12 会把末尾几句静默省略掉。
+     */
+    private val MAX_LINES_CAP = 16
 
     /**
      * 全屏高度模式下每行都可能折行，上限放宽。
@@ -126,22 +131,18 @@ class OverlayStateBinder(
                     return@collect
                 }
 
-                // 行数由用户选（1..5）；标题两行小字单独一个 View，见 applyTitle。
+                // 行数：全屏按面板高度自适应，单条字幕按用户档位（或「自动」按高度反推），
+                // 具体像素换算在宿主里做（那里才有 dp / 字号 / 屏幕尺寸）。
                 // 标题显隐会改变窗口高度，需要重新夹一次位置（否则窗口变高后可能出屏）。
                 if (host.applyTitle(content, prefs) && !host.editing) {
                     host.container?.post { host.applyPosition() }
                 }
-                // 全屏高度模式（v1.1.19）：行数不再由用户选，而是铺满一屏的
-                // 11 行（上 5 + 当前 + 下 5），与播放页歌词区的观感一致。
                 val full = prefs.lyricOverlayFullHeight
+                val lineCount = host.resolveLineCount(prefs, full)
                 val lines = when {
                     content.visible -> OverlayTextComposer.compose(
                         resolved = content.resolved,
-                        lineCount = if (full) {
-                            OverlayTextComposer.FULL_HEIGHT_LINES
-                        } else {
-                            prefs.lyricOverlayLines
-                        },
+                        lineCount = lineCount,
                         // 双语副行不设开关：它是**同一句**的翻译，属于内容完整性
                         // 而不是排版选择——能拿到双语歌词的用户本来就想要它。
                         showTranslation = true,
@@ -189,6 +190,15 @@ class OverlayStateBinder(
 
         fun prefs(): Prefs
         fun applyAppearance(prefs: Prefs)
+
+        /**
+         * 这次要画几行（v1.1.49）。
+         *
+         * 行数可以是「自动」——那就得按窗口高度反推，而高度、字号、密度只有宿主
+         * 知道。纯算法在 [OverlayLineFit]，宿主负责把 dp / sp 换成像素。
+         */
+        fun resolveLineCount(prefs: Prefs, full: Boolean): Int
+
         fun syncForegroundTracking(hiddenApps: Set<String>, logEnabled: Boolean)
         fun applyVisibility()
         fun applyTitle(content: LyricOverlayBus.Content, prefs: Prefs): Boolean

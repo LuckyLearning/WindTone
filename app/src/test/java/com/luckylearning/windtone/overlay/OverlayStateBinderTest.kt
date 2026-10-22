@@ -85,6 +85,16 @@ class OverlayStateBinderTest {
         override var desiredVisible = false
 
         override fun prefs() = prefs
+
+        /**
+         * 行数自适应在服务里算（要 dp / 字号 / 屏幕尺寸），替身直接返回用户档位；
+         * 「自动」= 0 在这里换成 3，模拟「高度也是自动」时的兜底值。
+         */
+        override fun resolveLineCount(prefs: Prefs, full: Boolean): Int {
+            val configured = prefs.lyricOverlayLines
+            return if (configured > 0) configured else OverlayLineFit.STRIP_FALLBACK_LINES
+        }
+
         override fun applyAppearance(p: Prefs) {
             applyAppearanceCount++
         }

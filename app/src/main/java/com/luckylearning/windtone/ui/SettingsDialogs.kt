@@ -247,8 +247,11 @@ internal enum class OverlayChoice(
 ) {
     LINES(
         "悬浮歌词行数",
-        "桌面悬浮歌词一次显示几行（当前行居中高亮，上下带上下文）。选中后立刻给一次 6 秒预览。",
-        (1..5).map { n -> ChoiceOption(n, "$n 行", overlayLinesHint(n)) },
+        "桌面悬浮歌词一次显示几行（当前行居中高亮，上下带上下文）。" +
+            "选「自动」时按悬浮窗高度算：窗口高就多给几行，窗口矮就只留当前句，不会被裁掉。" +
+            "选中后立刻给一次 6 秒预览。",
+        listOf(ChoiceOption(0, "自动（按高度适配）", overlayLinesHint(0))) +
+            (1..5).map { n -> ChoiceOption(n, "$n 行", overlayLinesHint(n)) },
     ),
     TITLE_SCALE(
         "歌名歌手字号",
@@ -303,6 +306,7 @@ internal enum class OverlayChoice(
  * 偶数行时下方多一行：当前行尽量靠中间，而不是贴在最上面。
  */
 internal fun overlayLinesHint(lines: Int): String = when (lines) {
+    0 -> "按窗口高度自动决定能放几行；高度为「自动」时按 3 行显示"
     1 -> "只显示当前歌词行（一行放不下时自动折行）"
     2 -> "当前行 + 下一句"
     3 -> "上一行 / 当前行 / 下一行，当前行高亮"

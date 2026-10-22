@@ -13,12 +13,11 @@ import com.luckylearning.windtone.lyrics.OverlayContentResolver
 object OverlayTextComposer {
 
     /**
-     * 「全屏高度」模式（v1.1.19）一次画多少行：上 5 + 当前 + 下 5。
+     * 「全屏高度」模式的**行数上限**（v1.1.19，v1.1.49 起变成上限而非固定值）。
      *
-     * 这个模式的目标是「和播放页歌词区一样」——一屏铺满、当前行居中、
-     * 上下都是可读的上下文。奇数行保证当前行真正落在正中（上下对称）；
-     * 具体要几条由 [com.luckylearning.windtone.lyrics.OverlayContentResolver]
-     * 的上下文上限兜底，这里只是把额度用满。
+     * 上 5 + 当前 + 下 5：一屏铺满、当前行居中、上下都是可读的上下文。
+     * 奇数行保证当前行真正落在正中；实际画几行由 [OverlayLineFit] 按面板高度反推，
+     * 面板被调矮（30%~）时自动减少，不会被窗口裁掉最后几行。
      */
     const val FULL_HEIGHT_LINES = 11
 

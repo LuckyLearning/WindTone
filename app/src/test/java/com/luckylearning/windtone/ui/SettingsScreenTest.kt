@@ -363,6 +363,27 @@ class SettingsScreenTest {
     }
 
     /**
+     * v1.1.49：行数多出一档「自动」。
+     *
+     * 为什么值得单独测：这一档存的是 0，而 0 在老代码里会被夹成 1（越界值）。
+     * 界面看着有「自动」，点下去却回到 1 行，是最容易被当成「点了没反应」的形态。
+     */
+    @Test
+    fun overlayLinesDialogOffersAutoFit() {
+        render(player = PlayerUiState(lyricOverlay = true, lyricOverlayFullHeight = false))
+
+        compose.onNodeWithText("歌词").performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText("悬浮歌词行数", substring = true).performScrollTo().performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText("自动（按高度适配）", substring = true).assertIsDisplayed()
+        // 手选档不能被顶掉：老用户设的 3 行 / 5 行还得能选回来
+        compose.onAllNodesWithText("3 行").assertCountEquals(1)
+    }
+
+    /**
      * v1.1.48：尺寸 / 位置 / 背景这些新旋钮真的出现在页面上。
      *
      * 为什么要测：这些控件全在「悬浮歌词开着」的条件块里，写错一个分支就会静默消失，
@@ -380,7 +401,7 @@ class SettingsScreenTest {
         compose.onNodeWithText("歌词").performClick()
         compose.waitForIdle()
 
-        listOf("高度 自动", "水平位置", "垂直位置", "自定义背景", "选择背景色", "背景不透明度")
+        listOf("高度 自动", "水平位置", "垂直位置", "自定义背景", "选择背景色", "背景颜色", "背景不透明度")
             .forEach { title ->
                 compose.onNodeWithText(title, substring = true).performScrollTo().assertIsDisplayed()
             }
