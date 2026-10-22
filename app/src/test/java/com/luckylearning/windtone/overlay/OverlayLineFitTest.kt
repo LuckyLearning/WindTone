@@ -65,16 +65,11 @@ class OverlayLineFitTest {
     }
 
     @Test
-    fun `上限按形态分档`() {
-        // 全屏形态最多 11 行（上 5 + 当前 + 下 5）
+    fun `自动档上限是宽松安全网，行数主要由高度决定`() {
+        // 高度充裕时顶到上限（v1.1.50 前 7/11 两档会在手机竖屏上留大片空白）
         assertEquals(
-            OverlayLineFit.MAX_FULL_LINES,
-            OverlayLineFit.fit(availablePx = 4000, lineBoxPx = 100, maxLines = OverlayLineFit.MAX_FULL_LINES),
-        )
-        // 单条字幕最多 7 行：再多就不是字幕而是一块遮屏的板子
-        assertEquals(
-            OverlayLineFit.MAX_STRIP_LINES,
-            OverlayLineFit.fit(availablePx = 4000, lineBoxPx = 100, maxLines = OverlayLineFit.MAX_STRIP_LINES),
+            OverlayLineFit.MAX_AUTO_LINES,
+            OverlayLineFit.fit(availablePx = 4000, lineBoxPx = 100),
         )
         assertEquals(1, OverlayLineFit.fit(availablePx = 1000, lineBoxPx = 100, maxLines = 0))
     }
@@ -88,29 +83,45 @@ class OverlayLineFitTest {
     // ------------------------------------------------------------ 真实屏尺寸
 
     @Test
-    fun `车机 1920x1080 全屏面板 100% 高度仍给满 11 行`() {
+    fun `车机全屏面板高度拉满时给 15 行（不再被 11 档截住）`() {
         // 字 20sp × 1.5 = 30px；行高 30×1.25×1.2 + 15 = 60px；可用高度 1080 − 84（Dock）
         val box = OverlayLineFit.lineBoxPx(30f, 15f, 1.2f)
         val lines = OverlayLineFit.fit(
             availablePx = 996,
             lineBoxPx = box,
             chromePx = 24,
-            maxLines = OverlayLineFit.MAX_FULL_LINES,
+            maxLines = OverlayLineFit.MAX_AUTO_LINES,
         )
-        assertEquals(11, lines)
+        // 996 − 24 = 972 → 16.2 → 16 行 → 取奇数 15（v1.1.50 前被 11 档截住）
+        assertEquals(15, lines)
     }
 
     @Test
-    fun `面板调到 30% 高度时行数降下来，不会被裁`() {
+    fun `面板调矮到三成高度时行数降下来，不会被裁`() {
         // 与上一条同一台车机，面板高度 30%：996 × 0.3 ≈ 298px
         val box = OverlayLineFit.lineBoxPx(30f, 15f, 1.2f)
         val lines = OverlayLineFit.fit(
             availablePx = 298,
             lineBoxPx = box,
             chromePx = 24,
-            maxLines = OverlayLineFit.MAX_FULL_LINES,
+            maxLines = OverlayLineFit.MAX_AUTO_LINES,
         )
         // 298 − 24 = 274 → 4 行 → 取奇数 3
         assertEquals(3, lines)
+    }
+
+    @Test
+    fun `手机竖屏单条高度拉满时行数用满窗口（回归上一版只给 7 行）`() {
+        // 1080×2340 / 440dpi：20sp = 55px；行高 55×1.25×1 + dp2 = 74px
+        val box = OverlayLineFit.lineBoxPx(55f, 5.5f, 1f)
+        // 固定开销：上下内边距 44 + 标题两行小字 107 + 一句译文余量 74
+        val lines = OverlayLineFit.fit(
+            availablePx = 2000,
+            lineBoxPx = box,
+            chromePx = 225,
+            maxLines = OverlayLineFit.MAX_AUTO_LINES,
+        )
+        // (2000 − 225) / 74 ≈ 23.9 → 23 行 —— v1.1.49 在这里被 7 档截住
+        assertEquals(23, lines)
     }
 }

@@ -29,11 +29,12 @@ object OverlayLineFit {
     /**
      * 自动行数的上限。
      *
-     * 全屏形态沿用 v1.1.19 的 11 行（上 5 + 当前 + 下 5）；
-     * 单条字幕给 7 行 —— 再多的「浮层」就不是字幕而是一块遮屏的板子了。
+     * v1.1.50 之前这里分形态设过 11 / 7 两档，真机立刻打脸：手机竖屏上把单条
+     * 高度拉到 94%，窗口大半是空的、只画 7 行 —— 用户要的是「参考播放页，
+     * 高度用满」。所以自动档的上限放宽成一个宽松的安全网，**行数主要交给
+     * 高度反推**：字号再小、屏幕再高，25 行也是一块完整的歌词墙而不是失控。
      */
-    const val MAX_FULL_LINES = 11
-    const val MAX_STRIP_LINES = 7
+    const val MAX_AUTO_LINES = 25
 
     /**
      * 单条字幕「高度也是自动」时自动行数的兜底值。
@@ -78,7 +79,7 @@ object OverlayLineFit {
         availablePx: Int,
         lineBoxPx: Int,
         chromePx: Int = 0,
-        maxLines: Int = MAX_FULL_LINES,
+        maxLines: Int = MAX_AUTO_LINES,
     ): Int {
         val box = lineBoxPx.coerceAtLeast(1)
         val usable = (availablePx - chromePx.coerceAtLeast(0)).coerceAtLeast(0)

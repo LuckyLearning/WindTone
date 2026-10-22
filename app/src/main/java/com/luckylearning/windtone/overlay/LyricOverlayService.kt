@@ -759,14 +759,17 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
     // ------------------------------------------------------------------ 行数
 
     /**
-     * 这次到底画几行（v1.1.49）。
+     * 这次到底画几行（v1.1.49，v1.1.50 放开形态上限）。
      *
      * 三个来源，优先级从高到低：
      *  1. 全屏形态：一律按面板高度自适应 —— 面板高度本就是用户可调的（30..100%），
-     *     写死 11 行在面板调矮 / 手机竖屏时会被窗口裁掉最后几行；
+     *     写死行数在面板调矮 / 手机竖屏时会被窗口裁掉最后几行；
      *  2. 单条字幕 + 用户手选 1..5：照旧，尊重用户的明确选择；
      *  3. 单条字幕 + 「自动」：按固定高度反推（高度也是自动时按
      *     [OverlayLineFit.STRIP_FALLBACK_LINES] 行，否则会「行多变高、变高又多行」）。
+     *
+     * 自动档两种形态共用 [OverlayLineFit.MAX_AUTO_LINES] 这一个宽松上限：
+     * 行数主要由高度决定（播放页效果 = 高度用满），上限只是安全网。
      */
     override fun resolveLineCount(prefs: Prefs, full: Boolean): Int {
         if (full) return autoLineCount(prefs, full = true)
@@ -810,7 +813,10 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             availablePx = frame.height,
             lineBoxPx = lineBox,
             chromePx = chrome,
-            maxLines = if (full) OverlayLineFit.MAX_FULL_LINES else OverlayLineFit.MAX_STRIP_LINES,
+            // v1.1.50：不再按形态分 11/7 两档 —— 手机竖屏高度 94% 时 7 行只用了
+            // 窗口的一小半，用户要的是播放页那种「高度用满」的效果。行数交给
+            // 高度反推，这里只留一个宽松安全网。
+            maxLines = OverlayLineFit.MAX_AUTO_LINES,
         )
     }
 
