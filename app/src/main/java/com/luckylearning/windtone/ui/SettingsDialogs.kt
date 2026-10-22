@@ -274,6 +274,17 @@ internal enum class OverlayChoice(
             ChoiceOption(1, "隐藏", "暂停即消失，桌面更干净"),
         ),
     ),
+    // v1.1.52：标题从「显示 / 不显示」开关升级为可选内容 —— 只显示歌名 / 只显示歌手。
+    // 「显示歌名与歌手」开关保留（关 = 完全不显示），打开后由这里决定显示哪几行。
+    TITLE_MODE(
+        "标题内容",
+        "悬浮窗顶部的小字标题显示哪些内容（需要先打开上面的「显示歌名与歌手」）。",
+        listOf(
+            ChoiceOption(0, "歌名 + 歌手", "默认，两行都显示"),
+            ChoiceOption(1, "只显示歌名", "去掉歌手行，标题更紧凑"),
+            ChoiceOption(2, "只显示歌手", "去掉歌名行"),
+        ),
+    ),
 }
 
 /**
@@ -294,3 +305,4 @@ internal fun overlayLinesHint(lines: Int): String = when (lines) {
 /** 设置页行尾摘要用的短标签（与弹层选项一一对应，按档位下标取） */
 internal val OVERLAY_ALIGN_LABELS = listOf("居中", "居左")
 internal val OVERLAY_PAUSE_LABELS = listOf("淡出", "隐藏")
+internal val OVERLAY_TITLE_MODE_LABELS = listOf("歌名 + 歌手", "只歌名", "只歌手")

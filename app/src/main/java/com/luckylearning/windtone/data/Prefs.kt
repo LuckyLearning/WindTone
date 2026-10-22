@@ -222,6 +222,44 @@ object SettingsDefaults {
     const val OVERLAY_ALIGN = 0
     const val OVERLAY_PAUSE_MODE = 0
 
+    // ------------------------------------------------ 样式细节（v1.1.52，全部滑杆 / 取色）
+
+    /** 悬浮窗背景圆角（dp）：全屏形态强制直角（圆角会在四角露出桌面） */
+    const val OVERLAY_CORNER_RADIUS_DP = 14
+    val OVERLAY_CORNER_RADIUS_RANGE = 0..28
+
+    /** 背景边框宽度（dp）：0 = 无边框 */
+    const val OVERLAY_BORDER_WIDTH_DP = 0
+    val OVERLAY_BORDER_WIDTH_RANGE = 0..4
+
+    /** 背景边框颜色：半透明白（宽度默认 0，这个色值只是滑杆拉起来时的预填） */
+    const val OVERLAY_BORDER_COLOR = 0x66FFFFFF.toInt()
+
+    /** 单条字幕的额外行距（dp）：与全屏模式的 10dp 各管各的 */
+    const val OVERLAY_LINE_SPACING_DP = 2
+    val OVERLAY_LINE_SPACING_RANGE = 0..12
+
+    /** 当前行颜色：0 = 跟随「文字颜色」（默认），其余为 ARGB */
+    const val OVERLAY_CURRENT_COLOR = 0
+
+    /** 上下句压暗程度（不透明度 %）：42 与播放页 0.42 对齐；无底板时有保底下限 */
+    const val OVERLAY_DIM_PERCENT = 42
+    val OVERLAY_DIM_RANGE = 20..80
+
+    /** 文字描边宽度（dp）：0 = 自动（有底板 3dp 柔光 / 无底板 2dp 硬描边） */
+    const val OVERLAY_STROKE_WIDTH_DP = 0
+    val OVERLAY_STROKE_WIDTH_RANGE = 0..4
+
+    /** 描边颜色（默认纯黑） */
+    const val OVERLAY_STROKE_COLOR = 0xFF000000.toInt()
+
+    /** 换行动画时长（ms）：0 = 关闭动画（硬切） */
+    const val OVERLAY_FADE_MS = 160
+    val OVERLAY_FADE_RANGE = 0..500
+
+    /** 标题显示内容：0 歌名 + 歌手（默认）/ 1 只歌名 / 2 只歌手 */
+    const val OVERLAY_TITLE_MODE = 0
+
     /**
      * 悬浮窗宽度（屏幕宽度的百分比，1..100）。
      *
@@ -880,6 +918,105 @@ class Prefs private constructor(context: Context) {
             ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_BG_ALPHA, v) }
         }
 
+    // ---------------- 样式细节（v1.1.52）----------------
+
+    /** 悬浮窗背景圆角（dp）：全屏形态在服务里强制直角，这个值只作用于单条字幕 */
+    var lyricOverlayCornerRadiusDp: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_CORNER, SettingsDefaults.OVERLAY_CORNER_RADIUS_DP)
+            .coerceIn(0, 28)
+        set(value) {
+            val v = value.coerceIn(0, 28)
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_CORNER, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_CORNER, v) }
+        }
+
+    /** 背景边框宽度（dp）：0 = 无边框 */
+    var lyricOverlayBorderWidthDp: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_BORDER_W, SettingsDefaults.OVERLAY_BORDER_WIDTH_DP)
+            .coerceIn(0, 4)
+        set(value) {
+            val v = value.coerceIn(0, 4)
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_BORDER_W, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_BORDER_W, v) }
+        }
+
+    /** 背景边框颜色（ARGB）。保留原 alpha：默认就是半透明白（0x66FFFFFF），细线不该画成实心 */
+    var lyricOverlayBorderColor: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_BORDER_C, SettingsDefaults.OVERLAY_BORDER_COLOR)
+        set(value) {
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_BORDER_C, value).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_BORDER_C, value) }
+        }
+
+    /** 单条字幕的额外行距（dp）：改了之后行数「自动」会跟着重算 */
+    var lyricOverlayLineSpacingDp: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_LINE_SPACING, SettingsDefaults.OVERLAY_LINE_SPACING_DP)
+            .coerceIn(0, 12)
+        set(value) {
+            val v = value.coerceIn(0, 12)
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_LINE_SPACING, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_LINE_SPACING, v) }
+        }
+
+    /** 当前行颜色：0 = 跟随「文字颜色」 */
+    var lyricOverlayCurrentColor: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_CURRENT_COLOR, SettingsDefaults.OVERLAY_CURRENT_COLOR)
+        set(value) {
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_CURRENT_COLOR, value).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_CURRENT_COLOR, value) }
+        }
+
+    /** 上下句压暗程度（%）：无底板时有保底下限（见 OverlayLegibility） */
+    var lyricOverlayDimPercent: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_DIM, SettingsDefaults.OVERLAY_DIM_PERCENT)
+            .coerceIn(SettingsDefaults.OVERLAY_DIM_RANGE.first, SettingsDefaults.OVERLAY_DIM_RANGE.last)
+        set(value) {
+            val v = value.coerceIn(
+                SettingsDefaults.OVERLAY_DIM_RANGE.first,
+                SettingsDefaults.OVERLAY_DIM_RANGE.last,
+            )
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_DIM, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_DIM, v) }
+        }
+
+    /** 文字描边宽度（dp）：0 = 自动（有底板 3dp 柔光 / 无底板 2dp 硬描边） */
+    var lyricOverlayStrokeWidthDp: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_STROKE_W, SettingsDefaults.OVERLAY_STROKE_WIDTH_DP)
+            .coerceIn(0, 4)
+        set(value) {
+            val v = value.coerceIn(0, 4)
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_STROKE_W, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_STROKE_W, v) }
+        }
+
+    /** 描边颜色（ARGB） */
+    var lyricOverlayStrokeColor: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_STROKE_C, SettingsDefaults.OVERLAY_STROKE_COLOR)
+        set(value) {
+            val v = value or 0xFF000000.toInt()
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_STROKE_C, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_STROKE_C, v) }
+        }
+
+    /** 换行动画时长（ms）：0 = 关闭动画 */
+    var lyricOverlayFadeMs: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_FADE, SettingsDefaults.OVERLAY_FADE_MS)
+            .coerceIn(0, 500)
+        set(value) {
+            val v = value.coerceIn(0, 500)
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_FADE, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_FADE, v) }
+        }
+
+    /** 标题显示内容：0 歌名 + 歌手 / 1 只歌名 / 2 只歌手 */
+    var lyricOverlayTitleMode: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_TITLE_MODE, SettingsDefaults.OVERLAY_TITLE_MODE).coerceIn(0, 2)
+        set(value) {
+            val v = value.coerceIn(0, 2)
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_TITLE_MODE, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_TITLE_MODE, v) }
+        }
+
     /** 暂停时的表现：0 淡出（默认，保留最后一句便于看清唱到哪）/ 1 隐藏 */
     var lyricOverlayPauseMode: Int
         get() = sp.getInt(KEY_LYRIC_OVERLAY_PAUSE_MODE, SettingsDefaults.OVERLAY_PAUSE_MODE).coerceIn(0, 1)
@@ -1318,6 +1455,18 @@ class Prefs private constructor(context: Context) {
         /** 旧「自定义背景」开关 —— 只读，用于迁移（v1.1.51 起背景始终可自定义） */
         const val KEY_LYRIC_OVERLAY_CUSTOM_BG = "lyric_overlay_custom_bg"
         const val KEY_LYRIC_OVERLAY_FULL_OFFSET = "lyric_overlay_full_offset_percent"
+
+        // ---- 样式细节（v1.1.52）----
+        const val KEY_LYRIC_OVERLAY_CORNER = "lyric_overlay_corner_dp"
+        const val KEY_LYRIC_OVERLAY_BORDER_W = "lyric_overlay_border_width_dp"
+        const val KEY_LYRIC_OVERLAY_BORDER_C = "lyric_overlay_border_color"
+        const val KEY_LYRIC_OVERLAY_LINE_SPACING = "lyric_overlay_line_spacing_dp"
+        const val KEY_LYRIC_OVERLAY_CURRENT_COLOR = "lyric_overlay_current_color"
+        const val KEY_LYRIC_OVERLAY_DIM = "lyric_overlay_dim_percent"
+        const val KEY_LYRIC_OVERLAY_STROKE_W = "lyric_overlay_stroke_width_dp"
+        const val KEY_LYRIC_OVERLAY_STROKE_C = "lyric_overlay_stroke_color"
+        const val KEY_LYRIC_OVERLAY_FADE = "lyric_overlay_fade_ms"
+        const val KEY_LYRIC_OVERLAY_TITLE_MODE = "lyric_overlay_title_mode"
 
         // ---- 6. 前台检测与调试 ----
         const val KEY_LYRIC_OVERLAY_HIDDEN_APPS = "lyric_overlay_hidden_apps"

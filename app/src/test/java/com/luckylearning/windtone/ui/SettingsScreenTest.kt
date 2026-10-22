@@ -112,6 +112,16 @@ class SettingsScreenTest {
                     onLyricOverlayFullYPercent = onLyricOverlayFullYPercent,
                     onLyricOverlayBgColor = onLyricOverlayBgColor,
                     onLyricOverlayBgAlphaPercent = onLyricOverlayBgAlphaPercent,
+                    onLyricOverlayCornerRadiusDp = {},
+                    onLyricOverlayBorderWidthDp = {},
+                    onLyricOverlayBorderColor = {},
+                    onLyricOverlayLineSpacingDp = {},
+                    onLyricOverlayCurrentColor = {},
+                    onLyricOverlayDimPercent = {},
+                    onLyricOverlayStrokeWidthDp = {},
+                    onLyricOverlayStrokeColor = {},
+                    onLyricOverlayFadeMs = {},
+                    onLyricOverlayTitleMode = {},
                     onLyricOverlayHiddenApps = onLyricOverlayHiddenApps,
                     onForegroundLogEnabled = onForegroundLogEnabled,
                     onDebugUnlocked = onDebugUnlocked,
@@ -160,11 +170,11 @@ class SettingsScreenTest {
         compose.waitForIdle()
     }
 
-    /** 主页 = 六张分类卡，一张不多一张不少 */
+    /** 主页 = 七张分类卡，一张不多一张不少（v1.1.52 起悬浮歌词独立成卡） */
     @Test
-    fun rootShowsSixCategoryCards() {
+    fun rootShowsSevenCategoryCards() {
         render()
-        listOf("外观", "播放", "歌词", "音乐库", "更新", "关于与诊断").forEach {
+        listOf("外观", "播放", "歌词", "悬浮歌词", "音乐库", "更新", "关于与诊断").forEach {
             compose.onNodeWithText(it).assertIsDisplayed()
         }
         // 分类卡与子页里的 ActionRow 的区别就在这一行摘要（连摘要一起断言，
@@ -267,17 +277,27 @@ class SettingsScreenTest {
             onLyricOverlayTextColor = { textColor = it },
         )
 
+        // v1.1.52 拆页后：字号 ↺ 在「歌词」子页，颜色 ↺ 在「悬浮歌词」子页，
+        // 两处互不干扰这件事正好借拆页钉得更死。
         compose.onNodeWithText("歌词").performClick()
         compose.waitForIdle()
-        // 三枚：①「歌词字号」（页首）②「桌面悬浮歌词」开关本身（开着 ≠ 出厂默认）
-        // ③「悬浮歌词文字颜色」（页尾）。开关那枚是 v1.1.21 打开悬浮歌词后才冒出来的，
-        // 早先这条测试用默认的「关闭」状态，所以只有两枚。
-        compose.onAllNodesWithContentDescription("恢复默认").assertCountEquals(3)
+        // 歌词子页只有「歌词字号」偏离默认（双语 / 跳转都在默认档，不挂 ↺）
+        compose.onAllNodesWithContentDescription("恢复默认").assertCountEquals(1)
+        compose.onAllNodesWithContentDescription("恢复默认")[0].performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals(SettingsDefaults.LYRIC_SCALE, scale)
+        // 悬浮歌词那边的回调不该被顺带叫到
+        assertEquals(null, textColor)
 
-        // 下标 = 页面里的先后顺序：0 歌词字号 / 1 悬浮歌词开关 / 2 悬浮歌词文字颜色
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("悬浮歌词").performClick()
+        compose.waitForIdle()
+        // 悬浮歌词子页挂 ↺ 的两处：①开关本身（开着 ≠ 出厂默认）②「悬浮歌词文字颜色」
+        compose.onAllNodesWithContentDescription("恢复默认").assertCountEquals(2)
         compose.onNodeWithText("悬浮歌词文字颜色").performScrollTo()
         compose.waitForIdle()
-        compose.onAllNodesWithContentDescription("恢复默认")[2].performScrollTo().performClick()
+        compose.onAllNodesWithContentDescription("恢复默认")[1].performScrollTo().performClick()
         compose.waitForIdle()
         assertEquals(
             "点「悬浮歌词文字颜色」行的 ↺ 应当写回 OVERLAY_TEXT_COLOR",
@@ -285,12 +305,8 @@ class SettingsScreenTest {
             textColor,
         )
         // 它只该动颜色：字号那处的回调不该被叫到；也不该顺带把色板弹层打开
-        assertEquals(null, scale)
-        compose.onNodeWithText("预设").assertDoesNotExist()
-
-        compose.onAllNodesWithContentDescription("恢复默认")[0].performScrollTo().performClick()
-        compose.waitForIdle()
         assertEquals(SettingsDefaults.LYRIC_SCALE, scale)
+        compose.onNodeWithText("预设").assertDoesNotExist()
     }
 
     // ================================================================ v1.1.21 联动项按开关显隐
@@ -307,7 +323,8 @@ class SettingsScreenTest {
     fun overlayAppearanceOptionsHideWhenOverlayOff() {
         render(player = PlayerUiState(lyricOverlay = false))
 
-        compose.onNodeWithText("歌词").performClick()
+        // v1.1.52 拆页后这些项都在「悬浮歌词」子页
+        compose.onNodeWithText("悬浮歌词").performClick()
         compose.waitForIdle()
 
         listOf(
@@ -338,7 +355,8 @@ class SettingsScreenTest {
     fun overlayAppearanceOptionsAppearWhenOverlayOn() {
         render(player = PlayerUiState(lyricOverlay = true, lyricOverlayFullHeight = false))
 
-        compose.onNodeWithText("歌词").performClick()
+        // v1.1.52：这些项从「歌词」子页拆到了「悬浮歌词」子页
+        compose.onNodeWithText("悬浮歌词").performClick()
         compose.waitForIdle()
 
         listOf(
@@ -369,7 +387,7 @@ class SettingsScreenTest {
     fun overlayLinesDialogOffersAutoFit() {
         render(player = PlayerUiState(lyricOverlay = true, lyricOverlayFullHeight = false))
 
-        compose.onNodeWithText("歌词").performClick()
+        compose.onNodeWithText("悬浮歌词").performClick()
         compose.waitForIdle()
 
         compose.onNodeWithText("悬浮歌词行数", substring = true).performScrollTo().performClick()
@@ -394,7 +412,7 @@ class SettingsScreenTest {
                 lyricOverlayFullHeight = false,
             ),
         )
-        compose.onNodeWithText("歌词").performClick()
+        compose.onNodeWithText("悬浮歌词").performClick()
         compose.waitForIdle()
 
         listOf("高度 自动", "水平位置", "垂直位置", "选择背景色", "背景颜色", "背景不透明度")
@@ -413,7 +431,7 @@ class SettingsScreenTest {
     fun overlayBackgroundIsAlwaysCustomizable() {
         render(player = PlayerUiState(lyricOverlay = true, lyricOverlayFullHeight = false))
 
-        compose.onNodeWithText("歌词").performClick()
+        compose.onNodeWithText("悬浮歌词").performClick()
         compose.waitForIdle()
 
         compose.onNodeWithText("背景不透明度", substring = true).performScrollTo().assertIsDisplayed()
@@ -428,7 +446,7 @@ class SettingsScreenTest {
     fun overlayFontSizeIsASliderInSp() {
         render(player = PlayerUiState(lyricOverlay = true, lyricOverlayTextSp = 28))
 
-        compose.onNodeWithText("歌词").performClick()
+        compose.onNodeWithText("悬浮歌词").performClick()
         compose.waitForIdle()
 
         compose.onNodeWithText("正文字号 28sp", substring = true).performScrollTo().assertIsDisplayed()
@@ -506,10 +524,10 @@ class SettingsScreenTest {
     }
 
     /**
-     * v1.1.30：两个入口分家了。
+     * v1.1.30 两个入口分家；v1.1.52 再拆页。
      *
-     *  · 歌词子页只剩「不显示悬浮窗的应用」（日常配置）；
-     *  · 「记录前台应用切换」搬进 关于与诊断 → **调试**，和「加入名单」放在同一屏。
+     *  · 「不显示悬浮窗的应用」跟着悬浮歌词整体搬进「悬浮歌词」子页；
+     *  · 「记录前台应用切换」在 关于与诊断 → **调试**，和「加入名单」放在同一屏。
      *
      * 防的是「功能从界面上悄悄消失」—— 这两处都是用户在自己车上配名单的唯一入口，
      * 丢了不会编译失败、不会报错。
@@ -520,9 +538,16 @@ class SettingsScreenTest {
 
         compose.onNodeWithText("歌词").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText("不显示悬浮窗的应用").performScrollTo().assertExists()
-        // 记录开关已经搬走，不该再出现在歌词子页
+        // 歌词子页不再有名单入口（跟着悬浮歌词拆走了）
+        compose.onNodeWithText("不显示悬浮窗的应用").assertDoesNotExist()
+        // 记录开关也已经搬走，不该再出现在歌词子页
         compose.onNodeWithText("记录前台应用切换").assertDoesNotExist()
+
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("悬浮歌词").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("不显示悬浮窗的应用").performScrollTo().assertExists()
     }
 
     /**

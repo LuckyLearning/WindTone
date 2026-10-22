@@ -194,6 +194,56 @@ class SettingsRepository(val prefs: Prefs) {
         return prefs.lyricOverlayBgAlphaPercent
     }
 
+    fun setLyricOverlayCornerRadiusDp(value: Int): Int {
+        prefs.lyricOverlayCornerRadiusDp = value
+        return prefs.lyricOverlayCornerRadiusDp
+    }
+
+    fun setLyricOverlayBorderWidthDp(value: Int): Int {
+        prefs.lyricOverlayBorderWidthDp = value
+        return prefs.lyricOverlayBorderWidthDp
+    }
+
+    fun setLyricOverlayBorderColor(value: Int): Int {
+        prefs.lyricOverlayBorderColor = value
+        return prefs.lyricOverlayBorderColor
+    }
+
+    fun setLyricOverlayLineSpacingDp(value: Int): Int {
+        prefs.lyricOverlayLineSpacingDp = value
+        return prefs.lyricOverlayLineSpacingDp
+    }
+
+    fun setLyricOverlayCurrentColor(value: Int): Int {
+        prefs.lyricOverlayCurrentColor = value
+        return prefs.lyricOverlayCurrentColor
+    }
+
+    fun setLyricOverlayDimPercent(value: Int): Int {
+        prefs.lyricOverlayDimPercent = value
+        return prefs.lyricOverlayDimPercent
+    }
+
+    fun setLyricOverlayStrokeWidthDp(value: Int): Int {
+        prefs.lyricOverlayStrokeWidthDp = value
+        return prefs.lyricOverlayStrokeWidthDp
+    }
+
+    fun setLyricOverlayStrokeColor(value: Int): Int {
+        prefs.lyricOverlayStrokeColor = value
+        return prefs.lyricOverlayStrokeColor
+    }
+
+    fun setLyricOverlayFadeMs(value: Int): Int {
+        prefs.lyricOverlayFadeMs = value
+        return prefs.lyricOverlayFadeMs
+    }
+
+    fun setLyricOverlayTitleMode(value: Int): Int {
+        prefs.lyricOverlayTitleMode = value
+        return prefs.lyricOverlayTitleMode
+    }
+
     fun setOverlayTextColor(color: Int) {
         prefs.lyricOverlayTextColor = color
     }

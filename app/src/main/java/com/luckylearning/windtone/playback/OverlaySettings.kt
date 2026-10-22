@@ -208,6 +208,66 @@ class OverlaySettings(
         previewOverlayAfterConfigChange()
     }
 
+    override fun setLyricOverlayCornerRadiusDp(value: Int) {
+        val normalized = settings.setLyricOverlayCornerRadiusDp(value)
+        state.update { it.copy(lyricOverlayCornerRadiusDp = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setLyricOverlayBorderWidthDp(value: Int) {
+        val normalized = settings.setLyricOverlayBorderWidthDp(value)
+        state.update { it.copy(lyricOverlayBorderWidthDp = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setLyricOverlayBorderColor(value: Int) {
+        val normalized = settings.setLyricOverlayBorderColor(value)
+        state.update { it.copy(lyricOverlayBorderColor = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setLyricOverlayLineSpacingDp(value: Int) {
+        val normalized = settings.setLyricOverlayLineSpacingDp(value)
+        state.update { it.copy(lyricOverlayLineSpacingDp = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setLyricOverlayCurrentColor(value: Int) {
+        val normalized = settings.setLyricOverlayCurrentColor(value)
+        state.update { it.copy(lyricOverlayCurrentColor = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setLyricOverlayDimPercent(value: Int) {
+        val normalized = settings.setLyricOverlayDimPercent(value)
+        state.update { it.copy(lyricOverlayDimPercent = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setLyricOverlayStrokeWidthDp(value: Int) {
+        val normalized = settings.setLyricOverlayStrokeWidthDp(value)
+        state.update { it.copy(lyricOverlayStrokeWidthDp = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setLyricOverlayStrokeColor(value: Int) {
+        val normalized = settings.setLyricOverlayStrokeColor(value)
+        state.update { it.copy(lyricOverlayStrokeColor = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setLyricOverlayFadeMs(value: Int) {
+        val normalized = settings.setLyricOverlayFadeMs(value)
+        state.update { it.copy(lyricOverlayFadeMs = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setLyricOverlayTitleMode(value: Int) {
+        val normalized = settings.setLyricOverlayTitleMode(value)
+        state.update { it.copy(lyricOverlayTitleMode = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
     override fun canDrawOverlay(): Boolean = LyricOverlayBridge.canDraw(app)
 
     override fun setOverlayEditing(editing: Boolean) {

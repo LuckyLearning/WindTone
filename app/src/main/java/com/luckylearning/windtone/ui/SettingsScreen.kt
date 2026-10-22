@@ -102,6 +102,9 @@ internal enum class SettingsPage(val title: String) {
     PLAYBACK("播放"),
     LYRICS("歌词"),
 
+    /** 桌面悬浮歌词 —— v1.1.52 独立成页 */
+    OVERLAY("悬浮歌词"),
+
     LIBRARY("音乐库"),
     UPDATE("更新"),
     DIAGNOSTICS("关于与诊断"),
@@ -170,6 +173,16 @@ fun SettingsScreen(
     onLyricOverlayFullYPercent: (Int) -> Unit,
     onLyricOverlayBgColor: (Int) -> Unit,
     onLyricOverlayBgAlphaPercent: (Int) -> Unit,
+    onLyricOverlayCornerRadiusDp: (Int) -> Unit,
+    onLyricOverlayBorderWidthDp: (Int) -> Unit,
+    onLyricOverlayBorderColor: (Int) -> Unit,
+    onLyricOverlayLineSpacingDp: (Int) -> Unit,
+    onLyricOverlayCurrentColor: (Int) -> Unit,
+    onLyricOverlayDimPercent: (Int) -> Unit,
+    onLyricOverlayStrokeWidthDp: (Int) -> Unit,
+    onLyricOverlayStrokeColor: (Int) -> Unit,
+    onLyricOverlayFadeMs: (Int) -> Unit,
+    onLyricOverlayTitleMode: (Int) -> Unit,
     /** 悬浮窗歌词文字颜色 —— v1.1.4 */
     onLyricOverlayTextColor: (Int) -> Unit,
     /** 「不显示悬浮窗的应用」名单（v1.1.29） */
@@ -243,7 +256,8 @@ fun SettingsScreen(
 
     // 车载：「完整设置」是否已打开（v1.1.32）。
     // 车载默认走一页到底的 CarSettingsScreen；只有用户主动点最后一行「完整设置」
-    // 才回到手机版这套六卡 + 子页的结构，且返回键先退回车载页而不是直接关设置。
+    // 才回到手机版这套七卡 + 子页的结构（v1.1.52 起悬浮歌词独立成卡），
+    // 且返回键先退回车载页而不是直接关设置。
     var fullSettings by remember { mutableStateOf(false) }
 
     // ---------------------------------------------------------------- 车载设置
@@ -419,11 +433,15 @@ fun SettingsScreen(
 
                     SettingsPage.LYRICS -> SettingsLyricsPage(
                         player = player,
-                        canDrawOverlay = canDrawOverlay,
-                        overlayHealth = overlayHealth,
                         onLyricScale = onLyricScale,
                         onLyricTapSeeks = onLyricTapSeeks,
                         onLyricBilingual = onLyricBilingual,
+                    )
+
+                    SettingsPage.OVERLAY -> SettingsOverlayPage(
+                        player = player,
+                        canDrawOverlay = canDrawOverlay,
+                        overlayHealth = overlayHealth,
                         onLyricOverlay = onLyricOverlay,
                         onLyricOverlayLines = onLyricOverlayLines,
                         onLyricOverlayFullHeight = onLyricOverlayFullHeight,
@@ -442,6 +460,16 @@ fun SettingsScreen(
                         onLyricOverlayFullYPercent = onLyricOverlayFullYPercent,
                         onLyricOverlayBgColor = onLyricOverlayBgColor,
                         onLyricOverlayBgAlphaPercent = onLyricOverlayBgAlphaPercent,
+                        onLyricOverlayCornerRadiusDp = onLyricOverlayCornerRadiusDp,
+                        onLyricOverlayBorderWidthDp = onLyricOverlayBorderWidthDp,
+                        onLyricOverlayBorderColor = onLyricOverlayBorderColor,
+                        onLyricOverlayLineSpacingDp = onLyricOverlayLineSpacingDp,
+                        onLyricOverlayCurrentColor = onLyricOverlayCurrentColor,
+                        onLyricOverlayDimPercent = onLyricOverlayDimPercent,
+                        onLyricOverlayStrokeWidthDp = onLyricOverlayStrokeWidthDp,
+                        onLyricOverlayStrokeColor = onLyricOverlayStrokeColor,
+                        onLyricOverlayFadeMs = onLyricOverlayFadeMs,
+                        onLyricOverlayTitleMode = onLyricOverlayTitleMode,
                         onLyricOverlayTextColor = onLyricOverlayTextColor,
                         onLyricOverlayHiddenApps = onLyricOverlayHiddenApps,
                         onOverlayEditing = onOverlayEditing,

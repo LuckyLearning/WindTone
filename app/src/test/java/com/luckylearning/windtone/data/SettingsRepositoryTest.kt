@@ -175,6 +175,40 @@ class SettingsRepositoryTest {
     }
 
     @Test
+    fun `样式补全各项越界夹到自己的区间并落盘`() {
+        // v1.1.52 十项：圆角 / 边框宽高与颜色 / 行距 / 当前行色 / 压暗 / 描边宽色 / 动画 / 标题内容
+        assertEquals(SettingsDefaults.OVERLAY_CORNER_RADIUS_RANGE.last, settings.setLyricOverlayCornerRadiusDp(99))
+        assertEquals(SettingsDefaults.OVERLAY_BORDER_WIDTH_RANGE.first, settings.setLyricOverlayBorderWidthDp(-1))
+        assertEquals(SettingsDefaults.OVERLAY_LINE_SPACING_RANGE.last, settings.setLyricOverlayLineSpacingDp(99))
+        assertEquals(SettingsDefaults.OVERLAY_DIM_RANGE.first, settings.setLyricOverlayDimPercent(1))
+        assertEquals(SettingsDefaults.OVERLAY_STROKE_WIDTH_RANGE.last, settings.setLyricOverlayStrokeWidthDp(50))
+        assertEquals(SettingsDefaults.OVERLAY_FADE_RANGE.first, settings.setLyricOverlayFadeMs(-1))
+        assertEquals(2, settings.setLyricOverlayTitleMode(9))
+        assertEquals(0, settings.setLyricOverlayTitleMode(-1))
+        // 落盘的也必须是夹取后的值（最后一次写的是下界 / 0 档）
+        assertEquals(SettingsDefaults.OVERLAY_CORNER_RADIUS_RANGE.last, prefs.lyricOverlayCornerRadiusDp)
+        assertEquals(SettingsDefaults.OVERLAY_BORDER_WIDTH_RANGE.first, prefs.lyricOverlayBorderWidthDp)
+        assertEquals(SettingsDefaults.OVERLAY_LINE_SPACING_RANGE.last, prefs.lyricOverlayLineSpacingDp)
+        assertEquals(SettingsDefaults.OVERLAY_DIM_RANGE.first, prefs.lyricOverlayDimPercent)
+        assertEquals(SettingsDefaults.OVERLAY_STROKE_WIDTH_RANGE.last, prefs.lyricOverlayStrokeWidthDp)
+        assertEquals(SettingsDefaults.OVERLAY_FADE_RANGE.first, prefs.lyricOverlayFadeMs)
+        assertEquals(0, prefs.lyricOverlayTitleMode)
+    }
+
+    @Test
+    fun `样式补全的颜色项原样落盘`() {
+        val current = 0xFFFF8800.toInt()
+        val stroke = 0xFF000000.toInt()
+        val border = 0x66FFFFFF.toInt()
+        settings.setLyricOverlayCurrentColor(current)
+        settings.setLyricOverlayStrokeColor(stroke)
+        settings.setLyricOverlayBorderColor(border)
+        assertEquals(current, prefs.lyricOverlayCurrentColor)
+        assertEquals(stroke, prefs.lyricOverlayStrokeColor)
+        assertEquals(border, prefs.lyricOverlayBorderColor)
+    }
+
+    @Test
     fun `仓库与 prefs 直通读是同一份存储`() {
         // 门面不复制状态：settings.prefs 就是构造时传入的那个实例
         assert(settings.prefs === prefs)

@@ -69,6 +69,16 @@ interface OverlayActions {
 
     /** 悬浮窗背景不透明度（0..100，0 = 无底板；v1.1.51 起背景只有颜色 + 这一项） */
     fun setLyricOverlayBgAlphaPercent(percent: Int)
+    fun setLyricOverlayCornerRadiusDp(value: Int)
+    fun setLyricOverlayBorderWidthDp(value: Int)
+    fun setLyricOverlayBorderColor(value: Int)
+    fun setLyricOverlayLineSpacingDp(value: Int)
+    fun setLyricOverlayCurrentColor(value: Int)
+    fun setLyricOverlayDimPercent(value: Int)
+    fun setLyricOverlayStrokeWidthDp(value: Int)
+    fun setLyricOverlayStrokeColor(value: Int)
+    fun setLyricOverlayFadeMs(value: Int)
+    fun setLyricOverlayTitleMode(value: Int)
 
     /** 悬浮窗歌词文字颜色（ARGB） */
     fun setLyricOverlayTextColor(color: Int)

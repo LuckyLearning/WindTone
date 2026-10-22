@@ -109,6 +109,16 @@ class PlaybackEngine(
             lyricOverlayFullYPercent = prefs.lyricOverlayFullYPercent,
             lyricOverlayBgColor = prefs.lyricOverlayBgColor,
             lyricOverlayBgAlphaPercent = prefs.lyricOverlayBgAlphaPercent,
+            lyricOverlayCornerRadiusDp = prefs.lyricOverlayCornerRadiusDp,
+            lyricOverlayBorderWidthDp = prefs.lyricOverlayBorderWidthDp,
+            lyricOverlayBorderColor = prefs.lyricOverlayBorderColor,
+            lyricOverlayLineSpacingDp = prefs.lyricOverlayLineSpacingDp,
+            lyricOverlayCurrentColor = prefs.lyricOverlayCurrentColor,
+            lyricOverlayDimPercent = prefs.lyricOverlayDimPercent,
+            lyricOverlayStrokeWidthDp = prefs.lyricOverlayStrokeWidthDp,
+            lyricOverlayStrokeColor = prefs.lyricOverlayStrokeColor,
+            lyricOverlayFadeMs = prefs.lyricOverlayFadeMs,
+            lyricOverlayTitleMode = prefs.lyricOverlayTitleMode,
             // 车载模式：启动直接进播放页（跳过库主页）
             playerExpanded = prefs.carMode,
             speed = prefs.playbackSpeed,
@@ -1030,6 +1040,28 @@ class PlaybackEngine(
     override fun setLyricOverlayBgColor(color: Int) = overlaySettings.setLyricOverlayBgColor(color)
     override fun setLyricOverlayBgAlphaPercent(percent: Int) =
         overlaySettings.setLyricOverlayBgAlphaPercent(percent)
+
+    // v1.1.52：样式补全 10 项（圆角 / 边框 / 行距 / 当前行颜色 / 压暗 / 描边 / 动画 / 标题内容）
+    override fun setLyricOverlayCornerRadiusDp(value: Int) =
+        overlaySettings.setLyricOverlayCornerRadiusDp(value)
+    override fun setLyricOverlayBorderWidthDp(value: Int) =
+        overlaySettings.setLyricOverlayBorderWidthDp(value)
+    override fun setLyricOverlayBorderColor(value: Int) =
+        overlaySettings.setLyricOverlayBorderColor(value)
+    override fun setLyricOverlayLineSpacingDp(value: Int) =
+        overlaySettings.setLyricOverlayLineSpacingDp(value)
+    override fun setLyricOverlayCurrentColor(value: Int) =
+        overlaySettings.setLyricOverlayCurrentColor(value)
+    override fun setLyricOverlayDimPercent(value: Int) =
+        overlaySettings.setLyricOverlayDimPercent(value)
+    override fun setLyricOverlayStrokeWidthDp(value: Int) =
+        overlaySettings.setLyricOverlayStrokeWidthDp(value)
+    override fun setLyricOverlayStrokeColor(value: Int) =
+        overlaySettings.setLyricOverlayStrokeColor(value)
+    override fun setLyricOverlayFadeMs(value: Int) =
+        overlaySettings.setLyricOverlayFadeMs(value)
+    override fun setLyricOverlayTitleMode(value: Int) =
+        overlaySettings.setLyricOverlayTitleMode(value)
 
     override fun canDrawOverlay(): Boolean = overlaySettings.canDrawOverlay()
     override fun setOverlayEditing(editing: Boolean) = overlaySettings.setOverlayEditing(editing)

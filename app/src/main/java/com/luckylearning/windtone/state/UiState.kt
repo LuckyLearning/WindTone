@@ -374,6 +374,17 @@ data class PlayerUiState(
     val lyricOverlayBgColor: Int = SettingsDefaults.OVERLAY_BG_COLOR,
     /** 背景不透明度（0..100，0 = 无底板）——v1.1.51 起背景只由颜色 + 这一项决定 */
     val lyricOverlayBgAlphaPercent: Int = SettingsDefaults.OVERLAY_BG_ALPHA_PERCENT,
+    /** v1.1.52 样式细节 */
+    val lyricOverlayCornerRadiusDp: Int = SettingsDefaults.OVERLAY_CORNER_RADIUS_DP,
+    val lyricOverlayBorderWidthDp: Int = SettingsDefaults.OVERLAY_BORDER_WIDTH_DP,
+    val lyricOverlayBorderColor: Int = SettingsDefaults.OVERLAY_BORDER_COLOR,
+    val lyricOverlayLineSpacingDp: Int = SettingsDefaults.OVERLAY_LINE_SPACING_DP,
+    val lyricOverlayCurrentColor: Int = SettingsDefaults.OVERLAY_CURRENT_COLOR,
+    val lyricOverlayDimPercent: Int = SettingsDefaults.OVERLAY_DIM_PERCENT,
+    val lyricOverlayStrokeWidthDp: Int = SettingsDefaults.OVERLAY_STROKE_WIDTH_DP,
+    val lyricOverlayStrokeColor: Int = SettingsDefaults.OVERLAY_STROKE_COLOR,
+    val lyricOverlayFadeMs: Int = SettingsDefaults.OVERLAY_FADE_MS,
+    val lyricOverlayTitleMode: Int = SettingsDefaults.OVERLAY_TITLE_MODE,
     /** 悬浮窗里的歌词文字颜色（ARGB，默认纯白） */
     val lyricOverlayTextColor: Int = SettingsDefaults.OVERLAY_TEXT_COLOR,
     /** 悬浮歌词是否处于「调整位置」模式（临时可拖动，会话级，不落盘） */

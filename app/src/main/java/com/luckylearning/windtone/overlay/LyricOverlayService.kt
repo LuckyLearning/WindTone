@@ -150,6 +150,12 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
     /** 已应用的底板档位（决定文字描边强度） */
     private var appliedLegibility = Int.MIN_VALUE
 
+    /** 已应用的文字描边（宽度×31+颜色，v1.1.52）；0 宽 = 自动描边 */
+    private var appliedStrokeKey = Int.MIN_VALUE
+
+    /** 已应用的单条行距 dp（v1.1.52）；-1 = 还没应用过 */
+    private var appliedLineSpacingDp = -1
+
     /** 已应用的「全屏高度」开关（v1.1.19）；-1 = 还没应用过 */
     private var appliedFullHeight = -1
 
@@ -295,8 +301,12 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
                 Gravity.CENTER
             }
             // 行数与省略策略由 observeState 按模式决定（手机 2 行 / 车载 6 行），
-            // 这里只给多行留好行距——单行时它不产生任何效果。
-            setLineSpacing(dp(STRIP_LINE_SPACING_EXTRA_DP).toFloat(), 1f)
+            // 这里只给多行留好行距（v1.1.52 起行距可在设置里调，0 = 紧凑）——
+            // 单行时它不产生任何效果。
+            setLineSpacing(
+                dp(Prefs(this@LyricOverlayService).lyricOverlayLineSpacingDp).toFloat(),
+                1f,
+            )
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, SettingsDefaults.OVERLAY_TEXT_SP.toFloat())
             // ⚠️ 这里**不能**设 INVISIBLE：显隐只由 observeState 切外层 box，
@@ -802,7 +812,8 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         val (extraDp, mult) = if (full) {
             OverlayAppearance.fullHeightLineSpacing()
         } else {
-            STRIP_LINE_SPACING_EXTRA_DP to 1f
+            // v1.1.52：单条形态的行距开放为设置项（0 = 紧凑）
+            prefs.lyricOverlayLineSpacingDp to 1f
         }
         val lineBox = OverlayLineFit.lineBoxPx(
             textSizePx = spToPx(prefs.lyricOverlayTextSp.toFloat()),
@@ -888,10 +899,14 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         // 底板透明度变了就重算一次文字的「可读性包」：不透明度 0 = 无底板，文字直接
         // 压在任何画面上，必须有更硬的描边，否则浅色文字落在浅色地图 / 泊车画面上
         // 就是一片糊（v1.1.25）。v1.1.51 起背景只有「颜色 + 不透明度」一套语义。
+        // v1.1.52：描边宽度 / 颜色开放为设置项（0 = 自动），一并纳入「变了才重算」。
         val backdropNow = OverlayBackground.legibilityKey(prefs.lyricOverlayBgAlphaPercent)
-        if (appliedLegibility != backdropNow) {
+        val strokeKey = prefs.lyricOverlayStrokeWidthDp * 31 +
+            (prefs.lyricOverlayStrokeColor and 0x00FFFFFF)
+        if (appliedLegibility != backdropNow || appliedStrokeKey != strokeKey) {
             appliedLegibility = backdropNow
-            applyTextLegibility(tv, backdropNow)
+            appliedStrokeKey = strokeKey
+            applyTextLegibility(tv, backdropNow, prefs)
         }
 
         // 全屏高度（v1.1.19）：窗口尺寸与位置改由屏幕决定，宽度百分比与行数两项
@@ -969,6 +984,20 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             if (!fullHeight) container?.post { if (!editing) applyPosition() }
         }
 
+        // v1.1.52：单条形态的行距开放为设置项。全屏形态的行距由
+        // [OverlayAppearance.fullHeightLineSpacing] 固定给（播放页同款），不吃这个值。
+        val lineSpacingDp = prefs.lyricOverlayLineSpacingDp
+        if (appliedLineSpacingDp != lineSpacingDp) {
+            appliedLineSpacingDp = lineSpacingDp
+            if (!fullHeight) {
+                tv.setLineSpacing(dp(lineSpacingDp).toFloat(), 1f)
+                lastRenderKey = ""
+                // 行距变了行高就变：固定高度 + 行数自动的窗口行数会跟着变，
+                // 交一帧布局量完再重摆一次
+                container?.post { if (!editing) applyPosition() }
+            }
+        }
+
         val bgAlpha = prefs.lyricOverlayBgAlphaPercent
         val pauseMode = prefs.lyricOverlayPauseMode
         if (appliedBgAlpha != bgAlpha || appliedPauseMode != pauseMode) {
@@ -1002,15 +1031,28 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
      * 处理：无底板时改成**零位移 + 更紧的深色描边**（边界立刻变硬），
      * 有底板时保持原来的柔光（底板已经给了对比度，再加深会显脏）。
      */
-    private fun applyTextLegibility(tv: TextView, backdrop: Int) {
-        val shadow = OverlayAppearance.shadowFor(backdrop)
-        // 无底板时半径取 2dp：远小于字重，只加粗边缘而不会糊掉笔画之间的空隙
-        tv.setShadowLayer(
-            dp(shadow.radiusDp).toFloat(),
-            0f,
-            dp(shadow.offsetYDp).toFloat(),
-            Color.argb(shadow.colorAlpha, 0, 0, 0),
-        )
+    private fun applyTextLegibility(tv: TextView, backdrop: Int, prefs: Prefs) {
+        // v1.1.52：用户手动设了描边宽度就完全交给它 —— 零位移的实色投影围一圈
+        // 就是描边（TextView 没有原生描边，投影是唯一不引自定义 View 的画法）；
+        // 0 = 自动：无底板换硬描边、有底板保持柔光。
+        val manualStroke = prefs.lyricOverlayStrokeWidthDp
+        if (manualStroke > 0) {
+            tv.setShadowLayer(
+                dp(manualStroke).toFloat(),
+                0f,
+                0f,
+                prefs.lyricOverlayStrokeColor,
+            )
+        } else {
+            val shadow = OverlayAppearance.shadowFor(backdrop)
+            // 无底板时半径取 2dp：远小于字重，只加粗边缘而不会糊掉笔画之间的空隙
+            tv.setShadowLayer(
+                dp(shadow.radiusDp).toFloat(),
+                0f,
+                dp(shadow.offsetYDp).toFloat(),
+                Color.argb(shadow.colorAlpha, 0, 0, 0),
+            )
+        }
         // 描边变了必须重画：span 里的颜色没变，但字形渲染变了
         lastRenderKey = ""
     }
@@ -1057,7 +1099,8 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             val (lsExtra, lsMult) = OverlayAppearance.fullHeightLineSpacing()
             tv.setLineSpacing(dp(lsExtra).toFloat(), lsMult)
         } else {
-            tv.setLineSpacing(dp(STRIP_LINE_SPACING_EXTRA_DP).toFloat(), 1f)
+            // v1.1.52：单条行距开放为设置项；全屏形态保持播放页同款固定行距
+            tv.setLineSpacing(dp(prefs.lyricOverlayLineSpacingDp).toFloat(), 1f)
         }
         // 排版模式变了，旧的 span 签名作废，下一帧必须重画
         lastRenderKey = ""
@@ -1106,9 +1149,14 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
     override fun applyTitle(content: LyricOverlayBus.Content, prefs: Prefs): Boolean {
         val tv = titleView ?: return false
         val text = if (prefs.lyricOverlayShowTitle) {
-            listOf(content.title, content.artist)
-                .filter { it.isNotBlank() }
-                .joinToString("\n")
+            // v1.1.52：标题内容可选 —— 只歌名 / 只歌手 / 两者（默认）。
+            // 各行仍可能为空：歌手拿不到时（`<unknown>` 已被上游清成空串）只显示剩下那行。
+            val parts = when (prefs.lyricOverlayTitleMode) {
+                1 -> listOf(content.title)
+                2 -> listOf(content.artist)
+                else -> listOf(content.title, content.artist)
+            }
+            parts.filter { it.isNotBlank() }.joinToString("\n")
         } else {
             ""
         }
@@ -1157,30 +1205,50 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         val renderPrefs = Prefs(this)
         val noBackdrop = OverlayBackground.legibilityKey(renderPrefs.lyricOverlayBgAlphaPercent) ==
             OverlayAppearance.BACKDROP_NONE
-        val spanned = OverlayTextStyler.build(lines, fullHeight, baseColor, noBackdrop)
+        val spanned = OverlayTextStyler.build(
+            lines,
+            fullHeight,
+            baseColor,
+            noBackdrop,
+            currentColor = renderPrefs.lyricOverlayCurrentColor,
+            dimPercent = renderPrefs.lyricOverlayDimPercent,
+        )
         val sameText = tv.text.toString() == spanned.toString()
-        // 「角色 + 文字」一起做去重键：全屏模式下间奏 ⇄ 演唱是同一串文字、不同角色，
-        // 只比文字的话这次重绘会被跳过，画面停在旧的强调状态。
+        // 「角色 + 文字 + 样式输入」一起做去重键：全屏模式下间奏 ⇄ 演唱是同一串文字、
+        // 不同角色，只比文字的话这次重绘会被跳过，画面停在旧的强调状态。
+        // v1.1.52：当前行颜色 / 压暗百分比也进了样式，一并入键 —— 否则改了设置
+        // 文字没变时这次重绘会被整个跳过。
         val renderKey = buildString {
             append(if (fullHeight) "F|" else "S|")
             append(if (opaque) "1|" else "0|")
+            append(renderPrefs.lyricOverlayCurrentColor).append('|')
+            append(renderPrefs.lyricOverlayDimPercent).append('|')
             lines.forEach { append(it.role.name).append(':').append(it.text).append('\n') }
         }
         val sameRender = renderKey == lastRenderKey
         lastRenderKey = renderKey
 
+        // v1.1.52：换行动画时长开放为设置项。淡出按 9/16 比例给（旧版 160/90 的关系），
+        // 淡入即用户设的值；0 = 关动画，直接切。
+        val fadeInMs = renderPrefs.lyricOverlayFadeMs.toLong()
+        val fadeOutMs = fadeInMs * 9L / 16L
+
         if (!sameRender && !sameText) {
             tv.animate().cancel()
-            if (!fading && container?.visibility == View.VISIBLE) {
+            if (fadeInMs <= 0L) {
+                // 动画关掉：直接换字，别再走 animate 链
+                tv.text = spanned
+                tv.alpha = targetAlpha
+            } else if (!fading && container?.visibility == View.VISIBLE) {
                 fading = true
                 tv.animate()
                     .alpha(0f)
-                    .setDuration(FADE_OUT_MS)
+                    .setDuration(fadeOutMs)
                     .withEndAction {
                         tv.text = spanned
                         tv.animate()
                             .alpha(targetAlpha)
-                            .setDuration(FADE_IN_MS)
+                            .setDuration(fadeInMs)
                             .withEndAction { fading = false }
                             .start()
                     }
@@ -1273,7 +1341,16 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             chromePrefs.lyricOverlayBgAlphaPercent,
         )
         // 全屏模式铺满整屏，圆角会在四角露出桌面，看着像渲染错误 —— 直角处理。
-        val corner = if (fullHeight) 0f else dp(14).toFloat()
+        // v1.1.52：单条形态的圆角开放为设置项（0 = 直角）。
+        val corner = if (fullHeight) {
+            0f
+        } else {
+            dp(chromePrefs.lyricOverlayCornerRadiusDp).toFloat()
+        }
+        // v1.1.52：底板边框开放为设置项（0 = 不画）。编辑态保留自己的蓝描边，
+        // 不吃这个值 —— 那一圈线的语义是「这块能拖」。
+        val borderWidthDp = chromePrefs.lyricOverlayBorderWidthDp
+        val borderColor = chromePrefs.lyricOverlayBorderColor
         box.background = when {
             editable -> GradientDrawable().apply {
                 setColor(EDIT_BACKDROP_COLOR)
@@ -1284,6 +1361,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             else -> GradientDrawable().apply {
                 setColor(bgColor)
                 cornerRadius = corner
+                if (borderWidthDp > 0) setStroke(dp(borderWidthDp), borderColor)
             }
         }
         appliedBgKey = backgroundKey(chromePrefs)
@@ -1292,11 +1370,17 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
     /**
      * 背景配置的「去重键」：颜色 + 不透明度（v1.1.51 起就这两项决定最终颜色）。
      *
+     * v1.1.52：圆角 / 边框宽度 / 边框颜色也画在底板上，一并入键 ——
+     * 不这样的话改圆角要等下一次背景变化才重刷。
+     *
      * 用 Int 拼而不是字符串：每帧都要比一次，字符串拼接近乎白给 GC 找事。
      */
     private fun backgroundKey(prefs: Prefs): Int {
         var key = prefs.lyricOverlayBgAlphaPercent.coerceIn(0, 100)
         key = key * 31 + (prefs.lyricOverlayBgColor and 0x00FFFFFF)
+        key = key * 31 + prefs.lyricOverlayCornerRadiusDp.coerceIn(0, 28)
+        key = key * 31 + prefs.lyricOverlayBorderWidthDp.coerceIn(0, 4)
+        key = key * 31 + (prefs.lyricOverlayBorderColor and 0x00FFFFFF)
         return key
     }
 
@@ -1383,12 +1467,9 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         /** 歌名 / 歌手最多两行（歌名 + 歌手），行数自适应时按它扣高度 */
         private const val TITLE_ROWS = 2
 
-        /** 单条字幕的行距额外值（dp）：与 [attachWindow] 里 setLineSpacing 保持一致 */
-        private const val STRIP_LINE_SPACING_EXTRA_DP = 2
-
-        /** 行切换的淡出 / 淡入时长；再长就会觉得「字幕卡了」 */
-        private const val FADE_OUT_MS = 90L
-        private const val FADE_IN_MS = 160L
+        // v1.1.52：单条行距与换行动画时长开放为设置项，
+        // 旧常量 STRIP_LINE_SPACING_EXTRA_DP(2) / FADE_OUT_MS(90) / FADE_IN_MS(160) 删除，
+        // 出厂默认在 SettingsDefaults（OVERLAY_LINE_SPACING_DP / OVERLAY_FADE_MS）。
 
         /**
          * 「调整位置」多久没人动就自动锁定。

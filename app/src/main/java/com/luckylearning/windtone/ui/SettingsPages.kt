@@ -125,9 +125,22 @@ internal fun SettingsRootPage(
     )
     CategoryRow(
         title = "歌词",
-        subtitle = "字号 ${"%.1f".format(player.lyricScale)}x · 双语歌词 · 悬浮歌词",
+        subtitle = "字号 ${"%.1f".format(player.lyricScale)}x · 双语歌词",
         icon = AppIcons.LyricsBubble,
         onClick = { onNavigate(SettingsPage.LYRICS) },
+    )
+    // v1.1.52：悬浮歌词从「歌词」子页拆出，独立成页 —— 它的开关、授权、四组
+    // 外观调节、隐藏名单与自检早已独占两屏，是个完整的功能模块而非歌词的一附属项。
+    CategoryRow(
+        title = "悬浮歌词",
+        subtitle = if (player.lyricOverlay) {
+            "已开启 · 字号 ${player.lyricOverlayTextSp}sp · " +
+                (if (player.lyricOverlayFullHeight) "全屏歌词" else "单条字幕")
+        } else {
+            "桌面悬浮显示当前歌词行 · 样式与位置自由调"
+        },
+        icon = AppIcons.Subtitles,
+        onClick = { onNavigate(SettingsPage.OVERLAY) },
     )
     CategoryRow(
         title = "音乐库",
