@@ -169,6 +169,57 @@ class OverlaySettings(
         previewOverlayAfterConfigChange()
     }
 
+    // ------------------------------------------------ 自定义尺寸 / 位置 / 背景（v1.1.48）
+
+    override fun setLyricOverlayBoxHeightPercent(percent: Int) {
+        val normalized = settings.setOverlayBoxHeightPercent(percent)
+        state.update { it.copy(lyricOverlayBoxHeightPercent = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setLyricOverlayFullHeightPercent(percent: Int) {
+        val normalized = settings.setOverlayFullHeightPercent(percent)
+        state.update { it.copy(lyricOverlayFullHeightPercent = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setLyricOverlayXPercent(percent: Int) {
+        val normalized = settings.setOverlayXPercent(percent)
+        state.update { it.copy(lyricOverlayXPercent = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setLyricOverlayYPercent(percent: Int) {
+        val normalized = settings.setOverlayYPercent(percent)
+        state.update { it.copy(lyricOverlayYPercent = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setLyricOverlayFullYPercent(percent: Int) {
+        val normalized = settings.setOverlayFullYPercent(percent)
+        state.update { it.copy(lyricOverlayFullYPercent = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setLyricOverlayBgColor(color: Int) {
+        settings.setOverlayBgColor(color)
+        // Prefs 会把 alpha 位置成不透明，这里读回同一个值，避免 UI 与落盘不一致
+        state.update { it.copy(lyricOverlayBgColor = prefs.lyricOverlayBgColor) }
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setLyricOverlayBgAlphaPercent(percent: Int) {
+        val normalized = settings.setOverlayBgAlphaPercent(percent)
+        state.update { it.copy(lyricOverlayBgAlphaPercent = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setLyricOverlayCustomBg(enabled: Boolean) {
+        settings.setOverlayCustomBg(enabled)
+        state.update { it.copy(lyricOverlayCustomBg = enabled) }
+        previewOverlayAfterConfigChange()
+    }
+
     override fun canDrawOverlay(): Boolean = LyricOverlayBridge.canDraw(app)
 
     override fun setOverlayEditing(editing: Boolean) {

@@ -66,6 +66,14 @@ class SettingsScreenTest {
         onLyricScale: (Float) -> Unit = {},
         onLyricBilingual: (Int) -> Unit = {},
         onLyricOverlayTextColor: (Int) -> Unit = {},
+        onLyricOverlayBoxHeightPercent: (Int) -> Unit = {},
+        onLyricOverlayFullHeightPercent: (Int) -> Unit = {},
+        onLyricOverlayXPercent: (Int) -> Unit = {},
+        onLyricOverlayYPercent: (Int) -> Unit = {},
+        onLyricOverlayFullYPercent: (Int) -> Unit = {},
+        onLyricOverlayBgColor: (Int) -> Unit = {},
+        onLyricOverlayBgAlphaPercent: (Int) -> Unit = {},
+        onLyricOverlayCustomBg: (Boolean) -> Unit = {},
         onLyricOverlayHiddenApps: (Set<String>) -> Unit = {},
         onForegroundLogEnabled: (Boolean) -> Unit = {},
         onDebugUnlocked: (Boolean) -> Unit = {},
@@ -99,6 +107,14 @@ class SettingsScreenTest {
                     onLyricOverlayPauseMode = {},
                     onLyricOverlayWidthPercent = {},
                     onLyricOverlayTextColor = onLyricOverlayTextColor,
+                    onLyricOverlayBoxHeightPercent = onLyricOverlayBoxHeightPercent,
+                    onLyricOverlayFullHeightPercent = onLyricOverlayFullHeightPercent,
+                    onLyricOverlayXPercent = onLyricOverlayXPercent,
+                    onLyricOverlayYPercent = onLyricOverlayYPercent,
+                    onLyricOverlayFullYPercent = onLyricOverlayFullYPercent,
+                    onLyricOverlayBgColor = onLyricOverlayBgColor,
+                    onLyricOverlayBgAlphaPercent = onLyricOverlayBgAlphaPercent,
+                    onLyricOverlayCustomBg = onLyricOverlayCustomBg,
                     onLyricOverlayHiddenApps = onLyricOverlayHiddenApps,
                     onForegroundLogEnabled = onForegroundLogEnabled,
                     onDebugUnlocked = onDebugUnlocked,
@@ -340,8 +356,54 @@ class SettingsScreenTest {
         ).forEach { title ->
             compose.onNodeWithText(title, substring = true).performScrollTo().assertIsDisplayed()
         }
-        // 单条字幕这一档不该出现全屏专属的「宽度 / 水平位置」两个滑块
-        compose.onNodeWithText("水平位置", substring = true).assertDoesNotExist()
+        // 单条字幕这一档不该出现全屏专属的滑块（v1.1.48 起单条自己有水平/垂直位置，
+        // 所以这里判的是「全屏宽度」而不是「水平位置」）
+        compose.onNodeWithText("全屏宽度", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("水平位置", substring = true).performScrollTo().assertIsDisplayed()
+    }
+
+    /**
+     * v1.1.48：尺寸 / 位置 / 背景这些新旋钮真的出现在页面上。
+     *
+     * 为什么要测：这些控件全在「悬浮歌词开着」的条件块里，写错一个分支就会静默消失，
+     * 而那在编译期完全看不出来 —— 用户只能报「设置里找不到」。
+     */
+    @Test
+    fun overlaySizeAndBackgroundControlsAppear() {
+        render(
+            player = PlayerUiState(
+                lyricOverlay = true,
+                lyricOverlayFullHeight = false,
+                lyricOverlayCustomBg = true,
+            ),
+        )
+        compose.onNodeWithText("歌词").performClick()
+        compose.waitForIdle()
+
+        listOf("高度 自动", "水平位置", "垂直位置", "自定义背景", "选择背景色", "背景不透明度")
+            .forEach { title ->
+                compose.onNodeWithText(title, substring = true).performScrollTo().assertIsDisplayed()
+            }
+        // 全屏专属的控件不该混进来
+        compose.onNodeWithText("全屏高度 1", substring = true).assertDoesNotExist()
+    }
+
+    /** 关掉「自定义背景」时，色板与不透明度滑块必须一起隐藏（用户 2026-10-21 的要求） */
+    @Test
+    fun overlayCustomBackgroundControlsHiddenWhenOff() {
+        render(
+            player = PlayerUiState(
+                lyricOverlay = true,
+                lyricOverlayFullHeight = false,
+                lyricOverlayCustomBg = false,
+            ),
+        )
+        compose.onNodeWithText("歌词").performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText("自定义背景", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("选择背景色", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("背景不透明度", substring = true).assertDoesNotExist()
     }
 
     // ================================================================ v1.1.16 继续上次播放

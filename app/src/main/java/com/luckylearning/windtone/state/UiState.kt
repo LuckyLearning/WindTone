@@ -362,6 +362,20 @@ data class PlayerUiState(
      */
     val lyricOverlayFullWidthPercent: Int = SettingsDefaults.OVERLAY_FULL_WIDTH_PERCENT,
     val lyricOverlayFullOffsetPercent: Int = SettingsDefaults.OVERLAY_FULL_OFFSET_PERCENT,
+    /**
+     * 自定义尺寸 / 位置 / 背景（v1.1.48）。
+     *
+     * 位置一律存「可移动余量的百分比」而不是像素：换分辨率、转屏之后仍然正确，
+     * 也才能让设置页的滑块与桌面拖动共用同一份数据。
+     */
+    val lyricOverlayBoxHeightPercent: Int = SettingsDefaults.OVERLAY_BOX_HEIGHT_PERCENT,
+    val lyricOverlayFullHeightPercent: Int = SettingsDefaults.OVERLAY_FULL_HEIGHT_PERCENT,
+    val lyricOverlayXPercent: Int = SettingsDefaults.OVERLAY_X_PERCENT,
+    val lyricOverlayYPercent: Int = SettingsDefaults.OVERLAY_Y_PERCENT,
+    val lyricOverlayFullYPercent: Int = SettingsDefaults.OVERLAY_FULL_Y_PERCENT,
+    val lyricOverlayBgColor: Int = SettingsDefaults.OVERLAY_BG_COLOR,
+    val lyricOverlayBgAlphaPercent: Int = SettingsDefaults.OVERLAY_BG_ALPHA_PERCENT,
+    val lyricOverlayCustomBg: Boolean = SettingsDefaults.OVERLAY_CUSTOM_BG,
     /** 悬浮窗里的歌词文字颜色（ARGB，默认纯白） */
     val lyricOverlayTextColor: Int = SettingsDefaults.OVERLAY_TEXT_COLOR,
     /** 悬浮歌词是否处于「调整位置」模式（临时可拖动，会话级，不落盘） */

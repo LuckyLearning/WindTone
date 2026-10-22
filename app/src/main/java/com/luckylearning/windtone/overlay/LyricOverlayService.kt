@@ -137,6 +137,14 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
     /** 已应用的窗口宽度百分比（v1.1.4）；-1 = 还没应用过 */
     private var appliedWidthPercent = -1
 
+    // 自定义尺寸 / 位置 / 背景（v1.1.48）：「已应用」快照，避免每帧 updateViewLayout
+    private var appliedBoxHeightPercent = -1
+    private var appliedFullHeightPercent = -1
+    private var appliedFullYPercent = -1
+    private var appliedXPct = -1
+    private var appliedYPct = -1
+    private var appliedBgKey = Int.MIN_VALUE
+
     /** 已应用的底板档位（决定文字描边强度） */
     private var appliedLegibility = Int.MIN_VALUE
 
@@ -344,11 +352,18 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             visibility = View.INVISIBLE
         }
 
-        // 宽度按**屏幕百分比**固定（v1.1.4）：原先宽高都是 WRAP_CONTENT，长句一路
-        // 顶到屏幕边缘、短句只有窄窄一条，同一首歌里窗口宽度来回跳。高度仍交给内容。
+        // 尺寸统一由 OverlayFrame 算（v1.1.48）：宽度按屏宽百分比（v1.1.4 起），
+        // 高度可给百分比（0 = 自动，仍交给内容撑开）。两套形态各用各的一组值。
+        val initialPrefs = Prefs(this)
+        val (initScreenW, initScreenH) = screenSize()
+        val initialFrame = frameFor(initialPrefs, initScreenW, initScreenH)
         val params = WindowManager.LayoutParams(
-            overlayWidthPx(Prefs(this).lyricOverlayWidthPercent),
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            initialFrame.width,
+            if (initialFrame.autoHeight) {
+                WindowManager.LayoutParams.WRAP_CONTENT
+            } else {
+                initialFrame.height
+            },
             // TYPE_APPLICATION_OVERLAY 是 Android 8.0+ 唯一允许第三方应用使用的
             // 系统级悬浮窗类型，需要 SYSTEM_ALERT_WINDOW 授权。
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -439,41 +454,90 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
     override fun applyPosition() {
         val p = layoutParams ?: return
         val prefs = Prefs(this)
-        // 全屏模式（v1.1.20）：位置不再钉死在左上角，而是按「宽度 + 水平位置百分比」
-        // 重新算一遍。这里只管 x/y（尺寸由 applyFullHeightChrome 负责），
-        // 拖动过程中本方法不会被调用，所以不会和手指抢位置。
-        if (prefs.lyricOverlayFullHeight) {
-            val (screenW, screenH) = screenSize()
-            val frame = fullFrameFor(screenW, screenH, prefs)
-            if (p.gravity == (Gravity.TOP or Gravity.START) && p.x == frame.x && p.y == frame.y) {
-                return
-            }
-            p.gravity = Gravity.TOP or Gravity.START
-            p.x = frame.x
-            p.y = frame.y
-            runCatching { windowManager?.updateViewLayout(container, p) }
-            updateGeometryReport()
-            return
-        }
         val (screenW, screenH) = screenSize()
-        val placed = OverlayPositioner.place(
-            OverlayPositioner.Params(
-                savedX = prefs.lyricOverlayX,
-                savedY = prefs.lyricOverlayY,
-                screenW = screenW,
-                screenH = screenH,
-                windowW = container?.width ?: 0,
-                windowH = container?.height ?: 0,
-                defaultY = statusBarHeight() + dp(TOP_OFFSET_DP),
-            ),
-        )
+        val frame = frameFor(prefs, screenW, screenH)
 
-        if (p.gravity == placed.gravity && p.x == placed.x && p.y == placed.y) return
-        p.gravity = placed.gravity
-        p.x = placed.x
-        p.y = placed.y
+        if (p.gravity == (Gravity.TOP or Gravity.START) && p.x == frame.x && p.y == frame.y) return
+        p.gravity = Gravity.TOP or Gravity.START
+        p.x = frame.x
+        p.y = frame.y
+        // 尺寸也顺手对齐：转屏 / 改宽度之后，位置夹取依赖窗口尺寸，
+        // 只挪位置不改尺寸会算出一个「按旧尺寸夹过」的坐标
+        if (p.width != frame.width) p.width = frame.width
         runCatching { windowManager?.updateViewLayout(container, p) }
         updateGeometryReport()
+    }
+
+    /**
+     * 当前形态对应的窗口外形（尺寸 + 位置）。两种形态共用同一套算法（v1.1.48）。
+     *
+     * 全屏形态：底部让出车机 Dock（[SettingsDefaults.OVERLAY_DOCK_RESERVED_DP]）；
+     * 单条形态：高度可自动（0 = 按行数撑开），不扣让位。
+     * 位置取「可移动余量的百分比」，所以 100% 宽度时横向余量为 0 —— 与旧行为一致。
+     */
+    private fun frameFor(prefs: Prefs, screenW: Int, screenH: Int): OverlayFrame.Frame {
+        val full = prefs.lyricOverlayFullHeight
+        val measured = container?.height?.takeIf { it > 0 } ?: 0
+        return OverlayFrame.frame(
+            OverlayFrame.Params(
+                screenW = screenW,
+                screenH = screenH,
+                widthPercent = if (full) prefs.lyricOverlayFullWidthPercent else prefs.lyricOverlayWidthPercent,
+                heightPercent = if (full) {
+                    prefs.lyricOverlayFullHeightPercent
+                } else {
+                    prefs.lyricOverlayBoxHeightPercent
+                },
+                xPercent = if (full) {
+                    prefs.lyricOverlayFullOffsetPercent
+                } else {
+                    effectiveXPercent(prefs, screenW)
+                },
+                yPercent = if (full) prefs.lyricOverlayFullYPercent else effectiveYPercent(prefs, screenW, screenH),
+                minWidthPx = dp(MIN_OVERLAY_WIDTH_DP),
+                bottomReservedPx = if (full) dp(SettingsDefaults.OVERLAY_DOCK_RESERVED_DP) else 0,
+                autoHeightPx = if (full) 0 else measured,
+            ),
+        )
+    }
+
+    /**
+     * 单条形态的横向位置（百分比）：把旧版本存下来的**像素坐标**换算一次并落盘。
+     *
+     * 不换算的话，升级上来的用户会忽然回到默认位置 —— 而「位置被重置」是最让人
+     * 怀疑「版本越改越差」的那类问题。只迁移一次（写完 pct 就 >= 0 了）。
+     */
+    private fun effectiveXPercent(prefs: Prefs, screenW: Int): Int {
+        val stored = prefs.lyricOverlayXPercent
+        if (stored >= 0) return stored
+        val width = overlayWidthPx(prefs.lyricOverlayWidthPercent)
+        val maxX = (screenW - width).coerceAtLeast(0)
+        val legacy = prefs.lyricOverlayX
+        val pct = if (legacy == OverlayPositioner.UNSET) {
+            SettingsDefaults.OVERLAY_X_PERCENT
+        } else {
+            OverlayFrame.percentOf(legacy, maxX, SettingsDefaults.OVERLAY_X_PERCENT)
+        }
+        prefs.lyricOverlayXPercent = pct
+        return pct
+    }
+
+    /** 单条形态的纵向位置（百分比）：同上，旧像素坐标换算一次 */
+    private fun effectiveYPercent(prefs: Prefs, screenW: Int, screenH: Int): Int {
+        val stored = prefs.lyricOverlayYPercent
+        if (stored >= 0) return stored
+        val height = container?.height?.takeIf { it > 0 } ?: 0
+        val maxY = (screenH - height).coerceAtLeast(0)
+        val legacy = prefs.lyricOverlayY
+        val defaultY = statusBarHeight() + dp(TOP_OFFSET_DP)
+        val pct = if (legacy == OverlayPositioner.UNSET || maxY <= 0) {
+            // 还没拖过（或窗口还没测量）：按「状态栏下方一点」折算
+            OverlayFrame.percentOf(defaultY, maxY, SettingsDefaults.OVERLAY_Y_PERCENT)
+        } else {
+            OverlayFrame.percentOf(legacy, maxY, SettingsDefaults.OVERLAY_Y_PERCENT)
+        }
+        prefs.lyricOverlayYPercent = pct
+        return pct
     }
 
     /** 屏幕真实尺寸（像素）。优先用 WindowMetrics，避免 displayMetrics 在部分机型上偏小。 */
@@ -604,7 +668,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
                 val dx = (event.rawX - lastRawX).roundToInt()
                 val dy = (event.rawY - lastRawY).roundToInt()
                 p.x += dx
-                if (!full) p.y += dy
+                p.y += dy
                 lastRawX = event.rawX
                 lastRawY = event.rawY
                 // 夹住，别拖出屏幕就再也抓不回来。按窗口自身尺寸收紧边界，
@@ -613,13 +677,11 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
                 val windowW = p.width.coerceAtLeast(container?.width ?: 0)
                 val maxX = (screenW - windowW).coerceAtLeast(0)
                 p.x = p.x.coerceIn(0, maxX)
-                if (full) {
-                    p.y = 0
-                } else {
-                    val maxY = (screenH - (container?.height ?: 0)).coerceAtLeast(0)
-                    p.y = p.y.coerceIn(0, maxY)
-                }
-                if (dx != 0 || (!full && dy != 0)) pendingPositionSave = true
+                // v1.1.48：两种形态都可自由拖动（此前全屏只能左右挪），
+                // 纵向位置由「可移动余量的百分比」记住，换分辨率也不跑偏
+                val maxY = (screenH - (container?.height ?: 0)).coerceAtLeast(0)
+                p.y = p.y.coerceIn(0, maxY)
+                if (dx != 0 || dy != 0) pendingPositionSave = true
                 runCatching { windowManager?.updateViewLayout(container, p) }
                 updateGeometryReport()
                 true
@@ -667,21 +729,30 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
     ) {
         if (!pendingPositionSave) return
         pendingPositionSave = false
-        if (!full) {
+        val (screenW, screenH) = screenSize()
+        val h = if (p.height > 0) p.height else (container?.height ?: 0)
+        val maxX = (screenW - p.width.coerceAtLeast(0)).coerceAtLeast(0)
+        val maxY = (screenH - h).coerceAtLeast(0)
+        if (full) {
+            // 余量为 0（满宽 / 满高）时不动用户原来的偏好，免得随手拖一下把设置抹平
+            if (maxX > 0) {
+                prefs.lyricOverlayFullOffsetPercent =
+                    OverlayFrame.percentOf(p.x, maxX, prefs.lyricOverlayFullOffsetPercent)
+                appliedFullOffsetPercent = prefs.lyricOverlayFullOffsetPercent
+            }
+            prefs.lyricOverlayFullYPercent =
+                OverlayFrame.percentOf(p.y, maxY, prefs.lyricOverlayFullYPercent)
+            appliedFullYPercent = prefs.lyricOverlayFullYPercent
+        } else {
+            prefs.lyricOverlayXPercent = OverlayFrame.percentOf(p.x, maxX, prefs.lyricOverlayXPercent.coerceAtLeast(0))
+            prefs.lyricOverlayYPercent = OverlayFrame.percentOf(p.y, maxY, prefs.lyricOverlayYPercent.coerceAtLeast(0))
+            appliedXPct = prefs.lyricOverlayXPercent
+            appliedYPct = prefs.lyricOverlayYPercent
+            // 同时写一份旧像素坐标：万一回退到旧版本，位置不至于丢掉
             prefs.lyricOverlayX = p.x
             prefs.lyricOverlayY = p.y
-            return
         }
-        val (screenW, _) = screenSize()
-        val maxX = (screenW - p.width.coerceAtLeast(0)).coerceAtLeast(0)
-        // 余量为 0（宽度 = 屏宽）时 x 恒 0，此时不动用户原来的水平位置，
-        // 免得「满宽时随手拖一下」把设置里的靠右偏好抹成居中。
-        if (maxX <= 0) return
-        prefs.lyricOverlayFullOffsetPercent =
-            OverlayPositioner.offsetPercentFromX(p.x, maxX, SettingsDefaults.OVERLAY_FULL_OFFSET_RANGE)
-        // 落盘后把「已应用的位置」对齐，避免下一帧外观对账时又按旧百分比挪回去
-        appliedFullOffsetPercent = prefs.lyricOverlayFullOffsetPercent
-        // 通知播放域回读一次：设置页的水平位置滑块与这里是同一份数据
+        // 通知播放域回读一次：设置页的位置滑块与这里是同一份数据
         LyricOverlayBridge.notifyPositionSaved()
     }
 
@@ -738,7 +809,13 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
 
         // 底板档位变了就重算一次文字的「可读性包」：无底板时文字直接压在任何画面上，
         // 必须有更硬的描边，否则浅色文字落在浅色地图 / 泊车画面上就是一片糊（v1.1.25）。
-        val backdropNow = prefs.lyricOverlayBackdrop
+        // 自定义背景把不透明度拉到 0 时，视觉上就是「无底板」——描边必须跟着变硬，
+        // 否则会出现「没有底板、描边却按有底板给的柔光」，正是 v1.1.25 那个模糊问题
+        val backdropNow = OverlayBackground.legibilityKey(
+            prefs.lyricOverlayBackdrop,
+            prefs.lyricOverlayCustomBg,
+            prefs.lyricOverlayBgAlphaPercent,
+        )
         if (appliedLegibility != backdropNow) {
             appliedLegibility = backdropNow
             applyTextLegibility(tv, backdropNow)
@@ -753,28 +830,30 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             applyFullHeightChrome(fullHeight)
         }
 
-        // 窗口宽度：屏幕百分比（v1.1.4 起可调）。宽度一变必须重摆一次位置 ——
-        // OverlayPositioner 的夹取上限是「屏宽 − 窗口宽」，窗口越宽能移动的余量越小。
-        // 全屏模式下改用全屏专属的宽度与水平位置（v1.1.20），两套值互不影响。
-        val widthPercent = prefs.lyricOverlayWidthPercent
-        if (!fullHeight && appliedWidthPercent != widthPercent) {
-            appliedWidthPercent = widthPercent
-            layoutParams?.let { p ->
-                val w = overlayWidthPx(widthPercent)
-                if (p.width != w) {
-                    p.width = w
-                    windowManager?.updateViewLayout(container, p)
-                    applyPosition()
-                }
-            }
-        }
+        // 尺寸（宽 + 高）与位置：两种形态各一套值，统一走 frameFor（v1.1.48）。
+        // 尺寸一变必须重摆位置 —— 可移动余量是「屏幕 − 窗口」，窗口变大余量变小。
+        // 拖动期间（editing）不按落盘值重摆：此刻位置只在内存里，
+        // 一旦按旧 Prefs 重算，手指还按着窗口就跳回去了。
         if (fullHeight) {
-            // 拖动期间（editing）不按落盘值重摆：此刻位置只在内存里，
-            // 一旦按旧 Prefs 重算，手指还按着窗口就跳回去了。
-            val widthChanged = appliedFullWidthPercent != prefs.lyricOverlayFullWidthPercent
-            val offsetChanged = !editing &&
-                appliedFullOffsetPercent != prefs.lyricOverlayFullOffsetPercent
-            if (widthChanged || offsetChanged) applyFullHeightChrome(true)
+            val changed = appliedFullWidthPercent != prefs.lyricOverlayFullWidthPercent ||
+                appliedFullHeightPercent != prefs.lyricOverlayFullHeightPercent ||
+                (!editing && appliedFullOffsetPercent != prefs.lyricOverlayFullOffsetPercent) ||
+                (!editing && appliedFullYPercent != prefs.lyricOverlayFullYPercent)
+            if (changed) applyFullHeightChrome(true)
+        } else {
+            val changed = appliedWidthPercent != prefs.lyricOverlayWidthPercent ||
+                appliedBoxHeightPercent != prefs.lyricOverlayBoxHeightPercent ||
+                (!editing && appliedXPct != prefs.lyricOverlayXPercent) ||
+                (!editing && appliedYPct != prefs.lyricOverlayYPercent)
+            if (changed) applyStripChrome()
+        }
+
+        // 背景（颜色 / 不透明度 / 自定义开关）：三项合成一个键，任一变化就重刷底板。
+        // 不这样做的话，调色板上改颜色、改不透明度都要等下一次窗口重建才生效。
+        val bgKey = backgroundKey(prefs)
+        if (appliedBgKey != bgKey) {
+            appliedBgKey = bgKey
+            refreshModeChrome()
         }
 
         // 正文色落到 TextView 上就够了 —— 整窗只有这一种颜色，主角与上下句靠
@@ -877,42 +956,70 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
     private fun applyFullHeightChrome(full: Boolean) {
         val p = layoutParams ?: return
         val tv = lyricView ?: return
-        if (full) {
-            val prefs = Prefs(this)
-            val (screenW, screenH) = screenSize()
-            val frame = fullFrameFor(screenW, screenH, prefs)
-            p.width = frame.width
-            p.height = frame.height
-            // 拖动中只改尺寸、不抢位置：用户正按着窗口，重算 x 会让它跳一下。
-            p.x = if (editing) {
-                p.x.coerceIn(0, (screenW - frame.width).coerceAtLeast(0))
-            } else {
-                frame.x
-            }
+        val prefs = Prefs(this)
+        val (screenW, screenH) = screenSize()
+        val frame = frameFor(prefs, screenW, screenH)
+        p.width = frame.width
+        p.height = if (frame.autoHeight) WindowManager.LayoutParams.WRAP_CONTENT else frame.height
+        // 拖动中只改尺寸、不抢位置：用户正按着窗口，重算 x/y 会让它跳一下
+        if (!editing) {
+            p.x = frame.x
             p.y = frame.y
-            p.gravity = Gravity.TOP or Gravity.START
-            // 记下「已经用到哪一档」，否则 applyAppearance 每帧都会认为宽度变了，
-            // 于是每帧 updateViewLayout，屏幕上表现为歌词不停轻微抖动
-            appliedFullWidthPercent = prefs.lyricOverlayFullWidthPercent
-            appliedFullOffsetPercent = prefs.lyricOverlayFullOffsetPercent
+        }
+        p.gravity = Gravity.TOP or Gravity.START
+        // 记下「已经用到哪一档」，否则 applyAppearance 每帧都会认为尺寸变了，
+        // 于是每帧 updateViewLayout，屏幕上表现为歌词不停轻微抖动
+        appliedFullWidthPercent = prefs.lyricOverlayFullWidthPercent
+        appliedFullOffsetPercent = prefs.lyricOverlayFullOffsetPercent
+        appliedFullHeightPercent = prefs.lyricOverlayFullHeightPercent
+        appliedFullYPercent = prefs.lyricOverlayFullYPercent
+        appliedWidthPercent = prefs.lyricOverlayWidthPercent
+        appliedBoxHeightPercent = prefs.lyricOverlayBoxHeightPercent
+        appliedXPct = prefs.lyricOverlayXPercent
+        appliedYPct = prefs.lyricOverlayYPercent
+
+        if (full) {
             val (lsExtra, lsMult) = OverlayAppearance.fullHeightLineSpacing()
-            tv.setLineSpacing(
-                dp(lsExtra).toFloat(),
-                lsMult,
-            )
+            tv.setLineSpacing(dp(lsExtra).toFloat(), lsMult)
         } else {
-            p.width = overlayWidthPx(Prefs(this).lyricOverlayWidthPercent)
-            p.height = WindowManager.LayoutParams.WRAP_CONTENT
-            appliedWidthPercent = -1
-            appliedFullWidthPercent = -1
-            appliedFullOffsetPercent = -1
             tv.setLineSpacing(dp(2).toFloat(), 1f)
         }
         // 排版模式变了，旧的 span 签名作废，下一帧必须重画
         lastRenderKey = ""
         runCatching { windowManager?.updateViewLayout(container, p) }
         refreshModeChrome()
-        if (!full) container?.post { applyPosition() }
+        container?.post { updateGeometryReport() }
+    }
+
+    /**
+     * 单条形态的尺寸 / 位置应用（v1.1.48）。
+     *
+     * 与全屏那个方法分开，是因为两者「谁来决定高度」不同：单条可以是「自动高度」，
+     * 交给 `WRAP_CONTENT`，此时 [OverlayFrame.Frame.height] 只是测量值，不能写进
+     * layoutParams —— 写进去窗口就再也不会随行数变了。
+     */
+    private fun applyStripChrome() {
+        val p = layoutParams ?: return
+        val prefs = Prefs(this)
+        val (screenW, screenH) = screenSize()
+        // 迁移旧像素坐标（只发生一次）
+        effectiveXPercent(prefs, screenW)
+        effectiveYPercent(prefs, screenW, screenH)
+        val frame = frameFor(prefs, screenW, screenH)
+        p.width = frame.width
+        p.height = if (frame.autoHeight) WindowManager.LayoutParams.WRAP_CONTENT else frame.height
+        if (!editing) {
+            p.x = frame.x
+            p.y = frame.y
+        }
+        p.gravity = Gravity.TOP or Gravity.START
+        appliedWidthPercent = prefs.lyricOverlayWidthPercent
+        appliedBoxHeightPercent = prefs.lyricOverlayBoxHeightPercent
+        appliedXPct = prefs.lyricOverlayXPercent
+        appliedYPct = prefs.lyricOverlayYPercent
+        runCatching { windowManager?.updateViewLayout(container, p) }
+        // 尺寸变了，夹取上限跟着变：等一帧让布局量完再摆一次
+        container?.post { applyPosition() }
     }
 
     /**
@@ -972,7 +1079,12 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         } else {
             Prefs(this).lyricOverlayTextColor
         }
-        val noBackdrop = Prefs(this).lyricOverlayBackdrop == OverlayAppearance.BACKDROP_NONE
+        val renderPrefs = Prefs(this)
+        val noBackdrop = OverlayBackground.legibilityKey(
+            renderPrefs.lyricOverlayBackdrop,
+            renderPrefs.lyricOverlayCustomBg,
+            renderPrefs.lyricOverlayBgAlphaPercent,
+        ) == OverlayAppearance.BACKDROP_NONE
         val spanned = OverlayTextStyler.build(lines, fullHeight, baseColor, noBackdrop)
         val sameText = tv.text.toString() == spanned.toString()
         // 「角色 + 文字」一起做去重键：全屏模式下间奏 ⇄ 演唱是同一串文字、不同角色，
@@ -1081,7 +1193,15 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         // （投影半径按像素算，高密度屏上几乎等于没有），这是踩过的坑，不是审美偏好。
         // 编辑态无论如何都有底 + 蓝描边：此刻用户需要看清「这块能拖」的边界。
         // （GradientDrawable 不支持声明式虚线间隔，圆角实线框已足够表达「可拖」）
-        val backdrop = Prefs(this).lyricOverlayBackdrop
+        // 背景色（v1.1.48）：三档快捷与「自定义颜色 + 不透明度」共存，
+        // 取色逻辑在 OverlayBackground 里（纯函数，单测覆盖）。
+        val chromePrefs = Prefs(this)
+        val bgColor = OverlayBackground.resolve(
+            chromePrefs.lyricOverlayBackdrop,
+            chromePrefs.lyricOverlayCustomBg,
+            chromePrefs.lyricOverlayBgColor,
+            chromePrefs.lyricOverlayBgAlphaPercent,
+        )
         // 全屏模式铺满整屏，圆角会在四角露出桌面，看着像渲染错误 —— 直角处理。
         val corner = if (fullHeight) 0f else dp(14).toFloat()
         box.background = when {
@@ -1090,16 +1210,27 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
                 setStroke(dp(if (fullHeight) 3 else 2), EDIT_STROKE_COLOR)
                 cornerRadius = corner
             }
-            backdrop == OverlayAppearance.BACKDROP_NONE -> null
-            backdrop == OverlayAppearance.BACKDROP_SOLID -> GradientDrawable().apply {
-                setColor(SOLID_BACKDROP_COLOR)
-                cornerRadius = corner
-            }
+            bgColor == null -> null
             else -> GradientDrawable().apply {
-                setColor(TRANSLUCENT_BACKDROP_COLOR)
+                setColor(bgColor)
                 cornerRadius = corner
             }
         }
+        appliedBgKey = backgroundKey(chromePrefs)
+    }
+
+    /**
+     * 背景配置的「去重键」：颜色 + 不透明度 + 自定义开关 + 三档。
+     *
+     * 用 Int 拼而不是字符串：每帧都要比一次，字符串拼接近乎白给 GC 找事。
+     * 四者共同决定最终颜色，漏掉任何一个都会出现「调了没反应」。
+     */
+    private fun backgroundKey(prefs: Prefs): Int {
+        var key = prefs.lyricOverlayBackdrop.coerceIn(0, 2)
+        key = key * 101 + prefs.lyricOverlayBgAlphaPercent.coerceIn(0, 100)
+        key = key * 31 + if (prefs.lyricOverlayCustomBg) 1 else 0
+        key = key * 31 + (prefs.lyricOverlayBgColor and 0x00FFFFFF)
+        return key
     }
 
     private fun canDraw(): Boolean = canDrawOverlay(this)

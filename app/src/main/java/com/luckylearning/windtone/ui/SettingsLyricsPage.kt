@@ -139,6 +139,15 @@ internal fun SettingsLyricsPage(
     onLyricOverlayPauseMode: (Int) -> Unit,
     onLyricOverlayWidthPercent: (Int) -> Unit,
     onLyricOverlayTextColor: (Int) -> Unit,
+    // 自定义尺寸 / 位置 / 背景（v1.1.48）
+    onLyricOverlayBoxHeightPercent: (Int) -> Unit,
+    onLyricOverlayFullHeightPercent: (Int) -> Unit,
+    onLyricOverlayXPercent: (Int) -> Unit,
+    onLyricOverlayYPercent: (Int) -> Unit,
+    onLyricOverlayFullYPercent: (Int) -> Unit,
+    onLyricOverlayBgColor: (Int) -> Unit,
+    onLyricOverlayBgAlphaPercent: (Int) -> Unit,
+    onLyricOverlayCustomBg: (Boolean) -> Unit,
     /** 「不显示悬浮窗的应用」名单（v1.1.29）；整体写回，弹窗内逐个勾选 */
     onLyricOverlayHiddenApps: (Set<String>) -> Unit,
     onOverlayEditing: (Boolean) -> Unit,
@@ -298,6 +307,36 @@ internal fun SettingsLyricsPage(
                     onLyricOverlayFullOffsetPercent(SettingsDefaults.OVERLAY_FULL_OFFSET_PERCENT)
                 },
             )
+            SliderRow(
+                title = "全屏高度 ${player.lyricOverlayFullHeightPercent}%",
+                subtitle = if (player.lyricOverlayFullHeightPercent >= 100) {
+                    "屏高减去底部车机 Dock 让位。调小一点，面板就不会一直压到屏幕最下面"
+                } else {
+                    "屏高的 ${player.lyricOverlayFullHeightPercent}%（已扣掉底部让位），" +
+                        "剩下的空间可以配合下面的垂直位置摆到任意高度"
+                },
+                value = player.lyricOverlayFullHeightPercent.toFloat(),
+                range = SettingsDefaults.OVERLAY_FULL_HEIGHT_RANGE.first.toFloat()..
+                    SettingsDefaults.OVERLAY_FULL_HEIGHT_RANGE.last.toFloat(),
+                onValueChange = { onLyricOverlayFullHeightPercent(it.toInt().coerceIn(30, 100)) },
+                onReset = resetAction(
+                    player.lyricOverlayFullHeightPercent != SettingsDefaults.OVERLAY_FULL_HEIGHT_PERCENT,
+                ) { onLyricOverlayFullHeightPercent(SettingsDefaults.OVERLAY_FULL_HEIGHT_PERCENT) },
+            )
+            SliderRow(
+                title = "垂直位置 " + positionLabel(player.lyricOverlayFullYPercent, horizontal = false),
+                subtitle = if (player.lyricOverlayFullHeightPercent >= 100) {
+                    "高度 100% 时纵向没有余量；先调小高度就能上下移动"
+                } else {
+                    "在上下留白之间移动面板；也可以直接到桌面上拖（v1.1.48 起全屏也能上下拖）"
+                },
+                value = player.lyricOverlayFullYPercent.toFloat(),
+                range = 0f..100f,
+                onValueChange = { onLyricOverlayFullYPercent(it.toInt().coerceIn(0, 100)) },
+                onReset = resetAction(
+                    player.lyricOverlayFullYPercent != SettingsDefaults.OVERLAY_FULL_Y_PERCENT,
+                ) { onLyricOverlayFullYPercent(SettingsDefaults.OVERLAY_FULL_Y_PERCENT) },
+            )
             // 三个大按钮：车机上用滑块找「正好靠边」很难，一键到位更实际
             OverlayOffsetPresets(
                 current = player.lyricOverlayFullOffsetPercent,
@@ -311,6 +350,8 @@ internal fun SettingsLyricsPage(
             OverlayFullPreviewMock(
                 widthPercent = player.lyricOverlayFullWidthPercent,
                 offsetPercent = player.lyricOverlayFullOffsetPercent,
+                heightPercent = player.lyricOverlayFullHeightPercent,
+                yPercent = player.lyricOverlayFullYPercent,
             )
         } else {
             ActionRow(
@@ -341,6 +382,48 @@ internal fun SettingsLyricsPage(
                 onReset = resetAction(
                     player.lyricOverlayWidthPercent != SettingsDefaults.OVERLAY_WIDTH_PERCENT,
                 ) { onLyricOverlayWidthPercent(SettingsDefaults.OVERLAY_WIDTH_PERCENT) },
+            )
+            SliderRow(
+                title = if (player.lyricOverlayBoxHeightPercent == 0) {
+                    "高度 自动"
+                } else {
+                    "高度 ${player.lyricOverlayBoxHeightPercent}%"
+                },
+                subtitle = if (player.lyricOverlayBoxHeightPercent == 0) {
+                    "自动 = 按显示行数撑开（默认）。想把它固定成屏幕上的一个小块，就把滑块往右拉"
+                } else {
+                    "屏高的 ${player.lyricOverlayBoxHeightPercent}%。固定高度后，长句不会再把这个块顶高"
+                },
+                value = player.lyricOverlayBoxHeightPercent.toFloat(),
+                range = 0f..100f,
+                onValueChange = {
+                    val v = it.toInt()
+                    // 0 是「自动」档；1..9 没有意义（压成一条缝），直接跳到 10
+                    onLyricOverlayBoxHeightPercent(if (v == 0) 0 else v.coerceAtLeast(10))
+                },
+                onReset = resetAction(
+                    player.lyricOverlayBoxHeightPercent != SettingsDefaults.OVERLAY_BOX_HEIGHT_PERCENT,
+                ) { onLyricOverlayBoxHeightPercent(SettingsDefaults.OVERLAY_BOX_HEIGHT_PERCENT) },
+            )
+            SliderRow(
+                title = "水平位置 " + positionLabel(player.lyricOverlayXPercent),
+                subtitle = "在左右留白之间移动；也可以到桌面上直接拖（两处是同一份设置）",
+                value = player.lyricOverlayXPercent.toFloat(),
+                range = 0f..100f,
+                onValueChange = { onLyricOverlayXPercent(it.toInt().coerceIn(0, 100)) },
+                onReset = resetAction(
+                    player.lyricOverlayXPercent != SettingsDefaults.OVERLAY_X_PERCENT,
+                ) { onLyricOverlayXPercent(SettingsDefaults.OVERLAY_X_PERCENT) },
+            )
+            SliderRow(
+                title = "垂直位置 " + positionLabel(player.lyricOverlayYPercent, horizontal = false),
+                subtitle = "在上下留白之间移动；桌面上直接拖也会同步到这里",
+                value = player.lyricOverlayYPercent.toFloat(),
+                range = 0f..100f,
+                onValueChange = { onLyricOverlayYPercent(it.toInt().coerceIn(0, 100)) },
+                onReset = resetAction(
+                    player.lyricOverlayYPercent != SettingsDefaults.OVERLAY_Y_PERCENT,
+                ) { onLyricOverlayYPercent(SettingsDefaults.OVERLAY_Y_PERCENT) },
             )
         }
         // v1.1.15：顶部「歌名 + 歌手」两行小字（默认关闭，不打扰老用户）
@@ -415,6 +498,39 @@ internal fun SettingsLyricsPage(
                 player.lyricOverlayBackdrop != SettingsDefaults.OVERLAY_BACKDROP,
             ) { onLyricOverlayBackdrop(SettingsDefaults.OVERLAY_BACKDROP) },
         )
+        SwitchRow(
+            title = "自定义背景",
+            subtitle = if (player.lyricOverlayCustomBg) {
+                "自己选背景颜色与不透明度；上面的三档此时不生效"
+            } else {
+                "关着时用上面的三档。打开后可自由挑颜色、拉不透明度"
+            },
+            checked = player.lyricOverlayCustomBg,
+            onCheckedChange = onLyricOverlayCustomBg,
+            onReset = resetAction(player.lyricOverlayCustomBg != SettingsDefaults.OVERLAY_CUSTOM_BG) {
+                onLyricOverlayCustomBg(SettingsDefaults.OVERLAY_CUSTOM_BG)
+            },
+        )
+        if (player.lyricOverlayCustomBg) {
+            OverlayBgPalette(
+                selected = player.lyricOverlayBgColor,
+                onPick = onLyricOverlayBgColor,
+            )
+            SliderRow(
+                title = "背景不透明度 ${player.lyricOverlayBgAlphaPercent}%",
+                subtitle = if (player.lyricOverlayBgAlphaPercent == 0) {
+                    "0% = 完全透明（等于无底板，文字会自动换成硬描边）"
+                } else {
+                    "0 = 完全透明，100 = 完全不透明。车机屏幕上建议 40–70%，既能压住背景又看得清路况"
+                },
+                value = player.lyricOverlayBgAlphaPercent.toFloat(),
+                range = 0f..100f,
+                onValueChange = { onLyricOverlayBgAlphaPercent(it.toInt().coerceIn(0, 100)) },
+                onReset = resetAction(
+                    player.lyricOverlayBgAlphaPercent != SettingsDefaults.OVERLAY_BG_ALPHA_PERCENT,
+                ) { onLyricOverlayBgAlphaPercent(SettingsDefaults.OVERLAY_BG_ALPHA_PERCENT) },
+            )
+        }
         ActionRow(
             title = "暂停时的悬浮歌词",
             subtitle = if (player.lyricOverlayPauseMode == 1) {
@@ -757,7 +873,12 @@ internal fun SettingsLyricsPage(
  * 满高贴着最底。
  */
 @Composable
-private fun OverlayFullPreviewMock(widthPercent: Int, offsetPercent: Int) {
+private fun OverlayFullPreviewMock(
+    widthPercent: Int,
+    offsetPercent: Int,
+    heightPercent: Int,
+    yPercent: Int,
+) {
     val screenColor = MaterialTheme.colorScheme.surface
     val frameColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
     val panelColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
@@ -787,14 +908,19 @@ private fun OverlayFullPreviewMock(widthPercent: Int, offsetPercent: Int) {
                 // 与 OverlayPositioner.fullFrame 同口径：底部要让出车机 Dock。
                 // 示意图按屏高的 6% 画（56dp 在车机常见屏高下大致就是这个比例）。
                 val dockH = size.height * 0.06f
-                val panelH = size.height - dockH
+                val usableH = size.height - dockH
+                // v1.1.48：高度与纵向位置也画出来 —— 全屏浮层在 App 内不绘制
+                // （否则会盖住这些滑块），没有这张图就是「调完当场什么都看不到」
+                val panelH = usableH * heightPercent.coerceIn(30, 100) / 100f
+                val travelY = (usableH - panelH).coerceAtLeast(0f)
+                val y = travelY * yPercent.coerceIn(0, 100) / 100f
 
-                drawRect(color = panelColor, topLeft = Offset(x, 0f), size = Size(panelW, panelH))
+                drawRect(color = panelColor, topLeft = Offset(x, y), size = Size(panelW, panelH))
                 // 左右两条边线：面板贴边时也能一眼看出边界在哪
-                drawRect(color = panelEdge, topLeft = Offset(x, 0f), size = Size(1.5f, panelH))
+                drawRect(color = panelEdge, topLeft = Offset(x, y), size = Size(1.5f, panelH))
                 drawRect(
                     color = panelEdge,
-                    topLeft = Offset((x + panelW - 1.5f).coerceAtLeast(x), 0f),
+                    topLeft = Offset((x + panelW - 1.5f).coerceAtLeast(x), y),
                     size = Size(1.5f, panelH),
                 )
 
@@ -889,5 +1015,78 @@ private fun OverlayOffsetPresets(
                 }
             }
         }
+    }
+}
+
+/**
+ * 背景色板（v1.1.48）。
+ *
+ * 为什么用预设色而不是 HSV 取色器：车机上用手指调色相滑块基本调不准，而背景色
+ * 实际只需要「够深、能压住画面」这几档。预设 8 个色相足够，还省掉一个全屏弹层。
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun OverlayBgPalette(selected: Int, onPick: (Int) -> Unit) {
+    val presets = listOf(
+        0xFF101014.toInt(), // 深黑（默认）
+        0xFF1D2330.toInt(), // 深蓝灰
+        0xFF14261C.toInt(), // 深绿
+        0xFF2A1620.toInt(), // 酒红
+        0xFF241B33.toInt(), // 深紫
+        0xFF2B2118.toInt(), // 深棕
+        0xFF3A3A3A.toInt(), // 中灰
+        0xFFE8E8E8.toInt(), // 浅灰（配深色文字）
+    )
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Text(
+            text = "选择背景色",
+            style = MaterialTheme.typography.titleSmall,
+        )
+        Spacer(Modifier.height(8.dp))
+        // 用 FlowRow 而不是 Row：手机竖屏放 8 个 36dp 圆点会溢出，
+        // 换行比裁掉最后几个颜色体面得多
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            presets.forEach { color ->
+                val isSelected = (selected and 0x00FFFFFF) == (color and 0x00FFFFFF)
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Color(color or 0xFF000000.toInt()))
+                        .border(
+                            width = if (isSelected) 3.dp else 1.dp,
+                            color = if (isSelected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.outlineVariant
+                            },
+                            shape = CircleShape,
+                        )
+                        .clickable { onPick(color) },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 位置百分比的人话。
+ *
+ * 两个轴共用同一份设置语义（0..100 是「可移动余量」的百分比），但说法必须按轴分开 ——
+ * 同一个数字在横向是「靠左」、在纵向是「靠上」，混着写只会让人看不懂。
+ */
+private fun positionLabel(percent: Int, horizontal: Boolean = true): String {
+    val v = percent.coerceIn(0, 100)
+    val start = if (horizontal) "最左" else "最上"
+    val end = if (horizontal) "最右" else "最下"
+    return when {
+        v <= 2 -> start
+        v >= 98 -> end
+        kotlin.math.abs(v - 50) <= 2 -> "居中"
+        v < 50 -> "偏${if (horizontal) "左" else "上"} $v%"
+        else -> "偏${if (horizontal) "右" else "下"} $v%"
     }
 }

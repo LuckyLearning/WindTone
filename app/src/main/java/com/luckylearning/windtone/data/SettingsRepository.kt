@@ -157,6 +157,53 @@ class SettingsRepository(val prefs: Prefs) {
         prefs.lyricOverlayFullHeight = enabled
     }
 
+    // ------------------------------------------------ 自定义尺寸 / 位置 / 背景（v1.1.48）
+
+    /** @return 夹到 0（自动）或 10..100 后的值 */
+    fun setOverlayBoxHeightPercent(percent: Int): Int {
+        prefs.lyricOverlayBoxHeightPercent = percent
+        return prefs.lyricOverlayBoxHeightPercent
+    }
+
+    /** @return 夹到 30..100 后的值 */
+    fun setOverlayFullHeightPercent(percent: Int): Int {
+        prefs.lyricOverlayFullHeightPercent = percent
+        return prefs.lyricOverlayFullHeightPercent
+    }
+
+    /** @return 夹到 0..100 后的值 */
+    fun setOverlayXPercent(percent: Int): Int {
+        prefs.lyricOverlayXPercent = percent
+        return prefs.lyricOverlayXPercent
+    }
+
+    /** @return 夹到 0..100 后的值 */
+    fun setOverlayYPercent(percent: Int): Int {
+        prefs.lyricOverlayYPercent = percent
+        return prefs.lyricOverlayYPercent
+    }
+
+    /** @return 夹到 0..100 后的值 */
+    fun setOverlayFullYPercent(percent: Int): Int {
+        prefs.lyricOverlayFullYPercent = percent
+        return prefs.lyricOverlayFullYPercent
+    }
+
+    /** 背景颜色（只保留 RGB，不透明度走单独一项） */
+    fun setOverlayBgColor(color: Int) {
+        prefs.lyricOverlayBgColor = color
+    }
+
+    /** @return 夹到 0..100 后的值 */
+    fun setOverlayBgAlphaPercent(percent: Int): Int {
+        prefs.lyricOverlayBgAlphaPercent = percent
+        return prefs.lyricOverlayBgAlphaPercent
+    }
+
+    fun setOverlayCustomBg(enabled: Boolean) {
+        prefs.lyricOverlayCustomBg = enabled
+    }
+
     fun setOverlayTextColor(color: Int) {
         prefs.lyricOverlayTextColor = color
     }

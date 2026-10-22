@@ -13,6 +13,7 @@ import com.luckylearning.windtone.data.CoverRepository
 import com.luckylearning.windtone.data.LyricsLoader
 import com.luckylearning.windtone.data.MessageBus
 import com.luckylearning.windtone.data.Prefs
+import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.data.SettingsRepository
 import com.luckylearning.windtone.data.SongIndex
 import com.luckylearning.windtone.data.ThemeColorExtractor
@@ -98,6 +99,18 @@ class PlaybackEngine(
             // v1.1.4 新增：悬浮窗宽度与文字颜色
             lyricOverlayWidthPercent = prefs.lyricOverlayWidthPercent,
             lyricOverlayTextColor = prefs.lyricOverlayTextColor,
+            // v1.1.48：尺寸 / 位置 / 背景可自定义
+            lyricOverlayBoxHeightPercent = prefs.lyricOverlayBoxHeightPercent,
+            lyricOverlayFullHeightPercent = prefs.lyricOverlayFullHeightPercent,
+            // -1 = 还没从旧像素坐标迁移过：界面先按默认值显示，服务挂窗后会写回真实值
+            lyricOverlayXPercent = prefs.lyricOverlayXPercent
+                .takeIf { it >= 0 } ?: SettingsDefaults.OVERLAY_X_PERCENT,
+            lyricOverlayYPercent = prefs.lyricOverlayYPercent
+                .takeIf { it >= 0 } ?: SettingsDefaults.OVERLAY_Y_PERCENT,
+            lyricOverlayFullYPercent = prefs.lyricOverlayFullYPercent,
+            lyricOverlayBgColor = prefs.lyricOverlayBgColor,
+            lyricOverlayBgAlphaPercent = prefs.lyricOverlayBgAlphaPercent,
+            lyricOverlayCustomBg = prefs.lyricOverlayCustomBg,
             // 车载模式：启动直接进播放页（跳过库主页）
             playerExpanded = prefs.carMode,
             speed = prefs.playbackSpeed,
@@ -286,9 +299,25 @@ class PlaybackEngine(
         // 否则设置页的「水平位置」滑块还停在拖动之前的值，看着像没保存。
         scope.launch {
             LyricOverlayBridge.positionSaves.collect {
+                val s = _player.value
                 val offset = prefs.lyricOverlayFullOffsetPercent
-                if (_player.value.lyricOverlayFullOffsetPercent != offset) {
-                    _player.update { it.copy(lyricOverlayFullOffsetPercent = offset) }
+                val fullY = prefs.lyricOverlayFullYPercent
+                // 单条形态的位置可能存在 -1（未迁移）；-1 时保留界面上的当前值
+                val xPct = prefs.lyricOverlayXPercent.takeIf { it >= 0 } ?: s.lyricOverlayXPercent
+                val yPct = prefs.lyricOverlayYPercent.takeIf { it >= 0 } ?: s.lyricOverlayYPercent
+                if (s.lyricOverlayFullOffsetPercent != offset ||
+                    s.lyricOverlayFullYPercent != fullY ||
+                    s.lyricOverlayXPercent != xPct ||
+                    s.lyricOverlayYPercent != yPct
+                ) {
+                    _player.update {
+                        it.copy(
+                            lyricOverlayFullOffsetPercent = offset,
+                            lyricOverlayFullYPercent = fullY,
+                            lyricOverlayXPercent = xPct,
+                            lyricOverlayYPercent = yPct,
+                        )
+                    }
                 }
             }
         }
@@ -977,6 +1006,29 @@ class PlaybackEngine(
         overlaySettings.setLyricOverlayWidthPercent(percent)
 
     override fun setLyricOverlayTextColor(color: Int) = overlaySettings.setLyricOverlayTextColor(color)
+
+    // v1.1.48：自定义尺寸 / 位置 / 背景
+    override fun setLyricOverlayBoxHeightPercent(percent: Int) =
+        overlaySettings.setLyricOverlayBoxHeightPercent(percent)
+
+    override fun setLyricOverlayFullHeightPercent(percent: Int) =
+        overlaySettings.setLyricOverlayFullHeightPercent(percent)
+
+    override fun setLyricOverlayXPercent(percent: Int) =
+        overlaySettings.setLyricOverlayXPercent(percent)
+
+    override fun setLyricOverlayYPercent(percent: Int) =
+        overlaySettings.setLyricOverlayYPercent(percent)
+
+    override fun setLyricOverlayFullYPercent(percent: Int) =
+        overlaySettings.setLyricOverlayFullYPercent(percent)
+
+    override fun setLyricOverlayBgColor(color: Int) = overlaySettings.setLyricOverlayBgColor(color)
+    override fun setLyricOverlayBgAlphaPercent(percent: Int) =
+        overlaySettings.setLyricOverlayBgAlphaPercent(percent)
+
+    override fun setLyricOverlayCustomBg(enabled: Boolean) =
+        overlaySettings.setLyricOverlayCustomBg(enabled)
     override fun canDrawOverlay(): Boolean = overlaySettings.canDrawOverlay()
     override fun setOverlayEditing(editing: Boolean) = overlaySettings.setOverlayEditing(editing)
     override fun setAppForeground(foreground: Boolean) = overlaySettings.setAppForeground(foreground)

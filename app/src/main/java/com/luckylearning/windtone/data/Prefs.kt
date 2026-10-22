@@ -138,6 +138,43 @@ object SettingsDefaults {
     /** 水平位置百分比的合法区间 */
     val OVERLAY_FULL_OFFSET_RANGE = 0..100
 
+    // ------------------------------------------------ 自定义尺寸 / 位置 / 背景（v1.1.48）
+
+    /**
+     * 单条字幕的窗口高度（屏高百分比）。**0 = 自动**（照旧按行数撑开）。
+     *
+     * 为什么保留「自动」：绝大多数人只想让它刚好装下几行歌词，给一个百分比滑块是
+     * 给「想让它固定在屏幕某一小块区域、不被长句顶高」的场景用的。
+     */
+    const val OVERLAY_BOX_HEIGHT_PERCENT = 0
+
+    /** 高度百分比的合法区间；>0 时不低于 [OVERLAY_BOX_HEIGHT_MIN_PERCENT]，否则会压成一条缝 */
+    val OVERLAY_BOX_HEIGHT_RANGE = 0..100
+    const val OVERLAY_BOX_HEIGHT_MIN_PERCENT = 10
+
+    /** 全屏形态的窗口高度（屏高百分比）。100 = 屏高减车机 Dock 让位，与 v1.1.19 行为一致 */
+    const val OVERLAY_FULL_HEIGHT_PERCENT = 100
+    val OVERLAY_FULL_HEIGHT_RANGE = 30..100
+
+    /** 位置百分比默认值：水平居中；单条默认略靠上，全屏贴顶 */
+    const val OVERLAY_X_PERCENT = 50
+    const val OVERLAY_Y_PERCENT = 12
+    const val OVERLAY_FULL_Y_PERCENT = 0
+
+    /**
+     * 背景颜色默认值：深灰黑。
+     *
+     * 与旧的「半透明深色底板」同色相 —— 升级到可自定义背景时，没动过设置的用户
+     * 看起来应该一模一样，而不是忽然变成另一种黑。
+     */
+    const val OVERLAY_BG_COLOR = 0xFF101014.toInt()
+
+    /** 背景不透明度默认值（%）。旧「半透明」档约等于 62%，这里保持一致 */
+    const val OVERLAY_BG_ALPHA_PERCENT = 62
+
+    /** 是否启用自定义背景（关闭时仍走「无 / 半透明 / 实底」三档，v1.1.48） */
+    const val OVERLAY_CUSTOM_BG = false
+
     /** 悬浮歌词水平对齐：0 居中 / 1 居左（取值与 `overlay/OverlayPositioner` 的 ALIGN_* 一致） */
     const val OVERLAY_ALIGN = 0
     const val OVERLAY_BACKDROP = 1
@@ -795,6 +832,114 @@ class Prefs private constructor(context: Context) {
             ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_Y, value) }
         }
 
+    // ------------------------------------------------ 自定义尺寸 / 位置 / 背景（v1.1.48）
+
+    /**
+     * 单条字幕的窗口高度（屏高百分比，0 = 自动按行数）。
+     *
+     * 与 [lyricOverlayLines] 的关系：行数决定**显示几行**，高度决定**窗口多大**。
+     * 高度固定后，行数超出的部分会挤在窗口里居中显示（文字仍按行距排布），
+     * 所以两者不冲突，只是两个独立的旋钮。
+     */
+    var lyricOverlayBoxHeightPercent: Int
+        get() {
+            val v = sp.getInt(KEY_LYRIC_OVERLAY_BOX_HEIGHT, SettingsDefaults.OVERLAY_BOX_HEIGHT_PERCENT)
+            if (v <= 0) return 0
+            return v.coerceIn(
+                SettingsDefaults.OVERLAY_BOX_HEIGHT_MIN_PERCENT,
+                SettingsDefaults.OVERLAY_BOX_HEIGHT_RANGE.last,
+            )
+        }
+        set(value) {
+            val v = if (value <= 0) 0 else value.coerceIn(
+                SettingsDefaults.OVERLAY_BOX_HEIGHT_MIN_PERCENT,
+                SettingsDefaults.OVERLAY_BOX_HEIGHT_RANGE.last,
+            )
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_BOX_HEIGHT, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_BOX_HEIGHT, v) }
+        }
+
+    /** 全屏形态的窗口高度（屏高百分比，30..100，默认 100 = 减去车机 Dock 让位） */
+    var lyricOverlayFullHeightPercent: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_FULL_HEIGHT_PCT, SettingsDefaults.OVERLAY_FULL_HEIGHT_PERCENT)
+            .coerceIn(SettingsDefaults.OVERLAY_FULL_HEIGHT_RANGE.first, SettingsDefaults.OVERLAY_FULL_HEIGHT_RANGE.last)
+        set(value) {
+            val v = value.coerceIn(
+                SettingsDefaults.OVERLAY_FULL_HEIGHT_RANGE.first,
+                SettingsDefaults.OVERLAY_FULL_HEIGHT_RANGE.last,
+            )
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_FULL_HEIGHT_PCT, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_FULL_HEIGHT_PCT, v) }
+        }
+
+    /**
+     * 单条字幕的横向位置（可移动余量的百分比，0..100）。
+     *
+     * `-1` 表示**还没迁移过**：此时回退到旧的像素坐标 [lyricOverlayX]，
+     * 服务首次挂窗时会换算成百分比并写回（见 `LyricOverlayService.migrateLegacyPosition`）。
+     * 存百分比而不是像素，是为了换分辨率 / 转屏后位置仍然正确 —— 这与全屏形态
+     * 用 [lyricOverlayFullOffsetPercent] 的理由是同一个。
+     */
+    var lyricOverlayXPercent: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_X_PCT, -1).coerceIn(-1, 100)
+        set(value) {
+            val v = value.coerceIn(0, 100)
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_X_PCT, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_X_PCT, v) }
+        }
+
+    /** 单条字幕的纵向位置（可移动余量的百分比，0..100；-1 = 未迁移） */
+    var lyricOverlayYPercent: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_Y_PCT, -1).coerceIn(-1, 100)
+        set(value) {
+            val v = value.coerceIn(0, 100)
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_Y_PCT, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_Y_PCT, v) }
+        }
+
+    /** 全屏形态的纵向位置（可移动余量的百分比，0..100，默认 0 = 贴顶） */
+    var lyricOverlayFullYPercent: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_FULL_Y_PCT, SettingsDefaults.OVERLAY_FULL_Y_PERCENT)
+            .coerceIn(0, 100)
+        set(value) {
+            val v = value.coerceIn(0, 100)
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_FULL_Y_PCT, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_FULL_Y_PCT, v) }
+        }
+
+    /** 背景颜色（ARGB，alpha 位不使用 —— 不透明度由 [lyricOverlayBgAlphaPercent] 单独管） */
+    var lyricOverlayBgColor: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_BG_COLOR, SettingsDefaults.OVERLAY_BG_COLOR)
+        set(value) {
+            // 只保留 RGB：alpha 走独立滑块，避免两个地方都能改不透明度
+            val v = value or 0xFF000000.toInt()
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_BG_COLOR, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_BG_COLOR, v) }
+        }
+
+    /** 背景不透明度（%，0 = 完全透明，100 = 不透明） */
+    var lyricOverlayBgAlphaPercent: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_BG_ALPHA, SettingsDefaults.OVERLAY_BG_ALPHA_PERCENT)
+            .coerceIn(0, 100)
+        set(value) {
+            val v = value.coerceIn(0, 100)
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_BG_ALPHA, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_BG_ALPHA, v) }
+        }
+
+    /**
+     * 是否启用自定义背景（颜色 + 不透明度）。
+     *
+     * 关闭时仍按「无 / 半透明 / 实底」三档算，老用户升级上来看到的样子不变；
+     * 打开后三档失效，由 [lyricOverlayBgColor] + [lyricOverlayBgAlphaPercent] 决定。
+     */
+    var lyricOverlayCustomBg: Boolean
+        get() = sp.getBoolean(KEY_LYRIC_OVERLAY_CUSTOM_BG, SettingsDefaults.OVERLAY_CUSTOM_BG)
+        set(value) {
+            sp.edit().putBoolean(KEY_LYRIC_OVERLAY_CUSTOM_BG, value).apply()
+            ioScope.launch { store.putBoolean(KEY_LYRIC_OVERLAY_CUSTOM_BG, value) }
+        }
+
     // ============================================================ 6. 前台检测与调试
 
     /**
@@ -995,6 +1140,14 @@ class Prefs private constructor(context: Context) {
         const val KEY_LYRIC_OVERLAY_FULL_HEIGHT = "lyric_overlay_full_height"
         /** 全屏模式的宽度（屏宽百分比）与水平位置（余量百分比），与单条字幕分开存 */
         const val KEY_LYRIC_OVERLAY_FULL_WIDTH = "lyric_overlay_full_width_percent"
+        const val KEY_LYRIC_OVERLAY_BOX_HEIGHT = "lyric_overlay_box_height_percent"
+        const val KEY_LYRIC_OVERLAY_FULL_HEIGHT_PCT = "lyric_overlay_full_height_percent"
+        const val KEY_LYRIC_OVERLAY_X_PCT = "lyric_overlay_x_percent"
+        const val KEY_LYRIC_OVERLAY_Y_PCT = "lyric_overlay_y_percent"
+        const val KEY_LYRIC_OVERLAY_FULL_Y_PCT = "lyric_overlay_full_y_percent"
+        const val KEY_LYRIC_OVERLAY_BG_COLOR = "lyric_overlay_bg_color"
+        const val KEY_LYRIC_OVERLAY_BG_ALPHA = "lyric_overlay_bg_alpha_percent"
+        const val KEY_LYRIC_OVERLAY_CUSTOM_BG = "lyric_overlay_custom_bg"
         const val KEY_LYRIC_OVERLAY_FULL_OFFSET = "lyric_overlay_full_offset_percent"
 
         // ---- 6. 前台检测与调试 ----

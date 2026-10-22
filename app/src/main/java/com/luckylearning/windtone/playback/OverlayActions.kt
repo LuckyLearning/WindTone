@@ -44,6 +44,32 @@ interface OverlayActions {
     /** 悬浮窗宽度：屏幕宽度百分比（1..100） */
     fun setLyricOverlayWidthPercent(percent: Int)
 
+    // ------------------------------------------------ 自定义尺寸 / 位置 / 背景（v1.1.48）
+
+    /** 单条字幕高度：屏高百分比（0 = 自动，按行数撑开） */
+    fun setLyricOverlayBoxHeightPercent(percent: Int)
+
+    /** 全屏形态高度：屏高百分比（30..100） */
+    fun setLyricOverlayFullHeightPercent(percent: Int)
+
+    /** 单条字幕横向位置：可移动余量的百分比（0..100） */
+    fun setLyricOverlayXPercent(percent: Int)
+
+    /** 单条字幕纵向位置：可移动余量的百分比（0..100） */
+    fun setLyricOverlayYPercent(percent: Int)
+
+    /** 全屏形态纵向位置：可移动余量的百分比（0..100） */
+    fun setLyricOverlayFullYPercent(percent: Int)
+
+    /** 悬浮窗背景颜色（ARGB，只用 RGB） */
+    fun setLyricOverlayBgColor(color: Int)
+
+    /** 悬浮窗背景不透明度（0..100） */
+    fun setLyricOverlayBgAlphaPercent(percent: Int)
+
+    /** 是否启用自定义背景（关闭时走「无 / 半透明 / 实底」三档） */
+    fun setLyricOverlayCustomBg(enabled: Boolean)
+
     /** 悬浮窗歌词文字颜色（ARGB） */
     fun setLyricOverlayTextColor(color: Int)
 
