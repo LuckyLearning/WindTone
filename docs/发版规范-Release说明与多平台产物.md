@@ -247,3 +247,86 @@ bash scripts/publish-release-repo.sh    # 需要 secret RELEASE_REPO_TOKEN
 
 公共仓库可以随时从私有 Release 重建：把历史版本的 4 个包下载下来按上面的结构摆好，
 跑一次 `gen-release-manifest.py` 生成清单即可（2026-10-19 迁移时保留了 1.1.29 / 1.1.28 / 1.1.27 / 1.1.23 / 1.1.21）。
+
+---
+
+## 七、一键发版（`scripts/release.sh` + 验证链）
+
+> 目标：说一句「发版」就能一条命令出结论，不需要人工/AI 再分多次去点 REST、轮询 CI、下包验签。
+> 三个脚本分工：`release.sh`（发）→ `verify-release.sh`（验四步）→ `verify_apk.py`（验签）。
+
+### 7.1 命令速查
+
+| 目的 | 命令 |
+| --- | --- |
+| 发补丁版并**一路验到底**（推荐，阻塞 10~20 分钟） | `bash scripts/release.sh patch --verify` |
+| 指定版本号发版 | `bash scripts/release.sh 1.1.55 --verify` |
+| 只看看会改什么，不动仓库 | `bash scripts/release.sh patch --dry` |
+| 发完只推、不等 CI | `bash scripts/release.sh patch` |
+| 事后单独补跑验证链 | `bash scripts/verify-release.sh v1.1.55` |
+| CI 已确认跑完，只核后半段 | `bash scripts/verify-release.sh v1.1.55 --skip-ci` |
+| 只下包验签 | `python scripts/verify_apk.py v1.1.55` |
+
+开关与位置参数**顺序不限**（`--verify patch` 与 `patch --verify` 等价）。
+`--verify` 会自动带上四步验证链，所以**建议直接放后台跑**：
+
+```bash
+bash scripts/release.sh patch --verify > build/release.log 2>&1 &
+```
+
+### 7.2 `release.sh` 内部顺序（顺序本身有讲究）
+
+| # | 步骤 | 为什么放在这个位置 |
+| --- | --- | --- |
+| 1 | 跑 `testDebugUnitTest` | **必须在改版本号之前**。反过来的话单测一失败，仓库就留下「版本号已改但没提交」的脏状态；下次重跑读到的就是已经 +1 过的 code，于是再 +1（2026-10-14 踩出过 code 6）。 |
+| 2 | 渲染 Release 说明预览 | 正文来自 `.github/release-notes/template.md`，只替换版本号，**不需要手写也不让 AI 写**。 |
+| 3 | 写 `appVersionName` / `appVersionCode` | 版本号唯一出处在 `app/build.gradle.kts` 顶部。 |
+| 4 | `commit` + `git tag` | 提交信息固定为 `release: vX.Y.Z`。 |
+| 5 | 推送 + **远端 REST 实查** | 不信任推送方返回值（早年 6 次 tag 推送静默失败的根因）。查不到就补推一次，仍查不到就大声失败并给出手动命令。 |
+| 6 | （`--verify`）调用 `verify-release.sh` | 见 7.3。 |
+
+⚠️ **不要用 `release.sh | tail` 判断成败** —— 管道会吃掉退出码。以输出里出现
+`✓ 已推送 vX.Y.Z（远端已确认）` 为准。
+
+### 7.3 四步验证链（每一步都对应一次真实事故）
+
+| # | 检查 | 失败意味着什么 | 不查会怎样 |
+| --- | --- | --- | --- |
+| ① | 远端 `git/refs/tags/<tag>` 存在 | tag 推送静默失败 | Release 根本没触发，却以为发完了 |
+| ② | workflow `conclusion == success` | 构建失败 | 只看资产会看到**上一版**的资产，误判成功 |
+| ③ | Release 资产恰好 4 个 ABI | 少打了某个变体 | 部分架构用户装不上 |
+| ③b | 公共仓库 `latest.json` 指向本版 | publish 步骤没跑完 | 应用内更新拿不到新版（**不阻塞**，只警告） |
+| ④ | APK 签名证书 + 包内版本串 | CI 缺 `KEYSTORE_BASE64` / 发了旧包 | 「构建成功但装不上」 |
+
+第 ④ 步的签名指纹 golden：
+
+```
+75EAECCD7CAB0DB4E30170F52091B3BF80AC0F1D6F89235433EBE2B5876E7398
+```
+
+⚠️ **为什么必须核包内版本串**：各版本经 zipalign 对齐后**字节数可能完全相同**
+（1.1.52 / 1.1.53 / 1.1.54 三个 universal 包都是 3414642 字节）。只看大小会误判成「发了旧包」，
+所以 `verify_apk.py` 会解压 `AndroidManifest.xml` 找 UTF-16LE 编码的版本串再对一次。
+
+> 本机没有 apksigner / Android SDK，脚本直接解析 APK Signing Block，在其中扫描 X.509 证书 DER
+> （ASN.1 `0x30 0x82`），对 SHA-256。
+
+### 7.4 失败补救手册
+
+| 现象 | 补救 |
+| --- | --- |
+| ① tag 查不到 | `bash scripts/push.sh origin vX.Y.Z`，再 `bash scripts/verify-release.sh vX.Y.Z --skip-ci` |
+| ② workflow 红 | 打开 Actions 看日志；修完在 GitHub 上 `Re-run failed jobs` 即可，不用重发版 |
+| ③ 资产不足 4 个 | 同上，通常是构建中断；确认 `RELEASE_REPO_TOKEN` 存在 |
+| ③b latest.json 还是旧版 | 等几分钟再 `bash scripts/verify-release.sh vX.Y.Z --skip-ci`；持续不符要查 CI 的 publish 步骤 |
+| ④ 签名不匹配 | CI 的 `KEYSTORE_BASE64` / `KEY_*` secrets 丢了，补上后**重新打 tag**（版本号需 +1） |
+| 版本号改了但没发成 | 先把 `app/build.gradle.kts` 改回去再重跑，**不要**直接重跑（会 +1 两次） |
+
+### 7.5 环境与权限注意
+
+- 访问 GitHub 必须**出沙箱**（沙箱内 TLS 会被断）：调用方需 `dangerouslyDisableSandbox`。
+- 本机 PAT 是 **fine-grained**，只能开 Pages / 重跑工作流 / 改仓库 About 之外的操作；
+  公共仓库 `LuckyLearning/Release` 的读取走匿名 raw 优先，拿不到才回退 contents API。
+- Android 构建必须 `JAVA_HOME=C:/Users/stu_l/.jdks/openjdk-21.0.2`（脚本会自动把落到
+  GraalVM 的 `JAVA_HOME` 换掉，GraalVM 在 `JdkImageTransform` 阶段必败）。
+- 网络调用全部加 `--offline`，避免 Gradle 尝试联网解析依赖。

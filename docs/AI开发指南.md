@@ -204,7 +204,12 @@ WindTone/                        ← 仓库根 == Gradle 根（已扁平化，�
 │        ui.css / ui.js / ui-sprite.js  样式 / 行为 / 图标池（分章文件不写内联）
 ├─ scripts/
 │   ├─ push.sh                   用 .github-token 推送（GIT_ASKPASS，token 不落盘；退出码已根治 trap 污染）
-│   ├─ release.sh                跑单测 → 改版本号 → 提交 → 打 tag → 推送 + 推后查证
+│   ├─ release.sh                跑单测 → 改版本号 → 提交 → 打 tag → 推送 + 推后查证（--verify 接着跑验证链）
+│   ├─ verify-release.sh         ★ 四步验证链：tag → workflow → 4 资产 → latest.json → 验签（--skip-ci 跳过轮询）
+│   ├─ verify_apk.py             ★ 下 universal 包验签名证书 + 包内版本串（无 apksigner，自解析 Signing Block）
+│   ├─ publish-release-repo.sh   CI 用：把产物发到公共仓库 LuckyLearning/Release（快照 force push）
+│   ├─ render-release-notes.sh   渲染发版说明（固定模板 + 只换版本号）
+│   ├─ gen-release-manifest.py   生成公共仓库 latest.json / README 版本行
 │   ├─ sdk-setup.bat             Windows 本地 SDK 引导
 │   └─ gen_icons.py              图标生成
 ├─ gradle/
@@ -964,11 +969,13 @@ export JAVA_HOME="/c/Users/stu_l/.jdks/openjdk-21.0.2"
 
 ```bash
 # 方式 A：用脚本一把梭（推荐）
-bash scripts/release.sh patch        # 1.1.2 → 1.1.3
-bash scripts/release.sh minor        # 1.1.1 → 1.2.0
-bash scripts/release.sh major        # 1.1.1 → 2.0.0
-bash scripts/release.sh 1.5.2        # 指定版本号
-bash scripts/release.sh patch --dry  # 先看它要干什么
+bash scripts/release.sh patch --verify   # ★ 发版 + 自动跑完四步验证链（阻塞 10~20 min，建议后台跑）
+bash scripts/release.sh patch            # 只发不等 CI
+bash scripts/release.sh minor            # 1.1.1 → 1.2.0
+bash scripts/release.sh major            # 1.1.1 → 2.0.0
+bash scripts/release.sh 1.5.2            # 指定版本号
+bash scripts/release.sh patch --dry      # 先看它要干什么
+
 
 # 方式 B：手工
 # 1) 改 app/build.gradle.kts 顶部 appVersionName / appVersionCode（code 必须 +1）
@@ -977,8 +984,18 @@ bash scripts/release.sh patch --dry  # 先看它要干什么
 # 4) git tag v1.0.1 && bash scripts/push.sh origin v1.0.1   ← 推 tag 触发 Release 工作流
 ```
 
-`scripts/release.sh` 已内置：**跑单测 → 打印发版说明预览 → 改版本号 → 提交 → 打 tag → 推送 + 推后查证（REST 实查远端，查不到自动补推一次）**。
+`scripts/release.sh` 已内置：**跑单测 → 打印发版说明预览 → 改版本号 → 提交 → 打 tag → 推送 + 推后查证（REST 实查远端，查不到自动补推一次）→（`--verify`）四步验证链**。
 推送一律走 `scripts/push.sh`（token 经 `GIT_ASKPASS` 临时传递，**不写进 git 配置、不进 remote URL**）。
+
+> ⭐ **`--verify` 是默认推荐用法**。它会在推送后自动调用 `scripts/verify-release.sh` 跑完
+> §8.6 的四步验证链（tag → workflow 轮询 → 4 个资产 → 公共仓库 `latest.json` → 下载验签 +
+> 包内版本串），**一条命令出 PASS/FAIL 结论**，省掉 4~5 次分开的 REST 调用与轮询，也避免漏掉第 ④ 步。
+> 代价是阻塞等 CI（10~20 分钟），放后台跑即可：
+> ```bash
+> bash scripts/release.sh patch --verify > build/release.log 2>&1 &
+> ```
+> 事后想单独补跑：`bash scripts/verify-release.sh vX.Y.Z`（CI 已知跑完加 `--skip-ci`）。
+> 三个脚本的完整说明见 `docs/发版规范-Release说明与多平台产物.md` 第七节。
 
 > **单测在改版本号之前跑**（2026-10-14 调整）。反过来的话，单测一失败就把仓库留在
 > 「版本号已改但没提交」的脏状态，下次重跑会让 `versionCode` 再 +1（已实际踩出过 code 6）。
@@ -1064,7 +1081,18 @@ PUT /repos/{owner}/{repo}/actions/secrets/{name}       → 提交 encrypted_valu
 
 ### 8.6 发版后验证（每次都要走一遍）
 
-`release.sh` 跑完**不等于**发版成功 —— tag 可能没推上去、CI 可能失败、包可能没签名。按顺序核四步：
+`release.sh` 跑完**不等于**发版成功 —— tag 可能没推上去、CI 可能失败、包可能没签名。
+
+**首选：一条命令跑完四步**（自动含下面 ①②③④ 全部检查，只需在沙箱外执行）：
+
+```bash
+bash scripts/verify-release.sh vX.Y.Z            # 等 CI 跑完再核（自动轮询，45s 一次）
+bash scripts/verify-release.sh vX.Y.Z --skip-ci  # CI 已确认跑完，只核后半段
+python scripts/verify_apk.py vX.Y.Z              # 只下 universal 包验签
+```
+
+输出以 `✓ 验证链全部通过：vX.Y.Z` / `✗ 验证链有 N 项未通过` 结尾，退出码同步（0/1）。
+手动核对时用下面的原始命令（脚本已封装，仅在需要查细节时用）：
 
 ```bash
 # 准备：所有 curl 都要在沙箱外执行
@@ -1089,7 +1117,13 @@ curl -s -H "Authorization: Bearer $TOKEN" $REPO/releases \
 ```
 
 > **第 ④ 步别省**。「构建成功但装不上」最常见的根因就是没签名（CI 缺 `KEYSTORE_BASE64` 时只是
-> `::warning::`，step 依然 success）。`apksigner verify` 不通过 = 用户装不上，必须回查 Secrets。
+> `::warning::`，step 依然 success）。签名不通过 = 用户装不上，必须回查 Secrets。
+> `scripts/verify_apk.py` 已把这一步包进去（本机无 apksigner，脚本直接解析 APK Signing Block
+> 扫 X.509 DER 比对 SHA-256）。
+>
+> ⚠️ **还要核包内版本串**：zipalign 对齐会让**连续几版字节数完全相同**
+> （1.1.52 / 1.1.53 / 1.1.54 三个 universal 都是 3414642 字节），只看大小会误判成「发了旧包」。
+> `verify_apk.py` 会解压 `AndroidManifest.xml` 找 UTF-16LE 的版本串再对一次。
 >
 > workflow 的 step 列表可以整体确认一遍（15 个全 success 才算过）：
 > ```bash
@@ -1231,10 +1265,18 @@ WindTone-v{版本}-universal.apk      # 拿不准架构时的兜底
 > ⚠️ **前提**：只在用户主动要求发版时才执行。日常开发只提交功能代码，不动版本号。
 
 ```bash
-bash scripts/release.sh minor     # 或 patch / major / 具体版本号
+bash scripts/release.sh patch --verify   # ★ 推荐：发版 + 自动跑完四步验证链，一条命令出结论
+bash scripts/release.sh minor            # 或 patch / major / 具体版本号（不带 --verify 则只发不等 CI）
 ```
-它会把 `appVersionCode` +1、`appVersionName` 改成新值，跑单测，提交、打 tag、推送。
+
+它会跑单测 → 把 `appVersionCode` +1、`appVersionName` 改成新值 → 提交、打 tag、推送
+（推完 REST 实查远端）；带 `--verify` 时接着跑四步验证链（§8.6）。
+
 **执行前还需确认**：Secrets 里的 keystore 是当前在用的那一套。
+
+> ⚠️ 脚本会阻塞等 CI 约 10~20 分钟，建议后台跑并落日志：`... --verify > build/release.log 2>&1 &`。
+> 失败时先看清**卡在哪一步**再决定补救（`docs/发版规范…` 第七节 7.4 有对照表）——
+> **版本号改过之后不要无脑重跑**，会把 `versionCode` 再 +1。
 
 ### 11.5 换签名密钥
 

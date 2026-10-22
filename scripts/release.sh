@@ -12,13 +12,31 @@
 #    bash scripts/release.sh major          # 1.0.0 → 2.0.0
 #    bash scripts/release.sh 1.5.2          # 指定版本号
 #    bash scripts/release.sh patch --dry    # 只打印将要做什么
+#    bash scripts/release.sh patch --verify # 推完继续跑「四步验证链」直到出结论
+#
+#  ⚠️ 强烈建议带上 --verify：它会等 CI 跑完、核对 Release 资产、核对公共分发仓库
+#     latest.json、下载 APK 验签并核对包内版本串，全流程**一条命令出结论**
+#     （省掉 AI 侧 4~5 次分开的 REST 调用与轮询，也避免漏掉第 ④ 步）。
+#     代价是脚本会阻塞 10~20 分钟等 CI —— 放后台跑即可。
 # ===================================================================
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GRADLE_FILE="$ROOT/app/build.gradle.kts"
-BUMP="${1:-patch}"
-DRY="${2:-}"
+# 开关与位置参数分开收集：这样 `--verify patch` 和 `patch --verify` 都能用
+# （直接取 "$1" 的话，开关在前就会被当成版本号）。
+DRY=0
+VERIFY=0
+ARGS=()
+for arg in "$@"; do
+  case "$arg" in
+    --dry) DRY=1 ;;
+    --verify) VERIFY=1 ;;
+    --*) echo "无法识别的开关：$arg（只支持 --dry / --verify）" >&2; exit 1 ;;
+    *) ARGS+=("$arg") ;;
+  esac
+done
+BUMP="${ARGS[0]:-patch}"
 
 [[ -f "$GRADLE_FILE" ]] || { echo "找不到 $GRADLE_FILE" >&2; exit 1; }
 
@@ -40,7 +58,7 @@ TAG="v$NEW_NAME"
 echo "版本：$CUR_NAME (code $CUR_CODE)  →  $NEW_NAME (code $NEW_CODE)"
 echo "tag ：$TAG"
 
-if [[ "$DRY" == "--dry" ]]; then
+if (( DRY )); then
   echo "（--dry：未做任何改动）"
   exit 0
 fi
@@ -140,5 +158,13 @@ push_and_confirm() { # $1 = ref 名称, $2 = 校验函数名, $3 = 成功提示
 push_and_confirm "$BRANCH" branch_on_remote "✓ main 已推送（远端 SHA 确认为 ${HEAD_SHA:0:7}）"
 push_and_confirm "$TAG" tag_on_remote "✓ 已推送 $TAG（远端已确认）"
 
+if (( VERIFY )); then
+  echo
+  echo "→ 四步验证链（阻塞等 CI，约 10~20 分钟）"
+  bash "$ROOT/scripts/verify-release.sh" "$TAG" "$REPO_SLUG" "$NEW_NAME" "$HEAD_SHA"
+  exit $?
+fi
+
 echo
 echo "  Release 构建进度： https://github.com/LuckyLearning/WindTone/actions/workflows/android-release.yml"
+echo "  构建完成后可单独跑验证链： bash scripts/verify-release.sh $TAG"
