@@ -1,9 +1,9 @@
 package com.luckylearning.windtone.ui
 
 import android.content.Intent
+import android.graphics.Bitmap
 import android.net.Uri
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -21,16 +21,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.google.zxing.BarcodeFormat
-import com.google.zxing.EncodeHintType
-import com.google.zxing.qrcode.QRCodeWriter
 import com.luckylearning.windtone.data.aliyun.AliyunAuth
+import com.luckylearning.windtone.data.aliyun.AliyunQrCode
 import com.luckylearning.windtone.data.aliyun.AliyunQrLogin
 import com.luckylearning.windtone.data.aliyun.AliyunQrLogin.ScanStatus
 import kotlinx.coroutines.delay
@@ -222,7 +221,7 @@ private fun QrLoginContent(
                 }
             }
             else -> {
-                QrCodeImage(session.qrContent, modifier = Modifier.size(220.dp))
+                QrCodeImage(session.qrContent, modifier = Modifier.padding(vertical = 4.dp))
                 Text(
                     when (status) {
                         ScanStatus.SCANED -> "已扫码：请在手机上确认授权"
@@ -243,36 +242,41 @@ private fun QrLoginContent(
     }
 }
 
-/** 本地渲染二维码（ZXing BitMatrix → Compose Canvas），不依赖任何图片服务 */
+/**
+ * 本地渲染二维码（ZXing → Bitmap → Compose Image），不依赖任何图片服务。
+ *
+ * 关键点全在 [AliyunQrCode] 里：静区 4 个模块、整数倍放大、整像素边界。
+ * 这里只负责把算好的 ARGB 装进 `Bitmap` —— 直接给位图而不是用 Canvas 逐格画，
+ * 是为了避免任何重采样（`FilterQuality.None` + 画布尺寸等于位图尺寸 = 1:1 拷贝）。
+ *
+ * 220dp 太小：阿里云盘 App 的扫描框偏小，深色主题下还容易把白边吃掉。
+ * 取 260dp，并把白边算进图片内，保证扫码器看得到静区。
+ */
 @Composable
 private fun QrCodeImage(content: String, modifier: Modifier = Modifier) {
-    // BitMatrix 一次算好：内容不变就不再重算
-    val matrix = remember(content) {
-        QRCodeWriter().encode(
-            content,
-            BarcodeFormat.QR_CODE,
-            600,
-            600,
-            mapOf(EncodeHintType.MARGIN to 1),
-        )
-    }
-    Box(modifier) {
-        Canvas(Modifier.size(220.dp).align(Alignment.Center)) {
-            val fg = Color(0xFF1B1B1B)
-            val bg = Color.White
-            drawRect(bg) // 白底：阿里云盘 App 对对比度有要求，深色主题下也不能透出底色
-            val cell = size.width / matrix.width
-            for (y in 0 until matrix.height) {
-                for (x in 0 until matrix.width) {
-                    if (matrix[x, y]) {
-                        drawRect(
-                            fg,
-                            topLeft = Offset(x * cell, y * cell),
-                            size = Size(cell, cell),
-                        )
-                    }
-                }
-            }
+    val targetPx = with(LocalDensity.current) { QR_SIZE.roundToPx() }
+    val bitmap = remember(content, targetPx) {
+        val spec = AliyunQrCode.spec(content, targetPx)
+        Bitmap.createBitmap(spec.pixelSize, spec.pixelSize, Bitmap.Config.ARGB_8888).apply {
+            setPixels(
+                AliyunQrCode.argb(spec),
+                0,
+                spec.pixelSize,
+                0,
+                0,
+                spec.pixelSize,
+                spec.pixelSize,
+            )
         }
     }
+    Image(
+        bitmap = bitmap.asImageBitmap(),
+        contentDescription = "阿里云盘扫码授权二维码",
+        modifier = modifier.size(QR_SIZE),
+        contentScale = ContentScale.Fit,
+        filterQuality = FilterQuality.None,
+    )
 }
+
+/** 二维码显示边长：再小扫码框对不上 */
+private val QR_SIZE = 260.dp

@@ -1,8 +1,12 @@
 package com.luckylearning.windtone.data.aliyun
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.util.Collections
 
 /**
  * 阿里云盘**扫码授权**（app 内完成，不跳外部页面）。
@@ -85,30 +89,51 @@ object AliyunQrLogin {
     // ---------------------------------------------------------------- 三步请求
 
     /**
-     * 第 1 步：生成扫码会话（网络请求，必须在 IO 线程）。失败抛 [QrLoginException]。
+     * 第 1 步：生成扫码会话。失败抛 [QrLoginException]。
      *
-     * 逐个试 [BASES]：一个域名连不上不能把整个授权堵死。每个请求用短超时
-     * （连接 6s / 读 10s），失败就换下一个 —— 两个都失败才报错，错误里带上两边原因。
+     * 两个域名**并行竞速**，谁先回用谁，另一个立刻取消。之前是串行「先 .cn，失败再
+     * .org」，用户实际体验是「卡很久才出码」—— 只要 .cn 慢一点，等待就是两段延迟之和。
+     * 竞速后耗时 = 两个站里快的那个（实测 .cn 约 1s、.org 约 8s，取 1s）。
+     *
+     * 代价：服务端偶尔会多出一个没人用的会话（几分钟后自然过期），无副作用。
+     * 选中哪个站的 base 会随 [QrSession] 带给后续两步 —— 三步必须同站，跨站查不到会话。
      */
     suspend fun generateQr(fingerprint: String): QrSession = withContext(Dispatchers.IO) {
-        val failures = mutableListOf<String>()
-        for (base in BASES) {
-            try {
-                val json = http {
-                    AliyunHttp.getJson(
-                        generateUrl(base),
-                        AliyunEndpoints.UA,
-                        mapOf(HEADER_FINGERPRINT to fingerprint),
-                        connectTimeoutMs = 6_000,
-                        readTimeoutMs = 10_000,
-                    )
+        coroutineScope {
+            val winner = CompletableDeferred<QrSession>()
+            val failures = Collections.synchronizedList(mutableListOf<String>())
+            val racers = BASES.map { base ->
+                launch {
+                    try {
+                        val json = AliyunHttp.getJson(
+                            generateUrl(base),
+                            AliyunEndpoints.UA,
+                            mapOf(HEADER_FINGERPRINT to fingerprint),
+                            connectTimeoutMs = 6_000,
+                            readTimeoutMs = 10_000,
+                        )
+                        winner.complete(parseGenerate(json).copy(base = base))
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e // 竞速输了被取消：正常收尾，不算失败
+                    } catch (e: Exception) {
+                        failures += "${base.substringAfter("://")}：${e.message ?: "请求失败"}"
+                        if (failures.size >= BASES.size) {
+                            winner.completeExceptionally(
+                                QrLoginException(
+                                    "连不上授权服务器（已试 ${BASES.size} 个站）：" +
+                                        failures.joinToString("；"),
+                                ),
+                            )
+                        }
+                    }
                 }
-                return@withContext parseGenerate(json).copy(base = base)
-            } catch (e: QrLoginException) {
-                failures += "${base.substringAfter("://")}：${e.message}"
+            }
+            try {
+                winner.await()
+            } finally {
+                racers.forEach { it.cancel() }
             }
         }
-        throw QrLoginException("连不上授权服务器（已试 ${BASES.size} 个站）：" + failures.joinToString("；"))
     }
 
     /** [parseGenerate]：只做字段解析，单测可直接喏 JSON */
