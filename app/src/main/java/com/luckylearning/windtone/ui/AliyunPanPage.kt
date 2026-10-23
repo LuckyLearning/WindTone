@@ -33,6 +33,7 @@ import com.luckylearning.windtone.data.aliyun.AliyunDrive
 import com.luckylearning.windtone.data.aliyun.AliyunEndpoints
 import com.luckylearning.windtone.data.aliyun.AliyunEntry
 import com.luckylearning.windtone.data.aliyun.AliyunExchange
+import com.luckylearning.windtone.data.aliyun.AliyunProbe
 import com.luckylearning.windtone.data.aliyun.AliyunSavedPlaylists
 import com.luckylearning.windtone.data.aliyun.AliyunScanRules
 import com.luckylearning.windtone.data.formatByteSize
@@ -92,6 +93,9 @@ internal fun AliyunPanPage(
     var scanning by remember { mutableStateOf(false) }
     var scanProgress by remember { mutableStateOf("") }
     var scanJob by remember { mutableStateOf<Job?>(null) }
+    /** 播放自检：运行中标记 + 结果文本（null = 没跑过） */
+    var probeRunning by remember { mutableStateOf(false) }
+    var probeText by remember { mutableStateOf<String?>(null) }
     /** 扫描完成、待命名的结果（null = 无） */
     var namingScan by remember { mutableStateOf<AliyunScanRules.ScanOutcome?>(null) }
 
@@ -334,6 +338,40 @@ internal fun AliyunPanPage(
         ) { Text("播放本目录全部音频（${audioEntries.size}）") }
     }
 
+    // ---------------------------------------------- 播放自检（直链能不能下载）
+    // 播不了时第一件事就是分清「直链取不到/下不动」还是「播放器侧的问题」，
+    // 否则只能看到一个 ERROR_CODE_IO_UNSPECIFIED。
+    TextButton(
+        enabled = !loading && !scanning,
+        onClick = {
+            val target = audioEntries.firstOrNull()?.fileId
+                ?: playlists.firstOrNull()?.files?.firstOrNull()?.fileId
+            if (target == null) {
+                error = "这个目录里没有音频文件，先进入一个有歌的目录再自检"
+                return@TextButton
+            }
+            probeRunning = true
+            probeText = null
+            scope.launch {
+                val url = drive.downloadUrl(driveId, target)
+                    .getOrElse {
+                        probeRunning = false
+                        probeText = "取直链失败：${it.message ?: "未知原因"}"
+                        return@launch
+                    }
+                val result = AliyunProbe.probe(url)
+                probeRunning = false
+                probeText = result.summary() +
+                    if (result.ok) {
+                        "\n\n直链本身没问题，若仍播不了，问题在播放器侧（本地缓存或文件格式）。" +
+                            "可以到「设置 → 关于与诊断」清一次在线缓存再试。"
+                    } else {
+                        "\n\n主机：${result.host}"
+                    }
+            }
+        },
+    ) { Text(if (probeRunning) "正在自检…" else "播放自检（测直链）") }
+
     // ---------------------------------------------- 递归扫描成歌单（含下 2 层子目录）
     TextButton(
         enabled = !loading && !scanning,
@@ -495,6 +533,17 @@ internal fun AliyunPanPage(
             text = { Text(msg) },
             confirmButton = {
                 TextButton(onClick = { error = null }) { Text("好") }
+            },
+        )
+    }
+
+    probeText?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { probeText = null },
+            title = { Text("播放自检") },
+            text = { Text(msg) },
+            confirmButton = {
+                TextButton(onClick = { probeText = null }) { Text("知道了") }
             },
         )
     }
