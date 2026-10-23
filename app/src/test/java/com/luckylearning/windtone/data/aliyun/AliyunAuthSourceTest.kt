@@ -71,10 +71,27 @@ class AliyunAuthSourceTest {
     }
 
     @Test
-    fun directGrantEndpointIsOfficialOldDomain() {
-        // 扫码登录（CS）的令牌刷新可以直连官方免凭据端点 —— OpenList 在线接口
-        // 背后就是转发它；直连成功就完全不经过第三方
-        assertEquals("https://openapi.aliyundrive.com/oauth/access_token", AliyunEndpoints.DIRECT_TOKEN_URL)
+    fun webTokenEndpointIsAuthAlipan() {
+        // 网页扫码令牌（CS）的刷新走网页账号端点，真的免凭据（实测缺 client_id 不报错，
+        // 假 RT 回 InvalidParameter.RefreshToken）；开放平台那边的 oauth/access_token
+        // 实测必须带 client_id —— 1.1.64 曾误把那边当免凭据端点
+        assertEquals("https://auth.alipan.com/v2/account/token", AliyunEndpoints.WEB_TOKEN_URL)
+    }
+
+    @Test
+    fun webApiFamilyEndpointsAreWebDomain() {
+        // 扫码令牌是网页版应用的，只能打网页 API；打 OpenAPI 一律 401（1.1.66 及更早的总根因）
+        assertEquals("https://api.alipan.com", AliyunEndpoints.WEB_BASE)
+        assertEquals("https://api.alipan.com/v2/file/list", AliyunEndpoints.WEB_FILE_LIST_URL)
+        assertEquals(
+            "https://api.alipan.com/v2/file/get_download_url",
+            AliyunEndpoints.WEB_DOWNLOAD_URL,
+        )
+        assertEquals(
+            "https://api.alipan.com/v2/databox/get_personal_info",
+            AliyunEndpoints.WEB_PERSONAL_INFO_URL,
+        )
+        assertEquals("https://api.alipan.com/v2/user/get", AliyunEndpoints.WEB_USER_URL)
     }
 
     @Test

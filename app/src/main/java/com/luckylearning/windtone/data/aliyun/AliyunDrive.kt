@@ -77,12 +77,12 @@ object AliyunRules {
  * 上传/删除/重命名一律不做 —— 这个应用对网盘是**只读播放器**，与百度网盘页同一原则：
  * 能力越小越不容易被风控，也越好解释权限。
  *
- * 端点与参数照 OpenList 的 `aliyundrive_open` 驱动逐字对齐（2026-10 核对源码）：
- *  · 基址 `https://openapi.alipan.com/adrive/v1.0`；
- *  · 列目录 `openFile/list`（limit 200、marker 分页）；
- *  · 直链 `openFile/getDownloadUrl`，body `{drive_id, file_id, expire_sec}`，响应字段 `url`。
- *
- * 与百度的关键差异：
+ * 端点与参数**按令牌来源分家族**（2026-10 实锤，见 [AliyunEndpoints.WEB_BASE] 注释）：
+ *  · **网页扫码线（CS）**→ 网页版 API `api.alipan.com`（`/v2/file/list`、
+ *    `/v2/file/get_download_url` 等，照 AList 网页版驱动对齐）；
+ *  · **开放平台线（OA，自备密钥）**→ OpenAPI `openapi.alipan.com/adrive/v1.0`（照
+ *    OpenList `aliyundrive_open` 驱动对齐）。
+ *  · 与阿里云盘的关键差异：
  *  · 全部 JSON POST + `Authorization: Bearer` 头（百度是 GET + query 上的 token）；
  *  · 列目录**没有路径**，靠 parent_file_id（根目录固定叫 `root`）；
  *  · 直链**没有批量接口**，一个文件一次请求，调用方按需取；
@@ -97,10 +97,19 @@ class AliyunDrive(
      * 默认返回 false（纯测试构造下不重试）。
      */
     private val forceRefresher: suspend () -> Boolean = { false },
+    /** 当前令牌来源（决定用哪套 API 家族；纯测试构造下默认网页线） */
+    private val sourceProvider: suspend () -> AliyunTokenSource = { AliyunTokenSource.CS },
 ) {
 
-    /** 常规构造：token 从授权层按需取（快过期会自动刷新，见 AliyunAuth.accessToken） */
-    constructor(auth: AliyunAuth) : this({ auth.accessToken() }, { auth.forceRefresh() })
+    /** 常规构造：token 与来源都从授权层按需取 */
+    constructor(auth: AliyunAuth) : this(
+        { auth.accessToken() },
+        { auth.forceRefresh() },
+        { auth.tokenSource() },
+    )
+
+    /** 网页线（CS）走网页 API；开放平台线（OA）走 OpenAPI */
+    private suspend fun isWebFamily(): Boolean = sourceProvider() == AliyunTokenSource.CS
 
     /**
      * 用户信息：昵称 + 三个盘 id。
@@ -140,6 +149,15 @@ class AliyunDrive(
 
     suspend fun driveInfo(): Result<DriveInfo> = withContext(Dispatchers.IO) {
         runCatching {
+            if (isWebFamily()) {
+                // 昵称在 /v2/user/get，盘 id 在 /v2/databox/get_personal_info，两个都要打；
+                // 昵称那一步失败不拦路（拿不到就展示默认名）
+                val user = runCatching {
+                    api(AliyunEndpoints.WEB_USER_URL, JSONObject())
+                }.getOrNull()
+                val json = api(AliyunEndpoints.WEB_PERSONAL_INFO_URL, JSONObject())
+                return@runCatching parseWebPersonalInfo(json, user)
+            }
             val json = api("$BASE/user/getDriveInfo", JSONObject())
             DriveInfo(
                 nickname = json.optString("user_name").ifBlank { "阿里云盘用户" },
@@ -171,8 +189,16 @@ class AliyunDrive(
                     put("marker", marker)
                     put("order_by", "name")
                     put("order_direction", "ASC")
+                    // 网页 API 额外要求这两个字段（照 AList 网页驱动；OpenAPI 多给也不报错）
+                    put("fields", "*")
+                    put("url_expire_sec", LINK_EXPIRATION_SEC)
                 }
-                val json = api("$BASE/openFile/list", body)
+                val url = if (isWebFamily()) {
+                    AliyunEndpoints.WEB_FILE_LIST_URL
+                } else {
+                    "$BASE/openFile/list"
+                }
+                val json = api(url, body)
                 val arr = json.optJSONArray("items") ?: JSONArray()
                 val entries = (0 until arr.length()).mapNotNull { i ->
                     runCatching { parseEntry(arr.getJSONObject(i)) }.getOrNull()
@@ -198,12 +224,17 @@ class AliyunDrive(
                 put("file_id", fileId)
                 put("expire_sec", LINK_EXPIRATION_SEC)
             }
-            val json = api("$BASE/openFile/getDownloadUrl", body)
-            val url = json.optString("url")
-            if (!url.startsWith("http")) {
+            val url = if (isWebFamily()) {
+                AliyunEndpoints.WEB_DOWNLOAD_URL
+            } else {
+                "$BASE/openFile/getDownloadUrl"
+            }
+            val json = api(url, body)
+            val link = json.optString("url")
+            if (!link.startsWith("http")) {
                 error("接口没有返回可播放的地址（文件可能已被删除或被屏蔽）")
             }
-            url
+            link
         }
     }
 
@@ -316,6 +347,9 @@ class AliyunDrive(
             setRequestProperty("Content-Type", "application/json; charset=utf-8")
             setRequestProperty("Authorization", "Bearer $token")
             setRequestProperty("User-Agent", AliyunEndpoints.UA)
+            // 网页 API 校验请求来源形态（照 AList 网页驱动：Origin/Referer 指向网页版）
+            setRequestProperty("Referer", "https://alipan.com/")
+            setRequestProperty("Origin", "https://www.alipan.com")
         }
         try {
             conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
@@ -342,5 +376,37 @@ class AliyunDrive(
 
         /** 直链有效期（秒）：4 小时，与 OpenList 一致 */
         const val LINK_EXPIRATION_SEC = 14_400
+
+        /**
+         * 网页线的盘信息解析（纯函数，单测覆盖）。
+         *
+         * `/v2/databox/get_personal_info` 的结构：`personal_drive_info` 里带
+         * `resource_drive_id` / `backup_drive_id`；昵称不在里面，来自单独的
+         * `/v2/user/get`（[userJson]）。id 在根层级也可能有一份（不同时期接口
+         * 形态有过波动），两处都看、取先到者。
+         */
+        internal fun parseWebPersonalInfo(
+            personalInfo: JSONObject,
+            userJson: JSONObject? = null,
+        ): DriveInfo {
+            val personal = personalInfo.optJSONObject("personal_drive_info") ?: JSONObject()
+            fun pick(key: String): String = listOf(
+                personal.optString(key),
+                personalInfo.optString(key),
+            ).firstOrNull { it.isNotBlank() }.orEmpty()
+            val nickname = listOf("user_name", "nick_name", "nickname", "name")
+                .firstNotNullOfOrNull { userJson?.optString(it)?.takeIf(String::isNotBlank) }
+                ?: "阿里云盘用户"
+            return DriveInfo(
+                nickname = nickname,
+                defaultDriveId = pick("default_drive_id"),
+                resourceDriveId = pick("resource_drive_id"),
+                backupDriveId = pick("backup_drive_id"),
+            ).also {
+                if (it.preferredDriveId() == null) {
+                    error("账号没有可用的盘（响应里没有任何 drive_id）")
+                }
+            }
+        }
     }
 }

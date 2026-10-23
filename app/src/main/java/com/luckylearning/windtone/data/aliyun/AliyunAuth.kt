@@ -147,8 +147,9 @@ class AliyunAuth(context: Context) {
     suspend fun applyRefreshToken(pasted: String): AliyunExchange = withContext(Dispatchers.IO) {
         val trimmed = pasted.trim()
         if (trimmed.isBlank()) return@withContext AliyunExchange.Failed("粘贴的内容是空的")
-        // 粘贴来的令牌自己不知道来源：先从 OA 试，不行再试 CS，成功即定来源
-        refreshAuto(trimmed, preferred = AliyunTokenSource.OA)
+        // 粘贴令牌大概率是网页扫码线（OpenList 网页工具发的就是网页令牌）：先走网页
+        // 刷新，不行再试 OpenList 两条兜底；成功即按实际成功的那条记来源
+        refreshAuto(trimmed, preferred = AliyunTokenSource.CS)
     }
 
     /** 扫码登录拿到令牌后保存（来源固定为 CS：网页版扫码登录） */
@@ -242,16 +243,16 @@ class AliyunAuth(context: Context) {
             }
         }
 
-        // 路径二：官方免凭据刷新端点（仅扫码登录线）。
-        // 扫码登录的令牌属于阿里内置应用，刷新不需要 client 凭据；OpenList 在线接口
-        // 背后就是转发这一个请求。直连成功就完全不经过第三方；失败自动落到兜底链。
+        // 路径二：网页令牌的免凭据刷新端点（仅扫码登录线）。
+        // 扫码登录拿到的就是网页版令牌，刷新只需 refresh_token 本身（无 client 凭据）。
+        // 直连成功就完全不经过第三方；失败自动落到兜底链。
         if (preferred == AliyunTokenSource.CS) {
-            when (val direct = refreshViaDirectGrant(refreshToken)) {
+            when (val direct = refreshViaWeb(refreshToken)) {
                 is AliyunExchange.Ready -> {
                     save(direct.token, AliyunTokenSource.CS)
                     return direct
                 }
-                is AliyunExchange.Failed -> failures += "直连令牌端点：${direct.reason}"
+                is AliyunExchange.Failed -> failures += "直连网页令牌端点：${direct.reason}"
             }
         }
 
@@ -295,20 +296,20 @@ class AliyunAuth(context: Context) {
         }
     }
 
-    /** 路径二：官方免凭据刷新端点（openapi.aliyundrive.com，仅扫码登录线用） */
-    private fun refreshViaDirectGrant(refreshToken: String): AliyunExchange {
+    /** 路径二：网页令牌免凭据刷新端点（auth.alipan.com，仅扫码登录线用） */
+    private fun refreshViaWeb(refreshToken: String): AliyunExchange {
         val body = JSONObject().apply {
             put("grant_type", "refresh_token")
             put("refresh_token", refreshToken)
         }
         val json = runCatching {
-            AliyunHttp.postJson(AliyunEndpoints.DIRECT_TOKEN_URL, body, AliyunEndpoints.UA)
-        }.getOrElse { return AliyunExchange.Failed(it.message ?: "网络请求失败（官方令牌端点）") }
+            AliyunHttp.postJson(AliyunEndpoints.WEB_TOKEN_URL, body, AliyunEndpoints.UA)
+        }.getOrElse { return AliyunExchange.Failed(it.message ?: "网络请求失败（网页令牌端点）") }
         val token = parseToken(json, fallbackRefresh = refreshToken)
         return if (token != null) {
             AliyunExchange.Ready(token)
         } else {
-            AliyunExchange.Failed(AliyunErrors.hint(json).ifBlank { "官方令牌端点没有返回令牌" })
+            AliyunExchange.Failed(AliyunErrors.hint(json).ifBlank { "网页令牌端点没有返回令牌" })
         }
     }
 
@@ -405,14 +406,40 @@ object AliyunEndpoints {
     val TOKEN_TOOL_URL: String get() = BASES.first()
 
     /**
-     * 官方**免凭据**刷新端点（旧域名）。
+     * **网页版 API** 基址（扫码登录线专用）。
      *
-     * 扫码登录（CS）的令牌属于阿里内置应用，刷新不需要 client 凭据 ——
-     * OpenList 在线接口背后就是转发这一个请求（`alicloud_cs.ts` 的 genToken：
-     * `grant_type=refresh_token` + refresh_token，无凭据）。直连它成功就完全不经过
-     * 第三方；失败再落到 OpenList 兜底链。
+     * **2026-10 实锤的重大修正**：扫码登录拿到的是**网页版应用**的令牌，只能在
+     * `api.alipan.com` 这套网页 API 上用；拿去打开放平台 OpenAPI（`openapi.alipan.com`）
+     * 一律 401 `AccessTokenInvalid` —— 这就是 1.1.56~1.1.66 期间「登录成功但
+     * 列目录/播放全挂」的总根因（OpenList 自己的网页驱动调的也是这套网页 API，
+     * 见它的 `alicloud_cs.ts`：`user.aliyundrive.com/v2/user/get` 等）。
+     * 端点与参数照 AList 网页版驱动（`drivers/aliyundrive`）逐字对齐。
      */
-    const val DIRECT_TOKEN_URL = "https://openapi.aliyundrive.com/oauth/access_token"
+    const val WEB_BASE = "https://api.alipan.com"
+
+    /** 网页 API：用户信息（`/v2/user/get`，`{}` 空体，返回 nick_name 等） */
+    const val WEB_USER_URL = "$WEB_BASE/v2/user/get"
+
+    /** 网页 API：盘信息（`/v2/databox/get_personal_info`，含资源库/备份盘 id） */
+    const val WEB_PERSONAL_INFO_URL = "$WEB_BASE/v2/databox/get_personal_info"
+
+    /** 网页 API：列目录（`/v2/file/list`，marker 分页，字段名与 OpenAPI 一致） */
+    const val WEB_FILE_LIST_URL = "$WEB_BASE/v2/file/list"
+
+    /** 网页 API：取下载直链（`/v2/file/get_download_url`，响应字段 `url`） */
+    const val WEB_DOWNLOAD_URL = "$WEB_BASE/v2/file/get_download_url"
+
+    /**
+     * 网页令牌的**免凭据**刷新端点（AList 网页版驱动的刷新地址）。
+     *
+     * 网页扫码令牌刷新只需 `{grant_type: "refresh_token", refresh_token}`，
+     * 不需要任何 client 凭据（实测：假 RT 回 `InvalidParameter.RefreshToken`，
+     * 说明请求形态被完整接受、只是 RT 不存在）。
+     * 注意别与开放平台的 `openapi.alipan.com/oauth/access_token` 混淆 ——
+     * 那边实测必须带 client_id（缺它回 `BadRequest: client_id 不能为空`），
+     * 1.1.64 曾误把那边当「免凭据端点」，实测打脸后改到这里。
+     */
+    const val WEB_TOKEN_URL = "https://auth.alipan.com/v2/account/token"
 
     /** 刷新令牌的官方地址 */
     fun tokenUrl(): String = TOKEN_URL

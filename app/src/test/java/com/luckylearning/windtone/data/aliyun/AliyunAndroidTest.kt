@@ -41,6 +41,35 @@ class AliyunAndroidTest {
     }
 
     @Test
+    fun `网页线盘信息解析认 personal_drive_info 并回退根层级`() {
+        val info = JSONObject(
+            """{"personal_drive_info":{"resource_drive_id":"res-1","backup_drive_id":"bak-1"}}""",
+        )
+        val parsed = AliyunDrive.parseWebPersonalInfo(info)
+        assertEquals("res-1", parsed.resourceDriveId)
+        assertEquals("bak-1", parsed.backupDriveId)
+        assertEquals("res-1", parsed.preferredDriveId()) // 无 default 时退资源库
+    }
+
+    @Test
+    fun `网页线昵称从 user_get 的多种字段名里取`() {
+        val info = JSONObject("""{"personal_drive_info":{"resource_drive_id":"res-1"}}""")
+        for (key in listOf("user_name", "nick_name", "nickname", "name")) {
+            val user = JSONObject("""{"$key":"张三"}""")
+            assertEquals(key, "张三", AliyunDrive.parseWebPersonalInfo(info, user).nickname)
+        }
+        // 没有 user 信息也不炸，给默认名
+        assertEquals("阿里云盘用户", AliyunDrive.parseWebPersonalInfo(info).nickname)
+    }
+
+    @Test
+    fun `网页线一个盘 id 都没有时给出明确错误`() {
+        val info = JSONObject("""{"personal_drive_info":{}}""")
+        val err = runCatching { AliyunDrive.parseWebPersonalInfo(info) }.exceptionOrNull()
+        assertEquals("账号没有可用的盘（响应里没有任何 drive_id）", err?.message)
+    }
+
+    @Test
     fun `OpenList 在线接口的成功响应形态能解析出令牌`() {
         // 字段名与 OpenList 服务端一致：access_token / refresh_token / text(错误时才非空)
         val json = JSONObject(
