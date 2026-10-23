@@ -33,6 +33,9 @@ object AliyunQrCode {
     /** 放大后的最小边长（像素）：太小在手机上本身就难扫 */
     const val MIN_TARGET_PX = 240
 
+    /** 每个模块至少放大成几个像素：低于这个值模块会糊成一片 */
+    const val MIN_SCALE = 4
+
     /** 一个二维码该怎么画：模块数、每模块放大倍数、总像素、颜色矩阵 */
     class Spec(
         /** 含静区的边长（模块数） */
@@ -77,7 +80,7 @@ object AliyunQrCode {
         val count = bits.size
         val px = max(targetPx, MIN_TARGET_PX)
         // 整数倍：宁可略小于目标像素，也不用 1.3 倍这种会糊边的小数倍
-        val scale = max(1, px / count)
+        val scale = max(MIN_SCALE, px / count)
         return Spec(
             moduleCount = count,
             scale = scale,

@@ -105,6 +105,20 @@ class AliyunQrCodeTest {
     }
 
     @Test
+    fun bitmapNeverExceedsAvailableWidth() {
+        // 渲染层约定：位图生成后视图按位图的精确像素尺寸显示（1:1 零缩放），
+        // 所以位图绝不能比可用宽度还宽（否则又会被缩小重采样）
+        for (target in listOf(240, 320, 480, 780, 1080)) {
+            val spec = AliyunQrCode.spec(realContent, targetPx = target)
+            assertTrue(
+                "target=$target 时位图 ${spec.pixelSize}px 超出了可用宽度",
+                spec.pixelSize <= target || spec.pixelSize <= spec.moduleCount * AliyunQrCode.MIN_SCALE,
+            )
+            assertTrue("scale 至少 ${AliyunQrCode.MIN_SCALE}", spec.scale >= AliyunQrCode.MIN_SCALE)
+        }
+    }
+
+    @Test
     fun tinyRequestIsRaisedToReadableMinimum() {
         // 传 40px 进来也不会生成一张糊成一团的图（234/45 落到 5 倍 = 225px）
         val spec = AliyunQrCode.spec(realContent, targetPx = 40)

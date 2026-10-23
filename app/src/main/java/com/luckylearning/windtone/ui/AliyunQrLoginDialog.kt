@@ -28,7 +28,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.luckylearning.windtone.data.aliyun.AliyunAuth
 import com.luckylearning.windtone.data.aliyun.AliyunEndpoints
@@ -175,7 +174,8 @@ internal fun AliyunQrLoginDialog(
         confirmButton = {
             when {
                 failed != null -> TextButton(onClick = { attempt++ }) { Text("重试") }
-                session != null -> TextButton(onClick = onDismiss) { Text("取消") }
+                // 扫不上 / 怀疑这张码已经死了：手动换一张（正常过期也会自动换）
+                session != null -> TextButton(onClick = { attempt++ }) { Text("换一张") }
             }
         },
         dismissButton = {
@@ -258,7 +258,8 @@ private fun QrLoginContent(
                     )
                 }
                 Text(
-                    "二维码过期会自动换新码；应用对网盘只读，不会上传、修改或删除任何文件",
+                    "识别不到时：①调高屏幕亮度、离 20~30cm 再扫；②或截屏后用阿里云盘「扫一扫」选「相册」识别这张截图（截图是全分辨率，最稳）；③点「换一张」再试。\n" +
+                        "二维码过期会自动换新码；应用对网盘只读，不会上传、修改或删除任何文件",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -273,47 +274,41 @@ private fun QrLoginContent(
  * 本地渲染二维码（ZXing → Bitmap → Compose Image），不依赖任何图片服务。
  *
  * 关键点全在 [AliyunQrCode] 里：静区 4 个模块、整数倍放大、整像素边界。
- * 这里只负责把算好的 ARGB 装进 `Bitmap` —— 直接给位图而不是用 Canvas 逐格画，
- * 是为了避免任何重采样（`FilterQuality.None` + 画布尺寸等于位图尺寸 = 1:1 拷贝）。
  *
- * 尺寸：尽量给 260dp（阿里云盘 App 的扫描框对不上小图），但**不能超过弹层可用宽度** ——
- * 320dp 宽的小屏上弹层正文只有 ~216dp，硬塞 260dp 会被裁掉一侧，等于整张码废掉。
- * 所以用 [BoxWithConstraints] 取实际可用宽度再夹一次，位图按夹完的尺寸重新生成，
- * 显示尺寸与位图尺寸始终一致。
+ * **位图与视图必须逐像素 1:1**：位图尺寸是「模块数 × 整数倍」，几乎不可能恰好等于
+ * 弹层宽度，如果让 `Image` 把位图缩放到视图尺寸（哪怕 1.06 倍的最近邻），模块边界
+ * 会出现 ±1 像素的不均匀 —— 摄像头扫屏本来就是最难的一档，再叠加重采样更容易翻车。
+ * 所以这里反过来：先按可用像素宽算好位图，再把视图定成位图的**精确**尺寸，
+ * 全链路零缩放、零重采样。
+ *
+ * 二维码尽量大（占满弹层宽）：模块越大，摄像头越容易对上焦、越不怕摩尔纹。
  */
 @Composable
 private fun QrCodeImage(content: String, modifier: Modifier = Modifier) {
     BoxWithConstraints(modifier) {
-        val side = minOf(QR_MAX_SIZE, maxWidth)
-        QrBitmap(content, side)
-    }
-}
-
-@Composable
-private fun QrBitmap(content: String, side: Dp) {
-    val targetPx = with(LocalDensity.current) { side.roundToPx() }
-    val bitmap = remember(content, targetPx) {
-        val spec = AliyunQrCode.spec(content, targetPx)
-        Bitmap.createBitmap(spec.pixelSize, spec.pixelSize, Bitmap.Config.ARGB_8888).apply {
-            setPixels(
-                AliyunQrCode.argb(spec),
-                0,
-                spec.pixelSize,
-                0,
-                0,
-                spec.pixelSize,
-                spec.pixelSize,
-            )
+        val density = LocalDensity.current
+        val availPx = with(density) { maxWidth.roundToPx() }.coerceAtLeast(AliyunQrCode.MIN_SCALE * 8)
+        val bitmap = remember(content, availPx) {
+            val spec = AliyunQrCode.spec(content, availPx)
+            Bitmap.createBitmap(spec.pixelSize, spec.pixelSize, Bitmap.Config.ARGB_8888).apply {
+                setPixels(
+                    AliyunQrCode.argb(spec),
+                    0,
+                    spec.pixelSize,
+                    0,
+                    0,
+                    spec.pixelSize,
+                    spec.pixelSize,
+                )
+            }
         }
+        Image(
+            bitmap = bitmap.asImageBitmap(),
+            contentDescription = "阿里云盘扫码授权二维码",
+            // 视图尺寸 = 位图尺寸：1:1，没有任何缩放
+            modifier = Modifier.size(with(density) { bitmap.width.toDp() }),
+            contentScale = ContentScale.Fit,
+            filterQuality = FilterQuality.None,
+        )
     }
-    Image(
-        bitmap = bitmap.asImageBitmap(),
-        contentDescription = "阿里云盘扫码授权二维码",
-        modifier = Modifier.size(side),
-        contentScale = ContentScale.Fit,
-        filterQuality = FilterQuality.None,
-    )
 }
-
-/** 二维码理想边长：再小扫码框对不上 */
-private val QR_MAX_SIZE = 260.dp
