@@ -1,5 +1,7 @@
 package com.luckylearning.windtone.data.aliyun
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 /**
@@ -66,8 +68,8 @@ object AliyunQrLogin {
 
     // ---------------------------------------------------------------- 三步请求
 
-    /** 第 1 步：生成扫码会话。失败抛 [QrLoginException]（带人话原因）。 */
-    fun generateQr(fingerprint: String): QrSession {
+    /** 第 1 步：生成扫码会话（网络请求，必须在 IO 线程）。失败抛 [QrLoginException]。 */
+    suspend fun generateQr(fingerprint: String): QrSession = withContext(Dispatchers.IO) {
         val json = http {
             AliyunHttp.getJson(
                 generateUrl(),
@@ -75,7 +77,7 @@ object AliyunQrLogin {
                 mapOf(HEADER_FINGERPRINT to fingerprint),
             )
         }
-        return parseGenerate(json)
+        parseGenerate(json)
     }
 
     /** [parseGenerate]：只做字段解析，单测可直接喏 JSON */
@@ -96,31 +98,33 @@ object AliyunQrLogin {
     }
 
     /** 第 2 步：轮询扫码状态。失败抛 [QrLoginException]。 */
-    fun checkLogin(sessionId: String, fingerprint: String): ScanStatus {
-        val json = http {
-            AliyunHttp.getJson(
-                checkUrl(sessionId),
-                AliyunEndpoints.UA,
-                mapOf(HEADER_FINGERPRINT to fingerprint),
-            )
+    suspend fun checkLogin(sessionId: String, fingerprint: String): ScanStatus =
+        withContext(Dispatchers.IO) {
+            val json = http {
+                AliyunHttp.getJson(
+                    checkUrl(sessionId),
+                    AliyunEndpoints.UA,
+                    mapOf(HEADER_FINGERPRINT to fingerprint),
+                )
+            }
+            if (!json.optBoolean("success", false)) {
+                throw QrLoginException(json.optString("error").ifBlank { "查询扫码状态失败" })
+            }
+            parseStatus(json.optString("status"))
         }
-        if (!json.optBoolean("success", false)) {
-            throw QrLoginException(json.optString("error").ifBlank { "查询扫码状态失败" })
-        }
-        return parseStatus(json.optString("status"))
-    }
 
     /** 第 3 步：取回令牌。失败抛 [QrLoginException]。 */
-    fun fetchResult(sessionId: String, fingerprint: String): QrResult {
-        val json = http {
-            AliyunHttp.getJson(
-                userInfoUrl(sessionId),
-                AliyunEndpoints.UA,
-                mapOf(HEADER_FINGERPRINT to fingerprint),
-            )
+    suspend fun fetchResult(sessionId: String, fingerprint: String): QrResult =
+        withContext(Dispatchers.IO) {
+            val json = http {
+                AliyunHttp.getJson(
+                    userInfoUrl(sessionId),
+                    AliyunEndpoints.UA,
+                    mapOf(HEADER_FINGERPRINT to fingerprint),
+                )
+            }
+            parseResult(json)
         }
-        return parseResult(json)
-    }
 
     /** [parseResult]：只做字段解析，单测可直接喏 JSON */
     fun parseResult(json: JSONObject): QrResult {

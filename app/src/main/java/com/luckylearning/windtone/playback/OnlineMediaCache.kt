@@ -148,12 +148,15 @@ object OnlineMediaCache {
             val cached = CacheDataSource.Factory()
                 .setCache(cache)
                 .setUpstreamDataSourceFactory(http)
-                // 网盘直链按 fsId 做键，避免「每次签名不同 → 永不命中」。
-                // 注意优先用 `dataSpec.key`：网盘请求的真实 URI 里已经摘掉了 `#wt=…`
-                // （见 SchemeRoutingDataSource.open），键由那里显式塞进来。
+                // 网盘直链按 fileId 做键，避免「每次签名不同 → 永不命中」。
+                // **先看 fragment**：阿里的 uri 带着 `#wt=<fileId>` 且 key 是完整签名 URL
+                // （v1.1.58 之前这里先取 dataSpec.key，导致阿里歌的缓存键里含签名，
+                //  每次播放都换一把 → 缓存永远不命中、还白占配额）。
+                // 百度的请求在 SchemeRoutingDataSource 里已摘掉 fragment 并显式塞 key，
+                // 走 dataSpec.key 分支，语义不变。
                 .setCacheKeyFactory(object : CacheKeyFactory {
                     override fun buildCacheKey(dataSpec: DataSpec): String =
-                        dataSpec.key ?: panCacheKey(dataSpec.uri) ?: dataSpec.uri.toString()
+                        panCacheKey(dataSpec.uri) ?: dataSpec.key ?: dataSpec.uri.toString()
                 })
                 // 缓存写失败（磁盘满 / 权限）时退化成直连，不要因此中断播放
                 .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)

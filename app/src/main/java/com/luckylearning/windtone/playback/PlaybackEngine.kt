@@ -10,6 +10,7 @@ import androidx.media3.session.MediaController
 import com.luckylearning.windtone.data.AudioInspector
 import com.luckylearning.windtone.data.BootStatus
 import com.luckylearning.windtone.data.CoverRepository
+import com.luckylearning.windtone.data.CrashLog
 import com.luckylearning.windtone.data.LyricsLoader
 import com.luckylearning.windtone.data.MessageBus
 import com.luckylearning.windtone.data.Prefs
@@ -425,6 +426,7 @@ class PlaybackEngine(
 
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
             Log.w(TAG, "播放错误: ${error.errorCodeName}", error)
+            logPlaybackError(error)
             val name = _player.value.current?.displayName ?: ""
             _player.update { it.copy(isPlaying = false) }
             consecutiveErrors++
@@ -444,6 +446,42 @@ class PlaybackEngine(
                     else "播放失败：$name（$reason）",
                 )
             }
+        }
+    }
+
+    /**
+     * 把播放失败的**技术细节**写进崩溃日志（设置 → 关于与诊断 → 崩溃日志可见）。
+     *
+     * 为什么需要它：提示条只能给一句人话（「网络连接失败」/`ERROR_CODE_IO_UNSPECIFIED`），
+     * 而排障真正需要的是「哪一层抛的、什么异常、打的哪个主机」。以前这些只进 logcat，
+     * 用户在车机上根本取不到 —— v1.1.59 用户反馈「网盘歌单 3 首都 IO_UNSPECIFIED」时，
+     * 手上除了这一个错误码什么都没有。
+     *
+     * 只记 host + path 前缀，**不记 query**：阿里直链的 query 是签名，等于临时凭据。
+     */
+    private fun logPlaybackError(error: androidx.media3.common.PlaybackException) {
+        runCatching {
+            val uri = controller?.currentMediaItem?.localConfiguration?.uri
+                ?: _player.value.current?.uri
+            val chain = generateSequence<Throwable>(error) { it.cause }
+                .joinToString(" <- ") { "${it.javaClass.simpleName}: ${it.message}" }
+            val target = uri?.let { u ->
+                buildString {
+                    append(u.scheme).append("://").append(u.host)
+                    u.path?.take(80)?.let { append(it) }
+                    if (u.fragment?.startsWith("wt=") == true) append(" #wt(网盘直链)")
+                    if (!u.query.isNullOrBlank()) append(" ?(query 已隐藏)")
+                }
+            } ?: "未知"
+            CrashLog.record(
+                app,
+                "playback-error",
+                buildString {
+                    appendLine("code=${error.errorCodeName}")
+                    appendLine("target=$target")
+                    appendLine("chain=$chain")
+                },
+            )
         }
     }
 
