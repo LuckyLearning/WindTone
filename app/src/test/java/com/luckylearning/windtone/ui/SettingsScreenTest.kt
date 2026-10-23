@@ -502,8 +502,10 @@ class SettingsScreenTest {
         compose.onNodeWithText("阿里云盘").performScrollTo().performClick()
         compose.waitForIdle()
 
-        // 未登录时这一页的第一行引导，出现即说明页面真的渲染出来了
-        compose.onNodeWithText("打开获取令牌页面").performScrollTo().assertIsDisplayed()
+        // 未登录时这一页的第一行引导（扫码授权，app 内完成），出现即说明页面真的渲染出来了
+        compose.onNodeWithText("扫码授权").performScrollTo().assertIsDisplayed()
+        // 手动粘贴仍是兜底入口
+        compose.onNodeWithText("手动粘贴令牌").assertIsDisplayed()
     }
 
     /**

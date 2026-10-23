@@ -343,6 +343,9 @@ dependencies {
 
     implementation(libs.pinyin4j)
 
+    // 阿里云盘扫码授权：本地生成登录二维码（见 data/aliyun/AliyunQrLogin.kt）
+    implementation(libs.zxing.core)
+
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.guava)
 

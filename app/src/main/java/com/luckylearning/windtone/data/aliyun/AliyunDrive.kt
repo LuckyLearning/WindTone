@@ -208,6 +208,41 @@ class AliyunDrive(
     }
 
     /**
+     * 递归扫描一份歌单用的「列目录」实现：处理分页，把整目录全部条目拉完。
+     *
+     * 扫描编排（层深 / 排序 / 跳过）在 [AliyunScanRules.scan]，这里只负责把
+     * 一个目录的所有页拉平；单页失败直接抛给上层按「跳过该目录」处理。
+     */
+    private suspend fun listAll(driveId: String, parentFileId: String): List<AliyunEntry> {
+        val all = mutableListOf<AliyunEntry>()
+        var marker = ""
+        do {
+            val page = list(driveId, parentFileId, marker).getOrThrow()
+            all += page.entries
+            marker = page.nextMarker
+        } while (marker.isNotBlank())
+        return all
+    }
+
+    /**
+     * 把 [rootId] 目录（含下钻 [AliyunScanRules.SCAN_DEPTH] 层子目录）扫描成一份歌单。
+     *
+     * 只收可播放音频；列失败的目录跳过并在结果里带原因；协程取消即中断。
+     * 进度通过 [onProgress] 回调（已扫目录数 / 已收文件数），界面显示「扫描中」用。
+     */
+    suspend fun scanPlaylist(
+        driveId: String,
+        rootId: String,
+        onProgress: suspend (dirsDone: Int, filesFound: Int) -> Unit = { _, _ -> },
+    ): AliyunScanRules.ScanOutcome = withContext(Dispatchers.IO) {
+        AliyunScanRules.scan(
+            rootId = rootId,
+            listDir = { listAll(driveId, it) },
+            onProgress = onProgress,
+        )
+    }
+
+    /**
      * 把文件条目转成播放队列里的歌。
      *
      * URI 的 fragment 带 `wt=<fileId>`：直链每次签名都不同，拿整个 URI 当缓存键

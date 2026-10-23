@@ -242,12 +242,23 @@ internal object AliyunHttp {
     fun getJson(url: String, ua: String): JSONObject =
         read(url, ua, method = "GET", body = null)
 
-    private fun read(url: String, ua: String, method: String, body: JSONObject?): JSONObject {
+    /** 带额外请求头的 GET（扫码授权需要 `X-Client-Fingerprint`，见 AliyunQrLogin） */
+    fun getJson(url: String, ua: String, extraHeaders: Map<String, String>): JSONObject =
+        read(url, ua, method = "GET", body = null, extraHeaders = extraHeaders)
+
+    private fun read(
+        url: String,
+        ua: String,
+        method: String,
+        body: JSONObject?,
+        extraHeaders: Map<String, String> = emptyMap(),
+    ): JSONObject {
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 12_000
             readTimeout = 20_000
             requestMethod = method
             setRequestProperty("User-Agent", ua)
+            extraHeaders.forEach { (k, v) -> setRequestProperty(k, v) }
             if (body != null) {
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")

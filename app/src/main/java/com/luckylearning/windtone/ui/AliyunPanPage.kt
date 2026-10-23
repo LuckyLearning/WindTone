@@ -33,24 +33,31 @@ import com.luckylearning.windtone.data.aliyun.AliyunDrive
 import com.luckylearning.windtone.data.aliyun.AliyunEndpoints
 import com.luckylearning.windtone.data.aliyun.AliyunEntry
 import com.luckylearning.windtone.data.aliyun.AliyunExchange
+import com.luckylearning.windtone.data.aliyun.AliyunSavedPlaylists
+import com.luckylearning.windtone.data.aliyun.AliyunScanRules
 import com.luckylearning.windtone.data.formatByteSize
 import com.luckylearning.windtone.data.model.Song
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
  * 阿里云盘（在线播放）—— 授权 + 目录浏览 + 播放。
  *
- * 授权走 **OpenList 方案**：授权本身在 OpenList 的网页工具（api.oplist.org）里完成 ——
- * 用户扫码登录、页面直接给出「刷新令牌（Refresh Token）」，复制后粘贴到本应用即可。
- * 这条路不要求应用注册回调地址、也不要求车机有浏览器（可以在手机上粘贴完再同步感受
- * 同一份登录态），刷新令牌由 [AliyunAuth] 负责换取 access_token 并在过期前自动续期。
+ * 授权**在应用内完成**（[AliyunQrLoginDialog]）：点「扫码授权」弹出二维码，用阿里云盘
+ * App 扫码确认后自动拿到 refresh_token 存进 [AliyunAuth]，全程不跳浏览器、不复制粘贴。
+ * 复刻的是 OpenList-APIPages（api.oplist.org）网页工具的同一套接口（详见 [AliyunQrLogin]）；
+ * 手动粘贴 refresh_token 保留为兜底入口（网页工具改版时仍走得通）。
+ * 这条路不要求应用注册回调地址、也不要求车机有浏览器（手机上授权完，车机登录态可用）。
  *
  * 与百度网盘页的差异都来自开放平台本身：
- *  · 登录只有一个动作（粘贴令牌），没有设备码/二维码弹层；
+ *  · 登录后只有目录浏览一个主界面，没有设备码/二维码弹层；
  *  · 目录没有路径概念，全靠 file_id，导航用**栈**（进目录压栈、返回弹栈）；
  *  · 空间分「备份盘 / 资源库」两块，可切换（见 AliyunRules.pickDrive 的兜底顺序）；
  *  · 直链没有批量接口，播放一个取一个；「播放本目录全部」按顺序现取，
  *    进度给到第几首，避免大目录下像卡死。
+ *  · 支持把当前目录（含下 2 层子目录）递归扫描成歌单（[AliyunScanRules]），
+ *    歌单存 fileId 引用，播放时现取直链（见 AliyunSavedPlaylists）。
  */
 @Composable
 internal fun AliyunPanPage(
@@ -76,6 +83,17 @@ internal fun AliyunPanPage(
     var progress by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var showPasteToken by remember { mutableStateOf(false) }
+    var showQrLogin by remember { mutableStateOf(false) }
+    /** 目录名栈（与 [stack] 同步：根目录为空串），扫描歌单取名字用 */
+    var dirNames by remember { mutableStateOf(listOf("")) }
+    /** 保存云盘歌单的本地存档（改名 / 删除也走它） */
+    val savedPlaylists = remember { AliyunSavedPlaylists(context) }
+    var playlists by remember { mutableStateOf(savedPlaylists.all()) }
+    var scanning by remember { mutableStateOf(false) }
+    var scanProgress by remember { mutableStateOf("") }
+    var scanJob by remember { mutableStateOf<Job?>(null) }
+    /** 扫描完成、待命名的结果（null = 无） */
+    var namingScan by remember { mutableStateOf<AliyunScanRules.ScanOutcome?>(null) }
 
     fun refreshAccount() {
         scope.launch {
@@ -123,9 +141,9 @@ internal fun AliyunPanPage(
     SectionTitle("阿里云盘")
     Text(
         if (auth.hasClientCredentials()) {
-            "已配置应用凭据：刷新令牌直连官方接口。授权在浏览器里完成，令牌只保存在本机。"
+            "已配置应用凭据：扫码授权在应用内完成，令牌刷新直连官方接口，只保存在本机。"
         } else {
-            "未配置应用凭据：刷新令牌走 OpenList 在线接口（无需自备密钥）。令牌只保存在本机。"
+            "未配置应用凭据：扫码授权在应用内完成（无需自备密钥），令牌刷新走 OpenList 在线接口，只保存在本机。"
         },
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -134,30 +152,21 @@ internal fun AliyunPanPage(
 
     if (!loggedIn) {
         Text(
-            "获取令牌的步骤：① 打开获取令牌页面 → ② 选择「阿里云盘 OAuth2 扫码登录」→ " +
-                "③ 勾选「使用 OpenList 提供的参数」→ ④ 点「获取 Token」并用手机扫码授权 → " +
-                "⑤ 复制页面给出的「刷新令牌（Refresh Token）」回来粘贴。" +
-                "应用对网盘只读，不会上传、修改或删除任何文件。",
+            "扫码授权在应用内完成：点「扫码授权」用阿里云盘 App 扫弹出的二维码即可，" +
+                "无需跳转浏览器、无需复制粘贴。应用对网盘只读，不会上传、修改或删除任何文件。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 8.dp),
         )
         ActionRow(
-            title = "打开获取令牌页面",
-            subtitle = "在浏览器里打开 ${AliyunEndpoints.TOKEN_TOOL_URL}，扫码授权后复制刷新令牌",
-            onClick = {
-                runCatching {
-                    context.startActivity(
-                        Intent(Intent.ACTION_VIEW, Uri.parse(AliyunEndpoints.TOKEN_TOOL_URL))
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                    )
-                }.onFailure { error = it.message ?: "无法打开浏览器" }
-            },
+            title = "扫码授权",
+            subtitle = "用阿里云盘 App 扫码，授权在应用内自动完成",
+            onClick = { showQrLogin = true },
             chevron = true,
         )
         ActionRow(
-            title = "粘贴刷新令牌",
-            subtitle = "把上一步拿到的 Refresh Token 粘贴进来；应用会先校验再保存",
+            title = "手动粘贴令牌",
+            subtitle = "备用：在 ${AliyunEndpoints.TOKEN_TOOL_URL} 扫码拿到 Refresh Token 后粘贴进来，先校验再保存",
             onClick = { showPasteToken = true },
             chevron = true,
         )
@@ -193,6 +202,21 @@ internal fun AliyunPanPage(
                 onDismiss = { showPasteToken = false },
             )
         }
+        if (showQrLogin) {
+            AliyunQrLoginDialog(
+                auth = auth,
+                onLoggedIn = {
+                    showQrLogin = false
+                    loggedIn = true
+                    refreshAccount()
+                },
+                onError = { msg ->
+                    showQrLogin = false
+                    error = msg
+                },
+                onDismiss = { showQrLogin = false },
+            )
+        }
         error?.let { msg ->
             AlertDialog(
                 onDismissRequest = { error = null },
@@ -217,6 +241,7 @@ internal fun AliyunPanPage(
         if (stack.size > 1) {
             TextButton(onClick = {
                 stack = stack.dropLast(1)
+                dirNames = dirNames.dropLast(1)
                 entries = emptyList()
                 nextMarker = ""
                 load(stack.last())
@@ -233,6 +258,7 @@ internal fun AliyunPanPage(
             drives = emptyList()
             entries = emptyList()
             stack = listOf(AliyunDrive.ROOT_ID)
+            dirNames = listOf("")
             nextMarker = ""
         }) { Text("退出登录") }
     }
@@ -253,6 +279,7 @@ internal fun AliyunPanPage(
                         entries = emptyList()
                         nextMarker = ""
                         stack = listOf(AliyunDrive.ROOT_ID)
+                        dirNames = listOf("")
                         load(AliyunDrive.ROOT_ID)
                     }) { Text("切到$name") }
                 }
@@ -302,9 +329,123 @@ internal fun AliyunPanPage(
 
     if (audioEntries.isNotEmpty()) {
         TextButton(
-            enabled = !loading,
+            enabled = !loading && !scanning,
             onClick = { playFrom(null) },
         ) { Text("播放本目录全部音频（${audioEntries.size}）") }
+    }
+
+    // ---------------------------------------------- 递归扫描成歌单（含下 2 层子目录）
+    TextButton(
+        enabled = !loading && !scanning,
+        onClick = {
+            val rootId = stack.last()
+            val rootName = dirNames.lastOrNull().orEmpty()
+            scanning = true
+            scanProgress = "正在扫描…"
+            error = null
+            scanJob = scope.launch {
+                try {
+                    val outcome = drive.scanPlaylist(driveId, rootId) { dirs, files ->
+                        scanProgress = "已扫 $dirs 个目录，收到 $files 首…"
+                    }
+                    if (outcome.files.isEmpty()) {
+                        error = if (outcome.skipped.isNotEmpty()) {
+                            "没有扫到音频文件。" + outcome.skipped.take(3).joinToString("；")
+                        } else {
+                            "这个目录（含 2 层子目录）里没有音频文件"
+                        }
+                    } else {
+                        namingScan = outcome
+                    }
+                } catch (e: CancellationException) {
+                    // 用户取消：不算错误
+                } catch (e: Exception) {
+                    error = e.message ?: "扫描失败"
+                }
+                scanning = false
+                scanProgress = ""
+            }
+        },
+    ) { Text("扫描为歌单（含 2 层子目录）") }
+
+    if (scanning) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        ) {
+            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+            Spacer(Modifier.width(10.dp))
+            Text(scanProgress, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+            TextButton(onClick = { scanJob?.cancel() }) { Text("停止") }
+        }
+    }
+
+    // 扫描完成 → 命名入库
+    namingScan?.let { outcome ->
+        NameScanDialog(
+            defaultName = dirNames.lastOrNull().orEmpty().ifBlank { "云盘歌单" },
+            onConfirm = { name ->
+                namingScan = null
+                savedPlaylists.add(name, driveId, dirNames.lastOrNull().orEmpty(), outcome.files)
+                playlists = savedPlaylists.all()
+            },
+            onDismiss = { namingScan = null },
+        )
+    }
+
+    // 已保存的云盘歌单（存 fileId 引用，播放时现取直链）
+    if (playlists.isNotEmpty()) {
+        Text(
+            "云盘歌单（${playlists.size}）",
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
+        )
+        playlists.forEach { p ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(p.name, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "${p.fileCount} 首 · 来源：${p.rootName.ifBlank { "根目录" }}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(
+                    enabled = !loading && !scanning,
+                    onClick = {
+                        loading = true
+                        error = null
+                        scope.launch {
+                            val songs = mutableListOf<Song>()
+                            p.files.forEachIndexed { index, hit ->
+                                progress = "正在取播放地址（${index + 1}/${p.files.size}）…"
+                                drive.downloadUrl(p.driveId, hit.fileId)
+                                    .onSuccess {
+                                        songs += drive.toSong(
+                                            AliyunEntry(hit.fileId, hit.name, isDir = false, sizeBytes = 0L),
+                                            it,
+                                        )
+                                    }
+                            }
+                            progress = ""
+                            loading = false
+                            if (songs.isEmpty()) {
+                                error = "没有取到可播放的地址（文件可能已被删除或被屏蔽）"
+                            } else {
+                                onPlay(songs, 0)
+                            }
+                        }
+                    },
+                ) { Text("播放") }
+                TextButton(onClick = {
+                    savedPlaylists.remove(p.id)
+                    playlists = savedPlaylists.all()
+                }) { Text("删除") }
+            }
+        }
     }
 
     if (loading || progress.isNotBlank()) {
@@ -332,6 +473,7 @@ internal fun AliyunPanPage(
             entry = entry,
             onOpenDir = {
                 stack = stack + entry.fileId
+                dirNames = dirNames + entry.name
                 entries = emptyList()
                 nextMarker = ""
                 load(entry.fileId)
@@ -427,6 +569,44 @@ private fun PasteTokenDialog(
                 enabled = input.isNotBlank(),
                 onClick = { onConfirm(input) },
             ) { Text("登录") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
+}
+
+/** 扫描完成后给歌单命名（默认用扫描根目录名） */
+@Composable
+private fun NameScanDialog(
+    defaultName: String,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var input by remember { mutableStateOf(defaultName) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("保存为歌单") },
+        text = {
+            Column {
+                Text(
+                    "扫描结果已就绪，起个名字存下来。歌单只保存文件引用，播放时现取直链，" +
+                        "文件被删除或移走后播放会自动跳过。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = input,
+                    onValueChange = { input = it },
+                    label = { Text("歌单名") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = input.isNotBlank(),
+                onClick = { onConfirm(input) },
+            ) { Text("保存") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )

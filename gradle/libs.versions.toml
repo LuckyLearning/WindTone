@@ -44,6 +44,8 @@ datastore = "1.1.1"
 pinyin4j = "2.5.1"
 coroutines = "1.8.1"
 guava = "33.0.0-android"
+# ZXing core：阿里云盘扫码授权 —— 本地生成登录二维码（纯 Java 库，无 Android 依赖）
+zxing = "3.5.3"
 
 # ── 测试 ─────────────────────────────────────────────────────────────────────
 junit = "4.13.2"
@@ -101,6 +103,7 @@ androidx-datastore-preferences = { group = "androidx.datastore", name = "datasto
 
 # ── 通用工具 ──
 pinyin4j = { group = "com.belerweb", name = "pinyin4j", version.ref = "pinyin4j" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 guava = { group = "com.google.guava", name = "guava", version.ref = "guava" }
 
