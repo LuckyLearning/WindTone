@@ -48,9 +48,23 @@ class AliyunTrackStoreTest {
         assertEquals(2, row.playCount)
         assertEquals(20, row.lastPlayedAt)
         assertEquals(5_000, row.playedMs)
+        assertEquals(5_000, store.listenBuckets().single().ms)
         assertEquals(listOf("f"), store.favorites().map { it.fileId })
         assertEquals(listOf("f"), store.recent().map { it.fileId })
         assertEquals(listOf("f"), store.mostPlayed().map { it.fileId })
+    }
+
+    @Test
+    fun `收听时长按小时累加，超出保留期的桶会丢掉`() {
+        val mediaId = "aliyun:ay=d/f"
+        store.addListenTime(mediaId, 1_000, 0L)
+        val recent = (400L * 24 + 5) * 3_600_000L
+        store.addListenTime(mediaId, 2_000, recent)
+        store.addListenTime(mediaId, 3_000, recent)
+        val buckets = store.listenBuckets()
+        assertEquals(1, buckets.size)
+        assertEquals(recent / 3_600_000L, buckets.single().hourEpoch)
+        assertEquals(5_000, buckets.single().ms)
     }
 
     @Test

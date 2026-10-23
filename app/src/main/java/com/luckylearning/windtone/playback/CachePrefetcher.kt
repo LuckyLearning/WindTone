@@ -14,8 +14,10 @@ import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.CacheKeyFactory
 import androidx.media3.exoplayer.offline.Downloader
 import androidx.media3.exoplayer.offline.ProgressiveDownloader
+import com.luckylearning.windtone.data.aliyun.AliyunEndpoints
 import com.luckylearning.windtone.data.baidu.BaiduRules
 import com.luckylearning.windtone.data.model.Song
+import com.luckylearning.windtone.data.model.TrackFragment
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -169,13 +171,21 @@ object CachePrefetcher {
 
     private fun httpFactory(song: Song): DefaultHttpDataSource.Factory {
         val pan = BaiduRules.needsPanUserAgent(song.uri.host)
+        val aliyun = TrackFragment.parse(song.uri.fragment) != null
         val factory = DefaultHttpDataSource.Factory()
-            .setUserAgent(if (pan) "pan.baidu.com" else USER_AGENT)
+            .setUserAgent(
+                when {
+                    pan -> "pan.baidu.com"
+                    aliyun -> AliyunEndpoints.DOWNLOAD_UA
+                    else -> USER_AGENT
+                },
+            )
             .setConnectTimeoutMs(15_000)
             .setReadTimeoutMs(20_000)
             // 网盘 / 电台经常 302 到别的节点甚至别的协议，不放开会直接失败
             .setAllowCrossProtocolRedirects(true)
         if (pan) factory.setDefaultRequestProperties(BaiduRules.panHeaders())
+        if (aliyun) factory.setDefaultRequestProperties(AliyunEndpoints.downloadHeaders())
         return factory
     }
 }

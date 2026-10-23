@@ -33,6 +33,7 @@ import com.luckylearning.windtone.data.aliyun.AliyunDrive
 import com.luckylearning.windtone.data.aliyun.AliyunEndpoints
 import com.luckylearning.windtone.data.aliyun.AliyunEntry
 import com.luckylearning.windtone.data.aliyun.AliyunExchange
+import com.luckylearning.windtone.data.aliyun.AliyunPlaybackWindow
 import com.luckylearning.windtone.data.aliyun.AliyunProbe
 import com.luckylearning.windtone.data.aliyun.AliyunRules
 import com.luckylearning.windtone.data.aliyun.AliyunSavedPlaylists
@@ -40,7 +41,6 @@ import com.luckylearning.windtone.data.aliyun.AliyunScanRules
 import com.luckylearning.windtone.data.aliyun.AliyunTrackStore
 import com.luckylearning.windtone.data.formatByteSize
 import com.luckylearning.windtone.data.model.Song
-import com.luckylearning.windtone.data.model.TrackFragment
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -350,43 +350,48 @@ internal fun AliyunPanPage(
 
     val audioEntries = entries.filter { it.isPlayableAudio }
 
+    /** 整表进队列，只给窗口里的歌取直链。当前这首失败就改播窗口里后面那首。 */
+    fun openQueue(songs: List<Song>, start: Int) {
+        if (songs.isEmpty()) return
+        loading = true
+        error = null
+        progress = "正在准备附近几首的播放地址…"
+        scope.launch {
+            val filled = drive.fillWindow(songs, start)
+            val playAt = AliyunPlaybackWindow.firstReady(
+                filled.map { AliyunPlaybackWindow.isPending(it.uri.scheme) },
+                start,
+            )
+            progress = ""
+            loading = false
+            if (playAt == null) {
+                error = "没有取到可播放的地址（文件可能已被删除、移入回收站或被屏蔽）"
+            } else {
+                onPlay(filled, playAt)
+            }
+        }
+    }
+
     /**
-     * 播放：队列始终是「本目录全部音频」，[startId] 指定从哪一首开始（null = 第一首）。
-     *
-     * 直链没有批量接口，按队列顺序逐个现取；没取到地址的条目直接跳过，
-     * 起始位置按 fileId 反查（不能按 audioEntries 下标，那会在有失败时播错歌）。
+     * 播放：队列是本目录全部音频，直链只取当前曲附近的一个窗口。
+     * [startId] 指定从哪一首开始（null = 第一首）。
      */
     fun playFrom(startId: String?) {
         if (audioEntries.isEmpty()) return
         if (driveId.isBlank()) {
-            // 空的 drive_id 发出去只会收到 BadRequest，白耗一次请求还误导排障
             error = "还没读到账号信息（盘 id 为空），等上面的账号信息加载完再播放"
             return
         }
-        loading = true
-        error = null
-        scope.launch {
-            val songs = mutableListOf<Song>()
-            audioEntries.forEachIndexed { index, entry ->
-                progress = "正在取播放地址（${index + 1}/${audioEntries.size}）…"
-                drive.downloadUrl(driveId, entry.fileId)
-                    .onSuccess { url ->
-                        val folder = dirNames.lastOrNull()?.takeIf { it.isNotBlank() }
-                        tracks.remember(driveId, entry.fileId, entry.name, folder, stack.last())
-                        songs += drive.toSong(entry, url, driveId, folder, tracks.get(driveId, entry.fileId))
-                    }
-            }
-            progress = ""
-            loading = false
-            if (songs.isEmpty()) {
-                error = "没有取到可播放的地址（文件可能已被删除、移入回收站或被屏蔽）"
-            } else {
-                val idx = startId
-                    ?.let { id -> songs.indexOfFirst { TrackFragment.parse(it.uri.fragment)?.second == id } }
-                    ?.takeIf { it >= 0 } ?: 0
-                onPlay(songs, idx)
-            }
+        val folder = dirNames.lastOrNull()?.takeIf { it.isNotBlank() }
+        val parent = stack.last()
+        val songs = audioEntries.map { entry ->
+            tracks.remember(driveId, entry.fileId, entry.name, folder, parent)
+            drive.pendingSong(entry, driveId, folder, tracks.get(driveId, entry.fileId))
         }
+        val start = startId
+            ?.let { id -> audioEntries.indexOfFirst { it.fileId == id } }
+            ?.takeIf { it >= 0 } ?: 0
+        openQueue(songs, start)
     }
 
     if (audioEntries.isNotEmpty()) {
@@ -543,33 +548,17 @@ internal fun AliyunPanPage(
                 TextButton(
                     enabled = !loading && !scanning,
                     onClick = {
-                        loading = true
-                        error = null
-                        scope.launch {
-                            val songs = mutableListOf<Song>()
-                            p.files.forEachIndexed { index, hit ->
-                                progress = "正在取播放地址（${index + 1}/${p.files.size}）…"
-                                drive.downloadUrl(p.driveId, hit.fileId)
-                                    .onSuccess { url ->
-                                        val folder = hit.parentPath.substringAfterLast('/').ifBlank { hit.parentPath }
-                                        tracks.remember(p.driveId, hit.fileId, hit.name, folder, hit.parentFileId)
-                                        songs += drive.toSong(
-                                            AliyunEntry(hit.fileId, hit.name, isDir = false, sizeBytes = 0L),
-                                            url,
-                                            p.driveId,
-                                            folder,
-                                            tracks.get(p.driveId, hit.fileId),
-                                        )
-                                    }
-                            }
-                            progress = ""
-                            loading = false
-                            if (songs.isEmpty()) {
-                                error = "没有取到可播放的地址（文件可能已被删除或被屏蔽）"
-                            } else {
-                                onPlay(songs, 0)
-                            }
+                        val songs = p.files.map { hit ->
+                            val folder = hit.parentPath.substringAfterLast('/').ifBlank { hit.parentPath }
+                            tracks.remember(p.driveId, hit.fileId, hit.name, folder, hit.parentFileId)
+                            drive.pendingSong(
+                                AliyunEntry(hit.fileId, hit.name, isDir = false, sizeBytes = 0L),
+                                p.driveId,
+                                folder,
+                                tracks.get(p.driveId, hit.fileId),
+                            )
                         }
+                        openQueue(songs, 0)
                     },
                 ) { Text("播放") }
                 TextButton(onClick = {

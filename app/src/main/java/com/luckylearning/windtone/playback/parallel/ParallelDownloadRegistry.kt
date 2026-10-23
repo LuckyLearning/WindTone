@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import androidx.media3.datasource.DataSpec
+import com.luckylearning.windtone.data.aliyun.AliyunEndpoints
 import com.luckylearning.windtone.data.baidu.BaiduRules
 import com.luckylearning.windtone.data.model.TrackFragment
 import com.luckylearning.windtone.playback.CachePrefetcher
@@ -90,6 +91,7 @@ object ParallelDownloadRegistry {
     fun obtain(context: Context, dataSpec: DataSpec): ParallelDownload? {
         val key = currentKey ?: return null
         if (dataSpec.uri.fragment?.startsWith(TrackFragment.PREFIX) == true) return null
+        if (AliyunEndpoints.isDownloadHost(dataSpec.uri.host)) return null
         if (keyOf(dataSpec.uri) != key) return null
 
         synchronized(lock) {

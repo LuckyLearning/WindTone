@@ -274,6 +274,7 @@ fun SettingsScreen(
 
     // 当前处于哪一层：主页面 / 音乐库 / 更新 / 关于与诊断
     var page by remember { mutableStateOf(SettingsPage.ROOT) }
+    var showOnlineReport by remember { mutableStateOf(false) }
     val menuContext = LocalContext.current
     val menuStore = remember { SettingsMenuStore(menuContext) }
     var menuOrder by remember { mutableStateOf(menuStore.load()) }
@@ -351,6 +352,7 @@ fun SettingsScreen(
     }
 
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize()) {
         Column(
             Modifier
                 .fillMaxSize()
@@ -520,6 +522,7 @@ fun SettingsScreen(
                     SettingsPage.ONLINE_HUB -> SettingsOnlinePage(
                         onOpenAliyun = { page = SettingsPage.ALIYUN },
                         onOpenPlaylists = { page = SettingsPage.ONLINE },
+                        onOpenReport = { showOnlineReport = true },
                     )
 
                     SettingsPage.MENU_ORDER -> SettingsMenuOrderPage(
@@ -579,6 +582,13 @@ fun SettingsScreen(
                 }
                 Spacer(Modifier.height(28.dp))
             }
+        }
+        if (showOnlineReport) {
+            OnlineListeningReport(
+                onClose = { showOnlineReport = false },
+                onPlay = onPlayQueue,
+            )
+        }
         }
     }
 }

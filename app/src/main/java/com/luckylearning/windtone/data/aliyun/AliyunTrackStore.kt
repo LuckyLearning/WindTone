@@ -1,6 +1,8 @@
 package com.luckylearning.windtone.data.aliyun
 
 import android.content.Context
+import com.luckylearning.windtone.data.HOUR_MS
+import com.luckylearning.windtone.data.ListenBucket
 import com.luckylearning.windtone.data.model.TrackFragment
 import org.json.JSONArray
 import org.json.JSONObject
@@ -59,6 +61,24 @@ class AliyunTrackStore(context: Context) {
 
     fun mostPlayed(): List<AliyunTrackRecord> =
         all().values.filter { it.playCount > 0 }.sortedByDescending { it.playCount }.take(100)
+
+    fun records(): List<AliyunTrackRecord> = all().values.toList()
+
+    /** 在线收听的小时桶。和本地 `listen_log` 分开存，报告算法共用。 */
+    fun listenBuckets(): List<ListenBucket> {
+        val raw = sp.getString(HOURS, null) ?: return emptyList()
+        return runCatching {
+            val arr = JSONArray(raw)
+            buildList {
+                for (i in 0 until arr.length()) {
+                    val row = arr.optJSONObject(i) ?: continue
+                    val ms = row.optLong("ms")
+                    if (ms <= 0L) continue
+                    add(ListenBucket(row.optLong("h"), ms))
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
 
     /** 第一次见到这首歌时记下文件名和文件夹。已有记录只补空着的目录信息。 */
     fun remember(
@@ -137,6 +157,7 @@ class AliyunTrackStore(context: Context) {
         val parsed = parseMediaId(mediaId) ?: return
         val existing = get(parsed.first, parsed.second) ?: AliyunTrackRecord(parsed.first, parsed.second)
         put(existing.copy(playedMs = existing.playedMs + ms, lastPlayedAt = now))
+        addBucket(now / HOUR_MS, ms)
     }
 
     fun saveQueue(snapshot: AliyunQueueSnapshot?) {
@@ -256,8 +277,22 @@ class AliyunTrackStore(context: Context) {
 
     private fun key(driveId: String, fileId: String) = "$driveId/$fileId"
 
+    private fun addBucket(hour: Long, ms: Long) {
+        val kept = listenBuckets().associate { it.hourEpoch to it.ms }.toMutableMap()
+        kept[hour] = (kept[hour] ?: 0L) + ms
+        val cutoff = hour - RETENTION_DAYS * 24L
+        val arr = JSONArray()
+        kept.forEach { (h, value) ->
+            if (h >= cutoff && value > 0L) arr.put(JSONObject().put("h", h).put("ms", value))
+        }
+        sp.edit().putString(HOURS, arr.toString()).apply()
+    }
+
     private companion object {
         const val TRACKS = "tracks"
         const val QUEUE = "queue"
+        const val HOURS = "listen_hours"
+        /** 与本地收听报告同一保留期，避免在线小时桶无限涨 */
+        const val RETENTION_DAYS = 400
     }
 }

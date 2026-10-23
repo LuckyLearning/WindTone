@@ -14,6 +14,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.core.app.ApplicationProvider
 import com.luckylearning.windtone.data.DownloadRoute
+import com.luckylearning.windtone.playback.OnlineMediaCache
 import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.overlay.ForegroundAppLog
 import com.luckylearning.windtone.overlay.LyricOverlayBus
@@ -506,6 +507,32 @@ class SettingsScreenTest {
         compose.onNodeWithText("扫码授权").performScrollTo().assertIsDisplayed()
         // 手动粘贴仍是兜底入口
         compose.onNodeWithText("手动粘贴令牌").assertIsDisplayed()
+    }
+
+    @Test
+    fun onlinePagePicksCacheInDialogAndOpensReport() {
+        render()
+        compose.onNodeWithText("在线播放").performScrollTo().performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText("缓存上限").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("128MB").performClick()
+        compose.waitForIdle()
+        compose.onAllNodesWithText("2GB").assertCountEquals(0)
+        compose.onNodeWithText("128MB").assertIsDisplayed()
+
+        compose.onNodeWithText("收听报告").performScrollTo().performClick()
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("每日收听时长").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("每日收听时长").assertIsDisplayed()
+        compose.onNodeWithText("最常播放").performScrollTo().assertIsDisplayed()
+
+        OnlineMediaCache.setLimitBytes(
+            ApplicationProvider.getApplicationContext(),
+            OnlineMediaCache.MAX_BYTES,
+        )
     }
 
     /**

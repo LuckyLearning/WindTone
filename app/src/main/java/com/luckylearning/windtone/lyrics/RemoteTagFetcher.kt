@@ -1,7 +1,9 @@
 package com.luckylearning.windtone.lyrics
 
 import android.net.Uri
+import com.luckylearning.windtone.data.aliyun.AliyunEndpoints
 import com.luckylearning.windtone.data.baidu.BaiduRules
+import com.luckylearning.windtone.data.model.TrackFragment
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
@@ -53,12 +55,18 @@ internal object RemoteTagFetcher {
 
     private fun fetch(uri: Uri, limit: Int, token: String?): ByteArray? {
         val pan = BaiduRules.needsPanUserAgent(uri.host)
-        val url = if (pan) BaiduRules.withAccessToken(uri.toString(), token) else uri.toString()
+        val aliyun = TrackFragment.parse(uri.fragment) != null
+        val url = when {
+            pan -> BaiduRules.withAccessToken(uri.toString(), token)
+            aliyun -> uri.buildUpon().fragment(null).build().toString()
+            else -> uri.toString()
+        }
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = CONNECT_TIMEOUT_MS
             readTimeout = READ_TIMEOUT_MS
             setRequestProperty("Range", "bytes=0-${limit - 1}")
             if (pan) BaiduRules.panHeaders().forEach { (k, v) -> setRequestProperty(k, v) }
+            if (aliyun) AliyunEndpoints.downloadHeaders().forEach { (k, v) -> setRequestProperty(k, v) }
         }
         try {
             if (conn.responseCode !in 200..299) return null

@@ -31,6 +31,17 @@ class AliyunAuthTest {
     }
 
     @Test
+    fun `直链下载要伪装成网页，否则数据节点会掐连接`() {
+        val headers = AliyunEndpoints.downloadHeaders()
+        assertEquals("https://www.aliyundrive.com/", headers["Referer"])
+        assertTrue(headers.getValue("User-Agent").contains("Mozilla"))
+        assertTrue(AliyunEndpoints.isDownloadHost("cn-beijing.aliyundrive.net"))
+        assertTrue(AliyunEndpoints.isDownloadHost("cdn.alicloudccp.com"))
+        assertFalse(AliyunEndpoints.isDownloadHost("d.pcs.baidu.com"))
+        assertFalse(AliyunEndpoints.isDownloadHost(null))
+    }
+
+    @Test
     fun `端点常量指向改名后的正式域名`() {
         // 阿里云盘已改名，正式域名是 alipan.com；aliyundrive.com 是旧域名
         assertTrue(AliyunEndpoints.API_BASE.startsWith("https://openapi.alipan.com/"))

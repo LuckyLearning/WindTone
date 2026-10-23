@@ -28,6 +28,8 @@ object AliyunProbe {
         val host: String,
         /** 文件总大小（服务端给了 Content-Range 时才有） */
         val totalBytes: Long = 0L,
+        /** 连不上时的异常说明，方便从截图里分辨超时、证书和连接被掐 */
+        val detail: String = "",
     ) {
         /** 能正常下载（200 / 206 且真的读到了数据） */
         val ok: Boolean get() = (httpCode == 200 || httpCode == 206) && bytes > 0
@@ -36,7 +38,8 @@ object AliyunProbe {
         fun summary(): String = when {
             ok -> "直链可下载：HTTP $httpCode，收到 $bytes 字节，用时 ${elapsedMs}ms" +
                 if (totalBytes > 0) "，文件 ${totalBytes / 1024 / 1024}MB" else ""
-            httpCode == 0 -> "连不上直链服务器（$host），用时 ${elapsedMs}ms —— 网络或 DNS 问题"
+            httpCode == 0 -> "连不上直链服务器（$host），用时 ${elapsedMs}ms" +
+                if (detail.isBlank()) " —— 网络或 DNS 问题" else "：$detail"
             httpCode == 403 -> "HTTP 403：直链没有权限（令牌或签名问题）"
             httpCode == 404 -> "HTTP 404：文件已不在原位置"
             httpCode == 416 -> "HTTP 416：Range 请求被拒（文件可能被替换过）"
@@ -60,7 +63,7 @@ object AliyunProbe {
                 readTimeout = timeoutMs
                 requestMethod = "GET"
                 setRequestProperty("Range", "bytes=0-1023")
-                setRequestProperty("User-Agent", AliyunEndpoints.UA)
+                AliyunEndpoints.downloadHeaders().forEach { (k, v) -> setRequestProperty(k, v) }
             }
             val code = conn.responseCode
             val bytes = runCatching {
@@ -81,6 +84,7 @@ object AliyunProbe {
                 bytes = 0,
                 elapsedMs = System.currentTimeMillis() - started,
                 host = host,
+                detail = (e.message ?: e.javaClass.simpleName).take(160),
             )
         } finally {
             runCatching { conn?.disconnect() }

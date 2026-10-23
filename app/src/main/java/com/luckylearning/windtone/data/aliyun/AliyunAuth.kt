@@ -489,6 +489,30 @@ object AliyunEndpoints {
     fun enc(s: String): String = URLEncoder.encode(s, "UTF-8")
 
     const val UA = "WindTone/1.1 (Android; aliyundrive)"
+
+    /**
+     * 下载直链时要伪装成网页播放器。
+     *
+     * 数据节点不认应用自己的 UA：连接会被直接掐掉，自检只能看到「连不上直链服务器」，
+     * 播放器则报「网络连接失败」。Referer 用旧版网页域名，现网 CDN 仍按这个值放行。
+     */
+    const val DOWNLOAD_REFERER = "https://www.aliyundrive.com/"
+
+    const val DOWNLOAD_UA =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+    fun downloadHeaders(): Map<String, String> = mapOf(
+        "User-Agent" to DOWNLOAD_UA,
+        "Referer" to DOWNLOAD_REFERER,
+    )
+
+    /** 直链 CDN 的域名。播放器有时会先摘掉 `#ay=`，这时只能靠主机名认出该走下载头。 */
+    fun isDownloadHost(host: String?): Boolean {
+        val h = host?.lowercase() ?: return false
+        fun on(domain: String) = h == domain || h.endsWith(".$domain")
+        return on("aliyundrive.net") || on("aliyundrive.com") || on("alipan.com") ||
+            on("aliyuncs.com") || on("alicloudccp.com")
+    }
 }
 
 /** HTTP 小工具：零依赖，与工程其他网络层同一风格 */

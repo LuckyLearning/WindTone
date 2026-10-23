@@ -39,7 +39,7 @@
   <div class="sec-hd"><h2>四、设置页</h2><span>SettingsScreen.kt —— 主页面只放二级分类入口卡（六类）+ 各分类子页（顺序与代码一致）</span></div>
   <div class="board">
 <figure class="fig" id="scr-settings-1">
-  <div class="cap"><b>㉙ 设置页 · 主页面（二级分类）</b><em>SettingsScreen.kt · 六张分类入口卡：外观 / 播放 / 歌词 / 音乐库 / 更新 / 关于与诊断</em></div>
+  <div class="cap"><b>㉙ 设置页 · 主页面（二级分类）</b><em>SettingsScreen.kt · 分类入口卡：外观 / 播放 / 歌词 / 音乐库 / 在线播放 / 更新 / 关于与诊断</em></div>
   <div class="phone">
     <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
     <div class="app">
@@ -61,6 +61,9 @@
           <div class="cat-main"><div class="cat-t">音乐库</div><div class="cat-s">格式与容量 · 过滤 &lt; 60 秒</div></div>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
         <div class="cat-row"><span class="cat-ic"><svg class="ic"><use href="#i-cloud"/></svg></span>
+          <div class="cat-main"><div class="cat-t">在线播放</div><div class="cat-s">阿里云盘 · 在线歌单 · 缓存 512MB</div></div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
+        <div class="cat-row"><span class="cat-ic"><svg class="ic"><use href="#i-cloud"/></svg></span>
           <div class="cat-main"><div class="cat-t">更新</div><div class="cat-s">检查更新 · 自动检查 · 下载线路</div></div>
           <span style="font-size:11px;color:var(--primary)">v1.0.6</span>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
@@ -72,7 +75,7 @@
   </div>
   <p class="note"><b>分层原则（v1.1.3 二次重构）</b>：主页面<b>只放二级分类入口卡</b>，一张卡一个分类——左侧<b>语义图标</b>（40dp 圆角 12 容器、secondaryContainer 底）+ 分类名 + 一行摘要 + 右箭头，<b>摘要把子页里最重要的状态前置</b>（「格式与容量 · 过滤 &lt; 60 秒」「v1.0.6」「速度 1.00x」），不进子页就能看到大概。<br>
   &nbsp;&nbsp;v1.0.7 曾把主页压到「外观 / 播放 / 歌词三组平铺 + 三个子页入口」（约 1.3 屏）；但悬浮歌词五个外观选项加入后，「歌词」一组独占两屏，主页又开始长回去——本次把 <b>外观 / 播放 / 歌词</b> 三组也各自下沉成子页，主页回到<b>一屏六张卡</b>，任何设置最多两层直达。<br>
-  &nbsp;&nbsp;六个分类的归属：①<b>外观</b>——主题跟随封面取色、车载模式；②<b>播放</b>——默认播放速度、变调、<b>打开应用继续上次播放</b>、跳过静音、均衡器与音效；③<b>歌词</b>——歌词字号、桌面悬浮歌词及其外观选项；④<b>音乐库</b>——短音频过滤（一次性配置）；⑤<b>更新</b>——检查更新 / 自动检查 / 下载线路；⑥<b>关于与诊断</b>——播放统计、数据与存储、版本与隐私（<b>崩溃日志在「调试」分区里，默认不显示</b>，见 <a href="#scr-diagnostics-foreground-log">㉚F</a>）。<br>
+  &nbsp;&nbsp;分类归属：①<b>外观</b>——主题跟随封面取色、车载模式；②<b>播放</b>——默认播放速度、变调、<b>打开应用继续上次播放</b>、跳过静音、均衡器与音效；③<b>歌词</b>——歌词字号、桌面悬浮歌词及其外观选项；④<b>音乐库</b>——短音频过滤（一次性配置）；⑤<b>在线播放</b>——阿里云盘、在线歌单、缓存上限弹窗、在线收听报告（见 <a href="#scr-settings-online">㉚G</a>）；⑥<b>更新</b>——检查更新 / 自动检查 / 下载线路；⑦<b>关于与诊断</b>——播放统计、数据与存储、版本与隐私（<b>崩溃日志在「调试」分区里，默认不显示</b>，见 <a href="#scr-diagnostics-foreground-log">㉚F</a>）。<br>
   <b>设置页从底部滑入覆盖全屏</b>（不是新 Activity）；子页是同一个 <code>SettingsScreen</code> 内部的页面状态（<code>SettingsPage</code> 枚举），<b>不新建 Activity、不引入导航库</b>；子页里按系统返回键先回主页面，回主页后再按才关闭设置页。<br>
   <b>分类入口卡 = 图标 + 摘要 + 右箭头</b>：v1.0.7 起「全 App 不存在 chevron」的规范放宽为「只有 ActionRow 能带 chevron」；v1.1.3 起再放宽一档——<b>设置主页的二级分类入口卡（<code>CategoryRow</code>）也带 chevron 和左侧图标</b>（参考通用播放器设置主页的二级菜单结构），其余位置不变：<code>OptionRow</code>（弹层行）依旧左侧图标 + 选中 ✓、无箭头；子页内的 <code>ActionRow</code> 依旧左侧无图标、箭头只给「点开会进入另一个界面」的行（子页入口、打开弹层 / 弹窗的行），就地执行动作（「检查更新」）或就地展开（「查看日志」）的行不加。<br>
   <b>子页入口行与分类卡的区别</b>：子页里的 <code>ActionRow</code>（如「均衡器与音效」「过滤短音频」）是<b>某一类设置里的一条</b>，无图标；主页的 <code>CategoryRow</code> 是<b>一整类设置的门面</b>，带图标 + 摘要——两层信息密度不同，不会混淆。<br>
@@ -734,6 +737,82 @@
   <b>生效方式</b>：确定后立即写 Prefs 并触发一次重扫（扫描范围为「未选择」时不触发，界面给提示）；扫描结束后曲库立即反映过滤结果。<br>
   <b>过滤口径</b>：只剔除<b>时长已知且小于阈值</b>的曲目——时长未知（<code>durationMs == 0</code>）的不参与过滤，播过一次拿到真实时长后由下次扫描接管。<br>
   <b>入口文案三态</b>：正常值显示「过滤短音频（&lt; 60 秒）」；为 0 时显示「过滤短音频（未开启）」。</p>
+</figure>
+
+<figure class="fig" id="scr-settings-online">
+  <div class="cap"><b>㉚G 设置页 · 在线播放</b><em>SettingsOnlinePage.kt · 缓存上限弹窗 / 在线收听报告</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">在线播放</div></div>
+      </div>
+      <div class="list" style="padding:4px 18px 16px">
+        <div class="section-label" style="padding:0;margin:8px 0 4px">来源</div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px">
+          <div style="flex:1"><div style="font-size:15px">阿里云盘</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">扫码登录后播放云盘里的音乐。只读，收藏和统计与本地曲库分开</div></div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-top:8px">
+          <div style="flex:1"><div style="font-size:15px">在线歌单（M3U）</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">添加 m3u / m3u8 / pls 直链并播放</div></div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+        <div class="section-label" style="padding:0;margin:16px 0 4px">播放缓存</div>
+        <div style="font-size:15px;padding:2px 2px 0">已用 186.4 MB</div>
+        <div class="slider" style="margin:8px 0 8px"><span class="fill" style="width:36%"></span></div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px">
+          <div style="flex:1"><div style="font-size:15px">缓存上限</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">同一首再次播放时直接读已下载的部分。调小上限会立刻删掉最久没听的歌。</div></div>
+          <span style="font-size:12px;color:var(--primary);font-weight:700">512MB</span>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;margin-top:8px">
+          <div style="font-size:15px">清空缓存</div>
+          <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">清空后，听过的歌需要重新下载</div>
+        </div>
+        <div class="section-label" style="padding:0;margin:16px 0 4px">播放记录</div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px">
+          <div style="flex:1"><div style="font-size:15px">收听报告</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">阿里云盘歌曲的收听时长、时段和榜单。不计入本地收听报告</div></div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+      </div>
+      <div class="dim"></div>
+      <div class="dialog">
+        <div class="dlg-title">缓存上限</div>
+        <div style="font-size:11px;line-height:1.55;color:var(--on-surface-variant);margin-bottom:4px">调小上限会立刻删掉最久没听的歌。默认 512MB。</div>
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 2px">
+          <div style="flex:1"><div style="font-size:14.5px">128MB</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:2px">占用更少存储</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 2px">
+          <div style="flex:1"><div style="font-size:14.5px">256MB</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:2px">占用更少存储</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 2px">
+          <div style="flex:1"><div style="font-size:14.5px;color:var(--primary)">512MB</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:2px">默认</div></div>
+          <svg class="ic" style="color:var(--primary)"><use href="#i-check"/></svg>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 2px">
+          <div style="flex:1"><div style="font-size:14.5px">1GB</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:2px">占用更多存储</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 2px">
+          <div style="flex:1"><div style="font-size:14.5px">2GB</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:2px">占用更多存储</div></div>
+        </div>
+        <div class="dlg-actions"><button class="txtbtn">关闭</button></div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>缓存上限</b>点开弹窗单选，选中项标题用 primary 色并在右侧打 ✓。点任一项立即生效并关闭；「关闭」只是收起弹窗。默认 512MB，偏离默认时这一行出现 ↺。<br>
+  <b>用量</b>仍是没有圆点的进度条，写在「缓存上限」上面。清空缓存是就地动作，不加右箭头。<br>
+  <b>收听报告</b>在本页「播放记录」里。打开后的页面与曲库「收听报告」相同（近 7 天 / 近 30 天、每日时长、时段分布、最常播放、最长收听）。数据只来自阿里云盘自己的播放记录和小时桶，不读本地 <code>listen_log</code>，也不写进本地报告。<br>
+  阿里云盘、在线歌单不再出现在「音乐库」里。</p>
 </figure>
 
   </div>

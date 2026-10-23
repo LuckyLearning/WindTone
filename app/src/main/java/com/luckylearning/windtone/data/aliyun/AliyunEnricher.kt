@@ -71,6 +71,7 @@ object AliyunEnricher {
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 10_000
             readTimeout = 15_000
+            AliyunEndpoints.downloadHeaders().forEach { (k, v) -> setRequestProperty(k, v) }
         }
         return try {
             if (conn.responseCode !in 200..299) return null

@@ -2,6 +2,7 @@ package com.luckylearning.windtone.playback
 
 import android.content.Context
 import android.net.Uri
+import com.luckylearning.windtone.data.aliyun.AliyunEndpoints
 import com.luckylearning.windtone.data.baidu.BaiduRules
 import com.luckylearning.windtone.data.model.TrackFragment
 import androidx.media3.common.util.UnstableApi
@@ -172,38 +173,58 @@ object OnlineMediaCache {
     @androidx.annotation.OptIn(UnstableApi::class)
     fun mediaSourceFactory(context: Context): MediaSource.Factory {
         val cache = get(context)
+        val keys = object : CacheKeyFactory {
+            override fun buildCacheKey(dataSpec: DataSpec): String =
+                stableKey(dataSpec.uri) ?: dataSpec.key ?: dataSpec.uri.toString()
+        }
+        // 阿里直链必须用自己的工厂：共用工厂的 User-Agent 写在请求头之后，
+        // 会把 downloadHeaders 里的浏览器 UA 盖掉，数据节点照样掐连接。
+        val aliyunHttp = httpFactory(AliyunEndpoints.DOWNLOAD_UA, AliyunEndpoints.downloadHeaders())
         val dataSource: DataSource.Factory = if (cache == null) {
             // 缓存不可用时仍然要经过路由包装：百度直链需要改 UA，
             // 直接返回 DefaultDataSource 会让「没缓存」这种边缘状态连播放一起丢。
-            SchemeRoutingFactory(DefaultDataSource.Factory(context), DefaultDataSource.Factory(context))
+            SchemeRoutingFactory(
+                DefaultDataSource.Factory(context),
+                DefaultDataSource.Factory(context),
+                aliyunHttp,
+            )
         } else {
-            val http = DefaultHttpDataSource.Factory()
-                .setUserAgent(USER_AGENT)
-                .setConnectTimeoutMs(15_000)
-                .setReadTimeoutMs(20_000)
-                // 部分电台会 302 到另一个协议（http→https），不放开会直接失败
-                .setAllowCrossProtocolRedirects(true)
-            val cached = CacheDataSource.Factory()
-                .setCache(cache)
-                .setUpstreamDataSourceFactory(http)
-                // 网盘直链按 fileId 做键，避免「每次签名不同 → 永不命中」。
-                // **先看 fragment**：阿里的 uri 带着 `#wt=<fileId>` 且 key 是完整签名 URL
-                // （v1.1.58 之前这里先取 dataSpec.key，导致阿里歌的缓存键里含签名，
-                //  每次播放都换一把 → 缓存永远不命中、还白占配额）。
-                // 百度的请求在 SchemeRoutingDataSource 里已摘掉 fragment 并显式塞 key，
-                // 走 dataSpec.key 分支，语义不变。
-                .setCacheKeyFactory(object : CacheKeyFactory {
-                    override fun buildCacheKey(dataSpec: DataSpec): String =
-                        stableKey(dataSpec.uri) ?: dataSpec.key ?: dataSpec.uri.toString()
-                })
-                // 缓存写失败（磁盘满 / 权限）时退化成直连，不要因此中断播放
-                .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
-            SchemeRoutingFactory(cached, DefaultDataSource.Factory(context))
+            val http = httpFactory(USER_AGENT)
+            val cached = cacheFactory(cache, http, keys)
+            val aliyunCached = cacheFactory(cache, aliyunHttp, keys)
+            SchemeRoutingFactory(cached, DefaultDataSource.Factory(context), aliyunCached)
         }
         // 最外层再套一层并行分片路由（v1.1.47）：只有「当前正在播放的那一首」会被认领，
         // 其余请求原样落到上面这套缓存 / 单连接链路上
         return DefaultMediaSourceFactory(ParallelRoutingFactory(context.applicationContext, dataSource))
     }
+
+    private fun httpFactory(
+        userAgent: String,
+        headers: Map<String, String> = emptyMap(),
+    ): DefaultHttpDataSource.Factory {
+        val factory = DefaultHttpDataSource.Factory()
+            .setUserAgent(userAgent)
+            .setConnectTimeoutMs(15_000)
+            .setReadTimeoutMs(20_000)
+            // 部分电台会 302 到另一个协议（http→https），不放开会直接失败
+            .setAllowCrossProtocolRedirects(true)
+        if (headers.isNotEmpty()) factory.setDefaultRequestProperties(headers)
+        return factory
+    }
+
+    private fun cacheFactory(
+        cache: SimpleCache,
+        upstream: DataSource.Factory,
+        keys: CacheKeyFactory,
+    ): CacheDataSource.Factory = CacheDataSource.Factory()
+        .setCache(cache)
+        .setUpstreamDataSourceFactory(upstream)
+        // 网盘直链按 fileId 做键，避免「每次签名不同 → 永不命中」。
+        // 百度的请求在 SchemeRoutingDataSource 里已摘掉 fragment 并显式塞 key。
+        .setCacheKeyFactory(keys)
+        // 缓存写失败（磁盘满 / 权限）时退化成直连，不要因此中断播放
+        .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
 
     /**
      * 后台预取要用同一个 `SimpleCache` 实例（v1.1.46）。
@@ -253,15 +274,17 @@ object OnlineMediaCache {
 private class SchemeRoutingFactory(
     private val remote: DataSource.Factory,
     private val local: DataSource.Factory,
+    private val aliyun: DataSource.Factory,
 ) : DataSource.Factory {
 
-    override fun createDataSource(): DataSource = SchemeRoutingDataSource(remote, local)
+    override fun createDataSource(): DataSource = SchemeRoutingDataSource(remote, local, aliyun)
 }
 
 @UnstableApi
 private class SchemeRoutingDataSource(
     private val remote: DataSource.Factory,
     private val local: DataSource.Factory,
+    private val aliyun: DataSource.Factory,
 ) : DataSource {
 
     private val listeners = mutableListOf<TransferListener>()
@@ -276,11 +299,22 @@ private class SchemeRoutingDataSource(
         // （见 panCacheKey），所以**能缓存的就缓存**；只有拿不到 fsId 的网盘请求才跳过，
         // 否则会白占 512MB 淘汰配额。UA / token 注入不受影响，仍在下面统一处理。
         val pan = BaiduRules.needsPanUserAgent(dataSpec.uri.host)
+        val frag = dataSpec.uri.fragment
+        // 占位地址是 aliyun-pending://，也带着 #ay=。它还没有直链，不能送进 HTTP 工厂，
+        // 否则会空等连接超时，表现为又一次「网络连接失败」。
+        val aliyun = OnlineMediaCache.shouldCache(dataSpec.uri) && (
+            (frag != null && frag.startsWith(TrackFragment.PREFIX)) ||
+                AliyunEndpoints.isDownloadHost(dataSpec.uri.host)
+            )
         // fragment 只用于「算缓存键」，不能留在真实请求里（见下面的 withAccessToken 注释）
         val panKey = if (pan) OnlineMediaCache.panCacheKey(dataSpec.uri) else null
         val cacheable = OnlineMediaCache.shouldCache(dataSpec.uri) &&
             (!pan || panKey != null)
-        val factory = if (cacheable) remote else local
+        val factory = when {
+            aliyun -> this.aliyun
+            cacheable -> remote
+            else -> local
+        }
         val source = factory.createDataSource()
         listeners.forEach(source::addTransferListener)
         delegate = source
@@ -297,17 +331,15 @@ private class SchemeRoutingDataSource(
                 .setKey(panKey ?: dataSpec.key)
                 .setHttpRequestHeaders(BaiduRules.panHeaders())
                 .build()
-        } else {
-            val frag = dataSpec.uri.fragment
-            val stripped = if (frag != null && frag.startsWith(TrackFragment.PREFIX)) {
-                dataSpec.buildUpon()
-                    .setUri(dataSpec.uri.buildUpon().fragment(null).build())
-                    .setKey(TrackFragment.cacheKey(frag))
-                    .build()
-            } else {
-                dataSpec
+        } else if (aliyun) {
+            val built = dataSpec.buildUpon()
+                .setUri(dataSpec.uri.buildUpon().fragment(null).build())
+            if (frag != null && frag.startsWith(TrackFragment.PREFIX)) {
+                built.setKey(TrackFragment.cacheKey(frag))
             }
-            stripped
+            built.build()
+        } else {
+            dataSpec
         }
         return source.open(effective)
     }

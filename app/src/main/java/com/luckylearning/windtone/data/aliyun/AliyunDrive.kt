@@ -6,8 +6,10 @@ import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.data.model.SongSource
 import com.luckylearning.windtone.data.model.TrackFragment
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.coroutineContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -396,6 +398,67 @@ class AliyunDrive(
             displayName = entry.name,
             source = SongSource.REMOTE,
         )
+    }
+
+    /** 先占一个位置进队列，直链等这首歌滑进窗口再取。 */
+    fun pendingSong(record: AliyunTrackRecord): Song {
+        val name = record.fileName.ifBlank {
+            if (record.title.isBlank()) "未命名.mp3" else "${record.title}.mp3"
+        }
+        return pendingSong(
+            AliyunEntry(record.fileId, name, false, 0L),
+            record.driveId,
+            record.folderName.takeIf { it.isNotBlank() },
+            record,
+        )
+    }
+
+    fun pendingSong(
+        entry: AliyunEntry,
+        driveId: String,
+        folderName: String? = null,
+        saved: AliyunTrackRecord? = null,
+    ): Song = toSong(
+        entry,
+        "${AliyunPlaybackWindow.PENDING_SCHEME}://track",
+        driveId,
+        folderName,
+        saved,
+    )
+
+    /**
+     * 只给窗口里还没有直链的歌取地址。窗口外的歌保持原样。
+     * 已经是 http(s) 的不重复取。某一首失败就留在占位，调用方可以改播窗口里下一首。
+     */
+    suspend fun fillWindow(songs: List<Song>, current: Int): List<Song> {
+        if (songs.isEmpty()) return songs
+        val index = current.coerceIn(0, songs.lastIndex)
+        val span = AliyunPlaybackWindow.range(index, songs.size)
+        if (span.isEmpty()) return songs
+        val out = songs.toMutableList()
+        for (i in span) {
+            coroutineContext.ensureActive()
+            val song = out[i]
+            if (!AliyunPlaybackWindow.isPending(song.uri.scheme)) continue
+            val id = TrackFragment.parse(song.uri.fragment) ?: continue
+            val url = downloadUrl(id.first, id.second).getOrNull() ?: continue
+            val refreshed = toSong(
+                AliyunEntry(id.second, song.displayName.ifBlank { song.title }, false, song.sizeBytes),
+                url,
+                id.first,
+                song.album,
+                AliyunTrackRecord(
+                    driveId = id.first,
+                    fileId = id.second,
+                    title = song.title,
+                    artist = song.artist,
+                    album = song.album,
+                    durationMs = song.durationMs,
+                ),
+            )
+            out[i] = refreshed.copy(displayName = song.displayName.ifBlank { refreshed.displayName })
+        }
+        return out
     }
 
     private fun parseEntry(o: JSONObject): AliyunEntry? {
