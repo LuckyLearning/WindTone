@@ -116,12 +116,12 @@ class AliyunScanRulesTest {
     }
 
     @Test
-    fun fingerprintIsNonEmptyBase36AndVaries() {
-        val a = AliyunQrLogin.randomFingerprint()
-        val b = AliyunQrLogin.randomFingerprint()
-        assertTrue(a.isNotBlank())
-        assertTrue(a.all { it in "0123456789abcdefghijklmnopqrstuvwxyz" })
-        assertTrue("随机串不该两连相等（12 字节熵，撞车概率忽略）", a != b)
+    fun umidTokenIs32HexAndVaries() {
+        val a = AliyunQrLogin.randomUmidToken()
+        val b = AliyunQrLogin.randomUmidToken()
+        assertEquals(32, a.length)
+        assertTrue(a.all { it in "0123456789abcdef" })
+        assertTrue("随机串不该两连相等", a != b)
     }
 
     @Test

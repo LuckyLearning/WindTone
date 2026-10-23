@@ -71,6 +71,13 @@ class AliyunAuthSourceTest {
     }
 
     @Test
+    fun directGrantEndpointIsOfficialOldDomain() {
+        // 扫码登录（CS）的令牌刷新可以直连官方免凭据端点 —— OpenList 在线接口
+        // 背后就是转发它；直连成功就完全不经过第三方
+        assertEquals("https://openapi.aliyundrive.com/oauth/access_token", AliyunEndpoints.DIRECT_TOKEN_URL)
+    }
+
+    @Test
     fun sourceParsingFallsBackToOaForOldSaves() {
         // 1.1.56/57 的存档里没有 token_source 键 —— 按 OA 读，
         // 升级后第一次刷新会先试 OA、失败再试 CS，成功后自动把来源纠正为 CS

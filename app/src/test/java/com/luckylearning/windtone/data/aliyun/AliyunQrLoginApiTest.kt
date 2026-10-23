@@ -1,6 +1,9 @@
 package com.luckylearning.windtone.data.aliyun
 
+import android.util.Base64
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -8,115 +11,189 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * 扫码授权接口的**响应解析**与 URL 拼装（Robolectric：解析用到 org.json）。
+ * 阿里官方 passport 扫码接口的**响应解析**与 URL 拼装（Robolectric：解析用到
+ * org.json 与 android.util.Base64）。
  *
- * 接口形态与 OpenList-APIPages 前端 `qr.ts` 对齐（2026-10 核对源码）：
- *  · `GET /alicloud2/generate_qr` → `{success, session_id, qr_code_url, expires_in, error}`
- *  · `GET /alicloud2/check_login?session_id=…` → `{success, status, error}`
- *  · `GET /alicloud2/get_user_info?session_id=…` → `{success, user_info:{nick_name}, access_token, refresh_token, error}`
+ * 接口形态与 OpenList `alicloud_cs` 驱动逐字对齐（2026-10 核对源码 + curl 实测）：
+ *  · `GET /newlogin/qrcode/generate.do?…`
+ *     → `{hasError:false, content:{success:true, data:{codeContent, ck, t, resultCode}}}`
+ *  · `POST /newlogin/qrcode/query.do`（表单 ck/t）
+ *     → `{content:{success:true, data:{qrCodeStatus, bizExt}}}`；
+ *     CONFIRMED 时 bizExt（Base64 JSON）的 `pds_login_result` 里有双令牌。
  *
- * 状态机的字符串→枚举映射、终态判定、指纹生成在纯 JVM 的 [AliyunScanRulesTest]；
- * 这里管 JSON 解析与错误分流。
+ * 状态字符串映射、终态判定、umidToken 生成的纯函数用例在 [AliyunScanRulesTest]；
+ * 这里管 JSON 解析、错误分流与 bizExt 解码。
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class AliyunQrLoginApiTest {
 
+    // ---------------------------------------------------------------- generate.do
+
     @Test
-    fun parseGenerateExtractsSessionAndQrContent() {
+    fun parseGenerateExtractsQrContentAndPollingCredentials() {
         val session = AliyunQrLogin.parseGenerate(
-            org.json.JSONObject(
-                """{"success":true,"session_id":"sid-1",""" +
-                    """"qr_code_url":"https://passport.alipan.com/qr?x=1","expires_in":120}""",
+            JSONObject(
+                """{"hasError":false,"content":{"success":true,"data":{""" +
+                    """"codeContent":"https://passport.aliyundrive.com/qrcodeCheck.htm?lgToken=abc",""" +
+                    """"ck":"ck-123","t":1792745743543,"resultCode":200,"processFinished":false}}}""",
             ),
         )
-        assertEquals("sid-1", session.sessionId)
-        assertEquals("https://passport.alipan.com/qr?x=1", session.qrContent)
-        assertEquals(120L, session.expiresInSec)
+        assertEquals("https://passport.aliyundrive.com/qrcodeCheck.htm?lgToken=abc", session.qrContent)
+        assertEquals("ck-123", session.ck)
+        assertEquals("1792745743543", session.t) // t 是数字，也要原样带回表单
     }
 
     @Test
-    fun parseGenerateFailsWithServerMessage() {
-        try {
-            AliyunQrLogin.parseGenerate(org.json.JSONObject("""{"success":false,"error":"请求过于频繁"}"""))
-            throw AssertionError("success=false 应当抛异常")
-        } catch (e: AliyunQrLogin.QrLoginException) {
-            assertEquals("请求过于频繁", e.message)
-        }
-    }
-
-    @Test
-    fun parseGenerateRejectsIncompleteResponse() {
+    fun parseGenerateFailsOnHasError() {
         try {
             AliyunQrLogin.parseGenerate(
-                org.json.JSONObject("""{"success":true,"session_id":"sid-1"}"""), // 缺 qr_code_url
+                JSONObject("""{"hasError":true,"content":{"success":false,"error":"请求异常"}}"""),
             )
-            throw AssertionError("缺二维码内容应当抛异常")
+            throw AssertionError("hasError=true 应当抛异常")
         } catch (e: AliyunQrLogin.QrLoginException) {
-            assertTrue(e.message!!.contains("响应异常"))
+            assertEquals("阿里云盘：请求异常", e.message)
         }
     }
 
     @Test
-    fun parseResultExtractsTokensAndNickname() {
-        val result = AliyunQrLogin.parseResult(
-            org.json.JSONObject(
-                """{"success":true,"access_token":"at-1","refresh_token":"rt-1",""" +
-                    """"user_info":{"nick_name":"阿明","user_id":"u1"},"expires_in":7200}""",
+    fun parseGenerateRejectsMissingCodeContent() {
+        try {
+            AliyunQrLogin.parseGenerate(
+                JSONObject("""{"hasError":false,"content":{"success":true,"data":{"ck":"ck-1"}}}"""),
+            )
+            throw AssertionError("缺 codeContent 应当抛异常")
+        } catch (e: AliyunQrLogin.QrLoginException) {
+            assertTrue(e.message!!.contains("二维码内容"))
+        }
+    }
+
+    // ---------------------------------------------------------------- query.do
+
+    @Test
+    fun parseQueryMapsWaitingAndScaned() {
+        val waiting = AliyunQrLogin.parseQuery(
+            JSONObject(
+                """{"hasError":false,"content":{"success":true,""" +
+                    """"data":{"qrCodeStatus":"NEW","resultCode":100}}}""",
             ),
         )
-        assertEquals("at-1", result.accessToken)
-        assertEquals("rt-1", result.refreshToken)
-        assertEquals("阿明", result.nickname)
-        assertEquals(7200L, result.expiresInSec)
+        assertEquals(AliyunQrLogin.ScanStatus.WAITING, waiting.status)
+        assertNull(waiting.accessToken)
+
+        val scaned = AliyunQrLogin.parseQuery(
+            JSONObject(
+                """{"hasError":false,"content":{"success":true,""" +
+                    """"data":{"qrCodeStatus":"SCANED","resultCode":200}}}""",
+            ),
+        )
+        assertEquals(AliyunQrLogin.ScanStatus.SCANED, scaned.status)
     }
 
     @Test
-    fun parseResultRequiresBothTokens() {
-        // 缺 refresh_token：绝不能存半截登录态（refresh_token 是轮换的，丢了就没了）
+    fun parseQueryExtractsTokensFromBizExtOnConfirmed() {
+        // bizExt = base64({"pds_login_result":{"accessToken":..,"refreshToken":..,"expiresIn":..}})
+        val bizExt = Base64.encodeToString(
+            """{"pds_login_result":{"accessToken":"at-1","refreshToken":"rt-1","expiresIn":7200}}"""
+                .toByteArray(),
+            Base64.NO_WRAP,
+        )
+        val poll = AliyunQrLogin.parseQuery(
+            JSONObject(
+                """{"hasError":false,"content":{"success":true,"data":{""" +
+                    """"qrCodeStatus":"CONFIRMED","resultCode":300,"bizExt":"$bizExt"}}}""",
+            ),
+        )
+        assertEquals(AliyunQrLogin.ScanStatus.CONFIRMED, poll.status)
+        assertEquals("at-1", poll.accessToken)
+        assertEquals("rt-1", poll.refreshToken)
+        assertEquals(7200L, poll.expiresInSec)
+    }
+
+    @Test
+    fun parseQueryFailsWhenConfirmedWithoutTokens() {
+        // 确认成功却取不出令牌：绝不能当「登录完成」存半截状态 —— 必须报错让人重新扫
         try {
-            AliyunQrLogin.parseResult(
-                org.json.JSONObject("""{"success":true,"access_token":"at-1"}"""),
+            AliyunQrLogin.parseQuery(
+                JSONObject(
+                    """{"hasError":false,"content":{"success":true,""" +
+                        """"data":{"qrCodeStatus":"CONFIRMED"}}}""",
+                ),
             )
-            throw AssertionError("缺 refresh_token 应当抛异常")
+            throw AssertionError("CONFIRMED 但没有 bizExt 应当抛异常")
         } catch (e: AliyunQrLogin.QrLoginException) {
-            assertTrue(e.message!!.contains("手动粘贴"))
+            assertTrue(e.message!!.contains("重新扫码"))
         }
     }
 
     @Test
-    fun parseResultFailsWithServerMessage() {
-        try {
-            AliyunQrLogin.parseResult(
-                org.json.JSONObject("""{"success":false,"error":"会话不存在"}"""),
-            )
-            throw AssertionError("success=false 应当抛异常")
-        } catch (e: AliyunQrLogin.QrLoginException) {
-            assertEquals("会话不存在", e.message)
-        }
+    fun parseQueryToleratesExpiredStatus() {
+        val poll = AliyunQrLogin.parseQuery(
+            JSONObject(
+                """{"hasError":false,"content":{"success":true,""" +
+                    """"data":{"qrCodeStatus":"EXPIRED","resultCode":0}}}""",
+            ),
+        )
+        assertEquals(AliyunQrLogin.ScanStatus.EXPIRED, poll.status)
+        assertNull(poll.accessToken)
+    }
+
+    // ---------------------------------------------------------------- bizExt 解码
+
+    @Test
+    fun decodeBizExtHandlesPaddedAndWhitespaceInput() {
+        val json = """{"pds_login_result":{"accessToken":"a","refreshToken":"r"}}"""
+        val padded = Base64.encodeToString(json.toByteArray(), Base64.NO_WRAP)
+        assertEquals("a", AliyunQrLogin.decodeBizExtTokens(padded)!!.first)
+        assertEquals("r", AliyunQrLogin.decodeBizExtTokens(padded)!!.second)
+        // DEFAULT 会自动处理换行
+        assertEquals("a", AliyunQrLogin.decodeBizExtTokens(padded + "\n")!!.first)
     }
 
     @Test
-    fun urlsCarrySessionIdAndSelectedBase() {
-        assertEquals(
-            "https://api.oplist.org.cn/alicloud2/generate_qr",
-            AliyunQrLogin.generateUrl("https://api.oplist.org.cn"),
-        )
-        assertEquals(
-            "https://api.oplist.org.cn/alicloud2/check_login?session_id=sid%2F1",
-            // sessionId 里有特殊字符也要被正确转义
-            AliyunQrLogin.checkUrl("https://api.oplist.org.cn", "sid/1"),
-        )
-        assertEquals(
-            "https://api.oplist.org.cn/alicloud2/get_user_info?session_id=sid-2",
-            AliyunQrLogin.userInfoUrl("https://api.oplist.org.cn", "sid-2"),
-        )
+    fun decodeBizExtReturnsNullOnGarbageOrMissingTokens() {
+        assertNull(AliyunQrLogin.decodeBizExtTokens(""))
+        assertNull(AliyunQrLogin.decodeBizExtTokens("not-base64!!!"))
+        val noTokens = Base64.encodeToString("""{"pds_login_result":{}}""".toByteArray(), Base64.NO_WRAP)
+        assertNull(AliyunQrLogin.decodeBizExtTokens(noTokens))
+        val noLogin = Base64.encodeToString("""{"foo":1}""".toByteArray(), Base64.NO_WRAP)
+        assertNull(AliyunQrLogin.decodeBizExtTokens(noLogin))
     }
 
     @Test
-    fun mainlandSiteIsTriedFirst() {
-        // 国内移动网络下 .cn（EdgeOne）0.6s，.org（Cloudflare）6s+ 甚至连不上
-        assertEquals("https://api.oplist.org.cn", AliyunQrLogin.BASES.first())
-        assertEquals(2, AliyunQrLogin.BASES.size)
+    fun parsePdsLoginDefaultsExpiryToTwoHours() {
+        val t = AliyunQrLogin.parsePdsLogin(
+            """{"pds_login_result":{"accessToken":"a","refreshToken":"r"}}""",
+        )!!
+        assertEquals(7_200L, t.third)
+    }
+
+    // ---------------------------------------------------------------- URL 拼装
+
+    @Test
+    fun generateUrlCarriesFixedParamsAndEscapesBizParams() {
+        val url = AliyunQrLogin.generateUrl("umid-1")
+        assertTrue(url.startsWith("https://passport.alipan.com/newlogin/qrcode/generate.do?"))
+        assertTrue(url.contains("appName=aliyun_drive"))
+        assertTrue(url.contains("fromSite=52"))
+        assertTrue(url.contains("umidToken=umid-1"))
+        // bizParams 里的 & 与 = 必须被转义，否则会被当成独立的查询参数
+        assertTrue(url.contains("bizParams=taobaoBizLoginFrom%3Dweb_default%26renderRefer%3Dhttps%3A%2F%2Fauth.alipan.com%2F"))
+        assertTrue(url.contains("umidTag=SERVER"))
+    }
+
+    @Test
+    fun queryUrlIsPassportQueryEndpoint() {
+        assertEquals("https://passport.alipan.com/newlogin/qrcode/query.do", AliyunQrLogin.queryUrl())
+    }
+
+    @Test
+    fun passportRequestsCarryBrowserFormHeaders() {
+        val h = AliyunQrLogin.passportHeaders()
+        assertEquals("https://passport.alipan.com/", h["Referer"])
+        assertEquals("https://passport.alipan.com", h["Origin"])
+        assertEquals("XMLHttpRequest", h["X-Requested-With"])
+        // passport 按浏览器形态放行，UA 不能是 app 自己的
+        assertTrue(AliyunQrLogin.PASSPORT_UA.startsWith("Mozilla/5.0"))
     }
 }

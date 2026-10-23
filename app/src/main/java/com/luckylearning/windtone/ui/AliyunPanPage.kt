@@ -47,8 +47,8 @@ import kotlinx.coroutines.launch
  *
  * 授权**在应用内完成**（[AliyunQrLoginDialog]）：点「扫码授权」弹出二维码，用阿里云盘
  * App 扫码确认后自动拿到 refresh_token 存进 [AliyunAuth]，全程不跳浏览器、不复制粘贴。
- * 复刻的是 OpenList-APIPages（api.oplist.org）网页工具的同一套接口（详见 [AliyunQrLogin]）；
- * 手动粘贴 refresh_token 保留为兜底入口（网页工具改版时仍走得通）。
+ * 走的是阿里官方 passport 接口（详见 [AliyunQrLogin]）；
+ * 手动粘贴 refresh_token 保留为兜底入口（OpenList 网页工具改版时仍走得通）。
  * 这条路不要求应用注册回调地址、也不要求车机有浏览器（手机上授权完，车机登录态可用）。
  *
  * 与百度网盘页的差异都来自开放平台本身：

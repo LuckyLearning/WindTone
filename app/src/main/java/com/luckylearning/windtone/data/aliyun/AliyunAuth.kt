@@ -242,7 +242,20 @@ class AliyunAuth(context: Context) {
             }
         }
 
-        // 路径二 / 三：OpenList 两条刷新线（先来源、再兜底）
+        // 路径二：官方免凭据刷新端点（仅扫码登录线）。
+        // 扫码登录的令牌属于阿里内置应用，刷新不需要 client 凭据；OpenList 在线接口
+        // 背后就是转发这一个请求。直连成功就完全不经过第三方；失败自动落到兜底链。
+        if (preferred == AliyunTokenSource.CS) {
+            when (val direct = refreshViaDirectGrant(refreshToken)) {
+                is AliyunExchange.Ready -> {
+                    save(direct.token, AliyunTokenSource.CS)
+                    return direct
+                }
+                is AliyunExchange.Failed -> failures += "直连令牌端点：${direct.reason}"
+            }
+        }
+
+        // 路径三 / 四：OpenList 两条刷新线（先来源、再兜底）
         val order = listOf(preferred, if (preferred == AliyunTokenSource.OA) AliyunTokenSource.CS else AliyunTokenSource.OA)
         for (source in order) {
             for (base in AliyunEndpoints.BASES) {
@@ -282,7 +295,24 @@ class AliyunAuth(context: Context) {
         }
     }
 
-    /** 路径二 / 三：OpenList 在线接口（按令牌来源选端点、按站点选域名） */
+    /** 路径二：官方免凭据刷新端点（openapi.aliyundrive.com，仅扫码登录线用） */
+    private fun refreshViaDirectGrant(refreshToken: String): AliyunExchange {
+        val body = JSONObject().apply {
+            put("grant_type", "refresh_token")
+            put("refresh_token", refreshToken)
+        }
+        val json = runCatching {
+            AliyunHttp.postJson(AliyunEndpoints.DIRECT_TOKEN_URL, body, AliyunEndpoints.UA)
+        }.getOrElse { return AliyunExchange.Failed(it.message ?: "网络请求失败（官方令牌端点）") }
+        val token = parseToken(json, fallbackRefresh = refreshToken)
+        return if (token != null) {
+            AliyunExchange.Ready(token)
+        } else {
+            AliyunExchange.Failed(AliyunErrors.hint(json).ifBlank { "官方令牌端点没有返回令牌" })
+        }
+    }
+
+    /** 路径三 / 四：OpenList 在线接口（按令牌来源选端点、按站点选域名） */
     private fun refreshViaOpenList(
         refreshToken: String,
         source: AliyunTokenSource,
@@ -374,6 +404,16 @@ object AliyunEndpoints {
      */
     val TOKEN_TOOL_URL: String get() = BASES.first()
 
+    /**
+     * 官方**免凭据**刷新端点（旧域名）。
+     *
+     * 扫码登录（CS）的令牌属于阿里内置应用，刷新不需要 client 凭据 ——
+     * OpenList 在线接口背后就是转发这一个请求（`alicloud_cs.ts` 的 genToken：
+     * `grant_type=refresh_token` + refresh_token，无凭据）。直连它成功就完全不经过
+     * 第三方；失败再落到 OpenList 兜底链。
+     */
+    const val DIRECT_TOKEN_URL = "https://openapi.aliyundrive.com/oauth/access_token"
+
     /** 刷新令牌的官方地址 */
     fun tokenUrl(): String = TOKEN_URL
 
@@ -408,16 +448,37 @@ object AliyunEndpoints {
     const val UA = "WindTone/1.1 (Android; aliyundrive)"
 }
 
-/** HTTP 小工具：两种方法、零依赖，与工程其他网络层同一风格 */
+/** HTTP 小工具：零依赖，与工程其他网络层同一风格 */
 internal object AliyunHttp {
 
     fun postJson(url: String, body: JSONObject, ua: String): JSONObject =
-        read(url, ua, method = "POST", body = body)
+        read(url, ua, method = "POST", body = body.toString(), contentType = "application/json; charset=utf-8")
 
     fun getJson(url: String, ua: String): JSONObject =
-        read(url, ua, method = "GET", body = null)
+        read(url, ua, method = "GET", body = null, contentType = null)
 
-    /** 带额外请求头的 GET（扫码授权需要 `X-Client-Fingerprint`，见 AliyunQrLogin） */
+    /** 带额外请求头 + 自定义体的请求（passport 扫码接口要求浏览器形态的头，见 AliyunQrLogin） */
+    fun request(
+        url: String,
+        ua: String,
+        method: String,
+        body: String?,
+        contentType: String?,
+        extraHeaders: Map<String, String> = emptyMap(),
+        connectTimeoutMs: Int = 12_000,
+        readTimeoutMs: Int = 20_000,
+    ): JSONObject = read(
+        url,
+        ua,
+        method = method,
+        body = body,
+        contentType = contentType,
+        extraHeaders = extraHeaders,
+        connectTimeoutMs = connectTimeoutMs,
+        readTimeoutMs = readTimeoutMs,
+    )
+
+    /** 带额外请求头的 GET */
     fun getJson(
         url: String,
         ua: String,
@@ -429,6 +490,28 @@ internal object AliyunHttp {
         ua,
         method = "GET",
         body = null,
+        contentType = null,
+        extraHeaders = extraHeaders,
+        connectTimeoutMs = connectTimeoutMs,
+        readTimeoutMs = readTimeoutMs,
+    )
+
+    /** 表单 POST（`application/x-www-form-urlencoded`，passport query.do 用它） */
+    fun postForm(
+        url: String,
+        form: Map<String, String>,
+        ua: String,
+        extraHeaders: Map<String, String> = emptyMap(),
+        connectTimeoutMs: Int = 12_000,
+        readTimeoutMs: Int = 20_000,
+    ): JSONObject = read(
+        url,
+        ua,
+        method = "POST",
+        body = form.entries.joinToString("&") { (k, v) ->
+            AliyunEndpoints.enc(k) + "=" + AliyunEndpoints.enc(v)
+        },
+        contentType = "application/x-www-form-urlencoded; charset=UTF-8",
         extraHeaders = extraHeaders,
         connectTimeoutMs = connectTimeoutMs,
         readTimeoutMs = readTimeoutMs,
@@ -438,7 +521,8 @@ internal object AliyunHttp {
         url: String,
         ua: String,
         method: String,
-        body: JSONObject?,
+        body: String?,
+        contentType: String?,
         extraHeaders: Map<String, String> = emptyMap(),
         connectTimeoutMs: Int = 12_000,
         readTimeoutMs: Int = 20_000,
@@ -451,18 +535,23 @@ internal object AliyunHttp {
             extraHeaders.forEach { (k, v) -> setRequestProperty(k, v) }
             if (body != null) {
                 doOutput = true
-                setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                if (contentType != null) setRequestProperty("Content-Type", contentType)
             }
         }
         try {
             if (body != null) {
-                conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+                conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
             }
             val code = conn.responseCode
             val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
                 ?.bufferedReader()?.use { it.readText() }.orEmpty()
             if (text.isBlank()) throw IOException("空响应（HTTP $code）")
-            return JSONObject(text)
+            // 阿里 passport 出错时偶尔回 HTML 错误页，JSON 解析失败的报错要可读
+            return try {
+                JSONObject(text)
+            } catch (e: Exception) {
+                throw IOException("响应不是 JSON（HTTP $code）")
+            }
         } finally {
             runCatching { conn.disconnect() }
         }
