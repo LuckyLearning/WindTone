@@ -99,6 +99,14 @@ object ParallelDownloadRegistry {
             if (key in unsupported) return null
         }
 
+        // 本地 SimpleCache 已有可播前缀时，不要再开并行分片：并行层绕过缓存，
+        // 弱网一抖就会把「其实本地有货」报成播放失败 / 网络错误。
+        val cacheKey = OnlineMediaCache.stableKey(dataSpec.uri) ?: key
+        if (OnlineMediaCache.hasCachedPrefix(context, cacheKey)) {
+            _status.value = "已有本地缓存，走单连接"
+            return null
+        }
+
         val pan = BaiduRules.needsPanUserAgent(dataSpec.uri.host)
         val headers = if (pan) BaiduRules.panHeaders() else emptyMap()
         val userAgent = if (pan) "pan.baidu.com" else "WindTone/1.1 (Android; parallel)"

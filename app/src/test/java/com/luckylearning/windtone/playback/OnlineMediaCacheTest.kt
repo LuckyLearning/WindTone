@@ -48,4 +48,11 @@ class OnlineMediaCacheTest {
         )
         assertTrue(OnlineMediaCache.LIMIT_STEPS.contains(OnlineMediaCache.MAX_BYTES))
     }
+
+    @Test
+    fun `可播前缀阈值至少 256KB 且不超过 8MB`() {
+        // 太小起不到「避开并行分片」的作用；太大等于几乎要求整首下完才让路
+        assertTrue(OnlineMediaCache.DEFAULT_CACHED_PREFIX_BYTES >= 256L * 1024)
+        assertTrue(OnlineMediaCache.DEFAULT_CACHED_PREFIX_BYTES <= 8L * 1024 * 1024)
+    }
 }

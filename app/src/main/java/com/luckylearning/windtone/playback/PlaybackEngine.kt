@@ -525,27 +525,13 @@ class PlaybackEngine(
     }
 
     /**
-     * 把 [androidx.media3.common.PlaybackException] 翻成一句能截图反馈的话（v1.1.45）。
+     * 把 [androidx.media3.common.PlaybackException] 翻成一句能截图反馈的话。
      *
-     * 只报 `errorCodeName` 对用户没意义（如 `ERROR_CODE_IO_BAD_HTTP_STATUS`）；真正有用的是
-     * HTTP 状态码 —— 403 意味着直链没带 token 或已过期，404 是文件被移走，416 是缓存片段坏了。
-     * 这类问题在车机上没有任何日志可看，所以必须让它出现在提示条里。
+     * 规则在 [PlaybackErrorMessages]：HTTP 状态码优先；并行分片 / 缓存 / 本地 IO
+     * 不再一律写成「网络连接失败」（歌词旁路成功、音频失败时尤其容易误导）。
      */
-    private fun describePlaybackError(error: androidx.media3.common.PlaybackException): String {
-        val bad = generateSequence<Throwable>(error) { it.cause }
-            .filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>()
-            .firstOrNull()
-        val network = bad ?: generateSequence<Throwable>(error) { it.cause }
-            .filterIsInstance<androidx.media3.datasource.HttpDataSource.HttpDataSourceException>()
-            .firstOrNull()
-        return when (val code = bad?.responseCode ?: 0) {
-            401, 403 -> "HTTP $code，直链没有权限或已过期"
-            404 -> "HTTP 404，文件已不在原位置"
-            416 -> "HTTP 416，缓存片段不完整"
-            0 -> if (network != null) "网络连接失败" else error.errorCodeName
-            else -> "HTTP $code"
-        }
-    }
+    private fun describePlaybackError(error: androidx.media3.common.PlaybackException): String =
+        PlaybackErrorMessages.describe(error)
 
     // ================================================================ 播放统计
 

@@ -45,6 +45,9 @@ object OnlineMediaCache {
     /** 默认上限。设置里可以改成 [LIMIT_STEPS] 里的其它档。 */
     const val MAX_BYTES = 512L * 1024 * 1024
 
+    /** 认为「本地已有可播前缀」的最小连续缓存（512KB） */
+    const val DEFAULT_CACHED_PREFIX_BYTES: Long = 512L * 1024
+
     val LIMIT_STEPS: List<Long> = listOf(128, 256, 512, 1024, 2048).map { it * 1024L * 1024L }
 
     private const val LIMIT_PREFS = "online_media_prefs"
@@ -234,6 +237,21 @@ object OnlineMediaCache {
      */
     @androidx.annotation.OptIn(UnstableApi::class)
     internal fun cacheForPrefetch(context: Context): SimpleCache? = get(context)
+
+    /**
+     * 该缓存键从文件头起已经连续落盘了至少 [minBytes] 字节。
+     *
+     * 并行分片会**绕过** SimpleCache 另起炉灶；若这里已经有可播的前缀，应让位给
+     * CacheDataSource，否则弱网下一抖就会「歌词都出来了、播放却报网络错误」。
+     */
+    @androidx.annotation.OptIn(UnstableApi::class)
+    fun hasCachedPrefix(context: Context, key: String, minBytes: Long = DEFAULT_CACHED_PREFIX_BYTES): Boolean {
+        if (key.isBlank() || minBytes <= 0L) return false
+        val cache = get(context) ?: return false
+        // 正数 = 从 position 起连续已缓存的长度；负数 = 空洞长度
+        val cached = runCatching { cache.getCachedLength(key, 0L, Long.MAX_VALUE) }.getOrDefault(0L)
+        return cached >= minBytes
+    }
 
     /** 当前缓存占用（字节）；拿不到实例返回 0 */
     @androidx.annotation.OptIn(UnstableApi::class)

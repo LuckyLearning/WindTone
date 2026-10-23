@@ -111,7 +111,7 @@ class ParallelDownload(
      * 从 [position] 读最多 [length] 字节。
      *
      * 该偏移的数据还没落盘时会等待（最长 [WAIT_TIMEOUT_MS]）；下载失败或取消同样抛
-     * IOException —— 让播放器按「网络错误」处理，而不是拿到一片零字节。
+     * IOException —— 让播放器中止读取（由 PlaybackErrorMessages 翻成人话），而不是拿到一片零字节。
      */
     fun readAt(position: Long, buffer: ByteArray, offset: Int, length: Int): Int {
         if (position >= totalBytes) return -1
