@@ -20,6 +20,16 @@ object AliyunPlaybackWindow {
     fun isPending(scheme: String?): Boolean = scheme == PENDING_SCHEME
 
     /**
+     * 占位地址（`aliyun-pending://track#ay=盘/文件`）。
+     *
+     * 播放器不会拿它去下载（引擎在窗口补链后换真直链）；fragment 里带着曲目身份，
+     * 补链与缓存键都从这里算（见 [com.luckylearning.windtone.data.model.TrackFragment]）。
+     * 需要与 `AliyunDrive.pendingSong` 保持同一形态。
+     */
+    fun pendingUri(fragment: String): android.net.Uri =
+        android.net.Uri.parse("$PENDING_SCHEME://track").buildUpon().fragment(fragment).build()
+
+    /**
      * 以 [current] 为中心、夹在队列里的下标区间。
      * 队列为空或下标越界时返回空区间。
      */

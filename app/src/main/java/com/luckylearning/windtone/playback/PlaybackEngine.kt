@@ -598,6 +598,9 @@ class PlaybackEngine(
         if (pending.isEmpty()) return false
         val start = snapshot.index.coerceIn(0, pending.lastIndex)
         val songs = drive.fillWindow(pending, start)
+        // 预填好的直链记进备忘录：setMediaItems 过 resolve 时直接取用，不再重取
+        songs.filter { !AliyunPlaybackWindow.isPending(it.uri.scheme) }
+            .forEach { CloudUrlMemo.remember(it.stableKey, it.uri.toString()) }
         val index = AliyunPlaybackWindow.firstReady(
             songs.map { AliyunPlaybackWindow.isPending(it.uri.scheme) },
             start,
@@ -647,7 +650,9 @@ class PlaybackEngine(
                 if (c2.playWhenReady) c2.play()
             }
         }
-        val ready = filled.filter { !AliyunPlaybackWindow.isPending(it.uri.scheme) }.associateBy { it.stableKey }
+        val ready = filled.filter { !AliyunPlaybackWindow.isPending(it.uri.scheme) }
+            .associateBy { it.stableKey }
+        ready.forEach { (key, song) -> CloudUrlMemo.remember(key, song.uri.toString()) }
         currentQueue = currentQueue.map { ready[it.stableKey] ?: it }
     }
 
@@ -668,6 +673,7 @@ class PlaybackEngine(
             saved?.folderName,
             saved,
         )
+        CloudUrlMemo.remember(refreshed.stableKey, refreshed.uri.toString())
         val c = controller ?: return
         val at = (0 until c.mediaItemCount).firstOrNull { c.getMediaItemAt(it).mediaId == song.stableKey } ?: return
         val position = c.currentPosition.coerceAtLeast(0L)

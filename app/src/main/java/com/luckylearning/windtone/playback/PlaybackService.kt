@@ -24,6 +24,8 @@ import com.luckylearning.windtone.MainActivity
 import com.luckylearning.windtone.MusicApp
 import com.luckylearning.windtone.data.CrashLog
 import com.luckylearning.windtone.data.Prefs
+import com.luckylearning.windtone.data.aliyun.AliyunAuth
+import com.luckylearning.windtone.data.aliyun.AliyunDrive
 import com.luckylearning.windtone.widget.MusicWidgetProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -69,7 +71,19 @@ class PlaybackService : MediaLibraryService() {
      */
     private val browseScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val browser by lazy { LibraryBrowser(LibraryBrowseStore((application as MusicApp).container.db)) }
+    /**
+     * 云盘曲目（稳定键 mediaId）跨 Binder 回来时，起播那一项现取真直链用。
+     * 其余项回占位地址，由引擎的滑动窗口补链（见 LibraryBrowser.resolveOne）。
+     */
+    private val cloudUrlResolver: suspend (driveId: String, fileId: String) -> String? =
+    { driveId, fileId -> AliyunDrive(AliyunAuth(applicationContext)).downloadUrl(driveId, fileId).getOrNull() }
+
+    private val browser by lazy {
+        LibraryBrowser(
+            LibraryBrowseStore((application as MusicApp).container.db),
+            cloudUrlResolver,
+        )
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -195,8 +209,10 @@ class PlaybackService : MediaLibraryService() {
          *
          * 这里必须自己补 URI：`MediaItem` 跨 Binder 只保留 `mediaId` 与 metadata，
          * `LocalConfiguration`（真正的 `content://` / `file://`）会被丢掉。
-         * 歌曲节点的 `mediaId` 本来就是音频 URI（见 [com.luckylearning.windtone.data.model.Song.stableKey]），
-         * 所以「补回来」只是把 mediaId 再当 uri 写一次；分类节点则展开成它下面的歌曲。
+         * 本地歌曲节点的 `mediaId` 本来就是音频 URI（见 [com.luckylearning.windtone.data.model.Song.stableKey]），
+         * 所以「补回来」只是把 mediaId 再当 uri 写一次；分类节点则展开成它下面的歌曲；
+         * **云盘曲目**的 mediaId 是稳定键（`aliyun:ay=…`），不能当 URI 写 —— 由
+         * [LibraryBrowser.resolveOne] 重建占位 / 备忘录 / 现取的播放地址。
          */
         override fun onAddMediaItems(
             session: MediaSession,
@@ -211,7 +227,7 @@ class PlaybackService : MediaLibraryService() {
             startIndex: Int,
             startPositionMs: Long,
         ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> = browseValue { b ->
-            val resolved = b.resolve(mediaItems)
+            val resolved = b.resolve(mediaItems, startIndex)
             // 「点了一个歌单」会把 1 项展开成 N 项，原来的 startIndex / 起播位置随之失效
             val expanded = resolved.size != mediaItems.size
             MediaSession.MediaItemsWithStartPosition(

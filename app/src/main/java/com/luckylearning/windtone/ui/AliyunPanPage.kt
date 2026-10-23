@@ -38,6 +38,7 @@ import com.luckylearning.windtone.data.aliyun.AliyunProbe
 import com.luckylearning.windtone.data.aliyun.AliyunRules
 import com.luckylearning.windtone.data.aliyun.AliyunSavedPlaylists
 import com.luckylearning.windtone.data.aliyun.AliyunScanRules
+import com.luckylearning.windtone.playback.CloudUrlMemo
 import com.luckylearning.windtone.data.aliyun.AliyunTrackStore
 import com.luckylearning.windtone.data.formatByteSize
 import com.luckylearning.windtone.data.model.Song
@@ -358,6 +359,10 @@ internal fun AliyunPanPage(
         progress = "正在准备附近几首的播放地址…"
         scope.launch {
             val filled = drive.fillWindow(songs, start)
+            // 预填好的直链记进备忘录：onPlay 的 setMediaItems 过 resolve 时直接取用，
+            // 起播那一首不再二次现取
+            filled.filter { !AliyunPlaybackWindow.isPending(it.uri.scheme) }
+                .forEach { CloudUrlMemo.remember(it.stableKey, it.uri.toString()) }
             val playAt = AliyunPlaybackWindow.firstReady(
                 filled.map { AliyunPlaybackWindow.isPending(it.uri.scheme) },
                 start,

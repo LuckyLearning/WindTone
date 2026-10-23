@@ -1,9 +1,12 @@
 package com.luckylearning.windtone.playback
 
+import android.net.Uri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import com.luckylearning.windtone.data.aliyun.AliyunPlaybackWindow
 import com.luckylearning.windtone.data.db.toSong
 import com.luckylearning.windtone.data.model.Song
+import com.luckylearning.windtone.data.model.TrackFragment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -122,7 +125,15 @@ internal fun browseSongItem(song: Song): MediaItem {
  *
  * 只做查询，不做权限判断：能连上本服务的浏览器要么是系统车机面板，要么是本应用自己。
  */
-internal class LibraryBrowser(private val store: LibraryBrowseStore) {
+internal class LibraryBrowser(
+    private val store: LibraryBrowseStore,
+    /**
+     * 云盘曲目（mediaId 是稳定键 `aliyun:ay=盘/文件`）的取直链回调。
+     * 由 [com.luckylearning.windtone.playback.PlaybackService] 注入；
+     * null（纯测试构造）时云盘曲目一律回占位地址，由播放引擎的窗口补链。
+     */
+    private val cloudUrlResolver: (suspend (driveId: String, fileId: String) -> String?)? = null,
+) {
 
     /**
      * 某个节点的子节点。
@@ -194,18 +205,57 @@ internal class LibraryBrowser(private val store: LibraryBrowseStore) {
     /**
      * 把浏览器交回来的一组播放项变成真正能播的项。
      *
-     * 两种输入：
+     * 三种输入：
      *  - **分类节点**（`wt:` 前缀）→ 展开成它下面的歌曲；
+     *  - **云盘曲目**（稳定键 `aliyun:ay=…`）→ 重建云盘占位地址（见下）；
      *  - **歌曲节点** → 跨 Binder 时 `LocalConfiguration` 被丢掉，
      *    这里把 `mediaId` 重新写回 uri（歌曲节点的 mediaId 就是音频 URI）。
      *
      * 认不出 uri 形态的项**原样返回**，交给 Media3 去报错——
      * 这里不猜、也不伪造一个播放地址。
      */
-    suspend fun resolve(items: List<MediaItem>): List<MediaItem> = items.flatMap { item ->
+    suspend fun resolve(items: List<MediaItem>, startIndex: Int? = null): List<MediaItem> = items
+        .mapIndexed { index, item -> resolveOne(item, index == startIndex) }
+        .flatMap { it }
+
+    /**
+     * 单个播放项的解析。
+     *
+     * **云盘曲目为什么不能把 mediaId 写回 uri**（v1.1.71 的播放全挂就是这里）：
+     * 本地歌的 mediaId 本来就是 `file://` / `content://` URI，写回去天经地义；
+     * 云盘歌 1.1.69 起 mediaId 改成了稳定键 `aliyun:ay=盘/文件`——它的 scheme
+     * `aliyun` 恰好长得像个协议名，被 [looksLikeUri] 误判后直接塞给播放器，
+     * 一律 `MalformedURLException: unknown protocol: aliyun`。
+     *
+     * 正确做法：按键重建**云盘占位地址**（`aliyun-pending://track#ay=…`，
+     * 与 [com.luckylearning.windtone.data.aliyun.AliyunDrive.pendingSong] 同一形态），
+     * 直链交给播放引擎的滑动窗口补。唯一例外是本次要起播的那一项
+     * （[isStart]）：给它现取一条真直链，让「按下播放」不用先吃一次
+     * 占位错误再等窗口补链。
+     */
+    private suspend fun resolveOne(item: MediaItem, isStart: Boolean): List<MediaItem> {
         val mediaId = item.mediaId
-        when {
+        return when {
             BrowseIds.isLibraryId(mediaId) -> playableItemsUnder(mediaId)
+            TrackFragment.cacheKeyOfMediaId(mediaId) -> {
+                val id = TrackFragment.parse(mediaId.removePrefix(TrackFragment.PREFIX))
+                    ?: return listOf(item)
+                val (driveId, fileId) = id
+                val fragment = TrackFragment.of(driveId, fileId)
+                // 优先用引擎刚取到的直链（窗口补链 / 401 重试后 replaceMediaItem 会
+                // 再过一次 resolve，不查备忘录的话地址会被剥掉、补链白做）
+                val memo = CloudUrlMemo.peek(mediaId)
+                val url = memo
+                    ?: if (isStart) cloudUrlResolver?.invoke(driveId, fileId)?.also {
+                        CloudUrlMemo.remember(mediaId, Uri.parse(it).buildUpon().fragment(fragment).build().toString())
+                    } else null
+                val uri = if (url != null) {
+                    Uri.parse(url).buildUpon().fragment(fragment).build()
+                } else {
+                    AliyunPlaybackWindow.pendingUri(fragment)
+                }
+                listOf(item.buildUpon().setUri(uri).build())
+            }
             looksLikeUri(mediaId) -> listOf(item.buildUpon().setUri(mediaId).build())
             else -> listOf(item)
         }
