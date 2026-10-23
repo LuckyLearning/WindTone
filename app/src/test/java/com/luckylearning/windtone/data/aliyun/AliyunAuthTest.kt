@@ -16,7 +16,7 @@ class AliyunAuthTest {
 
     @Test
     fun `OpenList 在线接口的 URL 参数与源码一致`() {
-        val url = AliyunEndpoints.renewApiUrl("abc.def-123")
+        val url = AliyunEndpoints.renewApiUrl("abc.def-123", AliyunTokenSource.OA)
         assertTrue(url.startsWith("https://api.oplist.org/alicloud/renewapi?"))
         assertTrue("refresh_ui 是 OpenList 的入口参数名，不能改", url.contains("refresh_ui=abc.def-123"))
         assertTrue("server_use=true 表示由服务端代持密钥", url.contains("server_use=true"))
@@ -25,7 +25,7 @@ class AliyunAuthTest {
 
     @Test
     fun `special chars 会被 URL 编码`() {
-        val url = AliyunEndpoints.renewApiUrl("a+b/c=d")
+        val url = AliyunEndpoints.renewApiUrl("a+b/c=d", AliyunTokenSource.OA)
         assertFalse("原始 + 号必须编码，否则服务端会解成空格", url.contains("a+b"))
         assertTrue(url.contains("a%2Bb%2Fc%3Dd"))
     }

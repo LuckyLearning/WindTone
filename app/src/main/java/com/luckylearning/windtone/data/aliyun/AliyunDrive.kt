@@ -288,7 +288,13 @@ class AliyunDrive(
     private suspend fun api(url: String, body: JSONObject, retried: Boolean = false): JSONObject {
         val token = requireToken()
         val (code, text) = post(token, url, body)
-        if (code == 401) error("登录状态已失效，请重新登录")
+        // HTTP 401：access_token 被服务端判无效（过期判定偏差 / 多端登录被顶 / 令牌轮换后旧值）
+        // —— 这里必须也走一次刷新重试。以前直接报「登录状态已失效」，
+        // 让一次本可以自愈的 401 变成必须用户重新授权。
+        if (code == 401) {
+            if (!retried && forceRefresher()) return api(url, body, retried = true)
+            error("登录状态已失效，请重新扫码授权")
+        }
         if (text.isBlank()) error("阿里云盘返回空响应（HTTP $code）")
         val json = JSONObject(text)
         if (code !in 200..299) {

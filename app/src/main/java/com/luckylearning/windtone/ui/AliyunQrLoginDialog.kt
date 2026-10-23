@@ -92,13 +92,12 @@ internal fun AliyunQrLoginDialog(
                     s == ScanStatus.CONFIRMED -> {
                         saving = true
                         val result = AliyunQrLogin.fetchResult(sid, fingerprint)
-                        auth.save(
-                            com.luckylearning.windtone.data.aliyun.AliyunToken(
-                                accessToken = result.accessToken,
-                                refreshToken = result.refreshToken,
-                                expiresAt = System.currentTimeMillis() +
-                                    result.expiresInSec.coerceAtLeast(600L) * 1000L,
-                            ),
+                        // 来源固定为 CS（网页版扫码登录）—— 刷新端点必须与之匹配，
+                        // 混用会「能用 2 小时后永久失效」（见 AliyunTokenSource 注释）
+                        auth.saveFromQrLogin(
+                            accessToken = result.accessToken,
+                            refreshToken = result.refreshToken,
+                            expiresInSec = result.expiresInSec,
                         )
                         onLoggedIn()
                         return@LaunchedEffect
