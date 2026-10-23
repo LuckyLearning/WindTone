@@ -481,6 +481,32 @@ class SettingsScreenTest {
     // ================================================================ v1.1.17 曲库格式与容量
 
     /**
+     * 「音乐库 → 阿里云盘」能进子页，且**不崩**。
+     *
+     * 这是 v1.1.56 真机崩溃的最小复现：`pagePositions` 是按下标存各页滚动位置的，
+     * ALIYUN 是枚举里 ordinal 最大的那一项，只要表比枚举短一格就必崩在这：
+     *
+     * ```
+     * java.lang.IndexOutOfBoundsException: index: 10, size: 9
+     *   at SettingsScreenKt.SettingsScreen(SettingsScreen.kt)
+     * ```
+     *
+     * 长度契约另由 [SettingsPagePositionsTest] 直接断言，这条负责走完从点卡到渲染的真实路径。
+     */
+    @Test
+    fun aliyunPageOpensWithoutCrash() {
+        render()
+
+        compose.onNodeWithText("音乐库").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("阿里云盘").performScrollTo().performClick()
+        compose.waitForIdle()
+
+        // 未登录时这一页的第一行引导，出现即说明页面真的渲染出来了
+        compose.onNodeWithText("打开获取令牌页面").performScrollTo().assertIsDisplayed()
+    }
+
+    /**
      * 「音乐库」子页里有「格式与容量」入口，点它能把请求交出去。
      *
      * 与上一条同理：统计页本身是个全屏子页，入口行丢了**不会编译失败也不会报错**，

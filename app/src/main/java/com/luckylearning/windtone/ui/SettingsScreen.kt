@@ -53,7 +53,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.listSaver
@@ -125,9 +124,22 @@ internal enum class SettingsPage(val title: String) {
  * 存成 `List<Int>` 而不是 `ScrollState`：一个 Int 不受任何对象生命周期影响，
  * 这是这套机制能成立的全部原因（细节见 `SettingsScreen` 里 `pagePositions` 的注释）。
  */
+/** [SettingsScreen] 里 `pagePositions` 的初始值：长度必须等于 [SettingsPage] 的项数。 */
+internal fun initialPagePositions(): MutableList<Int> =
+    MutableList(SettingsPage.entries.size) { 0 }
+
+/**
+ * 把存档里读回来的滚动位置补齐到当前枚举项数。
+ *
+ * 老版本存进来的列表是按当年的项数来的 —— 每新增一个子页，存档就比枚举短一格，
+ * 直接按 ordinal 索引必越界（v1.1.56 点「阿里云盘」就是这么崩的）。
+ */
+internal fun paddedPagePositions(saved: List<Int>): MutableList<Int> =
+    MutableList(SettingsPage.entries.size.coerceAtLeast(saved.size)) { saved.getOrElse(it) { 0 } }
+
 internal val PagePositionsSaver = listSaver<MutableList<Int>, Int>(
     save = { it.toList() },
-    restore = { it.toMutableStateList() },
+    restore = { paddedPagePositions(it).toMutableStateList() },
 )
 
 /**
@@ -311,17 +323,22 @@ fun SettingsScreen(
     // 这里改成显式快照：离开某页时把它的滚动位置记进这张表，回到该页时用记下的值建 state。
     // 存进 rememberSaveable 的是 Int，与 ScrollState 的生死完全无关，旋转屏幕也不丢。
     // 子页也是各记各的，所以「音乐库」上次滚到哪里，再进去还是那里。
-    // ⚠️ 长度必须等于 SettingsPage 的项数（现为 7），否则 index 越界；
-    // 以后加子页记得一起加一个 0。
+    // ⚠️ 长度必须等于 SettingsPage 的项数 —— 所以这里**按枚举项数生成**，
+    // 不要再手写一串 0（v1.1.56 之前手写 9 个 0、枚举涨到 11 项，
+    // 点「阿里云盘」时 `pagePositions[10]` 直接 IndexOutOfBounds 崩在设置页）。
     val pagePositions = rememberSaveable(saver = PagePositionsSaver) {
-        mutableStateListOf(0, 0, 0, 0, 0, 0, 0, 0, 0)
+        initialPagePositions().toMutableStateList()
     }
     val pageIndex = page.ordinal
-    val pageScroll = remember(pageIndex) { ScrollState(pagePositions[pageIndex]) }
+    val pageScroll = remember(pageIndex) { ScrollState(pagePositions.getOrElse(pageIndex) { 0 }) }
     DisposableEffect(pageIndex, pageScroll) {
         // 切换页面时旧 state 已被 verticalScroll 卸下，不会再被测量 / 夹取，
         // 此刻读到的一定是用户真正停下的位置。
-        onDispose { pagePositions[pageIndex] = pageScroll.value }
+        onDispose {
+            // 兜底：恢复自更老的存档 / 未来再加页面时，表可能比枚举短，先补齐再写。
+            while (pagePositions.size <= pageIndex) pagePositions.add(0)
+            pagePositions[pageIndex] = pageScroll.value
+        }
     }
 
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
