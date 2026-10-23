@@ -70,6 +70,59 @@ class AliyunAndroidTest {
     }
 
     @Test
+    fun `盘 id 在 user_get 根上，get_personal_info 没有也不报没有盘`() {
+        // 现行网页接口：/v2/user/get 带 default/resource/backup_drive_id，
+        // get_personal_info 往往只有容量。1.1.67 只解析后者，登录成功却报「没有任何 drive_id」。
+        val personal = JSONObject("""{"personal_space_info":{"used_size":1,"total_size":2}}""")
+        val user = JSONObject(
+            """{"nick_name":"张三","default_drive_id":"def-1","resource_drive_id":"res-1","backup_drive_id":"bak-1"}""",
+        )
+        val parsed = AliyunDrive.parseWebPersonalInfo(personal, user)
+        assertEquals("def-1", parsed.defaultDriveId)
+        assertEquals("res-1", parsed.resourceDriveId)
+        assertEquals("bak-1", parsed.backupDriveId)
+        assertEquals("def-1", parsed.preferredDriveId())
+        assertEquals("张三", parsed.nickname)
+    }
+
+    @Test
+    fun `user_get 只有 default_drive_id 也能进盘`() {
+        val user = JSONObject("""{"user_name":"李四","default_drive_id":"only-default"}""")
+        val parsed = AliyunDrive.parseWebPersonalInfo(JSONObject(), user)
+        assertEquals("only-default", parsed.preferredDriveId())
+        assertEquals("李四", parsed.nickname)
+    }
+
+    @Test
+    fun `JSON null 的 default_drive_id 不当成盘 id`() {
+        val user = JSONObject().apply {
+            put("default_drive_id", JSONObject.NULL)
+            put("resource_drive_id", "res-1")
+        }
+        val parsed = AliyunDrive.parseWebPersonalInfo(JSONObject(), user)
+        assertEquals("", parsed.defaultDriveId)
+        assertEquals("res-1", parsed.preferredDriveId())
+    }
+
+    @Test
+    fun `只有 drive_id 时把它当作默认盘`() {
+        val user = JSONObject("""{"drive_id":"plain-1"}""")
+        assertEquals("plain-1", AliyunDrive.parseWebPersonalInfo(JSONObject(), user).preferredDriveId())
+    }
+
+    @Test
+    fun `两份 user_get 合并时用有盘 id 的那份补空`() {
+        val nicknameOnly = JSONObject("""{"nick_name":"张三","default_drive_id":null}""")
+        val withDrive = JSONObject("""{"resource_drive_id":"res-9","backup_drive_id":"bak-9"}""")
+        val merged = AliyunDrive.mergeUserJson(nicknameOnly, withDrive)
+        val parsed = AliyunDrive.parseWebPersonalInfo(JSONObject(), merged)
+        assertEquals("张三", parsed.nickname)
+        assertEquals("res-9", parsed.resourceDriveId)
+        assertEquals("bak-9", parsed.backupDriveId)
+        assertEquals("res-9", parsed.preferredDriveId())
+    }
+
+    @Test
     fun `OpenList 在线接口的成功响应形态能解析出令牌`() {
         // 字段名与 OpenList 服务端一致：access_token / refresh_token / text(错误时才非空)
         val json = JSONObject(

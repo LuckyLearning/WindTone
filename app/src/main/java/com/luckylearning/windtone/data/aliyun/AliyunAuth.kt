@@ -417,10 +417,26 @@ object AliyunEndpoints {
      */
     const val WEB_BASE = "https://api.alipan.com"
 
-    /** 网页 API：用户信息（`/v2/user/get`，`{}` 空体，返回 nick_name 等） */
+    /**
+     * 网页 API：用户信息（`/v2/user/get`，`{}` 空体）。
+     *
+     * **盘 id 在这里**，不在 [WEB_PERSONAL_INFO_URL]。OpenList 网页驱动取的就是
+     * 响应根上的 `default_drive_id`（同时可能有 `resource_drive_id` / `backup_drive_id`）。
+     * `get_personal_info` 多半只有容量和会员权益，没有盘 id —— 只盯它会误报
+     * 「账号没有可用的盘」。
+     */
     const val WEB_USER_URL = "$WEB_BASE/v2/user/get"
 
-    /** 网页 API：盘信息（`/v2/databox/get_personal_info`，含资源库/备份盘 id） */
+    /**
+     * 同一份用户信息的另一台主机。
+     *
+     * 小雅 / aligo 从这里读 `resource_drive_id` 与 `backup_drive_id`。
+     * `api.alipan.com/v2/user/get` 已经带了盘 id 时不会再打这一下；
+     * 只有那边没有可用盘 id 时才兜底。
+     */
+    const val WEB_USER_DRIVE_URL = "https://user.aliyundrive.com/v2/user/get"
+
+    /** 网页 API：容量与权益（通常没有盘 id，只作盘 id 的旧形态兜底） */
     const val WEB_PERSONAL_INFO_URL = "$WEB_BASE/v2/databox/get_personal_info"
 
     /** 网页 API：列目录（`/v2/file/list`，marker 分页，字段名与 OpenAPI 一致） */

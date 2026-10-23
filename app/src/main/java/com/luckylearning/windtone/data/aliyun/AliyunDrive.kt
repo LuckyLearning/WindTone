@@ -150,13 +150,7 @@ class AliyunDrive(
     suspend fun driveInfo(): Result<DriveInfo> = withContext(Dispatchers.IO) {
         runCatching {
             if (isWebFamily()) {
-                // 昵称在 /v2/user/get，盘 id 在 /v2/databox/get_personal_info，两个都要打；
-                // 昵称那一步失败不拦路（拿不到就展示默认名）
-                val user = runCatching {
-                    api(AliyunEndpoints.WEB_USER_URL, JSONObject())
-                }.getOrNull()
-                val json = api(AliyunEndpoints.WEB_PERSONAL_INFO_URL, JSONObject())
-                return@runCatching parseWebPersonalInfo(json, user)
+                return@runCatching webDriveInfo()
             }
             val json = api("$BASE/user/getDriveInfo", JSONObject())
             DriveInfo(
@@ -169,6 +163,45 @@ class AliyunDrive(
                     error("账号没有可用的盘（响应里没有任何 drive_id）")
                 }
             }
+        }
+    }
+
+    /**
+     * 网页线的账号信息。
+     *
+     * 盘 id 的正源是 `/v2/user/get` 根上的 `default_drive_id`（以及
+     * `resource_drive_id` / `backup_drive_id`）。`get_personal_info` 在现行接口里
+     * 通常只有容量，没有盘 id；只解析它就会在登录成功后报「没有任何 drive_id」。
+     * `api.alipan.com` 这份用户信息里没有可用盘 id 时，再问一次
+     * `user.aliyundrive.com/v2/user/get`（小雅 / aligo 读资源库、备份盘的那台）。
+     * 两个用户接口都失败时，把接口错误抛出去，不用「没有盘」盖掉 401 这类真失败。
+     */
+    private suspend fun webDriveInfo(): DriveInfo {
+        val apiUser = runCatching { api(AliyunEndpoints.WEB_USER_URL, JSONObject()) }
+        val personal = runCatching { api(AliyunEndpoints.WEB_PERSONAL_INFO_URL, JSONObject()) }
+        val personalJson = personal.getOrNull()
+        val firstUser = apiUser.getOrNull()
+        // runCatching 是 inline：解析成功就从本函数返回，失败才继续走兜底主机
+        runCatching { return parseWebPersonalInfo(personalJson ?: JSONObject(), firstUser) }
+
+        val hostUser = runCatching { api(AliyunEndpoints.WEB_USER_DRIVE_URL, JSONObject()) }
+        val merged = mergeUserJson(firstUser, hostUser.getOrNull())
+        if (merged == null && personalJson == null) {
+            throw apiUser.exceptionOrNull()
+                ?: hostUser.exceptionOrNull()
+                ?: personal.exceptionOrNull()
+                ?: error("账号没有可用的盘（响应里没有任何 drive_id）")
+        }
+        return try {
+            parseWebPersonalInfo(personalJson ?: JSONObject(), merged)
+        } catch (e: IllegalStateException) {
+            if (firstUser == null && hostUser.getOrNull() == null) {
+                throw apiUser.exceptionOrNull()
+                    ?: hostUser.exceptionOrNull()
+                    ?: personal.exceptionOrNull()
+                    ?: e
+            }
+            throw e
         }
     }
 
@@ -380,10 +413,10 @@ class AliyunDrive(
         /**
          * 网页线的盘信息解析（纯函数，单测覆盖）。
          *
-         * `/v2/databox/get_personal_info` 的结构：`personal_drive_info` 里带
-         * `resource_drive_id` / `backup_drive_id`；昵称不在里面，来自单独的
-         * `/v2/user/get`（[userJson]）。id 在根层级也可能有一份（不同时期接口
-         * 形态有过波动），两处都看、取先到者。
+         * 盘 id 优先取 [userJson]（`/v2/user/get` 的根字段 `default_drive_id` /
+         * `resource_drive_id` / `backup_drive_id`）。`get_personal_info` 里的
+         * `personal_drive_info` 以及响应根上的同名字段只作旧形态兜底。
+         * 字段值是 JSON null 时 `optString` 会得到字面量 `"null"`，那不是盘 id。
          */
         internal fun parseWebPersonalInfo(
             personalInfo: JSONObject,
@@ -391,15 +424,16 @@ class AliyunDrive(
         ): DriveInfo {
             val personal = personalInfo.optJSONObject("personal_drive_info") ?: JSONObject()
             fun pick(key: String): String = listOf(
+                userJson?.optString(key),
                 personal.optString(key),
                 personalInfo.optString(key),
-            ).firstOrNull { it.isNotBlank() }.orEmpty()
+            ).firstOrNull { usable(it) }.orEmpty()
             val nickname = listOf("user_name", "nick_name", "nickname", "name")
-                .firstNotNullOfOrNull { userJson?.optString(it)?.takeIf(String::isNotBlank) }
+                .firstNotNullOfOrNull { key -> userJson?.optString(key)?.takeIf { usable(it) } }
                 ?: "阿里云盘用户"
             return DriveInfo(
                 nickname = nickname,
-                defaultDriveId = pick("default_drive_id"),
+                defaultDriveId = pick("default_drive_id").ifBlank { pick("drive_id") },
                 resourceDriveId = pick("resource_drive_id"),
                 backupDriveId = pick("backup_drive_id"),
             ).also {
@@ -408,5 +442,32 @@ class AliyunDrive(
                 }
             }
         }
+
+        /** 把两份 user/get 合成一份：先到的非空字段保留，空的用另一份补 */
+        internal fun mergeUserJson(primary: JSONObject?, extra: JSONObject?): JSONObject? {
+            if (primary == null) return extra
+            if (extra == null) return primary
+            val out = JSONObject()
+            for (key in USER_KEYS) {
+                val value = listOf(primary.optString(key), extra.optString(key))
+                    .firstOrNull { usable(it) }
+                if (value != null) out.put(key, value)
+            }
+            return out
+        }
+
+        private fun usable(value: String?): Boolean =
+            !value.isNullOrBlank() && value != "null"
+
+        private val USER_KEYS = listOf(
+            "default_drive_id",
+            "resource_drive_id",
+            "backup_drive_id",
+            "drive_id",
+            "user_name",
+            "nick_name",
+            "nickname",
+            "name",
+        )
     }
 }

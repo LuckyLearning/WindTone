@@ -92,6 +92,11 @@ class AliyunAuthSourceTest {
             AliyunEndpoints.WEB_PERSONAL_INFO_URL,
         )
         assertEquals("https://api.alipan.com/v2/user/get", AliyunEndpoints.WEB_USER_URL)
+        // 资源库 / 备份盘 id 的兜底主机（api.alipan.com 这份用户信息里没有盘 id 时才打）
+        assertEquals(
+            "https://user.aliyundrive.com/v2/user/get",
+            AliyunEndpoints.WEB_USER_DRIVE_URL,
+        )
     }
 
     @Test
