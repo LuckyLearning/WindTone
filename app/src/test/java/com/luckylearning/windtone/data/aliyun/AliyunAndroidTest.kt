@@ -31,6 +31,16 @@ class AliyunAndroidTest {
     }
 
     @Test
+    fun `BadRequest 要说明是参数问题而不是登录问题`() {
+        // 真机排障教训：drive_id 为空时发 getDownloadUrl，阿里回 {"code":"BadRequest"}，
+        // 旧文案「阿里云盘返回错误：BadRequest」让人以为是账号/服务端问题
+        assertEquals(
+            "请求参数无效（多为 drive_id / file_id 为空或不匹配，不是登录问题）",
+            AliyunErrors.hint(JSONObject("""{"code":"BadRequest"}""")),
+        )
+    }
+
+    @Test
     fun `OpenList 在线接口的成功响应形态能解析出令牌`() {
         // 字段名与 OpenList 服务端一致：access_token / refresh_token / text(错误时才非空)
         val json = JSONObject(

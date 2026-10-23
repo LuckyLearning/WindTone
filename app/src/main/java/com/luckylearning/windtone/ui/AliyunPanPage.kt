@@ -98,21 +98,38 @@ internal fun AliyunPanPage(
     var probeText by remember { mutableStateOf<String?>(null) }
     /** 扫描完成、待命名的结果（null = 无） */
     var namingScan by remember { mutableStateOf<AliyunScanRules.ScanOutcome?>(null) }
+    /** 读取账号信息（driveInfo）最近一次失败的原因（成功即清空）；driveId 为空时显示在页面上 */
+    var accountError by remember { mutableStateOf<String?>(null) }
+
+    /**
+     * 读账号信息：拿昵称与盘 id。返回失败原因（成功返回 null）。
+     *
+     * 之所以单独拆出来：这个失败**不能只弹一次窗就完事** —— driveId 拿不到，
+     * 后面列目录、取直链、自检全都发不了（会被 BadRequest 挡住），用户看到
+     * 的却是「正在读取账号信息…」永远挂着，真实的报错早被关掉了。
+     * 失败原因要一直留在页面上 + 给「重试」，自检/播放前发现盘 id 为空也要能
+     * 现场重新拉一次。
+     */
+    suspend fun fetchAccount(): String? {
+        progress = "正在读取账号信息…"
+        val err = drive.driveInfo().fold(
+            onSuccess = { info ->
+                nickname = info.nickname
+                drives = info.availableDrives()
+                val preferred = info.preferredDriveId().orEmpty()
+                driveId = preferred
+                driveName = drives.firstOrNull { it.second == preferred }?.first.orEmpty()
+                null
+            },
+            onFailure = { it.message ?: "读取账号信息失败" },
+        )
+        accountError = err
+        progress = ""
+        return err
+    }
 
     fun refreshAccount() {
-        scope.launch {
-            progress = "正在读取账号信息…"
-            drive.driveInfo()
-                .onSuccess { info ->
-                    nickname = info.nickname
-                    drives = info.availableDrives()
-                    val preferred = info.preferredDriveId().orEmpty()
-                    driveId = preferred
-                    driveName = drives.firstOrNull { it.second == preferred }?.first.orEmpty()
-                }
-                .onFailure { error = it.message ?: "读取账号信息失败" }
-            progress = ""
-        }
+        scope.launch { fetchAccount() }
     }
 
     fun load(dirId: String, marker: String = "", append: Boolean = false) {
@@ -292,11 +309,25 @@ internal fun AliyunPanPage(
     }
 
     if (driveId.isBlank()) {
-        Text(
-            "正在读取账号信息…",
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(vertical = 4.dp),
-        )
+        when {
+            accountError != null -> {
+                Text(
+                    "读取账号信息失败：$accountError",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(vertical = 4.dp),
+                )
+                TextButton(onClick = {
+                    accountError = null
+                    refreshAccount()
+                }) { Text("重试读取账号信息") }
+            }
+            else -> Text(
+                "正在读取账号信息…",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(vertical = 4.dp),
+            )
+        }
     }
 
     val audioEntries = entries.filter { it.isPlayableAudio }
@@ -309,6 +340,11 @@ internal fun AliyunPanPage(
      */
     fun playFrom(startId: String?) {
         if (audioEntries.isEmpty()) return
+        if (driveId.isBlank()) {
+            // 空的 drive_id 发出去只会收到 BadRequest，白耗一次请求还误导排障
+            error = "还没读到账号信息（盘 id 为空），等上面的账号信息加载完再播放"
+            return
+        }
         loading = true
         error = null
         scope.launch {
@@ -344,15 +380,31 @@ internal fun AliyunPanPage(
     TextButton(
         enabled = !loading && !scanning,
         onClick = {
-            val target = audioEntries.firstOrNull()?.fileId
-                ?: playlists.firstOrNull()?.files?.firstOrNull()?.fileId
-            if (target == null) {
+            if (playlists.isEmpty() && audioEntries.isEmpty()) {
                 error = "这个目录里没有音频文件，先进入一个有歌的目录再自检"
                 return@TextButton
             }
             probeRunning = true
             probeText = null
             scope.launch {
+                // 盘 id 没读到，后面 everything 都是 BadRequest —— 先补一次账号信息，
+                // 顺便把真实失败原因带出来（以前这里只会看到干巴巴的 BadRequest）
+                if (driveId.isBlank()) {
+                    probeText = "还没读到账号信息，正在重新获取…"
+                    fetchAccount()?.let { err ->
+                        probeRunning = false
+                        probeText = "取不到账号的盘 id：$err\n\n「读取账号信息」这一步失败了，直链无从谈起；" +
+                            "先解决它（页面上有重试按钮），再回来测直链。"
+                        return@launch
+                    }
+                }
+                val target = audioEntries.firstOrNull()?.fileId
+                    ?: playlists.firstOrNull()?.files?.firstOrNull()?.fileId
+                if (target == null) {
+                    probeRunning = false
+                    probeText = "没有可测的文件"
+                    return@launch
+                }
                 val url = drive.downloadUrl(driveId, target)
                     .getOrElse {
                         probeRunning = false

@@ -578,6 +578,7 @@ object AliyunErrors {
         "InvalidGrant", "invalid_grant" -> "刷新令牌无效或已失效，请重新获取"
         "InvalidClient", "invalid_client" -> "应用凭据无效（ClientId / ClientSecret）"
         "InvalidParameter", "invalid_parameter" -> "请求参数错误"
+        "BadRequest" -> "请求参数无效（多为 drive_id / file_id 为空或不匹配，不是登录问题）"
         "NotFound", "ResourceNotFound" -> "文件或目录不存在（可能已被移动或删除）"
         "AccessDenied", "PermissionDenied", "Forbidden" -> "没有权限访问这个资源"
         "QuotaExceeded", "TooManyRequests", "TooManyRequestsError" -> "请求过于频繁，被限流了，等几分钟再试"
