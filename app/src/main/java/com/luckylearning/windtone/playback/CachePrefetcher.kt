@@ -136,13 +136,14 @@ object CachePrefetcher {
         val cache = OnlineMediaCache.cacheForPrefetch(context) ?: return false
         val pan = BaiduRules.needsPanUserAgent(song.uri.host)
         // 键与播放侧完全一致：网盘用 pan:<fsId>，普通在线地址用完整 URI
-        val key = OnlineMediaCache.panCacheKey(song.uri) ?: song.uri.toString()
+        val key = OnlineMediaCache.stableKey(song.uri)
+            ?: song.uri.buildUpon().fragment(null).build().toString()
         val uri = if (pan) {
             val signed = BaiduRules.withAccessToken(song.uri.toString(), OnlineMediaCache.panToken())
             // 摘掉只用于算键的 `#wt=…`，它不该进真实请求（v1.1.45 的教训）
             Uri.parse(signed).buildUpon().fragment(null).build()
         } else {
-            song.uri
+            song.uri.buildUpon().fragment(null).build()
         }
 
         val cacheFactory = CacheDataSource.Factory()

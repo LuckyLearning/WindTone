@@ -43,4 +43,10 @@ class CachePrefetchPolicyTest {
         assertTrue(CachePrefetchPolicy.shouldStart(playing = false, bufferAheadMs = 1_000))
         assertTrue(CachePrefetchPolicy.shouldStart(playing = false, bufferAheadMs = 0))
     }
+
+    @Test
+    fun `当前曲缺口还没补完时不预取`() {
+        assertFalse(CachePrefetchPolicy.shouldStart(playing = false, bufferAheadMs = 30_000, currentTailOpen = true))
+        assertFalse(CachePrefetchPolicy.shouldStart(playing = true, bufferAheadMs = 30_000, currentTailOpen = true))
+    }
 }

@@ -54,7 +54,8 @@ data class Song(
     val baseName: String
         get() = displayName.substringBeforeLast('.', displayName)
 
-    val stableKey: String get() = uri.toString()
+    /** 阿里云盘用 fragment 里的盘编号和文件编号；其余来源仍用完整地址 */
+    val stableKey: String get() = TrackFragment.cacheKey(uri.fragment) ?: uri.toString()
 
     val hasSidecarLyric: Boolean get() = lrcUri != null
 }

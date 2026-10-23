@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.compose.runtime.Immutable
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.data.model.SongSource
+import com.luckylearning.windtone.data.model.TrackFragment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -51,6 +52,39 @@ object AliyunRules {
         fileName.substringBeforeLast('.', fileName).ifBlank { fileName }
 
     /**
+     * 从文件名拆出歌手和歌名。
+     *
+     * 先认带空格的分隔（` - `、破折号、` _ `），再认只出现一次的 `_` 或 `-`。
+     * 拆不开时歌名用去扩展名的文件名，歌手为空。
+     */
+    fun splitDisplayName(fileName: String): Pair<String, String?> {
+        val stem = displayTitle(fileName)
+        val spaced = listOf(" - ", " – ", " — ", " _ ")
+        for (sep in spaced) {
+            val cut = splitOnce(stem, sep) ?: continue
+            return cut
+        }
+        for (sep in listOf("_", "-")) {
+            if (stem.count { it == sep[0] } != 1) continue
+            val cut = splitOnce(stem, sep) ?: continue
+            return cut
+        }
+        return stem to null
+    }
+
+    /** 专辑名用所在文件夹。空文件夹不拿「阿里云盘」充数。 */
+    fun albumName(folderName: String?): String? = folderName?.trim()?.takeIf { it.isNotEmpty() }
+
+    private fun splitOnce(stem: String, sep: String): Pair<String, String?>? {
+        val at = stem.indexOf(sep)
+        if (at <= 0 || at + sep.length >= stem.length) return null
+        val artist = stem.substring(0, at).trim()
+        val title = stem.substring(at + sep.length).trim()
+        if (artist.isEmpty() || title.isEmpty()) return null
+        return title to artist
+    }
+
+    /**
      * 列目录的排序：文件夹在前、名称不区分大小写 —— 与百度网盘页保持同一套观感。
      */
     fun sorted(entries: List<AliyunEntry>): List<AliyunEntry> =
@@ -59,15 +93,39 @@ object AliyunRules {
     /**
      * 「用哪个盘」的兜底顺序（纯函数，单测覆盖）。
      *
-     * 阿里云盘把空间拆成三个盘：**资源库**（resource，用户上传的文件多在这里）、
-     * **备份盘**（backup，相册/文件备份）、以及接口给的默认盘（default）。
-     * OpenList 的默认值是 `resource`；但老账号往往只有 default。所以顺序取
-     * default → resource → backup：default 不可用时再退到资源库，最后才是备份盘。
-     * 三个都拿不到说明账号异常，返回 null 交给界面报错。
+     * 网页「全部文件」是**资源库**。截图里的「备份文件」是备份盘的根，不是它下面的子目录，
+     * 所以在备份盘根上没有文件夹上级可返回。`default_drive_id` 又经常就等于备份盘，
+     * 先选 default 会一登录就进备份文件。
+     *
+     * 有资源库就进资源库；没有资源库时再用 default（老账号往往只有它）；
+     * default 自己就是备份盘、又没有资源库时，才落在备份盘。
      */
-    fun pickDrive(defaultId: String?, resourceId: String?, backupId: String?): String? =
-        listOf(defaultId, resourceId, backupId)
-            .firstOrNull { !it.isNullOrBlank() }
+    fun pickDrive(defaultId: String?, resourceId: String?, backupId: String?): String? {
+        val resource = resourceId?.takeIf { it.isNotBlank() }
+        val default = defaultId?.takeIf { it.isNotBlank() }
+        val backup = backupId?.takeIf { it.isNotBlank() }
+        if (resource != null) return resource
+        if (default != null && default != backup) return default
+        return default ?: backup
+    }
+
+    /**
+     * 备份盘根目录在网页上的上级是「全部文件」（资源库）。
+     *
+     * 已经在某个子目录里时返回 null，调用方走普通的目录栈弹出。
+     * 当前不是备份盘、或没有另一份资源库时，也返回 null（没有可回的上级）。
+     */
+    fun backupRootParent(
+        currentDriveId: String,
+        drives: List<Pair<String, String>>,
+        atRoot: Boolean,
+    ): String? {
+        if (!atRoot) return null
+        val resource = drives.firstOrNull { it.first == "资源库" }?.second ?: return null
+        val backup = drives.firstOrNull { it.first == "备份盘" }?.second ?: return null
+        if (currentDriveId == backup && resource != currentDriveId) return resource
+        return null
+    }
 }
 
 /**
@@ -124,7 +182,7 @@ class AliyunDrive(
         val resourceDriveId: String,
         val backupDriveId: String,
     ) {
-        /** 默认进哪个盘（default → resource → backup） */
+        /** 默认进哪个盘：有资源库进资源库（网页「全部文件」），否则见 [AliyunRules.pickDrive] */
         fun preferredDriveId(): String? =
             AliyunRules.pickDrive(defaultDriveId, resourceDriveId, backupDriveId)
 
@@ -179,22 +237,25 @@ class AliyunDrive(
     private suspend fun webDriveInfo(): DriveInfo {
         val apiUser = runCatching { api(AliyunEndpoints.WEB_USER_URL, JSONObject()) }
         val personal = runCatching { api(AliyunEndpoints.WEB_PERSONAL_INFO_URL, JSONObject()) }
-        val personalJson = personal.getOrNull()
+        val personalJson = personal.getOrNull() ?: JSONObject()
         val firstUser = apiUser.getOrNull()
-        // runCatching 是 inline：解析成功就从本函数返回，失败才继续走兜底主机
-        runCatching { return parseWebPersonalInfo(personalJson ?: JSONObject(), firstUser) }
+        val first = runCatching { parseWebPersonalInfo(personalJson, firstUser) }.getOrNull()
+        // api.alipan.com 这份常常只有 default_drive_id，而且它就是备份盘。
+        // 资源库 id 在 user.aliyundrive.com 上。缺了资源库就再问一次，否则进不了「全部文件」。
+        if (first != null && first.resourceDriveId.isNotBlank()) return first
 
         val hostUser = runCatching { api(AliyunEndpoints.WEB_USER_DRIVE_URL, JSONObject()) }
         val merged = mergeUserJson(firstUser, hostUser.getOrNull())
-        if (merged == null && personalJson == null) {
+        if (merged == null && personal.getOrNull() == null && first == null) {
             throw apiUser.exceptionOrNull()
                 ?: hostUser.exceptionOrNull()
                 ?: personal.exceptionOrNull()
                 ?: error("账号没有可用的盘（响应里没有任何 drive_id）")
         }
         return try {
-            parseWebPersonalInfo(personalJson ?: JSONObject(), merged)
+            parseWebPersonalInfo(personalJson, merged)
         } catch (e: IllegalStateException) {
+            if (first != null) return first
             if (firstUser == null && hostUser.getOrNull() == null) {
                 throw apiUser.exceptionOrNull()
                     ?: hostUser.exceptionOrNull()
@@ -309,24 +370,33 @@ class AliyunDrive(
     /**
      * 把文件条目转成播放队列里的歌。
      *
-     * URI 的 fragment 带 `wt=<fileId>`：直链每次签名都不同，拿整个 URI 当缓存键
-     * 等于永不命中 —— 与百度页同一机制（fragment 不进 HTTP 请求，只给缓存层当
-     * 稳定键，见 OnlineMediaCache.panCacheKey）。
+     * 身份是盘编号加文件编号，放在 fragment（`ay=`）里，不进 HTTP。
+     * [saved] 里已有的标题、歌手、专辑、时长盖过文件名和文件夹。
      */
-    fun toSong(entry: AliyunEntry, url: String): Song = Song(
-        // 与百度页一致：id 取负数避开本地曲库的正数 id 空间。
-        // hashCode 本身可能是负数，直接再取负会变正 —— 先压成非负（丢掉符号位），
-        // 同一个 fileId 的映射结果稳定不变。
-        id = -(entry.fileId.hashCode() and 0x7FFFFFFF).toLong(),
-        uri = Uri.parse(url).buildUpon().fragment("wt=${entry.fileId}").build(),
-        title = AliyunRules.displayTitle(entry.name),
-        artist = null,
-        album = "阿里云盘",
-        durationMs = 0L,
-        sizeBytes = entry.sizeBytes,
-        displayName = entry.name,
-        source = SongSource.REMOTE,
-    )
+    fun toSong(
+        entry: AliyunEntry,
+        url: String,
+        driveId: String,
+        folderName: String? = null,
+        saved: AliyunTrackRecord? = null,
+    ): Song {
+        val (parsedTitle, parsedArtist) = AliyunRules.splitDisplayName(entry.name)
+        val title = saved?.title?.takeIf { it.isNotBlank() } ?: parsedTitle
+        val artist = saved?.artist?.takeIf { it.isNotBlank() } ?: parsedArtist
+        val album = saved?.album?.takeIf { it.isNotBlank() } ?: AliyunRules.albumName(folderName)
+        val identity = "$driveId/${entry.fileId}"
+        return Song(
+            id = -(identity.hashCode() and 0x7FFFFFFF).toLong(),
+            uri = Uri.parse(url).buildUpon().fragment(TrackFragment.of(driveId, entry.fileId)).build(),
+            title = title,
+            artist = artist,
+            album = album,
+            durationMs = saved?.durationMs ?: 0L,
+            sizeBytes = entry.sizeBytes,
+            displayName = entry.name,
+            source = SongSource.REMOTE,
+        )
+    }
 
     private fun parseEntry(o: JSONObject): AliyunEntry? {
         val id = o.optString("file_id")

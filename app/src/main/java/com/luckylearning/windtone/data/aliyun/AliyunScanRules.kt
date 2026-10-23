@@ -33,6 +33,8 @@ object AliyunScanRules {
         val name: String,
         /** 从根到该文件所在目录的路径，如 `"周杰伦/范特西"`；根目录下的文件为空串 */
         val parentPath: String = "",
+        /** 文件所在目录的 fileId，用来找同目录歌词。旧存档没有这个字段。 */
+        val parentFileId: String = "",
     ) {
         /** 展示标题：目录名参与展示（同一专辑名的歌集中在一起看） */
         val displayTitle: String
@@ -96,7 +98,12 @@ object AliyunScanRules {
             }
             entries.forEach { entry ->
                 when {
-                    entry.isPlayableAudio -> files += ScanHit(entry.fileId, entry.name, task.path)
+                    entry.isPlayableAudio -> files += ScanHit(
+                        fileId = entry.fileId,
+                        name = entry.name,
+                        parentPath = task.path,
+                        parentFileId = task.fileId,
+                    )
                     entry.isDir && canDescend(task.depth) ->
                         queue.add(
                             DirTask(

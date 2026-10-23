@@ -35,17 +35,20 @@ internal object RemoteTagFetcher {
 
     fun read(uri: Uri, extension: String, token: String?): EmbeddedTagResult? {
         if (extension.lowercase() !in SUPPORTED_EXTENSIONS) return null
+        var best: EmbeddedTagResult? = null
         for (limit in STEPS) {
-            val bytes = fetch(uri, limit, token) ?: return null
-            if (bytes.size < 10) return null
+            val bytes = fetch(uri, limit, token) ?: return best
+            if (bytes.size < 10) return best
             val result = runCatching {
                 BinaryReader.open(bytes).use { EmbeddedTags.parse(it, extension, null) }
             }.getOrNull()
-            if (result != null && result.hasLyrics) return result
-            // 这一段已经是整个文件（服务器没截断）就没必要再取一次更大的
-            if (bytes.size < limit) return null
+            if (result != null) {
+                if (result.hasLyrics) return result
+                if (best == null) best = result
+            }
+            if (bytes.size < limit) return best
         }
-        return null
+        return best
     }
 
     private fun fetch(uri: Uri, limit: Int, token: String?): ByteArray? {

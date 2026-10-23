@@ -5,6 +5,7 @@ import android.net.Uri
 import android.util.Log
 import androidx.media3.datasource.DataSpec
 import com.luckylearning.windtone.data.baidu.BaiduRules
+import com.luckylearning.windtone.data.model.TrackFragment
 import com.luckylearning.windtone.playback.CachePrefetcher
 import com.luckylearning.windtone.playback.OnlineMediaCache
 import kotlinx.coroutines.CoroutineScope
@@ -88,6 +89,7 @@ object ParallelDownloadRegistry {
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     fun obtain(context: Context, dataSpec: DataSpec): ParallelDownload? {
         val key = currentKey ?: return null
+        if (dataSpec.uri.fragment?.startsWith(TrackFragment.PREFIX) == true) return null
         if (keyOf(dataSpec.uri) != key) return null
 
         synchronized(lock) {

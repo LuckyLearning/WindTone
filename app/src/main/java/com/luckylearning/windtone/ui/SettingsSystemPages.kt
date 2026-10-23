@@ -5,7 +5,6 @@ import android.widget.Toast
 import com.luckylearning.windtone.data.formatByteSize
 import com.luckylearning.windtone.playback.CachePrefetcher
 import com.luckylearning.windtone.playback.parallel.ParallelDownloadRegistry
-import com.luckylearning.windtone.playback.OnlineMediaCache
 import com.luckylearning.windtone.data.BootStatus
 import com.luckylearning.windtone.data.BootStatusText
 import com.luckylearning.windtone.data.DataMaintenance
@@ -175,8 +174,6 @@ internal fun SettingsDiagnosticsPage(
     var showResetDataConfirm by remember { mutableStateOf(false) }
     // 清空曲库（与「清空全部用户数据」方向相反，同样不可撤销）
     var showResetLibraryConfirm by remember { mutableStateOf(false) }
-    // 在线缓存占用（v1.1.38）：读一次即可，清除后就地刷新
-    var onlineCacheBytes by remember { mutableStateOf(OnlineMediaCache.sizeBytes(context)) }
     // 开机自启的落盘证据（v1.1.27）：进页面读一次，随时可手动刷新
     var bootInfo by remember { mutableStateOf<BootStatus.Snapshot?>(null) }
     LaunchedEffect(Unit) { bootInfo = BootStatus.snapshot(context) }
@@ -499,33 +496,7 @@ internal fun SettingsDiagnosticsPage(
             ) { Text("清空日志") }
         }
 
-        // ------------------------------------------------ 在线播放缓存
-    // 车机弱网下这是「在线播放能不能用」的关键一环，所以把占用与清理放在诊断页：
-    // 用户报「听在线歌费流量 / 加载慢」时，第一件事就是看这里有没有缓存、要不要清。
-    SectionTitle("在线播放")
-    ActionRow(
-        title = "在线缓存",
-        subtitle = if (onlineCacheBytes > 0) {
-            "已缓存 ${formatByteSize(onlineCacheBytes)}（上限 512 MB，超出按最近最少使用淘汰）；" +
-                "点这一行清除，清除后重播需要重新下载"
-        } else {
-            "还没有缓存。在线歌单播放过的音频会存到本机，重播时不再走网络"
-        },
-        trailing = formatByteSize(onlineCacheBytes),
-        onClick = {
-            val ok = OnlineMediaCache.clear(context)
-            onlineCacheBytes = OnlineMediaCache.sizeBytes(context)
-            Toast.makeText(
-                context,
-                if (ok) "已清除在线缓存" else "当前没有可清除的缓存",
-                Toast.LENGTH_SHORT,
-            ).show()
-        },
-    )
-
-    // 后台预取（v1.1.46）：网盘按「单连接」限速，当前这首绕不过去，但下一首可以在
-    // 用户没注意时先用两条连接拉好。这里把它的实时状态摆出来 —— 用户报「还是慢」时，
-    // 一眼就能判断是「预取没跑起来」还是「跑了但线路就这速度」。
+        // ------------------------------------------------ 后台预取
     val prefetchStatus by CachePrefetcher.status.collectAsStateWithLifecycle()
     ActionRow(
         title = "后台预取",

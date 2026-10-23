@@ -13,8 +13,10 @@ import com.luckylearning.windtone.data.db.toSong
 import com.luckylearning.windtone.data.derivedFolderPath
 import com.luckylearning.windtone.data.folderDisplayName
 import com.luckylearning.windtone.data.folderParentHint
+import com.luckylearning.windtone.data.aliyun.AliyunTrackStore
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.data.model.SongSource
+import com.luckylearning.windtone.data.model.TrackFragment
 import com.luckylearning.windtone.state.GroupInfo
 import com.luckylearning.windtone.state.LibraryView
 import com.luckylearning.windtone.state.PlayStats
@@ -378,7 +380,8 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
         // uri → 曲库主键索引：持久化边界全靠它把界面上的 uri 换算成 songId
         index.rebuild(sorted)
 
-        val favs = sorted.filter { index.stateOf(it.dbId)?.favorite == true }.map { it.stableKey }.toSet()
+        val favs = sorted.filter { index.stateOf(it.dbId)?.favorite == true }.map { it.stableKey }.toSet() +
+            AliyunTrackStore(app).favoriteKeys()
 
         // 重活全部在进入 update 之前算完：
         // update 的 lambda 走 CAS 重试，若在里面做全量搜索会被重复执行。
@@ -698,6 +701,20 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
     // ---------------------------------------------------------- 收藏
 
     override fun toggleFavorite(song: Song) {
+        val cloud = TrackFragment.parse(song.uri.fragment)
+        if (cloud != null) {
+            scope.launch {
+                val newFav = withContext(Dispatchers.IO) {
+                    AliyunTrackStore(app).toggleFavorite(cloud.first, cloud.second)
+                }
+                _library.update {
+                    val next = if (newFav) it.favoriteUris + song.stableKey else it.favoriteUris - song.stableKey
+                    it.copy(favoriteUris = next)
+                }
+                pushMessage(if (newFav) "已收藏「${song.title}」" else "已取消收藏")
+            }
+            return
+        }
         scope.launch {
             val songId = idOf(song) ?: return@launch
             val newFav = withContext(Dispatchers.IO) {

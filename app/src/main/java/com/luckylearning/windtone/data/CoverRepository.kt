@@ -107,6 +107,12 @@ object CoverRepository {
         bytes.takeIf { it.isNotEmpty() }
     }
 
+    /** 已经从文件头读到的封面，直接放进内存缓存，避免再去打开远程地址。 */
+    fun rememberRaw(song: Song, bytes: ByteArray) {
+        if (bytes.isEmpty()) return
+        cache.put(song.stableKey, bytes)
+    }
+
     /** 等比缩放到目标边长，避免在列表里解码超大封面 */
     fun decodeScaled(raw: ByteArray, targetPx: Int): Bitmap? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }

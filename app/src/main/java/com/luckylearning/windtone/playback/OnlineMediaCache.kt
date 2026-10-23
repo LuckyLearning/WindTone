@@ -3,6 +3,7 @@ package com.luckylearning.windtone.playback
 import android.content.Context
 import android.net.Uri
 import com.luckylearning.windtone.data.baidu.BaiduRules
+import com.luckylearning.windtone.data.model.TrackFragment
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DataSource
@@ -12,7 +13,9 @@ import androidx.media3.datasource.TransferListener
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.CacheKeyFactory
-import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
+import androidx.media3.datasource.cache.Cache
+import androidx.media3.datasource.cache.CacheEvictor
+import androidx.media3.datasource.cache.CacheSpan
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.luckylearning.windtone.playback.parallel.ParallelRoutingFactory
@@ -38,8 +41,15 @@ import java.io.File
  */
 object OnlineMediaCache {
 
-    /** 缓存上限。512MB 约等于 5~8 张无损专辑，够覆盖通勤路上的重播 */
+    /** 默认上限。设置里可以改成 [LIMIT_STEPS] 里的其它档。 */
     const val MAX_BYTES = 512L * 1024 * 1024
+
+    val LIMIT_STEPS: List<Long> = listOf(128, 256, 512, 1024, 2048).map { it * 1024L * 1024L }
+
+    private const val LIMIT_PREFS = "online_media_prefs"
+    private const val LIMIT_KEY = "max_bytes"
+
+    private var evictor: AdjustableEvictor? = null
 
     private const val DIR_NAME = "online_media"
     private const val USER_AGENT = "WindTone/1.1 (Android; online-media)"
@@ -90,6 +100,32 @@ object OnlineMediaCache {
         return if (fsId.isEmpty()) null else "pan:$fsId"
     }
 
+    /** 播放与预取共用的稳定键。阿里云盘优先于百度的 `wt=`。 */
+    fun stableKey(uri: Uri?): String? =
+        TrackFragment.cacheKey(uri?.fragment) ?: panCacheKey(uri)
+
+    fun limitBytes(context: Context): Long {
+        val stored = context.applicationContext
+            .getSharedPreferences(LIMIT_PREFS, Context.MODE_PRIVATE)
+            .getLong(LIMIT_KEY, MAX_BYTES)
+        return LIMIT_STEPS.minBy { kotlin.math.abs(it - stored) }
+    }
+
+    fun setLimitBytes(context: Context, bytes: Long) {
+        val snapped = LIMIT_STEPS.minBy { kotlin.math.abs(it - bytes) }
+        context.applicationContext
+            .getSharedPreferences(LIMIT_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putLong(LIMIT_KEY, snapped)
+            .apply()
+        applyLimit(context)
+    }
+
+    fun applyLimit(context: Context) {
+        val cache = get(context) ?: return
+        evictor?.trim(cache)
+    }
+
     /** 只有网络流进缓存；本地 URI 一律走原路径 */
     fun shouldCache(scheme: String?): Boolean =
         scheme.equals("http", ignoreCase = true) || scheme.equals("https", ignoreCase = true)
@@ -112,11 +148,13 @@ object OnlineMediaCache {
             if (failed) return null
             return runCatching {
                 val dir = File(context.applicationContext.cacheDir, DIR_NAME)
+                val created = AdjustableEvictor(context.applicationContext)
+                evictor = created
                 SimpleCache(
                     dir,
-                    LeastRecentlyUsedCacheEvictor(MAX_BYTES),
+                    created,
                     StandaloneDatabaseProvider(context.applicationContext),
-                )
+                ).also { created.trim(it) }
             }.onFailure { failed = true }.getOrNull().also { instance = it }
         }
     }
@@ -156,7 +194,7 @@ object OnlineMediaCache {
                 // 走 dataSpec.key 分支，语义不变。
                 .setCacheKeyFactory(object : CacheKeyFactory {
                     override fun buildCacheKey(dataSpec: DataSpec): String =
-                        panCacheKey(dataSpec.uri) ?: dataSpec.key ?: dataSpec.uri.toString()
+                        stableKey(dataSpec.uri) ?: dataSpec.key ?: dataSpec.uri.toString()
                 })
                 // 缓存写失败（磁盘满 / 权限）时退化成直连，不要因此中断播放
                 .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
@@ -260,7 +298,16 @@ private class SchemeRoutingDataSource(
                 .setHttpRequestHeaders(BaiduRules.panHeaders())
                 .build()
         } else {
-            dataSpec
+            val frag = dataSpec.uri.fragment
+            val stripped = if (frag != null && frag.startsWith(TrackFragment.PREFIX)) {
+                dataSpec.buildUpon()
+                    .setUri(dataSpec.uri.buildUpon().fragment(null).build())
+                    .setKey(TrackFragment.cacheKey(frag))
+                    .build()
+            } else {
+                dataSpec
+            }
+            stripped
         }
         return source.open(effective)
     }
@@ -279,5 +326,40 @@ private class SchemeRoutingDataSource(
         val source = delegate
         delegate = null
         source?.close()
+    }
+}
+
+@UnstableApi
+private class AdjustableEvictor(
+    private val context: Context,
+) : CacheEvictor {
+
+    override fun requiresCacheSpanTouches(): Boolean = true
+
+    override fun onCacheInitialized() = Unit
+
+    override fun onSpanAdded(cache: Cache, span: CacheSpan) {
+        trim(cache)
+    }
+
+    override fun onSpanRemoved(cache: Cache, span: CacheSpan) = Unit
+
+    override fun onSpanTouched(cache: Cache, oldSpan: CacheSpan, newSpan: CacheSpan) = Unit
+
+    override fun onStartFile(cache: Cache, key: String, position: Long, length: Long) {
+        trim(cache, length.coerceAtLeast(0L))
+    }
+
+    fun trim(cache: Cache, extra: Long = 0L) {
+        val max = OnlineMediaCache.limitBytes(context)
+        var guard = 0
+        while (cache.cacheSpace + extra > max && guard++ < 10_000) {
+            val oldest = cache.keys
+                .asSequence()
+                .flatMap { cache.getCachedSpans(it) }
+                .minByOrNull { it.lastTouchTimestamp }
+                ?: break
+            cache.removeSpan(oldest)
+        }
     }
 }

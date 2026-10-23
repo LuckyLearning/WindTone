@@ -33,6 +33,15 @@ class OnlineMediaCacheKeyTest {
     }
 
     @Test
+    fun `阿里云盘换签名仍是同一个缓存键`() {
+        val first = Uri.parse("https://preview.alipan.com/a?sign=AAA#ay=drive-1/file-1")
+        val second = Uri.parse("https://preview.alipan.com/a?sign=BBB#ay=drive-1/file-1")
+        assertEquals("aliyun:ay=drive-1/file-1", OnlineMediaCache.stableKey(first))
+        assertEquals(OnlineMediaCache.stableKey(first), OnlineMediaCache.stableKey(second))
+        assertEquals("pan:1", OnlineMediaCache.stableKey(Uri.parse("https://d.pcs.baidu.com/x#wt=1")))
+    }
+
+    @Test
     fun `没有 fsId fragment 的地址不走网盘键`() {
         assertNull(OnlineMediaCache.panCacheKey(Uri.parse("https://cdn.example.com/a.mp3")))
         assertNull(OnlineMediaCache.panCacheKey(Uri.parse("https://d.pcs.baidu.com/file/x#wt=")))

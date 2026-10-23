@@ -170,12 +170,12 @@ class SettingsScreenTest {
         compose.waitForIdle()
     }
 
-    /** 主页 = 七张分类卡，一张不多一张不少（v1.1.52 起悬浮歌词独立成卡） */
+    /** 主页分类卡，含在线播放。靠后的卡需要滚出来。 */
     @Test
     fun rootShowsSevenCategoryCards() {
         render()
-        listOf("外观", "播放", "歌词", "悬浮歌词", "音乐库", "更新", "关于与诊断").forEach {
-            compose.onNodeWithText(it).assertIsDisplayed()
+        listOf("外观", "播放", "歌词", "悬浮歌词", "音乐库", "在线播放", "更新", "关于与诊断", "调整菜单顺序").forEach {
+            compose.onNodeWithText(it).performScrollTo().assertIsDisplayed()
         }
         // 分类卡与子页里的 ActionRow 的区别就在这一行摘要（连摘要一起断言，
         // 免得以后退回成没有摘要的普通 ActionRow 也照样"通过"）
@@ -497,7 +497,7 @@ class SettingsScreenTest {
     fun aliyunPageOpensWithoutCrash() {
         render()
 
-        compose.onNodeWithText("音乐库").performClick()
+        compose.onNodeWithText("在线播放").performScrollTo().performClick()
         compose.waitForIdle()
         compose.onNodeWithText("阿里云盘").performScrollTo().performClick()
         compose.waitForIdle()

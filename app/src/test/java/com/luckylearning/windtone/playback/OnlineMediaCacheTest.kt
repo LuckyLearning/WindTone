@@ -42,5 +42,10 @@ class OnlineMediaCacheTest {
         assertTrue(OnlineMediaCache.MAX_BYTES >= 64L * 1024 * 1024)
         assertTrue(OnlineMediaCache.MAX_BYTES <= 2L * 1024 * 1024 * 1024)
         assertEquals(0L, OnlineMediaCache.MAX_BYTES % (1024 * 1024))
+        assertEquals(
+            listOf(128, 256, 512, 1024, 2048).map { it * 1024L * 1024L },
+            OnlineMediaCache.LIMIT_STEPS,
+        )
+        assertTrue(OnlineMediaCache.LIMIT_STEPS.contains(OnlineMediaCache.MAX_BYTES))
     }
 }

@@ -22,6 +22,15 @@ class AliyunDriveTest {
     }
 
     @Test
+    fun `文件名能拆出歌手和歌名，拆不开则歌手为空`() {
+        assertEquals("晴天" to "周杰伦", AliyunRules.splitDisplayName("周杰伦 - 晴天.flac"))
+        assertEquals("晴天" to "周杰伦", AliyunRules.splitDisplayName("周杰伦_晴天.mp3"))
+        assertEquals("a.b" to null, AliyunRules.splitDisplayName("a.b.c"))
+        assertNull(AliyunRules.albumName("  "))
+        assertEquals("范特西", AliyunRules.albumName("范特西"))
+    }
+
+    @Test
     fun `展示名去掉扩展名`() {
         assertEquals("晴天", AliyunRules.displayTitle("晴天.flac"))
         assertEquals("a.b", AliyunRules.displayTitle("a.b.c"))
@@ -63,12 +72,26 @@ class AliyunDriveTest {
     // ------------------------------------------------------------ 盘选择（备份盘 / 资源库）
 
     @Test
-    fun `盘选择优先 default 再 resource 最后 backup`() {
-        assertEquals("D", AliyunRules.pickDrive("D", "R", "B"))
+    fun `有资源库就进全部文件，default 等于备份盘时也不先进备份`() {
+        assertEquals("R", AliyunRules.pickDrive("D", "R", "B"))
+        assertEquals("R", AliyunRules.pickDrive("B", "R", "B"))
         assertEquals("R", AliyunRules.pickDrive(null, "R", "B"))
         assertEquals("R", AliyunRules.pickDrive("", "R", "B"))
+        // 老账号没有资源库：default 不是备份盘时用 default，否则才是备份盘
+        assertEquals("D", AliyunRules.pickDrive("D", null, "B"))
+        assertEquals("D", AliyunRules.pickDrive("D", "", "B"))
+        assertEquals("B", AliyunRules.pickDrive("B", null, "B"))
         assertEquals("B", AliyunRules.pickDrive(null, null, "B"))
         assertNull(AliyunRules.pickDrive(null, null, null))
+    }
+
+    @Test
+    fun `备份盘根目录的上级是资源库`() {
+        val drives = listOf("备份盘" to "B", "资源库" to "R")
+        assertEquals("R", AliyunRules.backupRootParent("B", drives, atRoot = true))
+        assertNull(AliyunRules.backupRootParent("B", drives, atRoot = false))
+        assertNull(AliyunRules.backupRootParent("R", drives, atRoot = true))
+        assertNull(AliyunRules.backupRootParent("B", listOf("备份盘" to "B"), atRoot = true))
     }
 
     @Test
@@ -92,8 +115,8 @@ class AliyunDriveTest {
         assertEquals("资源库" to "R", drives[1])
         // 默认盘 id 与另外两个都不同 —— 必须列出来，否则切走后无法切回
         assertEquals("默认盘" to "D", drives[2])
-        // 默认仍优先 default
-        assertEquals("D", both.preferredDriveId())
+        // 登录后进资源库（网页「全部文件」），不进备份盘
+        assertEquals("R", both.preferredDriveId())
     }
 
     @Test
@@ -104,5 +127,6 @@ class AliyunDriveTest {
         assertEquals(2, drives.size)
         assertEquals("备份盘" to "B", drives[0])
         assertEquals("资源库" to "R", drives[1])
+        assertEquals("R", info.preferredDriveId())
     }
 }

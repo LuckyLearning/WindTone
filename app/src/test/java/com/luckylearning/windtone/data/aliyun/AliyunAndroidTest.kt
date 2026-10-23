@@ -81,7 +81,7 @@ class AliyunAndroidTest {
         assertEquals("def-1", parsed.defaultDriveId)
         assertEquals("res-1", parsed.resourceDriveId)
         assertEquals("bak-1", parsed.backupDriveId)
-        assertEquals("def-1", parsed.preferredDriveId())
+        assertEquals("res-1", parsed.preferredDriveId())
         assertEquals("张三", parsed.nickname)
     }
 
@@ -138,17 +138,20 @@ class AliyunAndroidTest {
         // 命名参数强制走主构造（次构造是 AliyunAuth 版本，需要 Context）
         val drive = AliyunDrive(tokenProvider = { null })
         val song = drive.toSong(
-            AliyunEntry("6603f2e2abcd", "晴天.flac", false, 28_000_000),
+            AliyunEntry("6603f2e2abcd", "周杰伦 - 晴天.flac", false, 28_000_000),
             "https://preview.alipan.com/abc?sign=xyz",
+            driveId = "drive-1",
+            folderName = "范特西",
         )
-        assertEquals("wt=6603f2e2abcd", song.uri.fragment)
-        // fragment 不进 HTTP 请求：uri 去掉 fragment 后就是原始直链
+        assertEquals(com.luckylearning.windtone.data.model.TrackFragment.of("drive-1", "6603f2e2abcd"), song.uri.fragment)
         assertEquals(
             "https://preview.alipan.com/abc?sign=xyz",
             song.uri.buildUpon().fragment(null).build().toString(),
         )
-        assertEquals("阿里云盘", song.album)
+        assertEquals("范特西", song.album)
         assertEquals("晴天", song.title)
+        assertEquals("周杰伦", song.artist)
+        assertEquals("aliyun:" + song.uri.fragment, song.stableKey)
         assertTrue(song.id < 0)
         assertEquals(28_000_000, song.sizeBytes)
     }

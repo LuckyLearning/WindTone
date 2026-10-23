@@ -53,9 +53,12 @@ object CachePrefetchPolicy {
     /**
      * 现在允许开始预取吗。
      *
-     * 暂停时几乎总是允许：此时网络空闲，正是补缓存的好时机（停车场里先把后面几首拉好）。
-     * 播放中则要缓冲领先足够 —— 见 [MIN_AHEAD_MS]。
+     * [currentTailOpen] 表示当前曲从播放位置往前的缺口还没补到 [MIN_AHEAD_MS]，
+     * 这时带宽留给这一条连接。文件后半段还没进缓存不算缺口：播放器最多只垫 120 秒。
+     * 暂停且缺口已补上时可以预取。播放中则要缓冲领先足够。
      */
-    fun shouldStart(playing: Boolean, bufferAheadMs: Long): Boolean =
-        !playing || bufferAheadMs >= MIN_AHEAD_MS
+    fun shouldStart(playing: Boolean, bufferAheadMs: Long, currentTailOpen: Boolean = false): Boolean {
+        if (currentTailOpen) return false
+        return !playing || bufferAheadMs >= MIN_AHEAD_MS
+    }
 }

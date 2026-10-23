@@ -69,6 +69,7 @@ internal object EmbeddedTags {
             var title: String? = null
             var artist: String? = null
             var album: String? = null
+            var picture: ByteArray? = null
 
             val idLen = if (major == 2) 3 else 4
             val headerLen = if (major == 2) 6 else 10
@@ -117,11 +118,12 @@ internal object EmbeddedTags {
                     "TIT2", "TT2" -> if (title.isNullOrBlank()) title = textFrame(data)
                     "TPE1", "TP1" -> if (artist.isNullOrBlank()) artist = textFrame(data)
                     "TALB", "TAL" -> if (album.isNullOrBlank()) album = textFrame(data)
+                    "APIC", "PIC" -> if (picture == null) picture = extractApic(data)
                 }
             }
 
-            val res = EmbeddedTagResult(lyricsText, synced, title, artist, album)
-            return if (res.hasLyrics || title != null) res else null
+            val res = EmbeddedTagResult(lyricsText, synced, title, artist, album, picture)
+            return if (res.hasLyrics || title != null || artist != null || album != null || picture != null) res else null
         } catch (t: Throwable) {
             return null
         }
@@ -188,6 +190,46 @@ internal object EmbeddedTags {
         return TextCodec.decodeId3(enc, data.copyOfRange(1, data.size)).trim('\u0000').takeIf { it.isNotBlank() }
     }
 
+    /** ID3 APIC：编码、MIME、图片类型、描述之后是图片字节。 */
+    private fun extractApic(data: ByteArray): ByteArray? {
+        if (data.size < 8) return null
+        val enc = data[0].toInt() and 0xFF
+        var p = 1
+        while (p < data.size && data[p] != 0.toByte()) p++
+        if (p >= data.size - 2) return null
+        p++
+        p++
+        val term = TextCodec.terminatorLength(enc)
+        val descEnd = indexOfZeroRun(data, p, term)
+        val start = if (descEnd < 0) p else descEnd + term
+        if (start >= data.size || data.size - start < 32) return null
+        return data.copyOfRange(start, data.size)
+    }
+
+    /** FLAC METADATA_BLOCK_PICTURE。 */
+    private fun flacPicture(block: ByteArray): ByteArray? {
+        fun u32(at: Int): Int {
+            if (at + 4 > block.size) return -1
+            return ((block[at].toInt() and 0xFF) shl 24) or
+                ((block[at + 1].toInt() and 0xFF) shl 16) or
+                ((block[at + 2].toInt() and 0xFF) shl 8) or
+                (block[at + 3].toInt() and 0xFF)
+        }
+        var p = 4
+        val mimeLen = u32(p)
+        p += 4
+        if (mimeLen < 0 || p + mimeLen > block.size) return null
+        p += mimeLen
+        val descLen = u32(p)
+        p += 4
+        if (descLen < 0 || p + descLen + 20 > block.size) return null
+        p += descLen + 16
+        val dataLen = u32(p)
+        p += 4
+        if (dataLen < 32 || p + dataLen > block.size) return null
+        return block.copyOfRange(p, p + dataLen)
+    }
+
     // ------------------------------------------------------------------ FLAC
 
     private fun parseFlac(r: BinaryReader): EmbeddedTagResult? {
@@ -197,6 +239,8 @@ internal object EmbeddedTags {
 
         var last = false
         var guard = 0
+        var comment: EmbeddedTagResult? = null
+        var picture: ByteArray? = null
         while (!last && guard++ < 256) {
             val b = r.readByte()
             if (b < 0) break
@@ -204,13 +248,20 @@ internal object EmbeddedTags {
             val type = b and 0x7F
             val len = r.readUInt24BE()
             if (len < 0) break
-            if (type == 4) {
-                val block = r.readBytes(len) ?: break
-                return parseVorbisComment(block)
+            when (type) {
+                4 -> {
+                    val block = r.readBytes(len) ?: break
+                    comment = parseVorbisComment(block)
+                }
+                6 -> {
+                    val block = r.readBytes(len) ?: break
+                    if (picture == null) picture = flacPicture(block)
+                }
+                else -> r.skip(len.toLong())
             }
-            r.skip(len.toLong())
         }
-        return null
+        if (comment == null && picture == null) return null
+        return (comment ?: EmbeddedTagResult()).copy(picture = picture ?: comment?.picture)
     }
 
     // ------------------------------------------------------------- OGG / Opus
@@ -278,7 +329,7 @@ internal object EmbeddedTags {
         }
 
         val res = EmbeddedTagResult(lyrics, null, title, artist, album)
-        return if (res.hasLyrics || title != null) res else null
+        return if (res.hasLyrics || title != null || artist != null || album != null) res else null
     }
 
     // --------------------------------------------------------------- MP4 / M4A

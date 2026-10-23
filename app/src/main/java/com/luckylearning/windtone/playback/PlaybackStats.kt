@@ -3,6 +3,7 @@ package com.luckylearning.windtone.playback
 import android.os.SystemClock
 import com.luckylearning.windtone.data.HOUR_MS
 import com.luckylearning.windtone.data.SongIndex
+import com.luckylearning.windtone.data.model.TrackFragment
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -23,6 +24,7 @@ class PlaybackStats(
     private val store: PlaybackStore,
     private val index: SongIndex,
     private val scope: CoroutineScope,
+    private val online: OnlinePlayLedger? = null,
 ) {
 
     /** 当前正在累计收听的曲目（stableKey），null = 没有在累计 */
@@ -54,7 +56,16 @@ class PlaybackStats(
      * 没收藏过的歌永远写不进统计表（现由 [PlaybackStore.recordPlay] 保证）。
      */
     fun recordPlay(mediaId: String) {
-        val songId = index.idOf(mediaId) ?: return
+        val songId = index.idOf(mediaId)
+        if (songId == null) {
+            if (online != null && TrackFragment.cacheKeyOfMediaId(mediaId)) {
+                scope.launch {
+                    val now = System.currentTimeMillis()
+                    withContext(Dispatchers.IO) { runCatching { online.recordPlay(mediaId, now) } }
+                }
+            }
+            return
+        }
         scope.launch {
             val now = System.currentTimeMillis()
             withContext(Dispatchers.IO) {
@@ -70,7 +81,17 @@ class PlaybackStats(
         val ms = listenAccumMs
         listenAccumMs = 0L
         if (ms < 1000L) return
-        val songId = index.idOf(key) ?: return
+        val songId = index.idOf(key)
+        if (songId == null) {
+            if (online != null && TrackFragment.cacheKeyOfMediaId(key)) {
+                val played = ms
+                scope.launch {
+                    val now = System.currentTimeMillis()
+                    withContext(Dispatchers.IO) { runCatching { online.addListenTime(key, played, now) } }
+                }
+            }
+            return
+        }
         // 收听报告的小时桶按**本次结算时刻**归属（一次累计最多 30 秒，
         // 恰好跨整点的情况误差可以忽略）
         val hour = System.currentTimeMillis() / HOUR_MS
@@ -114,4 +135,10 @@ class PlaybackStats(
             if (listenAccumMs >= 30_000L) flushListen()
         }
     }
+}
+
+/** 在线曲目的播放次数和收听时长。本地曲库索引里没有这些歌。 */
+interface OnlinePlayLedger {
+    fun recordPlay(mediaId: String, now: Long)
+    fun addListenTime(mediaId: String, ms: Long, now: Long)
 }

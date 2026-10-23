@@ -12,6 +12,7 @@ import com.luckylearning.windtone.lyrics.KrcParser
 import com.luckylearning.windtone.lyrics.LrcParser
 import com.luckylearning.windtone.lyrics.LyricSource
 import com.luckylearning.windtone.lyrics.Lyrics
+import com.luckylearning.windtone.data.aliyun.AliyunEnricher
 import com.luckylearning.windtone.lyrics.RemoteTagFetcher
 import com.luckylearning.windtone.lyrics.TextCodec
 import kotlinx.coroutines.Dispatchers
@@ -55,6 +56,8 @@ class LyricsLoader(private val context: Context) {
     }
 
     private suspend fun loadRaw(song: Song): Lyrics {
+        val cloudLyric = AliyunEnricher.sidecarLyrics(context, song)
+        if (cloudLyric != null) return cloudLyric
         // 1) 侧车歌词文件
         val sidecarUri = song.lrcUri ?: findSidecar(song)
         if (sidecarUri != null) {

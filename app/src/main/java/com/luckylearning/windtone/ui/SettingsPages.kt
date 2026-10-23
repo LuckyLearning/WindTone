@@ -109,64 +109,77 @@ internal fun SettingsRootPage(
     player: PlayerUiState,
     update: UpdateUiState,
     minSongDurationSec: Int,
+    pages: List<SettingsPage>,
     onNavigate: (SettingsPage) -> Unit,
 ) {
-    CategoryRow(
-        title = "外观",
-        subtitle = "主题取色 · 车载模式",
-        icon = AppIcons.Palette,
-        onClick = { onNavigate(SettingsPage.APPEARANCE) },
-    )
-    CategoryRow(
-        title = "播放",
-        subtitle = "速度 ${"%.2f".format(player.speed)}x · 变调 ${Pitch.labelOf(player.pitchSemitones)} · 跳过静音 · 均衡器与音效",
-        icon = Icons.Filled.PlayArrow,
-        onClick = { onNavigate(SettingsPage.PLAYBACK) },
-    )
-    CategoryRow(
-        title = "歌词",
-        subtitle = "字号 ${"%.1f".format(player.lyricScale)}x · 双语歌词",
-        icon = AppIcons.LyricsBubble,
-        onClick = { onNavigate(SettingsPage.LYRICS) },
-    )
-    // v1.1.52：悬浮歌词从「歌词」子页拆出，独立成页 —— 它的开关、授权、四组
-    // 外观调节、隐藏名单与自检早已独占两屏，是个完整的功能模块而非歌词的一附属项。
-    CategoryRow(
-        title = "悬浮歌词",
-        subtitle = if (player.lyricOverlay) {
-            "已开启 · 字号 ${player.lyricOverlayTextSp}sp · " +
-                (if (player.lyricOverlayFullHeight) "全屏歌词" else "单条字幕")
-        } else {
-            "桌面悬浮显示当前歌词行 · 样式与位置自由调"
-        },
-        icon = AppIcons.Subtitles,
-        onClick = { onNavigate(SettingsPage.OVERLAY) },
-    )
-    CategoryRow(
-        title = "音乐库",
-        // 摘要前置「格式与容量」（v1.1.17）：这是本页唯一会天天被点开的项，
-        // 短音频过滤是一辈子配一次的，摆在摘要前半句反而更容易被误认成唯一内容。
-        subtitle = if (minSongDurationSec > 0) {
-            "格式与容量 · 过滤 < ${minSongDurationSec} 秒"
-        } else {
-            "格式与容量 · 未开启短音频过滤"
-        },
-        icon = AppIcons.LibraryMusic,
-        onClick = { onNavigate(SettingsPage.LIBRARY) },
-    )
-    CategoryRow(
-        title = "更新",
-        subtitle = "检查更新 · 自动检查 · 下载线路",
-        icon = AppIcons.Cloud,
-        onClick = { onNavigate(SettingsPage.UPDATE) },
-        trailing = if (update.info != null) "有新版本" else "v${update.currentVersion}",
-    )
-    CategoryRow(
-        title = "关于与诊断",
-        // 默认不写「崩溃日志」：它在调试分区里，未解锁时不显示（v1.1.31）
-        subtitle = "版本信息 · 播放统计 · 隐私说明",
-        icon = AppIcons.Info,
-        onClick = { onNavigate(SettingsPage.DIAGNOSTICS) },
+    pages.forEach { page ->
+        when (page) {
+            SettingsPage.APPEARANCE -> CategoryRow(
+                title = "外观",
+                subtitle = "主题取色 · 车载模式",
+                icon = AppIcons.Palette,
+                onClick = { onNavigate(SettingsPage.APPEARANCE) },
+            )
+            SettingsPage.PLAYBACK -> CategoryRow(
+                title = "播放",
+                subtitle = "速度 ${"%.2f".format(player.speed)}x · 变调 ${Pitch.labelOf(player.pitchSemitones)} · 跳过静音 · 均衡器与音效",
+                icon = Icons.Filled.PlayArrow,
+                onClick = { onNavigate(SettingsPage.PLAYBACK) },
+            )
+            SettingsPage.LYRICS -> CategoryRow(
+                title = "歌词",
+                subtitle = "字号 ${"%.1f".format(player.lyricScale)}x · 双语歌词",
+                icon = AppIcons.LyricsBubble,
+                onClick = { onNavigate(SettingsPage.LYRICS) },
+            )
+            SettingsPage.OVERLAY -> CategoryRow(
+                title = "悬浮歌词",
+                subtitle = if (player.lyricOverlay) {
+                    "已开启 · 字号 ${player.lyricOverlayTextSp}sp · " +
+                        (if (player.lyricOverlayFullHeight) "全屏歌词" else "单条字幕")
+                } else {
+                    "桌面悬浮显示当前歌词行 · 样式与位置自由调"
+                },
+                icon = AppIcons.Subtitles,
+                onClick = { onNavigate(SettingsPage.OVERLAY) },
+            )
+            SettingsPage.LIBRARY -> CategoryRow(
+                title = "音乐库",
+                subtitle = if (minSongDurationSec > 0) {
+                    "格式与容量 · 过滤 < ${minSongDurationSec} 秒"
+                } else {
+                    "格式与容量 · 未开启短音频过滤"
+                },
+                icon = AppIcons.LibraryMusic,
+                onClick = { onNavigate(SettingsPage.LIBRARY) },
+            )
+            SettingsPage.ONLINE_HUB -> CategoryRow(
+                title = "在线播放",
+                subtitle = "阿里云盘 · 在线歌单 · 播放缓存",
+                icon = AppIcons.Cloud,
+                onClick = { onNavigate(SettingsPage.ONLINE_HUB) },
+            )
+            SettingsPage.UPDATE -> CategoryRow(
+                title = "更新",
+                subtitle = "检查更新 · 自动检查 · 下载线路",
+                icon = AppIcons.Cloud,
+                onClick = { onNavigate(SettingsPage.UPDATE) },
+                trailing = if (update.info != null) "有新版本" else "v${update.currentVersion}",
+            )
+            SettingsPage.DIAGNOSTICS -> CategoryRow(
+                title = "关于与诊断",
+                subtitle = "版本信息 · 播放统计 · 隐私说明",
+                icon = AppIcons.Info,
+                onClick = { onNavigate(SettingsPage.DIAGNOSTICS) },
+            )
+            else -> Unit
+        }
+    }
+    ActionRow(
+        title = "调整菜单顺序",
+        subtitle = "长按无效果时用上移、下移排列上面这些分类",
+        onClick = { onNavigate(SettingsPage.MENU_ORDER) },
+        chevron = true,
     )
 }
 
@@ -336,12 +349,8 @@ internal fun SettingsLibraryPage(
     onOpenReport: () -> Unit,
     onOpenDuplicates: () -> Unit,
     onOpenStats: () -> Unit,
-    /** 打开「在线歌单」子页（v1.1.37） */
-    onOpenOnline: () -> Unit,
     /** 打开「百度网盘」子页（v1.1.39） */
     onOpenBaidu: () -> Unit,
-    /** 打开「阿里云盘」子页（在线播放） */
-    onOpenAliyun: () -> Unit,
     library: LibraryUiState,
 ) {
     var showMinDurationDialog by remember { mutableStateOf(false) }
@@ -376,21 +385,9 @@ internal fun SettingsLibraryPage(
     )
 
     ActionRow(
-        title = "在线歌单（M3U）",
-        subtitle = "添加 m3u / m3u8 / pls 直链并播放；在线条目独立于曲库，不参与扫描与统计",
-        onClick = onOpenOnline,
-        chevron = true,
-    )
-    ActionRow(
         title = "百度网盘",
         subtitle = "扫码授权后直接播放网盘里的音乐（只读；需放在「我的应用数据/<应用名>」目录）",
         onClick = onOpenBaidu,
-        chevron = true,
-    )
-    ActionRow(
-        title = "阿里云盘",
-        subtitle = "粘贴刷新令牌后直接播放云盘里的音乐（只读；令牌在 api.oplist.org 扫码获取）",
-        onClick = onOpenAliyun,
         chevron = true,
     )
 

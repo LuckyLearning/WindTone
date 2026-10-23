@@ -116,6 +116,12 @@ internal enum class SettingsPage(val title: String) {
 
     /** 阿里云盘（在线播放） */
     ALIYUN("阿里云盘"),
+
+    /** 在线播放：阿里云盘、在线歌单、缓存 */
+    ONLINE_HUB("在线播放"),
+
+    /** 调整主页分类卡顺序，本身不是一张分类卡 */
+    MENU_ORDER("调整菜单顺序"),
 }
 
 /**
@@ -268,6 +274,9 @@ fun SettingsScreen(
 
     // 当前处于哪一层：主页面 / 音乐库 / 更新 / 关于与诊断
     var page by remember { mutableStateOf(SettingsPage.ROOT) }
+    val menuContext = LocalContext.current
+    val menuStore = remember { SettingsMenuStore(menuContext) }
+    var menuOrder by remember { mutableStateOf(menuStore.load()) }
 
     // 车载：「完整设置」是否已打开（v1.1.32）。
     // 车载默认走一页到底的 CarSettingsScreen；只有用户主动点最后一行「完整设置」
@@ -432,6 +441,7 @@ fun SettingsScreen(
                         player = player,
                         update = update,
                         minSongDurationSec = minSongDurationSec,
+                        pages = SettingsMenuOrder.pages(menuOrder),
                         onNavigate = { page = it },
                     )
 
@@ -503,10 +513,21 @@ fun SettingsScreen(
                         onOpenReport = onOpenReport,
                         onOpenDuplicates = onOpenDuplicates,
                         onOpenStats = onOpenStats,
-                        onOpenOnline = { page = SettingsPage.ONLINE },
                         onOpenBaidu = { page = SettingsPage.BAIDU },
-                        onOpenAliyun = { page = SettingsPage.ALIYUN },
                         library = library,
+                    )
+
+                    SettingsPage.ONLINE_HUB -> SettingsOnlinePage(
+                        onOpenAliyun = { page = SettingsPage.ALIYUN },
+                        onOpenPlaylists = { page = SettingsPage.ONLINE },
+                    )
+
+                    SettingsPage.MENU_ORDER -> SettingsMenuOrderPage(
+                        order = menuOrder,
+                        onChange = { next ->
+                            menuOrder = next
+                            menuStore.save(next)
+                        },
                     )
 
                     SettingsPage.ONLINE -> OnlinePlaylistsPage(onPlay = onPlayQueue)

@@ -150,6 +150,7 @@ internal data class EmbeddedTagResult(
     val title: String? = null,
     val artist: String? = null,
     val album: String? = null,
+    val picture: ByteArray? = null,
 ) {
     val hasLyrics: Boolean get() = !lyricsText.isNullOrBlank() || !syncedLines.isNullOrEmpty()
 }

@@ -34,10 +34,13 @@ import com.luckylearning.windtone.data.aliyun.AliyunEndpoints
 import com.luckylearning.windtone.data.aliyun.AliyunEntry
 import com.luckylearning.windtone.data.aliyun.AliyunExchange
 import com.luckylearning.windtone.data.aliyun.AliyunProbe
+import com.luckylearning.windtone.data.aliyun.AliyunRules
 import com.luckylearning.windtone.data.aliyun.AliyunSavedPlaylists
 import com.luckylearning.windtone.data.aliyun.AliyunScanRules
+import com.luckylearning.windtone.data.aliyun.AliyunTrackStore
 import com.luckylearning.windtone.data.formatByteSize
 import com.luckylearning.windtone.data.model.Song
+import com.luckylearning.windtone.data.model.TrackFragment
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -89,7 +92,10 @@ internal fun AliyunPanPage(
     var dirNames by remember { mutableStateOf(listOf("")) }
     /** 保存云盘歌单的本地存档（改名 / 删除也走它） */
     val savedPlaylists = remember { AliyunSavedPlaylists(context) }
+    val tracks = remember { AliyunTrackStore(context) }
     var playlists by remember { mutableStateOf(savedPlaylists.all()) }
+    var query by remember { mutableStateOf("") }
+    var editingPlaylistId by remember { mutableStateOf<String?>(null) }
     var scanning by remember { mutableStateOf(false) }
     var scanProgress by remember { mutableStateOf("") }
     var scanJob by remember { mutableStateOf<Job?>(null) }
@@ -259,13 +265,25 @@ internal fun AliyunPanPage(
     )
     Row(verticalAlignment = Alignment.CenterVertically) {
         TextButton(onClick = { load(stack.last()) }) { Text("刷新") }
-        if (stack.size > 1) {
+        val fileDriveId = AliyunRules.backupRootParent(driveId, drives, stack.size <= 1)
+        if (stack.size > 1 || fileDriveId != null) {
             TextButton(onClick = {
-                stack = stack.dropLast(1)
-                dirNames = dirNames.dropLast(1)
-                entries = emptyList()
-                nextMarker = ""
-                load(stack.last())
+                if (stack.size > 1) {
+                    stack = stack.dropLast(1)
+                    dirNames = dirNames.dropLast(1)
+                    entries = emptyList()
+                    nextMarker = ""
+                    load(stack.last())
+                } else if (fileDriveId != null) {
+                    // 备份盘的根就是网页里的「备份文件」，上级是资源库「全部文件」
+                    driveId = fileDriveId
+                    driveName = drives.firstOrNull { it.second == fileDriveId }?.first.orEmpty()
+                    entries = emptyList()
+                    nextMarker = ""
+                    stack = listOf(AliyunDrive.ROOT_ID)
+                    dirNames = listOf("")
+                    load(AliyunDrive.ROOT_ID)
+                }
             }) { Text("返回上级") }
         }
         Spacer(Modifier.weight(1f))
@@ -352,7 +370,11 @@ internal fun AliyunPanPage(
             audioEntries.forEachIndexed { index, entry ->
                 progress = "正在取播放地址（${index + 1}/${audioEntries.size}）…"
                 drive.downloadUrl(driveId, entry.fileId)
-                    .onSuccess { songs += drive.toSong(entry, it) }
+                    .onSuccess { url ->
+                        val folder = dirNames.lastOrNull()?.takeIf { it.isNotBlank() }
+                        tracks.remember(driveId, entry.fileId, entry.name, folder, stack.last())
+                        songs += drive.toSong(entry, url, driveId, folder, tracks.get(driveId, entry.fileId))
+                    }
             }
             progress = ""
             loading = false
@@ -360,7 +382,7 @@ internal fun AliyunPanPage(
                 error = "没有取到可播放的地址（文件可能已被删除、移入回收站或被屏蔽）"
             } else {
                 val idx = startId
-                    ?.let { id -> songs.indexOfFirst { it.uri.fragment == "wt=$id" } }
+                    ?.let { id -> songs.indexOfFirst { TrackFragment.parse(it.uri.fragment)?.second == id } }
                     ?.takeIf { it >= 0 } ?: 0
                 onPlay(songs, idx)
             }
@@ -416,7 +438,7 @@ internal fun AliyunPanPage(
                 probeText = result.summary() +
                     if (result.ok) {
                         "\n\n直链本身没问题，若仍播不了，问题在播放器侧（本地缓存或文件格式）。" +
-                            "可以到「设置 → 关于与诊断」清一次在线缓存再试。"
+                            "可以到「设置 → 在线播放」清一次在线缓存再试。"
                     } else {
                         "\n\n主机：${result.host}"
                     }
@@ -484,13 +506,28 @@ internal fun AliyunPanPage(
     }
 
     // 已保存的云盘歌单（存 fileId 引用，播放时现取直链）
-    if (playlists.isNotEmpty()) {
+    if (loggedIn && driveId.isNotBlank()) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            singleLine = true,
+            label = { Text("搜索文件名") },
+        )
+        OnlineLists(tracks)
+    }
+
+    val shownPlaylists = if (query.isBlank()) playlists else playlists.filter { playlist ->
+        playlist.name.contains(query, ignoreCase = true) ||
+            playlist.files.any { it.name.contains(query, ignoreCase = true) }
+    }
+    if (shownPlaylists.isNotEmpty()) {
         Text(
-            "云盘歌单（${playlists.size}）",
+            "云盘歌单（${shownPlaylists.size}）",
             style = MaterialTheme.typography.labelLarge,
             modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
         )
-        playlists.forEach { p ->
+        shownPlaylists.forEach { p ->
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),
@@ -513,10 +550,15 @@ internal fun AliyunPanPage(
                             p.files.forEachIndexed { index, hit ->
                                 progress = "正在取播放地址（${index + 1}/${p.files.size}）…"
                                 drive.downloadUrl(p.driveId, hit.fileId)
-                                    .onSuccess {
+                                    .onSuccess { url ->
+                                        val folder = hit.parentPath.substringAfterLast('/').ifBlank { hit.parentPath }
+                                        tracks.remember(p.driveId, hit.fileId, hit.name, folder, hit.parentFileId)
                                         songs += drive.toSong(
                                             AliyunEntry(hit.fileId, hit.name, isDir = false, sizeBytes = 0L),
-                                            it,
+                                            url,
+                                            p.driveId,
+                                            folder,
+                                            tracks.get(p.driveId, hit.fileId),
                                         )
                                     }
                             }
@@ -534,6 +576,7 @@ internal fun AliyunPanPage(
                     savedPlaylists.remove(p.id)
                     playlists = savedPlaylists.all()
                 }) { Text("删除") }
+                TextButton(onClick = { editingPlaylistId = p.id }) { Text("曲目") }
             }
         }
     }
@@ -558,7 +601,8 @@ internal fun AliyunPanPage(
         )
     }
 
-    entries.forEach { entry ->
+    val shownEntries = if (query.isBlank()) entries else entries.filter { it.name.contains(query, ignoreCase = true) }
+    shownEntries.forEach { entry ->
         AliyunEntryRow(
             entry = entry,
             onOpenDir = {
@@ -599,6 +643,80 @@ internal fun AliyunPanPage(
             },
         )
     }
+
+    editingPlaylistId?.let { id ->
+        playlists.firstOrNull { it.id == id }?.let { playlist ->
+            PlaylistFilesDialog(
+                playlist = playlist,
+                query = query,
+                onMove = { from, to ->
+                    val ids = playlist.files.map { it.fileId }.toMutableList()
+                    if (to !in ids.indices) return@PlaylistFilesDialog
+                    val moved = ids.removeAt(from)
+                    ids.add(to, moved)
+                    savedPlaylists.reorder(playlist.id, ids)
+                    playlists = savedPlaylists.all()
+                },
+                onRemove = { fileId ->
+                    savedPlaylists.removeFile(playlist.id, fileId)
+                    playlists = savedPlaylists.all()
+                },
+                onDismiss = { editingPlaylistId = null },
+            )
+        }
+    }
+}
+
+@Composable
+private fun OnlineLists(tracks: AliyunTrackStore) {
+    val favorites = tracks.favorites()
+    val recent = tracks.recent().take(8)
+    val most = tracks.mostPlayed().take(8)
+    if (favorites.isEmpty() && recent.isEmpty() && most.isEmpty()) return
+    if (favorites.isNotEmpty()) {
+        Text("在线收藏 ${favorites.size} 首", style = MaterialTheme.typography.labelLarge)
+        favorites.take(8).forEach { Text(it.title.ifBlank { it.fileName }, style = MaterialTheme.typography.bodySmall) }
+    }
+    if (recent.isNotEmpty()) {
+        Text("在线最近播放", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 6.dp))
+        recent.forEach { Text(it.title.ifBlank { it.fileName }, style = MaterialTheme.typography.bodySmall) }
+    }
+    if (most.isNotEmpty()) {
+        Text("在线最常播放", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 6.dp))
+        most.forEach { Text("${it.title.ifBlank { it.fileName }} · ${it.playCount} 次", style = MaterialTheme.typography.bodySmall) }
+    }
+}
+
+@Composable
+private fun PlaylistFilesDialog(
+    playlist: com.luckylearning.windtone.data.aliyun.AliyunPlaylist,
+    query: String,
+    onMove: (Int, Int) -> Unit,
+    onRemove: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val files = playlist.files.filter { query.isBlank() || it.name.contains(query, ignoreCase = true) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(playlist.name) },
+        text = {
+            Column {
+                files.forEachIndexed { index, hit ->
+                    val realIndex = playlist.files.indexOfFirst { it.fileId == hit.fileId }
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Text(hit.name, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        TextButton(enabled = realIndex > 0, onClick = { onMove(realIndex, realIndex - 1) }) { Text("上移") }
+                        TextButton(
+                            enabled = realIndex in 0 until playlist.files.lastIndex,
+                            onClick = { onMove(realIndex, realIndex + 1) },
+                        ) { Text("下移") }
+                        TextButton(onClick = { onRemove(hit.fileId) }) { Text("移除") }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("完成") } },
+    )
 }
 
 @Composable

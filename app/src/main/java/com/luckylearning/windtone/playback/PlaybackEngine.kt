@@ -20,7 +20,14 @@ import com.luckylearning.windtone.data.SongIndex
 import com.luckylearning.windtone.data.ThemeColorExtractor
 import com.luckylearning.windtone.data.db.PlayerStateEntity
 import com.luckylearning.windtone.data.db.QueueSongEntity
+import com.luckylearning.windtone.data.aliyun.AliyunAuth
+import com.luckylearning.windtone.data.aliyun.AliyunDrive
+import com.luckylearning.windtone.data.aliyun.AliyunEnricher
+import com.luckylearning.windtone.data.aliyun.AliyunQueueItem
+import com.luckylearning.windtone.data.aliyun.AliyunQueueSnapshot
+import com.luckylearning.windtone.data.aliyun.AliyunTrackStore
 import com.luckylearning.windtone.data.model.Song
+import com.luckylearning.windtone.data.model.TrackFragment
 import com.luckylearning.windtone.lyrics.BilingualLyrics
 import com.luckylearning.windtone.lyrics.BilingualMode
 import com.luckylearning.windtone.lyrics.Lyrics
@@ -264,7 +271,18 @@ class PlaybackEngine(
     private var appForeground = true
 
     /** 播放统计（次数 / 收听时长 / 去重）——已抽出，可独立单测 */
-    private val stats = PlaybackStats(store, index, scope)
+    private val aliyunTracks = AliyunTrackStore(app)
+    private val stats = PlaybackStats(
+        store,
+        index,
+        scope,
+        object : OnlinePlayLedger {
+            override fun recordPlay(mediaId: String, now: Long) = aliyunTracks.recordPlay(mediaId, now)
+            override fun addListenTime(mediaId: String, ms: Long, now: Long) =
+                aliyunTracks.addListenTime(mediaId, ms, now)
+        },
+    )
+    private var aliyunUrlRetried = false
 
     /** 上一次尝试把悬浮窗服务拉回来的时间，用于 30 秒节流（见 [OverlayTickHelper.shouldReviveOverlay]） */
     private var lastOverlayReviveAt = 0L
@@ -412,6 +430,7 @@ class PlaybackEngine(
             }
             syncCurrentSong()
             mediaItem?.mediaId?.takeIf { stats.shouldCountPlay(it) }?.let { stats.recordPlay(it) }
+            aliyunUrlRetried = false
         }
 
         override fun onRepeatModeChanged(repeatMode: Int) {
@@ -425,6 +444,18 @@ class PlaybackEngine(
         }
 
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+            val song = _player.value.current
+            val code = generateSequence<Throwable>(error) { it.cause }
+                .filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>()
+                .firstOrNull()
+                ?.responseCode ?: 0
+            if ((code == 401 || code == 403) && !aliyunUrlRetried && song != null &&
+                TrackFragment.parse(song.uri.fragment) != null
+            ) {
+                aliyunUrlRetried = true
+                scope.launch { refreshAliyunUrl(song) }
+                return
+            }
             Log.w(TAG, "播放错误: ${error.errorCodeName}", error)
             logPlaybackError(error)
             val name = _player.value.current?.displayName ?: ""
@@ -528,9 +559,121 @@ class PlaybackEngine(
             index.idOf(c.getMediaItemAt(i).mediaId)?.let { QueueSongEntity(position = i, songId = it) }
         }
         val state = snapshotPlayerState(c)
+        val aliyunItems = currentQueue.mapNotNull { song ->
+            val id = TrackFragment.parse(song.uri.fragment) ?: return@mapNotNull null
+            val record = aliyunTracks.get(id.first, id.second)
+            AliyunQueueItem(
+                driveId = id.first,
+                fileId = id.second,
+                name = song.displayName.ifBlank { song.title },
+                folderName = record?.folderName.orEmpty(),
+                parentFileId = record?.parentFileId.orEmpty(),
+            )
+        }
+        val aliyunIndex = currentQueue.indexOfFirst { TrackFragment.parse(it.uri.fragment) != null && it.stableKey == c.currentMediaItem?.mediaId }
         scope.launch {
             withContext(Dispatchers.IO) {
                 runCatching { store.saveQueueAndState(rows, state) }
+                runCatching {
+                    if (aliyunItems.isEmpty()) aliyunTracks.saveQueue(null)
+                    else aliyunTracks.saveQueue(
+                        AliyunQueueSnapshot(
+                            items = aliyunItems,
+                            index = aliyunIndex.coerceAtLeast(0),
+                            positionMs = c.currentPosition.coerceAtLeast(0L),
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    private suspend fun restoreAliyunQueue(c: MediaController): Boolean {
+        val snapshot = withContext(Dispatchers.IO) { aliyunTracks.loadQueue() } ?: return false
+        val auth = AliyunAuth(app)
+        val drive = AliyunDrive(auth)
+        val songs = mutableListOf<Song>()
+        for (item in snapshot.items) {
+            val url = drive.downloadUrl(item.driveId, item.fileId).getOrNull() ?: continue
+            val saved = aliyunTracks.get(item.driveId, item.fileId)
+            songs += drive.toSong(
+                com.luckylearning.windtone.data.aliyun.AliyunEntry(item.fileId, item.name, false, 0L),
+                url,
+                item.driveId,
+                item.folderName,
+                saved,
+            )
+        }
+        if (songs.isEmpty()) return false
+        val index = snapshot.index.coerceIn(0, songs.lastIndex)
+        currentQueue = songs
+        c.setMediaItems(songs.map { PlaybackConnection.toMediaItem(it) }, index, snapshot.positionMs)
+        c.prepare()
+        queueRestored = true
+        syncCurrentSong(force = true)
+        Log.i(TAG, "断点续播：恢复阿里云盘队列 ${songs.size} 首，第 ${index + 1} 首")
+        resumeIfWanted(c)
+        return true
+    }
+
+    private suspend fun refreshAliyunUrl(song: Song) {
+        val id = TrackFragment.parse(song.uri.fragment) ?: return
+        val drive = AliyunDrive(AliyunAuth(app))
+        val url = drive.downloadUrl(id.first, id.second).getOrNull() ?: return
+        val saved = aliyunTracks.get(id.first, id.second)
+        val refreshed = drive.toSong(
+            com.luckylearning.windtone.data.aliyun.AliyunEntry(
+                id.second,
+                song.displayName.ifBlank { song.title },
+                false,
+                song.sizeBytes,
+            ),
+            url,
+            id.first,
+            saved?.folderName,
+            saved,
+        )
+        val c = controller ?: return
+        val at = (0 until c.mediaItemCount).firstOrNull { c.getMediaItemAt(it).mediaId == song.stableKey } ?: return
+        val position = c.currentPosition.coerceAtLeast(0L)
+        c.replaceMediaItem(at, PlaybackConnection.toMediaItem(refreshed))
+        c.seekTo(at, position)
+        c.prepare()
+        c.play()
+        currentQueue = currentQueue.map { if (it.stableKey == song.stableKey) refreshed else it }
+        _player.update { it.copy(current = refreshed) }
+    }
+
+    private fun enrichAliyun(song: Song) {
+        if (TrackFragment.parse(song.uri.fragment) == null) return
+        scope.launch {
+            delay(600)
+            val meta = withContext(Dispatchers.IO) { runCatching { AliyunEnricher.readHeader(song) }.getOrNull() }
+                ?: return@launch
+            if (_player.value.current?.stableKey != song.stableKey) return@launch
+            withContext(Dispatchers.IO) { AliyunEnricher.applyHeader(app, song, meta) }
+            val saved = withContext(Dispatchers.IO) {
+                val id = TrackFragment.parse(song.uri.fragment) ?: return@withContext null
+                aliyunTracks.get(id.first, id.second)
+            }
+            val updated = song.copy(
+                title = saved?.title?.takeIf { it.isNotBlank() } ?: song.title,
+                artist = saved?.artist ?: song.artist,
+                album = saved?.album ?: song.album,
+                durationMs = saved?.durationMs?.takeIf { it > 0L } ?: song.durationMs,
+            )
+            currentQueue = currentQueue.map { if (it.stableKey == song.stableKey) updated else it }
+            _player.update { state ->
+                if (state.current?.stableKey == song.stableKey) state.copy(current = updated) else state
+            }
+            meta.picture?.let { bytes ->
+                CoverRepository.rememberRaw(updated, bytes)
+                val c = controller ?: return@let
+                val at = (0 until c.mediaItemCount).firstOrNull { c.getMediaItemAt(it).mediaId == song.stableKey }
+                    ?: return@let
+                runCatching {
+                    c.replaceMediaItem(at, PlaybackConnection.withArtwork(c.getMediaItemAt(at), bytes))
+                }
             }
         }
     }
@@ -718,6 +861,7 @@ class PlaybackEngine(
         // 曲库还没推过来（冷启动时曲库域的装载与这里是一条竞速链）。
         // **不置 queueRestored**：下一次调用（扫描完成后）还要再来一遍。
         if (librarySongs.isEmpty()) {
+            if (restoreAliyunQueue(c)) return
             Log.i(TAG, "断点续播：曲库尚未就绪，等下一次调用")
             return
         }
@@ -728,9 +872,11 @@ class PlaybackEngine(
         // 决策交给纯函数（见 RestorePlan.kt），这里只负责把计划落到播放器上。
         when (val plan = planRestore(librarySongs, queueIds, state)) {
             RestorePlan.WaitForLibrary -> Log.i(TAG, "断点续播：曲库尚未就绪，等下一次调用")
-            RestorePlan.NothingToRestore -> Log.i(TAG, "断点续播：没有可恢复的播放态")
+            RestorePlan.NothingToRestore -> {
+                if (!restoreAliyunQueue(c)) Log.i(TAG, "断点续播：没有可恢复的播放态")
+            }
             RestorePlan.StaleState -> {
-                // 那首歌已不在曲库里（被删 / 被移出）：没什么可恢复的，别再重试
+                if (queueIds.isEmpty() && restoreAliyunQueue(c)) return@restoreQueue
                 queueRestored = true
                 Log.i(TAG, "断点续播：上次的歌曲已不在曲库（id=${state?.currentSongId}）")
             }
@@ -1163,7 +1309,11 @@ class PlaybackEngine(
 
         // 并行分片只服务「当前这一首」（v1.1.47）：本地文件传 null，等于关掉这层
         ParallelDownloadRegistry.setCurrentKey(
-            if (CachePrefetchPolicy.isRemote(song.uri.scheme)) ParallelDownloadRegistry.keyOf(song.uri) else null,
+            if (TrackFragment.parse(song.uri.fragment) == null && CachePrefetchPolicy.isRemote(song.uri.scheme)) {
+                ParallelDownloadRegistry.keyOf(song.uri)
+            } else {
+                null
+            },
         )
 
         stats.flushListen()
@@ -1180,6 +1330,7 @@ class PlaybackEngine(
         startPositionTicker()
         loadLyrics(song)
         loadArtwork(song)
+        enrichAliyun(song)
     }
 
     private fun loadLyrics(song: Song) {
@@ -1310,7 +1461,15 @@ class PlaybackEngine(
                     lastPrefetchPlanAt = now
                     // 并行分片正在吃带宽时不再预取：两条路抢同一根管子，只会两边都慢
                     if (!ParallelDownloadRegistry.isActive() &&
-                        CachePrefetchPolicy.shouldStart(playing, buffered - pos)
+                        CachePrefetchPolicy.shouldStart(
+                            playing,
+                            buffered - pos,
+                            // 缺口指播放位置往前还不够 20 秒，不是「整首歌还没下完」。
+                            // 缓冲窗口最多 120 秒，用文件结尾判断会让后面两首永远等不到预取。
+                            currentTailOpen = duration > 0L &&
+                                buffered + 1_000L < duration &&
+                                buffered - pos < CachePrefetchPolicy.MIN_AHEAD_MS,
+                        )
                     ) {
                         runCatching { CachePrefetcher.plan(app, upcomingSongs(c)) }
                     }
@@ -1318,10 +1477,14 @@ class PlaybackEngine(
 
                 if (pos > 0 && now - lastSavedAt >= 5_000L) {
                     lastSavedAt = now
-                    // 进度落库：只更新 player_state 唯一那一行（单行 UPDATE，开销极小）
+                    val mediaId = c.currentMediaItem?.mediaId
+                    val id = mediaId?.let { TrackFragment.parse(it.removePrefix("aliyun:")) }
                     scope.launch {
                         withContext(Dispatchers.IO) {
                             runCatching { store.updatePosition(pos, System.currentTimeMillis()) }
+                            if (id != null && duration > 0L) {
+                                runCatching { aliyunTracks.rememberDuration(id.first, id.second, duration) }
+                            }
                         }
                     }
                 }

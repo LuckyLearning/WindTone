@@ -64,7 +64,8 @@ internal class AliyunPlaylistStore(context: Context) {
                 JSONObject()
                     .put("file_id", f.fileId)
                     .put("name", f.name)
-                    .put("parent_path", f.parentPath),
+                    .put("parent_path", f.parentPath)
+                    .put("parent_file_id", f.parentFileId),
             )
         }
         put("files", files)
@@ -80,6 +81,7 @@ internal class AliyunPlaylistStore(context: Context) {
                 fileId = fileId,
                 name = f.optString("name"),
                 parentPath = f.optString("parent_path"),
+                parentFileId = f.optString("parent_file_id"),
             )
         }
         return AliyunPlaylist(
@@ -135,5 +137,33 @@ class AliyunSavedPlaylists(context: Context) {
 
     fun remove(id: String) {
         store.replace(store.all().filterNot { it.id == id })
+    }
+
+    /** 从一份歌单里去掉一首。改的是本地引用，不改云盘上的文件。 */
+    fun removeFile(playlistId: String, fileId: String) {
+        store.replace(
+            store.all().map { playlist ->
+                if (playlist.id != playlistId) playlist
+                else playlist.copy(
+                    files = playlist.files.filterNot { it.fileId == fileId },
+                    updatedAt = System.currentTimeMillis(),
+                )
+            },
+        )
+    }
+
+    /** 按给定 fileId 顺序重排。没出现在列表里的曲目留在末尾，避免一次不完整的排序丢掉歌。 */
+    fun reorder(playlistId: String, orderedFileIds: List<String>) {
+        store.replace(
+            store.all().map { playlist ->
+                if (playlist.id != playlistId) playlist
+                else {
+                    val byId = playlist.files.associateBy { it.fileId }
+                    val head = orderedFileIds.mapNotNull { byId[it] }
+                    val rest = playlist.files.filter { it.fileId !in orderedFileIds.toSet() }
+                    playlist.copy(files = head + rest, updatedAt = System.currentTimeMillis())
+                }
+            },
+        )
     }
 }
