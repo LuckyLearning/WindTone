@@ -36,7 +36,7 @@ class AliyunAuthSourceTest {
 
     @Test
     fun oaSourceUsesLegacyRenewEndpointWithDriverHint() {
-        val url = AliyunEndpoints.renewApiUrl("rt-1", AliyunTokenSource.OA)
+        val url = AliyunEndpoints.renewApiUrl("rt-1", AliyunTokenSource.OA, "https://api.oplist.org")
         assertEquals(
             "https://api.oplist.org/alicloud/renewapi?refresh_ui=rt-1&server_use=true&driver_txt=alicloud_qr",
             url,
@@ -44,8 +44,19 @@ class AliyunAuthSourceTest {
     }
 
     @Test
+    fun renewUrlPutsMainlandSiteFirst() {
+        // 国内移动网络下 .cn（EdgeOne）明显快于 .org（Cloudflare），后者甚至可能连不上
+        assertEquals("https://api.oplist.org.cn", AliyunEndpoints.BASES.first())
+        assertTrue(AliyunEndpoints.BASES.contains("https://api.oplist.org"))
+        assertTrue(
+            AliyunEndpoints.renewApiUrl("rt", AliyunTokenSource.CS)
+                .startsWith("https://api.oplist.org.cn/alicloud2/renewapi?"),
+        )
+    }
+
+    @Test
     fun csSourceUsesQrLoginRenewEndpointWithoutDriverHint() {
-        val url = AliyunEndpoints.renewApiUrl("rt-2", AliyunTokenSource.CS)
+        val url = AliyunEndpoints.renewApiUrl("rt-2", AliyunTokenSource.CS, "https://api.oplist.org")
         assertEquals("https://api.oplist.org/alicloud2/renewapi?refresh_ui=rt-2", url)
         // oa 端点的 driver_txt 与 server_use 不能出现在 cs 端点上（服务端按路径分派驱动，
         // 多余参数会让 alicloud_cs 的 genToken 行为与预期不符）
@@ -55,7 +66,7 @@ class AliyunAuthSourceTest {
 
     @Test
     fun refreshTokenIsUrlEncoded() {
-        val url = AliyunEndpoints.renewApiUrl("a+b/c=", AliyunTokenSource.CS)
+        val url = AliyunEndpoints.renewApiUrl("a+b/c=", AliyunTokenSource.CS, "https://api.oplist.org")
         assertTrue(url.endsWith("refresh_ui=a%2Bb%2Fc%3D"))
     }
 

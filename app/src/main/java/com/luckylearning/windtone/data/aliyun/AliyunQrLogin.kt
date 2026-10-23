@@ -34,6 +34,8 @@ object AliyunQrLogin {
         val qrContent: String,
         /** 会话有效期（秒），0 = 服务端没给 */
         val expiresInSec: Long,
+        /** 生成它的服务基址 —— 后续轮询 / 取令牌必须打同一个站（见 [BASES]） */
+        val base: String = BASE,
     )
 
     /** 扫码状态（与服务端字符串一一对应，详见 [ScanStatus]） */
@@ -53,31 +55,60 @@ object AliyunQrLogin {
 
     // ---------------------------------------------------------------- 端点 URL
 
+    /**
+     * 授权服务基址候选，**国内站优先**。
+     *
+     * OpenList 同时部署了两个站：`api.oplist.org.cn`（腾讯 EdgeOne 中国大陆节点）
+     * 与 `api.oplist.org`（全球，Cloudflare）。实测后者在国内移动网络下经常要 6 秒以上、
+     * 甚至握不上手 —— 用户看到的就是「正在生成二维码…」一直转。所以先试 `.cn`，
+     * 失败再退到全球站。
+     *
+     * ⚠️ 三步（生成 / 轮询 / 取令牌）必须打**同一个域名**：`session_id` 存在服务端
+     * 会话存储里，跨站查不到。所以选中的 base 会随 [QrSession] 一起带给后续两步。
+     */
+    val BASES = listOf("https://api.oplist.org.cn", "https://api.oplist.org")
+
+    /** 默认基址（全球站）：仅作兼容引用，实际请求走 [BASES] 逐个尝试 */
     const val BASE = "https://api.oplist.org"
 
-    fun generateUrl(): String = "$BASE/alicloud2/generate_qr"
+    fun generateUrl(base: String): String = "$base/alicloud2/generate_qr"
 
-    fun checkUrl(sessionId: String): String =
-        "$BASE/alicloud2/check_login?session_id=${AliyunEndpoints.enc(sessionId)}"
+    fun checkUrl(base: String, sessionId: String): String =
+        "$base/alicloud2/check_login?session_id=${AliyunEndpoints.enc(sessionId)}"
 
-    fun userInfoUrl(sessionId: String): String =
-        "$BASE/alicloud2/get_user_info?session_id=${AliyunEndpoints.enc(sessionId)}"
+    fun userInfoUrl(base: String, sessionId: String): String =
+        "$base/alicloud2/get_user_info?session_id=${AliyunEndpoints.enc(sessionId)}"
 
     /** 服务端要求的会话绑定头 */
     const val HEADER_FINGERPRINT = "X-Client-Fingerprint"
 
     // ---------------------------------------------------------------- 三步请求
 
-    /** 第 1 步：生成扫码会话（网络请求，必须在 IO 线程）。失败抛 [QrLoginException]。 */
+    /**
+     * 第 1 步：生成扫码会话（网络请求，必须在 IO 线程）。失败抛 [QrLoginException]。
+     *
+     * 逐个试 [BASES]：一个域名连不上不能把整个授权堵死。每个请求用短超时
+     * （连接 6s / 读 10s），失败就换下一个 —— 两个都失败才报错，错误里带上两边原因。
+     */
     suspend fun generateQr(fingerprint: String): QrSession = withContext(Dispatchers.IO) {
-        val json = http {
-            AliyunHttp.getJson(
-                generateUrl(),
-                AliyunEndpoints.UA,
-                mapOf(HEADER_FINGERPRINT to fingerprint),
-            )
+        val failures = mutableListOf<String>()
+        for (base in BASES) {
+            try {
+                val json = http {
+                    AliyunHttp.getJson(
+                        generateUrl(base),
+                        AliyunEndpoints.UA,
+                        mapOf(HEADER_FINGERPRINT to fingerprint),
+                        connectTimeoutMs = 6_000,
+                        readTimeoutMs = 10_000,
+                    )
+                }
+                return@withContext parseGenerate(json).copy(base = base)
+            } catch (e: QrLoginException) {
+                failures += "${base.substringAfter("://")}：${e.message}"
+            }
         }
-        parseGenerate(json)
+        throw QrLoginException("连不上授权服务器（已试 ${BASES.size} 个站）：" + failures.joinToString("；"))
     }
 
     /** [parseGenerate]：只做字段解析，单测可直接喏 JSON */
@@ -98,13 +129,15 @@ object AliyunQrLogin {
     }
 
     /** 第 2 步：轮询扫码状态。失败抛 [QrLoginException]。 */
-    suspend fun checkLogin(sessionId: String, fingerprint: String): ScanStatus =
+    suspend fun checkLogin(session: QrSession, fingerprint: String): ScanStatus =
         withContext(Dispatchers.IO) {
             val json = http {
                 AliyunHttp.getJson(
-                    checkUrl(sessionId),
+                    checkUrl(session.base, session.sessionId),
                     AliyunEndpoints.UA,
                     mapOf(HEADER_FINGERPRINT to fingerprint),
+                    connectTimeoutMs = 6_000,
+                    readTimeoutMs = 10_000,
                 )
             }
             if (!json.optBoolean("success", false)) {
@@ -114,13 +147,15 @@ object AliyunQrLogin {
         }
 
     /** 第 3 步：取回令牌。失败抛 [QrLoginException]。 */
-    suspend fun fetchResult(sessionId: String, fingerprint: String): QrResult =
+    suspend fun fetchResult(session: QrSession, fingerprint: String): QrResult =
         withContext(Dispatchers.IO) {
             val json = http {
                 AliyunHttp.getJson(
-                    userInfoUrl(sessionId),
+                    userInfoUrl(session.base, session.sessionId),
                     AliyunEndpoints.UA,
                     mapOf(HEADER_FINGERPRINT to fingerprint),
+                    connectTimeoutMs = 6_000,
+                    readTimeoutMs = 15_000,
                 )
             }
             parseResult(json)

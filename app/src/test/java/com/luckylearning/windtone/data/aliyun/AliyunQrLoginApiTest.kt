@@ -97,18 +97,26 @@ class AliyunQrLoginApiTest {
     }
 
     @Test
-    fun urlsCarrySessionId() {
+    fun urlsCarrySessionIdAndSelectedBase() {
         assertEquals(
-            "https://api.oplist.org/alicloud2/generate_qr",
-            AliyunQrLogin.generateUrl(),
+            "https://api.oplist.org.cn/alicloud2/generate_qr",
+            AliyunQrLogin.generateUrl("https://api.oplist.org.cn"),
         )
         assertEquals(
-            "https://api.oplist.org/alicloud2/check_login?session_id=sid%2F1",
-            AliyunQrLogin.checkUrl("sid/1"), // sessionId 里有特殊字符也要被正确转义
+            "https://api.oplist.org.cn/alicloud2/check_login?session_id=sid%2F1",
+            // sessionId 里有特殊字符也要被正确转义
+            AliyunQrLogin.checkUrl("https://api.oplist.org.cn", "sid/1"),
         )
         assertEquals(
-            "https://api.oplist.org/alicloud2/get_user_info?session_id=sid-2",
-            AliyunQrLogin.userInfoUrl("sid-2"),
+            "https://api.oplist.org.cn/alicloud2/get_user_info?session_id=sid-2",
+            AliyunQrLogin.userInfoUrl("https://api.oplist.org.cn", "sid-2"),
         )
+    }
+
+    @Test
+    fun mainlandSiteIsTriedFirst() {
+        // 国内移动网络下 .cn（EdgeOne）0.6s，.org（Cloudflare）6s+ 甚至连不上
+        assertEquals("https://api.oplist.org.cn", AliyunQrLogin.BASES.first())
+        assertEquals(2, AliyunQrLogin.BASES.size)
     }
 }

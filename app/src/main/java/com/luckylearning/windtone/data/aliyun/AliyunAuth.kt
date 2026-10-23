@@ -245,12 +245,17 @@ class AliyunAuth(context: Context) {
         // 路径二 / 三：OpenList 两条刷新线（先来源、再兜底）
         val order = listOf(preferred, if (preferred == AliyunTokenSource.OA) AliyunTokenSource.CS else AliyunTokenSource.OA)
         for (source in order) {
-            when (val r = refreshViaOpenList(refreshToken, source)) {
-                is AliyunExchange.Ready -> {
-                    save(r.token, source)
-                    return r
+            for (base in AliyunEndpoints.BASES) {
+                when (val r = refreshViaOpenList(refreshToken, source, base)) {
+                    is AliyunExchange.Ready -> {
+                        save(r.token, source)
+                        return r
+                    }
+                    is AliyunExchange.Failed -> failures += (
+                        (if (source == AliyunTokenSource.OA) "旧扫码线" else "扫码登录线") +
+                            "(${base.substringAfter("://")})：" + r.reason
+                        )
                 }
-                is AliyunExchange.Failed -> failures += (if (source == AliyunTokenSource.OA) "旧扫码线：" else "扫码登录线：") + r.reason
             }
         }
         return AliyunExchange.Failed(
@@ -277,10 +282,17 @@ class AliyunAuth(context: Context) {
         }
     }
 
-    /** 路径二 / 三：OpenList 在线接口（按令牌来源选端点） */
-    private fun refreshViaOpenList(refreshToken: String, source: AliyunTokenSource): AliyunExchange {
+    /** 路径二 / 三：OpenList 在线接口（按令牌来源选端点、按站点选域名） */
+    private fun refreshViaOpenList(
+        refreshToken: String,
+        source: AliyunTokenSource,
+        base: String,
+    ): AliyunExchange {
         val json = runCatching {
-            AliyunHttp.getJson(AliyunEndpoints.renewApiUrl(refreshToken, source), AliyunEndpoints.UA)
+            AliyunHttp.getJson(
+                AliyunEndpoints.renewApiUrl(refreshToken, source, base),
+                AliyunEndpoints.UA,
+            )
         }.getOrElse { return AliyunExchange.Failed(it.message ?: "网络请求失败（OpenList 在线接口）") }
         // 在线接口的错误放在 text 字段里（成功时为空）
         val text = json.optString("text")
@@ -347,8 +359,20 @@ object AliyunEndpoints {
      */
     const val RENEW_API_CS = "https://api.oplist.org/alicloud2/renewapi"
 
-    /** OpenList 的令牌获取页（浏览器打开，扫码授权后显示 refresh_token） */
-    const val TOKEN_TOOL_URL = "https://api.oplist.org"
+    /**
+     * OpenList 服务基址候选：**中国大陆节点优先**，全球站兜底。
+     *
+     * 实测（国内容移动网络）：`api.oplist.org.cn`（腾讯 EdgeOne）约 0.6 秒，
+     * `api.oplist.org`（Cloudflare）要 6 秒以上、甚至是用户侧完全连不上的那一档。
+     * 两者接口路径与行为一致。
+     */
+    val BASES = listOf("https://api.oplist.org.cn", "https://api.oplist.org")
+
+    /**
+     * OpenList 的令牌获取页（浏览器打开，扫码授权后显示 refresh_token）——
+     * 国内站优先（与 [BASES] 一致）
+     */
+    val TOKEN_TOOL_URL: String get() = BASES.first()
 
     /** 刷新令牌的官方地址 */
     fun tokenUrl(): String = TOKEN_URL
@@ -359,20 +383,25 @@ object AliyunEndpoints {
      * 参数与 OpenList 源码逐字一致（`refresh_ui` / `server_use` / `driver_txt`）——
      * 名字怪但改不得：服务端按它们分派驱动。`driver_txt=alicloud_qr` 表示
      * 「旧扫码授权」那一档；扫码登录（网页侧）走 `/alicloud2` 且**不带** driver_txt。
+     *
+     * [base] 由调用方从 [BASES] 里选（通常先国内站，失败再换站）。
      */
-    fun renewApiUrl(refreshToken: String, source: AliyunTokenSource): String =
-        when (source) {
-            AliyunTokenSource.OA -> buildString {
-                append(RENEW_API)
-                append("?refresh_ui=").append(enc(refreshToken))
-                append("&server_use=true")
-                append("&driver_txt=alicloud_qr")
-            }
-            AliyunTokenSource.CS -> buildString {
-                append(RENEW_API_CS)
-                append("?refresh_ui=").append(enc(refreshToken))
-            }
+    fun renewApiUrl(
+        refreshToken: String,
+        source: AliyunTokenSource,
+        base: String = BASES.first(),
+    ): String = when (source) {
+        AliyunTokenSource.OA -> buildString {
+            append(base).append("/alicloud/renewapi")
+            append("?refresh_ui=").append(enc(refreshToken))
+            append("&server_use=true")
+            append("&driver_txt=alicloud_qr")
         }
+        AliyunTokenSource.CS -> buildString {
+            append(base).append("/alicloud2/renewapi")
+            append("?refresh_ui=").append(enc(refreshToken))
+        }
+    }
 
     fun enc(s: String): String = URLEncoder.encode(s, "UTF-8")
 
@@ -389,8 +418,21 @@ internal object AliyunHttp {
         read(url, ua, method = "GET", body = null)
 
     /** 带额外请求头的 GET（扫码授权需要 `X-Client-Fingerprint`，见 AliyunQrLogin） */
-    fun getJson(url: String, ua: String, extraHeaders: Map<String, String>): JSONObject =
-        read(url, ua, method = "GET", body = null, extraHeaders = extraHeaders)
+    fun getJson(
+        url: String,
+        ua: String,
+        extraHeaders: Map<String, String>,
+        connectTimeoutMs: Int = 12_000,
+        readTimeoutMs: Int = 20_000,
+    ): JSONObject = read(
+        url,
+        ua,
+        method = "GET",
+        body = null,
+        extraHeaders = extraHeaders,
+        connectTimeoutMs = connectTimeoutMs,
+        readTimeoutMs = readTimeoutMs,
+    )
 
     private fun read(
         url: String,
@@ -398,10 +440,12 @@ internal object AliyunHttp {
         method: String,
         body: JSONObject?,
         extraHeaders: Map<String, String> = emptyMap(),
+        connectTimeoutMs: Int = 12_000,
+        readTimeoutMs: Int = 20_000,
     ): JSONObject {
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 12_000
-            readTimeout = 20_000
+            connectTimeout = connectTimeoutMs
+            readTimeout = readTimeoutMs
             requestMethod = method
             setRequestProperty("User-Agent", ua)
             extraHeaders.forEach { (k, v) -> setRequestProperty(k, v) }

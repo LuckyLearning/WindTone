@@ -1,5 +1,7 @@
 package com.luckylearning.windtone.ui
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,9 +21,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.google.zxing.BarcodeFormat
@@ -32,6 +35,7 @@ import com.luckylearning.windtone.data.aliyun.AliyunQrLogin
 import com.luckylearning.windtone.data.aliyun.AliyunQrLogin.ScanStatus
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 /**
  * 阿里云盘**扫码授权弹层** —— 授权全程在 app 内完成，不跳浏览器、不复制粘贴。
@@ -42,10 +46,16 @@ import kotlinx.coroutines.isActive
  *
  * 状态机：
  * ```
- * Generating ──→ Showing(qr, status) ── CONFIRMED ──→ Saving ──→ onLoggedIn()
- *      ↑                │  │                (取令牌)
- *      └── EXPIRED ─────┘  └── 出错 → Failed(reason)，可重试
+ * 生成中(显示已等待秒数) ──成功──→ 显示二维码 ── CONFIRMED ──→ 保存 ──→ onLoggedIn()
+ *      │                        │
+ *      └──失败→ 显示原因 + 重试    └── EXPIRED → 重新生成
  * ```
+ *
+ * 两个刻意的取舍：
+ *  1. **不自动静默重试**：生成失败立刻把原因摊在界面上。以前失败后默默再试，
+ *     用户看到的只是「正在生成二维码…」永远转圈，分不清是慢、是死、还是根本没发出去。
+ *  2. **等待秒数可见**：转圈超过 3 秒就显示「已等待 N 秒」，让「慢」和「卡死」可区分。
+ *
  * 轮询挂在 [LaunchedEffect] 协程里，弹层关闭 = 协程取消 = 轮询停止，无泄漏。
  */
 @Composable
@@ -55,43 +65,53 @@ internal fun AliyunQrLoginDialog(
     onError: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    /** 弹层阶段。session == null 且 generating = 正在生成；非空 = 展示二维码轮询中 */
+    val context = LocalContext.current
+
+    /** 当前扫码会话；null = 还没生成出来 */
     var session by remember { mutableStateOf<AliyunQrLogin.QrSession?>(null) }
-    var generating by remember { mutableStateOf(true) }
     var status by remember { mutableStateOf<ScanStatus?>(null) }
     var saving by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf<String?>(null) }
+    /** 生成阶段已等待的秒数（>3 秒才显示，区分「慢」与「卡死」） */
+    var waitedSeconds by remember { mutableStateOf(0) }
+    /** 重试计数：自增即触发重新生成 */
+    var attempt by remember { mutableStateOf(0) }
 
     /** 一次授权流程共用的指纹（服务端要求三步同一个值，见 AliyunQrLogin.randomFingerprint） */
     val fingerprint = remember { AliyunQrLogin.randomFingerprint() }
 
-    // 生成二维码：初次进入 + 过期自动重来都走这里（以 session 为 key 不会死循环，
-    // 过期时先把 session 置空再触发重新生成）
-    LaunchedEffect(Unit) {
-        while (isActive && session == null && failed == null) {
-            generating = true
-            try {
-                session = AliyunQrLogin.generateQr(fingerprint)
-                status = null
-            } catch (e: AliyunQrLogin.QrLoginException) {
-                failed = e.message ?: "生成二维码失败"
+    // 生成二维码：进入弹层、点重试、二维码过期都走这里
+    LaunchedEffect(attempt) {
+        session = null
+        failed = null
+        status = null
+        waitedSeconds = 0
+        val ticker = launch {
+            while (isActive) {
+                delay(1_000)
+                waitedSeconds++
             }
-            generating = false
-            if (session == null && failed == null) delay(3_000) // 生成失败：缓 3 秒再试
+        }
+        try {
+            session = AliyunQrLogin.generateQr(fingerprint)
+        } catch (e: AliyunQrLogin.QrLoginException) {
+            failed = e.message ?: "生成二维码失败"
+        } finally {
+            ticker.cancel()
         }
     }
 
-    // 轮询扫码状态：session 换了（过期重来）就重新开始
+    // 轮询扫码状态：换了 session（过期重来）就重新开始
     LaunchedEffect(session) {
-        val sid = session?.sessionId ?: return@LaunchedEffect
+        val current = session ?: return@LaunchedEffect
         while (isActive) {
             try {
-                val s = AliyunQrLogin.checkLogin(sid, fingerprint)
+                val s = AliyunQrLogin.checkLogin(current, fingerprint)
                 status = s
                 when {
                     s == ScanStatus.CONFIRMED -> {
                         saving = true
-                        val result = AliyunQrLogin.fetchResult(sid, fingerprint)
+                        val result = AliyunQrLogin.fetchResult(current, fingerprint)
                         // 来源固定为 CS（网页版扫码登录）—— 刷新端点必须与之匹配，
                         // 混用会「能用 2 小时后永久失效」（见 AliyunTokenSource 注释）
                         auth.saveFromQrLogin(
@@ -103,15 +123,15 @@ internal fun AliyunQrLoginDialog(
                         return@LaunchedEffect
                     }
                     s == ScanStatus.EXPIRED -> {
-                        // 二维码过期：重新生成一张（退出本轮轮询，由上面的生成循环接手）
+                        // 二维码过期：重新生成一张（attempt 自增触发上面的生成逻辑）
                         session = null
+                        attempt++
                         return@LaunchedEffect
                     }
                     else -> Unit
                 }
             } catch (e: AliyunQrLogin.QrLoginException) {
-                // 网络抖动不终止轮询，连着多次失败再报错（每轮间隔照常，累计由用户关弹层控制）
-                repeat(2) { delay(AliyunQrLogin.POLL_INTERVAL_MS) }
+                // 轮询偶发失败（切网 / 弱网）不该终止整个流程：等一轮再来
                 status = null
             }
             delay(AliyunQrLogin.POLL_INTERVAL_MS)
@@ -121,18 +141,35 @@ internal fun AliyunQrLoginDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("扫码登录阿里云盘") },
-        text = { QrLoginContent(session, generating, status, saving, failed) },
+        text = {
+            QrLoginContent(
+                session = session,
+                status = status,
+                saving = saving,
+                failed = failed,
+                waitedSeconds = waitedSeconds,
+                onOpenWebTool = {
+                    runCatching {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse(AliyunQrLogin.BASES.first()))
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    }
+                },
+            )
+        },
         confirmButton = {
-            if (failed != null) {
-                TextButton(onClick = {
-                    failed = null
-                    session = null
-                    generating = true
-                }) { Text("重试") }
+            when {
+                failed != null -> TextButton(onClick = { attempt++ }) { Text("重试") }
+                session != null -> TextButton(onClick = onDismiss) { Text("取消") }
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            if (session != null || failed != null) {
+                TextButton(onClick = onDismiss) { Text("关闭") }
+            } else {
+                TextButton(onClick = onDismiss) { Text("取消") }
+            }
         },
     )
 }
@@ -140,10 +177,11 @@ internal fun AliyunQrLoginDialog(
 @Composable
 private fun QrLoginContent(
     session: AliyunQrLogin.QrSession?,
-    generating: Boolean,
     status: ScanStatus?,
     saving: Boolean,
     failed: String?,
+    waitedSeconds: Int,
+    onOpenWebTool: () -> Unit,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -153,12 +191,14 @@ private fun QrLoginContent(
             failed != null -> {
                 Text(failed, textAlign = TextAlign.Center)
                 Text(
-                    "也可以退回上一页用「手动粘贴令牌」完成登录",
+                    "扫码授权依赖第三方在线服务，连不上时可以：① 点下面「网页获取令牌」用浏览器扫码，" +
+                        "拿到的刷新令牌回上一页「手动粘贴令牌」；② 换 Wi-Fi 重试。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = 8.dp),
                 )
+                TextButton(onClick = onOpenWebTool) { Text("网页获取令牌") }
             }
             saving -> {
                 CircularProgressIndicator(Modifier.size(48.dp))
@@ -166,7 +206,20 @@ private fun QrLoginContent(
             }
             session == null -> {
                 CircularProgressIndicator(Modifier.size(48.dp))
-                Text("正在生成二维码…", modifier = Modifier.padding(top = 12.dp))
+                Text(
+                    if (waitedSeconds > 3) "正在生成二维码…（已等待 ${waitedSeconds} 秒）"
+                    else "正在生成二维码…",
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                if (waitedSeconds > 10) {
+                    Text(
+                        "网络较慢时会多等一会；若一直停在这里，关掉重试或改用「网页获取令牌」",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
             }
             else -> {
                 QrCodeImage(session.qrContent, modifier = Modifier.size(220.dp))
@@ -179,7 +232,7 @@ private fun QrLoginContent(
                     modifier = Modifier.padding(top = 12.dp),
                 )
                 Text(
-                    "二维码过期会自动刷新；应用对网盘只读，不会上传、修改或删除任何文件",
+                    "二维码过期会自动换新码；应用对网盘只读，不会上传、修改或删除任何文件",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
