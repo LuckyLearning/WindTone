@@ -340,6 +340,8 @@ internal fun SettingsLibraryPage(
     onOpenOnline: () -> Unit,
     /** 打开「百度网盘」子页（v1.1.39） */
     onOpenBaidu: () -> Unit,
+    /** 打开「阿里云盘」子页（在线播放） */
+    onOpenAliyun: () -> Unit,
     library: LibraryUiState,
 ) {
     var showMinDurationDialog by remember { mutableStateOf(false) }
@@ -383,6 +385,12 @@ internal fun SettingsLibraryPage(
         title = "百度网盘",
         subtitle = "扫码授权后直接播放网盘里的音乐（只读；需放在「我的应用数据/<应用名>」目录）",
         onClick = onOpenBaidu,
+        chevron = true,
+    )
+    ActionRow(
+        title = "阿里云盘",
+        subtitle = "粘贴刷新令牌后直接播放云盘里的音乐（只读；令牌在 api.oplist.org 扫码获取）",
+        onClick = onOpenAliyun,
         chevron = true,
     )
 

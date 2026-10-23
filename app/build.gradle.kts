@@ -132,6 +132,14 @@ fun credential(envName: String, fileName: String): String {
 val baiduAppKey = credential("BAIDU_APP_KEY", "baiduAppKey")
 val baiduSecretKey = credential("BAIDU_SECRET_KEY", "SecretKey")
 
+// 阿里云盘开放平台（在线播放）的 ClientId / ClientSecret：
+//   · 本机开发：工程根目录下的 aliyunClientId / aliyunClientSecret（已 gitignore，不入库）
+//   · CI 构建：仓库 Secrets 注入的环境变量 ALIYUN_CLIENT_ID / ALIYUN_CLIENT_SECRET
+// 都没有时留空 —— 应用里阿里云盘入口会显示「当前构建未配置应用凭据」，
+// 与百度网盘入口保持同一套兜底语义。
+val aliyunClientId = credential("ALIYUN_CLIENT_ID", "aliyunClientId")
+val aliyunClientSecret = credential("ALIYUN_CLIENT_SECRET", "aliyunClientSecret")
+
 android {
     namespace = "com.luckylearning.windtone"
     compileSdk = 35
@@ -163,6 +171,10 @@ android {
         // 百度网盘（v1.1.39）：Key 从文件/环境变量读，见文件顶部 credential()
         buildConfigField("String", "BAIDU_APP_KEY", "\"$baiduAppKey\"")
         buildConfigField("String", "BAIDU_SECRET_KEY", "\"$baiduSecretKey\"")
+
+        // 阿里云盘（在线播放）：Key 从文件/环境变量读，见文件顶部 credential()
+        buildConfigField("String", "ALIYUN_CLIENT_ID", "\"$aliyunClientId\"")
+        buildConfigField("String", "ALIYUN_CLIENT_SECRET", "\"$aliyunClientSecret\"")
 
         // 启动诊断页（见文件顶部 diagBuild 的说明），默认关闭
         buildConfigField("boolean", "BOOT_DIAG", diagBuild.toString())

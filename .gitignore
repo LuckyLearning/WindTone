@@ -81,3 +81,6 @@ desktop.ini
 # 百度网盘开放平台凭据（本机开发用，绝不入库）
 baiduAppKey
 SecretKey
+# 阿里云盘开放平台凭据（本机开发用，绝不入库）
+aliyunClientId
+aliyunClientSecret

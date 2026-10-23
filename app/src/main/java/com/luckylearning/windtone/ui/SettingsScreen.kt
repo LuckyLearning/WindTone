@@ -114,6 +114,9 @@ internal enum class SettingsPage(val title: String) {
 
     /** 百度网盘 —— v1.1.39 */
     BAIDU("百度网盘"),
+
+    /** 阿里云盘（在线播放） */
+    ALIYUN("阿里云盘"),
 }
 
 /**
@@ -485,12 +488,15 @@ fun SettingsScreen(
                         onOpenStats = onOpenStats,
                         onOpenOnline = { page = SettingsPage.ONLINE },
                         onOpenBaidu = { page = SettingsPage.BAIDU },
+                        onOpenAliyun = { page = SettingsPage.ALIYUN },
                         library = library,
                     )
 
                     SettingsPage.ONLINE -> OnlinePlaylistsPage(onPlay = onPlayQueue)
 
                     SettingsPage.BAIDU -> BaiduPanPage(onPlay = onPlayQueue)
+
+                    SettingsPage.ALIYUN -> AliyunPanPage(onPlay = onPlayQueue)
 
                     SettingsPage.DIAGNOSTICS -> SettingsDiagnosticsPage(
                         player = player,
