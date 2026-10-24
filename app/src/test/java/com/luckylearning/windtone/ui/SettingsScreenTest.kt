@@ -482,33 +482,12 @@ class SettingsScreenTest {
     // ================================================================ v1.1.17 曲库格式与容量
 
     /**
-     * 「音乐库 → 阿里云盘」能进子页，且**不崩**。
+     * 「阿里云盘」页已不在设置里（v1.1.75 升为抽屉一级入口，见 AliyunPanPageTest）。
      *
-     * 这是 v1.1.56 真机崩溃的最小复现：`pagePositions` 是按下标存各页滚动位置的，
-     * ALIYUN 是枚举里 ordinal 最大的那一项，只要表比枚举短一格就必崩在这：
-     *
-     * ```
-     * java.lang.IndexOutOfBoundsException: index: 10, size: 9
-     *   at SettingsScreenKt.SettingsScreen(SettingsScreen.kt)
-     * ```
-     *
-     * 长度契约另由 [SettingsPagePositionsTest] 直接断言，这条负责走完从点卡到渲染的真实路径。
+     * 这里保留 v1.1.56 那次真机崩溃的教训说明：`pagePositions` 是按下标存各页滚动
+     * 位置的，当年 ALIYUN 是枚举里 ordinal 最大的那一项，只要表比枚举短一格就必崩。
+     * 枚举项增删时的长度契约另由 [SettingsPagePositionsTest] 直接断言。
      */
-    @Test
-    fun aliyunPageOpensWithoutCrash() {
-        render()
-
-        compose.onNodeWithText("在线播放").performScrollTo().performClick()
-        compose.waitForIdle()
-        compose.onNodeWithText("阿里云盘").performScrollTo().performClick()
-        compose.waitForIdle()
-
-        // 未登录时这一页的第一行引导（扫码授权，app 内完成），出现即说明页面真的渲染出来了
-        compose.onNodeWithText("扫码授权").performScrollTo().assertIsDisplayed()
-        // 手动粘贴仍是兜底入口
-        compose.onNodeWithText("手动粘贴令牌").assertIsDisplayed()
-    }
-
     @Test
     fun onlinePagePicksCacheInDialogAndOpensReport() {
         render()

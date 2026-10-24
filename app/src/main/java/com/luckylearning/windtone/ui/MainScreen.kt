@@ -219,6 +219,8 @@ fun MainScreen(
     // 侧边抽屉开合（v1.1.3：取代底部五视图导航）。只在曲库页出现，
     // 播放页 / 设置页这类全屏覆盖层在效果图里各有自己的返回按钮，没有汉堡入口。
     var drawerOpen by remember { mutableStateOf(false) }
+    // 阿里云盘页（v1.1.75 升为一级入口）：与曲库视图互斥显示，抽屉里切换。
+    var showAliyun by remember { mutableStateOf(false) }
     var crashLogText by remember { mutableStateOf<String?>(null) }
     var crashLogCount by remember { mutableStateOf(0) }
 
@@ -384,6 +386,8 @@ fun MainScreen(
     BackHandler(enabled = showReport) { showReport = false }
     BackHandler(enabled = showDuplicates) { showDuplicates = false }
     BackHandler(enabled = showLibraryStats) { showLibraryStats = false }
+    // 云盘页先于抽屉注册：抽屉开着时返回键只收抽屉（抽屉的 BackHandler 在后面，优先级更高）。
+    BackHandler(enabled = showAliyun) { showAliyun = false }
     // 抽屉最后注册 = 优先级最高：抽屉开着时返回键只收抽屉，不会顺带退出别的层。
     BackHandler(enabled = drawerOpen) { drawerOpen = false }
 
@@ -529,6 +533,17 @@ fun MainScreen(
                     )
                 }
                 Column(Modifier.weight(1f)) {
+                if (showAliyun) {
+                    // 阿里云盘一级页（v1.1.75）：自带头部（返回/标题/菜单），顶替
+                    // LibraryHeader + 曲库列表的位置；迷你播放条保留在下面，播云盘歌
+                    // 时照常显示。选曲库视图会自动退出云盘页（见抽屉的 onSelectView）。
+                    AliyunPanPage(
+                        onPlay = playerVm::playQueue,
+                        onClose = { showAliyun = false },
+                        onOpenDrawer = { drawerOpen = true },
+                        modifier = Modifier.weight(1f),
+                    )
+                } else {
                 if (carMode) {
                     // 车机：标题行（搜索）；视图切换在左侧常驻导航
                     CarLibraryHeader(
@@ -576,6 +591,7 @@ fun MainScreen(
                         listArea()
                     }
                 }
+                } // else（曲库页）：阿里云盘一级页时不渲染曲库头部与列表
 
                 if (!library.selecting) {
                     if (carMode) {
@@ -625,7 +641,13 @@ fun MainScreen(
             LibraryDrawer(
                 open = drawerOpen,
                 currentView = library.view,
-                onSelectView = lib::setView,
+                // 选曲库视图时退出阿里云盘页：抽屉里的「音乐库」组与「在线音乐」组互斥显示
+                onSelectView = {
+                    showAliyun = false
+                    lib.setView(it)
+                },
+                aliyunActive = showAliyun,
+                onOpenAliyun = { showAliyun = true },
                 onOpenScanScope = { showScanScope = true },
                 onOpenSettings = { showSettings = true },
                 onClose = { drawerOpen = false },

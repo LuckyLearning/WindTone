@@ -54,6 +54,7 @@ class LibraryDrawerTest {
         var closed = false
         var scanScope = false
         var settings = false
+        var aliyun = false
     }
 
     private fun renderOpen(currentView: LibraryView = LibraryView.SONGS): Recorder {
@@ -66,6 +67,7 @@ class LibraryDrawerTest {
                     onSelectView = { rec.selected = it },
                     onOpenScanScope = { rec.scanScope = true },
                     onOpenSettings = { rec.settings = true },
+                    onOpenAliyun = { rec.aliyun = true },
                     onClose = { rec.closed = true },
                 )
             }
@@ -94,19 +96,22 @@ class LibraryDrawerTest {
         compose.onNodeWithText("歌曲").assertDoesNotExist()
     }
 
-    /** 品牌块 + 两组共 7 项，一个都不能少 */
+    /** 品牌块 + 三组共 8 项，一个都不能少 */
     @Test
     fun showsBrandAndBothGroups() {
         renderOpen()
         compose.onNodeWithText("听风").assertIsDisplayed()
         compose.onNodeWithText("WindTone · 本地音乐").assertIsDisplayed()
         compose.onNodeWithText("音乐库").assertIsDisplayed()
+        compose.onNodeWithText("在线音乐").assertIsDisplayed()
         compose.onNodeWithText("更多").assertIsDisplayed()
         // 第一组 = 原底部导航的五个浏览视图
         listOf("歌曲", "专辑", "歌手", "文件夹", "歌单").forEach {
             compose.onNodeWithText(it).assertIsDisplayed()
         }
-        // 第二组 = 两个快捷入口（2026-10-17 起「检查更新」已从抽屉移除）
+        // 第二组：云盘页升为一级入口（v1.1.75）
+        compose.onNodeWithText("阿里云盘").assertIsDisplayed()
+        // 第三组 = 两个快捷入口（2026-10-17 起「检查更新」已从抽屉移除）
         listOf("扫描范围", "设置").forEach {
             compose.onNodeWithText(it).assertIsDisplayed()
         }
@@ -162,6 +167,17 @@ class LibraryDrawerTest {
         compose.onNodeWithText("设置").performClick()
         compose.waitForIdle()
         assertTrue(rec.settings)
+    }
+
+    /** 阿里云盘一级入口（v1.1.75）：点了必须回调 onOpenAliyun，且不算视图切换 */
+    @Test
+    fun tappingAliyunFiresItsCallbackAndCloses() {
+        val rec = renderOpen()
+        compose.onNodeWithText("阿里云盘").performClick()
+        compose.waitForIdle()
+        assertTrue(rec.aliyun)
+        assertTrue(rec.closed)
+        assertNull("云盘入口不该被当成视图切换", rec.selected)
     }
 
     /** 五个视图依次被标成「当前」时，选中项都要正常渲染（高亮只是视觉，但布局不能崩） */

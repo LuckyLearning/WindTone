@@ -49,7 +49,6 @@ import kotlinx.coroutines.withContext
 
 @Composable
 internal fun SettingsOnlinePage(
-    onOpenAliyun: () -> Unit,
     onOpenPlaylists: () -> Unit,
     onOpenReport: () -> Unit,
 ) {
@@ -59,12 +58,6 @@ internal fun SettingsOnlinePage(
     var pickingLimit by remember { mutableStateOf(false) }
 
     SectionTitle("来源")
-    ActionRow(
-        title = "阿里云盘",
-        subtitle = "扫码登录后播放云盘里的音乐。只读，收藏和统计与本地曲库分开",
-        onClick = onOpenAliyun,
-        chevron = true,
-    )
     ActionRow(
         title = "在线歌单（M3U）",
         subtitle = "添加 m3u / m3u8 / pls 直链并播放",
@@ -111,7 +104,7 @@ internal fun SettingsOnlinePage(
     SectionTitle("播放记录")
     ActionRow(
         title = "收听报告",
-        subtitle = "阿里云盘歌曲的收听时长、时段和榜单。不计入本地收听报告",
+        subtitle = "阿里云盘歌曲的收听时长、时段和榜单（云盘页已在抽屉一级入口，入口不再挂这里）",
         onClick = onOpenReport,
         chevron = true,
     )

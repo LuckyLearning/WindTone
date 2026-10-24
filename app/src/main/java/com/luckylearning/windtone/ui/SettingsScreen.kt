@@ -114,10 +114,10 @@ internal enum class SettingsPage(val title: String) {
     /** 百度网盘 —— v1.1.39 */
     BAIDU("百度网盘"),
 
-    /** 阿里云盘（在线播放） */
-    ALIYUN("阿里云盘"),
+    // 「阿里云盘」页（原 SettingsPage.ALIYUN）已于 v1.1.75 移除：
+    // 云盘页升为一级入口（抽屉 → 在线音乐 → 阿里云盘），不再嵌在设置里。
 
-    /** 在线播放：阿里云盘、在线歌单、缓存 */
+    /** 在线播放：在线歌单、缓存 */
     ONLINE_HUB("在线播放"),
 
     /** 调整主页分类卡顺序，本身不是一张分类卡 */
@@ -524,7 +524,6 @@ fun SettingsScreen(
                     )
 
                     SettingsPage.ONLINE_HUB -> SettingsOnlinePage(
-                        onOpenAliyun = { page = SettingsPage.ALIYUN },
                         onOpenPlaylists = { page = SettingsPage.ONLINE },
                         onOpenReport = { showOnlineReport = true },
                     )
@@ -540,8 +539,6 @@ fun SettingsScreen(
                     SettingsPage.ONLINE -> OnlinePlaylistsPage(onPlay = onPlayQueue)
 
                     SettingsPage.BAIDU -> BaiduPanPage(onPlay = onPlayQueue)
-
-                    SettingsPage.ALIYUN -> AliyunPanPage(onPlay = onPlayQueue)
 
                     SettingsPage.DIAGNOSTICS -> SettingsDiagnosticsPage(
                         player = player,

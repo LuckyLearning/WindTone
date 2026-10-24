@@ -4,19 +4,31 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -37,9 +49,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.luckylearning.windtone.data.aliyun.AliyunAuth
 import com.luckylearning.windtone.data.aliyun.AliyunDrive
 import com.luckylearning.windtone.data.aliyun.AliyunEndpoints
@@ -54,31 +72,39 @@ import com.luckylearning.windtone.playback.CloudUrlMemo
 import com.luckylearning.windtone.data.aliyun.AliyunTrackStore
 import com.luckylearning.windtone.data.formatByteSize
 import com.luckylearning.windtone.data.model.Song
+import com.luckylearning.windtone.ui.theme.AppVisual
+import com.luckylearning.windtone.ui.theme.windShadow
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
- * 阿里云盘（在线播放）—— 授权 + 目录浏览 + 播放。
+ * 阿里云盘（在线播放）—— **一级公民页**（v1.1.75 起：从「设置 → 在线播放」提升为
+ * 抽屉里的独立入口，与歌曲 / 专辑 / 歌手同级）。
  *
  * 授权**在应用内完成**（[AliyunQrLoginDialog]）：点「扫码授权」弹出二维码，用阿里云盘
  * App 扫码确认后自动拿到 refresh_token 存进 [AliyunAuth]，全程不跳浏览器、不复制粘贴。
  * 走的是阿里官方 passport 接口（详见 [AliyunQrLogin]）；
  * 手动粘贴 refresh_token 保留为兜底入口（OpenList 网页工具改版时仍走得通）。
- * 这条路不要求应用注册回调地址、也不要求车机有浏览器（手机上授权完，车机登录态可用）。
  *
- * 与百度网盘页的差异都来自开放平台本身：
- *  · 登录后只有目录浏览一个主界面，没有设备码/二维码弹层；
+ * 与本地曲库的差异都来自开放平台本身：
  *  · 目录没有路径概念，全靠 file_id，导航用**栈**（进目录压栈、返回弹栈）；
  *  · 空间分「备份盘 / 资源库」两块，可切换（见 AliyunRules.pickDrive 的兜底顺序）；
  *  · 直链没有批量接口，播放一个取一个；「播放本目录全部」按顺序现取，
  *    进度给到第几首，避免大目录下像卡死。
  *  · 支持把当前目录（含下 2 层子目录）递归扫描成歌单（[AliyunScanRules]），
  *    歌单存 fileId 引用，播放时现取直链（见 AliyunSavedPlaylists）。
+ *
+ * 版式（v1.1.75 重构）：固定顶栏（返回 / 标题 / 汉堡 / 溢出菜单）+ 可滚动正文；
+ * 未登录是居中 hero（渐变云徽 + 授权引导），已登录是账号卡 + 目录浏览。
+ * 扫描 / 自检这类低频操作收进顶栏溢出菜单，目录浏览区只留高频动作。
  */
 @Composable
 internal fun AliyunPanPage(
     onPlay: (List<Song>, Int) -> Unit,
+    onClose: () -> Unit,
+    onOpenDrawer: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val auth = remember { AliyunAuth(context) }
@@ -119,6 +145,8 @@ internal fun AliyunPanPage(
     var namingScan by remember { mutableStateOf<AliyunScanRules.ScanOutcome?>(null) }
     /** 读取账号信息（driveInfo）最近一次失败的原因（成功即清空）；driveId 为空时显示在页面上 */
     var accountError by remember { mutableStateOf<String?>(null) }
+    /** 顶栏溢出菜单 */
+    var menuOpen by remember { mutableStateOf(false) }
 
     /**
      * 读账号信息：拿昵称与盘 id。返回失败原因（成功返回 null）。
@@ -166,199 +194,50 @@ internal fun AliyunPanPage(
         }
     }
 
-    LaunchedEffect(loggedIn) {
-        if (!loggedIn) return@LaunchedEffect
-        refreshAccount()
+    /** 退出登录：清凭据 + 清界面状态（不动本地歌单存档） */
+    fun signOut() {
+        auth.signOut()
+        loggedIn = false
+        nickname = ""
+        driveId = ""
+        driveName = ""
+        drives = emptyList()
+        entries = emptyList()
+        stack = listOf(AliyunDrive.ROOT_ID)
+        dirNames = listOf("")
+        nextMarker = ""
+        query = ""
     }
 
-    // 拿到盘 id 后自动加载根目录（只加载一次）
-    LaunchedEffect(driveId) {
-        if (loggedIn && driveId.isNotBlank() && entries.isEmpty()) {
+    /** 回到上一级目录；备份盘根目录的上级是资源库「全部文件」（见 AliyunRules.backupRootParent） */
+    fun goUp() {
+        val fileDriveId = AliyunRules.backupRootParent(driveId, drives, stack.size <= 1)
+        if (stack.size > 1) {
+            stack = stack.dropLast(1)
+            dirNames = dirNames.dropLast(1)
+            entries = emptyList()
+            nextMarker = ""
+            load(stack.last())
+        } else if (fileDriveId != null) {
+            driveId = fileDriveId
+            driveName = drives.firstOrNull { it.second == fileDriveId }?.first.orEmpty()
+            entries = emptyList()
+            nextMarker = ""
+            stack = listOf(AliyunDrive.ROOT_ID)
+            dirNames = listOf("")
             load(AliyunDrive.ROOT_ID)
         }
     }
 
-    SectionTitle("阿里云盘")
-    Text(
-        if (auth.hasClientCredentials()) {
-            "已配置应用凭据：扫码授权在应用内完成，令牌刷新直连官方接口，只保存在本机。"
-        } else {
-            "未配置应用凭据：扫码授权在应用内完成（无需自备密钥），令牌刷新走 OpenList 在线接口，只保存在本机。"
-        },
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(vertical = 4.dp),
-    )
-
-    if (!loggedIn) {
-        Text(
-            "扫码授权在应用内完成：点「扫码授权」用阿里云盘 App 扫弹出的二维码即可，" +
-                "无需跳转浏览器、无需复制粘贴。应用对网盘只读，不会上传、修改或删除任何文件。",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 8.dp),
-        )
-        ActionRow(
-            title = "扫码授权",
-            subtitle = "用阿里云盘 App 扫码，授权在应用内自动完成",
-            onClick = { showQrLogin = true },
-            chevron = true,
-        )
-        ActionRow(
-            title = "手动粘贴令牌",
-            subtitle = "备用：在 ${AliyunEndpoints.TOKEN_TOOL_URL} 扫码拿到 Refresh Token 后粘贴进来，先校验再保存",
-            onClick = { showPasteToken = true },
-            chevron = true,
-        )
-        ActionRow(
-            title = "打开阿里云盘 App",
-            subtitle = "整理音乐文件时可以直接在网盘 App 里操作",
-            onClick = { openAliyunPan(context) },
-            chevron = true,
-        )
-        if (progress.isNotBlank()) {
-            Text(
-                progress,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(vertical = 4.dp),
-            )
-        }
-        if (showPasteToken) {
-            PasteTokenDialog(
-                onConfirm = { pasted ->
-                    showPasteToken = false
-                    progress = "正在校验令牌…"
-                    scope.launch {
-                        when (val result = auth.applyRefreshToken(pasted)) {
-                            is AliyunExchange.Ready -> {
-                                loggedIn = true
-                                refreshAccount()
-                            }
-                            is AliyunExchange.Failed -> error = result.reason
-                        }
-                        progress = ""
-                    }
-                },
-                onDismiss = { showPasteToken = false },
-            )
-        }
-        if (showQrLogin) {
-            AliyunQrLoginDialog(
-                auth = auth,
-                onLoggedIn = {
-                    showQrLogin = false
-                    loggedIn = true
-                    refreshAccount()
-                },
-                onError = { msg ->
-                    showQrLogin = false
-                    error = msg
-                },
-                onDismiss = { showQrLogin = false },
-            )
-        }
-        error?.let { msg ->
-            AlertDialog(
-                onDismissRequest = { error = null },
-                title = { Text("没能完成") },
-                text = { Text(msg) },
-                confirmButton = {
-                    TextButton(onClick = { error = null }) { Text("好") }
-                },
-            )
-        }
-        return
-    }
-
-    // ---------------------------------------------------------------- 已登录
-    Text(
-        text = "已登录" + if (nickname.isNotBlank()) "：$nickname" else "",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        TextButton(onClick = { load(stack.last()) }) { Text("刷新") }
-        val fileDriveId = AliyunRules.backupRootParent(driveId, drives, stack.size <= 1)
-        if (stack.size > 1 || fileDriveId != null) {
-            TextButton(onClick = {
-                if (stack.size > 1) {
-                    stack = stack.dropLast(1)
-                    dirNames = dirNames.dropLast(1)
-                    entries = emptyList()
-                    nextMarker = ""
-                    load(stack.last())
-                } else if (fileDriveId != null) {
-                    // 备份盘的根就是网页里的「备份文件」，上级是资源库「全部文件」
-                    driveId = fileDriveId
-                    driveName = drives.firstOrNull { it.second == fileDriveId }?.first.orEmpty()
-                    entries = emptyList()
-                    nextMarker = ""
-                    stack = listOf(AliyunDrive.ROOT_ID)
-                    dirNames = listOf("")
-                    load(AliyunDrive.ROOT_ID)
-                }
-            }) { Text("返回上级") }
-        }
-        Spacer(Modifier.weight(1f))
-        TextButton(onClick = { openAliyunPan(context) }) { Text("打开网盘 App") }
-        TextButton(onClick = {
-            auth.signOut()
-            loggedIn = false
-            nickname = ""
-            driveId = ""
-            driveName = ""
-            drives = emptyList()
-            entries = emptyList()
-            stack = listOf(AliyunDrive.ROOT_ID)
-            dirNames = listOf("")
-            nextMarker = ""
-        }) { Text("退出登录") }
-    }
-
-    // 盘切换：只有账号确实有两个盘时才出现
-    if (drives.size > 1) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "当前盘：${driveName.ifBlank { "未知" }}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            drives.forEach { (name, id) ->
-                if (id != driveId) {
-                    TextButton(onClick = {
-                        driveId = id
-                        driveName = name
-                        entries = emptyList()
-                        nextMarker = ""
-                        stack = listOf(AliyunDrive.ROOT_ID)
-                        dirNames = listOf("")
-                        load(AliyunDrive.ROOT_ID)
-                    }) { Text("切到$name") }
-                }
-            }
-        }
-    }
-
-    if (driveId.isBlank()) {
-        when {
-            accountError != null -> {
-                Text(
-                    "读取账号信息失败：$accountError",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(vertical = 4.dp),
-                )
-                TextButton(onClick = {
-                    accountError = null
-                    refreshAccount()
-                }) { Text("重试读取账号信息") }
-            }
-            else -> Text(
-                "正在读取账号信息…",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(vertical = 4.dp),
-            )
-        }
+    /** 切换到另一块盘（备份盘 / 资源库），回到它的根目录 */
+    fun switchDrive(id: String, name: String) {
+        driveId = id
+        driveName = name
+        entries = emptyList()
+        nextMarker = ""
+        stack = listOf(AliyunDrive.ROOT_ID)
+        dirNames = listOf("")
+        load(AliyunDrive.ROOT_ID)
     }
 
     val audioEntries = entries.filter { it.isPlayableAudio }
@@ -396,7 +275,7 @@ internal fun AliyunPanPage(
     fun playFrom(startId: String?) {
         if (audioEntries.isEmpty()) return
         if (driveId.isBlank()) {
-            error = "还没读到账号信息（盘 id 为空），等上面的账号信息加载完再播放"
+            error = "还没读到账号信息（盘 id 为空），等账号信息加载完再播放"
             return
         }
         val folder = dirNames.lastOrNull()?.takeIf { it.isNotBlank() }
@@ -411,110 +290,295 @@ internal fun AliyunPanPage(
         openQueue(songs, start)
     }
 
-    if (audioEntries.isNotEmpty()) {
-        TextButton(
-            enabled = !loading && !scanning,
-            onClick = { playFrom(null) },
-        ) { Text("播放本目录全部音频（${audioEntries.size}）") }
-    }
-
-    // ---------------------------------------------- 播放自检（直链能不能下载）
-    // 播不了时第一件事就是分清「直链取不到/下不动」还是「播放器侧的问题」，
-    // 否则只能看到一个 ERROR_CODE_IO_UNSPECIFIED。
-    TextButton(
-        enabled = !loading && !scanning,
-        onClick = {
-            if (playlists.isEmpty() && audioEntries.isEmpty()) {
-                error = "这个目录里没有音频文件，先进入一个有歌的目录再自检"
-                return@TextButton
-            }
-            probeRunning = true
-            probeText = null
-            scope.launch {
-                // 盘 id 没读到，后面 everything 都是 BadRequest —— 先补一次账号信息，
-                // 顺便把真实失败原因带出来（以前这里只会看到干巴巴的 BadRequest）
-                if (driveId.isBlank()) {
-                    probeText = "还没读到账号信息，正在重新获取…"
-                    fetchAccount()?.let { err ->
-                        probeRunning = false
-                        probeText = "取不到账号的盘 id：$err\n\n「读取账号信息」这一步失败了，直链无从谈起；" +
-                            "先解决它（页面上有重试按钮），再回来测直链。"
-                        return@launch
-                    }
+    /** 递归扫描当前目录（含下 2 层子目录）成歌单，完成后弹命名框 */
+    fun startScan() {
+        val rootId = stack.last()
+        val rootName = dirNames.lastOrNull().orEmpty()
+        scanning = true
+        scanProgress = "正在扫描…"
+        error = null
+        scanJob = scope.launch {
+            try {
+                val outcome = drive.scanPlaylist(driveId, rootId) { dirs, files ->
+                    scanProgress = "已扫 $dirs 个目录，收到 $files 首…"
                 }
-                val target = audioEntries.firstOrNull()?.fileId
-                    ?: playlists.firstOrNull()?.files?.firstOrNull()?.fileId
-                if (target == null) {
-                    probeRunning = false
-                    probeText = "没有可测的文件"
-                    return@launch
-                }
-                val url = drive.downloadUrl(driveId, target)
-                    .getOrElse {
-                        probeRunning = false
-                        probeText = "取直链失败：${it.message ?: "未知原因"}"
-                        return@launch
-                    }
-                val result = AliyunProbe.probe(url)
-                probeRunning = false
-                probeText = result.summary() +
-                    if (result.ok) {
-                        "\n\n直链本身没问题，若仍播不了，问题在播放器侧（本地缓存或文件格式）。" +
-                            "可以到「设置 → 在线播放」清一次在线缓存再试。"
+                if (outcome.files.isEmpty()) {
+                    error = if (outcome.skipped.isNotEmpty()) {
+                        "没有扫到音频文件。" + outcome.skipped.take(3).joinToString("；")
                     } else {
-                        "\n\n主机：${result.host}"
+                        "这个目录（含 2 层子目录）里没有音频文件"
                     }
-            }
-        },
-    ) { Text(if (probeRunning) "正在自检…" else "播放自检（测直链）") }
-
-    // ---------------------------------------------- 递归扫描成歌单（含下 2 层子目录）
-    TextButton(
-        enabled = !loading && !scanning,
-        onClick = {
-            val rootId = stack.last()
-            val rootName = dirNames.lastOrNull().orEmpty()
-            scanning = true
-            scanProgress = "正在扫描…"
-            error = null
-            scanJob = scope.launch {
-                try {
-                    val outcome = drive.scanPlaylist(driveId, rootId) { dirs, files ->
-                        scanProgress = "已扫 $dirs 个目录，收到 $files 首…"
-                    }
-                    if (outcome.files.isEmpty()) {
-                        error = if (outcome.skipped.isNotEmpty()) {
-                            "没有扫到音频文件。" + outcome.skipped.take(3).joinToString("；")
-                        } else {
-                            "这个目录（含 2 层子目录）里没有音频文件"
-                        }
-                    } else {
-                        namingScan = outcome
-                    }
-                } catch (e: CancellationException) {
-                    // 用户取消：不算错误
-                } catch (e: Exception) {
-                    error = e.message ?: "扫描失败"
+                } else {
+                    namingScan = outcome
                 }
-                scanning = false
-                scanProgress = ""
+            } catch (e: CancellationException) {
+                // 用户取消：不算错误
+            } catch (e: Exception) {
+                error = e.message ?: "扫描失败"
             }
-        },
-    ) { Text("扫描为歌单（含 2 层子目录）") }
-
-    if (scanning) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        ) {
-            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-            Spacer(Modifier.width(10.dp))
-            Text(scanProgress, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-            TextButton(onClick = { scanJob?.cancel() }) { Text("停止") }
+            scanning = false
+            scanProgress = ""
         }
     }
 
-    // 扫描完成 → 命名入库
+    /** 播放自检：测当前目录（或云盘歌单）第一首歌的直链能不能下载 */
+    fun startProbe() {
+        if (playlists.isEmpty() && audioEntries.isEmpty()) {
+            error = "这个目录里没有音频文件，先进入一个有歌的目录再自检"
+            return
+        }
+        probeRunning = true
+        probeText = null
+        scope.launch {
+            // 盘 id 没读到，后面 everything 都是 BadRequest —— 先补一次账号信息，
+            // 顺便把真实失败原因带出来（以前这里只会看到干巴巴的 BadRequest）
+            if (driveId.isBlank()) {
+                probeText = "还没读到账号信息，正在重新获取…"
+                fetchAccount()?.let { err ->
+                    probeRunning = false
+                    probeText = "取不到账号的盘 id：$err\n\n「读取账号信息」这一步失败了，直链无从谈起；" +
+                        "先解决它（页面上有重试按钮），再回来测直链。"
+                    return@launch
+                }
+            }
+            val target = audioEntries.firstOrNull()?.fileId
+                ?: playlists.firstOrNull()?.files?.firstOrNull()?.fileId
+            if (target == null) {
+                probeRunning = false
+                probeText = "没有可测的文件"
+                return@launch
+            }
+            val url = drive.downloadUrl(driveId, target)
+                .getOrElse {
+                    probeRunning = false
+                    probeText = "取直链失败：${it.message ?: "未知原因"}"
+                    return@launch
+                }
+            val result = AliyunProbe.probe(url)
+            probeRunning = false
+            probeText = result.summary() +
+                if (result.ok) {
+                    "\n\n直链本身没问题，若仍播不了，问题在播放器侧（本地缓存或文件格式）。" +
+                        "可以到「设置 → 在线播放」清一次在线缓存再试。"
+                } else {
+                    "\n\n主机：${result.host}"
+                }
+        }
+    }
+
+    LaunchedEffect(loggedIn) {
+        if (!loggedIn) return@LaunchedEffect
+        refreshAccount()
+    }
+
+    // 拿到盘 id 后自动加载根目录（只加载一次）
+    LaunchedEffect(driveId) {
+        if (loggedIn && driveId.isNotBlank() && entries.isEmpty()) {
+            load(AliyunDrive.ROOT_ID)
+        }
+    }
+
+    // ================================================================ 页面骨架
+
+    Column(
+        modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+    ) {
+        // ------------------------------------------------ 固定顶栏
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 2.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+        ) {
+            IconButton(onClick = onClose) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "返回",
+                    tint = MaterialTheme.colorScheme.onBackground,
+                )
+            }
+            Spacer(Modifier.width(4.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "阿里云盘",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    maxLines = 1,
+                )
+                Text(
+                    when {
+                        !loggedIn -> "在线音乐 · 未连接"
+                        nickname.isNotBlank() -> "已登录 · $nickname"
+                        else -> "已登录"
+                    },
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (loggedIn) {
+                IconButton(onClick = { onOpenDrawer() }) {
+                    Icon(
+                        AppIcons.Menu,
+                        contentDescription = "打开菜单",
+                        tint = MaterialTheme.colorScheme.onBackground,
+                    )
+                }
+                Box {
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(
+                            Icons.Filled.MoreVert,
+                            contentDescription = "更多操作",
+                            tint = MaterialTheme.colorScheme.onBackground,
+                        )
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("打开网盘 App") },
+                            onClick = {
+                                menuOpen = false
+                                openAliyunPan(context)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("扫描为歌单（含 2 层子目录）") },
+                            enabled = !loading && !scanning,
+                            onClick = {
+                                menuOpen = false
+                                startScan()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("播放自检（测直链）") },
+                            enabled = !loading && !scanning,
+                            onClick = {
+                                menuOpen = false
+                                startProbe()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("退出登录") },
+                            onClick = {
+                                menuOpen = false
+                                signOut()
+                            },
+                        )
+                    }
+                }
+            }
+        }
+
+        // ------------------------------------------------ 可滚动正文
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
+        ) {
+            if (!loggedIn) {
+                NotLoggedInBody(
+                    auth = auth,
+                    progress = progress,
+                    onScan = { showQrLogin = true },
+                    onPasteToken = { showPasteToken = true },
+                    onOpenApp = { openAliyunPan(context) },
+                )
+            } else {
+                LoggedInBody(
+                    nickname = nickname,
+                    driveId = driveId,
+                    driveName = driveName,
+                    drives = drives,
+                    accountError = accountError,
+                    loading = loading,
+                    progress = progress,
+                    scanning = scanning,
+                    scanProgress = scanProgress,
+                    scanJob = scanJob,
+                    stackSize = stack.size,
+                    playlists = playlists,
+                    query = query,
+                    onQuery = { query = it },
+                    onRefreshAccount = {
+                        accountError = null
+                        refreshAccount()
+                    },
+                    onSwitchDrive = ::switchDrive,
+                    onGoUp = ::goUp,
+                    onRefresh = { load(stack.last()) },
+                    onPlayAll = { playFrom(null) },
+                    onStopScan = { scanJob?.cancel() },
+                    onPlayPlaylist = { p ->
+                        val songs = p.files.map { hit ->
+                            val folder = hit.parentPath.substringAfterLast('/').ifBlank { hit.parentPath }
+                            tracks.remember(p.driveId, hit.fileId, hit.name, folder, hit.parentFileId)
+                            drive.pendingSong(
+                                AliyunEntry(hit.fileId, hit.name, isDir = false, sizeBytes = 0L),
+                                p.driveId,
+                                folder,
+                                tracks.get(p.driveId, hit.fileId),
+                            )
+                        }
+                        openQueue(songs, 0)
+                    },
+                    onManagePlaylist = { editingPlaylistId = it },
+                    onDeletePlaylist = {
+                        savedPlaylists.remove(it)
+                        playlists = savedPlaylists.all()
+                    },
+                    onLoadMore = { load(stack.last(), nextMarker, append = true) },
+                    canLoadMore = nextMarker.isNotBlank() && !loading,
+                    entries = entries,
+                    onOpenDir = { entry ->
+                        stack = stack + entry.fileId
+                        dirNames = dirNames + entry.name
+                        entries = emptyList()
+                        nextMarker = ""
+                        load(entry.fileId)
+                    },
+                    onPlayFile = { playFrom(it.fileId) },
+                )
+            }
+        }
+    }
+
+    // ================================================================ 弹层（不随正文滚动）
+
+    if (showPasteToken) {
+        PasteTokenDialog(
+            onConfirm = { pasted ->
+                showPasteToken = false
+                progress = "正在校验令牌…"
+                scope.launch {
+                    when (val result = auth.applyRefreshToken(pasted)) {
+                        is AliyunExchange.Ready -> {
+                            loggedIn = true
+                            refreshAccount()
+                        }
+                        is AliyunExchange.Failed -> error = result.reason
+                    }
+                    progress = ""
+                }
+            },
+            onDismiss = { showPasteToken = false },
+        )
+    }
+    if (showQrLogin) {
+        AliyunQrLoginDialog(
+            auth = auth,
+            onLoggedIn = {
+                showQrLogin = false
+                loggedIn = true
+                refreshAccount()
+            },
+            onError = { msg ->
+                showQrLogin = false
+                error = msg
+            },
+            onDismiss = { showQrLogin = false },
+        )
+    }
     namingScan?.let { outcome ->
         NameScanDialog(
             defaultName = dirNames.lastOrNull().orEmpty().ifBlank { "云盘歌单" },
@@ -526,171 +590,6 @@ internal fun AliyunPanPage(
             onDismiss = { namingScan = null },
         )
     }
-
-    // 已保存的云盘歌单（存 fileId 引用，播放时现取直链）
-    if (loggedIn && driveId.isNotBlank()) {
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-            singleLine = true,
-            label = { Text("搜索文件名") },
-        )
-    }
-
-    val shownPlaylists = if (query.isBlank()) playlists else playlists.filter { playlist ->
-        playlist.name.contains(query, ignoreCase = true) ||
-            playlist.files.any { it.name.contains(query, ignoreCase = true) }
-    }
-    if (shownPlaylists.isNotEmpty()) {
-        Text(
-            "云盘歌单（${shownPlaylists.size}）",
-            style = MaterialTheme.typography.labelLarge,
-            modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
-        )
-        shownPlaylists.forEach { p ->
-            // 卡片样式与曲库分组卡一致（surfaceContainerLow + 圆角 + 图标位），
-            // 次要操作收进溢出菜单，主操作（播放）常驻 —— 不再一行挤三个文字按钮
-            var menuOpen by remember { mutableStateOf(false) }
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                shape = MaterialTheme.shapes.medium,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(start = 10.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .background(
-                                MaterialTheme.colorScheme.surfaceContainerHighest,
-                                RoundedCornerShape(10.dp),
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            AppIcons.MusicNote,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(24.dp),
-                        )
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            p.name,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            "${p.fileCount} 首 · 来源：${p.rootName.ifBlank { "根目录" }}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    Spacer(Modifier.width(4.dp))
-                    IconButton(
-                        enabled = !loading && !scanning,
-                        onClick = {
-                            val songs = p.files.map { hit ->
-                                val folder = hit.parentPath.substringAfterLast('/').ifBlank { hit.parentPath }
-                                tracks.remember(p.driveId, hit.fileId, hit.name, folder, hit.parentFileId)
-                                drive.pendingSong(
-                                    AliyunEntry(hit.fileId, hit.name, isDir = false, sizeBytes = 0L),
-                                    p.driveId,
-                                    folder,
-                                    tracks.get(p.driveId, hit.fileId),
-                                )
-                            }
-                            openQueue(songs, 0)
-                        },
-                    ) {
-                        Icon(
-                            Icons.Filled.PlayArrow,
-                            contentDescription = "播放 ${p.name}",
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                    Box {
-                        IconButton(onClick = { menuOpen = true }) {
-                            Icon(
-                                Icons.Filled.MoreVert,
-                                contentDescription = "更多操作",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                            DropdownMenuItem(
-                                text = { Text("曲目管理") },
-                                onClick = {
-                                    menuOpen = false
-                                    editingPlaylistId = p.id
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("删除歌单") },
-                                onClick = {
-                                    menuOpen = false
-                                    savedPlaylists.remove(p.id)
-                                    playlists = savedPlaylists.all()
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if (loading || progress.isNotBlank()) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        ) {
-            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-            Spacer(Modifier.width(10.dp))
-            Text(progress.ifBlank { "正在读取网盘…" }, style = MaterialTheme.typography.bodySmall)
-        }
-    }
-
-    if (!loading && entries.isEmpty() && driveId.isNotBlank()) {
-        Text(
-            "这个目录里没有内容。",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(vertical = 8.dp),
-        )
-    }
-
-    val shownEntries = if (query.isBlank()) entries else entries.filter { it.name.contains(query, ignoreCase = true) }
-    shownEntries.forEach { entry ->
-        AliyunEntryRow(
-            entry = entry,
-            onOpenDir = {
-                stack = stack + entry.fileId
-                dirNames = dirNames + entry.name
-                entries = emptyList()
-                nextMarker = ""
-                load(entry.fileId)
-            },
-            onPlayFile = { playFrom(entry.fileId) },
-        )
-    }
-
-    if (nextMarker.isNotBlank() && !loading) {
-        TextButton(onClick = { load(stack.last(), nextMarker, append = true) }) {
-            Text("加载更多")
-        }
-    }
-
     error?.let { msg ->
         AlertDialog(
             onDismissRequest = { error = null },
@@ -701,7 +600,6 @@ internal fun AliyunPanPage(
             },
         )
     }
-
     probeText?.let { msg ->
         AlertDialog(
             onDismissRequest = { probeText = null },
@@ -712,7 +610,6 @@ internal fun AliyunPanPage(
             },
         )
     }
-
     editingPlaylistId?.let { id ->
         playlists.firstOrNull { it.id == id }?.let { playlist ->
             PlaylistFilesDialog(
@@ -735,6 +632,621 @@ internal fun AliyunPanPage(
         }
     }
 }
+
+// ================================================================ 未登录：hero 引导
+
+@Composable
+private fun NotLoggedInBody(
+    auth: AliyunAuth,
+    progress: String,
+    onScan: () -> Unit,
+    onPasteToken: () -> Unit,
+    onOpenApp: () -> Unit,
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 28.dp),
+    ) {
+        // 渐变云徽（与抽屉品牌块同一套风之渐变）
+        Box(
+            modifier = Modifier
+                .size(84.dp)
+                .windShadow(level = 3, shape = CircleShape)
+                .clip(CircleShape)
+                .background(AppVisual.WindGradient),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                AppIcons.Cloud,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(42.dp),
+            )
+        }
+        Spacer(Modifier.height(20.dp))
+        Text(
+            "连接你的阿里云盘",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "扫码授权在应用内完成：用阿里云盘 App 扫二维码即可，无需跳转浏览器、无需复制粘贴。\n" +
+                "应用对网盘只读，不会上传、修改或删除任何文件。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+        Spacer(Modifier.height(24.dp))
+
+        // 主操作：渐变胶囊「扫码授权」
+        Row(
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .windShadow(level = 2, shape = CircleShape)
+                .clip(CircleShape)
+                .background(AppVisual.WindGradient)
+                .clickable(onClick = onScan),
+        ) {
+            Icon(AppIcons.Cloud, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("扫码授权", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        }
+        Spacer(Modifier.height(12.dp))
+
+        // 次操作：tonal 胶囊「手动粘贴令牌」
+        Row(
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(46.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .clickable(onClick = onPasteToken),
+        ) {
+            Text(
+                "手动粘贴令牌",
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Medium,
+                fontSize = 14.sp,
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        TextButton(onClick = onOpenApp) { Text("打开阿里云盘 App") }
+
+        Text(
+            if (auth.hasClientCredentials()) {
+                "已配置应用凭据：令牌刷新直连官方接口，只保存在本机。"
+            } else {
+                "未配置应用凭据：令牌刷新走 OpenList 在线接口，只保存在本机。"
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 14.dp),
+        )
+        if (progress.isNotBlank()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(top = 16.dp),
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(10.dp))
+                Text(progress, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+// ================================================================ 已登录
+
+@Composable
+private fun LoggedInBody(
+    nickname: String,
+    driveId: String,
+    driveName: String,
+    drives: List<Pair<String, String>>,
+    accountError: String?,
+    loading: Boolean,
+    progress: String,
+    scanning: Boolean,
+    scanProgress: String,
+    scanJob: Job?,
+    stackSize: Int,
+    playlists: List<com.luckylearning.windtone.data.aliyun.AliyunPlaylist>,
+    query: String,
+    onQuery: (String) -> Unit,
+    onRefreshAccount: () -> Unit,
+    onSwitchDrive: (String, String) -> Unit,
+    onGoUp: () -> Unit,
+    onRefresh: () -> Unit,
+    onPlayAll: () -> Unit,
+    onStopScan: () -> Unit,
+    onPlayPlaylist: (com.luckylearning.windtone.data.aliyun.AliyunPlaylist) -> Unit,
+    onManagePlaylist: (String) -> Unit,
+    onDeletePlaylist: (String) -> Unit,
+    onLoadMore: () -> Unit,
+    canLoadMore: Boolean,
+    entries: List<AliyunEntry>,
+    onOpenDir: (AliyunEntry) -> Unit,
+    onPlayFile: (AliyunEntry) -> Unit,
+) {
+    val audioEntries = entries.filter { it.isPlayableAudio }
+    // ---------------------------------------------- 账号卡
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(AppVisual.WindGradient),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(AppIcons.Cloud, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    nickname.ifBlank { "阿里云盘账号" },
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    when {
+                        driveName.isNotBlank() -> "当前盘：$driveName"
+                        accountError != null -> "账号信息读取失败"
+                        else -> "正在读取账号信息…"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            IconButton(onClick = onRefresh) {
+                Icon(
+                    Icons.Filled.Refresh,
+                    contentDescription = "刷新当前目录",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        // 盘切换：只有账号确实有两个盘时才出现
+        if (drives.size > 1) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
+            ) {
+                drives.forEach { (name, id) ->
+                    val selected = id == driveId
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(
+                                if (selected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.surfaceContainerHighest,
+                            )
+                            .clickable(enabled = !selected) { onSwitchDrive(id, name) }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    ) {
+                        Text(
+                            name,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (selected) MaterialTheme.colorScheme.onPrimary
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // 账号信息读取失败：常驻红字 + 重试（不能只弹一次窗，盘 id 拿不到后面全挂）
+    if (driveId.isBlank()) {
+        when {
+            accountError != null -> {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                ) {
+                    Text(
+                        "读取账号信息失败：$accountError",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = onRefreshAccount) { Text("重试") }
+                }
+            }
+            loading -> Unit // 目录加载指示器统一在下面画
+        }
+    }
+
+    // ---------------------------------------------- 搜索
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = CircleShape,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp),
+        ) {
+            Icon(
+                Icons.Filled.Search,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(10.dp))
+            Box(Modifier.weight(1f).padding(vertical = 10.dp)) {
+                if (query.isBlank()) {
+                    Text(
+                        "搜索文件名",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                BasicTextField(
+                    value = query,
+                    onValueChange = onQuery,
+                    singleLine = true,
+                    textStyle = TextStyle(
+                        color = MaterialTheme.colorScheme.onBackground,
+                        fontSize = 14.sp,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            if (query.isNotEmpty()) {
+                IconButton(onClick = { onQuery("") }, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        Icons.Filled.Clear,
+                        contentDescription = "清空搜索",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+        }
+    }
+
+    // ---------------------------------------------- 工具行：上级 / 播放全部
+    val fileDriveId = AliyunRules.backupRootParent(driveId, drives, stackSize <= 1)
+    if (stackSize > 1 || fileDriveId != null) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 8.dp, top = 4.dp),
+        ) {
+            TonalPill(
+                icon = Icons.Filled.KeyboardArrowLeft,
+                label = "上级",
+                onClick = onGoUp,
+            )
+        }
+    }
+    if (audioEntries.isNotEmpty() && driveId.isNotBlank()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+        ) {
+            val enabled = !loading && !scanning
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(44.dp)
+                    .alpha(if (enabled) 1f else 0.5f)
+                    .windShadow(level = 2, shape = CircleShape)
+                    .clip(CircleShape)
+                    .background(AppVisual.WindGradient)
+                    .clickable(enabled = enabled, onClick = onPlayAll)
+                    .padding(horizontal = 16.dp),
+            ) {
+                Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "播放本目录全部 · ${audioEntries.size} 首",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+
+    // 扫描进度
+    if (scanning) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+        ) {
+            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+            Spacer(Modifier.width(10.dp))
+            Text(scanProgress, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+            TextButton(onClick = { onStopScan() }) { Text("停止") }
+        }
+    }
+
+    // ---------------------------------------------- 云盘歌单
+    val shownPlaylists = if (query.isBlank()) playlists else playlists.filter { playlist ->
+        playlist.name.contains(query, ignoreCase = true) ||
+            playlist.files.any { it.name.contains(query, ignoreCase = true) }
+    }
+    if (shownPlaylists.isNotEmpty()) {
+        Text(
+            "云盘歌单（${shownPlaylists.size}）",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 16.dp, top = 10.dp, bottom = 2.dp),
+        )
+        shownPlaylists.forEach { p ->
+            // 卡片样式与曲库分组卡一致（surfaceContainerLow + 圆角 + 图标位），
+            // 次要操作收进溢出菜单，主操作（播放）常驻
+            var cardMenuOpen by remember { mutableStateOf(false) }
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(start = 10.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .background(
+                                MaterialTheme.colorScheme.surfaceContainerHighest,
+                                RoundedCornerShape(10.dp),
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            AppIcons.QueueMusic,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            p.name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            "${p.fileCount} 首 · 来源：${p.rootName.ifBlank { "根目录" }}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    IconButton(
+                        enabled = !loading && !scanning,
+                        onClick = { onPlayPlaylist(p) },
+                    ) {
+                        Icon(
+                            Icons.Filled.PlayArrow,
+                            contentDescription = "播放 ${p.name}",
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    Box {
+                        IconButton(onClick = { cardMenuOpen = true }) {
+                            Icon(
+                                Icons.Filled.MoreVert,
+                                contentDescription = "更多操作",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        DropdownMenu(expanded = cardMenuOpen, onDismissRequest = { cardMenuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("曲目管理") },
+                                onClick = {
+                                    cardMenuOpen = false
+                                    onManagePlaylist(p.id)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("删除歌单") },
+                                onClick = {
+                                    cardMenuOpen = false
+                                    onDeletePlaylist(p.id)
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ---------------------------------------------- 目录内容
+    if (loading || progress.isNotBlank()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+            Spacer(Modifier.width(10.dp))
+            Text(progress.ifBlank { "正在读取网盘…" }, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+
+    val shownEntries = if (query.isBlank()) entries else entries.filter { it.name.contains(query, ignoreCase = true) }
+    if (!loading && shownEntries.isEmpty() && driveId.isNotBlank()) {
+        Text(
+            "这个目录里没有内容。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        )
+    }
+    shownEntries.forEach { entry ->
+        AliyunEntryRow(
+            entry = entry,
+            onOpenDir = { onOpenDir(entry) },
+            onPlayFile = { onPlayFile(entry) },
+        )
+    }
+
+    if (canLoadMore) {
+        Row(
+            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
+        ) {
+            TonalPill(label = "加载更多", onClick = onLoadMore)
+        }
+    }
+
+    Spacer(Modifier.height(12.dp))
+}
+
+/** 小型 tonal 胶囊按钮（工具行用：上级 / 加载更多） */
+@Composable
+private fun TonalPill(
+    label: String,
+    onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    ) {
+        if (icon != null) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(2.dp))
+        }
+        Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+// ================================================================ 目录条目行
+
+@Composable
+private fun AliyunEntryRow(
+    entry: AliyunEntry,
+    onOpenDir: () -> Unit,
+    onPlayFile: () -> Unit,
+) {
+    val playable = entry.isPlayableAudio
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = entry.isDir || playable) {
+                if (entry.isDir) onOpenDir() else onPlayFile()
+            }
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(
+                    MaterialTheme.colorScheme.surfaceContainerHighest,
+                    RoundedCornerShape(12.dp),
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                if (entry.isDir) AppIcons.Folder else AppIcons.MusicNote,
+                contentDescription = null,
+                tint = if (entry.isDir) MaterialTheme.colorScheme.onSurfaceVariant
+                else MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                entry.name,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (!entry.isDir) {
+                Text(
+                    formatByteSize(entry.sizeBytes) +
+                        if (!playable) " · 格式暂不支持播放" else "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Text(
+                    "文件夹",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        if (entry.isDir) {
+            Icon(
+                AppIcons.ChevronRight,
+                contentDescription = "进入 ${entry.name}",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
+            )
+        } else if (playable) {
+            IconButton(onClick = onPlayFile) {
+                Icon(
+                    Icons.Filled.PlayArrow,
+                    contentDescription = "播放 ${entry.name}",
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+    }
+}
+
+// ================================================================ 弹层（保持原有逻辑）
 
 @Composable
 private fun PlaylistFilesDialog(
@@ -766,42 +1278,6 @@ private fun PlaylistFilesDialog(
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("完成") } },
     )
-}
-
-@Composable
-private fun AliyunEntryRow(
-    entry: AliyunEntry,
-    onOpenDir: () -> Unit,
-    onPlayFile: () -> Unit,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                if (entry.isDir) "📁 ${entry.name}" else entry.name,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (!entry.isDir) {
-                Text(
-                    formatByteSize(entry.sizeBytes) +
-                        if (!entry.isPlayableAudio) " · 格式暂不支持播放" else "",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        if (entry.isDir) {
-            TextButton(onClick = onOpenDir) { Text("进入") }
-        } else if (entry.isPlayableAudio) {
-            TextButton(onClick = onPlayFile) { Text("播放") }
-        }
-    }
 }
 
 /** 粘贴 refresh_token 的弹层（OpenList 方案的唯一登录动作） */

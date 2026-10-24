@@ -155,7 +155,7 @@ internal fun SettingsRootPage(
             )
             SettingsPage.ONLINE_HUB -> CategoryRow(
                 title = "在线播放",
-                subtitle = "阿里云盘 · 在线歌单 · 播放缓存",
+                subtitle = "在线歌单 · 播放缓存 · 收听报告（阿里云盘已升为抽屉一级入口）",
                 icon = AppIcons.Cloud,
                 onClick = { onNavigate(SettingsPage.ONLINE_HUB) },
             )

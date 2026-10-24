@@ -48,7 +48,8 @@ import com.luckylearning.windtone.ui.theme.windShadow
  *  - 滑入 **220ms**（效果图 `transition:transform .22s ease`），收起时滑出屏幕左侧；
  *  - 遮罩 `--dim`（深色 .62 / 浅色 .34）**盖住下层内容并吃掉触摸**，点它收起；
  *  - 品牌块 = 44dp 圆形 halo（primaryContainer）+「听风」16sp/800 +「WindTone · 本地音乐」11sp；
- *  - 两组：**音乐库**（原底部导航的五个浏览视图）/ **更多**（扫描范围 · 设置）；
+ *  - 两组：**音乐库**（原底部导航的五个浏览视图）/ **在线音乐**（阿里云盘，v1.1.75 升为一级入口）/
+ *    **更多**（扫描范围 · 设置）；
  *  - 选中项：风之渐变实底胶囊 + 加粗 + 白字 + 靛蓝投影（v2，对应 `.d-item.on`）。
  *
  * ⚠️ 抽屉盖在迷你播放条之上、但不盖播放页 / 设置页这类全屏覆盖层 ——
@@ -69,6 +70,9 @@ internal fun LibraryDrawer(
     onOpenScanScope: () -> Unit,
     onOpenSettings: () -> Unit,
     onClose: () -> Unit,
+    /** 阿里云盘页是否打开（v1.1.75：云盘页升为一级入口，与曲库视图互斥显示） */
+    aliyunActive: Boolean = false,
+    onOpenAliyun: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Box(modifier.fillMaxSize()) {
@@ -109,6 +113,8 @@ internal fun LibraryDrawer(
                 onOpenScanScope = onOpenScanScope,
                 onOpenSettings = onOpenSettings,
                 onClose = onClose,
+                aliyunActive = aliyunActive,
+                onOpenAliyun = onOpenAliyun,
             )
         }
     }
@@ -121,6 +127,8 @@ private fun DrawerPanel(
     onOpenScanScope: () -> Unit,
     onOpenSettings: () -> Unit,
     onClose: () -> Unit,
+    aliyunActive: Boolean,
+    onOpenAliyun: () -> Unit,
 ) {
     Surface(
         // --c-low（surface container low）比页面底色亮一档，抽屉才浮得起来
@@ -147,6 +155,16 @@ private fun DrawerPanel(
                     onClick = { onSelectView(view); onClose() },
                 )
             }
+
+            // 「在线音乐」：云盘页升为一级入口（v1.1.75），与曲库视图互斥显示。
+            // 放在「更多」之上：它是内容页（像五个视图一样常驻），不是设置类动作。
+            DrawerGroupLabel("在线音乐")
+            DrawerItem(
+                label = "阿里云盘",
+                icon = AppIcons.Cloud,
+                selected = aliyunActive,
+                onClick = { onOpenAliyun(); onClose() },
+            )
 
             // .d-gap{flex:1} —— 把「更多」组压到底部
             Spacer(Modifier.weight(1f))
