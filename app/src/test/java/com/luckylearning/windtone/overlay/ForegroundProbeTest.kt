@@ -22,6 +22,9 @@ class ForegroundProbeTest {
         usageStatsGranted: Boolean = false,
         settingsApps: List<ForegroundProbe.SettingsApp> = emptyList(),
         currentForeground: String? = null,
+        liveForeground: String? = null,
+        hiddenApps: List<String> = emptyList(),
+        recentSwitches: List<Pair<String, Long>> = emptyList(),
     ) = ForegroundProbe.Facts(
         collectedAt = 1_700_000_000_000L,
         manufacturer = "BYD",
@@ -47,6 +50,9 @@ class ForegroundProbeTest {
             ForegroundProbe.Candidate("使用情况", "android.settings.USAGE_ACCESS_SETTINGS", usageAccessPageResolvable),
         ),
         logcatReadable = false,
+        liveForeground = liveForeground,
+        hiddenApps = hiddenApps,
+        recentSwitches = recentSwitches,
     )
 
     @Test
@@ -118,5 +124,36 @@ class ForegroundProbeTest {
         val report = ForegroundProbe.buildReport(facts(currentForeground = "com.byd.launcher"))
         assertTrue(report.contains("电池优化白名单：未加入"))
         assertTrue(report.contains("当前前台包名：com.byd.launcher"))
+    }
+
+    @Test
+    fun `名单命中时报告直接说命中`() {
+        val report = ForegroundProbe.buildReport(
+            facts(liveForeground = "com.byd.media", hiddenApps = listOf("com.byd.media")),
+        )
+        assertTrue(report.contains("名单是否命中：是"))
+        assertTrue(report.contains("← 当前正是它"))
+    }
+
+    @Test
+    fun `名单为空时说明这是预期不生效`() {
+        val report = ForegroundProbe.buildReport(facts())
+        assertTrue(report.contains("名单为空，功能不生效是预期"))
+    }
+
+    @Test
+    fun `没有收到事件时明确说没收到`() {
+        val report = ForegroundProbe.buildReport(facts(liveForeground = null))
+        assertTrue(report.contains("事件看到的前台：（还没有收到任何事件）"))
+        assertTrue(report.contains("（空：无障碍服务可能还没收到窗口事件"))
+    }
+
+    @Test
+    fun `最近切换按时间列出包名`() {
+        val report = ForegroundProbe.buildReport(
+            facts(recentSwitches = listOf("com.byd.launcher" to 0L, "com.byd.media" to 60_000L)),
+        )
+        assertTrue(report.contains("com.byd.launcher"))
+        assertTrue(report.contains("com.byd.media"))
     }
 }

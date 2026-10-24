@@ -9,6 +9,7 @@ import android.os.PowerManager
 import android.os.Process
 import android.provider.Settings
 import android.util.Log
+import com.luckylearning.windtone.data.Prefs
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -59,6 +60,16 @@ internal object ForegroundProbe {
         val serviceExported: Boolean = false,
         /** 看护记录：这台机器上是否曾见过无障碍处于开启（掉线提醒的前提） */
         val watchdogSeenOn: Boolean = false,
+        /** 无障碍事件 / 轮询**实际**看到的前台包名（与 UsageStats 那行相互独立） */
+        val liveForeground: String? = null,
+        /** 当前「不显示悬浮窗的应用」名单 */
+        val hiddenApps: List<String> = emptyList(),
+        /** 最近的前台切换（旧的在前，最多 20 条）：判断事件到底有没有来 */
+        val recentSwitches: List<Pair<String, Long>> = emptyList(),
+        /** 系统当前认为在跑的无障碍服务（空 = 勾着但没绑上，事件不会来） */
+        val activeServices: List<String> = emptyList(),
+        /** 本服务上次被系统连上的时间；0 = 从未 */
+        val serviceLastConnectedAt: Long = 0L,
         /** UsageStats 的 AppOps 模式（数值 + 人话） */
         val usageStatsMode: String,
         /** UsageStats 是否视为已授权 */
@@ -161,6 +172,11 @@ internal object ForegroundProbe {
             serviceDeclared = declared,
             serviceExported = exported,
             watchdogSeenOn = AccessibilityWatchdog.seenOn(context),
+            liveForeground = ForegroundAppState.currentPkg.value,
+            hiddenApps = Prefs(context).lyricOverlayHiddenApps.sorted(),
+            recentSwitches = ForegroundAppState.recent().map { it.pkg to it.atMillis },
+            activeServices = ForegroundAppDetector.activeAccessibilityServices(context),
+            serviceLastConnectedAt = AccessibilityWatchdog.lastConnectedAt(context),
             usageStatsMode = mode,
             usageStatsGranted = ForegroundAppDetector.usageStatsGranted(context),
             ignoringBatteryOptimizations = ignoringBattery,
@@ -253,6 +269,18 @@ internal object ForegroundProbe {
         sb.appendLine("服务已声明在案：${yesNo(facts.serviceDeclared)}（exported=${yesNo(facts.serviceExported)}）")
         sb.appendLine("系统总开关 ACCESSIBILITY_ENABLED：${yesNo(facts.accessibilityMasterEnabled)}")
         sb.appendLine("掉线看护（曾开启过）：${yesNo(facts.watchdogSeenOn)}")
+        val connectedAt = if (facts.serviceLastConnectedAt > 0L) {
+            SimpleDateFormat("MM-dd HH:mm:ss", Locale.US).format(Date(facts.serviceLastConnectedAt))
+        } else {
+            "从未连上"
+        }
+        sb.appendLine("本服务上次被系统连上：$connectedAt")
+        val ours = "${facts.appPackage}/${ForegroundAppService::class.java.name}"
+        val running = facts.activeServices.any { it.equals(ours, ignoreCase = true) }
+        sb.appendLine(
+            "系统认为在跑的服务里含本服务：${yesNo(running)}" +
+                if (facts.activeServices.isEmpty()) "（列表为空：勾着但没绑上，事件不会来）" else "",
+        )
         sb.appendLine("已启用服务列表（截断 400 字）：${facts.enabledAccessibilityServices.take(400).ifBlank { "（空）" }}")
         sb.appendLine()
 
@@ -262,6 +290,34 @@ internal object ForegroundProbe {
         sb.appendLine("当前前台包名：${facts.currentForeground ?: "（查不到，通常是没有授权）"}")
         sb.appendLine("电池优化白名单：${if (facts.ignoringBatteryOptimizations) "已加入（后台保活正常）" else "未加入（车机可能在息屏后杀掉轮询）"}")
         sb.appendLine("logcat 可读：${yesNo(facts.logcatReadable)}")
+        sb.appendLine()
+
+        sb.appendLine("[不显示悬浮窗的应用]")
+        if (facts.hiddenApps.isEmpty()) {
+            sb.appendLine("（名单为空，功能不生效是预期）")
+        } else {
+            facts.hiddenApps.forEach { pkg ->
+                val hit = pkg == facts.liveForeground
+                sb.appendLine("· $pkg${if (hit) "  ← 当前正是它" else ""}")
+            }
+        }
+        sb.appendLine("事件看到的前台：${facts.liveForeground ?: "（还没有收到任何事件）"}")
+        sb.appendLine(
+            "名单是否命中：${
+                if (facts.liveForeground != null && facts.liveForeground in facts.hiddenApps) "是" else "否"
+            }",
+        )
+        sb.appendLine()
+
+        sb.appendLine("[最近的前台切换（旧的在前）]")
+        if (facts.recentSwitches.isEmpty()) {
+            sb.appendLine("（空：无障碍服务可能还没收到窗口事件，或进程刚重启）")
+        } else {
+            val fmt = SimpleDateFormat("HH:mm:ss", Locale.US)
+            facts.recentSwitches.takeLast(20).forEach { (pkg, at) ->
+                sb.appendLine("${fmt.format(Date(at))}  $pkg")
+            }
+        }
         sb.appendLine()
 
         sb.appendLine("[设置类应用]")

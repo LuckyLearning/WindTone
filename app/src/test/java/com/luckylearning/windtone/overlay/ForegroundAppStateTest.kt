@@ -43,6 +43,31 @@ class ForegroundAppStateTest {
     }
 
     @Test
+    fun `最近切换按旧到新保留，最多 20 条`() {
+        (1..25).forEach { ForegroundAppState.report("com.p$it") }
+        val recent = ForegroundAppState.recent()
+        assertEquals("只保留最近 20 条", 20, recent.size)
+        assertEquals("com.p6", recent.first().pkg)
+        assertEquals("com.p25", recent.last().pkg)
+    }
+
+    @Test
+    fun `reset 同时清空最近切换`() {
+        ForegroundAppState.report("com.a")
+        assertEquals(1, ForegroundAppState.recent().size)
+        ForegroundAppState.reset()
+        assertTrue(ForegroundAppState.recent().isEmpty())
+    }
+
+    @Test
+    fun `重复上报同一个应用不重复入队`() {
+        ForegroundAppState.report("com.a")
+        ForegroundAppState.report("com.a")
+        ForegroundAppState.report("com.b")
+        assertEquals(listOf("com.a", "com.b"), ForegroundAppState.recent().map { it.pkg })
+    }
+
+    @Test
     fun `reset 清空当前包名`() {
         ForegroundAppState.report("com.a")
         ForegroundAppState.reset()

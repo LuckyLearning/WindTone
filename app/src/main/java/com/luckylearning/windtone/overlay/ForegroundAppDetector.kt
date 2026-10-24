@@ -253,6 +253,24 @@ internal object ForegroundAppDetector {
         }
     }
 
+    /**
+     * 系统**当前认为在运行**的无障碍服务（v1.1.86）。
+     *
+     * 与 [accessibilityEnabled] 的区别很关键：后者读 Secure 设置，只说明「用户勾过」；
+     * 车机若把服务进程杀掉而没有重新绑定，设置里仍然是勾着的，但这里会空 ——
+     * 这正是「无障碍开着却不生效」的典型形态。
+     */
+    fun activeAccessibilityServices(context: Context): List<String> = runCatching {
+        val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE)
+            as? android.view.accessibility.AccessibilityManager
+            ?: return@runCatching emptyList()
+        am.getEnabledAccessibilityServiceList(
+            android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK,
+        ).mapNotNull { info ->
+            info.resolveInfo?.serviceInfo?.let { "${it.packageName}/${it.name}" }
+        }
+    }.getOrDefault(emptyList())
+
     /** 本机是否**存在**无障碍设置页（车机常被裁掉；仅用于如实展示状态，不影响跳转） */
     fun canOpenAccessibilityPage(context: Context): Boolean =
         accessibilitySettingsIntents(context).any { resolvable(context, it) }

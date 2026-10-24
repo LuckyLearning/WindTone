@@ -34,6 +34,9 @@ internal object AccessibilityWatchdog {
     private const val SP = "fg_accessibility"
     private const val KEY_SEEN_ON = "seen_on"
 
+    /** 服务上次被系统连上的时间（v1.1.86）：用来区分「设置里开着」与「实际在跑」 */
+    private const val KEY_SEEN_AT = "seen_at"
+
     private const val CHANNEL_ID = "fg_recovery"
 
     /** 与前台服务通知（0x7701）分开，避免互相顶掉 */
@@ -45,9 +48,15 @@ internal object AccessibilityWatchdog {
     /** 这台机器上是否**见过**无障碍服务处于开启状态（掉线恢复的前提） */
     fun seenOn(context: Context): Boolean = sp(context).getBoolean(KEY_SEEN_ON, false)
 
+    /** 服务上次连上的时间戳；0 = 从未连上 */
+    fun lastConnectedAt(context: Context): Long = sp(context).getLong(KEY_SEEN_AT, 0L)
+
     /** 服务连上 / 检查到已开启时调用：记住「曾经开过」，并撤销可能存在的提醒 */
     fun markOn(context: Context) {
-        sp(context).edit().putBoolean(KEY_SEEN_ON, true).apply()
+        sp(context).edit()
+            .putBoolean(KEY_SEEN_ON, true)
+            .putLong(KEY_SEEN_AT, System.currentTimeMillis())
+            .apply()
         runCatching {
             context.getSystemService(NotificationManager::class.java)?.cancel(NOTIFICATION_ID)
         }
