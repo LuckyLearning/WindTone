@@ -82,9 +82,12 @@ internal object OverlayTextStyler {
         // 无底板时不能把上下句压到 42%：浅底（泊车影像 / 地图）上那就是一片雾。
         val contextAlpha = OverlayLegibility.contextAlpha(noBackdrop, dimPercent)
         val translationAlpha = OverlayLegibility.translationAlpha(noBackdrop, dimPercent)
-        // 单条模式：配角是固定白，以旧版 150 为基准按压暗百分比等比缩放
+        // 单条模式：配角 / 译文与正文**同色相**，只压暗不换色（v1.1.79 修复）。
+        // 原先这里写死白色：用户把「悬浮歌词文字颜色」调成橙 / 黄后，上下句仍是白的，
+        // 只有顶部歌名（跟随文字色）变了色，看起来就像「颜色染到歌名上去了」。
+        // alpha 仍以旧版 150 为基准按压暗百分比等比缩放，默认文字色（白）下视觉不变。
         val stripContextColor = withAlpha(
-            0x00FFFFFF,
+            baseColor,
             (STRIP_CONTEXT_ALPHA * dimPercent.coerceIn(0, 100) /
                 OverlayLegibility.DEFAULT_DIM_PERCENT.toFloat()).roundToInt()
                 .coerceIn(30, 255),

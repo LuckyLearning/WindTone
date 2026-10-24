@@ -453,7 +453,7 @@ internal fun SettingsOverlayPage(
         )
         ActionRow(
             title = "悬浮歌词文字颜色",
-            subtitle = "悬浮窗是固定色，不跟随主题；当前行与上下句靠明暗区分",
+            subtitle = "歌名、上下句与正文同一个色相，只靠明暗区分；不跟随 App 主题",
             onClick = { colorPickerShown = true },
             swatch = player.lyricOverlayTextColor,
             chevron = true,

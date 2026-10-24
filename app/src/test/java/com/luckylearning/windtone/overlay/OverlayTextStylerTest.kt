@@ -128,6 +128,26 @@ class OverlayTextStylerTest {
     }
 
     @Test
+    fun `单条模式上下句跟随自定义文字颜色`() {
+        // v1.1.79 回归：上下句曾写死白色，用户改文字颜色后只有歌名变色。
+        val orange = 0xFFFF8800.toInt()
+        fun colorOf(role: OverlayTextComposer.Role): Int {
+            val result = OverlayTextStyler.build(
+                listOf(OverlayTextComposer.StyledLine("line", role)),
+                fullHeight = false,
+                baseColor = orange,
+                noBackdrop = false,
+            ) as Spanned
+            return result
+                .getSpans(0, result.length, ForegroundColorSpan::class.java)
+                .single().foregroundColor
+        }
+        // alpha 与旧版一致（默认压暗 42% → 150），RGB 换成用户选的色相
+        assertEquals(Color.argb(150, 255, 136, 0), colorOf(OverlayTextComposer.Role.CONTEXT))
+        assertEquals(Color.argb(150, 255, 136, 0), colorOf(OverlayTextComposer.Role.TRANSLATION))
+    }
+
+    @Test
     fun `压暗百分比反映到全屏上下句`() {
         fun contextAlphaOf(dim: Int): Int {
             val result = OverlayTextStyler.build(
