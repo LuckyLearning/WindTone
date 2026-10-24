@@ -443,6 +443,20 @@ internal fun SettingsDiagnosticsPage(
         )
 
         Spacer(Modifier.height(6.dp))
+        // v1.1.83：车机息屏后系统会冻结后台，1.5 秒轮询随之停摆 —— 这是「按应用隐藏」
+        // 在车上失效的第二个原因（第一个是没有无障碍页）。白名单申请不需要 adb。
+        val ignoringBattery = ForegroundAppDetector.ignoringBatteryOptimizations(context)
+        ActionRow(
+            title = "后台保活（电池优化白名单）",
+            subtitle = if (ignoringBattery) {
+                "已加入白名单：息屏后轮询继续跑，按应用隐藏不会半夜失效"
+            } else {
+                "未加入：车机息屏后可能冻结后台，按应用隐藏会失效；点这里去申请（无需 adb）"
+            },
+            onClick = { ForegroundAppDetector.requestIgnoreBatteryOptimizations(context) },
+            trailing = if (ignoringBattery) "已加入" else "去设置",
+            chevron = true,
+        )
         // v1.1.82：车机排障报告。远程看不到车机里有什么，把现场证据一次性取出来，
         // 用户复制或落盘带回来即可判断「是无障碍被裁、还是授权没给、还是服务被杀」。
         ActionRow(

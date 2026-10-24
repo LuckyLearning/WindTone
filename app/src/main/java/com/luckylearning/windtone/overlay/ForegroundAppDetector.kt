@@ -5,7 +5,9 @@ import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
+import android.os.PowerManager
 import android.os.Process
 import android.provider.Settings
 import android.util.Log
@@ -140,6 +142,52 @@ internal object ForegroundAppDetector {
         ACCESSIBILITY_ACTIVITIES.forEach { (pkg, cls) ->
             add(Intent().setClassName(pkg, cls).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
+        // 上一轮排障报告（DiLink 5.0 / Android 12）实测：比亚迪的无障碍页不在
+        // com.android.settings，而在 **com.byd.carsettings** 的
+        // com.byd.systemsettings.accessibility.AccessibilityMainActivity。
+        // 硬编码只覆盖已知机型，所以再补一层**动态发现**：把设置类应用里名字含
+        // accessibility 的 Activity 全找出来逐个试（见 discoverAccessibilityActivities）。
+        discoverAccessibilityActivities(context).forEach { cn ->
+            add(Intent().setComponent(cn).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+    }
+
+    /**
+     * 动态发现「无障碍」相关 Activity（OEM 改名 / 换应用时的通用兜底）。
+     *
+     * 取数路径：启动器里可见、且包名或应用名像「设置」的应用 → 枚举其 Activity →
+     * 名字里含 `accessib` 的收进来。Android 11+ 的包可见性由「能从桌面点到」天然满足，
+     * 不需要 QUERY_ALL_PACKAGES。
+     *
+     * 只返回**显式组件**（不带 action 的 Intent 无法被猜测命中），由调用方逐个 resolve。
+     */
+    fun discoverAccessibilityActivities(context: Context): List<android.content.ComponentName> {
+        val pm = context.packageManager
+        val settingsPackages = runCatching {
+            pm.queryIntentActivities(
+                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),
+                0,
+            )
+        }.getOrDefault(emptyList())
+            .mapNotNull { it.activityInfo?.packageName }
+            .distinct()
+            .filter { pkg ->
+                val label = runCatching {
+                    pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+                }.getOrDefault("")
+                pkg.contains("setting", ignoreCase = true) ||
+                    pkg.contains("byd.carsettings", ignoreCase = true) ||
+                    label.contains("设置") ||
+                    label.contains("Setting", ignoreCase = true)
+            }
+
+        return settingsPackages.flatMap { pkg ->
+            val info = runCatching { pm.getPackageInfo(pkg, PackageManager.GET_ACTIVITIES) }.getOrNull()
+            info?.activities.orEmpty()
+                .mapNotNull { it.name }
+                .filter { it.contains("accessib", ignoreCase = true) }
+                .map { android.content.ComponentName(pkg, it) }
+        }.distinct().take(8)
     }
 
     /** 只打开「系统设置首页」（路径向导里的按钮用） */
@@ -149,6 +197,36 @@ internal object ForegroundAppDetector {
     /** 系统设置首页的 Intent（单独暴露，便于测试断言「兜底是显式选择」） */
     fun systemSettingsIntent(): Intent =
         Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+    /**
+     * 是否已在「电池优化」白名单（v1.1.83）。
+     *
+     * 车机（DiLink）在息屏 / 待机后会冻结后台，1.5 秒轮询就断了 —— 这也是
+     * `LyricOverlayService` 前台服务之外唯一还需要用户手动给的一项。
+     */
+    fun ignoringBatteryOptimizations(context: Context): Boolean = runCatching {
+        (context.getSystemService(Context.POWER_SERVICE) as PowerManager)
+            .isIgnoringBatteryOptimizations(context.packageName)
+    }.getOrDefault(false)
+
+    /**
+     * 申请「忽略电池优化」。
+     *
+     * 优先系统弹窗（`ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`，需要清单里声明
+     * `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`）；有些车机把弹窗裁了，退回白名单列表页，
+     * 让用户自己在列表里勾选。返回是否成功打开了某个页面。
+     */
+    fun requestIgnoreBatteryOptimizations(context: Context): Boolean =
+        startFirstResolvable(context, batteryOptimizationIntents(context))
+
+    /** 申请白名单的候选：系统弹窗 → 白名单列表页（有的车机把弹窗裁了） */
+    fun batteryOptimizationIntents(context: Context): List<Intent> = listOf(
+        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+            .setData(android.net.Uri.parse("package:${context.packageName}"))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+    )
 
     /**
      * 跳系统「使用情况权限」页（多候选 + 兜底）。
@@ -201,7 +279,11 @@ internal object ForegroundAppDetector {
         "com.android.settings" to "com.android.settings.Settings\$AccessibilitySettingsActivity",
         "com.android.settings" to "com.android.settings.accessibility.AccessibilitySettings",
         "com.android.settings" to "com.android.settings.Settings\$AccessibilitySettings",
-        // 比亚迪 DiLink（部分版本设置应用独立包名；不存在时 resolve 会跳过）
+        // 比亚迪 DiLink 5.0（Android 12）实测：设置应用是 com.byd.carsettings，
+        // 无障碍页是 com.byd.systemsettings.accessibility.AccessibilityMainActivity
+        // （由排障报告「设置类应用」一栏发现，2026-10-24）。
+        "com.byd.carsettings" to "com.byd.systemsettings.accessibility.AccessibilityMainActivity",
+        "com.byd.carsettings" to "com.byd.systemsettings.accessibility.DescriptionActivity",
         "com.byd.settings" to "com.byd.settings.Settings\$AccessibilitySettingsActivity",
         "com.byd.settings" to "com.byd.settings.accessibility.AccessibilitySettings",
     )

@@ -175,7 +175,7 @@
     <string name="could_not_open_accessibility_settings">打不开无障碍设置页，请手动前往：设置 → 辅助功能</string>
     <string name="accessibility_settings">无障碍设置</string>
     <string name="fg_help_title">找到「无障碍」这一页</string>
-    <string name="fg_help_body">这台车机可能没有独立的「无障碍」页（比亚迪 DiLink 常见）。按下面任一路径找：\n\n1）设置 → 系统 → 无障碍 → 已下载的服务 → 听风\n2）设置 → 应用 → 特殊应用权限 → 无障碍\n3）设置 → 辅助功能（部分车型在列表最底部，需要往下滑）\n\n三条都没有也没关系：用「使用情况访问」同样能识别前台应用，延迟约 1.5 秒，够「按应用隐藏悬浮窗」用。</string>
+    <string name="fg_help_body">这台车机可能没有独立的「无障碍」页（比亚迪 DiLink 常见）。按下面任一路径找：\n\n1）设置 → 系统 → 无障碍 → 已下载的服务 → 听风\n2）设置 → 应用 → 特殊应用权限 → 无障碍\n3）设置 → 辅助功能（部分车型在列表最底部，需要往下滑）\n4）比亚迪 DiLink：车辆设置 → 系统设置 → 无障碍（App 会优先尝试这个入口）\n\n三条都没有也没关系：用「使用情况访问」同样能识别前台应用，延迟约 1.5 秒，够「按应用隐藏悬浮窗」用。</string>
     <string name="fg_help_copy">复制说明</string>
     <string name="fg_help_copied">说明已复制</string>
     <string name="fg_help_open_settings">打开系统设置</string>

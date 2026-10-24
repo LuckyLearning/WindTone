@@ -55,6 +55,8 @@ internal object ForegroundProbe {
         val accessibilityMasterEnabled: Boolean,
         /** 服务是否声明在案（PackageManager 能否查到本应用的 service） */
         val serviceDeclared: Boolean,
+        /** 服务是否 exported（系统要跨进程绑定它；false 时开了也不会生效） */
+        val serviceExported: Boolean = false,
         /** UsageStats 的 AppOps 模式（数值 + 人话） */
         val usageStatsMode: String,
         /** UsageStats 是否视为已授权 */
@@ -119,17 +121,19 @@ internal object ForegroundProbe {
             }
         }.getOrElse { "查询失败：${it.javaClass.simpleName}" }
 
-        val ignoringBattery = runCatching {
-            (context.getSystemService(Context.POWER_SERVICE) as PowerManager)
-                .isIgnoringBatteryOptimizations(context.packageName)
-        }.getOrDefault(false)
+        val ignoringBattery = ForegroundAppDetector.ignoringBatteryOptimizations(context)
 
-        val declared = runCatching {
-            pm.queryIntentServices(
-                Intent("android.accessibilityservice.AccessibilityService"),
-                PackageManager.MATCH_DEFAULT_ONLY,
-            ).any { it.serviceInfo?.packageName == context.packageName }
-        }.getOrDefault(false)
+        // ⚠️ v1.1.82 的报告在这一行给出过「否」的**假阴性**：当时用
+        // queryIntentServices(MATCH_DEFAULT_ONLY) 查，而无障碍服务的 intent-filter
+        // 没有 CATEGORY_DEFAULT，必然查不到。改为直接按组件名取 ServiceInfo。
+        val serviceInfo = runCatching {
+            pm.getServiceInfo(
+                android.content.ComponentName(context, ForegroundAppService::class.java),
+                PackageManager.GET_META_DATA,
+            )
+        }.getOrNull()
+        val declared = serviceInfo != null
+        val exported = serviceInfo?.exported ?: false
 
         return Facts(
             collectedAt = System.currentTimeMillis(),
@@ -153,6 +157,7 @@ internal object ForegroundProbe {
                 0,
             ) == 1,
             serviceDeclared = declared,
+            serviceExported = exported,
             usageStatsMode = mode,
             usageStatsGranted = ForegroundAppDetector.usageStatsGranted(context),
             ignoringBatteryOptimizations = ignoringBattery,
@@ -242,7 +247,7 @@ internal object ForegroundProbe {
         sb.appendLine()
 
         sb.appendLine("[无障碍]")
-        sb.appendLine("服务已声明在案：${yesNo(facts.serviceDeclared)}")
+        sb.appendLine("服务已声明在案：${yesNo(facts.serviceDeclared)}（exported=${yesNo(facts.serviceExported)}）")
         sb.appendLine("系统总开关 ACCESSIBILITY_ENABLED：${yesNo(facts.accessibilityMasterEnabled)}")
         sb.appendLine("已启用服务列表（截断 400 字）：${facts.enabledAccessibilityServices.take(400).ifBlank { "（空）" }}")
         sb.appendLine()

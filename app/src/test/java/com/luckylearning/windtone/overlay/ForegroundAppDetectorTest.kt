@@ -50,6 +50,30 @@ class ForegroundAppDetectorTest {
     }
 
     @Test
+    fun `比亚迪 DiLink 的车辆设置无障碍页在候选里`() {
+        // 2026-10-24 车机实测：DiLink 5.0（Android 12）的无障碍页在
+        // com.byd.carsettings 里，名字是 AccessibilityMainActivity。
+        // 这一条防止以后清理「猜错的 OEM 组件」时把它一起删掉。
+        val targets = ForegroundAppDetector.accessibilitySettingsIntents(context)
+            .mapNotNull { it.component?.flattenToShortString() }
+        assertTrue(
+            "缺少 DiLink 候选：$targets",
+            targets.any { it.contains("com.byd.carsettings") && it.contains("AccessibilityMainActivity") },
+        )
+    }
+
+    @Test
+    fun `电池优化申请首选系统弹窗，其次白名单列表页`() {
+        val intents = ForegroundAppDetector.batteryOptimizationIntents(context)
+        assertEquals(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, intents.first().action)
+        assertEquals(
+            "package:${context.packageName}",
+            intents.first().data?.toString(),
+        )
+        assertEquals(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS, intents.last().action)
+    }
+
+    @Test
     fun `每个候选都带 NEW_TASK`() {
         // 从 Activity 之外（诊断页里的普通 context 也是 Activity，但这里按契约锁死）
         // 启动时必须带 NEW_TASK，否则某些 ROM 会直接抛异常
