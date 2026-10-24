@@ -50,6 +50,7 @@ internal object ForegroundAppState {
         if (normalized == _currentPkg.value) return false
         _currentPkg.value = normalized
         if (normalized != null) {
+            com.luckylearning.windtone.diag.DiagLog.log("FG", "前台 → $normalized")
             synchronized(this) {
                 recentLog.addLast(Entry(normalized, System.currentTimeMillis()))
                 while (recentLog.size > RECENT_MAX) recentLog.removeFirst()

@@ -14,6 +14,7 @@ import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.data.UpdateChecker
 import com.luckylearning.windtone.overlay.ForegroundAppDetector
 import com.luckylearning.windtone.overlay.ForegroundProbe
+import com.luckylearning.windtone.diag.DiagnosticsReport
 import com.luckylearning.windtone.overlay.ForegroundAppLog
 import com.luckylearning.windtone.overlay.ForegroundAppState
 import com.luckylearning.windtone.overlay.LyricOverlayBridge
@@ -312,6 +313,8 @@ internal fun SettingsDiagnosticsPage(
         var showBatteryHelp by remember { mutableStateOf(false) }
         // v1.1.82：车机现场取证（见 ForegroundProbe）
         var probeReport by remember { mutableStateOf<String?>(null) }
+        // v1.1.88：完整诊断包（环境 / 权限 / 播放 / 悬浮窗 / 曲库 / 事件日志）
+        var diagReport by remember { mutableStateOf<String?>(null) }
         var probePath by remember { mutableStateOf<String?>(null) }
         val clipboard = LocalClipboardManager.current
         val scope = rememberCoroutineScope()
@@ -464,6 +467,51 @@ internal fun SettingsDiagnosticsPage(
             trailing = if (ignoringBattery) "已加入" else "去设置",
             chevron = true,
         )
+        // v1.1.88：诊断包。用户问「为什么这样」时，最省事的是贴一段文本，
+        // 而不是来回问「你什么机型 / 开没开权限 / 放的是哪首歌」。
+        ActionRow(
+            title = "诊断包（完整）",
+            subtitle = "环境 · 权限 · 播放 · 悬浮窗 · 曲库 · 前台识别 · 最近事件日志；可复制或落盘",
+            onClick = {
+                val report = DiagnosticsReport.build(
+                    DiagnosticsReport.collect(context, player, library),
+                )
+                DiagnosticsReport.saveToFile(context, report)
+                diagReport = report
+            },
+            chevron = true,
+        )
+        if (diagReport != null) {
+            val report = diagReport!!
+            AlertDialog(
+                onDismissRequest = { diagReport = null },
+                title = { Text("诊断包") },
+                text = {
+                    Column(
+                        Modifier
+                            .heightIn(max = 380.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        Text(
+                            report,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = FontFamily.Monospace,
+                            ),
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        clipboard.setText(AnnotatedString(report))
+                        Toast.makeText(context, "诊断包已复制", Toast.LENGTH_SHORT).show()
+                    }) { Text("复制全部") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { diagReport = null }) { Text("关闭") }
+                },
+            )
+        }
+
         // v1.1.82：车机排障报告。远程看不到车机里有什么，把现场证据一次性取出来，
         // 用户复制或落盘带回来即可判断「是无障碍被裁、还是授权没给、还是服务被杀」。
         ActionRow(

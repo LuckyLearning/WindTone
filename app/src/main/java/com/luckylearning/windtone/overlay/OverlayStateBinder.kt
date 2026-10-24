@@ -125,6 +125,12 @@ class OverlayStateBinder(
                     hiddenApps = prefs.lyricOverlayHiddenApps,
                     logEnabled = prefs.foregroundLogEnabled,
                 )
+                if (host.desiredVisible != visible) {
+                    com.luckylearning.windtone.diag.DiagLog.log(
+                        "OVERLAY",
+                        "可见性 ${if (visible) "显示" else "隐藏"}（前台=${foregroundPkg ?: "?"}）",
+                    )
+                }
                 host.desiredVisible = visible
                 if (!visible) {
                     host.applyVisibility()

@@ -44,6 +44,7 @@ class ForegroundAppService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         runCatching { AccessibilityWatchdog.markOn(applicationContext) }
+        com.luckylearning.windtone.diag.DiagLog.log("A11Y", "服务已连接（可接收窗口事件）")
     }
 
     override fun onInterrupt() {
@@ -53,6 +54,7 @@ class ForegroundAppService : AccessibilityService() {
     override fun onUnbind(intent: android.content.Intent?): Boolean {
         // 用户在设置里关掉服务：清掉残留包名，别让下一次开启先继承一个过期值
         ForegroundAppState.reset()
+        com.luckylearning.windtone.diag.DiagLog.log("A11Y", "服务被解绑（系统关闭或被杀）")
         return super.onUnbind(intent)
     }
 
