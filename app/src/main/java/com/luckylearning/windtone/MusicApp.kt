@@ -10,6 +10,7 @@ import com.luckylearning.windtone.data.CrashLog
 import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.data.UpdateChecker
 import com.luckylearning.windtone.overlay.LyricOverlayBridge
+import com.luckylearning.windtone.ui.AppStrings
 
 class MusicApp : Application() {
 
@@ -18,6 +19,10 @@ class MusicApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+
+        // 非组合上下文的取串入口，必须最先就绪：下面的通知渠道、
+        // 以及后续所有服务/数据层文案都依赖它。
+        AppStrings.init(this)
 
         // 阶段追踪必须在最前面：上一轮的记录要先保下来（见 BootTrace 的注释）。
         BootTrace.begin(this)
@@ -85,10 +90,10 @@ class MusicApp : Application() {
         if (manager.getNotificationChannel(CHANNEL_ID) != null) return
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "音乐播放",
+            AppStrings.s(R.string.notif_channel_name),
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = "播放控制与当前曲目信息"
+            description = AppStrings.s(R.string.notif_channel_desc)
             setShowBadge(false)
             enableVibration(false)
         }

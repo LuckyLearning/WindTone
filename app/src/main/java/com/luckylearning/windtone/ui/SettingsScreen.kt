@@ -1,4 +1,7 @@
 package com.luckylearning.windtone.ui
+
+import androidx.compose.ui.res.stringResource
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.overlay.LyricOverlayBridge
 import com.luckylearning.windtone.overlay.LyricOverlayBus
 import com.luckylearning.windtone.overlay.OverlaySnapshot
@@ -94,35 +97,35 @@ import kotlin.math.roundToInt
  * [ActionRow] 能带右箭头，[OptionRow]（弹层行）依旧是「左侧图标 + 选中 ✓、无箭头」。
  */
 enum class SettingsPage(val title: String) {
-    ROOT("设置"),
+    ROOT(AppStrings.s(R.string.drawer_settings)),
 
     // v1.1.3 二次重构：主页只放六张二级分类入口卡，原来平铺在主页的
     // 「外观 / 播放 / 歌词」三组各自下沉成子页（顺序与主页卡片顺序一致）。
-    APPEARANCE("外观"),
-    PLAYBACK("播放"),
-    LYRICS("歌词"),
+    APPEARANCE(AppStrings.s(R.string.appearance)),
+    PLAYBACK(AppStrings.s(R.string.playback)),
+    LYRICS(AppStrings.s(R.string.lyrics)),
 
     /** 桌面悬浮歌词 —— v1.1.52 独立成页 */
-    OVERLAY("悬浮歌词"),
+    OVERLAY(AppStrings.s(R.string.floating_lyrics)),
 
-    LIBRARY("音乐库"),
-    UPDATE("更新"),
-    DIAGNOSTICS("关于与诊断"),
+    LIBRARY(AppStrings.s(R.string.drawer_group_library)),
+    UPDATE(AppStrings.s(R.string.update)),
+    DIAGNOSTICS(AppStrings.s(R.string.about_diagnostics)),
 
     /** 在线歌单（M3U / M3U8 / PLS）—— v1.1.37 */
-    ONLINE("在线歌单"),
+    ONLINE(AppStrings.s(R.string.online_playlists)),
 
     /** 百度网盘 —— v1.1.39 */
-    BAIDU("百度网盘"),
+    BAIDU(AppStrings.s(R.string.baidu_netdisk)),
 
     // 「阿里云盘」页（原 SettingsPage.ALIYUN）已于 v1.1.75 移除：
     // 云盘页升为一级入口（抽屉 → 在线音乐 → 阿里云盘），不再嵌在设置里。
 
     /** 在线播放：在线歌单、缓存 */
-    ONLINE_HUB("在线播放"),
+    ONLINE_HUB(AppStrings.s(R.string.set_lab_online_title)),
 
     /** 调整主页分类卡顺序，本身不是一张分类卡 */
-    MENU_ORDER("调整菜单顺序"),
+    MENU_ORDER(AppStrings.s(R.string.set_lab_menu_order_title)),
 
     /**
      * 实验室功能（v1.1.80）。
@@ -130,7 +133,7 @@ enum class SettingsPage(val title: String) {
      * 口径：**实验性 / 尚未定型的入口先放这里**，跑一段时间确认稳定后再移到正式位置。
      * 目前收纳「在线播放」（缓存上限、收听报告仍在打磨）与「调整菜单顺序」。
      */
-    LAB("实验室功能"),
+    LAB(AppStrings.s(R.string.set_lab_title)),
 }
 
 /**
@@ -417,14 +420,14 @@ fun SettingsScreen(
                 ) {
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "返回",
+                        contentDescription = AppStrings.s(R.string.back),
                         tint = MaterialTheme.colorScheme.onBackground,
                     )
                 }
                 Text(
                     // 车载进入「完整设置」时换个标题：让用户始终知道自己站在哪一层
                     if (player.carMode && fullSettings && page == SettingsPage.ROOT) {
-                        "完整设置"
+                        AppStrings.s(R.string.all_settings)
                     } else {
                         page.title
                     },
@@ -444,7 +447,7 @@ fun SettingsScreen(
                             modifier = Modifier.size(20.dp),
                         )
                         Spacer(Modifier.width(6.dp))
-                        Text("播放页", color = MaterialTheme.colorScheme.primary)
+                        Text(AppStrings.s(R.string.player), color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
@@ -643,11 +646,11 @@ fun SettingsScreen(
 
 
 internal fun formatListened(ms: Long): String {
-    if (ms < 60_000L) return "${ms / 1000} 秒"
+    if (ms < 60_000L) return AppStrings.s(R.string.s, ms / 1000)
     val totalMinutes = ms / 60_000L
     val h = totalMinutes / 60
     val m = totalMinutes % 60
-    return if (h > 0) "$h 小时 $m 分钟" else "$m 分钟"
+    return if (h > 0) AppStrings.s(R.string.h_min, h, m) else AppStrings.s(R.string.min, m)
 }
 
 /**

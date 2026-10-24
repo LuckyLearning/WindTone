@@ -1,5 +1,8 @@
 package com.luckylearning.windtone.ui
 
+import androidx.compose.ui.res.stringResource
+import com.luckylearning.windtone.R
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
@@ -155,7 +158,7 @@ internal fun ColorPickerSheet(
             )
 
             if (showPresets) {
-                SectionTitle("预设")
+                SectionTitle(stringResource(R.string.preset))
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -173,7 +176,7 @@ internal fun ColorPickerSheet(
                 }
             }
 
-            SectionTitle("自定义")
+            SectionTitle(stringResource(R.string.custom))
             Box(
                 Modifier
                     .fillMaxWidth()
@@ -185,21 +188,21 @@ internal fun ColorPickerSheet(
             // 三个滑块只在**松手**时才写回：拖动时逐帧 setLyricOverlayXxxColor 会连着
             // 触发预览，把浮动窗口的排版刷成流水；预览条本身逐帧在变，反馈并不缺。
             HsvSlider(
-                label = "色相",
+                label = stringResource(R.string.hue),
                 value = hsv[0],
                 range = 0f..360f,
                 onChange = { hsv = floatArrayOf(it, hsv[1], hsv[2]) },
                 onCommit = { onPick(android.graphics.Color.HSVToColor(hsv)) },
             )
             HsvSlider(
-                label = "饱和度",
+                label = stringResource(R.string.saturation),
                 value = hsv[1],
                 range = 0f..1f,
                 onChange = { hsv = floatArrayOf(hsv[0], it, hsv[2]) },
                 onCommit = { onPick(android.graphics.Color.HSVToColor(hsv)) },
             )
             HsvSlider(
-                label = "亮度",
+                label = stringResource(R.string.brightness),
                 value = hsv[2],
                 range = 0f..1f,
                 onChange = { hsv = floatArrayOf(hsv[0], hsv[1], it) },
@@ -210,13 +213,13 @@ internal fun ColorPickerSheet(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier.padding(top = 6.dp),
             ) {
-                TextButton(onClick = onDismiss) { Text("取消") }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
                 TextButton(
                     onClick = {
                         onPick(custom)
                         onDismiss()
                     },
-                ) { Text("使用这个颜色") }
+                ) { Text(stringResource(R.string.use_this_color)) }
             }
         }
     }
@@ -245,7 +248,7 @@ private fun ColorSwatch(argb: Int, selected: Boolean, onClick: () -> Unit) {
         if (selected) {
             Icon(
                 Icons.Filled.Check,
-                contentDescription = "已选择",
+                contentDescription = stringResource(R.string.selected),
                 tint = contrastTint(argb),
                 modifier = Modifier.size(16.dp),
             )

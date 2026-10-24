@@ -1,5 +1,8 @@
 package com.luckylearning.windtone.ui
 
+import androidx.compose.ui.res.stringResource
+import com.luckylearning.windtone.R
+
 import android.content.Context
 import android.widget.Toast
 import com.luckylearning.windtone.data.formatByteSize
@@ -10,6 +13,7 @@ import com.luckylearning.windtone.data.DownloadRoute
 import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.data.UpdateChecker
 import com.luckylearning.windtone.overlay.ForegroundAppDetector
+import com.luckylearning.windtone.overlay.ForegroundProbe
 import com.luckylearning.windtone.overlay.ForegroundAppLog
 import com.luckylearning.windtone.overlay.ForegroundAppState
 import com.luckylearning.windtone.overlay.LyricOverlayBridge
@@ -85,6 +89,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -182,82 +187,82 @@ internal fun SettingsDiagnosticsPage(
 
 
     // ------------------------------------------------ 播放统计
-    SectionTitle("播放统计")
+    SectionTitle(stringResource(R.string.playback_stats))
     val stats = library.playStats
     StatCard(
         rows = listOf(
-            "歌曲总数" to "${library.songs.size} 首",
-            "播放过的歌曲" to "${stats.listenedSongs} 首",
-            "累计播放次数" to "${stats.totalPlays} 次",
-            "累计收听时长" to formatListened(stats.totalListenedMs),
-            "收藏" to "${stats.favorites} 首",
+            stringResource(R.string.total_songs) to stringResource(R.string.songs, library.songs.size),
+            stringResource(R.string.songs_played) to stringResource(R.string.songs, stats.listenedSongs),
+            stringResource(R.string.total_plays) to stringResource(R.string.plays, stats.totalPlays),
+            stringResource(R.string.total_listening_time) to formatListened(stats.totalListenedMs),
+            stringResource(R.string.favorites) to stringResource(R.string.songs, stats.favorites),
         )
     )
     ActionRow(
-        title = "收听报告",
-        subtitle = "按天曲线 · 时段分布 · 最常播放 / 最长收听榜（全部来自本地记录）",
+        title = stringResource(R.string.lib_listening_report),
+        subtitle = stringResource(R.string.daily_curve_time_of_day),
         onClick = onOpenReport,
         chevron = true,
     )
     Spacer(Modifier.height(8.dp))
     // 不可撤销 → 二次确认
     TextButton(onClick = { showClearStatsConfirm = true }) {
-        Text("清空播放统计（保留收藏）")
+        Text(stringResource(R.string.clear_playback_stats_keeps_favorites))
     }
 
     // ------------------------------------------------ 数据与存储
     // 进入本页时刷新一次自检：曲库 / 目录 / 歌单 / 缓存的实时占用。
     LaunchedEffect(Unit) { onRefreshMaintenance() }
-    SectionTitle("数据与存储")
+    SectionTitle(stringResource(R.string.data_storage))
     StatCard(
         rows = listOf(
-            "曲库歌曲" to if (maintenance == null) "—" else "${maintenance.songs} 首",
-            "暂不可见" to if (maintenance == null) "—" else "${maintenance.missing} 首",
-            "已移出曲库" to if (maintenance == null) "—" else "${maintenance.excluded} 首",
-            "导入目录" to if (maintenance == null) "—" else "${maintenance.folders} 个",
-            "歌单" to if (maintenance == null) "—" else "${maintenance.playlists} 个",
-            "封面缓存" to (maintenance?.coverSizeText ?: "—"),
-            "数据库占用" to (maintenance?.dbSizeText ?: "—"),
+            stringResource(R.string.library_songs) to if (maintenance == null) "—" else stringResource(R.string.songs, maintenance.songs),
+            stringResource(R.string.not_accessible) to if (maintenance == null) "—" else stringResource(R.string.songs, maintenance.missing),
+            stringResource(R.string.removed_from_library) to if (maintenance == null) "—" else stringResource(R.string.songs, maintenance.excluded),
+            stringResource(R.string.imported_folders) to if (maintenance == null) "—" else stringResource(R.string.text, maintenance.folders),
+            stringResource(R.string.view_playlists) to if (maintenance == null) "—" else stringResource(R.string.text, maintenance.playlists),
+            stringResource(R.string.cover_cache) to (maintenance?.coverSizeText ?: "—"),
+            stringResource(R.string.database_size) to (maintenance?.dbSizeText ?: "—"),
         )
     )
     ActionRow(
-        title = "清理失效歌曲",
+        title = stringResource(R.string.clean_up_missing_songs),
         subtitle = if ((maintenance?.missing ?: 0) > 0) {
-            "${maintenance!!.missing} 首歌曲的文件已不在本机，清理后其收藏与统计一并移除"
+            stringResource(R.string.songs_are_no_longer_on, maintenance!!.missing)
         } else {
-            "文件不在本机的歌曲会保留记录（文件回来后自动恢复）"
+            stringResource(R.string.songs_whose_files_are_missing)
         },
         onClick = { showCleanupConfirm = true },
     )
     // 「移出曲库」是这个应用里唯一一个"歌还在、但被用户主动藏起来"的状态：
     // 不给恢复入口的话，用户误点一次就再也找不回来（重扫也不会收）。
     ActionRow(
-        title = "恢复已移出曲库的歌曲",
+        title = stringResource(R.string.restore_songs_removed_from_library),
         subtitle = if ((maintenance?.excluded ?: 0) > 0) {
-            "${maintenance!!.excluded} 首被「移出曲库」，恢复后会重新扫描一次"
+            stringResource(R.string.songs_were_removed_from_the, maintenance!!.excluded)
         } else {
-            "没有歌被移出曲库（长按歌曲 → 移出曲库 会记在这里）"
+            stringResource(R.string.no_songs_removed_from_the)
         },
         onClick = onRestoreExcluded,
     )
     ActionRow(
-        title = "重复歌曲清理",
-        subtitle = "按「标题 + 歌手 + 时长」找重复，每组留一首，其余移出曲库（不删文件）",
+        title = stringResource(R.string.duplicate_cleanup),
+        subtitle = stringResource(R.string.finds_duplicates_by_title_artist),
         onClick = onOpenDuplicates,
         chevron = true,
     )
     ActionRow(
-        title = "清空封面缓存",
-        subtitle = "只删掉本地可重新生成的封面图，不影响收藏与歌单",
+        title = stringResource(R.string.clear_cover_cache),
+        subtitle = stringResource(R.string.only_deletes_regenerable_cover_images),
         onClick = onClearCoverCache,
     )
     Spacer(Modifier.height(8.dp))
     // 不可撤销 → 二次确认
     TextButton(onClick = { showResetDataConfirm = true }) {
-        Text("清空全部用户数据（保留曲库）")
+        Text(stringResource(R.string.clear_all_user_data_keeps))
     }
     TextButton(onClick = { showResetLibraryConfirm = true }) {
-        Text("清空曲库与导入目录（保留收藏与统计）")
+        Text(stringResource(R.string.clear_library_and_imported_folders))
     }
 
     // ------------------------------------------------ 调试（默认隐藏，v1.1.31）
@@ -267,12 +272,12 @@ internal fun SettingsDiagnosticsPage(
     //    打开：在下方「关于」卡上连点 5 次（`DEBUG_UNLOCK_TAPS`，计数只活在本页，退出即清零）。
     //    关闭：本区第一个开关，写回 `SettingsDefaults.DEBUG_UNLOCKED`。
     if (player.debugUnlocked) {
-        SectionTitle("调试")
+        SectionTitle(stringResource(R.string.debug))
         // 分区自身的开关：关掉即整段消失。放在最上面而不是最下面 ——
         // 关掉之后这一区就没了，开关必须在「消失之前」够得着的位置。
         SwitchRow(
-            title = "显示调试功能",
-            subtitle = "关闭后本区隐藏；需要时在「关于」连点 5 次可再次显示",
+            title = stringResource(R.string.show_debug_tools),
+            subtitle = stringResource(R.string.hides_this_section_when_off),
             checked = true,
             onCheckedChange = { if (!it) onDebugUnlocked(false) },
         )
@@ -281,15 +286,15 @@ internal fun SettingsDiagnosticsPage(
         // 「悬浮窗按应用隐藏」的仪表盘（设计见 docs/设计-悬浮窗按应用隐藏.md）。
         // 为什么历史在这里而不是只在设置里：悬浮窗的价值全在**听风在后台**时，
         // 实时显示反而看不到 —— 正常用车，停车后打开这里回看、勾名单。
-        DebugLabel("前台应用记录")
+        DebugLabel(stringResource(R.string.foreground_app_history))
         // 开关就在这块里（v1.1.30 从「设置 → 歌词」搬过来）：记录是排障手段，
         // 日常不该出现在歌词设置里；而查包名 → 加名单的动线全在这一页完成。
         SwitchRow(
-            title = "记录前台应用切换",
+            title = stringResource(R.string.record_foreground_app_switches),
             subtitle = if (player.foregroundLogEnabled) {
-                "记录中：最多 300 条，只写本机（关掉不影响名单生效）"
+                stringResource(R.string.recording_up_to_300_entries)
             } else {
-                "关闭。打开后把前台切换写进本机历史，便于查出 360 影像等应用的包名"
+                stringResource(R.string.off_turn_on_to_log)
             },
             checked = player.foregroundLogEnabled,
             onCheckedChange = onForegroundLogEnabled,
@@ -301,6 +306,11 @@ internal fun SettingsDiagnosticsPage(
         var logEntries by remember { mutableStateOf(ForegroundAppLog.read(context)) }
         var logcatProbe by remember { mutableStateOf<Boolean?>(null) }
         var confirmClearLog by remember { mutableStateOf(false) }
+        // v1.1.82：车机上跳转「无障碍设置」失败时的路径向导
+        var showForegroundHelp by remember { mutableStateOf(false) }
+        // v1.1.82：车机现场取证（见 ForegroundProbe）
+        var probeReport by remember { mutableStateOf<String?>(null) }
+        var probePath by remember { mutableStateOf<String?>(null) }
         val clipboard = LocalClipboardManager.current
         val scope = rememberCoroutineScope()
         // 检测源状态每次重组都探一次：三次 Settings.Secure / AppOps 查询很便宜，
@@ -308,63 +318,195 @@ internal fun SettingsDiagnosticsPage(
         val detector = ForegroundAppDetector.status(context)
 
         Text(
-            text = "检测通道：" +
-                (if (detector.accessibility) "无障碍服务（已开启）" else "无障碍服务（未开启）") +
-                " · " +
-                (if (detector.usageStats) "使用情况权限（已授予）" else "使用情况权限（未授予）"),
+            text = stringResource(
+                R.string.detection_channels,
+                if (detector.accessibility) {
+                    stringResource(R.string.accessibility_service_on)
+                } else {
+                    stringResource(R.string.accessibility_service_off)
+                },
+                if (detector.usageStats) {
+                    stringResource(R.string.usage_access_granted)
+                } else {
+                    stringResource(R.string.usage_access_not_granted)
+                },
+            ),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        // v1.1.82：车机（DiLink）把无障碍设置页整个裁掉了，状态行必须**如实**
+        // 说「本机没有这个页面」，而不是让用户以为是自己没找到。
+        val accessibilityPageAvailable = remember {
+            ForegroundAppDetector.canOpenAccessibilityPage(context)
+        }
+        if (!accessibilityPageAvailable && !detector.usageStats) {
+            Text(
+                text = "本机没有「无障碍」设置页（车机常见）。点下面的按钮会给出路径向导；" +
+                    "也可以改用「使用情况访问」，识别延迟约 1.5 秒，同样能按应用隐藏悬浮窗。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
         Text(
-            text = "两个通道任一可用即可按名单收起悬浮窗；都不可用时按「不隐藏」放行，" +
-                "悬浮窗不会因此消失。没有 adb 也能用：无障碍服务在系统设置里手动开启。",
+            text = stringResource(R.string.either_channel_is_enough_to),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            TextButton(onClick = {
-                runCatching { context.startActivity(ForegroundAppDetector.accessibilitySettingsIntent()) }
-                    .onFailure {
-                        Toast.makeText(context, "打不开无障碍设置页，请手动前往：设置 → 辅助功能", Toast.LENGTH_LONG).show()
+            // v1.1.81：车机（比亚迪 DiLink 等）常常没有「无障碍」这一页，
+            // 旧实现只会弹一句 toast，用户面前没有出口。现在跳转失败就打开路径向导。
+            val openAccessibility: @Composable () -> Unit = {
+                TextButton(onClick = {
+                    if (!ForegroundAppDetector.openAccessibilitySettings(context)) {
+                        showForegroundHelp = true
                     }
-            }) { Text("无障碍设置") }
-            TextButton(onClick = {
-                runCatching { context.startActivity(ForegroundAppDetector.usageAccessSettingsIntent()) }
-                    .onFailure {
-                        Toast.makeText(context, "打不开使用情况权限页（部分车机没有这一页）", Toast.LENGTH_LONG).show()
+                }) {
+                    Text(
+                        if (accessibilityPageAvailable) {
+                            stringResource(R.string.accessibility_settings)
+                        } else {
+                            // 如实说明：不是没找到，是这台车机没有这一页
+                            "无障碍设置（本机无此页）"
+                        },
+                    )
+                }
+            }
+            val openUsageAccess: @Composable () -> Unit = {
+                TextButton(onClick = {
+                    if (!ForegroundAppDetector.openUsageAccessSettings(context)) {
+                        showForegroundHelp = true
                     }
-            }) { Text("使用情况权限") }
+                }) { Text(stringResource(R.string.usage_access)) }
+            }
+            // v1.1.82：本机没有无障碍页时，把**能用的那条**放到前面 —— 车机用户的
+            // 第一眼应该落在「使用情况访问」上，而不是一个点了只会弹向导的按钮。
+            if (accessibilityPageAvailable) {
+                openAccessibility()
+                openUsageAccess()
+            } else {
+                openUsageAccess()
+                openAccessibility()
+            }
             // logcat 实测：用户最初想要的「日志监听」路线要 READ_LOGS（adb）——
             // 这里留一个实测按钮，万一迪丽放松了限制，报告里会显示「可读」。
             TextButton(onClick = {
                 scope.launch { logcatProbe = ForegroundAppDetector.logcatReadable() }
-            }) { Text("实测日志可读") }
+            }) { Text(stringResource(R.string.log_readability)) }
+        }
+        // 路径向导：车机没有无障碍设置页时的出口。
+        // 内容刻意写成「三条路径 + 一个等效方案」，因为 DiLink 各版本把这一项放在
+        // 系统 / 应用 / 辅助功能三个不同位置，猜单一路径必然有人找不到。
+        if (showForegroundHelp) {
+            val steps = stringResource(R.string.fg_help_body)
+            AlertDialog(
+                onDismissRequest = { showForegroundHelp = false },
+                title = { Text(stringResource(R.string.fg_help_title)) },
+                text = {
+                    Column(
+                        Modifier
+                            .heightIn(max = 340.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        Text(steps, style = MaterialTheme.typography.bodySmall)
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        clipboard.setText(AnnotatedString(steps))
+                        Toast.makeText(
+                            context,
+                            AppStrings.s(R.string.fg_help_copied),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }) { Text(stringResource(R.string.fg_help_copy)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        ForegroundAppDetector.openSystemSettings(context)
+                        showForegroundHelp = false
+                    }) { Text(stringResource(R.string.fg_help_open_settings)) }
+                },
+            )
         }
         Text(
-            text = "日志可读性：" + when (logcatProbe) {
-                null -> "未测试（不影响任何功能，仅作信息）"
-                true -> "可读（本机允许读取系统日志）"
-                false -> "不可读（符合预期：Android 4.1 起需 adb 授予 READ_LOGS）"
-            },
+            text = stringResource(
+                R.string.log_readability_state,
+                when (logcatProbe) {
+                    null -> stringResource(R.string.not_tested_informational_only)
+                    true -> stringResource(R.string.readable_system_logs_are_accessible)
+                    false -> stringResource(R.string.not_readable_expected_since_android)
+                },
+            ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         Spacer(Modifier.height(6.dp))
+        // v1.1.82：车机排障报告。远程看不到车机里有什么，把现场证据一次性取出来，
+        // 用户复制或落盘带回来即可判断「是无障碍被裁、还是授权没给、还是服务被杀」。
+        ActionRow(
+            title = "车机排障报告（前台识别）",
+            subtitle = "采集：无障碍页是否存在 · 服务是否在案 · 使用情况授权 · 每个候选页能否解析（可复制 / 落盘）",
+            onClick = {
+                val facts = ForegroundProbe.collect(context)
+                val report = ForegroundProbe.buildReport(facts)
+                probePath = ForegroundProbe.saveToFile(context, report)
+                probeReport = report
+            },
+            chevron = true,
+        )
+        if (probeReport != null) {
+            val report = probeReport!!
+            AlertDialog(
+                onDismissRequest = { probeReport = null },
+                title = { Text("前台识别排障报告") },
+                text = {
+                    Column(
+                        Modifier
+                            .heightIn(max = 380.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        Text(
+                            report,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = FontFamily.Monospace,
+                            ),
+                        )
+                        probePath?.let {
+                            Text(
+                                "\n已保存到：$it",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        clipboard.setText(AnnotatedString(report))
+                        Toast.makeText(context, "报告已复制", Toast.LENGTH_SHORT).show()
+                    }) { Text("复制全部") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { probeReport = null }) { Text("关闭") }
+                },
+            )
+        }
+        Spacer(Modifier.height(6.dp))
         Text(
-            text = "当前前台：" + (currentPkg ?: "未知") +
+            text = stringResource(R.string.in_foreground, (currentPkg ?: stringResource(R.string.unknown))) +
                 (currentPkg?.let { ForegroundAppLog.labelOf(context, it) }?.let { "（$it）" } ?: ""),
             style = MaterialTheme.typography.labelMedium,
         )
         Text(
-            text = "最近 ${logEntries.size} 条切换（最新在上）：",
+            text = stringResource(R.string.last_switches_newest_first, logEntries.size),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (logEntries.isEmpty()) {
             Text(
-                text = "还没有记录。先打开上面的「记录前台应用切换」，再正常用车；" +
-                    "停车后回到这里，就能看到 360 影像等应用的包名，点右侧「加入名单」即可收起悬浮窗。",
+                text = stringResource(R.string.nothing_recorded_yet_turn_on),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -387,7 +529,7 @@ internal fun SettingsDiagnosticsPage(
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
                             Text(
-                                text = entry.label ?: "（应用名解析不到）",
+                                text = entry.label ?: stringResource(R.string.app_name_unavailable),
                                 style = MaterialTheme.typography.labelMedium,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -406,11 +548,11 @@ internal fun SettingsDiagnosticsPage(
                                 onLyricOverlayHiddenApps(player.lyricOverlayHiddenApps + entry.pkg)
                                 Toast.makeText(
                                     context,
-                                    "已加入名单：" + (entry.label ?: entry.pkg),
+                                    AppStrings.s(R.string.already_listed, (entry.label ?: entry.pkg)),
                                     Toast.LENGTH_SHORT,
                                 ).show()
                             },
-                        ) { Text(if (inList) "已在名单" else "加入名单") }
+                        ) { Text(if (inList) stringResource(R.string.in_list) else stringResource(R.string.add_to_list)) }
                     }
                 }
             }
@@ -420,29 +562,29 @@ internal fun SettingsDiagnosticsPage(
                 enabled = logEntries.isNotEmpty(),
                 onClick = {
                     clipboard.setText(AnnotatedString(ForegroundAppLog.formatForCopy(logEntries)))
-                    Toast.makeText(context, "已复制 ${logEntries.size} 条记录", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, AppStrings.s(R.string.copied_entries, logEntries.size), Toast.LENGTH_SHORT).show()
                 },
-            ) { Text("复制全部") }
-            TextButton(onClick = { logEntries = ForegroundAppLog.read(context) }) { Text("刷新") }
+            ) { Text(stringResource(R.string.copy_all)) }
+            TextButton(onClick = { logEntries = ForegroundAppLog.read(context) }) { Text(stringResource(R.string.refresh)) }
             TextButton(
                 enabled = logEntries.isNotEmpty(),
                 onClick = { confirmClearLog = true },
-            ) { Text("清空") }
+            ) { Text(stringResource(R.string.common_clear)) }
         }
         if (confirmClearLog) {
             AlertDialog(
                 onDismissRequest = { confirmClearLog = false },
-                title = { Text("清空前台记录？") },
-                text = { Text("清空后不可恢复；不影响「不显示悬浮窗的应用」名单。") },
+                title = { Text(stringResource(R.string.clear_foreground_history)) },
+                text = { Text(stringResource(R.string.this_cannot_be_undone_the)) },
                 confirmButton = {
                     TextButton(onClick = {
                         confirmClearLog = false
                         ForegroundAppLog.clear(context)
                         logEntries = emptyList()
-                    }) { Text("清空") }
+                    }) { Text(stringResource(R.string.common_clear)) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { confirmClearLog = false }) { Text("取消") }
+                    TextButton(onClick = { confirmClearLog = false }) { Text(stringResource(R.string.cancel)) }
                 },
             )
         }
@@ -450,10 +592,10 @@ internal fun SettingsDiagnosticsPage(
         // ------------------------------------------------ 悬浮歌词自检
         // 悬浮歌词链路跨 6 个环节，任何一环断掉用户侧都是同一个「没反应」。
         // 这个入口把整条链路一次测完，直接指出断点，省去猜和反复重装。
-        DebugLabel("悬浮歌词")
+        DebugLabel(stringResource(R.string.floating_lyrics))
         ActionRow(
-            title = "悬浮歌词自检",
-            subtitle = "逐项检查 授权 → 开关 → 服务 → 窗口 → 内容，指出断在哪一环",
+            title = stringResource(R.string.floating_lyrics_self_check),
+            subtitle = stringResource(R.string.checks_permission_switch_service_window),
             onClick = {
                 overlayCheck = LyricOverlayBridge.snapshot(context)
                 showOverlayCheck = true
@@ -462,10 +604,10 @@ internal fun SettingsDiagnosticsPage(
         )
 
         // ------------------------------------------------ 崩溃日志
-        DebugLabel("崩溃日志")
+        DebugLabel(stringResource(R.string.crash_log))
         ActionRow(
-            title = if (crashLogCount > 0) "查看日志（共 $crashLogCount 条）" else "暂无崩溃记录",
-            subtitle = "崩溃信息只保存在本机，不会自动上传，可导出后反馈",
+            title = if (crashLogCount > 0) stringResource(R.string.view_log_entries, crashLogCount) else stringResource(R.string.no_crash_records),
+            subtitle = stringResource(R.string.crash_data_stays_on_this),
             onClick = onLoadCrashLog,
         )
         if (crashLogText != null) {
@@ -489,13 +631,13 @@ internal fun SettingsDiagnosticsPage(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             TextButton(onClick = onExportCrashLog, enabled = crashLogCount > 0) {
-                Text("导出日志")
+                Text(stringResource(R.string.export_log))
             }
             // 不可撤销 → 二次确认
             TextButton(
                 onClick = { showClearCrashConfirm = true },
                 enabled = crashLogCount > 0,
-            ) { Text("清空日志") }
+            ) { Text(stringResource(R.string.clear_log)) }
         }
 
         // v1.1.80：删掉「后台预取 / 并行分片」两行。
@@ -508,46 +650,46 @@ internal fun SettingsDiagnosticsPage(
         // 这条链路只有真车能验（开机广播是系统保护广播，adb 发不出去），而失败表现
         // 全是「开机后什么都没发生」。所以把广播是否到达、决策是什么、起播结果原样摆出来 ——
         // 用户看一眼就能知道是「系统没给广播」还是「给了但没播起来」。
-        DebugLabel("开机自启")
+        DebugLabel(stringResource(R.string.start_on_boot))
         val boot = bootInfo
         StatCard(
             rows = listOf(
-                "开关" to if (player.autoPlayOnBoot) {
-                    "已打开（开机后台起播，不弹界面）"
+                stringResource(R.string.switch_label) to if (player.autoPlayOnBoot) {
+                    stringResource(R.string.on_resumes_playback_in_the)
                 } else {
-                    "关闭"
+                    stringResource(R.string.off)
                 },
-                "上次开机广播" to if (boot == null || !boot.received) {
-                    "从未收到"
+                stringResource(R.string.last_boot_broadcast) to if (boot == null || !boot.received) {
+                    stringResource(R.string.never_received)
                 } else {
                     BootStatusText.agoLabel(System.currentTimeMillis(), boot.atMillis)
                 },
-                "决策" to (if (boot == null) "—" else BootStatusText.actionLabel(boot.action)),
-                "结果" to (if (boot == null) "—" else BootStatusText.resultLabel(boot)),
+                stringResource(R.string.decision) to (if (boot == null) "—" else BootStatusText.actionLabel(boot.action)),
+                stringResource(R.string.result) to (if (boot == null) "—" else BootStatusText.resultLabel(boot)),
             )
         )
         ActionRow(
-            title = "立刻试一次后台起播",
-            subtitle = "不重启也能验一遍：按开机那条路恢复上次队列并起播（不会弹出界面）",
+            title = stringResource(R.string.try_background_resume_now),
+            subtitle = stringResource(R.string.verify_without_rebooting_restores_the),
             onClick = {
                 onTestBootPlayback()
-                Toast.makeText(context, "已触发，退到桌面即可看到它在后台播放", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, AppStrings.s(R.string.triggered_go_to_the_home), Toast.LENGTH_SHORT).show()
                 bootInfo = BootStatus.snapshot(context)
             },
         )
         ActionRow(
-            title = "刷新上面的状态",
+            title = stringResource(R.string.refresh_the_status_above),
             subtitle = if (boot == null || !boot.received) {
-                "还没收到过开机广播：请确认系统「应用 → 听风 → 权限」里「开机启动 / 自启动」是允许的"
+                stringResource(R.string.no_boot_broadcast_yet_make)
             } else {
-                "看一遍这条路走到哪一步了"
+                stringResource(R.string.walk_this_path_and_show)
             },
             onClick = { bootInfo = BootStatus.snapshot(context) },
         )
     }
 
     // ------------------------------------------------ 关于
-    SectionTitle("关于")
+    SectionTitle(stringResource(R.string.about))
     // 连点 5 次解锁调试分区（v1.1.31）。
     // 计数用 `remember` 而不是持久化：必须「连续」点 —— 退出本页再进来就重新数，
     // 免得几下零散误触攒够 5 次把调试区翻出来。真正的「已解锁」状态才落盘。
@@ -557,41 +699,36 @@ internal fun SettingsDiagnosticsPage(
         if (aboutTaps >= DEBUG_UNLOCK_TAPS) {
             aboutTaps = 0
             onDebugUnlocked(true)
-            Toast.makeText(context, "调试功能已显示", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, AppStrings.s(R.string.debug_tools_are_now_visible), Toast.LENGTH_SHORT).show()
         }
     }
     StatCard(
         onClick = if (player.debugUnlocked) null else onAboutTap,
         rows = listOf(
-            "应用" to "听风 WindTone",
-            "版本" to version,
-            "包名" to context.packageName,
-            "最低系统" to "Android 7.0（API 24）",
+            stringResource(R.string.app) to stringResource(R.string.windtone),
+            stringResource(R.string.version) to version,
+            stringResource(R.string.package_label) to context.packageName,
+            stringResource(R.string.minimum_os) to "Android 7.0（API 24）",
             // v1.0.7 起 Release 按 ABI 分包，这里显示本机架构，方便对照下载
-            "CPU 架构" to UpdateChecker.primaryAbiLabel().ifBlank { "—" },
-            "更新来源" to "${BuildConfig.RELEASE_OWNER}/${BuildConfig.RELEASE_REPO}",
+            stringResource(R.string.abis) to UpdateChecker.primaryAbiLabel().ifBlank { "—" },
+            stringResource(R.string.update_source) to "${BuildConfig.RELEASE_OWNER}/${BuildConfig.RELEASE_REPO}",
         )
     )
     // v1.1.80：更新相关整体收进「关于」——版本号与「有没有新版本」本来就该在同一屏，
     // 以前分成两张主页卡，用户先看版本再去找更新时间多一跳。
     ActionRow(
-        title = "检查更新",
+        title = stringResource(R.string.check_for_updates),
         subtitle = when {
-            update.info != null -> "有新版本 v${update.info.version} 可下载"
-            autoCheckUpdate -> "检查更新 · 自动检查已开启"
-            else -> "检查更新 · 自动检查已关闭"
+            update.info != null -> stringResource(R.string.version_is_available, update.info.version)
+            autoCheckUpdate -> stringResource(R.string.check_for_updates_auto_check)
+            else -> stringResource(R.string.check_for_updates_auto_check_2)
         },
         onClick = onOpenUpdate,
-        trailing = if (update.info != null) "有新版本" else "",
+        trailing = if (update.info != null) stringResource(R.string.update_available) else "",
         chevron = true,
     )
     Text(
-        "歌单、收藏、播放统计、歌词等全部数据都只保存在本机；" +
-            "歌词优先读取音频同目录的 .lrc / .krc / .yrc 文件，其次读取音频内嵌歌词。\n" +
-            "联网行为只有一处：「检查更新 / 下载新版本」访问 GitHub 上的公共分发仓库" +
-            "（LuckyLearning/Release；先直连官方地址，连不上时自动切换第三方加速镜像，" +
-            "也可在「下载线路」中手动指定）。" +
-            "不采集、不上传任何信息。",
+        stringResource(R.string.playlists_favorites_playback_stats_and),
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(vertical = 8.dp),
@@ -601,10 +738,10 @@ internal fun SettingsDiagnosticsPage(
     if (showClearStatsConfirm) {
         AlertDialog(
             onDismissRequest = { showClearStatsConfirm = false },
-            title = { Text("清空播放统计？") },
+            title = { Text(stringResource(R.string.clear_playback_stats)) },
             text = {
                 Text(
-                    "会清空播放次数、累计收听时长与「播放过的歌曲」；收藏与歌单保留。该操作不可撤销。",
+                    stringResource(R.string.clears_play_counts_total_listening),
                     style = MaterialTheme.typography.bodySmall,
                 )
             },
@@ -614,10 +751,10 @@ internal fun SettingsDiagnosticsPage(
                         onClearStats()
                         showClearStatsConfirm = false
                     },
-                ) { Text("清空") }
+                ) { Text(stringResource(R.string.common_clear)) }
             },
             dismissButton = {
-                TextButton(onClick = { showClearStatsConfirm = false }) { Text("取消") }
+                TextButton(onClick = { showClearStatsConfirm = false }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -625,11 +762,10 @@ internal fun SettingsDiagnosticsPage(
     if (showClearCrashConfirm) {
         AlertDialog(
             onDismissRequest = { showClearCrashConfirm = false },
-            title = { Text("清空崩溃日志？") },
+            title = { Text(stringResource(R.string.clear_crash_log)) },
             text = {
                 Text(
-                    "本机保存的崩溃记录会被全部删除，删除后无法找回。" +
-                        "如果是要反馈问题，建议先「导出日志」再清空。",
+                    stringResource(R.string.clears_every_crash_record_stored),
                     style = MaterialTheme.typography.bodySmall,
                 )
             },
@@ -639,10 +775,10 @@ internal fun SettingsDiagnosticsPage(
                         onClearCrashLog()
                         showClearCrashConfirm = false
                     },
-                ) { Text("清空") }
+                ) { Text(stringResource(R.string.common_clear)) }
             },
             dismissButton = {
-                TextButton(onClick = { showClearCrashConfirm = false }) { Text("取消") }
+                TextButton(onClick = { showClearCrashConfirm = false }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -651,7 +787,7 @@ internal fun SettingsDiagnosticsPage(
         val snap = overlayCheck!!
         AlertDialog(
             onDismissRequest = { showOverlayCheck = false },
-            title = { Text("悬浮歌词自检") },
+            title = { Text(stringResource(R.string.floating_lyrics_self_check)) },
             text = {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     Text(
@@ -661,11 +797,11 @@ internal fun SettingsDiagnosticsPage(
                     Spacer(Modifier.height(8.dp))
                     // 动作按「能否直接解决问题」排；全部就地执行，不关弹窗，
                     // 方便用户一件事做完立刻回到这里看数字有没有变。
-                    TextButton(onClick = onOverlayPreview) { Text("显示预览 6 秒") }
+                    TextButton(onClick = onOverlayPreview) { Text(stringResource(R.string.show_a_6_second_preview)) }
                     if (!snap.permissionGranted || !snap.windowAttached) {
                         TextButton(
                             onClick = { context.startOverlayPermissionPage() },
-                        ) { Text("去系统设置授权") }
+                        ) { Text(stringResource(R.string.grant_in_system_settings)) }
                     }
                     TextButton(
                         onClick = {
@@ -673,7 +809,7 @@ internal fun SettingsDiagnosticsPage(
                             onLyricOverlay(true)
                             overlayCheck = LyricOverlayBridge.snapshot(context)
                         },
-                    ) { Text("重新拉起服务") }
+                    ) { Text(stringResource(R.string.restart_service)) }
                     TextButton(
                         onClick = {
                             // 窗口跑到屏幕外时的唯一出路：桌面上根本抓不到它，
@@ -682,11 +818,11 @@ internal fun SettingsDiagnosticsPage(
                             onOverlayPreview()
                             overlayCheck = LyricOverlayBridge.snapshot(context)
                         },
-                    ) { Text("重置位置并预览") }
+                    ) { Text(stringResource(R.string.reset_position_and_preview)) }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showOverlayCheck = false }) { Text("关闭") }
+                TextButton(onClick = { showOverlayCheck = false }) { Text(stringResource(R.string.off)) }
             },
         )
     }
@@ -694,11 +830,10 @@ internal fun SettingsDiagnosticsPage(
     if (showCleanupConfirm) {
         AlertDialog(
             onDismissRequest = { showCleanupConfirm = false },
-            title = { Text("清理失效歌曲？") },
+            title = { Text(stringResource(R.string.clean_up_missing_songs_2)) },
             text = {
                 Text(
-                    "会删除「文件已不在本机」的歌曲记录，这些歌的收藏、播放统计、歌词偏移与歌单条目会随之消失。" +
-                        "如果文件只是暂时不可用（外置存储未挂载、权限被撤销），先不要清理。该操作不可撤销。",
+                    stringResource(R.string.removes_records_of_songs_whose),
                     style = MaterialTheme.typography.bodySmall,
                 )
             },
@@ -708,10 +843,10 @@ internal fun SettingsDiagnosticsPage(
                         onCleanupMissingSongs()
                         showCleanupConfirm = false
                     },
-                ) { Text("清理") }
+                ) { Text(stringResource(R.string.clean_up)) }
             },
             dismissButton = {
-                TextButton(onClick = { showCleanupConfirm = false }) { Text("取消") }
+                TextButton(onClick = { showCleanupConfirm = false }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -719,11 +854,10 @@ internal fun SettingsDiagnosticsPage(
     if (showResetDataConfirm) {
         AlertDialog(
             onDismissRequest = { showResetDataConfirm = false },
-            title = { Text("清空全部用户数据？") },
+            title = { Text(stringResource(R.string.clear_all_user_data)) },
             text = {
                 Text(
-                    "会清空收藏、播放统计、逐曲歌词偏移、本地标签编辑、全部歌单、播放队列与搜索历史。" +
-                        "曲库与已导入的目录会保留，歌单一旦清空无法恢复。该操作不可撤销。",
+                    stringResource(R.string.clears_favorites_playback_stats_per),
                     style = MaterialTheme.typography.bodySmall,
                 )
             },
@@ -733,10 +867,10 @@ internal fun SettingsDiagnosticsPage(
                         onResetUserData()
                         showResetDataConfirm = false
                     },
-                ) { Text("清空") }
+                ) { Text(stringResource(R.string.common_clear)) }
             },
             dismissButton = {
-                TextButton(onClick = { showResetDataConfirm = false }) { Text("取消") }
+                TextButton(onClick = { showResetDataConfirm = false }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -746,14 +880,10 @@ internal fun SettingsDiagnosticsPage(
     if (showResetLibraryConfirm) {
         AlertDialog(
             onDismissRequest = { showResetLibraryConfirm = false },
-            title = { Text("清空曲库与导入目录？") },
+            title = { Text(stringResource(R.string.clear_library_and_imported_folders_2)) },
             text = {
                 Text(
-                    "会移除曲库里的全部歌曲记录与导入的目录（含已排出的目录），" +
-                        "下次启动停在「请选择扫描范围」，需要重新选择要扫描的位置。\n\n" +
-                        "收藏、播放统计、歌单与逐曲歌词偏移会保留 —— " +
-                        "重扫到同一批文件时它们会自动接上。\n\n" +
-                        "存储中的音频文件不会被删除。该操作不可撤销。",
+                    stringResource(R.string.removes_every_song_record_and),
                     style = MaterialTheme.typography.bodySmall,
                 )
             },
@@ -763,10 +893,10 @@ internal fun SettingsDiagnosticsPage(
                         onResetLibrary()
                         showResetLibraryConfirm = false
                     },
-                ) { Text("清空曲库") }
+                ) { Text(stringResource(R.string.clear_library)) }
             },
             dismissButton = {
-                TextButton(onClick = { showResetLibraryConfirm = false }) { Text("取消") }
+                TextButton(onClick = { showResetLibraryConfirm = false }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -795,30 +925,29 @@ internal fun SettingsUpdatePage(
 ) {
     var showRouteDialog by remember { mutableStateOf(false) }
 
-    SectionTitle("更新")
+    SectionTitle(stringResource(R.string.update))
     val info = update.info
     ActionRow(
         title = when {
-            update.checking -> "正在检查更新…"
-            info != null -> "发现新版本 v${info.version}"
-            else -> "检查更新"
+            update.checking -> stringResource(R.string.checking_for_updates)
+            info != null -> stringResource(R.string.version_is_available_2, info.version)
+            else -> stringResource(R.string.check_for_updates)
         },
         subtitle = when {
-            update.checking -> "正在检查更新…"
+            update.checking -> stringResource(R.string.checking_for_updates)
             info != null ->
-                "当前 v${update.currentVersion} → 最新 v${info.version}" +
-                    UpdateChecker.formatSize(info.apkSizeBytes)
+                stringResource(R.string.current_v_latest_v, update.currentVersion, info.version, UpdateChecker.formatSize(info.apkSizeBytes))
                         .takeIf { it.isNotBlank() }
                         ?.let { " · $it" }
                         .orEmpty()
 
-            else -> "当前版本 v${update.currentVersion} · 安装包由公共仓库分发"
+            else -> stringResource(R.string.current_version_packages_are_distributed, update.currentVersion)
         },
         onClick = onCheckUpdate,
     )
     SwitchRow(
-        title = "启动时自动检查更新",
-        subtitle = "关闭后应用不再发起任何网络请求（在线更新是唯一的联网功能）",
+        title = stringResource(R.string.check_for_updates_on_launch),
+        subtitle = stringResource(R.string.when_off_the_app_makes),
         checked = autoCheckUpdate,
         onCheckedChange = onAutoCheckUpdate,
         onReset = resetAction(autoCheckUpdate != SettingsDefaults.AUTO_UPDATE) {
@@ -826,7 +955,7 @@ internal fun SettingsUpdatePage(
         },
     )
     ActionRow(
-        title = "下载线路",
+        title = stringResource(R.string.download_route),
         subtitle = "${downloadRoute.label} · ${downloadRoute.hint}",
         onClick = { showRouteDialog = true },
         chevron = true,
@@ -835,9 +964,9 @@ internal fun SettingsUpdatePage(
         },
     )
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        TextButton(onClick = onOpenReleasePage) { Text("打开发布页面") }
+        TextButton(onClick = onOpenReleasePage) { Text(stringResource(R.string.open_release_page)) }
         if (info != null) {
-            TextButton(onClick = onIgnoreUpdate) { Text("忽略此版本") }
+            TextButton(onClick = onIgnoreUpdate) { Text(stringResource(R.string.skip_this_version)) }
         }
     }
 
@@ -845,13 +974,11 @@ internal fun SettingsUpdatePage(
     if (showRouteDialog) {
         AlertDialog(
             onDismissRequest = { showRouteDialog = false },
-            title = { Text("下载线路") },
+            title = { Text(stringResource(R.string.download_route)) },
             text = {
                 Column {
                     Text(
-                        "检查更新与下载安装包都走这条线路：「自动」先直连 GitHub 官方地址，" +
-                            "连不上时依次尝试加速镜像；手动选定则只走那一条。" +
-                            "镜像有缓存，偶尔会慢或滞后，失败时换一条线路再试即可。",
+                        stringResource(R.string.both_checking_and_downloading_use),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -890,7 +1017,7 @@ internal fun SettingsUpdatePage(
                             if (route == downloadRoute) {
                                 Icon(
                                     Icons.Filled.Check,
-                                    contentDescription = "已选择",
+                                    contentDescription = stringResource(R.string.selected),
                                     tint = MaterialTheme.colorScheme.primary,
                                 )
                             }
@@ -900,11 +1027,11 @@ internal fun SettingsUpdatePage(
                         onClick = onPingRoutes,
                         enabled = !update.pingingRoutes,
                     ) {
-                        Text(if (update.pingingRoutes) "正在测试延迟…" else "测试延迟")
+                        Text(if (update.pingingRoutes) stringResource(R.string.testing_latency) else stringResource(R.string.test_latency))
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { showRouteDialog = false }) { Text("完成") } },
+            confirmButton = { TextButton(onClick = { showRouteDialog = false }) { Text(stringResource(R.string.done)) } },
         )
     }
 
@@ -931,5 +1058,5 @@ private fun routeLatencyText(update: UpdateUiState, route: DownloadRoute): Strin
     if (!update.routeLatencies.containsKey(route)) {
         return if (update.pingingRoutes) "…" else ""
     }
-    return update.routeLatencies[route]?.let { "$it ms" } ?: "超时"
+    return update.routeLatencies[route]?.let { "$it ms" } ?: AppStrings.s(R.string.timed_out)
 }

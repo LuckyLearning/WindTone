@@ -1,5 +1,8 @@
 package com.luckylearning.windtone.ui
 
+import androidx.compose.ui.res.stringResource
+import com.luckylearning.windtone.R
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
@@ -151,7 +154,7 @@ internal fun SwitchRow(
                     Spacer(Modifier.width(6.dp))
                     Icon(
                         AppIcons.Info,
-                        contentDescription = "查看详细说明",
+                        contentDescription = stringResource(R.string.view_details),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier
                             .size(15.dp)

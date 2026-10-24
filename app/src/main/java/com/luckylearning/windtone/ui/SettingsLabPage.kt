@@ -5,7 +5,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.luckylearning.windtone.R
 
 /**
  * 设置子页：实验室功能（v1.1.80 新增）。
@@ -22,28 +24,27 @@ internal fun SettingsLabPage(
     onOpenOnline: () -> Unit,
     onOpenMenuOrder: () -> Unit,
 ) {
-    SectionTitle("实验室功能")
+    SectionTitle(stringResource(R.string.set_lab_title))
     Text(
-        "这里放还没有定型的功能：先跑一段时间，确认稳定、不会误伤日常使用之后，" +
-            "再移到正式位置。它们依然是正式实现，只是入口先放在这里。",
+        stringResource(R.string.set_lab_desc),
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(vertical = 6.dp),
     )
 
     ActionRow(
-        title = "在线播放",
-        subtitle = "在线歌单 · 播放缓存 · 收听报告（阿里云盘已升为抽屉一级入口）",
+        title = stringResource(R.string.set_lab_online_title),
+        subtitle = stringResource(R.string.set_lab_online_subtitle),
         onClick = onOpenOnline,
-        trailing = "实验",
+        trailing = stringResource(R.string.set_tag_experimental),
         chevron = true,
     )
 
     ActionRow(
-        title = "调整菜单顺序",
-        subtitle = "拖动不顺手时用上移 / 下移排列主页分类卡",
+        title = stringResource(R.string.set_lab_menu_order_title),
+        subtitle = stringResource(R.string.set_lab_menu_order_subtitle),
         onClick = onOpenMenuOrder,
-        trailing = "实验",
+        trailing = stringResource(R.string.set_tag_experimental),
         chevron = true,
     )
 }

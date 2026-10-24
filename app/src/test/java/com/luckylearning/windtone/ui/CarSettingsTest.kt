@@ -41,7 +41,7 @@ import org.robolectric.annotation.GraphicsMode
  * `performSemanticsAction(OnClick)`（同 SettingsScreenTest 的教训）。
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34], qualifiers = "w1280dp-h800dp-xhdpi")
+@Config(sdk = [34], qualifiers = "zh-rCN-w1280dp-h800dp-xhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class CarSettingsTest {
 

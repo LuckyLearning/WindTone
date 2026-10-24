@@ -1,5 +1,8 @@
 package com.luckylearning.windtone.ui
 
+import androidx.compose.ui.res.stringResource
+import com.luckylearning.windtone.R
+
 import android.content.Context
 import com.luckylearning.windtone.data.DataMaintenance
 import com.luckylearning.windtone.data.DownloadRoute
@@ -129,9 +132,9 @@ internal fun SettingsLyricsPage(
 
 
     // ------------------------------------------------ 播放页歌词
-    SectionTitle("播放页歌词")
+    SectionTitle(stringResource(R.string.player_lyrics))
     SliderRow(
-        title = "歌词字号 ${"%.1f".format(player.lyricScale)}x",
+        title = stringResource(R.string.lyric_text_size_x, "%.1f".format(player.lyricScale)),
         value = player.lyricScale,
         range = 0.7f..1.6f,
         onValueChange = onLyricScale,
@@ -142,11 +145,11 @@ internal fun SettingsLyricsPage(
     // 点歌词行跳转（v1.1.23，默认关）：车机上歌词要上下拖动，而「可点」会把
     // 带位移的滑动判成点击，进度莫名其妙跳走。想要这个能力的人自己打开。
     SwitchRow(
-        title = "点击歌词跳转",
+        title = stringResource(R.string.tap_lyrics_to_seek),
         subtitle = if (player.lyricTapSeeks) {
-            "点某一句歌词直接跳到那一句；拖动歌词时也可能被误判成点击"
+            stringResource(R.string.tapping_a_line_seeks_to)
         } else {
-            "关闭（推荐）：歌词只能上下拖动，播放进度不会被误触改动；长按校准偏移仍可用"
+            stringResource(R.string.off_recommended_lyrics_only_scroll)
         },
         checked = player.lyricTapSeeks,
         onCheckedChange = onLyricTapSeeks,
@@ -156,8 +159,8 @@ internal fun SettingsLyricsPage(
     )
     // v1.1.18：双语歌词显示模式（默认「中英都显示」= 历史行为）
     ActionRow(
-        title = "双语歌词 · ${BilingualMode.of(player.lyricBilingual).shortLabel}",
-        subtitle = "带翻译的歌词显示哪些行；只影响显示，导出的 LRC 不受影响",
+        title = stringResource(R.string.bilingual_lyrics_2, BilingualMode.of(player.lyricBilingual).shortLabel),
+        subtitle = stringResource(R.string.which_lines_translated_lyrics_show),
         onClick = { bilingualChoice = true },
         chevron = true,
     )
@@ -170,14 +173,14 @@ internal fun SettingsLyricsPage(
     // v1.1.80：悬浮歌词收进「歌词」页。
     // 口径（用户）：它只是**歌词的一种显示位置**（屏幕上 vs 桌面上），不是并列的另一类设置；
     // 主页也因此收回一张卡。进入后子页标题仍是「悬浮歌词」，返回逐级退回本页。
-    SectionTitle("悬浮歌词")
+    SectionTitle(stringResource(R.string.floating_lyrics))
     val presetNow = overlayPresetLabel(player.overlayPresetParams())
     ActionRow(
-        title = "桌面悬浮歌词",
+        title = stringResource(R.string.home_screen_floating_lyrics),
         subtitle = when {
-            !player.lyricOverlay -> "关闭中 · 退到桌面 / 导航页后在最上层显示当前歌词行"
-            player.lyricOverlayFullHeight -> "已开启 · 全屏歌词 · 样式：$presetNow"
-            else -> "已开启 · 单条字幕 · 样式：$presetNow"
+            !player.lyricOverlay -> stringResource(R.string.off_shows_the_current_lyric)
+            player.lyricOverlayFullHeight -> stringResource(R.string.on_full_screen_lyrics_style, presetNow)
+            else -> stringResource(R.string.on_single_subtitle_style, presetNow)
         },
         onClick = onOpenOverlay,
         chevron = true,
@@ -234,7 +237,7 @@ internal fun SettingsLyricsPage(
                             if (option.value == selected) {
                                 Icon(
                                     Icons.Filled.Check,
-                                    contentDescription = "已选择",
+                                    contentDescription = stringResource(R.string.selected),
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(20.dp),
                                 )
@@ -244,7 +247,7 @@ internal fun SettingsLyricsPage(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { bilingualChoice = false }) { Text("关闭") }
+                TextButton(onClick = { bilingualChoice = false }) { Text(stringResource(R.string.off)) }
             },
         )
     }

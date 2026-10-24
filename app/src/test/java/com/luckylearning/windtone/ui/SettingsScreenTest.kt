@@ -47,7 +47,7 @@ import org.robolectric.annotation.GraphicsMode
  * 这里窗口给到 800dp 高，免得第六张卡落在折叠线下面导致 `assertIsDisplayed()` 失败。
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34], qualifiers = "w360dp-h800dp-xhdpi")
+@Config(sdk = [34], qualifiers = "zh-rCN-w360dp-h800dp-xhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class SettingsScreenTest {
 

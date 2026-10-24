@@ -1,5 +1,8 @@
 package com.luckylearning.windtone.ui
 
+import androidx.compose.ui.res.stringResource
+import com.luckylearning.windtone.R
+
 import com.luckylearning.windtone.data.OverlayPreset
 import com.luckylearning.windtone.data.OverlayPresetTracker
 import com.luckylearning.windtone.data.OVERLAY_FACTORY_PARAMS
@@ -147,13 +150,13 @@ internal fun SettingsOverlayPage(
         }
     }
 
-    SectionTitle("桌面悬浮歌词")
+    SectionTitle(stringResource(R.string.home_screen_floating_lyrics))
     SwitchRow(
-        title = "桌面悬浮歌词",
+        title = stringResource(R.string.home_screen_floating_lyrics),
         subtitle = if (canDrawOverlay) {
-            "退到桌面 / 导航页后，在屏幕最上层显示当前歌词行（App 内自动隐藏，开启瞬间有 6 秒预览）"
+            stringResource(R.string.shows_the_current_lyric_line)
         } else {
-            "需要先授予「出现在其他应用上」权限，点击开关会自动跳转授权页"
+            stringResource(R.string.requires_the_display_over_other)
         },
         checked = player.lyricOverlay,
         onCheckedChange = { want ->
@@ -190,11 +193,11 @@ internal fun SettingsOverlayPage(
         // 「皮肤」，与预设混在一起会造成「选了预设却变了结构」的困惑（设计文档 §7.2）。
         // 所以它保持在预设网格之上独立可见。
         SwitchRow(
-            title = "全屏高度",
+            title = stringResource(R.string.full_screen_height),
             subtitle = if (player.lyricOverlayFullHeight) {
-                "占满屏幕（底部给车机 Dock 留 56dp），按播放页排版：当前行居中放大，行数随面板高度自适应"
+                stringResource(R.string.fills_the_screen_leaving_56dp)
             } else {
-                "打开后从单条字幕变成整屏歌词，内容与播放页歌词区一致"
+                stringResource(R.string.turns_the_single_subtitle_into)
             },
             checked = player.lyricOverlayFullHeight,
             onCheckedChange = onLyricOverlayFullHeight,
@@ -208,7 +211,7 @@ internal fun SettingsOverlayPage(
         // 状态卡（上方开关 + 运行态）与网格成对：快捷换样式在网格，深度调参在折叠区。
         // 「当前预设」不落盘，由参数反推（R5）——命中显示其名，出厂默认显示
         // 「默认预设」，改乱显示「自定义」并给「恢复上次套用」入口（FR-04）。
-        GroupLabel("样式预设")
+        GroupLabel(stringResource(R.string.style_presets))
         val presetParams = player.overlayPresetParams()
         val matchedPreset = currentOverlayPreset(presetParams)
         // 车机三套（carOnly）仅车载模式展示（D3）；手机模式恒 4 套
@@ -235,8 +238,8 @@ internal fun SettingsOverlayPage(
         if (matchedPreset == null && presetParams != OVERLAY_FACTORY_PARAMS) {
             OverlayPresetTracker.lastAppliedId?.let { OverlayPreset.byId(it) }?.let { last ->
                 ActionRow(
-                    title = "参数已修改，恢复「${last.displayName}」原值",
-                    subtitle = "上次套用：${last.displayName}（${last.summary()}）。点按把它的原始参数写回，当前手动修改会被覆盖",
+                    title = stringResource(R.string.parameters_changed_restore_the_original, last.displayName),
+                    subtitle = stringResource(R.string.last_applied_tap_to_write, last.displayName, last.summary()),
                     onClick = { onApplyOverlayPreset(last) },
                 )
             }
@@ -244,14 +247,14 @@ internal fun SettingsOverlayPage(
 
         // ---------------- 高级参数（折叠；原四组细参整体收进来） ----------------
         ActionRow(
-            title = "高级参数",
+            title = stringResource(R.string.advanced_parameters),
             subtitle = if (showOverlayAdvanced) {
-                "收起"
+                stringResource(R.string.collapse)
             } else {
-                "预设已覆盖大部分场景；宽度 / 位置 / 字号 / 颜色 / 描边等 20 多项细参在这里"
+                stringResource(R.string.presets_cover_most_cases_width)
             },
             onClick = { showOverlayAdvanced = !showOverlayAdvanced },
-            trailing = if (showOverlayAdvanced) "收起" else "展开",
+            trailing = if (showOverlayAdvanced) stringResource(R.string.collapse) else stringResource(R.string.expand),
             chevron = true,
         )
         if (showOverlayAdvanced) {
@@ -262,17 +265,16 @@ internal fun SettingsOverlayPage(
         // 形态开关仍在最上面：它决定下面出现哪一套尺寸控件。
 
         // ---------------- 位置与尺寸 ----------------
-        GroupLabel("位置与尺寸")
+        GroupLabel(stringResource(R.string.position_and_size))
         if (player.lyricOverlayFullHeight) {
             // 全屏形态：宽度、高度、水平 / 垂直位置都是百分比滑块。
             // 两套值刻意分开存（全屏 vs 单条），切换形态互不覆盖。
             SliderRow(
-                title = "面板宽度 ${player.lyricOverlayFullWidthPercent}%",
+                title = stringResource(R.string.panel_width, player.lyricOverlayFullWidthPercent),
                 subtitle = if (player.lyricOverlayFullWidthPercent >= 100) {
-                    "已占满屏宽（此时左右没有余量）。调小一点即可左右挪动，两侧留白也更聚焦"
+                    stringResource(R.string.full_width_so_there_is)
                 } else {
-                    "屏宽的 ${player.lyricOverlayFullWidthPercent}%，两侧共留出 " +
-                        "${100 - player.lyricOverlayFullWidthPercent}% 的余量供左右移动；宽度越窄，长句折行越早"
+                    stringResource(R.string.of_the_screen_width_leaving, player.lyricOverlayFullWidthPercent, 100 - player.lyricOverlayFullWidthPercent)
                 },
                 value = player.lyricOverlayFullWidthPercent.toFloat(),
                 range = SettingsDefaults.OVERLAY_FULL_WIDTH_RANGE.first.toFloat()..
@@ -285,12 +287,11 @@ internal fun SettingsOverlayPage(
                 ) { onLyricOverlayFullWidthPercent(SettingsDefaults.OVERLAY_FULL_WIDTH_PERCENT) },
             )
             SliderRow(
-                title = "面板高度 ${player.lyricOverlayFullHeightPercent}%",
+                title = stringResource(R.string.panel_height, player.lyricOverlayFullHeightPercent),
                 subtitle = if (player.lyricOverlayFullHeightPercent >= 100) {
-                    "屏高减去底部车机 Dock 让位。调小一点，面板就不会一直压到屏幕最下面"
+                    stringResource(R.string.screen_height_minus_the_head)
                 } else {
-                    "屏高的 ${player.lyricOverlayFullHeightPercent}%（已扣掉底部让位）；" +
-                        "行数会跟着这块面板的高度自动增减"
+                    stringResource(R.string.of_the_screen_height_dock, player.lyricOverlayFullHeightPercent)
                 },
                 value = player.lyricOverlayFullHeightPercent.toFloat(),
                 range = SettingsDefaults.OVERLAY_FULL_HEIGHT_RANGE.first.toFloat()..
@@ -301,11 +302,11 @@ internal fun SettingsOverlayPage(
                 ) { onLyricOverlayFullHeightPercent(SettingsDefaults.OVERLAY_FULL_HEIGHT_PERCENT) },
             )
             SliderRow(
-                title = "水平位置 " + positionLabel(player.lyricOverlayFullOffsetPercent),
+                title = stringResource(R.string.horizontal_position, positionLabel(player.lyricOverlayFullOffsetPercent)),
                 subtitle = if (player.lyricOverlayFullWidthPercent >= 100) {
-                    "宽度 100% 时没有可移动的余量，位置固定；先把上面的宽度调小"
+                    stringResource(R.string.at_100_width_there_is)
                 } else {
-                    "在左右留白之间移动歌词面板；也可以到桌面上直接左右拖（两处是同一份设置）"
+                    stringResource(R.string.moves_the_panel_between_the)
                 },
                 value = player.lyricOverlayFullOffsetPercent.toFloat(),
                 range = 0f..100f,
@@ -317,11 +318,11 @@ internal fun SettingsOverlayPage(
                 },
             )
             SliderRow(
-                title = "垂直位置 " + positionLabel(player.lyricOverlayFullYPercent, horizontal = false),
+                title = stringResource(R.string.vertical_position, positionLabel(player.lyricOverlayFullYPercent, horizontal = false)),
                 subtitle = if (player.lyricOverlayFullHeightPercent >= 100) {
-                    "高度 100% 时纵向没有余量；先调小高度就能上下移动"
+                    stringResource(R.string.at_100_height_there_is)
                 } else {
-                    "在上下留白之间移动面板；也可以直接到桌面上拖"
+                    stringResource(R.string.moves_the_panel_between_the_2)
                 },
                 value = player.lyricOverlayFullYPercent.toFloat(),
                 range = 0f..100f,
@@ -341,10 +342,9 @@ internal fun SettingsOverlayPage(
         } else {
             // 单条字幕：行数（自动 = 按高度反推）、宽度、高度、两个方向的位置
             ActionRow(
-                title = "悬浮歌词行数",
+                title = stringResource(R.string.floating_lyric_lines),
                 subtitle = if (player.lyricOverlayLines == 0 && player.lyricOverlayBoxHeightPercent == 0) {
-                    "自动：但高度现在是「自动」，没有高度可依据，先按 3 行显示；" +
-                        "把下面的高度拉成百分比后，行数会跟着高度走"
+                    stringResource(R.string.auto_but_the_height_is)
                 } else {
                     overlayLinesHint(player.lyricOverlayLines)
                 },
@@ -355,12 +355,11 @@ internal fun SettingsOverlayPage(
                 },
             )
             SliderRow(
-                title = "悬浮歌词宽度 ${player.lyricOverlayWidthPercent}%",
+                title = stringResource(R.string.floating_lyric_width, player.lyricOverlayWidthPercent),
                 subtitle = if (player.lyricOverlayWidthPercent >= 100) {
-                    "已占满屏宽，无法左右移动；调小一点即可拖到屏幕任意位置"
+                    stringResource(R.string.full_width_so_it_cannot)
                 } else {
-                    "屏幕宽度的百分比（1–100%）。窗口越窄，能左右移动的范围越大；" +
-                        "窗口越宽，长句折行越晚"
+                    stringResource(R.string.percentage_of_the_screen_width)
                 },
                 value = player.lyricOverlayWidthPercent.toFloat(),
                 range = 1f..100f,
@@ -373,14 +372,14 @@ internal fun SettingsOverlayPage(
             )
             SliderRow(
                 title = if (player.lyricOverlayBoxHeightPercent == 0) {
-                    "高度 自动"
+                    stringResource(R.string.height_auto)
                 } else {
-                    "高度 ${player.lyricOverlayBoxHeightPercent}%"
+                    stringResource(R.string.height, player.lyricOverlayBoxHeightPercent)
                 },
                 subtitle = if (player.lyricOverlayBoxHeightPercent == 0) {
-                    "自动 = 按显示行数撑开（默认）。想把它固定成屏幕上的一个小块，就把滑块往右拉"
+                    stringResource(R.string.auto_sizes_to_the_number)
                 } else {
-                    "屏高的 ${player.lyricOverlayBoxHeightPercent}%。固定高度后，长句不会再把这个块顶高"
+                    stringResource(R.string.of_screen_height_once_fixed, player.lyricOverlayBoxHeightPercent)
                 },
                 value = player.lyricOverlayBoxHeightPercent.toFloat(),
                 range = 0f..100f,
@@ -394,8 +393,8 @@ internal fun SettingsOverlayPage(
                 ) { onLyricOverlayBoxHeightPercent(SettingsDefaults.OVERLAY_BOX_HEIGHT_PERCENT) },
             )
             SliderRow(
-                title = "水平位置 " + positionLabel(player.lyricOverlayXPercent),
-                subtitle = "在左右留白之间移动；也可以到桌面上直接拖（两处是同一份设置）",
+                title = stringResource(R.string.horizontal_position_2, positionLabel(player.lyricOverlayXPercent)),
+                subtitle = stringResource(R.string.moves_between_the_left_and),
                 value = player.lyricOverlayXPercent.toFloat(),
                 range = 0f..100f,
                 onValueChange = { onLyricOverlayXPercent(it.toInt().coerceIn(0, 100)) },
@@ -404,8 +403,8 @@ internal fun SettingsOverlayPage(
                 ) { onLyricOverlayXPercent(SettingsDefaults.OVERLAY_X_PERCENT) },
             )
             SliderRow(
-                title = "垂直位置 " + positionLabel(player.lyricOverlayYPercent, horizontal = false),
-                subtitle = "在上下留白之间移动；桌面上直接拖也会同步到这里",
+                title = stringResource(R.string.vertical_position_2, positionLabel(player.lyricOverlayYPercent, horizontal = false)),
+                subtitle = stringResource(R.string.moves_between_the_top_and),
                 value = player.lyricOverlayYPercent.toFloat(),
                 range = 0f..100f,
                 onValueChange = { onLyricOverlayYPercent(it.toInt().coerceIn(0, 100)) },
@@ -416,14 +415,13 @@ internal fun SettingsOverlayPage(
         }
 
         // ---------------- 字体 ----------------
-        GroupLabel("字体")
+        GroupLabel(stringResource(R.string.font))
         // v1.1.51：字号从「小 / 中 / 大」三档改成 12–60sp 连续可调。
         // 三档在车机上永远差一截 —— 观看距离、屏幕尺寸、个人视力都不同，
         // 连续滑杆才谈得上「调到自己舒服」。
         SliderRow(
-            title = "正文字号 ${player.lyricOverlayTextSp}sp",
-            subtitle = "12–60sp 连续可调。手机 16–22sp 合适，车机离得远建议 24–32sp；" +
-                "改完立刻生效，行数选「自动」时会跟着重新排",
+            title = stringResource(R.string.body_size_sp, player.lyricOverlayTextSp),
+            subtitle = stringResource(R.string.continuously_adjustable_from_12_to),
             value = player.lyricOverlayTextSp.toFloat(),
             range = SettingsDefaults.OVERLAY_TEXT_SP_RANGE.first.toFloat()..
                 SettingsDefaults.OVERLAY_TEXT_SP_RANGE.last.toFloat(),
@@ -438,11 +436,11 @@ internal fun SettingsOverlayPage(
             },
         )
         ActionRow(
-            title = "悬浮歌词对齐",
+            title = stringResource(R.string.floating_lyric_alignment),
             subtitle = if (player.lyricOverlayAlign == 1) {
-                "歌词在窗内靠左排，适合长句与固定视线"
+                stringResource(R.string.lyrics_align_left_inside_the)
             } else {
-                "歌词在窗内水平居中（窗口位置由拖动决定）"
+                stringResource(R.string.lyrics_centered_horizontally_in_the)
             },
             onClick = { overlayChoice = OverlayChoice.ALIGN },
             trailing = OVERLAY_ALIGN_LABELS[player.lyricOverlayAlign],
@@ -452,8 +450,8 @@ internal fun SettingsOverlayPage(
             },
         )
         ActionRow(
-            title = "悬浮歌词文字颜色",
-            subtitle = "歌名、上下句与正文同一个色相，只靠明暗区分；不跟随 App 主题",
+            title = stringResource(R.string.floating_lyric_text_color),
+            subtitle = stringResource(R.string.title_context_lines_and_body),
             onClick = { colorPickerShown = true },
             swatch = player.lyricOverlayTextColor,
             chevron = true,
@@ -463,11 +461,11 @@ internal fun SettingsOverlayPage(
         )
         // ---- v1.1.52 样式补全：当前行颜色 / 上下句压暗 / 行距 / 描边 ----
         ActionRow(
-            title = "当前行颜色",
+            title = stringResource(R.string.current_line_color),
             subtitle = if (player.lyricOverlayCurrentColor == 0) {
-                "跟随上面的文字颜色（默认）—— 上下句靠压暗区分明暗"
+                stringResource(R.string.follows_the_text_color_above)
             } else {
-                "当前句单独用这个颜色高亮，比只靠明暗更醒目"
+                stringResource(R.string.highlights_the_current_line_in)
             },
             onClick = { currentColorPickerShown = true },
             swatch = if (player.lyricOverlayCurrentColor == 0) {
@@ -481,9 +479,8 @@ internal fun SettingsOverlayPage(
             ) { onLyricOverlayCurrentColor(SettingsDefaults.OVERLAY_CURRENT_COLOR) },
         )
         SliderRow(
-            title = "上下句亮度 ${player.lyricOverlayDimPercent}%",
-            subtitle = "非当前句保留的亮度：越小上下句越暗、当前句越突出；默认 42% 与播放页一致" +
-                "（无底板时不低于 61%，浅色画面上不糊）",
+            title = stringResource(R.string.context_line_brightness, player.lyricOverlayDimPercent),
+            subtitle = stringResource(R.string.brightness_kept_for_context_lines),
             value = player.lyricOverlayDimPercent.toFloat(),
             range = SettingsDefaults.OVERLAY_DIM_RANGE.first.toFloat()..
                 SettingsDefaults.OVERLAY_DIM_RANGE.last.toFloat(),
@@ -497,11 +494,11 @@ internal fun SettingsOverlayPage(
         )
         SliderRow(
             title = if (player.lyricOverlayLineSpacingDp == 0) {
-                "歌词行距 紧凑"
+                stringResource(R.string.lyric_line_spacing_compact)
             } else {
-                "歌词行距 ${player.lyricOverlayLineSpacingDp}dp"
+                stringResource(R.string.lyric_line_spacing_dp, player.lyricOverlayLineSpacingDp)
             },
-            subtitle = "歌词行与行之间的空隙；行数多窗口矮时调小能多塞一行",
+            subtitle = stringResource(R.string.gap_between_lyric_lines_reduce),
             value = player.lyricOverlayLineSpacingDp.toFloat(),
             range = SettingsDefaults.OVERLAY_LINE_SPACING_RANGE.first.toFloat()..
                 SettingsDefaults.OVERLAY_LINE_SPACING_RANGE.last.toFloat(),
@@ -515,14 +512,14 @@ internal fun SettingsOverlayPage(
         )
         SliderRow(
             title = if (player.lyricOverlayStrokeWidthDp == 0) {
-                "文字描边 自动"
+                stringResource(R.string.text_outline_auto)
             } else {
-                "文字描边 ${player.lyricOverlayStrokeWidthDp}dp"
+                stringResource(R.string.text_outline_dp, player.lyricOverlayStrokeWidthDp)
             },
             subtitle = if (player.lyricOverlayStrokeWidthDp == 0) {
-                "自动 = 无底板时描边 3dp、有底板时 2dp；手动设了宽度就不再自动变"
+                stringResource(R.string.auto_3dp_without_a_backdrop)
             } else {
-                "文字外圈的轮廓宽度，浅色画面上把字「勾」出来；0 = 自动"
+                stringResource(R.string.outline_width_around_the_text)
             },
             value = player.lyricOverlayStrokeWidthDp.toFloat(),
             range = SettingsDefaults.OVERLAY_STROKE_WIDTH_RANGE.first.toFloat()..
@@ -536,8 +533,8 @@ internal fun SettingsOverlayPage(
             ) { onLyricOverlayStrokeWidthDp(SettingsDefaults.OVERLAY_STROKE_WIDTH_DP) },
         )
         ActionRow(
-            title = "描边颜色",
-            subtitle = "文字轮廓的颜色，深色描边配浅色字最常见",
+            title = stringResource(R.string.outline_color),
+            subtitle = stringResource(R.string.color_of_the_text_outline),
             onClick = { strokeColorPickerShown = true },
             swatch = player.lyricOverlayStrokeColor,
             chevron = true,
@@ -548,11 +545,11 @@ internal fun SettingsOverlayPage(
         // 顶部「歌名 + 歌手」两行小字（v1.1.15，默认关闭）：开关与它的字号
         // 从此挨在一起 —— 早先字号行飘在页面另一头，看着像另一个功能的设置。
         SwitchRow(
-            title = "显示歌名与歌手",
+            title = stringResource(R.string.show_title_and_artist),
             subtitle = if (player.lyricOverlayShowTitle) {
-                "悬浮窗最上面加两行小字：歌名 / 歌手，下面是歌词"
+                stringResource(R.string.adds_two_small_lines_at)
             } else {
-                "只显示歌词，不加标题行"
+                stringResource(R.string.lyrics_only_no_title_lines)
             },
             checked = player.lyricOverlayShowTitle,
             onCheckedChange = onLyricOverlayShowTitle,
@@ -564,8 +561,8 @@ internal fun SettingsOverlayPage(
             // 标题字号用「正文的比例」而不是独立 sp：正文调大时标题自动跟着放大，
             // 既不用再手动追一次，也保证标题永远小于歌词、不会把歌词挤出去。
             SliderRow(
-                title = "标题字号 正文的 ${player.lyricOverlayTitlePercent}%",
-                subtitle = "只影响歌名 / 歌手两行小字；40–100%，默认 62%",
+                title = stringResource(R.string.title_size_of_body, player.lyricOverlayTitlePercent),
+                subtitle = stringResource(R.string.affects_only_the_two_small),
                 value = player.lyricOverlayTitlePercent.toFloat(),
                 range = SettingsDefaults.OVERLAY_TITLE_PERCENT_RANGE.first.toFloat()..
                     SettingsDefaults.OVERLAY_TITLE_PERCENT_RANGE.last.toFloat(),
@@ -581,11 +578,11 @@ internal fun SettingsOverlayPage(
             )
             // v1.1.52：标题显示哪些内容（歌名+歌手 / 只歌名 / 只歌手）
             ActionRow(
-                title = "标题内容",
+                title = stringResource(R.string.title_content),
                 subtitle = when (player.lyricOverlayTitleMode) {
-                    1 -> "只显示歌名，标题更紧凑"
-                    2 -> "只显示歌手"
-                    else -> "歌名与歌手两行都显示（默认）"
+                    1 -> stringResource(R.string.title_only_a_more_compact)
+                    2 -> stringResource(R.string.artist_only)
+                    else -> stringResource(R.string.both_title_and_artist_default)
                 },
                 onClick = { overlayChoice = OverlayChoice.TITLE_MODE },
                 trailing = OVERLAY_TITLE_MODE_LABELS[player.lyricOverlayTitleMode],
@@ -600,13 +597,13 @@ internal fun SettingsOverlayPage(
         // v1.1.51：原来的「底板三档 + 自定义背景开关 + 色板 + 不透明度」四件套
         // 语义重复（同一个结果有两套开关），并成「颜色 + 不透明度」两项；
         // 0% 就是无底板，文字自动换硬描边，不再需要一个开关。
-        GroupLabel("背景")
+        GroupLabel(stringResource(R.string.background))
         SliderRow(
-            title = "背景不透明度 ${player.lyricOverlayBgAlphaPercent}%",
+            title = stringResource(R.string.background_opacity, player.lyricOverlayBgAlphaPercent),
             subtitle = if (player.lyricOverlayBgAlphaPercent == 0) {
-                "0% = 无底板：背景消失，文字自动换成硬描边（浅色画面也读得清）"
+                stringResource(R.string.t_0_no_backdrop_the_background_label)
             } else {
-                "0 = 完全透明，100 = 完全不透明。车机上 40–70% 既能压住背景又看得清路况"
+                stringResource(R.string.t_0_is_fully_transparent_100_label)
             },
             value = player.lyricOverlayBgAlphaPercent.toFloat(),
             range = 0f..100f,
@@ -621,11 +618,11 @@ internal fun SettingsOverlayPage(
         )
         // 预设之外的颜色：色相 / 饱和度 / 亮度三档滑杆，可调出任意颜色
         ActionRow(
-            title = "背景颜色",
+            title = stringResource(R.string.background_color),
             subtitle = if (player.lyricOverlayBgAlphaPercent == 0) {
-                "不透明度是 0%，此时颜色看不到；先把上面的不透明度拉起来"
+                stringResource(R.string.opacity_is_0_so_the)
             } else {
-                "预设色板之外的颜色：色相 / 饱和度 / 亮度三档滑杆，可调出任意颜色"
+                stringResource(R.string.beyond_the_preset_swatches_hue)
             },
             onClick = { bgColorPickerShown = true },
             swatch = player.lyricOverlayBgColor,
@@ -636,8 +633,8 @@ internal fun SettingsOverlayPage(
         )
         // ---- v1.1.52 样式补全：底板圆角 / 边框 ----
         SliderRow(
-            title = "底板圆角 ${player.lyricOverlayCornerRadiusDp}dp",
-            subtitle = "背景板的四角弧度；0 是直角，默认 14dp",
+            title = stringResource(R.string.backdrop_radius_dp, player.lyricOverlayCornerRadiusDp),
+            subtitle = stringResource(R.string.corner_radius_of_the_backdrop),
             value = player.lyricOverlayCornerRadiusDp.toFloat(),
             range = SettingsDefaults.OVERLAY_CORNER_RADIUS_RANGE.first.toFloat()..
                 SettingsDefaults.OVERLAY_CORNER_RADIUS_RANGE.last.toFloat(),
@@ -651,14 +648,14 @@ internal fun SettingsOverlayPage(
         )
         SliderRow(
             title = if (player.lyricOverlayBorderWidthDp == 0) {
-                "底板边框 无"
+                stringResource(R.string.backdrop_border_none)
             } else {
-                "底板边框 ${player.lyricOverlayBorderWidthDp}dp"
+                stringResource(R.string.backdrop_border_dp, player.lyricOverlayBorderWidthDp)
             },
             subtitle = if (player.lyricOverlayBorderWidthDp == 0) {
-                "不画边框（默认）；背景与桌面颜色接近时分不清边界，可以加上边框"
+                stringResource(R.string.no_border_default_add_one)
             } else {
-                "背景板外圈一圈细线；背景色和桌面融在一起时靠它勾出边界"
+                stringResource(R.string.a_thin_border_around_the)
             },
             value = player.lyricOverlayBorderWidthDp.toFloat(),
             range = SettingsDefaults.OVERLAY_BORDER_WIDTH_RANGE.first.toFloat()..
@@ -673,8 +670,8 @@ internal fun SettingsOverlayPage(
         )
         if (player.lyricOverlayBorderWidthDp > 0) {
             ActionRow(
-                title = "边框颜色",
-                subtitle = "底板外圈细线的颜色",
+                title = stringResource(R.string.border_color),
+                subtitle = stringResource(R.string.color_of_the_backdrop_border),
                 onClick = { borderColorPickerShown = true },
                 swatch = player.lyricOverlayBorderColor,
                 chevron = true,
@@ -685,13 +682,13 @@ internal fun SettingsOverlayPage(
         }
 
         // ---------------- 行为 ----------------
-        GroupLabel("行为")
+        GroupLabel(stringResource(R.string.behavior))
         ActionRow(
-            title = "暂停时的悬浮歌词",
+            title = stringResource(R.string.floating_lyrics_when_paused),
             subtitle = if (player.lyricOverlayPauseMode == 1) {
-                "暂停即隐藏，恢复播放时再出现"
+                stringResource(R.string.hide_on_pause_and_reappear)
             } else {
-                "淡出到半透明，方便看清唱到哪一句"
+                stringResource(R.string.fade_to_translucent_so_you)
             },
             onClick = { overlayChoice = OverlayChoice.PAUSE },
             trailing = OVERLAY_PAUSE_LABELS[player.lyricOverlayPauseMode],
@@ -703,14 +700,14 @@ internal fun SettingsOverlayPage(
         // v1.1.52：歌词行切换时的淡入时长；0 = 直接切换不动画
         SliderRow(
             title = if (player.lyricOverlayFadeMs == 0) {
-                "换行动画 关"
+                stringResource(R.string.line_transition_off)
             } else {
-                "换行动画 ${player.lyricOverlayFadeMs}ms"
+                stringResource(R.string.line_transition_ms, player.lyricOverlayFadeMs)
             },
             subtitle = if (player.lyricOverlayFadeMs == 0) {
-                "换行时直接切换，不播动画；觉得歌词「跟不上」或晕动时可关掉"
+                stringResource(R.string.switches_lines_instantly_with_no)
             } else {
-                "换到新的一句时的淡入时长；越短越跟手，默认 160ms"
+                stringResource(R.string.fade_in_duration_for_a)
             },
             value = player.lyricOverlayFadeMs.toFloat(),
             range = SettingsDefaults.OVERLAY_FADE_RANGE.first.toFloat()..
@@ -725,12 +722,11 @@ internal fun SettingsOverlayPage(
         )
         // v1.1.29：不显示悬浮窗的应用（360 影像 / 视频类等打开时收起浮层）
         ActionRow(
-            title = "不显示悬浮窗的应用",
+            title = stringResource(R.string.apps_without_the_overlay),
             subtitle = if (player.lyricOverlayHiddenApps.isEmpty()) {
-                "还没有设置。选中的应用在前台时，悬浮歌词自动收起，退出后恢复；" +
-                    "找不到应用就先去「关于与诊断 → 调试 → 前台应用记录」看包名"
+                stringResource(R.string.nothing_configured_yet_floating_lyrics_2)
             } else {
-                "已设 ${player.lyricOverlayHiddenApps.size} 个应用；点开可增删"
+                stringResource(R.string.apps_configured_tap_to_edit, player.lyricOverlayHiddenApps.size)
             },
             onClick = { showHiddenApps = true },
             chevron = true,
@@ -744,8 +740,8 @@ internal fun SettingsOverlayPage(
         // 不动的两样：主开关（用户既然开着就是想用，恢复样式不该把它关掉）
         // 与隐藏名单（那是「哪些 App 别打扰我」的意志，不是样式）。
         ActionRow(
-            title = "全部恢复默认",
-            subtitle = "把形态、尺寸、位置、字体、背景、行为全部恢复到出厂值；开关和隐藏名单保持不变",
+            title = stringResource(R.string.restore_all_defaults),
+            subtitle = stringResource(R.string.restores_shape_size_position_font),
             onClick = { showResetAll = true },
         )
         } // end if (showOverlayAdvanced)
@@ -753,7 +749,7 @@ internal fun SettingsOverlayPage(
     // 关闭态只留一句「打开后有什么可调」，免得这一整块消失得像设置丢了。
     if (!player.lyricOverlay) {
         Text(
-            text = "打开后可调形态（单条字幕 / 全屏歌词）、宽高与位置、字号、对齐、背景颜色与不透明度、暂停表现。",
+            text = stringResource(R.string.once_on_you_can_adjust),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(vertical = 4.dp),
@@ -768,12 +764,10 @@ internal fun SettingsOverlayPage(
         Text(
             text = when (overlayHealth.status) {
                 LyricOverlayBus.Status.RUNNING ->
-                    "运行中：${overlayHealth.detail}，退到桌面即可看到歌词行"
+                    stringResource(R.string.running_go_to_the_home, overlayHealth.detail)
                 LyricOverlayBus.Status.FAILED ->
-                    "启动失败：${overlayHealth.detail}。" +
-                        "可到 设置 → 应用 → 显示悬浮窗（部分系统叫「后台弹出界面」）确认，" +
-                        "详情见 关于与诊断 → 崩溃日志"
-                LyricOverlayBus.Status.IDLE -> "悬浮窗未启动"
+                    stringResource(R.string.start_failed_check_settings_apps, overlayHealth.detail)
+                LyricOverlayBus.Status.IDLE -> stringResource(R.string.overlay_not_running)
             },
             style = MaterialTheme.typography.labelSmall,
             color = if (failed) {
@@ -795,14 +789,9 @@ internal fun SettingsOverlayPage(
         ) {
             Text(
                 text = if (overlayJumpFailed) {
-                    "未能打开系统授权页（本机 ROM 未提供该入口）。\n" +
-                        "请手动前往：设置 → 应用 → 听风 → 权限 → " +
-                        "「显示悬浮窗」或「出现在其他应用上层」→ 允许。\n" +
-                        "部分系统还需要同时允许「后台弹出界面」，否则授权后仍不显示。"
+                    stringResource(R.string.could_not_open_the_system)
                 } else {
-                    "授权路径：设置 → 应用 → 权限 → 出现在其他应用上 → 允许。\n" +
-                        "部分比亚迪车机（DiLink）需要把本应用加入白名单，或先强停一次应用进程，" +
-                        "否则授权后界面可能黑屏或歌词不显示。"
+                    stringResource(R.string.permission_path_settings_apps_permissions)
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -821,25 +810,25 @@ internal fun SettingsOverlayPage(
         ActionRow(
             title = when {
                 !player.overlayEditing -> if (player.lyricOverlayFullHeight) {
-                    "在桌面上左右调整位置"
+                    stringResource(R.string.adjust_horizontal_position_on_the)
                 } else {
-                    "调整悬浮歌词位置"
+                    stringResource(R.string.adjust_floating_lyric_position)
                 }
-                else -> "完成调整"
+                else -> stringResource(R.string.finish_adjusting)
             },
             subtitle = when {
                 player.overlayEditing && player.lyricOverlayFullHeight ->
-                    "已进入调整：退到桌面左右拖动歌词，双击即可锁定；也可以点这里锁定"
+                    stringResource(R.string.adjusting_drag_the_lyrics_on)
                 player.overlayEditing ->
-                    "拖动屏幕上的歌词（横竖都可以）到合适位置，然后点这里锁定"
+                    stringResource(R.string.drag_the_lyrics_anywhere_on)
                 // 满宽时全屏窗口盖住整块屏：直接进编辑态会「吃触摸但拖不动」，
                 // 所以这里先说清楚点下去会发生什么（实现里会自动留出 8% 余量）。
                 player.lyricOverlayFullHeight && player.lyricOverlayFullWidthPercent >= 100 ->
-                    "当前满宽没有余量。点一下会先把宽度收到 92% 留出两侧空间，就能左右拖了"
+                    stringResource(R.string.currently_full_width_with_no)
                 player.lyricOverlayFullHeight ->
-                    "临时解锁，在留白范围内左右拖动；也可以直接用上面的宽度与水平位置滑块"
+                    stringResource(R.string.temporarily_unlocks_dragging_within_the)
                 else ->
-                    "临时解锁，把歌词拖到想要的位置；位置会记住，锁定后不挡触摸"
+                    stringResource(R.string.temporarily_unlocks_dragging_the_position)
             },
             onClick = {
                 val entering = !player.overlayEditing
@@ -853,9 +842,9 @@ internal fun SettingsOverlayPage(
                     android.widget.Toast.makeText(
                         context,
                         if (narrowed) {
-                            "已进入调整：宽度收到 92% 留出余量。退到桌面左右拖动，双击锁定"
+                            AppStrings.s(R.string.adjusting_width_narrowed_to_92)
                         } else {
-                            "已进入调整：退到桌面左右拖动歌词，双击锁定"
+                            AppStrings.s(R.string.adjusting_drag_the_lyrics_on_2)
                         },
                         android.widget.Toast.LENGTH_LONG,
                     ).show()
@@ -922,7 +911,7 @@ internal fun SettingsOverlayPage(
                             if (option.value == selected) {
                                 Icon(
                                     Icons.Filled.Check,
-                                    contentDescription = "已选择",
+                                    contentDescription = stringResource(R.string.selected),
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(20.dp),
                                 )
@@ -932,7 +921,7 @@ internal fun SettingsOverlayPage(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { overlayChoice = null }) { Text("关闭") }
+                TextButton(onClick = { overlayChoice = null }) { Text(stringResource(R.string.off)) }
             },
         )
     }
@@ -941,8 +930,8 @@ internal fun SettingsOverlayPage(
     // 选中即落盘，悬浮窗还会顺带给一次 6 秒预览。
     if (colorPickerShown) {
         ColorPickerSheet(
-            title = "悬浮歌词文字颜色",
-            intro = "桌面悬浮歌词里那句话的颜色。悬浮窗固定不跟随主题。",
+            title = stringResource(R.string.floating_lyric_text_color),
+            intro = stringResource(R.string.color_of_the_lyric_line),
             value = player.lyricOverlayTextColor,
             onPick = { argb -> onLyricOverlayTextColor(argb) },
             onDismiss = { colorPickerShown = false },
@@ -953,8 +942,8 @@ internal fun SettingsOverlayPage(
     // 这里只负责「要一个色板上没有的颜色」。
     if (bgColorPickerShown) {
         ColorPickerSheet(
-            title = "悬浮窗背景颜色",
-            intro = "只改色相，不透明度还是用下面那个滑块；调到 0% 就等于没有底板。",
+            title = stringResource(R.string.overlay_background_color),
+            intro = stringResource(R.string.changes_hue_only_opacity_comes),
             value = player.lyricOverlayBgColor,
             showPresets = false,
             onPick = { argb -> onLyricOverlayBgColor(argb) },
@@ -966,8 +955,8 @@ internal fun SettingsOverlayPage(
     // 预设色板对「文字类」颜色帮助有限（用户调的多是氛围色），直接给 HSV 三滑杆。
     if (currentColorPickerShown) {
         ColorPickerSheet(
-            title = "当前行颜色",
-            intro = "当前句的单独高亮色；调回与文字色一致就等于「跟随文字颜色」。",
+            title = stringResource(R.string.current_line_color),
+            intro = stringResource(R.string.separate_highlight_color_for_the),
             value = if (player.lyricOverlayCurrentColor == 0) {
                 player.lyricOverlayTextColor
             } else {
@@ -980,8 +969,8 @@ internal fun SettingsOverlayPage(
     }
     if (strokeColorPickerShown) {
         ColorPickerSheet(
-            title = "描边颜色",
-            intro = "文字外圈轮廓的颜色，默认黑色。",
+            title = stringResource(R.string.outline_color),
+            intro = stringResource(R.string.outline_color_around_the_text),
             value = player.lyricOverlayStrokeColor,
             showPresets = false,
             onPick = { argb -> onLyricOverlayStrokeColor(argb) },
@@ -990,8 +979,8 @@ internal fun SettingsOverlayPage(
     }
     if (borderColorPickerShown) {
         ColorPickerSheet(
-            title = "边框颜色",
-            intro = "底板外圈细线的颜色；默认半透明白。",
+            title = stringResource(R.string.border_color),
+            intro = stringResource(R.string.color_of_the_backdrop_border_2),
             value = player.lyricOverlayBorderColor,
             showPresets = false,
             onPick = { argb -> onLyricOverlayBorderColor(argb) },
@@ -1005,9 +994,9 @@ internal fun SettingsOverlayPage(
     if (showResetAll) {
         AlertDialog(
             onDismissRequest = { showResetAll = false },
-            title = { Text("全部恢复默认？") },
+            title = { Text(stringResource(R.string.restore_all_defaults_2)) },
             text = {
-                Text("悬浮歌词的全部样式（形态、尺寸、位置、字体、颜色、背景、行为）都会回到出厂值。开关与隐藏名单不变。")
+                Text(stringResource(R.string.all_floating_lyric_styling_shape))
             },
             confirmButton = {
                 TextButton(onClick = {
@@ -1047,10 +1036,10 @@ internal fun SettingsOverlayPage(
                     onLyricOverlayPauseMode(SettingsDefaults.OVERLAY_PAUSE_MODE)
                     onLyricOverlayFadeMs(SettingsDefaults.OVERLAY_FADE_MS)
                     showResetAll = false
-                }) { Text("恢复") }
+                }) { Text(stringResource(R.string.restore)) }
             },
             dismissButton = {
-                TextButton(onClick = { showResetAll = false }) { Text("取消") }
+                TextButton(onClick = { showResetAll = false }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -1157,10 +1146,7 @@ private fun OverlayFullPreviewMock(
             }
         }
         Text(
-            text = "示意图：宽 $widthPercent%、" +
-                "${OverlayPositioner.offsetLabel(offsetPercent)}；" +
-                "底部灰色是车机 Dock（56dp 内不画歌词）。" +
-                "实际效果退到桌面查看 —— 全屏歌词不会盖住这一页，否则没法边调边看。",
+            text = stringResource(R.string.diagram_width_and_the_grey, widthPercent, OverlayPositioner.offsetLabel(offsetPercent)),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 6.dp),
@@ -1191,7 +1177,7 @@ private fun OverlayBgPalette(selected: Int, onPick: (Int) -> Unit) {
     )
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         Text(
-            text = "选择背景色",
+            text = stringResource(R.string.choose_background_color),
             style = MaterialTheme.typography.titleSmall,
         )
         Spacer(Modifier.height(8.dp))
@@ -1232,14 +1218,22 @@ private fun OverlayBgPalette(selected: Int, onPick: (Int) -> Unit) {
  */
 private fun positionLabel(percent: Int, horizontal: Boolean = true): String {
     val v = percent.coerceIn(0, 100)
-    val start = if (horizontal) "最左" else "最上"
-    val end = if (horizontal) "最右" else "最下"
+    val start = if (horizontal) AppStrings.s(R.string.far_left) else AppStrings.s(R.string.top)
+    val end = if (horizontal) AppStrings.s(R.string.far_right) else AppStrings.s(R.string.bottom)
     return when {
         v <= 2 -> start
         v >= 98 -> end
-        kotlin.math.abs(v - 50) <= 2 -> "居中"
-        v < 50 -> "偏${if (horizontal) "左" else "上"} $v%"
-        else -> "偏${if (horizontal) "右" else "下"} $v%"
+        kotlin.math.abs(v - 50) <= 2 -> AppStrings.s(R.string.center)
+        v < 50 -> AppStrings.s(
+            R.string.offset,
+            AppStrings.s(if (horizontal) R.string.dir_left else R.string.dir_top),
+            v,
+        )
+        else -> AppStrings.s(
+            R.string.offset,
+            AppStrings.s(if (horizontal) R.string.dir_right else R.string.dir_bottom),
+            v,
+        )
     }
 }
 
@@ -1289,7 +1283,7 @@ private fun OverlayPresetCard(
             if (selected) {
                 Icon(
                     Icons.Filled.Check,
-                    contentDescription = "当前预设",
+                    contentDescription = stringResource(R.string.current_preset),
                     tint = scheme.primary,
                     modifier = Modifier.size(16.dp),
                 )

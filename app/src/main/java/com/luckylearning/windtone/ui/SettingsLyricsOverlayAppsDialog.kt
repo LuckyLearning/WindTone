@@ -1,5 +1,8 @@
 package com.luckylearning.windtone.ui
 
+import androidx.compose.ui.res.stringResource
+import com.luckylearning.windtone.R
+
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import androidx.compose.foundation.Image
@@ -106,14 +109,14 @@ internal fun OverlayHiddenAppsDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("不显示悬浮窗的应用") },
+        title = { Text(stringResource(R.string.apps_without_the_overlay)) },
         text = {
             Column {
                 Text(
                     if (hiddenApps.isEmpty()) {
-                        "还没有设置。勾上的应用在前台时，悬浮歌词会自动收起，退出后恢复。"
+                        stringResource(R.string.nothing_configured_yet_floating_lyrics)
                     } else {
-                        "已设 ${hiddenApps.size} 个。勾上的应用在前台时，悬浮歌词会自动收起，退出后恢复。"
+                        stringResource(R.string.configured_floating_lyrics_hide_while, hiddenApps.size)
                     },
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -123,7 +126,7 @@ internal fun OverlayHiddenAppsDialog(
                     value = query,
                     onValueChange = { query = it },
                     singleLine = true,
-                    placeholder = { Text("搜索应用名或包名") },
+                    placeholder = { Text(stringResource(R.string.search_app_name_or_package)) },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(8.dp))
@@ -143,7 +146,7 @@ internal fun OverlayHiddenAppsDialog(
                                     .padding(horizontal = 4.dp),
                             ) {
                                 Column(Modifier.weight(1f)) {
-                                    Text("加入包名", fontSize = 16.sp, maxLines = 1)
+                                    Text(stringResource(R.string.add_package), fontSize = 16.sp, maxLines = 1)
                                     Text(
                                         text = pkg,
                                         style = MaterialTheme.typography.labelSmall,
@@ -160,7 +163,7 @@ internal fun OverlayHiddenAppsDialog(
                     if (hiddenUnlisted.isNotEmpty()) {
                         item(key = "hdr-unlisted") {
                             Text(
-                                "已加入（这些应用没有桌面图标，从这里也能取消）",
+                                stringResource(R.string.added_these_apps_have_no),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
@@ -230,7 +233,7 @@ internal fun OverlayHiddenAppsDialog(
                     if (filtered.isEmpty() && manualCandidate == null) {
                         item {
                             Text(
-                                "没有匹配的应用",
+                                stringResource(R.string.no_matching_apps),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(vertical = 24.dp),
@@ -241,7 +244,7 @@ internal fun OverlayHiddenAppsDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("完成") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.done)) }
         },
         dismissButton = {
             // 不可撤销 → 二次确认（与诊断页「清空记录」同一条规矩）
@@ -249,20 +252,20 @@ internal fun OverlayHiddenAppsDialog(
             TextButton(
                 onClick = { confirmClear = true },
                 enabled = hiddenApps.isNotEmpty(),
-            ) { Text("清空") }
+            ) { Text(stringResource(R.string.common_clear)) }
             if (confirmClear) {
                 AlertDialog(
                     onDismissRequest = { confirmClear = false },
-                    title = { Text("清空名单？") },
-                    text = { Text("清空后所有应用都不再隐藏悬浮歌词（回到出厂默认）。") },
+                    title = { Text(stringResource(R.string.clear_the_list)) },
+                    text = { Text(stringResource(R.string.after_clearing_no_app_hides)) },
                     confirmButton = {
                         TextButton(onClick = {
                             confirmClear = false
                             onClear()
-                        }) { Text("清空") }
+                        }) { Text(stringResource(R.string.common_clear)) }
                     },
                     dismissButton = {
-                        TextButton(onClick = { confirmClear = false }) { Text("取消") }
+                        TextButton(onClick = { confirmClear = false }) { Text(stringResource(R.string.cancel)) }
                     },
                 )
             }

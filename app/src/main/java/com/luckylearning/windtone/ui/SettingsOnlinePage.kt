@@ -1,5 +1,8 @@
 package com.luckylearning.windtone.ui
 
+import androidx.compose.ui.res.stringResource
+import com.luckylearning.windtone.R
+
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -57,17 +60,17 @@ internal fun SettingsOnlinePage(
     var used by remember { mutableLongStateOf(OnlineMediaCache.sizeBytes(context)) }
     var pickingLimit by remember { mutableStateOf(false) }
 
-    SectionTitle("来源")
+    SectionTitle(stringResource(R.string.sources))
     ActionRow(
-        title = "在线歌单（M3U）",
-        subtitle = "添加 m3u / m3u8 / pls 直链并播放",
+        title = stringResource(R.string.online_playlists_m3u),
+        subtitle = stringResource(R.string.add_m3u_m3u8_or_pls),
         onClick = onOpenPlaylists,
         chevron = true,
     )
 
-    SectionTitle("播放缓存")
+    SectionTitle(stringResource(R.string.playback_cache))
     Text(
-        "已用 ${formatByteSize(used)}",
+        stringResource(R.string.used, formatByteSize(used)),
         style = MaterialTheme.typography.bodyLarge,
         modifier = Modifier.padding(bottom = 8.dp),
     )
@@ -76,8 +79,8 @@ internal fun SettingsOnlinePage(
         modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
     )
     ActionRow(
-        title = "缓存上限",
-        subtitle = "同一首再次播放时直接读已下载的部分。调小上限会立刻删掉最久没听的歌。",
+        title = stringResource(R.string.cache_limit),
+        subtitle = stringResource(R.string.replays_read_the_downloaded_part),
         trailing = cacheStepLabel(limit),
         chevron = true,
         onReset = if (limit != OnlineMediaCache.MAX_BYTES) {
@@ -92,19 +95,19 @@ internal fun SettingsOnlinePage(
         onClick = { pickingLimit = true },
     )
     ActionRow(
-        title = "清空缓存",
-        subtitle = "清空后，听过的歌需要重新下载",
+        title = stringResource(R.string.clear_cache),
+        subtitle = stringResource(R.string.cleared_played_songs_will_be),
         onClick = {
             val ok = OnlineMediaCache.clear(context)
             used = OnlineMediaCache.sizeBytes(context)
-            Toast.makeText(context, if (ok) "已清除在线缓存" else "当前没有可清除的缓存", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, if (ok) AppStrings.s(R.string.online_cache_cleared) else AppStrings.s(R.string.nothing_to_clear), Toast.LENGTH_SHORT).show()
         },
     )
 
-    SectionTitle("播放记录")
+    SectionTitle(stringResource(R.string.playback_history))
     ActionRow(
-        title = "收听报告",
-        subtitle = "阿里云盘歌曲的收听时长、时段和榜单（云盘页已在抽屉一级入口，入口不再挂这里）",
+        title = stringResource(R.string.lib_listening_report),
+        subtitle = stringResource(R.string.listening_time_time_of_day),
         onClick = onOpenReport,
         chevron = true,
     )
@@ -112,11 +115,11 @@ internal fun SettingsOnlinePage(
     if (pickingLimit) {
         AlertDialog(
             onDismissRequest = { pickingLimit = false },
-            title = { Text("缓存上限") },
+            title = { Text(stringResource(R.string.cache_limit)) },
             text = {
                 Column {
                     Text(
-                        "调小上限会立刻删掉最久没听的歌。默认 512MB。",
+                        stringResource(R.string.lowering_the_limit_immediately_drops),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -148,9 +151,9 @@ internal fun SettingsOnlinePage(
                                 )
                                 Text(
                                     when {
-                                        step == OnlineMediaCache.MAX_BYTES -> "默认"
-                                        step < OnlineMediaCache.MAX_BYTES -> "占用更少存储"
-                                        else -> "占用更多存储"
+                                        step == OnlineMediaCache.MAX_BYTES -> stringResource(R.string.default_label)
+                                        step < OnlineMediaCache.MAX_BYTES -> stringResource(R.string.uses_less_storage)
+                                        else -> stringResource(R.string.uses_more_storage)
                                     },
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -159,7 +162,7 @@ internal fun SettingsOnlinePage(
                             if (selected) {
                                 Icon(
                                     Icons.Filled.Check,
-                                    contentDescription = "已选择",
+                                    contentDescription = stringResource(R.string.selected),
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(20.dp),
                                 )
@@ -169,7 +172,7 @@ internal fun SettingsOnlinePage(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { pickingLimit = false }) { Text("关闭") }
+                TextButton(onClick = { pickingLimit = false }) { Text(stringResource(R.string.off)) }
             },
         )
     }
@@ -218,7 +221,7 @@ internal fun OnlineListeningReport(
                     0,
                 )
                 if (playAt == null) {
-                    Toast.makeText(context, "没有取到可播放的地址", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, AppStrings.s(R.string.no_playable_url_was_returned), Toast.LENGTH_SHORT).show()
                 } else {
                     onPlay(filled, playAt)
                 }
@@ -238,7 +241,7 @@ private fun List<AliyunTrackRecord>.top(byPlay: Boolean): List<TopSong> {
         TopSong(
             songId = song.id,
             stableKey = song.stableKey,
-            title = song.title.ifBlank { "未命名" },
+            title = song.title.ifBlank { AppStrings.s(R.string.untitled) },
             artist = song.artistOrUnknown,
             playCount = record.playCount,
             listenedMs = record.playedMs,
@@ -252,9 +255,9 @@ internal fun SettingsMenuOrderPage(
     order: List<String>,
     onChange: (List<String>) -> Unit,
 ) {
-    SectionTitle("分类顺序")
+    SectionTitle(stringResource(R.string.category_order))
     Text(
-        "上移、下移调整设置主页的分类卡。子页里面的开关不参加排序。",
+        stringResource(R.string.move_cards_on_the_settings),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -268,13 +271,13 @@ internal fun SettingsMenuOrderPage(
                     val moved = ids.removeAt(index)
                     ids.add(index - 1, moved)
                     onChange(ids)
-                }) { Text("上移") }
+                }) { Text(stringResource(R.string.move_up)) }
                 TextButton(enabled = index < pages.lastIndex, onClick = {
                     val ids = pages.map { it.name }.toMutableList()
                     val moved = ids.removeAt(index)
                     ids.add(index + 1, moved)
                     onChange(ids)
-                }) { Text("下移") }
+                }) { Text(stringResource(R.string.move_down)) }
             }
         }
     }

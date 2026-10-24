@@ -1,5 +1,8 @@
 package com.luckylearning.windtone.ui
 
+import androidx.compose.ui.res.stringResource
+import com.luckylearning.windtone.R
+
 import android.content.Context
 import com.luckylearning.windtone.data.DataMaintenance
 import com.luckylearning.windtone.data.DownloadRoute
@@ -114,44 +117,44 @@ internal fun SettingsRootPage(
     pages.forEach { page ->
         when (page) {
             SettingsPage.APPEARANCE -> CategoryRow(
-                title = "外观",
-                subtitle = "主题取色 · 车载模式",
+                title = stringResource(R.string.appearance),
+                subtitle = stringResource(R.string.theme_colors_car_mode),
                 icon = AppIcons.Palette,
                 onClick = { onNavigate(SettingsPage.APPEARANCE) },
             )
             SettingsPage.PLAYBACK -> CategoryRow(
-                title = "播放",
-                subtitle = "速度 ${"%.2f".format(player.speed)}x · 变调 ${Pitch.labelOf(player.pitchSemitones)} · 跳过静音 · 均衡器与音效",
+                title = stringResource(R.string.playback),
+                subtitle = stringResource(R.string.speed_x_pitch_skip_silence, "%.2f".format(player.speed), Pitch.labelOf(player.pitchSemitones)),
                 icon = Icons.Filled.PlayArrow,
                 onClick = { onNavigate(SettingsPage.PLAYBACK) },
             )
             SettingsPage.LYRICS -> CategoryRow(
-                title = "歌词",
-                subtitle = "字号 ${"%.1f".format(player.lyricScale)}x · 双语歌词 · 桌面悬浮歌词",
+                title = stringResource(R.string.lyrics),
+                subtitle = stringResource(R.string.text_size_x_bilingual_lyrics, "%.1f".format(player.lyricScale)),
                 icon = AppIcons.LyricsBubble,
                 onClick = { onNavigate(SettingsPage.LYRICS) },
             )
             SettingsPage.LIBRARY -> CategoryRow(
-                title = "音乐库",
+                title = stringResource(R.string.drawer_group_library),
                 subtitle = if (minSongDurationSec > 0) {
-                    "格式与容量 · 过滤 < ${minSongDurationSec} 秒"
+                    stringResource(R.string.formats_and_storage_filters_under, minSongDurationSec)
                 } else {
-                    "格式与容量 · 未开启短音频过滤"
+                    stringResource(R.string.formats_and_storage_short_audio)
                 },
                 icon = AppIcons.LibraryMusic,
                 onClick = { onNavigate(SettingsPage.LIBRARY) },
             )
             // v1.1.80：更新从独立分类卡降为「关于与诊断」里的入口行
             SettingsPage.DIAGNOSTICS -> CategoryRow(
-                title = "关于与诊断",
-                subtitle = "版本信息 · 检查更新 · 播放统计 · 隐私说明",
+                title = stringResource(R.string.about_diagnostics),
+                subtitle = stringResource(R.string.version_check_for_updates_playback),
                 icon = AppIcons.Info,
                 onClick = { onNavigate(SettingsPage.DIAGNOSTICS) },
             )
             // v1.1.80：实验室功能 —— 实验性入口先放这里，确认稳定后再移出去
             SettingsPage.LAB -> CategoryRow(
-                title = "实验室功能",
-                subtitle = "在线播放 · 调整菜单顺序（实验性功能，稳定后再移出）",
+                title = stringResource(R.string.set_lab_title),
+                subtitle = stringResource(R.string.online_playback_reorder_menu_experimental),
                 icon = AppIcons.Science,
                 onClick = { onNavigate(SettingsPage.LAB) },
             )
@@ -174,10 +177,10 @@ internal fun SettingsAppearancePage(
 
 
     // ------------------------------------------------ 主题
-    SectionTitle("主题")
+    SectionTitle(stringResource(R.string.theme))
     SwitchRow(
-        title = "主题跟随封面取色",
-        subtitle = "从当前歌曲封面提取主色，驱动整个界面的配色",
+        title = stringResource(R.string.theme_follows_cover_colors),
+        subtitle = stringResource(R.string.extracts_the_dominant_color_from),
         checked = dynamicTheme,
         onCheckedChange = onDynamicTheme,
         onReset = resetAction(dynamicTheme != SettingsDefaults.DYNAMIC_THEME) {
@@ -186,11 +189,11 @@ internal fun SettingsAppearancePage(
     )
 
     // ------------------------------------------------ 车载
-    SectionTitle("车载")
+    SectionTitle(stringResource(R.string.car))
     // 副标题原文 180 字，一条设置项就占掉大半屏；详细说明移到标题旁的「?」弹窗
     SwitchRow(
-        title = "车载模式",
-        subtitle = "启动直进播放页 · 大控件首页 · 切换后立即生效",
+        title = stringResource(R.string.car_mode),
+        subtitle = stringResource(R.string.opens_on_the_player_large),
         checked = player.carMode,
         onCheckedChange = onCarMode,
         onInfo = { showCarModeInfo = true },
@@ -204,22 +207,15 @@ internal fun SettingsAppearancePage(
     if (showCarModeInfo) {
         AlertDialog(
             onDismissRequest = { showCarModeInfo = false },
-            title = { Text("车载模式") },
+            title = { Text(stringResource(R.string.car_mode)) },
             text = {
                 Text(
-                    "启动后直接进入播放页并锁定横屏，适合车机或手机横放。\n\n" +
-                        "切换后立即生效：打开就转横屏并展开播放页，不用重开应用" +
-                        "（关闭时不打断当前页面，只是下次启动回到曲库）。\n\n" +
-                        "曲库页换成车机版式：顶部横向分类、行高与字号放大、底部大播放条，" +
-                        "触摸目标都 ≥76dp，并关掉长按多选与滑动切歌这类在车上容易误触的手势。\n\n" +
-                        "播放页 5 秒无操作会自动收起顶栏、控制键与底部状态行，只留歌词、歌名、" +
-                        "进度与时间；触摸任意位置恢复。切到封面态不收起。\n\n" +
-                        "开启后，设备开机时应用会自动拉起（车载场景）。",
+                    stringResource(R.string.opens_the_player_directly_and),
                     style = MaterialTheme.typography.bodySmall,
                 )
             },
             confirmButton = {
-                TextButton(onClick = { showCarModeInfo = false }) { Text("知道了") }
+                TextButton(onClick = { showCarModeInfo = false }) { Text(stringResource(R.string.got_it)) }
             },
         )
     }
@@ -243,9 +239,9 @@ internal fun SettingsPlaybackPage(
     // ------------------------------------------------ 速度与变调
     // 两者在播放器里是同一个 `PlaybackParameters`（见 PlaybackEngine
     // 的 applyPlaybackParams），界面上也放在同一组里。
-    SectionTitle("速度与变调")
+    SectionTitle(stringResource(R.string.speed_and_pitch))
     SliderRow(
-        title = "默认播放速度 ${"%.2f".format(player.speed)}x",
+        title = stringResource(R.string.default_speed_x, "%.2f".format(player.speed)),
         value = player.speed,
         range = 0.75f..2.0f,
         onValueChange = onSpeed,
@@ -254,8 +250,8 @@ internal fun SettingsPlaybackPage(
         },
     )
     SliderRow(
-        title = "变调 ${Pitch.labelOf(player.pitchSemitones)}",
-        subtitle = "升降调不改速度（±12 半音 = 一个八度）",
+        title = stringResource(R.string.pitch, Pitch.labelOf(player.pitchSemitones)),
+        subtitle = stringResource(R.string.pitch_changes_do_not_affect),
         value = player.pitchSemitones.toFloat(),
         range = Pitch.MIN_SEMITONES.toFloat()..Pitch.MAX_SEMITONES.toFloat(),
         onValueChange = { onPitch(it.roundToInt()) },
@@ -265,12 +261,12 @@ internal fun SettingsPlaybackPage(
     )
 
     // ------------------------------------------------ 播放行为
-    SectionTitle("播放行为")
+    SectionTitle(stringResource(R.string.playback_behavior))
     // 放在「跳过静音」前面：只退过一次界面就回来的人找的是这一条，
     // 而它此前只能靠「恢复队列但停在暂停态」隐式体现，界面上没有名字。
     SwitchRow(
-        title = "打开应用继续上次播放",
-        subtitle = "从上次的进度接着播；关闭后只恢复队列与进度，停在暂停态",
+        title = stringResource(R.string.resume_last_playback_on_launch),
+        subtitle = stringResource(R.string.continues_from_the_last_position),
         checked = player.autoResume,
         onCheckedChange = onAutoResume,
         onReset = resetAction(player.autoResume != SettingsDefaults.AUTO_RESUME) {
@@ -280,11 +276,11 @@ internal fun SettingsPlaybackPage(
     // 开机自启（v1.1.24）：车机上「通电就播」但不弹界面。
     // 放在这里而不是「外观 → 车载」，因为它是播放行为，跟车载模式是否打开无关。
     SwitchRow(
-        title = "开机后台播放",
+        title = stringResource(R.string.play_in_background_after_boot),
         subtitle = if (player.autoPlayOnBoot) {
-            "开机后在后台恢复上次队列并直接播放，不打开主界面（需要系统「开机启动」权限）"
+            stringResource(R.string.after_boot_restores_the_last)
         } else {
-            "关闭时开机不做任何播放入口动作；打开后上车通电即续播，且不弹界面"
+            stringResource(R.string.when_off_boot_does_nothing)
         },
         checked = player.autoPlayOnBoot,
         onCheckedChange = onAutoPlayOnBoot,
@@ -293,8 +289,8 @@ internal fun SettingsPlaybackPage(
         },
     )
     SwitchRow(
-        title = "跳过静音",
-        subtitle = "自动跳过录音开头的空白段（对整轨 / 现场录音有效）",
+        title = stringResource(R.string.skip_silence),
+        subtitle = stringResource(R.string.skips_leading_silence_in_recordings),
         checked = player.skipSilence,
         onCheckedChange = onSkipSilence,
         onReset = resetAction(player.skipSilence != SettingsDefaults.SKIP_SILENCE) {
@@ -302,11 +298,10 @@ internal fun SettingsPlaybackPage(
         },
     )
     ActionRow(
-        title = "均衡器与音效",
+        title = stringResource(R.string.equalizer_and_effects),
         // 「（需先开始播放）」太绝对：有些车机即使正在播放也建不出效果器，
         // 那句话会把人引去反复点播放（2026-10-18 真机反馈）。改成说清依赖什么。
-        subtitle = "方案 / 预设 / 频段曲线 / 低音 / 环绕 / 响度 / 混响 / 淡入淡出 / 音量平衡；" +
-            "可用性取决于本机音频系统，车机可能只支持车辆自带的音效设置",
+        subtitle = stringResource(R.string.scheme_presets_band_curve_bass),
         onClick = { showEq = true },
         chevron = true,
     )
@@ -338,22 +333,21 @@ internal fun SettingsLibraryPage(
 
 
     // ------------------------------------------------ 本地曲库
-    SectionTitle("本地曲库")
+    SectionTitle(stringResource(R.string.local_library))
     ActionRow(
-        title = "格式与容量",
-        subtitle = "各格式的首数与占用、无损 / 有损占比（全部按本机文件大小统计）",
+        title = stringResource(R.string.formats_and_storage),
+        subtitle = stringResource(R.string.track_counts_and_size_per),
         onClick = onOpenStats,
         trailing = if (stats.totalSongs > 0) {
-            "${stats.totalSongs} 首 · ${formatByteSize(stats.totalBytes)}"
+            stringResource(R.string.songs_2, stats.totalSongs, formatByteSize(stats.totalBytes))
         } else {
             "—"
         },
         chevron = true,
     )
     ActionRow(
-        title = if (minSongDurationSec > 0) "过滤短音频（< ${minSongDurationSec} 秒）" else "过滤短音频（未开启）",
-        subtitle = "时长已知且低于阈值的音频不会进入曲库（滤掉提示音、转场音效等）。" +
-            "修改后自动重新扫描；填 0 关闭过滤",
+        title = if (minSongDurationSec > 0) stringResource(R.string.short_audio_filter_s, minSongDurationSec) else stringResource(R.string.short_audio_filter_off),
+        subtitle = stringResource(R.string.audio_with_a_known_duration),
         onClick = { showMinDurationDialog = true },
         chevron = true,
         onReset = resetAction(minSongDurationSec != SettingsDefaults.MIN_DURATION_SEC) {
@@ -362,8 +356,8 @@ internal fun SettingsLibraryPage(
     )
 
     ActionRow(
-        title = "百度网盘",
-        subtitle = "扫码授权后直接播放网盘里的音乐（只读；需放在「我的应用数据/<应用名>」目录）",
+        title = stringResource(R.string.baidu_netdisk),
+        subtitle = stringResource(R.string.scan_to_authorize_and_play),
         onClick = onOpenBaidu,
         chevron = true,
     )
@@ -372,18 +366,18 @@ internal fun SettingsLibraryPage(
         var input by remember { mutableStateOf(if (minSongDurationSec > 0) minSongDurationSec.toString() else "") }
         AlertDialog(
             onDismissRequest = { showMinDurationDialog = false },
-            title = { Text("过滤短音频") },
+            title = { Text(stringResource(R.string.short_audio_filter)) },
             text = {
                 Column {
                     Text(
-                        "时长小于该秒数的音频不进入曲库；填 0 关闭过滤。默认 60 秒。",
+                        stringResource(R.string.audio_shorter_than_this_many),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     OutlinedTextField(
                         value = input,
                         onValueChange = { input = it.filter(Char::isDigit).take(4) },
-                        label = { Text("最短时长（秒）") },
+                        label = { Text(stringResource(R.string.minimum_duration_s)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
                     )
@@ -395,10 +389,10 @@ internal fun SettingsLibraryPage(
                         onMinSongDurationSec(input.toIntOrNull()?.coerceIn(0, 3600) ?: 0)
                         showMinDurationDialog = false
                     },
-                ) { Text("确定") }
+                ) { Text(stringResource(R.string.ok)) }
             },
             dismissButton = {
-                TextButton(onClick = { showMinDurationDialog = false }) { Text("取消") }
+                TextButton(onClick = { showMinDurationDialog = false }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }

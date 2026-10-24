@@ -36,6 +36,9 @@ internal object ForegroundAppDetector {
 
     private const val POLL_INTERVAL_MS = 1_500L
 
+    /** `Settings.ACTION_ACCESSIBILITY_DETAILS_SETTINGS`（API 31）的字面量 */
+    private const val ACTION_ACCESSIBILITY_DETAILS = "android.settings.ACCESSIBILITY_DETAILS_SETTINGS"
+
     /** 诊断页要显示的两个通道状态 */
     data class Status(
         val usageStats: Boolean,
@@ -99,13 +102,115 @@ internal object ForegroundAppDetector {
         enabled.split(':').any { it.equals(expected, ignoreCase = true) }
     }.getOrDefault(false)
 
-    /** 跳系统「无障碍设置」页（诊断页按钮用；跳不开由调用方给手动路径） */
-    fun accessibilitySettingsIntent(): Intent =
-        Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    /**
+     * 跳系统「无障碍设置」页（v1.1.81：多候选 + 兜底，返回是否真的打开了）。
+     *
+     * 车机（比亚迪 DiLink 等）大量没有 `ACTION_ACCESSIBILITY_SETTINGS` 对应的 Activity，
+     * 直接 startActivity 会抛 ActivityNotFoundException —— 旧实现只弹一个 toast，
+     * 用户面前就是一个**没有出口**的提示。
+     *
+     * 现在按可能性从高到低逐个试：标准 action → API 31+ 的本服务详情页 →
+     * 各家设置应用的显式组件 → 系统设置首页。全都失败才回 false，
+     * 由调用方给出「手动路径 + 使用情况权限」的替代方案。
+     */
+    fun openAccessibilitySettings(context: Context): Boolean =
+        startFirstResolvable(context, accessibilitySettingsIntents(context))
 
-    /** 跳系统「使用情况权限」页（诊断页按钮用） */
-    fun usageAccessSettingsIntent(): Intent =
-        Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    /** 候选 Intent（顺序即优先级；测试可直接断言顺序与兜底项） */
+    fun accessibilitySettingsIntents(context: Context): List<Intent> = buildList {
+        add(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        // API 31+：直达本服务的开关页，比「列表页里翻到听风」少一步。
+        // 用字面量而不是 Settings.ACTION_ACCESSIBILITY_DETAILS_SETTINGS：
+        // 常量在部分 SDK 的 android.jar 里解析不到（本工程 compileSdk 35 上实测 Unresolved），
+        // 而这串 action 是平台稳定值。
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            add(
+                Intent(ACTION_ACCESSIBILITY_DETAILS)
+                    .putExtra(
+                        Intent.EXTRA_COMPONENT_NAME,
+                        android.content.ComponentName(context, ForegroundAppService::class.java),
+                    )
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
+        // 各家设置应用的显式入口：resolve 不到会在 startFirstResolvable 里被跳过。
+        // ⚠️ 这里**不放** ACTION_SETTINGS 兜底：兜底必须由调用方显式选择
+        // （先给路径向导，用户点「打开系统设置」再去），否则「成功打开设置首页」
+        // 会被当成「无障碍页打开了」，用户落在设置首页、没有任何指引。
+        ACCESSIBILITY_ACTIVITIES.forEach { (pkg, cls) ->
+            add(Intent().setClassName(pkg, cls).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+    }
+
+    /** 只打开「系统设置首页」（路径向导里的按钮用） */
+    fun openSystemSettings(context: Context): Boolean =
+        startFirstResolvable(context, listOf(systemSettingsIntent()))
+
+    /** 系统设置首页的 Intent（单独暴露，便于测试断言「兜底是显式选择」） */
+    fun systemSettingsIntent(): Intent =
+        Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+    /**
+     * 跳系统「使用情况权限」页（多候选 + 兜底）。
+     *
+     * 这是无障碍不可用时的**等效通道**（轮询 1.5 秒，够判「切到哪个应用」），
+     * 所以它必须比无障碍更容易打开。
+     */
+    fun openUsageAccessSettings(context: Context): Boolean =
+        startFirstResolvable(context, usageAccessIntents())
+
+    fun usageAccessIntents(): List<Intent> = buildList {
+        add(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        USAGE_ACCESS_ACTIVITIES.forEach { (pkg, cls) ->
+            add(Intent().setClassName(pkg, cls).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+    }
+
+    /** 本机是否**存在**无障碍设置页（车机常被裁掉；仅用于如实展示状态，不影响跳转） */
+    fun canOpenAccessibilityPage(context: Context): Boolean =
+        accessibilitySettingsIntents(context).any { resolvable(context, it) }
+
+    /** 本机是否存在「使用情况访问」页 */
+    fun canOpenUsageAccessPage(context: Context): Boolean =
+        usageAccessIntents().any { resolvable(context, it) }
+
+    private fun resolvable(context: Context, intent: Intent): Boolean = runCatching {
+        context.packageManager.resolveActivity(intent, 0) != null
+    }.getOrDefault(false)
+
+    /**
+     * 逐个尝试，返回是否有一个成功启动。
+     *
+     * 先 `resolveActivity` 过滤（不抛异常的判断），再 startActivity；
+     * startActivity 仍可能因权限 / 导出限制失败，所以还要包一层 runCatching 继续试下一个。
+     */
+    private fun startFirstResolvable(context: Context, intents: List<Intent>): Boolean {
+        for (intent in intents) {
+            val resolvable = runCatching {
+                context.packageManager.resolveActivity(intent, 0) != null
+            }.getOrDefault(false)
+            if (!resolvable) continue
+            val ok = runCatching { context.startActivity(intent) }.isSuccess
+            if (ok) return true
+        }
+        return false
+    }
+
+    /** 常见 ROM 的无障碍设置页组件（找不到就跳过，不报错） */
+    private val ACCESSIBILITY_ACTIVITIES = listOf(
+        "com.android.settings" to "com.android.settings.Settings\$AccessibilitySettingsActivity",
+        "com.android.settings" to "com.android.settings.accessibility.AccessibilitySettings",
+        "com.android.settings" to "com.android.settings.Settings\$AccessibilitySettings",
+        // 比亚迪 DiLink（部分版本设置应用独立包名；不存在时 resolve 会跳过）
+        "com.byd.settings" to "com.byd.settings.Settings\$AccessibilitySettingsActivity",
+        "com.byd.settings" to "com.byd.settings.accessibility.AccessibilitySettings",
+    )
+
+    private val USAGE_ACCESS_ACTIVITIES = listOf(
+        "com.android.settings" to "com.android.settings.Settings\$UsageAccessSettingsActivity",
+        "com.android.settings" to "com.android.settings.usage.UsageAccessSettings",
+        "com.byd.settings" to "com.byd.settings.Settings\$UsageAccessSettingsActivity",
+    )
 
     /**
      * 当前前台应用的包名（UsageStats，一次性查询最近 10 秒的最后一个 ACTIVITY_RESUMED）。

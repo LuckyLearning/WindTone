@@ -1,5 +1,8 @@
 package com.luckylearning.windtone.ui
 
+import androidx.compose.ui.res.stringResource
+import com.luckylearning.windtone.R
+
 import com.luckylearning.windtone.state.UpdateUiState
 
 import androidx.activity.compose.BackHandler
@@ -100,16 +103,16 @@ internal fun UpdateDialog(
         var showRoutes by remember { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = { },
-            title = { Text("正在下载新版本") },
+            title = { Text(stringResource(R.string.downloading_the_new_version)) },
             text = {
                 Column {
                     Text(
-                        "下载线路：${update.route.label}",
+                        stringResource(R.string.download_route_2, update.route.label),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     TextButton(onClick = { showRoutes = !showRoutes }) {
-                        Text(if (showRoutes) "收起线路列表" else "切换线路")
+                        Text(if (showRoutes) stringResource(R.string.collapse_route_list) else stringResource(R.string.switch_route))
                     }
                     if (showRoutes) {
                         DownloadRoute.values().forEach { route ->
@@ -127,18 +130,18 @@ internal fun UpdateDialog(
                             onClick = onPingRoutes,
                             enabled = !update.pingingRoutes,
                         ) {
-                            Text(if (update.pingingRoutes) "正在测试延迟…" else "测试延迟")
+                            Text(if (update.pingingRoutes) stringResource(R.string.testing_latency) else stringResource(R.string.test_latency))
                         }
                         Text(
-                            "切换后会中止当前下载，按新线路从头重新下载。",
+                            stringResource(R.string.switching_aborts_the_current_download),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Spacer(Modifier.height(6.dp))
                     }
                     Text(
-                        if (update.progress >= 0) "已下载 ${update.progress}%"
-                        else "已下载 ${UpdateChecker.formatSize(update.downloadedBytes).ifBlank { "0 MB" }}",
+                        if (update.progress >= 0) stringResource(R.string.downloaded, update.progress)
+                        else stringResource(R.string.downloaded_2, UpdateChecker.formatSize(update.downloadedBytes).ifBlank { "0 MB" }),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Spacer(Modifier.height(10.dp))
@@ -169,24 +172,23 @@ internal fun UpdateDialog(
     if (update.readyApkPath != null) {
         AlertDialog(
             onDismissRequest = onDismiss,
-            title = { Text("安装包已就绪") },
+            title = { Text(stringResource(R.string.package_ready)) },
             text = {
                 Text(
                     if (update.needInstallPermission) {
-                        "系统需要你允许「听风」安装应用，才能继续升级。点击「去授权」后打开对应开关即可。"
+                        stringResource(R.string.the_system_needs_permission_for)
                     } else {
-                        "点击「立即安装」会调起系统安装器，确认后即可完成升级。" +
-                            "歌单、收藏、播放统计都会保留。"
+                        stringResource(R.string.tapping_install_now_opens_the)
                     },
                     style = MaterialTheme.typography.bodyMedium,
                 )
             },
             confirmButton = {
                 TextButton(onClick = if (update.needInstallPermission) onGrantPermission else onInstall) {
-                    Text(if (update.needInstallPermission) "去授权" else "立即安装")
+                    Text(if (update.needInstallPermission) stringResource(R.string.grant) else stringResource(R.string.install_now))
                 }
             },
-            dismissButton = { TextButton(onClick = onDismiss) { Text("稍后") } },
+            dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.later)) } },
         )
         return
     }
@@ -195,20 +197,19 @@ internal fun UpdateDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("发现新版本 v${info.version}") },
+        title = { Text(stringResource(R.string.version_is_available_2, info.version)) },
         text = {
             Column {
                 Text(
-                    "当前版本 v${update.currentVersion}" +
-                        UpdateChecker.formatSize(info.apkSizeBytes)
+                    stringResource(R.string.current_version_v, update.currentVersion, UpdateChecker.formatSize(info.apkSizeBytes))
                             .takeIf { it.isNotBlank() }
-                            ?.let { " · 新版本 $it" }
+                            ?.let { stringResource(R.string.new_version, it) }
                             .orEmpty(),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    "下载线路：${update.route.label}（可在「设置 → 更新 → 下载线路」中更换）",
+                    stringResource(R.string.download_route_change_it_in, update.route.label),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -223,14 +224,14 @@ internal fun UpdateDialog(
                     )
                 } else {
                     Spacer(Modifier.height(10.dp))
-                    Text("该版本没有填写更新说明。", style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.no_release_notes_were_provided), style = MaterialTheme.typography.bodySmall)
                 }
                 Spacer(Modifier.height(6.dp))
-                TextButton(onClick = onOpenReleasePage) { Text("在浏览器中查看发布页") }
+                TextButton(onClick = onOpenReleasePage) { Text(stringResource(R.string.open_the_release_page_in)) }
             }
         },
-        confirmButton = { TextButton(onClick = onDownload) { Text("下载并安装") } },
-        dismissButton = { TextButton(onClick = onIgnore) { Text("忽略") } },
+        confirmButton = { TextButton(onClick = onDownload) { Text(stringResource(R.string.download_and_install)) } },
+        dismissButton = { TextButton(onClick = onIgnore) { Text(stringResource(R.string.skip)) } },
     )
 }
 
@@ -278,7 +279,7 @@ private fun DownloadRouteRow(
         if (selected) {
             Icon(
                 Icons.Filled.Check,
-                contentDescription = "当前线路",
+                contentDescription = stringResource(R.string.current_route),
                 tint = MaterialTheme.colorScheme.primary,
             )
         }
@@ -293,7 +294,7 @@ private fun routeLatencyText(update: UpdateUiState, route: DownloadRoute): Strin
     if (!update.routeLatencies.containsKey(route)) {
         return if (update.pingingRoutes) "…" else ""
     }
-    return update.routeLatencies[route]?.let { "$it ms" } ?: "超时"
+    return update.routeLatencies[route]?.let { "$it ms" } ?: AppStrings.s(R.string.timed_out)
 }
 
 /** 选项弹层里的一项 */
@@ -312,13 +313,12 @@ internal enum class BilingualChoice(
     val options: List<ChoiceOption>,
 ) {
     MODE(
-        "双语歌词",
-        "对同时带原文和翻译的歌词生效：只影响播放页与悬浮窗的显示，" +
-            "不改歌词文件，导出 LRC 时翻译仍然完整保留。",
+        AppStrings.s(R.string.bilingual_lyrics),
+        AppStrings.s(R.string.applies_to_lyrics_that_carry),
         listOf(
-            ChoiceOption(0, "中英都显示", "原文一行、译文一行，默认"),
-            ChoiceOption(1, "只显示中文", "外文歌词换中文译文显示"),
-            ChoiceOption(2, "只显示英文", "中文歌词换英文译文显示"),
+            ChoiceOption(0, AppStrings.s(R.string.show_both_languages), AppStrings.s(R.string.original_and_translation_one_line)),
+            ChoiceOption(1, AppStrings.s(R.string.chinese_only), AppStrings.s(R.string.show_chinese_translations_for_foreign)),
+            ChoiceOption(2, AppStrings.s(R.string.english_only), AppStrings.s(R.string.show_english_translations_for_chinese)),
         ),
     ),
     ;
@@ -340,40 +340,36 @@ internal enum class OverlayChoice(
     val options: List<ChoiceOption>,
 ) {
     LINES(
-        "悬浮歌词行数",
-        "桌面悬浮歌词一次显示几行（当前行居中高亮，上下带上下文）。" +
-            "选「自动」时按悬浮窗高度算：窗口高就多给几行，窗口矮就只留当前句，不会被裁掉。" +
-            "选中后立刻给一次 6 秒预览。",
-        listOf(ChoiceOption(0, "自动（按高度适配）", overlayLinesHint(0))) +
-            (1..5).map { n -> ChoiceOption(n, "$n 行", overlayLinesHint(n)) },
+        AppStrings.s(R.string.floating_lyric_lines),
+        AppStrings.s(R.string.how_many_lines_the_home),
+        listOf(ChoiceOption(0, AppStrings.s(R.string.auto_fit_to_height), overlayLinesHint(0))) +
+            (1..5).map { n -> ChoiceOption(n, AppStrings.s(R.string.lines, n), overlayLinesHint(n)) },
     ),
     ALIGN(
-        "悬浮歌词对齐",
-        "歌词文字在悬浮窗**内部**怎么排（窗口在屏幕上的位置由「调整悬浮歌词位置」自由拖动，与此无关）。" +
-            "居中适合每句都不长的歌词；居左更适合长句——每行都从同一条竖线起排，" +
-            "读起来比居中的参差边缘省力。",
+        AppStrings.s(R.string.floating_lyric_alignment),
+        AppStrings.s(R.string.how_lyric_text_is_laid),
         listOf(
-            ChoiceOption(0, "居中", "窗内每行居中，默认"),
-            ChoiceOption(1, "居左", "窗内每行从左沿起排"),
+            ChoiceOption(0, AppStrings.s(R.string.center), AppStrings.s(R.string.each_line_centered_in_the)),
+            ChoiceOption(1, AppStrings.s(R.string.align_left), AppStrings.s(R.string.each_line_starts_at_the)),
         ),
     ),
     PAUSE(
-        "暂停时的悬浮歌词",
-        "暂停之后字幕怎么处理。",
+        AppStrings.s(R.string.floating_lyrics_when_paused),
+        AppStrings.s(R.string.what_the_subtitle_does_when),
         listOf(
-            ChoiceOption(0, "淡出", "默认，保留最后一句便于回看唱到哪"),
-            ChoiceOption(1, "隐藏", "暂停即消失，桌面更干净"),
+            ChoiceOption(0, AppStrings.s(R.string.fade_out), AppStrings.s(R.string.default_keeps_the_last_line)),
+            ChoiceOption(1, AppStrings.s(R.string.hide), AppStrings.s(R.string.disappears_on_pause_for_a)),
         ),
     ),
     // v1.1.52：标题从「显示 / 不显示」开关升级为可选内容 —— 只显示歌名 / 只显示歌手。
     // 「显示歌名与歌手」开关保留（关 = 完全不显示），打开后由这里决定显示哪几行。
     TITLE_MODE(
-        "标题内容",
-        "悬浮窗顶部的小字标题显示哪些内容（需要先打开上面的「显示歌名与歌手」）。",
+        AppStrings.s(R.string.title_content),
+        AppStrings.s(R.string.what_the_small_header_shows),
         listOf(
-            ChoiceOption(0, "歌名 + 歌手", "默认，两行都显示"),
-            ChoiceOption(1, "只显示歌名", "去掉歌手行，标题更紧凑"),
-            ChoiceOption(2, "只显示歌手", "去掉歌名行"),
+            ChoiceOption(0, AppStrings.s(R.string.title_artist), AppStrings.s(R.string.default_both_lines)),
+            ChoiceOption(1, AppStrings.s(R.string.title_only), AppStrings.s(R.string.drops_the_artist_line_for)),
+            ChoiceOption(2, AppStrings.s(R.string.artist_only), AppStrings.s(R.string.drops_the_title_line)),
         ),
     ),
 }
@@ -384,16 +380,16 @@ internal enum class OverlayChoice(
  * 偶数行时下方多一行：当前行尽量靠中间，而不是贴在最上面。
  */
 internal fun overlayLinesHint(lines: Int): String = when (lines) {
-    0 -> "按窗口高度自动决定能放几行；高度为「自动」时按 3 行显示"
-    1 -> "只显示当前歌词行（一行放不下时自动折行）"
-    2 -> "当前行 + 下一句"
-    3 -> "上一行 / 当前行 / 下一行，当前行高亮"
-    4 -> "上 1 行 + 当前行 + 下 2 行"
-    5 -> "上下各 2 行，当前行居中高亮"
-    else -> "当前行 + 上下文"
+    0 -> AppStrings.s(R.string.line_count_follows_the_window)
+    1 -> AppStrings.s(R.string.current_line_only_wraps_when)
+    2 -> AppStrings.s(R.string.current_next)
+    3 -> AppStrings.s(R.string.previous_current_and_next_the)
+    4 -> AppStrings.s(R.string.t_1_above_current_2_below_label)
+    5 -> AppStrings.s(R.string.t_2_above_and_below_current_label)
+    else -> AppStrings.s(R.string.current_context)
 }
 
 /** 设置页行尾摘要用的短标签（与弹层选项一一对应，按档位下标取） */
-internal val OVERLAY_ALIGN_LABELS = listOf("居中", "居左")
-internal val OVERLAY_PAUSE_LABELS = listOf("淡出", "隐藏")
-internal val OVERLAY_TITLE_MODE_LABELS = listOf("歌名 + 歌手", "只歌名", "只歌手")
+internal val OVERLAY_ALIGN_LABELS = listOf(AppStrings.s(R.string.center), AppStrings.s(R.string.align_left))
+internal val OVERLAY_PAUSE_LABELS = listOf(AppStrings.s(R.string.fade_out), AppStrings.s(R.string.hide))
+internal val OVERLAY_TITLE_MODE_LABELS = listOf(AppStrings.s(R.string.title_artist), AppStrings.s(R.string.title_only_2), AppStrings.s(R.string.artist_only_2))
