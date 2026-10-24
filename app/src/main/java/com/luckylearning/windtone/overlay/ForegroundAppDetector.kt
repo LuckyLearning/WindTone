@@ -219,12 +219,21 @@ internal object ForegroundAppDetector {
     fun requestIgnoreBatteryOptimizations(context: Context): Boolean =
         startFirstResolvable(context, batteryOptimizationIntents(context))
 
-    /** 申请白名单的候选：系统弹窗 → 白名单列表页（有的车机把弹窗裁了） */
+    /**
+     * 申请白名单的候选（v1.1.84 起三段）：
+     * 1. 系统弹窗（最省事）；
+     * 2. 白名单列表页（弹窗被裁的 ROM）；
+     * 3. **本应用详情页** —— 车机（DiLink 实测）前两个都打不开，而「应用信息 → 电池 /
+     *    耗电管理 → 允许后台活动」几乎每台车机都保留，这是最后的可走路径。
+     */
     fun batteryOptimizationIntents(context: Context): List<Intent> = listOf(
         Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
             .setData(android.net.Uri.parse("package:${context.packageName}"))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+            .setData(android.net.Uri.parse("package:${context.packageName}"))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
     )
 

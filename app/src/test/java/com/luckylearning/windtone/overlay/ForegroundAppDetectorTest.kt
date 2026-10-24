@@ -63,14 +63,21 @@ class ForegroundAppDetectorTest {
     }
 
     @Test
-    fun `电池优化申请首选系统弹窗，其次白名单列表页`() {
+    fun `电池优化三段候选：弹窗 → 白名单列表页 → 应用详情页`() {
         val intents = ForegroundAppDetector.batteryOptimizationIntents(context)
-        assertEquals(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, intents.first().action)
+        assertEquals(
+            listOf(
+                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS,
+                // DiLink 前两个都裁掉了，最后靠「应用信息 → 电池」这条路
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            ),
+            intents.map { it.action },
+        )
         assertEquals(
             "package:${context.packageName}",
             intents.first().data?.toString(),
         )
-        assertEquals(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS, intents.last().action)
     }
 
     @Test

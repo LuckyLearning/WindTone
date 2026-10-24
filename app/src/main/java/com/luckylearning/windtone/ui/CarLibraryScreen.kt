@@ -185,6 +185,9 @@ internal fun CarNavRail(
     current: LibraryView,
     onSelect: (LibraryView) -> Unit,
     onOpenSettings: () -> Unit,
+    /** 阿里云盘页是否打开（v1.1.84：车机没有抽屉，云盘入口必须常驻在左导航里） */
+    aliyunActive: Boolean = false,
+    onOpenAliyun: () -> Unit = {},
 ) {
     val scheme = MaterialTheme.colorScheme
     Row(
@@ -225,10 +228,20 @@ internal fun CarNavRail(
                     label = carViewLabel(view),
                     icon = view.icon,
                     accent = carViewAccent(view),
-                    selected = view == current,
+                    // 云盘页打开时曲库视图不再高亮（与抽屉同一口径）
+                    selected = view == current && !aliyunActive,
                     onClick = { onSelect(view) },
                 )
             }
+            // v1.1.84：车机模式下没有抽屉，阿里云盘原本只能从抽屉进 —— 等于进不去。
+            // 这里补一个常驻入口，位置紧跟曲库视图，与手机端「在线音乐」组同一个层级。
+            CarNavItem(
+                label = "云盘",
+                icon = AppIcons.Cloud,
+                accent = scheme.onSurfaceVariant,
+                selected = aliyunActive,
+                onClick = onOpenAliyun,
+            )
             Spacer(Modifier.weight(1f))
             CarNavItem(
                 label = "设置",

@@ -193,6 +193,10 @@
     <string name="the_overlay_will_not_disappear">The overlay will not disappear. No adb needed: enable the accessibility service in system settings.</string>
     <string name="could_not_open_accessibility_settings">Could not open accessibility settings. Go to Settings → Accessibility manually</string>
     <string name="accessibility_settings">Accessibility settings</string>
+    <string name="battery_help_title">Allow background running</string>
+    <string name="battery_help_body">This head unit has no battery optimisation page (common on BYD DiLink). Try any of these paths://n//n1) Settings → Apps → WindTone → Power management → Allow background activity\n2) Settings → Battery → App power management → WindTone → Unrestricted\n3) Settings → Apps → WindTone → Battery → Not optimised / Allow background\n\nIf none exists it still works: as long as the accessibility service stays on, app switches are reported instantly. The allow-list only protects against being frozen after a long standby.</string>
+    <string name="battery_help_copy">Copy steps</string>
+    <string name="battery_help_copied">Steps copied</string>
     <string name="fg_help_title">Finding the accessibility page</string>
     <string name="fg_help_body">This head unit may not have a standalone Accessibility page (common on BYD DiLink). Try any of these paths://n//n1) Settings → System → Accessibility → Downloaded services → WindTone\n2) Settings → Apps → Special app access → Accessibility\n3) Settings → Accessibility (some models put it at the very bottom of the list, scroll down)\n4) BYD DiLink: Vehicle settings → System settings → Accessibility (the app tries this entry first)\n\nIf none of them exists, use Usage access instead: it recognises the foreground app with about a 1.5 s delay, which is enough for the per-app hiding list.</string>
     <string name="fg_help_copy">Copy steps</string>

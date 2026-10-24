@@ -308,6 +308,8 @@ internal fun SettingsDiagnosticsPage(
         var confirmClearLog by remember { mutableStateOf(false) }
         // v1.1.82：车机上跳转「无障碍设置」失败时的路径向导
         var showForegroundHelp by remember { mutableStateOf(false) }
+        // v1.1.84：车机打不开「电池优化」页时的路径向导
+        var showBatteryHelp by remember { mutableStateOf(false) }
         // v1.1.82：车机现场取证（见 ForegroundProbe）
         var probeReport by remember { mutableStateOf<String?>(null) }
         var probePath by remember { mutableStateOf<String?>(null) }
@@ -399,6 +401,7 @@ internal fun SettingsDiagnosticsPage(
         // 系统 / 应用 / 辅助功能三个不同位置，猜单一路径必然有人找不到。
         if (showForegroundHelp) {
             val steps = stringResource(R.string.fg_help_body)
+            val copiedMsg = stringResource(R.string.fg_help_copied)
             AlertDialog(
                 onDismissRequest = { showForegroundHelp = false },
                 title = { Text(stringResource(R.string.fg_help_title)) },
@@ -453,7 +456,11 @@ internal fun SettingsDiagnosticsPage(
             } else {
                 "未加入：车机息屏后可能冻结后台，按应用隐藏会失效；点这里去申请（无需 adb）"
             },
-            onClick = { ForegroundAppDetector.requestIgnoreBatteryOptimizations(context) },
+            onClick = {
+                if (!ForegroundAppDetector.requestIgnoreBatteryOptimizations(context)) {
+                    showBatteryHelp = true
+                }
+            },
             trailing = if (ignoringBattery) "已加入" else "去设置",
             chevron = true,
         )
@@ -470,6 +477,40 @@ internal fun SettingsDiagnosticsPage(
             },
             chevron = true,
         )
+        // 「电池优化」页在 DiLink 上同样被裁：三段候选都失败时给路径，不要只留一个死按钮。
+        if (showBatteryHelp) {
+            val steps = stringResource(R.string.battery_help_body)
+            val copiedMsg = stringResource(R.string.battery_help_copied)
+            AlertDialog(
+                onDismissRequest = { showBatteryHelp = false },
+                title = { Text(stringResource(R.string.battery_help_title)) },
+                text = {
+                    Column(
+                        Modifier
+                            .heightIn(max = 340.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        Text(steps, style = MaterialTheme.typography.bodySmall)
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        clipboard.setText(AnnotatedString(steps))
+                        Toast.makeText(
+                            context,
+                            copiedMsg,
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }) { Text(stringResource(R.string.battery_help_copy)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        ForegroundAppDetector.openSystemSettings(context)
+                        showBatteryHelp = false
+                    }) { Text(stringResource(R.string.fg_help_open_settings)) }
+                },
+            )
+        }
         if (probeReport != null) {
             val report = probeReport!!
             AlertDialog(

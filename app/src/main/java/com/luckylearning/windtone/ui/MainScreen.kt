@@ -530,8 +530,14 @@ fun MainScreen(
                 if (carMode) {
                     CarNavRail(
                         current = library.view,
-                        onSelect = lib::setView,
+                        // 选曲库视图时退出云盘页（与抽屉 onSelectView 同一口径）
+                        onSelect = {
+                            showAliyun = false
+                            lib.setView(it)
+                        },
                         onOpenSettings = { settingsEntryPage = SettingsPage.ROOT; showSettings = true },
+                        aliyunActive = showAliyun,
+                        onOpenAliyun = { showAliyun = true },
                     )
                 }
                 Column(Modifier.weight(1f)) {
