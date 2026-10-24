@@ -41,12 +41,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.ScanScope
 import com.luckylearning.windtone.data.SortOrder
 import com.luckylearning.windtone.state.LibraryUiState
@@ -104,13 +107,8 @@ internal val LibraryView.sortOptions: List<SortOrder>
         LibraryView.PLAYLIST -> listOf(SortOrder.PLAYLIST_ORDER, SortOrder.TITLE, SortOrder.DATE_ADDED)
     }
 
-/** 排序项在某个视图下的显示名（同一个枚举在不同视图里叫法不同） */
-internal fun SortOrder.labelFor(view: LibraryView): String = when {
-    view == LibraryView.FOLDER && this == SortOrder.TITLE -> "按文件夹名"
-    view == LibraryView.ALBUM && this == SortOrder.ALBUM -> "按专辑名"
-    view == LibraryView.ARTIST && this == SortOrder.ARTIST -> "按歌手名"
-    else -> label
-}
+/* 排序项在某个视图下的显示名见 `UiText.kt` 的 `SortOrder.displayName(view)`（i18n：
+   枚举不持有界面文案）。 */
 
 @Composable
 internal fun LibraryHeader(
@@ -145,26 +143,34 @@ internal fun LibraryHeader(
             IconButton(onClick = onOpenDrawer) {
                 Icon(
                     imageVector = AppIcons.Menu,
-                    contentDescription = "打开侧边抽屉",
+                    contentDescription = stringResource(R.string.cd_open_drawer),
                     tint = MaterialTheme.colorScheme.onBackground,
                 )
             }
             Text(
-                text = "本地音乐",
+                text = stringResource(R.string.lib_title_local_music),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground,
             )
             if (library.songs.isNotEmpty()) {
                 Spacer(Modifier.width(10.dp))
-                CountPill("${library.songs.size} 首")
+                CountPill(
+                    pluralStringResource(
+                        R.plurals.lib_song_count,
+                        library.songs.size,
+                        library.songs.size,
+                    )
+                )
             }
             Spacer(Modifier.weight(1f))
 
             IconButton(onClick = { searchMode = !searchMode }) {
                 Icon(
                     imageVector = if (searchMode) Icons.Filled.Close else Icons.Filled.Search,
-                    contentDescription = if (searchMode) "关闭搜索" else "搜索",
+                    contentDescription = stringResource(
+                        if (searchMode) R.string.cd_close_search else R.string.cd_search
+                    ),
                     tint = MaterialTheme.colorScheme.onBackground,
                 )
             }
@@ -173,7 +179,7 @@ internal fun LibraryHeader(
                 IconButton(onClick = { sortMenu = true }) {
                     Icon(
                         imageVector = AppIcons.Sort,
-                        contentDescription = "排序",
+                        contentDescription = stringResource(R.string.cd_sort),
                         tint = MaterialTheme.colorScheme.onBackground,
                     )
                 }
@@ -185,7 +191,7 @@ internal fun LibraryHeader(
                         DropdownMenuItem(
                             text = {
                                 Text(
-                                    text = order.labelFor(library.view),
+                                    text = order.displayName(library.view),
                                     fontWeight = if (order == library.sortOrder) FontWeight.Bold
                                     else FontWeight.Normal,
                                     color = if (order == library.sortOrder) MaterialTheme.colorScheme.primary
@@ -202,7 +208,7 @@ internal fun LibraryHeader(
                 IconButton(onClick = { moreMenu = true }) {
                     Icon(
                         imageVector = Icons.Filled.MoreVert,
-                        contentDescription = "更多",
+                        contentDescription = stringResource(R.string.cd_more),
                         tint = MaterialTheme.colorScheme.onBackground,
                     )
                 }
@@ -214,9 +220,12 @@ internal fun LibraryHeader(
                         text = {
                             Text(
                                 when (library.scanScope) {
-                                    ScanScope.UNSET -> "扫描范围：未选择"
-                                    ScanScope.FULL -> "扫描范围：全盘扫描"
-                                    ScanScope.FOLDERS -> "扫描范围：指定目录 ${library.folderCount} 个"
+                                    ScanScope.UNSET -> stringResource(R.string.lib_scan_scope_unset)
+                                    ScanScope.FULL -> stringResource(R.string.lib_scan_scope_full)
+                                    ScanScope.FOLDERS -> stringResource(
+                                        R.string.lib_scan_scope_folders,
+                                        library.folderCount,
+                                    )
                                 }
                             )
                         },
@@ -224,45 +233,54 @@ internal fun LibraryHeader(
                     )
                     if (library.scanScope != ScanScope.UNSET) {
                         DropdownMenuItem(
-                            text = { Text("重新扫描当前范围") },
+                            text = { Text(stringResource(R.string.lib_rescan_current)) },
                             onClick = { moreMenu = false; onRescan() },
                         )
                     }
                     if (library.scanScope != ScanScope.FULL) {
                         DropdownMenuItem(
-                            text = { Text(if (granted) "扫描全盘音乐…" else "授权并扫描全盘…") },
+                            text = {
+                                Text(
+                                    stringResource(
+                                        if (granted) R.string.lib_scan_full_deep
+                                        else R.string.lib_scan_full_grant
+                                    )
+                                )
+                            },
                             onClick = { moreMenu = false; onFullScan() },
                         )
                     }
                     DropdownMenuItem(
-                        text = { Text("导入音乐目录…") },
+                        text = { Text(stringResource(R.string.lib_import_folder)) },
                         onClick = { moreMenu = false; onImportFolder() },
                     )
                     if (library.scanScope != ScanScope.FULL && !granted) {
                         DropdownMenuItem(
-                            text = { Text("授予音频读取权限") },
+                            text = { Text(stringResource(R.string.lib_grant_audio_permission)) },
                             onClick = { moreMenu = false; onRequestPermission() },
                         )
                     }
                     DropdownMenuItem(
-                        text = { Text("重新匹配 .lrc 歌词") },
+                        text = { Text(stringResource(R.string.lib_rematch_lyrics)) },
                         onClick = { moreMenu = false; onRefreshLyrics() },
                     )
                     DropdownMenuItem(
-                        text = { Text("导入 M3U 歌单…") },
+                        text = { Text(stringResource(R.string.lib_import_m3u)) },
                         onClick = { moreMenu = false; onImportM3U() },
                     )
                     DropdownMenuItem(
                         text = {
                             Text(
-                                if (library.deepScan) "深度扫描：已开启（点击管理）"
-                                else "所有文件访问权限（深度扫描）"
+                                stringResource(
+                                    if (library.deepScan) R.string.lib_deep_scan_on
+                                    else R.string.lib_deep_scan_off
+                                )
                             )
                         },
                         onClick = { moreMenu = false; onDeepScan() },
                     )
                     DropdownMenuItem(
-                        text = { Text("收听报告") },
+                        text = { Text(stringResource(R.string.lib_listening_report)) },
                         onClick = { moreMenu = false; onOpenReport() },
                     )
                 }
@@ -273,7 +291,7 @@ internal fun LibraryHeader(
             OutlinedTextField(
                 value = library.query,
                 onValueChange = onQuery,
-                placeholder = { Text("搜索歌名 / 歌手 / 专辑 / 文件名 / 拼音") },
+                placeholder = { Text(stringResource(R.string.lib_search_hint)) },
                 singleLine = true,
                 shape = MaterialTheme.shapes.small,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -286,7 +304,7 @@ internal fun LibraryHeader(
                     modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
                 ) {
                     Text(
-                        "历史",
+                        stringResource(R.string.lib_search_history),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -308,16 +326,33 @@ internal fun LibraryHeader(
                         }
                     }
                     TextButton(onClick = onClearSearchHistory) {
-                        Text("清空", fontSize = 12.sp)
+                        Text(stringResource(R.string.common_clear), fontSize = 12.sp)
                     }
                 }
             }
         }
 
+        // stringResource / pluralStringResource 都是 @Composable，不能放进 buildString 的
+        // 非组合 lambda 里，先在此处求值再拼接。
+        val totalText = pluralStringResource(
+            R.plurals.lib_stat_total,
+            library.songs.size,
+            library.songs.size,
+        )
+        val lyricsText = if (library.lyricsCount > 0) {
+            pluralStringResource(R.plurals.lib_stat_lyrics, library.lyricsCount, library.lyricsCount)
+        } else ""
+        val skippedText = if (library.skippedUnsupported > 0) {
+            pluralStringResource(
+                R.plurals.lib_stat_skipped,
+                library.skippedUnsupported,
+                library.skippedUnsupported,
+            )
+        } else ""
         val stat = buildString {
-            append("共 ${library.songs.size} 首")
-            if (library.lyricsCount > 0) append(" · 含歌词文件 ${library.lyricsCount} 首")
-            if (library.skippedUnsupported > 0) append(" · 跳过 ${library.skippedUnsupported} 个不支持格式")
+            append(totalText)
+            if (lyricsText.isNotEmpty()) append(" · ").append(lyricsText)
+            if (skippedText.isNotEmpty()) append(" · ").append(skippedText)
         }
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -380,13 +415,13 @@ internal fun ScanSetupView(
         }
         Spacer(Modifier.height(20.dp))
         Text(
-            "选择音乐位置",
+            stringResource(R.string.lib_setup_title),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            "本应用默认不会扫描整个手机存储。\n请选择一种方式建立你的音乐库：",
+            stringResource(R.string.lib_setup_desc),
             style = MaterialTheme.typography.bodySmall,
             color = scheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -401,11 +436,11 @@ internal fun ScanSetupView(
         ) {
             Icon(AppIcons.Sort, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text("扫描全盘音乐")
+            Text(stringResource(R.string.lib_scan_full))
         }
         Spacer(Modifier.height(6.dp))
         Text(
-            "读取系统媒体库里已有的音乐；授予「所有文件访问权限」后还能连带识别同目录 .lrc 歌词",
+            stringResource(R.string.lib_scan_full_desc),
             style = MaterialTheme.typography.labelSmall,
             color = scheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -421,11 +456,11 @@ internal fun ScanSetupView(
         ) {
             Icon(AppIcons.Folder, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text("选择音乐目录")
+            Text(stringResource(R.string.lib_pick_folder))
         }
         Spacer(Modifier.height(6.dp))
         Text(
-            "只扫描你指定的文件夹，可以选多个目录，之后也能随时追加",
+            stringResource(R.string.lib_pick_folder_desc),
             style = MaterialTheme.typography.labelSmall,
             color = scheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -433,6 +468,8 @@ internal fun ScanSetupView(
         )
 
         if (scanning) {
+            // ifBlank 的 lambda 不是组合上下文，stringResource 必须先求值。
+            val scanningLabel = stringResource(R.string.lib_scanning)
             Spacer(Modifier.height(20.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(
@@ -442,7 +479,7 @@ internal fun ScanSetupView(
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    statusText.ifBlank { "正在扫描…" },
+                    statusText.ifBlank { scanningLabel },
                     style = MaterialTheme.typography.labelSmall,
                     color = scheme.onSurfaceVariant,
                 )
@@ -456,6 +493,8 @@ internal fun ScanSetupView(
 @Composable
 internal fun ScanningState(status: String) {
     Column(Modifier.fillMaxSize()) {
+        // 同上：ifBlank 的 lambda 不是组合上下文。
+        val scanningLabel = stringResource(R.string.lib_scanning_library)
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
@@ -469,7 +508,7 @@ internal fun ScanningState(status: String) {
             )
             Spacer(Modifier.width(10.dp))
             Text(
-                text = status.ifBlank { "正在扫描音乐库…" },
+                text = status.ifBlank { scanningLabel },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

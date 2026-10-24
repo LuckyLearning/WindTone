@@ -32,9 +32,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.state.LibraryView
 import com.luckylearning.windtone.ui.theme.AppVisual
 import com.luckylearning.windtone.ui.theme.windShadow
@@ -146,10 +148,10 @@ private fun DrawerPanel(
                 .padding(start = 12.dp, end = 12.dp, top = 14.dp, bottom = 16.dp),
         ) {
             DrawerBrand()
-            DrawerGroupLabel("音乐库")
+            DrawerGroupLabel(stringResource(R.string.drawer_group_library))
             LibraryView.entries.forEach { view ->
                 DrawerItem(
-                    label = view.label,
+                    label = view.displayName(),
                     icon = view.icon,
                     // 云盘页打开时曲库视图不再保持高亮（v1.1.77）：高亮唯一落在
                     // 「在线音乐 → 阿里云盘」上，与实际停留的页面一致
@@ -160,9 +162,9 @@ private fun DrawerPanel(
 
             // 「在线音乐」：云盘页升为一级入口（v1.1.75），与曲库视图互斥显示。
             // 放在「更多」之上：它是内容页（像五个视图一样常驻），不是设置类动作。
-            DrawerGroupLabel("在线音乐")
+            DrawerGroupLabel(stringResource(R.string.drawer_group_online))
             DrawerItem(
-                label = "阿里云盘",
+                label = stringResource(R.string.drawer_aliyun),
                 icon = AppIcons.Cloud,
                 selected = aliyunActive,
                 onClick = { onOpenAliyun(); onClose() },
@@ -171,9 +173,13 @@ private fun DrawerPanel(
             // .d-gap{flex:1} —— 把「更多」组压到底部
             Spacer(Modifier.weight(1f))
 
-            DrawerGroupLabel("更多")
-            DrawerItem("扫描范围", AppIcons.Folder, false) { onOpenScanScope(); onClose() }
-            DrawerItem("设置", AppIcons.Tune, false) { onOpenSettings(); onClose() }
+            DrawerGroupLabel(stringResource(R.string.drawer_group_more))
+            DrawerItem(stringResource(R.string.drawer_scan_scope), AppIcons.Folder, false) {
+                onOpenScanScope(); onClose()
+            }
+            DrawerItem(stringResource(R.string.drawer_settings), AppIcons.Tune, false) {
+                onOpenSettings(); onClose()
+            }
         }
     }
 }
@@ -205,13 +211,13 @@ private fun DrawerBrand() {
         Spacer(Modifier.width(12.dp))
         Column {
             Text(
-                "听风",
+                stringResource(R.string.app_name),
                 fontSize = 16.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Text(
-                "WindTone · 本地音乐",
+                stringResource(R.string.drawer_brand_subtitle),
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 1.dp),

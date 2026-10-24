@@ -18,4 +18,105 @@
     <string name="shortcut_favorites_long">打开我的收藏</string>
 <!-- 无障碍服务说明（设置 → 辅助功能 → 听风 里显示的那段），口径见 values/strings.xml -->
     <string name="accessibility_service_description">侦测当前前台是哪个应用（只读取窗口切换事件，不读取屏幕内容），以便在 360 影像等应用打开时自动收起听风的悬浮歌词。</string>
+
+    <!-- ================================================================
+         通用（跨模块复用）
+         ================================================================ -->
+    <string name="common_clear">清空</string>
+
+    <!-- ================================================================
+         曲库视图名称（抽屉与车机共用）
+         ================================================================ -->
+    <string name="view_songs">歌曲</string>
+    <string name="view_albums">专辑</string>
+    <string name="view_artists">歌手</string>
+    <string name="view_folders">文件夹</string>
+    <string name="view_playlists">歌单</string>
+
+    <!-- ================================================================
+         排序方式
+         ================================================================ -->
+    <string name="sort_title">按标题</string>
+    <string name="sort_artist">按歌手</string>
+    <string name="sort_album">按专辑</string>
+    <string name="sort_duration">按时长</string>
+    <string name="sort_date_added">按添加时间</string>
+    <string name="sort_file_name">按文件名</string>
+    <string name="sort_folder_path">按路径</string>
+    <string name="sort_playlist_order">按歌单内顺序</string>
+    <string name="sort_folder_name">按文件夹名</string>
+    <string name="sort_album_name">按专辑名</string>
+    <string name="sort_artist_name">按歌手名</string>
+
+    <!-- ================================================================
+         播放模式
+         ================================================================ -->
+    <string name="play_mode_sequential">顺序播放</string>
+    <string name="play_mode_repeat_all">列表循环</string>
+    <string name="play_mode_repeat_one">单曲循环</string>
+    <string name="play_mode_shuffle">随机播放</string>
+    <string name="cd_play_mode">播放模式：%1$s</string>
+
+    <!-- ================================================================
+         曲库首页
+         ================================================================ -->
+    <string name="lib_title_local_music">本地音乐</string>
+    <string name="cd_open_drawer">打开侧边抽屉</string>
+    <string name="cd_close_search">关闭搜索</string>
+    <string name="cd_search">搜索</string>
+    <string name="cd_sort">排序</string>
+    <string name="cd_more">更多</string>
+
+    <string name="lib_scan_scope_unset">扫描范围：未选择</string>
+    <string name="lib_scan_scope_full">扫描范围：全盘扫描</string>
+    <string name="lib_scan_scope_folders">扫描范围：指定目录 %1$d 个</string>
+    <string name="lib_rescan_current">重新扫描当前范围</string>
+    <string name="lib_scan_full_deep">扫描全盘音乐…</string>
+    <string name="lib_scan_full_grant">授权并扫描全盘…</string>
+    <string name="lib_import_folder">导入音乐目录…</string>
+    <string name="lib_grant_audio_permission">授予音频读取权限</string>
+    <string name="lib_rematch_lyrics">重新匹配 .lrc 歌词</string>
+    <string name="lib_import_m3u">导入 M3U 歌单…</string>
+    <string name="lib_deep_scan_on">深度扫描：已开启（点击管理）</string>
+    <string name="lib_deep_scan_off">所有文件访问权限（深度扫描）</string>
+    <string name="lib_listening_report">收听报告</string>
+
+    <string name="lib_search_hint">搜索歌名 / 歌手 / 专辑 / 文件名 / 拼音</string>
+    <string name="lib_search_history">历史</string>
+
+    <string name="lib_setup_title">选择音乐位置</string>
+    <string name="lib_setup_desc">本应用默认不会扫描整个手机存储。\n请选择一种方式建立你的音乐库：</string>
+    <string name="lib_scan_full">扫描全盘音乐</string>
+    <string name="lib_scan_full_desc">读取系统媒体库里已有的音乐；授予「所有文件访问权限」后还能连带识别同目录 .lrc 歌词</string>
+    <string name="lib_pick_folder">选择音乐目录</string>
+    <string name="lib_pick_folder_desc">只扫描你指定的文件夹，可以选多个目录，之后也能随时追加</string>
+    <string name="lib_scanning">正在扫描…</string>
+    <string name="lib_scanning_library">正在扫描音乐库…</string>
+
+    <!-- ================================================================
+         侧边抽屉
+         ================================================================ -->
+    <string name="drawer_group_library">音乐库</string>
+    <string name="drawer_group_online">在线音乐</string>
+    <string name="drawer_aliyun">阿里云盘</string>
+    <string name="drawer_group_more">更多</string>
+    <string name="drawer_scan_scope">扫描范围</string>
+    <string name="drawer_settings">设置</string>
+    <string name="drawer_brand_subtitle">WindTone · 本地音乐</string>
+
+    <!-- ================================================================
+         复数字符串（中文只有 other）
+         ================================================================ -->
+    <plurals name="lib_song_count">
+        <item quantity="other">%d 首</item>
+    </plurals>
+    <plurals name="lib_stat_total">
+        <item quantity="other">共 %d 首</item>
+    </plurals>
+    <plurals name="lib_stat_lyrics">
+        <item quantity="other">含歌词文件 %d 首</item>
+    </plurals>
+    <plurals name="lib_stat_skipped">
+        <item quantity="other">跳过 %d 个不支持格式</item>
+    </plurals>
 </resources>

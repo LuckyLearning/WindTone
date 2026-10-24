@@ -73,6 +73,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -80,6 +81,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.data.OverlayPreset
 import com.luckylearning.windtone.data.overlayPresetLabel
@@ -181,6 +183,8 @@ fun PlayerScreen(
 
     // 播放模式（顺序 / 列表循环 / 单曲循环 / 随机）—— 4 个档位共用下面控制区的一个按钮
     val playMode = playModeOf(state.repeatMode, state.shuffle)
+    // 模式名要在 LaunchedEffect 里用，而后者不是组合上下文，先在此处解析。
+    val playModeLabel = playMode.displayName()
     var modeHint by remember { mutableStateOf("") }
     var modeHintVisible by remember { mutableStateOf(false) }
     var lastPlayMode by remember { mutableStateOf(playMode) }
@@ -188,7 +192,7 @@ fun PlayerScreen(
     LaunchedEffect(playMode) {
         if (playMode == lastPlayMode) return@LaunchedEffect
         lastPlayMode = playMode
-        modeHint = playMode.label
+        modeHint = playModeLabel
         modeHintVisible = true
         delay(1400)
         modeHintVisible = false
@@ -641,7 +645,10 @@ fun PlayerScreen(
                         ) {
                             Icon(
                                 imageVector = playMode.icon,
-                                contentDescription = "播放模式：${playMode.label}",
+                                contentDescription = stringResource(
+                                    R.string.cd_play_mode,
+                                    playMode.displayName(),
+                                ),
                                 modifier = if (state.carMode) Modifier.size(34.dp) else Modifier,
                                 tint = if (playMode == PlayMode.SEQUENTIAL) scheme.onSurfaceVariant
                                 else scheme.primary,

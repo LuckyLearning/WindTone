@@ -41,7 +41,7 @@ import org.robolectric.annotation.GraphicsMode
  *     （`Surface(shadowElevation=…)` 是 Material3 对话框 / 底部弹层的通用写法）。
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34], qualifiers = "w360dp-h640dp-xhdpi")
+@Config(sdk = [34], qualifiers = "zh-w360dp-h640dp-xhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class LibraryDrawerTest {
 

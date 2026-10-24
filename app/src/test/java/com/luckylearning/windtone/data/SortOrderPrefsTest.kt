@@ -2,9 +2,10 @@ package com.luckylearning.windtone.data
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.state.LibraryView
 import com.luckylearning.windtone.ui.defaultSort
-import com.luckylearning.windtone.ui.labelFor
+import com.luckylearning.windtone.ui.labelRes
 import com.luckylearning.windtone.ui.sortOptions
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -144,17 +145,22 @@ class SortOrderPrefsTest {
         assertTrue(LibraryView.PLAYLIST.sortOptions.contains(SortOrder.PLAYLIST_ORDER))
     }
 
-    /** 同一个枚举在不同视图里叫不同名字：「按标题」在文件夹视图里其实是「按文件夹名」 */
+    /**
+     * 同一个枚举在不同视图里叫不同名字：「按标题」在文件夹视图里其实是「按文件夹名」。
+     *
+     * i18n 之后文案来自 `res/values-zh`，这里断言的是**资源映射**（枚举 → 资源 id），
+     * 与语言无关，也不依赖 Android 资源环境。
+     */
     @Test
     fun labelFollowsTheView() {
-        assertEquals("按文件夹名", SortOrder.TITLE.labelFor(LibraryView.FOLDER))
-        assertEquals("按专辑名", SortOrder.ALBUM.labelFor(LibraryView.ALBUM))
-        assertEquals("按歌手名", SortOrder.ARTIST.labelFor(LibraryView.ARTIST))
+        assertEquals(R.string.sort_folder_name, SortOrder.TITLE.labelRes(LibraryView.FOLDER))
+        assertEquals(R.string.sort_album_name, SortOrder.ALBUM.labelRes(LibraryView.ALBUM))
+        assertEquals(R.string.sort_artist_name, SortOrder.ARTIST.labelRes(LibraryView.ARTIST))
         // 视图不改变语义时用枚举自带的标签
-        assertEquals("按标题", SortOrder.TITLE.labelFor(LibraryView.SONGS))
+        assertEquals(R.string.sort_title, SortOrder.TITLE.labelRes(LibraryView.SONGS))
         assertFalse(
             "文件夹视图的「按标题」不该还是「按标题」",
-            SortOrder.TITLE.labelFor(LibraryView.FOLDER) == SortOrder.TITLE.label,
+            SortOrder.TITLE.labelRes(LibraryView.FOLDER) == R.string.sort_title,
         )
     }
 
