@@ -101,6 +101,10 @@ import kotlinx.coroutines.launch
  * 版式（v1.1.75 重构）：固定顶栏（返回 / 标题 / 汉堡 / 溢出菜单）+ 可滚动正文；
  * 未登录是居中 hero（渐变云徽 + 授权引导），已登录是账号卡 + 目录浏览。
  * 扫描 / 自检这类低频操作收进顶栏溢出菜单，目录浏览区只留高频动作。
+ *
+ * 返回语义（v1.1.77 定稿，用户拍板）：**顶栏返回键 = 直接退出云盘页**
+ * （回到曲库/抽屉层）；逐级回上级交给「上级」胶囊与系统返回手势/返回键
+ * （后者仍在子目录里拦截回上级，见下方 BackHandler）。
  */
 @Composable
 internal fun AliyunPanPage(
@@ -421,13 +425,10 @@ internal fun AliyunPanPage(
                 .fillMaxWidth()
                 .padding(start = 2.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
         ) {
-            IconButton(onClick = {
-                // 顶栏返回键与系统返回同一套语义：子目录先回上级，根目录才退整页
-                if (loggedIn && stack.size > 1) goUp() else onClose()
-            }) {
+            IconButton(onClick = onClose) {
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = if (loggedIn && stack.size > 1) "返回上级" else "返回",
+                    contentDescription = "返回",
                     tint = MaterialTheme.colorScheme.onBackground,
                 )
             }

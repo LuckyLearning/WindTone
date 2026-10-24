@@ -151,7 +151,9 @@ private fun DrawerPanel(
                 DrawerItem(
                     label = view.label,
                     icon = view.icon,
-                    selected = view == currentView,
+                    // 云盘页打开时曲库视图不再保持高亮（v1.1.77）：高亮唯一落在
+                    // 「在线音乐 → 阿里云盘」上，与实际停留的页面一致
+                    selected = view == currentView && !aliyunActive,
                     onClick = { onSelectView(view); onClose() },
                 )
             }
