@@ -53,6 +53,7 @@ object OnlineMediaCache {
     private const val LIMIT_PREFS = "online_media_prefs"
     private const val LIMIT_KEY = "max_bytes"
 
+    @androidx.annotation.OptIn(UnstableApi::class)
     private var evictor: AdjustableEvictor? = null
 
     private const val DIR_NAME = "online_media"
@@ -125,6 +126,7 @@ object OnlineMediaCache {
         applyLimit(context)
     }
 
+    @androidx.annotation.OptIn(UnstableApi::class)
     fun applyLimit(context: Context) {
         val cache = get(context) ?: return
         evictor?.trim(cache)
@@ -202,6 +204,7 @@ object OnlineMediaCache {
         return DefaultMediaSourceFactory(ParallelRoutingFactory(context.applicationContext, dataSource))
     }
 
+    @androidx.annotation.OptIn(UnstableApi::class)
     private fun httpFactory(
         userAgent: String,
         headers: Map<String, String> = emptyMap(),
@@ -216,6 +219,7 @@ object OnlineMediaCache {
         return factory
     }
 
+    @androidx.annotation.OptIn(UnstableApi::class)
     private fun cacheFactory(
         cache: SimpleCache,
         upstream: DataSource.Factory,
