@@ -3,8 +3,10 @@ package com.luckylearning.windtone.ui
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -104,6 +107,8 @@ internal fun AliyunPanPage(
     onPlay: (List<Song>, Int) -> Unit,
     onClose: () -> Unit,
     onOpenDrawer: () -> Unit,
+    /** 系统返回键拦截是否生效（抽屉开着时调用方会关掉它，让返回键优先收抽屉）—— v1.1.76 */
+    backEnabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -366,6 +371,15 @@ internal fun AliyunPanPage(
         }
     }
 
+    // 系统返回手势/返回键：在子目录里先逐级返回上级（标准文件浏览器的行为），
+    // 到根目录才退出整页。backEnabled=false（抽屉开着）时不注册，让抽屉的
+    // BackHandler 赢（BackHandler 后注册者优先）。
+    // 注意：只拦纯目录层级（stack.size > 1）；备份盘根目录「上级=资源库」
+    // 那一档是切盘不是回目录，不拦返回键，顶栏返回键直接退出。
+    BackHandler(enabled = backEnabled && loggedIn && stack.size > 1) {
+        goUp()
+    }
+
     LaunchedEffect(loggedIn) {
         if (!loggedIn) return@LaunchedEffect
         refreshAccount()
@@ -383,7 +397,22 @@ internal fun AliyunPanPage(
     Column(
         modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(MaterialTheme.colorScheme.background)
+            // 右滑开抽屉：与曲库列表同一套手势（v1.1.76 补齐；一级页原来只有汉堡键能开抽屉）。
+            // detectHorizontalDragGestures 自带水平 touch-slop 判定，纵向滚动自然赢下竞争。
+            .pointerInput(onOpenDrawer) {
+                var dragged = 0f
+                val threshold = 72.dp.toPx()
+                detectHorizontalDragGestures(
+                    onDragStart = { dragged = 0f },
+                    onDragCancel = { dragged = 0f },
+                    onDragEnd = {
+                        if (dragged >= threshold) onOpenDrawer()
+                        dragged = 0f
+                    },
+                    onHorizontalDrag = { _, amount -> dragged += amount },
+                )
+            },
     ) {
         // ------------------------------------------------ 固定顶栏
         Row(
@@ -392,10 +421,13 @@ internal fun AliyunPanPage(
                 .fillMaxWidth()
                 .padding(start = 2.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
         ) {
-            IconButton(onClick = onClose) {
+            IconButton(onClick = {
+                // 顶栏返回键与系统返回同一套语义：子目录先回上级，根目录才退整页
+                if (loggedIn && stack.size > 1) goUp() else onClose()
+            }) {
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "返回",
+                    contentDescription = if (loggedIn && stack.size > 1) "返回上级" else "返回",
                     tint = MaterialTheme.colorScheme.onBackground,
                 )
             }
@@ -786,73 +818,77 @@ private fun LoggedInBody(
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 6.dp),
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(AppVisual.WindGradient),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(AppIcons.Cloud, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    nickname.ifBlank { "阿里云盘账号" },
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    when {
-                        driveName.isNotBlank() -> "当前盘：$driveName"
-                        accountError != null -> "账号信息读取失败"
-                        else -> "正在读取账号信息…"
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            IconButton(onClick = onRefresh) {
-                Icon(
-                    Icons.Filled.Refresh,
-                    contentDescription = "刷新当前目录",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        // 盘切换：只有账号确实有两个盘时才出现
-        if (drives.size > 1) {
+        // ⚠️ Surface 的 content 是 Box 语义：直接并列两个 Row 会叠在一起
+        // （v1.1.75 真机截图实锤：盘切换胶囊盖住了昵称）。必须套 Column。
+        Column {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
             ) {
-                drives.forEach { (name, id) ->
-                    val selected = id == driveId
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(
-                                if (selected) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.surfaceContainerHighest,
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(AppVisual.WindGradient),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(AppIcons.Cloud, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        nickname.ifBlank { "阿里云盘账号" },
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        when {
+                            driveName.isNotBlank() -> "当前盘：$driveName"
+                            accountError != null -> "账号信息读取失败"
+                            else -> "正在读取账号信息…"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                IconButton(onClick = onRefresh) {
+                    Icon(
+                        Icons.Filled.Refresh,
+                        contentDescription = "刷新当前目录",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            // 盘切换：只有账号确实有两个盘时才出现
+            if (drives.size > 1) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
+                ) {
+                    drives.forEach { (name, id) ->
+                        val selected = id == driveId
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(
+                                    if (selected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.surfaceContainerHighest,
+                                )
+                                .clickable(enabled = !selected) { onSwitchDrive(id, name) }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                        ) {
+                            Text(
+                                name,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (selected) MaterialTheme.colorScheme.onPrimary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            .clickable(enabled = !selected) { onSwitchDrive(id, name) }
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                    ) {
-                        Text(
-                            name,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (selected) MaterialTheme.colorScheme.onPrimary
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        }
                     }
                 }
             }

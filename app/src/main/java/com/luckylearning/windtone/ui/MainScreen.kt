@@ -541,6 +541,9 @@ fun MainScreen(
                         onPlay = playerVm::playQueue,
                         onClose = { showAliyun = false },
                         onOpenDrawer = { drawerOpen = true },
+                        // 抽屉开着时云盘页不拦返回键：返回键优先收抽屉（云盘页在子目录
+                        // 里会拦返回逐级回上级，两个 BackHandler 后注册者优先，必须让位）
+                        backEnabled = !drawerOpen,
                         modifier = Modifier.weight(1f),
                     )
                 } else {
