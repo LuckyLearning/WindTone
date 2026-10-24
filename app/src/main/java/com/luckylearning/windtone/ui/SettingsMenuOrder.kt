@@ -5,15 +5,20 @@ import android.content.Context
 /** 设置主页分类卡的默认顺序与「新页面插回默认位置」的合并。 */
 internal object SettingsMenuOrder {
 
+    /**
+     * 主页分类卡默认顺序（v1.1.80 重排）。
+     *
+     * 这一版把「悬浮歌词」「更新」「在线播放」三张卡降级成上层页面里的入口行，
+     * 「调整菜单顺序」收进实验室 —— 主页回到 **6 张卡、一屏放下**。
+     * 老用户存档里那三个已不是分类的 id 会在 [merge] 里被过滤掉。
+     */
     val DEFAULT = listOf(
         "APPEARANCE",
         "PLAYBACK",
         "LYRICS",
-        "OVERLAY",
         "LIBRARY",
-        "ONLINE_HUB",
-        "UPDATE",
         "DIAGNOSTICS",
+        "LAB",
     )
 
     fun merge(saved: List<String>, defaultIds: List<String> = DEFAULT): List<String> {

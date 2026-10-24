@@ -107,7 +107,6 @@ import kotlin.math.roundToInt
 @Composable
 internal fun SettingsRootPage(
     player: PlayerUiState,
-    update: UpdateUiState,
     minSongDurationSec: Int,
     pages: List<SettingsPage>,
     onNavigate: (SettingsPage) -> Unit,
@@ -128,20 +127,9 @@ internal fun SettingsRootPage(
             )
             SettingsPage.LYRICS -> CategoryRow(
                 title = "歌词",
-                subtitle = "字号 ${"%.1f".format(player.lyricScale)}x · 双语歌词",
+                subtitle = "字号 ${"%.1f".format(player.lyricScale)}x · 双语歌词 · 桌面悬浮歌词",
                 icon = AppIcons.LyricsBubble,
                 onClick = { onNavigate(SettingsPage.LYRICS) },
-            )
-            SettingsPage.OVERLAY -> CategoryRow(
-                title = "悬浮歌词",
-                subtitle = if (player.lyricOverlay) {
-                    "已开启 · 字号 ${player.lyricOverlayTextSp}sp · " +
-                        (if (player.lyricOverlayFullHeight) "全屏歌词" else "单条字幕")
-                } else {
-                    "桌面悬浮显示当前歌词行 · 样式与位置自由调"
-                },
-                icon = AppIcons.Subtitles,
-                onClick = { onNavigate(SettingsPage.OVERLAY) },
             )
             SettingsPage.LIBRARY -> CategoryRow(
                 title = "音乐库",
@@ -153,34 +141,23 @@ internal fun SettingsRootPage(
                 icon = AppIcons.LibraryMusic,
                 onClick = { onNavigate(SettingsPage.LIBRARY) },
             )
-            SettingsPage.ONLINE_HUB -> CategoryRow(
-                title = "在线播放",
-                subtitle = "在线歌单 · 播放缓存 · 收听报告（阿里云盘已升为抽屉一级入口）",
-                icon = AppIcons.Cloud,
-                onClick = { onNavigate(SettingsPage.ONLINE_HUB) },
-            )
-            SettingsPage.UPDATE -> CategoryRow(
-                title = "更新",
-                subtitle = "检查更新 · 自动检查 · 下载线路",
-                icon = AppIcons.Cloud,
-                onClick = { onNavigate(SettingsPage.UPDATE) },
-                trailing = if (update.info != null) "有新版本" else "v${update.currentVersion}",
-            )
+            // v1.1.80：更新从独立分类卡降为「关于与诊断」里的入口行
             SettingsPage.DIAGNOSTICS -> CategoryRow(
                 title = "关于与诊断",
-                subtitle = "版本信息 · 播放统计 · 隐私说明",
+                subtitle = "版本信息 · 检查更新 · 播放统计 · 隐私说明",
                 icon = AppIcons.Info,
                 onClick = { onNavigate(SettingsPage.DIAGNOSTICS) },
+            )
+            // v1.1.80：实验室功能 —— 实验性入口先放这里，确认稳定后再移出去
+            SettingsPage.LAB -> CategoryRow(
+                title = "实验室功能",
+                subtitle = "在线播放 · 调整菜单顺序（实验性功能，稳定后再移出）",
+                icon = AppIcons.Science,
+                onClick = { onNavigate(SettingsPage.LAB) },
             )
             else -> Unit
         }
     }
-    ActionRow(
-        title = "调整菜单顺序",
-        subtitle = "长按无效果时用上移、下移排列上面这些分类",
-        onClick = { onNavigate(SettingsPage.MENU_ORDER) },
-        chevron = true,
-    )
 }
 
 // ================================================================ 子页：外观

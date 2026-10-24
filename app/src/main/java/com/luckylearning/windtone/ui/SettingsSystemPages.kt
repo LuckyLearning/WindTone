@@ -3,8 +3,6 @@ package com.luckylearning.windtone.ui
 import android.content.Context
 import android.widget.Toast
 import com.luckylearning.windtone.data.formatByteSize
-import com.luckylearning.windtone.playback.CachePrefetcher
-import com.luckylearning.windtone.playback.parallel.ParallelDownloadRegistry
 import com.luckylearning.windtone.data.BootStatus
 import com.luckylearning.windtone.data.BootStatusText
 import com.luckylearning.windtone.data.DataMaintenance
@@ -156,6 +154,10 @@ internal fun SettingsDiagnosticsPage(
     onTestBootPlayback: () -> Unit,
     /** 调试分区解锁开关（v1.1.31；关于连点 5 次打开，分区内开关可关回去） */
     onDebugUnlocked: (Boolean) -> Unit,
+    /** 打开「更新」子页（v1.1.80：更新不再是主页分类卡，降级为「关于」里的一行） */
+    update: UpdateUiState,
+    autoCheckUpdate: Boolean,
+    onOpenUpdate: () -> Unit,
 ) {
     val context = LocalContext.current
     val version = remember {
@@ -496,32 +498,13 @@ internal fun SettingsDiagnosticsPage(
             ) { Text("清空日志") }
         }
 
-        // ------------------------------------------------ 后台预取
-    val prefetchStatus by CachePrefetcher.status.collectAsStateWithLifecycle()
-    ActionRow(
-        title = "后台预取",
-        subtitle = "当前曲缓冲领先 20 秒后，用 2 个连接把接下来两首先拉进缓存（每个连接限速 320 KB/s）；" +
-            "点这一行可立刻停止",
-        trailing = prefetchStatus,
-        onClick = {
-            CachePrefetcher.cancel()
-            Toast.makeText(context, "已停止后台预取", Toast.LENGTH_SHORT).show()
-        },
-    )
+        // v1.1.80：删掉「后台预取 / 并行分片」两行。
+        // 功能本体照旧在跑（预取 + 5 段下载都由引擎自动决定），但这两行只是把内部状态
+        // 摆给用户看、外加一个「停止预取」的手动按钮 —— 属于调试残留，
+        // 放在「关于与诊断」里既解决不了问题，还容易被误当成可调开关。
+        // 排障需要时看 Logcat（tag: CachePrefetcher / ParallelDownload）即可。
 
-    // 并行分片（v1.1.47）：网盘按单连接限速，所以当前这一首会切成 5 段同时拉。
-    // 状态放在这里是因为它的失败方式很「安静」：服务器不支持 Range 就自动退回单连接，
-    // 用户只会觉得「还是慢」，看不到任何错误。
-    val parallelStatus by ParallelDownloadRegistry.status.collectAsStateWithLifecycle()
-    ActionRow(
-        title = "并行分片",
-        subtitle = "当前播放的在线歌曲按 5 段同时下载（不限速）；服务器不支持分段时自动退回单连接。" +
-            "只在播放当前曲时生效，切歌即换人",
-        trailing = parallelStatus,
-        onClick = { },
-    )
-
-    // ------------------------------------------------ 开机自启
+        // ------------------------------------------------ 开机自启
         // 这条链路只有真车能验（开机广播是系统保护广播，adb 发不出去），而失败表现
         // 全是「开机后什么都没发生」。所以把广播是否到达、决策是什么、起播结果原样摆出来 ——
         // 用户看一眼就能知道是「系统没给广播」还是「给了但没播起来」。
@@ -588,6 +571,19 @@ internal fun SettingsDiagnosticsPage(
             "CPU 架构" to UpdateChecker.primaryAbiLabel().ifBlank { "—" },
             "更新来源" to "${BuildConfig.RELEASE_OWNER}/${BuildConfig.RELEASE_REPO}",
         )
+    )
+    // v1.1.80：更新相关整体收进「关于」——版本号与「有没有新版本」本来就该在同一屏，
+    // 以前分成两张主页卡，用户先看版本再去找更新时间多一跳。
+    ActionRow(
+        title = "检查更新",
+        subtitle = when {
+            update.info != null -> "有新版本 v${update.info.version} 可下载"
+            autoCheckUpdate -> "检查更新 · 自动检查已开启"
+            else -> "检查更新 · 自动检查已关闭"
+        },
+        onClick = onOpenUpdate,
+        trailing = if (update.info != null) "有新版本" else "",
+        chevron = true,
     )
     Text(
         "歌单、收藏、播放统计、歌词等全部数据都只保存在本机；" +

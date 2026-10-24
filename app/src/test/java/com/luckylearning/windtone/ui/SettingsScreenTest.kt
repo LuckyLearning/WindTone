@@ -182,17 +182,74 @@ class SettingsScreenTest {
         compose.waitForIdle()
     }
 
-    /** 主页分类卡，含在线播放。靠后的卡需要滚出来。 */
+    /**
+     * v1.1.80：悬浮歌词不再是主页分类卡，收进了「歌词」子页。
+     *
+     * 路径与真实用户一致：主页 → 歌词 → 桌面悬浮歌词。
+     */
+    private fun openOverlayPage() {
+        compose.onNodeWithText("歌词").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("桌面悬浮歌词").performScrollTo().performClick()
+        compose.waitForIdle()
+    }
+
+    /** v1.1.80：在线播放收进了实验室功能。 */
+    private fun openOnlinePage() {
+        compose.onNodeWithText("实验室功能").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("在线播放").performScrollTo().performClick()
+        compose.waitForIdle()
+    }
+
+    /**
+     * v1.1.80 三级结构：歌词 → 悬浮歌词，返回键逐级退（不是一步跳回主页）。
+     *
+     * 这一条锁的是 `SettingsPage.parent()`：新增嵌套页面时最容易犯的错就是
+     * 所有子页的上一级都写 ROOT —— 用户从歌词点进去，返回就直接被弹到主页。
+     */
     @Test
-    fun rootShowsSevenCategoryCards() {
+    fun overlayBackReturnsToLyricsPageNotRoot() {
+        render(player = PlayerUiState(lyricOverlay = true))
+        openOverlayPage()
+        compose.onNodeWithText("全屏高度").performScrollTo().assertIsDisplayed()
+
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.waitForIdle()
+        // 回到「歌词」页：播放页歌词那段还在
+        compose.onNodeWithText("播放页歌词").performScrollTo().assertIsDisplayed()
+        // 再退一次才回主页（分类卡出现）
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("主题取色 · 车载模式").assertIsDisplayed()
+    }
+
+    /** v1.1.80：更新从主页卡降级为「关于与诊断」里的一行，点进去仍是原来的更新页。 */
+    @Test
+    fun aboutPageOpensUpdatePage() {
         render()
-        listOf("外观", "播放", "歌词", "悬浮歌词", "音乐库", "在线播放", "更新", "关于与诊断", "调整菜单顺序").forEach {
+        compose.onNodeWithText("关于与诊断").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("检查更新").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("启动时自动检查更新").performScrollTo().assertIsDisplayed()
+    }
+
+    /** 主页分类卡（v1.1.80：6 张，一屏放下）。 */
+    @Test
+    fun rootShowsSixCategoryCards() {
+        render()
+        listOf("外观", "播放", "歌词", "音乐库", "关于与诊断", "实验室功能").forEach {
             compose.onNodeWithText(it).performScrollTo().assertIsDisplayed()
         }
         // 分类卡与子页里的 ActionRow 的区别就在这一行摘要（连摘要一起断言，
         // 免得以后退回成没有摘要的普通 ActionRow 也照样"通过"）
         compose.onNodeWithText("主题取色 · 车载模式").assertIsDisplayed()
         compose.onNodeWithText("格式与容量 · 过滤 < 60 秒").assertIsDisplayed()
+        // 降级成入口行的三个分类不许再出现在主页
+        listOf("悬浮歌词", "在线播放", "更新", "调整菜单顺序").forEach {
+            compose.onNodeWithText(it).assertDoesNotExist()
+        }
     }
 
     /** 点「外观」→ 进外观子页（主题 / 车载两段），主页的卡整批让位 */
@@ -303,8 +360,7 @@ class SettingsScreenTest {
 
         compose.onNodeWithContentDescription("返回").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText("悬浮歌词").performClick()
-        compose.waitForIdle()
+        openOverlayPage()
         expandOverlayAdvanced()
         // 悬浮歌词子页挂 ↺ 的两处：①开关本身（开着 ≠ 出厂默认）②「悬浮歌词文字颜色」
         compose.onAllNodesWithContentDescription("恢复默认").assertCountEquals(2)
@@ -337,8 +393,7 @@ class SettingsScreenTest {
         render(player = PlayerUiState(lyricOverlay = false))
 
         // v1.1.52 拆页后这些项都在「悬浮歌词」子页
-        compose.onNodeWithText("悬浮歌词").performClick()
-        compose.waitForIdle()
+        openOverlayPage()
 
         listOf(
             "全屏高度",
@@ -369,8 +424,7 @@ class SettingsScreenTest {
         render(player = PlayerUiState(lyricOverlay = true, lyricOverlayFullHeight = false))
 
         // v1.1.52：这些项从「歌词」子页拆到了「悬浮歌词」子页
-        compose.onNodeWithText("悬浮歌词").performClick()
-        compose.waitForIdle()
+        openOverlayPage()
         expandOverlayAdvanced()
 
         listOf(
@@ -401,8 +455,7 @@ class SettingsScreenTest {
     fun overlayLinesDialogOffersAutoFit() {
         render(player = PlayerUiState(lyricOverlay = true, lyricOverlayFullHeight = false))
 
-        compose.onNodeWithText("悬浮歌词").performClick()
-        compose.waitForIdle()
+        openOverlayPage()
         expandOverlayAdvanced()
 
         compose.onNodeWithText("悬浮歌词行数", substring = true).performScrollTo().performClick()
@@ -427,8 +480,7 @@ class SettingsScreenTest {
                 lyricOverlayFullHeight = false,
             ),
         )
-        compose.onNodeWithText("悬浮歌词").performClick()
-        compose.waitForIdle()
+        openOverlayPage()
         expandOverlayAdvanced()
 
         listOf("高度 自动", "水平位置", "垂直位置", "选择背景色", "背景颜色", "背景不透明度")
@@ -447,8 +499,7 @@ class SettingsScreenTest {
     fun overlayBackgroundIsAlwaysCustomizable() {
         render(player = PlayerUiState(lyricOverlay = true, lyricOverlayFullHeight = false))
 
-        compose.onNodeWithText("悬浮歌词").performClick()
-        compose.waitForIdle()
+        openOverlayPage()
         expandOverlayAdvanced()
 
         compose.onNodeWithText("背景不透明度", substring = true).performScrollTo().assertIsDisplayed()
@@ -463,8 +514,7 @@ class SettingsScreenTest {
     fun overlayFontSizeIsASliderInSp() {
         render(player = PlayerUiState(lyricOverlay = true, lyricOverlayTextSp = 28))
 
-        compose.onNodeWithText("悬浮歌词").performClick()
-        compose.waitForIdle()
+        openOverlayPage()
         expandOverlayAdvanced()
 
         compose.onNodeWithText("正文字号 28sp", substring = true).performScrollTo().assertIsDisplayed()
@@ -508,8 +558,7 @@ class SettingsScreenTest {
     @Test
     fun onlinePagePicksCacheInDialogAndOpensReport() {
         render()
-        compose.onNodeWithText("在线播放").performScrollTo().performClick()
-        compose.waitForIdle()
+        openOnlinePage()
 
         compose.onNodeWithText("缓存上限").performScrollTo().performClick()
         compose.waitForIdle()
@@ -596,8 +645,7 @@ class SettingsScreenTest {
 
         compose.onNodeWithContentDescription("返回").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText("悬浮歌词").performClick()
-        compose.waitForIdle()
+        openOverlayPage()
         expandOverlayAdvanced()
         compose.onNodeWithText("不显示悬浮窗的应用").performScrollTo().assertExists()
     }

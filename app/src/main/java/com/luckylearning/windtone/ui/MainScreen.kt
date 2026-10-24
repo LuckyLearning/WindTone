@@ -212,6 +212,8 @@ fun MainScreen(
     var showQueue by remember { mutableStateOf(false) }
     var showScanScope by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    // v1.1.80：设置页打开时落在哪一页。默认主页；播放页「更多设置…」深链到悬浮歌词。
+    var settingsEntryPage by remember { mutableStateOf(SettingsPage.ROOT) }
     var showReport by remember { mutableStateOf(false) }
     var showDuplicates by remember { mutableStateOf(false) }
     // 曲库格式与容量（v1.1.17）：纯本地统计，进入时现算，不落库
@@ -529,7 +531,7 @@ fun MainScreen(
                     CarNavRail(
                         current = library.view,
                         onSelect = lib::setView,
-                        onOpenSettings = { showSettings = true },
+                        onOpenSettings = { settingsEntryPage = SettingsPage.ROOT; showSettings = true },
                     )
                 }
                 Column(Modifier.weight(1f)) {
@@ -652,7 +654,7 @@ fun MainScreen(
                 aliyunActive = showAliyun,
                 onOpenAliyun = { showAliyun = true },
                 onOpenScanScope = { showScanScope = true },
-                onOpenSettings = { showSettings = true },
+                onOpenSettings = { settingsEntryPage = SettingsPage.ROOT; showSettings = true },
                 onClose = { drawerOpen = false },
                 modifier = Modifier.statusBarsPadding(),
             )
@@ -674,7 +676,7 @@ fun MainScreen(
                     onShowAudioInfo = { player.current?.let { infoSong = it; playerVm.inspectAudio(it) } },
                     onExportLyrics = { uri -> playerVm.exportLyrics(uri) },
                     // 悬浮窗样式速选面板的「更多设置…」：直接掀开设置覆盖层
-                    onOpenSettings = { showSettings = true },
+                    onOpenSettings = { settingsEntryPage = SettingsPage.OVERLAY; showSettings = true },
                 )
             }
 
@@ -699,6 +701,7 @@ fun MainScreen(
                     autoCheckUpdate = autoCheckUpdateOn,
                     crashLogCount = crashLogCount,
                     crashLogText = crashLogText,
+                    initialPage = settingsEntryPage,
                     onClose = {
                         showSettings = false
                         crashLogText = null

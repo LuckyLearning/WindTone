@@ -93,7 +93,7 @@ import kotlin.math.roundToInt
  * 分层与 chevron 规范见 docs/ui/index.html「四、设置页」：只有 [CategoryRow] 与
  * [ActionRow] 能带右箭头，[OptionRow]（弹层行）依旧是「左侧图标 + 选中 ✓、无箭头」。
  */
-internal enum class SettingsPage(val title: String) {
+enum class SettingsPage(val title: String) {
     ROOT("设置"),
 
     // v1.1.3 二次重构：主页只放六张二级分类入口卡，原来平铺在主页的
@@ -123,6 +123,30 @@ internal enum class SettingsPage(val title: String) {
 
     /** 调整主页分类卡顺序，本身不是一张分类卡 */
     MENU_ORDER("调整菜单顺序"),
+
+    /**
+     * 实验室功能（v1.1.80）。
+     *
+     * 口径：**实验性 / 尚未定型的入口先放这里**，跑一段时间确认稳定后再移到正式位置。
+     * 目前收纳「在线播放」（缓存上限、收听报告仍在打磨）与「调整菜单顺序」。
+     */
+    LAB("实验室功能"),
+}
+
+/**
+ * 子页的上一级（v1.1.80）。
+ *
+ * 起因：悬浮歌词收进「歌词」、更新收进「关于」、在线播放与菜单顺序收进「实验室」后，
+ * 设置页出现了**三级**（主页 → 分类 → 子项）。返回键若一律回主页，
+ * 从歌词点进悬浮歌词再返回就会跳掉一层，用户得重新找。
+ */
+internal fun SettingsPage.parent(): SettingsPage = when (this) {
+    SettingsPage.OVERLAY -> SettingsPage.LYRICS
+    SettingsPage.UPDATE -> SettingsPage.DIAGNOSTICS
+    SettingsPage.ONLINE_HUB, SettingsPage.MENU_ORDER -> SettingsPage.LAB
+    SettingsPage.ONLINE -> SettingsPage.ONLINE_HUB
+    SettingsPage.BAIDU -> SettingsPage.LIBRARY
+    else -> SettingsPage.ROOT
 }
 
 /**
@@ -165,6 +189,13 @@ fun SettingsScreen(
     downloadRoute: DownloadRoute,
     crashLogCount: Int,
     crashLogText: String?,
+    /**
+     * 打开时落在哪一页（v1.1.80）。
+     *
+     * 播放页「悬浮窗样式 → 更多设置…」直接落到「悬浮歌词」页 —— 悬浮歌词收进歌词页
+     * 之后从主页走过去要三层，深链一下省两次点击。默认仍是主页。
+     */
+    initialPage: SettingsPage = SettingsPage.ROOT,
     onClose: () -> Unit,
     onDynamicTheme: (Boolean) -> Unit,
     onCarMode: (Boolean) -> Unit,
@@ -280,7 +311,7 @@ fun SettingsScreen(
 ) {
 
     // 当前处于哪一层：主页面 / 音乐库 / 更新 / 关于与诊断
-    var page by remember { mutableStateOf(SettingsPage.ROOT) }
+    var page by remember { mutableStateOf(initialPage) }
     var showOnlineReport by remember { mutableStateOf(false) }
     val menuContext = LocalContext.current
     val menuStore = remember { SettingsMenuStore(menuContext) }
@@ -322,8 +353,8 @@ fun SettingsScreen(
         return
     }
 
-    // 子页里按返回键先回主页面（本处理器在子页才启用，主页面时交给外层关闭设置页）
-    BackHandler(enabled = page != SettingsPage.ROOT) { page = SettingsPage.ROOT }
+    // 子页里按返回键先回上一级（v1.1.80 起是逐级退：悬浮歌词 → 歌词 → 主页）
+    BackHandler(enabled = page != SettingsPage.ROOT) { page = page.parent() }
     // 车载「完整设置」在主页时，返回键退回车载页（注册在子页处理器之后，优先命中）
     BackHandler(enabled = player.carMode && fullSettings && page == SettingsPage.ROOT) {
         fullSettings = false
@@ -377,7 +408,7 @@ fun SettingsScreen(
                 IconButton(
                     onClick = {
                         when {
-                            page != SettingsPage.ROOT -> page = SettingsPage.ROOT
+                            page != SettingsPage.ROOT -> page = page.parent()
                             // 车载：从「完整设置」退回车载设置页，而不是直接关掉整个设置
                             player.carMode && fullSettings -> fullSettings = false
                             else -> onClose()
@@ -448,7 +479,6 @@ fun SettingsScreen(
                 when (page) {
                     SettingsPage.ROOT -> SettingsRootPage(
                         player = player,
-                        update = update,
                         minSongDurationSec = minSongDurationSec,
                         pages = SettingsMenuOrder.pages(menuOrder),
                         onNavigate = { page = it },
@@ -475,6 +505,7 @@ fun SettingsScreen(
                         onLyricScale = onLyricScale,
                         onLyricTapSeeks = onLyricTapSeeks,
                         onLyricBilingual = onLyricBilingual,
+                        onOpenOverlay = { page = SettingsPage.OVERLAY },
                     )
 
                     SettingsPage.OVERLAY -> SettingsOverlayPage(
@@ -568,6 +599,15 @@ fun SettingsScreen(
                         onLyricOverlayHiddenApps = onLyricOverlayHiddenApps,
                         onTestBootPlayback = onTestBootPlayback,
                         onDebugUnlocked = onDebugUnlocked,
+                        update = update,
+                        autoCheckUpdate = autoCheckUpdate,
+                        onOpenUpdate = { page = SettingsPage.UPDATE },
+                    )
+
+                    // v1.1.80：实验室功能（在线播放 / 调整菜单顺序先收在这里）
+                    SettingsPage.LAB -> SettingsLabPage(
+                        onOpenOnline = { page = SettingsPage.ONLINE_HUB },
+                        onOpenMenuOrder = { page = SettingsPage.MENU_ORDER },
                     )
 
                     SettingsPage.UPDATE -> SettingsUpdatePage(

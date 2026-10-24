@@ -4,6 +4,7 @@ import android.content.Context
 import com.luckylearning.windtone.data.DataMaintenance
 import com.luckylearning.windtone.data.DownloadRoute
 import com.luckylearning.windtone.data.SettingsDefaults
+import com.luckylearning.windtone.data.overlayPresetLabel
 import com.luckylearning.windtone.data.UpdateChecker
 import com.luckylearning.windtone.overlay.LyricOverlayBridge
 import com.luckylearning.windtone.overlay.LyricOverlayBus
@@ -12,6 +13,7 @@ import com.luckylearning.windtone.overlay.OverlaySnapshot
 import com.luckylearning.windtone.state.LibraryUiState
 import com.luckylearning.windtone.state.PlayerUiState
 import com.luckylearning.windtone.state.UpdateUiState
+import com.luckylearning.windtone.state.overlayPresetParams
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
@@ -114,6 +116,8 @@ internal fun SettingsLyricsPage(
     /** 点歌词行是否跳转（默认关，v1.1.23） */
     onLyricTapSeeks: (Boolean) -> Unit,
     onLyricBilingual: (Int) -> Unit,
+    /** 打开「桌面悬浮歌词」子页（v1.1.80：它不再与「歌词」平级，收进本页） */
+    onOpenOverlay: () -> Unit = {},
     /** 全屏模式的宽度（屏宽百分比，30..100）—— v1.1.20，与单条字幕的宽度分开 */
     /** 全屏模式的水平位置（余量百分比：0 最左 / 50 居中 / 100 最右） */
     /** 标题字号：正文的百分比（40..100，v1.1.51 取代原来的三档） */
@@ -162,6 +166,22 @@ internal fun SettingsLyricsPage(
     //    播放页现在只有「当前行整行高亮」——靠主题色 + 字号 + 字重区分，没有可调项。
     //    重开后两个键（`lyric_word_by_word` / `lyric_sung_color`）会留在老用户
     //    的 SharedPreferences 里，是刻意不清理的死键，别再当 bug 排查。
+
+    // v1.1.80：悬浮歌词收进「歌词」页。
+    // 口径（用户）：它只是**歌词的一种显示位置**（屏幕上 vs 桌面上），不是并列的另一类设置；
+    // 主页也因此收回一张卡。进入后子页标题仍是「悬浮歌词」，返回逐级退回本页。
+    SectionTitle("悬浮歌词")
+    val presetNow = overlayPresetLabel(player.overlayPresetParams())
+    ActionRow(
+        title = "桌面悬浮歌词",
+        subtitle = when {
+            !player.lyricOverlay -> "关闭中 · 退到桌面 / 导航页后在最上层显示当前歌词行"
+            player.lyricOverlayFullHeight -> "已开启 · 全屏歌词 · 样式：$presetNow"
+            else -> "已开启 · 单条字幕 · 样式：$presetNow"
+        },
+        onClick = onOpenOverlay,
+        chevron = true,
+    )
 
     // v1.1.3：三个子页入口行已升级为主页的六张分类卡（见本文件开头的
     // SettingsPage.ROOT 分支）—— 原来这里只有音乐库 / 更新 / 关于与诊断

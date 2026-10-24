@@ -204,7 +204,7 @@ class CarSettingsTest {
     @Test
     fun phoneModeKeepsSixCategoryCards() {
         render(player = PlayerUiState(carMode = false))
-        listOf("外观", "播放", "歌词", "音乐库", "更新", "关于与诊断").forEach {
+        listOf("外观", "播放", "歌词", "音乐库", "关于与诊断", "实验室功能").forEach {
             compose.onNodeWithText(it).assertIsDisplayed()
         }
         compose.onAllNodesWithText("播放速度").assertCountEquals(0)
