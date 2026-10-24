@@ -358,13 +358,18 @@ ui/                       ── 展示层 ──
 
 ```
 res/
-├─ values/            strings.xml（app_name = WindTone）、themes.xml（Theme.MusicPlayer）
-├─ values-zh/         strings.xml（app_name = 听风）
+├─ values/            **英文兜底文案** strings.xml（app_name = WindTone）、themes.xml（Theme.MusicPlayer）
+├─ values-zh/         中文 strings.xml（app_name = 听风）
 ├─ values-night/      深色主题
 ├─ drawable/ layout/  图标、小组件布局
 ├─ mipmap-*/          启动图标（含 anydpi-v26 自适应图标）
 └─ xml/               file_paths.xml（FileProvider 路径）、music_widget_info.xml
 ```
+
+> **⚠️ 两个桶的语义别搞反（2026-10-24 起的硬约定）**：`values/` 是**英文兜底**，不是"中文默认"。
+> Android 的解析规则是「当前语言 → `values`」，所以**任何一条文案都必须在 `values/` 里存在英文值**，
+> 只在 `values-zh/` 里定义会让英文设备直接 `NotFoundException` 崩溃。加语言 = 新增 `values-xx/`，代码一行不改。
+> 细则见 §10 第 17 条。
 
 ---
 
@@ -1217,6 +1222,20 @@ WindTone-v{版本}-universal.apk      # 拿不准架构时的兜底
     - **「检查更新」只在设置 → 更新**：原先抽屉与顶栏「⋮」菜单各挂一份，都已删。顶栏「⋮」菜单从此**只放就地动作**（扫描范围 / 重扫 / 导入 / 重匹配 .lrc / 深度扫描 / 收听报告），不放跳转项。
     - 这三处 `LibraryHeader` / `LibraryDrawer` 的 `onOpenSettings`、`onCheckUpdate` 参数已随之删除；`LibraryDrawerTest` 里有两条对照测试锁住这个口径（`showsBrandAndBothGroups` 只列 7 项、`checkUpdateIsNotInDrawer` 断言抽屉里不存在「检查更新」）。
 
+17. **文案一律走资源，不再写死在 Compose 里（2026-10-24 起，新代码硬性要求）**。原「9.3 第二步不做」已被用户推翻。
+    - **两个桶**：`res/values/strings.xml` = **英文兜底**（每条都必须在，否则英文设备 `NotFoundException`）；
+      `res/values-zh/strings.xml` = 中文。**新增语言只加 `values-xx/`**，Kotlin 一行不改。
+    - **计数用 `<plurals>`**（英语要区分单复数，中文只有 `other`），插值用 `%1$d` / `%1$s`，不要用字符串拼接。
+    - **枚举标签不写在枚举里**：`state/UiState.kt` 的 `LibraryView` / `SortOrder`、`data/Prefs.kt` 的 `PlayMode` 等，
+      一律通过 `ui/UiText.kt` 的 `labelRes()`（**纯映射，JVM 单测可断言**）+ `displayName()`（`@Composable`，内部 `stringResource`）取文案。
+      数据层从此**不持有界面文案**——这是能加语言的关键解耦。
+    - ⚠️ `stringResource` 是 `@Composable`，**不能**在 `buildString {}` / `ifBlank {}` / `LaunchedEffect` / `remember` 回调里调用，
+      必须先求值成局部 `val` 再传进去（踩过的坑，见 §12）。
+    - **改造粒度按文件**：一个 Compose 文件要么整块改造，要么先不动，不做"同一文件里一半资源一半字面量"。
+    - **测试适配**：资源化后 Robolectric 默认 en-US，断言中文的 UI 测试要给 `@Config` 加语言限定（如 `qualifiers = "zh-w360dp-h640dp-xhdpi"`）；
+      断言标签文案的纯 JVM 测试改为断言 `labelRes()` 的**资源 id**，与语言无关。
+    - **进度**：第 1 批（`LibraryHeader` / `LibraryDrawer` / 播放模式标签）✅，其余按模块分批，未改造模块保持原状不算违规。
+
 ---
 
 ## 11. 常见任务手册
@@ -1232,6 +1251,8 @@ WindTone-v{版本}-universal.apk      # 拿不准架构时的兜底
 3. `ui/SettingsScreen.kt`：在**对应页**（`page == SettingsPage.XXX`）的对应 `SectionTitle` 区块下加 `SwitchRow` / `SliderRow` / `ActionRow`，通过参数传入回调。
    - `SwitchRow` 的描述太长（超过约 30 字）时，副标题压成一行要点，详细说明挂到 `onInfo`（标题右侧的 `?` 图标 → 弹窗）。
    - 新增入口行用 `ActionRow(title, subtitle, onClick, trailing = 当前值摘要, chevron = true)`（chevron 仅给"进入另一个界面"的行，见 §10 第 14 条）。
+   - **新文案一律落资源**：标题 / 副标题 / 弹窗说明同时写进 `res/values/strings.xml`（英文）与 `res/values-zh/strings.xml`（中文），
+     行里用 `stringResource(R.string.xxx)`。**不要**为省事直接写中文字面量（见 §10 第 17 条）。
 4. 若 `SettingsScreen` 参数变了，同步改 `MainScreen.kt` 里的调用点。
 5. **出厂默认值写进 `SettingsDefaults`（`data/Prefs.kt`）**，并给该行挂 `onReset`（见 §11.14-①）。
    ⚠️ 只在 getter 里写默认值是不够的：那样「恢复默认」写回的值与「首次安装」拿到的值会漂移，
@@ -1844,6 +1865,35 @@ launcher 应用列表 + 搜索 + 图标 + 手动贴包名，`Drawable→Bitmap` 
 已在名单的显示「已在名单」并禁用。查包名 → 加名单的动线因此全在一屏内完成。
 测试：`OverlayVisibilityTest`（4 条新增）/ `ForegroundAppStateTest`（上报去重 + 门控 + 日志纯函数）/ `LayoutContractTest`（manifest 声明）/ `SettingsScreenTest`。
 
+### 11.16 新增一条文案 / 加一种语言（i18n 流程，2026-10-24 起）
+
+**新增一条文案（最常见）**：
+
+1. `res/values/strings.xml` 加**英文**值 —— 这一条是兜底，**不能省**（英文设备缺它会 `NotFoundException`）。
+2. `res/values-zh/strings.xml` 加**中文**值，**key 必须完全一致**。
+3. UI 里用 `stringResource(R.string.xxx)`；带参数就写 `%1$s` / `%1$d`（不要在 Kotlin 里拼字符串，语序因语言而异）。
+   计数类用 `<plurals>` + `pluralStringResource`（英语要分单复数，中文只写 `other`）。
+4. 枚举标签走 `ui/UiText.kt` 的 `labelRes()` 映射，**不要**在枚举里写 `String` 常量（枚举拿不到 `Context`）。
+
+**加一种语言（如日语）**：
+
+1. 复制 `res/values-zh/strings.xml` → `res/values-ja/strings.xml`，逐条翻译。**Kotlin 一行不用改**。
+2. 若该语言需要区分复数形态（英/法等），`<plurals>` 的 `quantity` 要按 CLDR 补齐（`one` / `other` …），
+   中文、日文只有 `other`。
+3. `app/build.gradle.kts` 的 `resourceConfigurations` 里补语言码（当前为 `zh` / `en`）。
+4. ⚠️ **别只翻译已改造模块**：未改造模块仍是硬编码中文，会表现为"一半日语一半中文"。要么先把该模块抽干净再上语言，
+   要么在加语言前把目标模块全部改造完。
+
+**验证**：
+
+```bash
+./gradlew :app:testDebugUnitTest --offline          # 资源 id 断言与 UI 冒烟
+./gradlew :app:lintDebug --offline                  # 查 MissingTranslation / ExtraTranslation 类问题
+```
+
+> 断言中文的 Compose 测试要给 `@Config` 加语言限定（如 `qualifiers = "zh-w360dp-h640dp-xhdpi"`），
+> 因为 Robolectric 默认 en-US，资源化后界面上是英文，原中文断言会失配。
+
 ---
 
 ## 12. 已知限制与技术债
@@ -1868,7 +1918,7 @@ launcher 应用列表 + 搜索 + 图标 + 手动贴包名，`Drawable→Bitmap` 
 | **`DataMaintenance.resetLibrary()` 无 UI 入口** | ✅ **2026-10-15 已补入口** | 设置页「数据与存储」加了「清空曲库与导入目录（保留收藏与统计）」。⚠ **必须连带调 `LibraryViewModel.onLibraryCleared()`**——它把扫描范围退回 `UNSET` 并清 folders；只调 `reloadAll()` 的话，范围为「全盘」时会立刻重扫把曲库填回，表现为"按钮点了没反应" |
 | **`Prefs.onChanged()` 无调用者** | ✅ **2026-10-15 已删** | 全工程 0 调用者。界面一律同步读属性（见 §5.2 末尾"读取口径"）。**不要再引入监听器封装** |
 | **`androidx.appcompat` / `lifecycle.service` 零 import** | ✅ **2026-10-15 已删** | 主题继承框架 `android:Theme.Material.Light.NoActionBar` 而非 AppCompat；`MediaSessionService` 自带 lifecycle。catalog 里删了版本项 / 库项 / 两处 `implementation(...)`，并在 catalog 注释里留了原因。**删传递依赖要真机跑一遍**，不能只看编译过 |
-| **9.3 英文资源只做了第一步** | 框架层文案（磁贴 / 快捷方式 / 小组件）已分 `values`(英) 与 `values-zh`(中) | Compose 界面文案仍**硬编码中文**（约 1500 条散在 20+ 文件）。**做一半比不做更糟**：会变成中英混排。要么不动，要么一次抽干净（`stringResource` + 两个桶） |
+| **9.3 英文资源** | 第一步（框架层文案：磁贴 / 快捷方式 / 小组件）已分 `values`(英) 与 `values-zh`(中)；**第二步（Compose 文案抽资源）2026-10-24 由用户拍板重启**，按模块分批推进 | 已改造模块整块走 `stringResource` + 资源 id，**不要**在已改造文件里再写中文字面量。未改造模块仍是硬编码中文（预期状态，不是 bug）。抽取规范见 §10 第 17 条。当前进度：第 1 批（曲库首页 / 抽屉 / 播放模式）✅ |
 | **9.1 Android Auto 只做了清单兼容层** | `PlaybackService` 加了并列的 `android.media.browse.MediaBrowserService` intent-filter | 车机媒体卡能认出本应用，但**歌单/文件夹不可浏览**（要换 `MediaLibraryService` 才能提供层级）。且**未在真机/模拟器验证过** |
 | **9.2 平板 / 车机双栏** | ✅ **v1.1.14 已整体下线** | 起因是车机真机反馈（设置被 Dock 压住 + 不要双栏）。现在所有尺寸统一单栏；`widthDp >= 840` 只用来判断底部要不要给车机 Dock 留 56dp。`CarHomeScreen.kt` 保留未接入，恢复前先读版本历史 v1.1.13 / v1.1.14 |
 
