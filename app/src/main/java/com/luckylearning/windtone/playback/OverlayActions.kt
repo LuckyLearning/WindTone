@@ -1,5 +1,7 @@
 package com.luckylearning.windtone.playback
 
+import com.luckylearning.windtone.data.OverlayPreset
+
 /**
  * 悬浮歌词 / 外观设置的对外动作。
  *
@@ -82,6 +84,16 @@ interface OverlayActions {
 
     /** 悬浮窗歌词文字颜色（ARGB） */
     fun setLyricOverlayTextColor(color: Int)
+
+    /**
+     * 套用一套悬浮歌词「样式预设」（v1.1.78）。
+     *
+     * 与逐项 setter 的区别：预设是 **24 项外观参数的一次性批量写盘**（R1），
+     * 中间态不给用户看——若逐项调用 setter，每项都会触发一次预览与状态广播，
+     * 用户会在 100ms 内看到样式「抖」七八下；这里合并成一次收尾（NFR-1）。
+     * 全局参数（主开关 / 全屏形态 / 隐藏名单）不碰（FR-05）。
+     */
+    fun applyOverlayPreset(preset: OverlayPreset)
 
     fun canDrawOverlay(): Boolean
     fun setOverlayEditing(editing: Boolean)

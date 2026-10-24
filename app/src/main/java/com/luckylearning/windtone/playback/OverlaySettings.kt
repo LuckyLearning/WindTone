@@ -2,6 +2,8 @@ package com.luckylearning.windtone.playback
 
 import android.app.Application
 import com.luckylearning.windtone.data.MessageBus
+import com.luckylearning.windtone.data.OverlayPreset
+import com.luckylearning.windtone.data.OverlayPresetTracker
 import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.data.SettingsRepository
 import com.luckylearning.windtone.overlay.LyricOverlayBridge
@@ -265,6 +267,71 @@ class OverlaySettings(
     override fun setLyricOverlayTitleMode(value: Int) {
         val normalized = settings.setLyricOverlayTitleMode(value)
         state.update { it.copy(lyricOverlayTitleMode = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    /**
+     * 套用样式预设（v1.1.78）：24 项外观参数一次性批量写盘 + 一次状态合并 +
+     * 一次预览收尾。逐项走 setter 会触发 20 多次 bumpAppearance / 起预览，
+     * 用户会在一眨眼间看到样式连闪——预设切换必须是「一次到位」的（NFR-1）。
+     *
+     * 刻意不碰：主开关、全屏形态及其尺寸位置、隐藏名单（FR-05；
+     * 全屏形态是「结构切换」不是「皮肤」，见设计文档 §7.2 末尾）。
+     */
+    override fun applyOverlayPreset(preset: OverlayPreset) {
+        val lines = settings.setOverlayLines(preset.lines)
+        val width = settings.setOverlayWidthPercent(preset.widthPercent)
+        val boxHeight = settings.setOverlayBoxHeightPercent(preset.boxHeightPercent)
+        val x = settings.setOverlayXPercent(preset.xPercent)
+        val y = settings.setOverlayYPercent(preset.yPercent)
+        val textSp = settings.setOverlayTextSp(preset.textSp)
+        val align = settings.setOverlayAlign(preset.align)
+        settings.setOverlayTextColor(preset.textColor)
+        val currentColor = settings.setLyricOverlayCurrentColor(preset.currentColor)
+        val dim = settings.setLyricOverlayDimPercent(preset.dimPercent)
+        val strokeWidth = settings.setLyricOverlayStrokeWidthDp(preset.strokeWidthDp)
+        val strokeColor = settings.setLyricOverlayStrokeColor(preset.strokeColor)
+        val spacing = settings.setLyricOverlayLineSpacingDp(preset.lineSpacingDp)
+        settings.setOverlayShowTitle(preset.showTitle)
+        val titlePercent = settings.setOverlayTitlePercent(preset.titlePercent)
+        val titleMode = settings.setLyricOverlayTitleMode(preset.titleMode)
+        val bgAlpha = settings.setOverlayBgAlphaPercent(preset.bgAlphaPercent)
+        settings.setOverlayBgColor(preset.bgColor)
+        val corner = settings.setLyricOverlayCornerRadiusDp(preset.cornerRadiusDp)
+        val borderWidth = settings.setLyricOverlayBorderWidthDp(preset.borderWidthDp)
+        val borderColor = settings.setLyricOverlayBorderColor(preset.borderColor)
+        val pause = settings.setOverlayPauseMode(preset.pauseMode)
+        val fade = settings.setLyricOverlayFadeMs(preset.fadeMs)
+        state.update {
+            it.copy(
+                lyricOverlayLines = lines,
+                lyricOverlayWidthPercent = width,
+                lyricOverlayBoxHeightPercent = boxHeight,
+                lyricOverlayXPercent = x,
+                lyricOverlayYPercent = y,
+                lyricOverlayTextSp = textSp,
+                lyricOverlayAlign = align,
+                lyricOverlayTextColor = preset.textColor,
+                lyricOverlayCurrentColor = currentColor,
+                lyricOverlayDimPercent = dim,
+                lyricOverlayStrokeWidthDp = strokeWidth,
+                lyricOverlayStrokeColor = strokeColor,
+                lyricOverlayLineSpacingDp = spacing,
+                lyricOverlayShowTitle = preset.showTitle,
+                lyricOverlayTitlePercent = titlePercent,
+                lyricOverlayTitleMode = titleMode,
+                lyricOverlayBgAlphaPercent = bgAlpha,
+                // Prefs 的 bgColor setter 只保留 RGB，读回同一个值避免 UI 与落盘不一致
+                lyricOverlayBgColor = prefs.lyricOverlayBgColor,
+                lyricOverlayCornerRadiusDp = corner,
+                lyricOverlayBorderWidthDp = borderWidth,
+                lyricOverlayBorderColor = borderColor,
+                lyricOverlayPauseMode = pause,
+                lyricOverlayFadeMs = fade,
+            )
+        }
+        // 「已修改 / 恢复预设原值」的会话级锚点（R2；不落盘，见 OverlayPresetTracker）
+        OverlayPresetTracker.lastAppliedId = preset.id
         previewOverlayAfterConfigChange()
     }
 

@@ -13,6 +13,7 @@ import com.luckylearning.windtone.data.CoverRepository
 import com.luckylearning.windtone.data.CrashLog
 import com.luckylearning.windtone.data.LyricsLoader
 import com.luckylearning.windtone.data.MessageBus
+import com.luckylearning.windtone.data.OverlayPreset
 import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.data.SettingsRepository
@@ -1257,6 +1258,9 @@ class PlaybackEngine(
         overlaySettings.setLyricOverlayWidthPercent(percent)
 
     override fun setLyricOverlayTextColor(color: Int) = overlaySettings.setLyricOverlayTextColor(color)
+
+    override fun applyOverlayPreset(preset: OverlayPreset) =
+        overlaySettings.applyOverlayPreset(preset)
 
     // v1.1.48：自定义尺寸 / 位置 / 背景
     override fun setLyricOverlayBoxHeightPercent(percent: Int) =

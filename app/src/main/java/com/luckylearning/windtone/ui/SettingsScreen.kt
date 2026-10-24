@@ -74,6 +74,7 @@ import com.luckylearning.windtone.BuildConfig
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.data.DataMaintenance
 import com.luckylearning.windtone.data.DownloadRoute
+import com.luckylearning.windtone.data.OverlayPreset
 import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.data.UpdateChecker
 import com.luckylearning.windtone.playback.Pitch
@@ -208,6 +209,8 @@ fun SettingsScreen(
     onLyricOverlayTextColor: (Int) -> Unit,
     /** 「不显示悬浮窗的应用」名单（v1.1.29） */
     onLyricOverlayHiddenApps: (Set<String>) -> Unit,
+    /** 套用悬浮歌词样式预设（v1.1.78；带默认值保测试兼容） */
+    onApplyOverlayPreset: (OverlayPreset) -> Unit = {},
     /** 「前台应用记录」开关（v1.1.29） */
     onForegroundLogEnabled: (Boolean) -> Unit,
     /** 调试分区解锁开关（v1.1.31，默认隐藏） */
@@ -508,6 +511,7 @@ fun SettingsScreen(
                         onLyricOverlayTitleMode = onLyricOverlayTitleMode,
                         onLyricOverlayTextColor = onLyricOverlayTextColor,
                         onLyricOverlayHiddenApps = onLyricOverlayHiddenApps,
+                        onApplyOverlayPreset = onApplyOverlayPreset,
                         onOverlayEditing = onOverlayEditing,
                         onOverlayPreview = onOverlayPreview,
                     )

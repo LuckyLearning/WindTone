@@ -1,9 +1,42 @@
 package com.luckylearning.windtone.overlay
 
 import android.content.Context
+import com.luckylearning.windtone.data.OverlayPresetParams
 import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.lyrics.OverlayContentResolver
 import kotlinx.coroutines.flow.SharedFlow
+
+/**
+ * Prefs → 预设匹配参数快照（自检报告 FR-11 用）。
+ *
+ * 与 `PlayerUiState.overlayPresetParams()` 同构，但自检在服务侧跑、
+ * 只拿得到 Prefs——两处字段一一对应，改任何一边都要同步另一边。
+ */
+private fun prefsOverlayParams(prefs: Prefs) = OverlayPresetParams(
+    lines = prefs.lyricOverlayLines,
+    widthPercent = prefs.lyricOverlayWidthPercent,
+    boxHeightPercent = prefs.lyricOverlayBoxHeightPercent,
+    xPercent = prefs.lyricOverlayXPercent,
+    yPercent = prefs.lyricOverlayYPercent,
+    textSp = prefs.lyricOverlayTextSp,
+    align = prefs.lyricOverlayAlign,
+    textColor = prefs.lyricOverlayTextColor,
+    currentColor = prefs.lyricOverlayCurrentColor,
+    dimPercent = prefs.lyricOverlayDimPercent,
+    strokeWidthDp = prefs.lyricOverlayStrokeWidthDp,
+    strokeColor = prefs.lyricOverlayStrokeColor,
+    lineSpacingDp = prefs.lyricOverlayLineSpacingDp,
+    showTitle = prefs.lyricOverlayShowTitle,
+    titlePercent = prefs.lyricOverlayTitlePercent,
+    titleMode = prefs.lyricOverlayTitleMode,
+    bgAlphaPercent = prefs.lyricOverlayBgAlphaPercent,
+    bgColor = prefs.lyricOverlayBgColor,
+    cornerRadiusDp = prefs.lyricOverlayCornerRadiusDp,
+    borderWidthDp = prefs.lyricOverlayBorderWidthDp,
+    borderColor = prefs.lyricOverlayBorderColor,
+    pauseMode = prefs.lyricOverlayPauseMode,
+    fadeMs = prefs.lyricOverlayFadeMs,
+)
 
 /**
  * 悬浮歌词的一次性快照 —— 设置页「自检」用。
@@ -156,6 +189,13 @@ object LyricOverlayBridge {
                 append(" / 对齐").append(if (prefs.lyricOverlayAlign == 1) "居左" else "居中")
                 append(" / 背景").append(prefs.lyricOverlayBgAlphaPercent).append("%")
                 append(" / 暂停").append(if (prefs.lyricOverlayPauseMode == 1) "隐藏" else "淡出")
+                // v1.1.78（FR-11）：预设名 + 触摸模式。预设名由参数反推（R5），
+                // 与设置页 / 歌词菜单显示的是同一个函数算出来的同一个名字，
+                // 三处永远一致；「自定义」就是真自定义，不存在状态漂移。
+                append(" / 预设：").append(
+                    com.luckylearning.windtone.data.overlayPresetLabel(prefsOverlayParams(prefs)),
+                )
+                append(" / 触摸：穿透（锁定态零干扰）")
             },
         )
     }

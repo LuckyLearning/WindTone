@@ -81,6 +81,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.luckylearning.windtone.data.model.Song
+import com.luckylearning.windtone.data.OverlayPreset
+import com.luckylearning.windtone.data.overlayPresetLabel
+import com.luckylearning.windtone.state.overlayPresetParams
 import com.luckylearning.windtone.ui.theme.AppVisual
 import com.luckylearning.windtone.ui.theme.windShadow
 import kotlinx.coroutines.delay
@@ -152,6 +155,13 @@ fun PlayerScreen(
      */
     canDrawOverlay: Boolean = false,
     onLyricOverlay: (Boolean) -> Unit = {},
+    /**
+     * 套用悬浮歌词样式预设（v1.1.78，速选面板 → FR-03）。
+     * 直通 PlayerActions.applyOverlayPreset（`by` 委托），这里只透传。
+     */
+    onApplyOverlayPreset: (OverlayPreset) -> Unit = {},
+    /** 速选面板「更多设置…」：打开设置页（MainScreen 负责具体导航） */
+    onOpenSettings: () -> Unit = {},
     // 车载沉浸态下常驻歌名行右侧的红心需要自己知道收藏状态并触发切换，
     // 手机版歌名在顶栏、不带红心，这两个参数在手机模式下不会被用到。
     isFavorite: Boolean = false,
@@ -160,6 +170,8 @@ fun PlayerScreen(
     // 歌词 / 封面二选一：状态在引擎里（落盘，跨会话保留），这里只是个只读视图 + 回调。
     val showLyrics = state.lyricsPaneVisible
     var showOptions by remember { mutableStateOf(false) }
+    // 悬浮窗样式速选面板（v1.1.78）：从播放设置弹层的「悬浮窗样式」行打开
+    var showOverlayStyle by remember { mutableStateOf(false) }
     var showEq by remember { mutableStateOf(false) }
     var showSleep by remember { mutableStateOf(false) }
     // 长按歌词行校准偏移：存「该行时间戳 to 按下时的播放位置」。
@@ -799,7 +811,19 @@ fun PlayerScreen(
                     else -> appContext.startOverlayPermissionPage()
                 }
             },
+            // v1.1.78 歌词菜单：开关副标题报当前预设名 + 「悬浮窗样式」速选入口
+            overlayPresetLabel = overlayPresetLabel(state.overlayPresetParams()),
+            onOpenOverlayStyle = { showOptions = false; showOverlayStyle = true },
             onDismiss = { showOptions = false },
+        )
+    }
+    if (showOverlayStyle) {
+        OverlayStyleSheet(
+            carMode = state.carMode,
+            currentParams = state.overlayPresetParams(),
+            onApply = onApplyOverlayPreset,
+            onOpenSettings = onOpenSettings,
+            onDismiss = { showOverlayStyle = false },
         )
     }
     if (showEq) EqSheet(onClose = { showEq = false })

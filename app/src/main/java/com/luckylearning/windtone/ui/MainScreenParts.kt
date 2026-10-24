@@ -64,6 +64,8 @@ internal fun PlayerPane(
     onShowQueue: () -> Unit,
     onShowAudioInfo: () -> Unit,
     onExportLyrics: ((android.net.Uri) -> Unit)?,
+    /** 悬浮窗样式速选面板「更多设置…」：打开设置页（v1.1.78） */
+    onOpenSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Box(modifier.fillMaxSize()) {
@@ -96,6 +98,9 @@ internal fun PlayerPane(
             // 播放设置弹层里的悬浮歌词快捷开关（与设置页同一个开关、同一套授权逻辑）
             canDrawOverlay = canDrawOverlay,
             onLyricOverlay = playerVm::setLyricOverlay,
+            // v1.1.78 悬浮窗样式速选面板：套用预设 + 「更多设置」跳设置页
+            onApplyOverlayPreset = playerVm::applyOverlayPreset,
+            onOpenSettings = onOpenSettings,
             onLyricsPaneVisible = playerVm::setLyricsPaneVisible,
             pane = onExportLyrics == null,
         )

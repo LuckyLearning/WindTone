@@ -673,6 +673,8 @@ fun MainScreen(
                     onShowQueue = { playerVm.refreshQueue(); showQueue = true },
                     onShowAudioInfo = { player.current?.let { infoSong = it; playerVm.inspectAudio(it) } },
                     onExportLyrics = { uri -> playerVm.exportLyrics(uri) },
+                    // 悬浮窗样式速选面板的「更多设置…」：直接掀开设置覆盖层
+                    onOpenSettings = { showSettings = true },
                 )
             }
 
@@ -735,6 +737,7 @@ fun MainScreen(
                     onLyricOverlayFadeMs = playerVm::setLyricOverlayFadeMs,
                     onLyricOverlayTitleMode = playerVm::setLyricOverlayTitleMode,
                     onLyricOverlayHiddenApps = playerVm::setLyricOverlayHiddenApps,
+                    onApplyOverlayPreset = playerVm::applyOverlayPreset,
                     onForegroundLogEnabled = playerVm::setForegroundLogEnabled,
                     onDebugUnlocked = playerVm::setDebugUnlocked,
                     onOverlayEditing = playerVm::setOverlayEditing,

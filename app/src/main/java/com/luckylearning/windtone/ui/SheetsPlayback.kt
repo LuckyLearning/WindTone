@@ -1,11 +1,22 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.foundation.layout.ExperimentalLayoutApi::class,
+)
 
 package com.luckylearning.windtone.ui
 
+import com.luckylearning.windtone.data.OverlayPreset
+import com.luckylearning.windtone.data.OverlayPresetParams
+import com.luckylearning.windtone.data.OverlayPresetTracker
+import com.luckylearning.windtone.data.OVERLAY_FACTORY_PARAMS
+import com.luckylearning.windtone.data.currentOverlayPreset
+import com.luckylearning.windtone.data.overlayPresetLabel
 import com.luckylearning.windtone.state.QueueEntry
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -35,6 +46,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
@@ -255,6 +267,13 @@ fun PlayerOptionsSheet(
     /** 是否已拿到「显示悬浮窗」授权；未授权时点击会去系统授权页 */
     canDrawOverlay: Boolean,
     onToggleLyricOverlay: () -> Unit,
+    /**
+     * 当前悬浮歌词「样式预设」展示名（v1.1.78，反推匹配得到：
+     * 预设名 / 「默认预设」/「自定义」）。空串时退回「默认预设」。
+     */
+    overlayPresetLabel: String = "",
+    /** 打开「悬浮窗样式」速选面板（FR-02） */
+    onOpenOverlayStyle: () -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
@@ -310,12 +329,20 @@ fun PlayerOptionsSheet(
                 icon = AppIcons.Lyrics,
                 title = "桌面悬浮歌词",
                 subtitle = when {
-                    lyricOverlay -> "已开启 · 退到桌面 / 导航页后显示在屏幕最上层"
+                    lyricOverlay -> "已开启 · 当前：${overlayPresetLabel.ifBlank { "默认预设" }}"
                     !canDrawOverlay -> "需要系统「显示悬浮窗」授权，点击后自动跳转"
                     else -> "在桌面最上层显示当前歌词行（App 内自动隐藏）"
                 },
                 selected = lyricOverlay,
                 onClick = onToggleLyricOverlay,
+            )
+            // v1.1.78 歌词菜单升级（FR-01，D2 拍板落点=本弹层）：开关副标题报当前预设名，
+            // 换样式走下一行的速选面板——播放中完成「开关 / 换样式」不用退出播放页。
+            OptionRow(
+                icon = AppIcons.Palette,
+                title = "悬浮窗样式",
+                subtitle = "${overlayPresetLabel.ifBlank { "默认预设" }} · 内置外观方案一键套用",
+                onClick = onOpenOverlayStyle,
             )
             LyricScaleControl(scale = lyricScale, onScale = onLyricScale)
             LyricOffsetControl(
@@ -465,5 +492,135 @@ private fun LyricOffsetControl(offsetMs: Int, onOffset: (Int) -> Unit, onReset: 
         TextButton(onClick = { onOffset(-500) }) { Text("-0.5s") }
         TextButton(onClick = { onOffset(500) }) { Text("+0.5s") }
         TextButton(onClick = onReset, enabled = offsetMs != 0) { Text("重置") }
+    }
+}
+
+// ================================================================ 悬浮窗样式速选面板（v1.1.78）
+
+/**
+ * 「悬浮窗样式」速选面板（FR-02 / FR-03，设计文档 §6.1 / §7）。
+ *
+ * 车机三套（carOnly）只在车载模式出现（D3）；点任意预设**立即批量写盘并生效**
+ * （FR-03，服务每帧读 Prefs，无需重启）。面板内不做二次确认——样式可以随时
+ * 一键换回，误触成本为零。
+ *
+ * 差异参数卡：chips 下方常驻一张卡，展示选中预设的一句话定位 + 关键参数摘要
+ * （[OverlayPreset.summary]），让用户在点下去之前就知道这一套长什么样。
+ *
+ * 「已修改 / 恢复预设原值」（FR-04）：反推匹配失败（自定义）且本会话套用过某套
+ * 预设时出现；恢复 = 把那套预设的快照原样重写一遍（R2）。
+ */
+@Composable
+fun OverlayStyleSheet(
+    carMode: Boolean,
+    /** 调用方的当前悬浮歌词参数（用于反推当前预设与「已修改」判定） */
+    currentParams: OverlayPresetParams,
+    /** 套用预设（批量写盘 + 生效） */
+    onApply: (OverlayPreset) -> Unit,
+    /** 「更多设置…」：跳完整设置页（设置 → 歌词 → 桌面悬浮歌词） */
+    onOpenSettings: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val current = currentOverlayPreset(currentParams)
+    // 差异参数卡高亮哪套：优先当前命中，其次本会话最近套用（改乱了想看原貌时用）
+    val highlighted = current
+        ?: OverlayPresetTracker.lastAppliedId?.let { OverlayPreset.byId(it) }
+        ?: OverlayPreset.byId(OverlayPreset.DEFAULT_ID)!!
+    val modified = current == null &&
+        currentParams != OVERLAY_FACTORY_PARAMS &&
+        OverlayPresetTracker.lastAppliedId != null
+    // chips 选中态跟手：点下去即套用（FR-03），本地立刻高亮，不等状态回流
+    var selectedId by remember { mutableStateOf(highlighted.id) }
+    if (OverlayPreset.byId(selectedId) == null) selectedId = highlighted.id
+
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(max = sheetMaxHeight())
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp),
+        ) {
+            Text("悬浮窗样式", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                "点按即套用，悬浮窗立即换样式；可到设置页微调细节",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+            Spacer(Modifier.height(10.dp))
+            val pool = if (carMode) OverlayPreset.ALL else OverlayPreset.PHONE
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                pool.forEach { preset ->
+                    FilterChip(
+                        selected = preset.id == selectedId,
+                        onClick = {
+                            selectedId = preset.id
+                            onApply(preset)
+                        },
+                        label = { Text(preset.displayName, fontSize = 13.sp) },
+                    )
+                }
+            }
+            // 差异参数卡：当前高亮预设的定位 + 关键参数，点之前心里有数
+            val shown = OverlayPreset.byId(selectedId) ?: highlighted
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                    .padding(12.dp),
+            ) {
+                Text(shown.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(
+                    shown.tagline,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+                Text(
+                    shown.summary(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            // FR-04：参数被改乱（自定义）且本会话套用过 → 给一键还原
+            if (modified) {
+                OverlayPresetTracker.lastAppliedId?.let { OverlayPreset.byId(it) }?.let { last ->
+                    Text(
+                        "参数已被手动修改。恢复「${last.displayName}」原样",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable {
+                                selectedId = last.id
+                                onApply(last)
+                            }
+                            .padding(vertical = 12.dp, horizontal = 4.dp),
+                    )
+                }
+            }
+            Text(
+                "更多设置…",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable {
+                        onDismiss()
+                        onOpenSettings()
+                    }
+                    .padding(vertical = 12.dp, horizontal = 4.dp),
+            )
+            Spacer(Modifier.height(20.dp))
+        }
     }
 }

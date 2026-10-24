@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>八、歌词菜单整合与悬浮窗样式 · 听风 WindTone UI 效果图</title>
+<script>
+/* 主题必须在样式之前定位，避免首帧闪错色 */
+(function(){
+  try{
+    var saved=localStorage.getItem('wt-ui-theme');
+    var theme=saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme',theme);
+  }catch(e){
+    document.documentElement.setAttribute('data-theme','dark');
+  }
+})();
+</script>
+<link rel="stylesheet" href="ui.css">
+</head>
+<body>
+<script src="ui-sprite.js"></script>
+
+<header class="board-head">
+  <div class="bh-row">
+    <a class="backdocs" href="index.html">← 效果图总览</a>
+    <div class="bh-title">八、歌词菜单整合与悬浮窗样式<small>UI 效果图 · 设计稿（v1.1.78 开发基准）</small></div>
+    <span class="bh-badge"><span id="pageCount">12</span> 屏</span>
+    <span class="bh-badge">待开发</span>
+    <button class="tgl" id="themeBtn">🌙 深色主题</button>
+  </div>
+  <nav class="bh-nav"><a href="01-main.html">主界面</a><a href="02-player.html">播放页</a><a href="03-sheets.html">抽屉与弹窗</a><a href="04-settings.html">设置页</a><a href="05-extras.html">小组件·通知</a><a href="06-car.html">车机版</a><a href="07-spec.html">颜色与尺寸</a><a href="08-floating-lyrics.html" class="on">歌词菜单·悬浮窗</a></nav>
+</header>
+
+<div class="intro">
+  <b>本章是三项改动的开发基准（v2.1：四项用户决策已并入，见《设计-悬浮歌词预设化.md》§十七）：</b>
+  ① <b>悬浮歌词整合进歌词菜单</b>——播放设置弹层「歌词」分组升级为歌词菜单（D2 拍板落点），
+  新增「悬浮歌词」一行（开关 + 「样式 ›」），不再只藏在设置三级页里；
+  ② <b>内置样式预设</b>——手机 4 套（极简单行 / 毛玻璃双行 / 液态渐变 / 经典方块）+
+  车机 3 套专属（导航窄条 / 驻停歌词 / 纯净浮层，D3 按车机场景重新设计）一键套用；
+  <b>全部预设只展示、无任何控制按钮</b>（D1 拍板，播放控制走通知栏 / 小组件 / 方向盘按键）；
+  ③ <b>整体布局与设置页样式优化</b>——统一卡片圆角 / 间距 / 图标位三件套，设置主页与歌词子页改成「分组容器」版式。<br>
+  <b>本章所有视觉规格（渐变、投影、圆角）均取自 ui.css 令牌</b>，开发时同步落到 <code>DesignTokens.kt</code> 与主题。
+</div>
+
+<div class="wrap">
+
+<!-- ============================================================ §1 歌词菜单 -->
+<section class="sec" id="sec-menu">
+  <div class="sec-hd"><h2>一、歌词菜单 · 整合悬浮歌词</h2><span>PlayerScreen.kt 歌词态顶栏「歌词」按钮 → LyricsMenu（新增悬浮歌词行 + 样式速选）</span></div>
+  <div class="board">
+
+    <figure class="fig" id="scr-lyr-menu">
+      <div class="cap"><b>㉔ 播放设置弹层 · 歌词菜单（整合后）</b><em>SheetsPlayback.kt「歌词」分组升级（D2 拍板：不做新顶栏菜单，落点=播放设置弹层）</em></div>
+      <div class="phone">
+        <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+        <div class="app">
+          <div class="player" style="padding-bottom:40px">
+            <div class="p-top">
+              <button class="ibtn"><svg class="ic"><use href="#i-down"/></svg></button>
+              <div class="t-main"><div class="sp"></div></div>
+              <button class="ibtn"><svg class="ic"><use href="#i-more"/></svg></button>
+            </div>
+            <div class="p-mid" style="padding-top:6px">
+              <div class="lyr">
+                <div class="lyr-line">城市的夜晚灯火阑珊</div>
+                <div class="lyr-line">像星星落满了地面</div>
+                <div class="lyr-line cur"><span class="tr">我把心事写进旋律里面</span></div>
+                <div class="lyr-line">让风替我带到你身边</div>
+                <div class="lyr-line">穿过人潮与时间的缝隙</div>
+                <div class="lyr-line">终于学会与自己和解</div>
+              </div>
+            </div>
+          </div>
+          <div class="dim"></div>
+          <div class="sheet" style="max-height:430px">
+            <div class="handle"></div>
+            <div class="sheet-title"><svg class="ic" style="color:var(--primary)"><use href="#i-lyrics"/></svg>歌词菜单</div>
+            <div class="section-label">歌词</div>
+            <div class="row-opt"><div class="ro-main"><div class="ro-title">歌词 / 封面切换</div><div class="ro-sub">当前：歌词态</div></div></div>
+            <div class="row-opt"><div class="ro-main"><div class="ro-title">歌词大小</div><div class="ro-sub">当前 1.0x · 0.8x ~ 1.6x</div></div></div>
+            <div class="row-opt"><div class="ro-main"><div class="ro-title">双语歌词</div><div class="ro-sub">中英都显示</div></div></div>
+            <div class="row-opt sel"><div class="ro-main"><div class="ro-title">悬浮歌词</div><div class="ro-sub">退到桌面 / 其他应用时在最上层显示歌词</div></div><span class="switch"><i></i></span></div>
+            <div class="row-opt" style="padding-left:34px"><div class="ro-main"><div class="ro-title">悬浮窗样式</div><div class="ro-sub" style="color:var(--primary)">液态渐变 · 唱片 ›</div></div></div>
+            <div class="section-label">高级</div>
+            <div class="row-opt"><div class="ro-main"><div class="ro-title">歌词偏移校准</div><div class="ro-sub">当前 +120ms</div></div></div>
+            <div class="row-opt"><div class="ro-main"><div class="ro-title">重新匹配 .lrc 歌词</div></div></div>
+          </div>
+        </div>
+      </div>
+      <p class="note"><b>整合点（改动 ①）：</b>播放设置弹层的「歌词」分组新增两行——<br>
+      · <b>「悬浮歌词」</b>行内开关（替代设置里的总开关，两处状态同一份）；<br>
+      · <b>「悬浮窗样式」</b>缩进子行，显示当前预设名，点击展开样式速选（下一屏）；<br>
+      开启状态行尾常驻「已开启 · 样式名」；行驶中（车机）该行显示「行驶中 · 导航窄条」。<b>全形态只展示、无控制按钮</b>（D1 拍板）。</p>
+    </figure>
+
+    <figure class="fig" id="scr-lyr-style-quick">
+      <div class="cap"><b>㉕ 歌词菜单 · 悬浮窗样式速选（展开态）</b><em>播放设置弹层内展开：手机 4 套预设 + 车机 3 套（仅车机模式）</em></div>
+      <div class="phone">
+        <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+        <div class="app">
+          <div class="player" style="padding-bottom:40px">
+            <div class="p-top">
+              <button class="ibtn"><svg class="ic"><use href="#i-down"/></svg></button>
+              <div class="t-main"><div class="sp"></div></div>
+              <button class="ibtn"><svg class="ic"><use href="#i-more"/></svg></button>
+            </div>
+            <div class="p-mid" style="padding-top:6px">
+              <div class="lyr">
+                <div class="lyr-line">城市的夜晚灯火阑珊</div>
+                <div class="lyr-line cur"><span class="tr">我把心事写进旋律里面</span></div>
+                <div class="lyr-line">让风替我带到你身边</div>
+              </div>
+            </div>
+          </div>
+          <div class="dim"></div>
+          <div class="sheet" style="max-height:470px">
+            <div class="handle"></div>
+            <div class="sheet-title" style="justify-content:space-between">悬浮窗样式<span style="font-size:11px;color:var(--on-surface-variant);font-weight:500">全部只展示 · 无控制按钮（D1）</span></div>
+            <div class="section-label">预设 · 手机</div>
+            <div class="chips" style="gap:8px">
+              <span class="fchip">极简单行</span>
+              <span class="fchip">毛玻璃双行</span>
+              <span class="fchip on">液态渐变 · 唱片</span>
+              <span class="fchip">经典方块</span>
+            </div>
+            <div class="section-label">预设 · 车机专属（仅车载模式展示）</div>
+            <div class="chips" style="gap:8px">
+              <span class="fchip">🚗 导航窄条</span>
+              <span class="fchip">🚗 驻停歌词</span>
+              <span class="fchip">🚗 纯净浮层</span>
+            </div>
+            <div class="section-label">液态渐变 · 唱片</div>
+            <div style="display:flex;gap:10px;margin:2px 0 8px">
+              <div style="flex:1;background:var(--c-high);border-radius:12px;padding:8px;text-align:center">
+                <div style="height:64px;border-radius:10px;background:linear-gradient(135deg,#5B4BE0,#8B5CF6,#22D3EE);position:relative;overflow:hidden">
+                  <div style="position:absolute;left:6px;bottom:6px;right:6px;font-size:10px;color:#fff;font-weight:700;text-shadow:0 1px 3px rgba(0,0,0,.4)">我把心事写进旋律里面</div>
+                </div>
+                <div style="font-size:10.5px;color:var(--on-surface-variant);margin-top:5px">深色壁纸</div>
+              </div>
+              <div style="flex:1;background:var(--c-high);border-radius:12px;padding:8px;text-align:center">
+                <div style="height:64px;border-radius:10px;background:linear-gradient(135deg,#FBBF4A,#F472B6);position:relative;overflow:hidden">
+                  <div style="position:absolute;left:6px;bottom:6px;right:6px;font-size:10px;color:#fff;font-weight:700;text-shadow:0 1px 3px rgba(0,0,0,.4)">我把心事写进旋律里面</div>
+                </div>
+                <div style="font-size:10.5px;color:var(--on-surface-variant);margin-top:5px">浅色壁纸</div>
+              </div>
+            </div>
+            <div class="row-opt"><div class="ro-main"><div class="ro-title">跟随封面取色</div><div class="ro-sub">渐变底色取自主播歌曲封面</div></div><span class="switch"><i></i></span></div>
+            <div class="row-opt"><div class="ro-main"><div class="ro-title">显示唱片</div><div class="ro-sub">左侧旋转唱片缩略</div></div><span class="switch"><i></i></span></div>
+            <div class="row-opt"><div class="ro-main"><div class="ro-title">更多设置…</div><div class="ro-sub">字号 / 行数 / 宽度 / 位置 / 点击穿透（设置 → 歌词 → 悬浮窗样式）</div></div></div>
+          </div>
+        </div>
+      </div>
+      <p class="note"><b>速选面板：</b>手机 4 套 + 车机 3 套（🚗 标记，仅车机模式可选）；
+      每套预设只暴露<b>它自己的 2~3 个差异参数</b>（如渐变套的「跟随封面取色 / 显示唱片」），
+      通用参数收进「更多设置…」——避免一屏 20 个开关。<b>全部预设只展示、无任何控制按钮</b>（D1 拍板：
+      播放控制走通知栏媒体卡 / 桌面小组件 / 车机方向盘按键）。切换预设即时生效（悬浮窗重绘，无确认弹窗）。</p>
+    </figure>
+
+  </div>
+</section>
+
+<!-- ============================================================ §2 设置子页 -->
+<section class="sec" id="sec-overlay-page">
+  <div class="sec-hd"><h2>二、设置 · 悬浮窗样式子页</h2><span>SettingsLyricsPage.kt → 新增「悬浮窗样式」子页（SettingsPage.OVERLAY_STYLE）：预设网格 + 通用参数 + 权限状态</span></div>
+  <div class="board">
+
+    <figure class="fig" id="scr-overlay-style">
+      <div class="cap"><b>㉖ 设置 → 歌词 → 悬浮窗样式（总览）</b><em>SettingsOverlayStylePage.kt · 预设网格 + 通用参数分组容器</em></div>
+      <div class="phone">
+        <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+        <div class="app">
+          <div class="topbar"><div class="tb-row">
+            <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+            <div class="lib-title" style="font-size:15px">悬浮窗样式</div>
+            <button class="ibtn"><svg class="ic"><use href="#i-reset"/></svg></button>
+          </div></div>
+          <div class="list" style="padding:12px 14px;overflow:hidden">
+            <div class="sw-row">
+              <div class="sw-main"><div class="sw-t">桌面悬浮歌词</div><div class="sw-s">运行中 · 已授权「显示在其他应用上层」· 歌词：我把心事写进旋律里面</div></div>
+              <span class="switch"><i></i></span>
+            </div>
+            <div class="section-label" style="margin-top:14px">样式预设 · 手机（4 套）</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div class="tile" style="border-color:var(--primary)">
+                <div class="t-ic"><svg class="ic"><use href="#i-lyrics"/></svg></div>
+                <div class="t-t">极简单行</div>
+              </div>
+              <div class="tile">
+                <div class="t-ic"><svg class="ic"><use href="#i-palette"/></svg></div>
+                <div class="t-t">毛玻璃双行</div>
+              </div>
+              <div class="tile" style="border-color:var(--primary)">
+                <div class="t-ic"><svg class="ic"><use href="#i-album"/></svg></div>
+                <div class="t-t">液态渐变 · 唱片</div>
+              </div>
+              <div class="tile">
+                <div class="t-ic"><svg class="ic"><use href="#i-queue"/></svg></div>
+                <div class="t-t">经典方块</div>
+              </div>
+            </div>
+            <div class="section-label" style="margin-top:14px">样式预设 · 车机专属（仅车载模式展示）</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+              <div class="tile" style="border-color:var(--primary)">
+                <div class="t-ic"><svg class="ic"><use href="#i-speed"/></svg></div>
+                <div class="t-t">🚗 导航窄条</div>
+              </div>
+              <div class="tile">
+                <div class="t-ic"><svg class="ic"><use href="#i-palette"/></svg></div>
+                <div class="t-t">🚗 驻停歌词</div>
+              </div>
+              <div class="tile">
+                <div class="t-ic"><svg class="ic"><use href="#i-note"/></svg></div>
+                <div class="t-t">🚗 纯净浮层</div>
+              </div>
+            </div>
+            <div class="section-label" style="margin-top:14px">通用参数</div>
+            <div class="sw-row"><div class="sw-main"><div class="sw-t">歌词行数</div><div class="sw-s">当前行 + 下一行</div></div><div class="chips" style="flex:none"><span class="fchip">1</span><span class="fchip on">2</span><span class="fchip">3</span></div></div>
+            <div class="sw-row"><div class="sw-main"><div class="sw-t">文字大小</div><div class="sw-s">随系统字号缩放之上再缩放</div></div><div class="slider" style="width:120px;flex:none"><span class="fill" style="width:45%"></span><span class="knob" style="left:45%"></span></div></div>
+            <div class="sw-row"><div class="sw-main"><div class="sw-t">对齐</div></div><div class="chips" style="flex:none"><span class="fchip">左</span><span class="fchip on">中</span><span class="fchip">右</span></div></div>
+            <div class="sw-row"><div class="sw-main"><div class="sw-t">宽度</div><div class="sw-s">屏幕宽度百分比</div></div><div class="slider" style="width:120px;flex:none"><span class="fill" style="width:80%"></span><span class="knob" style="left:80%"></span></div></div>
+            <div class="sw-row"><div class="sw-main"><div class="sw-t">显示位置</div><div class="sw-s">顶部 · 可拖动微调</div></div></div>
+            <div class="sw-row"><div class="sw-main"><div class="sw-t">点击穿透</div><div class="sw-s">触摸事件透传给下方应用</div></div><span class="switch"><i></i></span></div>
+            <div class="sw-row"><div class="sw-main"><div class="sw-t">锁屏 / 通知栏歌词</div></div><span class="switch"><i></i></span></div>
+            <div class="row-action" style="margin-top:10px"><svg class="ic" style="color:var(--primary)"><use href="#i-cloud"/></svg>
+              <div class="ra-main"><div class="ra-title">不显示悬浮窗的应用</div><div class="ra-sub">已在名单：微信 · 高德地图 · 王者荣耀</div></div></div>
+          </div>
+        </div>
+      </div>
+      <p class="note"><b>分组容器版式（改动 ③）：</b>子页从「通铺列表」改为三段式——
+      <b>状态卡</b>（开关 + 运行态 + 当前歌词预览）/ <b>预设网格</b>（手机 4 套 2 列 + 车机 3 套 3 列，选中描边 primary，车机组仅车机模式显示）/
+      <b>通用参数</b>（滑杆行、chips 行、开关行同规格混排）。所有行高、圆角（14dp）、间距（12dp）统一。
+      <b>全部预设只展示、无控制按钮</b>（D1）。</p>
+    </figure>
+
+    <figure class="fig" id="scr-overlay-preset-detail">
+      <div class="cap"><b>㉗ 预设切换即时预览（选中「毛玻璃双行」）</b><em>预设差异参数卡 + 桌面实时预览小窗</em></div>
+      <div class="phone">
+        <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+        <div class="app">
+          <div class="topbar"><div class="tb-row">
+            <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+            <div class="lib-title" style="font-size:15px">悬浮窗样式</div>
+            <button class="ibtn"><svg class="ic"><use href="#i-reset"/></svg></button>
+          </div></div>
+          <div class="list" style="padding:12px 14px;overflow:hidden">
+            <div style="background:var(--c-high);border-radius:14px;padding:12px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div class="t-ic" style="width:34px;height:34px;background:var(--glass-bg);border:1px solid var(--glass-bd);border-radius:10px;display:flex;align-items:center;justify-content:center"><svg class="ic" style="color:var(--primary)"><use href="#i-palette"/></svg></div>
+                <div style="flex:1"><div style="font-size:13.5px;font-weight:700">毛玻璃双行</div>
+                <div style="font-size:11px;color:var(--on-surface-variant)">玻璃拟态底 + 当前行 / 下一行</div></div>
+                <span class="switch"><i></i></span>
+              </div>
+              <div class="slider" style="margin-top:10px"><span class="fill" style="width:60%"></span><span class="knob" style="left:60%"></span></div>
+              <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--on-surface-variant);margin-top:4px"><span>通透度</span><span>60%</span></div>
+              <div style="display:flex;gap:8px;margin-top:10px">
+                <span class="fchip on">显示下一行</span><span class="fchip">封面小图</span><span class="fchip on">圆角 14dp</span>
+              </div>
+            </div>
+            <div class="section-label" style="margin-top:14px">效果预览</div>
+            <div style="background:linear-gradient(160deg,#312E5F,#5B4BE0 55%,#22D3EE);border-radius:14px;height:150px;position:relative;overflow:hidden">
+              <div style="position:absolute;left:14px;right:14px;top:14px;background:var(--glass-bg);border:1px solid var(--glass-bd);border-radius:14px;padding:9px 12px;backdrop-filter:blur(8px)">
+                <div style="font-size:13px;font-weight:700;color:var(--primary)">我把心事写进旋律里面</div>
+                <div style="font-size:11.5px;color:var(--on-surface-variant);margin-top:2px">让风替我带到你身边</div>
+              </div>
+            </div>
+            <div class="section-label" style="margin-top:14px">其它预设</div>
+            <div class="chips"><span class="fchip">极简单行</span><span class="fchip on">毛玻璃双行</span><span class="fchip">液态渐变</span><span class="fchip">经典方块</span><span class="fchip">迷你胶囊·车机</span></div>
+          </div>
+        </div>
+      </div>
+      <p class="note"><b>即时生效：</b>点预设 tile = 套用 + 该预设的差异参数卡展开（通透度 / 下一行 / 封面小图 / 圆角档），
+      下方「效果预览」是同一渲染组件的实况小窗（非图片），改参数立刻看到效果——不需要真的退到桌面去验证。</p>
+    </figure>
+
+  </div>
+</section>
+
+<!-- ============================================================ §3 样式预览 -->
+<section class="sec" id="sec-presets">
+  <div class="sec-hd"><h2>三、手机四套预设 · 桌面实景预览 + 车机三套</h2><span>同一首歌（夜曲 · 周杰伦）在手机四套预设下的实际观感 · 深浅壁纸各一；车机三套见 ㉜ 总览</span></div>
+  <div class="board">
+
+    <figure class="fig" id="scr-preset-minimal">
+      <div class="cap"><b>㉘ 预设 1 · 极简单行</b><em>一行当前歌词 · 细胶囊 · 最低干扰</em></div>
+      <div class="phone">
+        <div class="statusbar" style="background:transparent"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+        <div class="app" style="position:relative;background:linear-gradient(165deg,#1B2A4A 0%,#0E1526 60%,#05080F 100%)">
+          <div style="position:absolute;left:0;right:0;top:52px;display:flex;justify-content:center">
+            <div style="background:rgba(10,12,20,.72);border:1px solid rgba(255,255,255,.10);border-radius:999px;padding:7px 16px;font-size:12.5px;color:#F2F3F8;max-width:78%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">我把心事写进旋律里面</div>
+          </div>
+          <div style="position:absolute;left:0;right:0;bottom:26px;text-align:center;color:rgba(255,255,255,.28);font-size:10.5px">触摸穿透到桌面 · 无控制按钮</div>
+        </div>
+      </div>
+      <p class="note"><b>规格：</b>高 30dp、圆角全圆角、深色底 72% 不透明度（浅色壁纸下自动反转）；
+      只显示当前行，超出省略。适合游戏 / 阅读场景。<b>锁定态触摸穿透</b>（D1：全形态只展示，手指划过去直达桌面）。</p>
+    </figure>
+
+    <figure class="fig" id="scr-preset-glass">
+      <div class="cap"><b>㉙ 预设 2 · 毛玻璃双行</b><em>glass 底 + 当前行 / 下一行</em></div>
+      <div class="phone">
+        <div class="statusbar" style="background:transparent"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+        <div class="app" style="position:relative;background:linear-gradient(150deg,#8FB8E8 0%,#5B7FC7 45%,#2E3F6E 100%)">
+          <div style="position:absolute;left:14px;right:14px;top:60px;background:var(--glass-bg);border:1px solid var(--glass-bd);border-radius:14px;padding:10px 14px;box-shadow:0 8px 24px rgba(0,0,0,.28)">
+            <div style="font-size:13.5px;font-weight:700;color:var(--primary)">我把心事写进旋律里面</div>
+            <div style="font-size:12px;color:var(--on-surface-variant);margin-top:2px">让风替我带到你身边</div>
+          </div>
+          <div style="position:absolute;left:0;right:0;bottom:26px;text-align:center;color:rgba(255,255,255,.4);font-size:10.5px">壁纸：山脉晨雾</div>
+        </div>
+      </div>
+      <p class="note"><b>规格：</b>玻璃底 = <code>--glass-bg</code>（暗 90% / 浅 94%）+ <code>--glass-bd</code> 描边 +
+      真模糊（API 31+ RenderEffect，低版本退高不透明度近似）；当前行 primary 加粗、下一行 42% 透明度。
+      宽度默认 86%，可拖动调位置。</p>
+    </figure>
+
+    <figure class="fig" id="scr-preset-gradient">
+      <div class="cap"><b>㉚ 预设 3 · 液态渐变 · 唱片</b><em>封面取色渐变 + 旋转唱片缩略</em></div>
+      <div class="phone">
+        <div class="statusbar" style="background:transparent"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+        <div class="app" style="position:relative;background:linear-gradient(180deg,#2B2733 0%,#17161D 100%)">
+          <div style="position:absolute;left:14px;right:14px;top:60px;background:linear-gradient(135deg,#5B4BE0,#8B5CF6 55%,#22D3EE);border-radius:16px;padding:10px 14px;box-shadow:0 10px 28px rgba(76,53,176,.42);display:flex;align-items:center;gap:10px">
+            <div class="vinyl" style="width:38px;height:38px;flex:none;margin:0"></div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13.5px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">我把心事写进旋律里面</div>
+              <div style="font-size:11px;color:rgba(255,255,255,.72);margin-top:2px">夜曲 · 周杰伦</div>
+            </div>
+          </div>
+          <div style="position:absolute;left:0;right:0;bottom:26px;text-align:center;color:rgba(255,255,255,.3);font-size:10.5px">渐变取自《叶惠美》封面</div>
+        </div>
+      </div>
+      <p class="note"><b>规格：</b>渐变 = 封面 <code>coverBrush(stableKey)</code> 六档确定性取色（同一首歌永远同色）；
+      唱片缩略 38dp 旋转动画（<code>AppVisual.Motion.BaseMs</code>）；带歌名 · 歌手副行。
+      无封面时退「极简单行」底色。投影用 <code>windShadow(2)</code> 靛蓝染色。</p>
+    </figure>
+
+    <figure class="fig" id="scr-preset-classic">
+      <div class="cap"><b>㉛ 预设 4 · 经典方块</b><em>方角专辑卡 · 纯展示（D1：无播放控制键）</em></div>
+      <div class="phone">
+        <div class="statusbar" style="background:transparent"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+        <div class="app" style="position:relative;background:linear-gradient(150deg,#F4EFE6 0%,#D8CFC0 100%)">
+          <div style="position:absolute;left:14px;right:14px;top:60px;background:#FFFDF8;border-radius:8px;padding:9px;display:flex;align-items:center;gap:10px;box-shadow:0 8px 22px rgba(60,48,32,.22)">
+            <div class="cov cov-48 c2" style="width:40px;height:40px;flex:none"><svg><use href="#i-note"/></svg></div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:700;color:#2A2833;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">我把心事写进旋律里面</div>
+              <div style="font-size:11px;color:#6B6875;margin-top:2px">夜曲 · 周杰伦</div>
+            </div>
+          </div>
+          <div style="position:absolute;left:0;right:0;bottom:26px;text-align:center;color:rgba(40,36,28,.4);font-size:10.5px">触摸穿透 · 播放控制走通知栏 / 小组件</div>
+        </div>
+      </div>
+      <p class="note"><b>规格：</b>方角 8dp + 米白纸底（深浅壁纸同一套，靠阴影分层）；左封面 40dp + 歌名·歌手 + 当前行。
+      <b>无播放控制键</b>（D1 拍板：全形态只展示；控制由通知栏媒体卡 / 桌面小组件 / 车机方向盘按键承担）。
+      适合喜欢「小卡片」观感、信息要全的用户。</p>
+    </figure>
+
+    <figure class="fig" id="scr-preset-car">
+      <div class="cap"><b>㉜ 车机专属三预设 · 总览（D3：按车机场景重新设计）</b><em>C1 导航窄条 / C2 驻停歌词 / C3 纯净浮层 —— 全部只展示、触摸穿透</em></div>
+      <div class="phone">
+        <div class="statusbar" style="background:transparent"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+        <div class="app" style="position:relative;background:linear-gradient(165deg,#101426 0%,#060810 100%);padding:14px;display:flex;flex-direction:column;gap:12px;justify-content:center">
+          <div style="font-size:10.5px;color:rgba(255,255,255,.4);text-align:center">车机中控屏 · 三套预设同屏对比</div>
+          <div>
+            <div style="font-size:10.5px;color:#8B7CF6;font-weight:700;margin-bottom:4px">C1 导航窄条（驾驶默认 · 行驶中强制降为该形态）</div>
+            <div style="background:rgba(11,13,24,.92);border:1.5px solid #6E63F0;border-radius:14px;padding:10px 16px;font-size:15.5px;font-weight:800;color:#F4F3FA;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">我把心事写进旋律里面</div>
+          </div>
+          <div>
+            <div style="font-size:10.5px;color:#8B7CF6;font-weight:700;margin-bottom:4px">C2 驻停歌词（红灯 / 等待 · 三行 + 歌名）</div>
+            <div style="background:var(--glass-bg);border:1px solid var(--glass-bd);border-radius:16px;padding:10px 14px">
+              <div style="font-size:12px;color:var(--on-surface-variant)">夜曲 · 周杰伦</div>
+              <div style="font-size:14px;font-weight:700;color:var(--primary);margin-top:2px">我把心事写进旋律里面</div>
+              <div style="font-size:12px;color:var(--on-surface-variant);margin-top:2px">让风替我带到你身边</div>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:10.5px;color:#8B7CF6;font-weight:700;margin-bottom:4px">C3 纯净浮层（无底板 · 纯文字 + 轻投影）</div>
+            <div style="font-size:14px;font-weight:600;color:#F4F3FA;text-shadow:0 1px 6px rgba(0,0,0,.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">我把心事写进旋律里面</div>
+          </div>
+        </div>
+      </div>
+      <p class="note"><b>车机三套的设计依据</b>（`docs/竞品调研-车机音乐应用.md`）：① 车机悬浮窗核心价值是<b>导航时看歌词</b>
+      （「7 分屏」白名单对侧载封闭，悬浮歌词是第三方看歌词的主通道）；② 竞品强光高对比是通用规格；③ 方向盘按键覆盖播放控制 → 无需按钮。<br>
+      <b>C1</b>：单行大字加粗（车机 24sp 档）+ 深色实底 90% + 高对比描边，高度 ≤64dp，贴顶居中偏右，不挡地图路线；
+      <b>C2</b>：三行 + 歌名，玻璃底（强光自动加深，NFR-6），驻停场景信息量与美观优先；
+      <b>C3</b>：无底板低存在感，适合干净桌面 / 大屏已在看播放页时辅助。<b>三套全部触摸穿透</b>（车机触控板误触率高）。
+      车速 > 10km/h 时任选 C2/C3 都会<b>强制降为 C1</b>（驾驶中简化，安全优先）。</p>
+    </figure>
+
+  </div>
+</section>
+
+<!-- ============================================================ §4 车载 -->
+<section class="sec" id="sec-car">
+  <div class="sec-hd"><h2>四、车载模式 · 悬浮窗样式配置</h2><span>车机设置（2560×1600 中控屏）→ 新增「悬浮窗样式」分组 · 大触控预设 + 大滑杆</span></div>
+  <div class="board">
+
+    <figure class="fig car" id="scr-car-overlay">
+      <div class="cap"><b>㉝ 车机 · 设置 → 悬浮窗样式（v1.1.78 新增分组）</b><em>CarSettingsScreen.kt · 车载模式专属：大触控预设卡 + 大号滑杆 + 位置四角快捷</em></div>
+      <div class="carphone" style="width:900px;height:600px">
+        <div class="carbar"><span class="sp"></span>
+          <span class="cb-item"><svg class="ic"><use href="#i-back"/></svg></span>
+          <span class="cb-item" style="font-size:15px;font-weight:800">悬浮窗样式</span>
+          <span class="cb-item"><svg class="ic"><use href="#i-reset"/></svg></span>
+        </div>
+        <div class="carmain" style="padding:22px 26px;overflow:hidden">
+          <div class="cset" style="margin-top:0">
+            <div class="cset-sec">样式预设 · 车机专属（3 套，按车机场景设计 · 全部只展示）</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px">
+              <div style="background:var(--c-high);border:2px solid var(--primary);border-radius:18px;padding:14px;display:flex;gap:12px;align-items:center">
+                <div style="width:56px;height:56px;border-radius:16px;background:#0B0D18;border:2px solid #6E63F0;display:flex;align-items:center;justify-content:center;flex:none"><svg class="ic ic-22" style="color:#8B7CF6"><use href="#i-speed"/></svg></div>
+                <div style="flex:1"><div style="font-size:15px;font-weight:800">🚗 导航窄条</div>
+                <div style="font-size:11.5px;color:var(--on-surface-variant);margin-top:2px">驾驶默认 · 单行大字高对比 · 贴顶不挡地图</div></div>
+                <svg class="ic" style="color:var(--primary)"><use href="#i-check"/></svg>
+              </div>
+              <div style="background:var(--c-high);border:1px solid var(--board-line);border-radius:18px;padding:14px;display:flex;gap:12px;align-items:center">
+                <div style="width:56px;height:56px;border-radius:16px;background:var(--glass-bg);border:1px solid var(--glass-bd);display:flex;align-items:center;justify-content:center;flex:none"><svg class="ic ic-22" style="color:var(--primary)"><use href="#i-palette"/></svg></div>
+                <div style="flex:1"><div style="font-size:15px;font-weight:800">🚗 驻停歌词</div>
+                <div style="font-size:11.5px;color:var(--on-surface-variant);margin-top:2px">驻停等待 · 三行 + 歌名 · 强光自动加深</div></div>
+              </div>
+              <div style="background:var(--c-high);border:1px solid var(--board-line);border-radius:18px;padding:14px;display:flex;gap:12px;align-items:center">
+                <div style="width:56px;height:56px;border-radius:16px;background:transparent;border:1px dashed var(--outline);display:flex;align-items:center;justify-content:center;flex:none"><svg class="ic ic-22" style="color:var(--on-surface-variant)"><use href="#i-note"/></svg></div>
+                <div style="flex:1"><div style="font-size:15px;font-weight:800">🚗 纯净浮层</div>
+                <div style="font-size:11.5px;color:var(--on-surface-variant);margin-top:2px">无底板 · 纯文字 · 低存在感</div></div>
+              </div>
+            </div>
+            <div class="cset-row">
+              <div style="flex:1"><div class="cset-k">文字大小</div><div class="cset-s">车机默认 1.3x（比手机大一档，强光下可读）</div></div>
+              <div class="cset-step">−</div><div class="cset-v">1.3x</div><div class="cset-step"><svg class="ic"><use href="#i-add"/></svg></div>
+            </div>
+            <div class="cset-row">
+              <div style="flex:1"><div class="cset-k">显示位置</div><div class="cset-s">四角快捷 + 拖动微调</div></div>
+              <div style="display:flex;gap:8px;flex:none">
+                <span class="fchip on">顶部</span><span class="fchip">底部</span><span class="fchip">左侧</span><span class="fchip">右侧</span>
+              </div>
+            </div>
+            <div class="cset-row">
+              <div style="flex:1"><div class="cset-k">驾驶中简化</div><div class="cset-s">车速 &gt; 10km/h 时任选哪套都强制降为「导航窄条」；停车恢复</div></div>
+              <span class="switch lg"><i></i></span>
+            </div>
+            <div class="cset-row">
+              <div style="flex:1"><div class="cset-k">触摸穿透</div><div class="cset-s">全形态只展示、无控制按钮；导航时触摸透传给地图应用（D1）</div></div>
+              <span class="switch"><i></i></span>
+            </div>
+            <div class="cset-sec">说明</div>
+            <div style="font-size:12px;color:var(--on-surface-variant);line-height:1.8">
+              车机悬浮窗的核心价值是<b style="color:var(--fg)">导航时看歌词</b>（「7 分屏」白名单对侧载应用封闭，
+              见《竞品调研-车机音乐应用》）；播放控制由<b style="color:var(--fg)">方向盘按键</b>承担，悬浮窗不做任何按钮（D1）。<br>
+              切换车机预设会<b style="color:var(--fg)">同时写回手机端</b>：退出车载模式后悬浮窗保持同一套样式，
+              不需要再设置一遍。
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="note"><b>车机版差异（改动 ②的车载部分）：</b>预设卡 56dp 图标 + 15sp 标题（手机 tile 是 40dp/13sp）；
+      参数行步进器 −/+ 加大到 40dp；「驾驶中简化」是车机独有（按车速强制降为导航窄条，安全优先）；
+      「显示位置」给四角 chips 快捷（车机拖动不便）。</p>
+    </figure>
+
+  </div>
+</section>
+
+<!-- ============================================================ §5 布局优化 -->
+<section class="sec" id="sec-layout">
+  <div class="sec-hd"><h2>五、整体布局与设置页样式优化</h2><span>设置主页分类卡 / 歌词子页分组容器 / 全局间距圆角令牌收敛</span></div>
+  <div class="board">
+
+    <figure class="fig" id="scr-settings-home">
+      <div class="cap"><b>㉞ 设置主页（优化后）</b><em>SettingsRootPage.kt · 六张分类卡统一 icon halo + 20dp 圆角 + 12dp 间距</em></div>
+      <div class="phone">
+        <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+        <div class="app">
+          <div class="topbar"><div class="tb-row">
+            <div class="lib-title" style="font-size:17px;font-weight:800">设置</div>
+            <button class="ibtn"><svg class="ic"><use href="#i-menu"/></svg></button>
+          </div></div>
+          <div class="list" style="padding:8px 14px;overflow:hidden">
+            <div class="cat-row" style="border-radius:20px;margin-bottom:10px;background:var(--c-low)"><div class="cat-ic" style="background:linear-gradient(135deg,#8B7CF6,#5040D8)"><svg class="ic"><use href="#i-palette"/></svg></div>
+              <div class="cat-main"><div class="cat-t">外观</div><div class="cat-s">主题取色 · 封面取色</div></div><svg class="ic" style="color:var(--outline)"><use href="#i-chevron"/></svg></div>
+            <div class="cat-row" style="border-radius:20px;margin-bottom:10px;background:var(--c-low)"><div class="cat-ic" style="background:linear-gradient(135deg,#5AA9F8,#2F76E8)"><svg class="ic"><use href="#i-speed"/></svg></div>
+              <div class="cat-main"><div class="cat-t">播放</div><div class="cat-s">自动播放 · 音效 · 淡入淡出</div></div><svg class="ic" style="color:var(--outline)"><use href="#i-chevron"/></svg></div>
+            <div class="cat-row" style="border-radius:20px;margin-bottom:10px;background:var(--c-low);border-color:var(--primary)"><div class="cat-ic" style="background:linear-gradient(135deg,#5B4BE0,#22D3EE)"><svg class="ic"><use href="#i-lyrics"/></svg></div>
+              <div class="cat-main"><div class="cat-t">歌词 <span class="badge badge-lrc" style="margin-left:6px">悬浮窗样式</span></div><div class="cat-s">字号 · 双语 · 悬浮歌词 · 样式预设</div></div><svg class="ic" style="color:var(--outline)"><use href="#i-chevron"/></svg></div>
+            <div class="cat-row" style="border-radius:20px;margin-bottom:10px;background:var(--c-low)"><div class="cat-ic" style="background:linear-gradient(135deg,#3ED6A8,#0E9E8F)"><svg class="ic"><use href="#i-library"/></svg></div>
+              <div class="cat-main"><div class="cat-t">音乐库</div><div class="cat-s">扫描范围 · 短音频过滤 · 格式与容量</div></div><svg class="ic" style="color:var(--outline)"><use href="#i-chevron"/></svg></div>
+            <div class="cat-row" style="border-radius:20px;margin-bottom:10px;background:var(--c-low)"><div class="cat-ic" style="background:linear-gradient(135deg,#FB7185,#E23D5A)"><svg class="ic"><use href="#i-cloud"/></svg></div>
+              <div class="cat-main"><div class="cat-t">在线播放</div><div class="cat-s">在线歌单 · 播放缓存 · 收听报告</div></div><svg class="ic" style="color:var(--outline)"><use href="#i-chevron"/></svg></div>
+            <div class="cat-row" style="border-radius:20px;margin-bottom:10px;background:var(--c-low)"><div class="cat-ic" style="background:linear-gradient(135deg,#FBBF4A,#EF7C1A)"><svg class="ic"><use href="#i-gear"/></svg></div>
+              <div class="cat-main"><div class="cat-t">关于与诊断</div><div class="cat-s">版本信息 · 播放统计 · 崩溃日志</div></div><svg class="ic" style="color:var(--outline)"><use href="#i-chevron"/></svg></div>
+          </div>
+        </div>
+      </div>
+      <p class="note"><b>优化点（改动 ③）：</b>①分类卡 icon 位改 40dp <b>渐变 halo</b>（六档确定性取色，与封面缺省同调性），
+      卡片统一 <code>surfaceContainerLow</code> + 20dp 圆角 + 10dp 纵向间距（原来是 14dp 圆角混用 surface/c-low）；
+      ②「歌词」卡加 <span class="badge badge-lrc">悬浮窗样式</span> 徽标——改动 ①的新入口要被看见；
+      ③副标题收敛为「最多两项」，不再一行挤五个名词。</p>
+    </figure>
+
+    <figure class="fig" id="scr-lyrics-page">
+      <div class="cap"><b>㉟ 歌词子页（优化后）</b><em>SettingsLyricsPage.kt · 三段分组容器：显示 / 悬浮窗（新）/ 高级</em></div>
+      <div class="phone">
+        <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+        <div class="app">
+          <div class="topbar"><div class="tb-row">
+            <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+            <div class="lib-title" style="font-size:15px">歌词</div>
+            <span class="sp"></span>
+          </div></div>
+          <div class="list" style="padding:8px 14px;overflow:hidden">
+            <div style="background:var(--c-low);border-radius:16px;padding:4px 12px;margin-bottom:12px">
+              <div class="section-label" style="margin-top:8px">显示</div>
+              <div class="sw-row"><div class="sw-main"><div class="sw-t">歌词大小</div><div class="sw-s">播放页歌词 · 0.8x ~ 1.6x</div></div><div class="slider" style="width:120px;flex:none"><span class="fill" style="width:45%"></span><span class="knob" style="left:45%"></span></div></div>
+              <div class="sw-row"><div class="sw-main"><div class="sw-t">双语歌词</div></div><div class="chips" style="flex:none"><span class="fchip">中英</span><span class="fchip on">仅中</span><span class="fchip">仅英</span></div></div>
+              <div class="sw-row"><div class="sw-main"><div class="sw-t">沉浸态</div><div class="sw-s">歌词态 5 秒无操作收起界面</div></div><span class="switch"><i></i></span></div>
+            </div>
+            <div style="background:var(--c-low);border-radius:16px;padding:4px 12px;margin-bottom:12px;border:1px solid var(--primary)">
+              <div class="section-label" style="margin-top:8px;color:var(--primary)">悬浮窗 <span style="color:var(--on-surface-variant);font-weight:500">· 改动 ①② 的落地入口</span></div>
+              <div class="sw-row"><div class="sw-main"><div class="sw-t">桌面悬浮歌词</div><div class="sw-s">运行中 · 已授权</div></div><span class="switch"><i></i></span></div>
+              <div class="row-action"><svg class="ic" style="color:var(--primary)"><use href="#i-palette"/></svg>
+                <div class="ra-main"><div class="ra-title">悬浮窗样式</div><div class="ra-sub" style="color:var(--primary)">液态渐变 · 唱片 · 手机 4 套 + 车机 3 套</div></div><svg class="ic" style="color:var(--outline)"><use href="#i-chevron"/></svg></div>
+              <div class="row-action"><svg class="ic" style="color:var(--primary)"><use href="#i-cloud"/></svg>
+                <div class="ra-main"><div class="ra-title">不显示悬浮窗的应用</div><div class="ra-sub">3 个应用</div></div><svg class="ic" style="color:var(--outline)"><use href="#i-chevron"/></svg></div>
+              <div class="sw-row"><div class="sw-main"><div class="sw-t">锁屏 / 通知栏歌词</div></div><span class="switch"><i></i></span></div>
+            </div>
+            <div style="background:var(--c-low);border-radius:16px;padding:4px 12px">
+              <div class="section-label" style="margin-top:8px">高级</div>
+              <div class="sw-row"><div class="sw-main"><div class="sw-t">歌词偏移校准</div><div class="sw-s">+120ms</div></div><div class="cset-step">−</div><div class="cset-v" style="min-width:64px;text-align:right">+120ms</div><div class="cset-step"><svg class="ic"><use href="#i-add"/></svg></div></div>
+              <div class="sw-row"><div class="sw-main"><div class="sw-t">重新匹配 .lrc 歌词</div></div></div>
+              <div class="sw-row"><div class="sw-main"><div class="sw-t">导出歌词（LRC）</div></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="note"><b>优化点（改动 ③）：</b>①子页从通铺列表改为<b>分组容器</b>（surfaceContainerLow + 16dp 圆角整组包住），
+        组间距 12dp；②新「悬浮窗」组加 primary 描边（新功能可见性）；③滑杆 / chips / 开关 / 步进器四种控件
+        <b>同行规格统一</b>（右侧控件宽 120px 或 flex:none），不再一行一个样；④「歌词偏移」从弹层改成行内步进器。</p>
+    </figure>
+
+  </div>
+</section>
+
+<!-- ============================================================ 规范小结 -->
+<section class="sec" id="sec-tokens">
+  <div class="sec-hd"><h2>六、本次引入 / 收敛的视觉令牌</h2><span>开发时同步落到 DesignTokens.kt · ui.css · Theme.kt（三处一致）</span></div>
+  <div class="board">
+    <figure class="fig wide">
+      <div class="cap"><b>㊱ 令牌清单（悬浮窗样式 + 布局优化共用）</b></div>
+      <div style="background:var(--board-card);border:1px solid var(--board-line);border-radius:14px;padding:16px 18px;font-size:12.5px;line-height:2;color:var(--board-fg)">
+        <div><b style="color:var(--primary)">间距档</b>　4 / 8 / 12 / 16 / 24（列表行 12、组内 8、组间 12、页边 14）</div>
+        <div><b style="color:var(--primary)">圆角档</b>　xs6（徽标）/ s10（图标位）/ m14（行、参数卡）/ l20（分类卡）/ xl28（抽屉）</div>
+        <div><b style="color:var(--primary)">卡片层级</b>　surfaceContainerLow（分组容器 / 分类卡）→ surfaceContainerHigh（tonal 胶囊 / tile）→ surfaceContainerHighest（图标位）</div>
+        <div><b style="color:var(--primary)">悬浮窗专用</b>　glassBg / glassBorder（毛玻璃双行）· coverBrush(stableKey)（液态渐变）· WindGradient（播放全部按钮）· windShadow(2)（渐变窗）</div>
+        <div><b style="color:var(--primary)">车机专用</b>　触控目标 ≥ 44dp · 标题 15sp/800 · 预设卡图标 56dp · 强光对比描边 1.5dp</div>
+      </div>
+      <p class="note">改动 ③ 的验收标准：设置主页、歌词子页、悬浮窗样式子页三页<b>只用以上令牌拼装</b>，不允许出现新的魔法数；
+      07-spec.html 的颜色与尺寸规范同步补「悬浮窗预设（手机 4 + 车机 3）」小节。</p>
+    </figure>
+  </div>
+</section>
+
+</div>
+</body>
+</html>

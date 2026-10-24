@@ -1,10 +1,15 @@
 package com.luckylearning.windtone.ui
 
+import com.luckylearning.windtone.data.OverlayPreset
+import com.luckylearning.windtone.data.OverlayPresetTracker
+import com.luckylearning.windtone.data.OVERLAY_FACTORY_PARAMS
 import com.luckylearning.windtone.data.SettingsDefaults
+import com.luckylearning.windtone.data.currentOverlayPreset
 import com.luckylearning.windtone.overlay.LyricOverlayBridge
 import com.luckylearning.windtone.overlay.LyricOverlayBus
 import com.luckylearning.windtone.overlay.OverlayPositioner
 import com.luckylearning.windtone.state.PlayerUiState
+import com.luckylearning.windtone.state.overlayPresetParams
 import com.luckylearning.windtone.ui.theme.windShadow
 
 import androidx.compose.foundation.Canvas
@@ -50,6 +55,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 
@@ -109,6 +115,8 @@ internal fun SettingsOverlayPage(
     onLyricOverlayTextColor: (Int) -> Unit,
     /** 「不显示悬浮窗的应用」名单（v1.1.29）；整体写回，弹窗内逐个勾选 */
     onLyricOverlayHiddenApps: (Set<String>) -> Unit,
+    /** 套用样式预设（v1.1.78；批量写盘，走 OverlayActions.applyOverlayPreset） */
+    onApplyOverlayPreset: (OverlayPreset) -> Unit = {},
     onOverlayEditing: (Boolean) -> Unit,
     onOverlayPreview: () -> Unit,
 ) {
@@ -126,6 +134,9 @@ internal fun SettingsOverlayPage(
     var borderColorPickerShown by remember { mutableStateOf(false) }
     // 「全部恢复默认」的二次确认
     var showResetAll by remember { mutableStateOf(false) }
+    // v1.1.78：「高级参数」折叠态。预设网格顶到前面之后，21 项细参默认收起，
+    // 「想换样式」的用户先看卡片，「想抠细节」的用户再展开。
+    var showOverlayAdvanced by remember { mutableStateOf(false) }
     var overlayHintVisible by remember { mutableStateOf(false) }
     // 三条跳转路都走不通（ROM 连系统授权页都不给开）→ 指引卡里改显示手动路径
     var overlayJumpFailed by remember { mutableStateOf(false) }
@@ -175,11 +186,9 @@ internal fun SettingsOverlayPage(
     // 在屏幕上」这件事有意义。留着它们只会让人以为「改了会生效」，
     // 而实际什么都看不到 —— 展示出来的每一行都必须是当下真正起作用的。
     if (player.lyricOverlay) {
-        // v1.1.51：按「位置与尺寸 / 字体 / 背景 / 行为」四组重排。
-        // 原则：**能连续调的都换成滑杆**，只有语义上就是二选一的（对齐 / 暂停表现）
-        // 才留选项弹层；原先的「底板三档 + 自定义背景开关」并进背景的颜色 + 不透明度。
-        //
-        // 形态开关仍是第一项：它决定下面出现哪一套尺寸控件。
+        // 全屏高度开关（v1.1.19）**不进预设体系**：整屏形态是「结构切换」而不是
+        // 「皮肤」，与预设混在一起会造成「选了预设却变了结构」的困惑（设计文档 §7.2）。
+        // 所以它保持在预设网格之上独立可见。
         SwitchRow(
             title = "全屏高度",
             subtitle = if (player.lyricOverlayFullHeight) {
@@ -193,6 +202,64 @@ internal fun SettingsOverlayPage(
                 onLyricOverlayFullHeight(SettingsDefaults.OVERLAY_FULL_HEIGHT)
             },
         )
+
+        // ---------------- 样式预设（v1.1.78，FR-06） ----------------
+        //
+        // 状态卡（上方开关 + 运行态）与网格成对：快捷换样式在网格，深度调参在折叠区。
+        // 「当前预设」不落盘，由参数反推（R5）——命中显示其名，出厂默认显示
+        // 「默认预设」，改乱显示「自定义」并给「恢复上次套用」入口（FR-04）。
+        GroupLabel("样式预设")
+        val presetParams = player.overlayPresetParams()
+        val matchedPreset = currentOverlayPreset(presetParams)
+        // 车机三套（carOnly）仅车载模式展示（D3）；手机模式恒 4 套
+        val presetPool = if (player.carMode) OverlayPreset.ALL else OverlayPreset.PHONE
+        presetPool.chunked(2).forEach { rowPresets ->
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                rowPresets.forEach { preset ->
+                    OverlayPresetCard(
+                        preset = preset,
+                        selected = matchedPreset?.id == preset.id,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onApplyOverlayPreset(preset) },
+                    )
+                }
+                if (rowPresets.size == 1) Spacer(Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(10.dp))
+        }
+        // FR-04：参数已偏离任何预设（且不是出厂默认）+ 本会话套用过 → 一键恢复原值。
+        // 恢复 = 把该预设快照原样重写（R2）；重启后记忆消失，此时网格上仍可重新套用。
+        if (matchedPreset == null && presetParams != OVERLAY_FACTORY_PARAMS) {
+            OverlayPresetTracker.lastAppliedId?.let { OverlayPreset.byId(it) }?.let { last ->
+                ActionRow(
+                    title = "参数已修改，恢复「${last.displayName}」原值",
+                    subtitle = "上次套用：${last.displayName}（${last.summary()}）。点按把它的原始参数写回，当前手动修改会被覆盖",
+                    onClick = { onApplyOverlayPreset(last) },
+                )
+            }
+        }
+
+        // ---------------- 高级参数（折叠；原四组细参整体收进来） ----------------
+        ActionRow(
+            title = "高级参数",
+            subtitle = if (showOverlayAdvanced) {
+                "收起"
+            } else {
+                "预设已覆盖大部分场景；宽度 / 位置 / 字号 / 颜色 / 描边等 20 多项细参在这里"
+            },
+            onClick = { showOverlayAdvanced = !showOverlayAdvanced },
+            trailing = if (showOverlayAdvanced) "收起" else "展开",
+            chevron = true,
+        )
+        if (showOverlayAdvanced) {
+        // v1.1.51：按「位置与尺寸 / 字体 / 背景 / 行为」四组重排。
+        // 原则：**能连续调的都换成滑杆**，只有语义上就是二选一的（对齐 / 暂停表现）
+        // 才留选项弹层；原先的「底板三档 + 自定义背景开关」并进背景的颜色 + 不透明度。
+        //
+        // 形态开关仍在最上面：它决定下面出现哪一套尺寸控件。
 
         // ---------------- 位置与尺寸 ----------------
         GroupLabel("位置与尺寸")
@@ -681,6 +748,7 @@ internal fun SettingsOverlayPage(
             subtitle = "把形态、尺寸、位置、字体、背景、行为全部恢复到出厂值；开关和隐藏名单保持不变",
             onClick = { showResetAll = true },
         )
+        } // end if (showOverlayAdvanced)
     }
     // 关闭态只留一句「打开后有什么可调」，免得这一整块消失得像设置丢了。
     if (!player.lyricOverlay) {
@@ -1172,5 +1240,72 @@ private fun positionLabel(percent: Int, horizontal: Boolean = true): String {
         kotlin.math.abs(v - 50) <= 2 -> "居中"
         v < 50 -> "偏${if (horizontal) "左" else "上"} $v%"
         else -> "偏${if (horizontal) "右" else "下"} $v%"
+    }
+}
+
+/**
+ * 预设网格卡（v1.1.78，FR-06）。
+ *
+ * 卡片信息三层：预设名（选中转 primary + ✓）/ 一句话定位 / 关键参数摘要。
+ * 选中态由参数反推匹配决定，**不是**「最后点的是哪张」——用户手动调参后
+ * 高亮会自然让位给「自定义」，界面永远与实际参数一致（R5 的直接受益）。
+ */
+@Composable
+private fun OverlayPresetCard(
+    preset: OverlayPreset,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                if (selected) {
+                    scheme.primary.copy(alpha = 0.10f)
+                } else {
+                    scheme.surfaceVariant.copy(alpha = 0.45f)
+                },
+            )
+            .border(
+                width = if (selected) 2.dp else 1.dp,
+                color = if (selected) scheme.primary else scheme.outlineVariant,
+                shape = RoundedCornerShape(12.dp),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                preset.displayName,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = if (selected) scheme.primary else scheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (selected) {
+                Icon(
+                    Icons.Filled.Check,
+                    contentDescription = "当前预设",
+                    tint = scheme.primary,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
+        Text(
+            preset.tagline,
+            style = MaterialTheme.typography.labelSmall,
+            color = scheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+        Text(
+            preset.summary(),
+            style = MaterialTheme.typography.labelSmall,
+            color = scheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
     }
 }

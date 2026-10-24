@@ -410,6 +410,39 @@ data class PlayerUiState(
     val autoPlayOnBoot: Boolean = SettingsDefaults.AUTO_PLAY_ON_BOOT,
 )
 
+/**
+ * 当前悬浮歌词参数 → 预设匹配用的参数快照（v1.1.78）。
+ *
+ * 「当前预设」不落盘（R5 零新键），由这组值反推：命中某套预设显示其名，
+ * 与出厂默认一致显示「默认预设」，否则「自定义」（见 data/OverlayPresets.kt）。
+ * 放在 state 包而不是 data 包：反向依赖只此一处，别让纯数据文件沾上 UI 状态类型。
+ */
+fun PlayerUiState.overlayPresetParams() = com.luckylearning.windtone.data.OverlayPresetParams(
+    lines = lyricOverlayLines,
+    widthPercent = lyricOverlayWidthPercent,
+    boxHeightPercent = lyricOverlayBoxHeightPercent,
+    xPercent = lyricOverlayXPercent,
+    yPercent = lyricOverlayYPercent,
+    textSp = lyricOverlayTextSp,
+    align = lyricOverlayAlign,
+    textColor = lyricOverlayTextColor,
+    currentColor = lyricOverlayCurrentColor,
+    dimPercent = lyricOverlayDimPercent,
+    strokeWidthDp = lyricOverlayStrokeWidthDp,
+    strokeColor = lyricOverlayStrokeColor,
+    lineSpacingDp = lyricOverlayLineSpacingDp,
+    showTitle = lyricOverlayShowTitle,
+    titlePercent = lyricOverlayTitlePercent,
+    titleMode = lyricOverlayTitleMode,
+    bgAlphaPercent = lyricOverlayBgAlphaPercent,
+    bgColor = lyricOverlayBgColor,
+    cornerRadiusDp = lyricOverlayCornerRadiusDp,
+    borderWidthDp = lyricOverlayBorderWidthDp,
+    borderColor = lyricOverlayBorderColor,
+    pauseMode = lyricOverlayPauseMode,
+    fadeMs = lyricOverlayFadeMs,
+)
+
 /** 播放队列条目（队列抽屉用） */
 @Immutable
 data class QueueEntry(

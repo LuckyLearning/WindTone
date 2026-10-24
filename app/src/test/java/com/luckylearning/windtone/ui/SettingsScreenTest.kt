@@ -171,6 +171,17 @@ class SettingsScreenTest {
         compose.waitForIdle()
     }
 
+    /**
+     * v1.1.78：进入悬浮歌词子页后展开「高级参数」。
+     *
+     * 预设网格上线后，21 项细参（行数 / 字号 / 背景 / 行为…）默认收进折叠区，
+     * 直接 scrollTo 找不到 —— 先点开再找，与真实用户的操作路径一致。
+     */
+    private fun expandOverlayAdvanced() {
+        compose.onNodeWithText("高级参数").performScrollTo().performClick()
+        compose.waitForIdle()
+    }
+
     /** 主页分类卡，含在线播放。靠后的卡需要滚出来。 */
     @Test
     fun rootShowsSevenCategoryCards() {
@@ -294,6 +305,7 @@ class SettingsScreenTest {
         compose.waitForIdle()
         compose.onNodeWithText("悬浮歌词").performClick()
         compose.waitForIdle()
+        expandOverlayAdvanced()
         // 悬浮歌词子页挂 ↺ 的两处：①开关本身（开着 ≠ 出厂默认）②「悬浮歌词文字颜色」
         compose.onAllNodesWithContentDescription("恢复默认").assertCountEquals(2)
         compose.onNodeWithText("悬浮歌词文字颜色").performScrollTo()
@@ -359,6 +371,7 @@ class SettingsScreenTest {
         // v1.1.52：这些项从「歌词」子页拆到了「悬浮歌词」子页
         compose.onNodeWithText("悬浮歌词").performClick()
         compose.waitForIdle()
+        expandOverlayAdvanced()
 
         listOf(
             "全屏高度",
@@ -390,6 +403,7 @@ class SettingsScreenTest {
 
         compose.onNodeWithText("悬浮歌词").performClick()
         compose.waitForIdle()
+        expandOverlayAdvanced()
 
         compose.onNodeWithText("悬浮歌词行数", substring = true).performScrollTo().performClick()
         compose.waitForIdle()
@@ -415,6 +429,7 @@ class SettingsScreenTest {
         )
         compose.onNodeWithText("悬浮歌词").performClick()
         compose.waitForIdle()
+        expandOverlayAdvanced()
 
         listOf("高度 自动", "水平位置", "垂直位置", "选择背景色", "背景颜色", "背景不透明度")
             .forEach { title ->
@@ -434,6 +449,7 @@ class SettingsScreenTest {
 
         compose.onNodeWithText("悬浮歌词").performClick()
         compose.waitForIdle()
+        expandOverlayAdvanced()
 
         compose.onNodeWithText("背景不透明度", substring = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("选择背景色", substring = true).performScrollTo().assertIsDisplayed()
@@ -449,6 +465,7 @@ class SettingsScreenTest {
 
         compose.onNodeWithText("悬浮歌词").performClick()
         compose.waitForIdle()
+        expandOverlayAdvanced()
 
         compose.onNodeWithText("正文字号 28sp", substring = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("小", substring = false).assertDoesNotExist()
@@ -581,6 +598,7 @@ class SettingsScreenTest {
         compose.waitForIdle()
         compose.onNodeWithText("悬浮歌词").performClick()
         compose.waitForIdle()
+        expandOverlayAdvanced()
         compose.onNodeWithText("不显示悬浮窗的应用").performScrollTo().assertExists()
     }
 
