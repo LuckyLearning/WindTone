@@ -57,6 +57,8 @@ internal object ForegroundProbe {
         val serviceDeclared: Boolean,
         /** 服务是否 exported（系统要跨进程绑定它；false 时开了也不会生效） */
         val serviceExported: Boolean = false,
+        /** 看护记录：这台机器上是否曾见过无障碍处于开启（掉线提醒的前提） */
+        val watchdogSeenOn: Boolean = false,
         /** UsageStats 的 AppOps 模式（数值 + 人话） */
         val usageStatsMode: String,
         /** UsageStats 是否视为已授权 */
@@ -158,6 +160,7 @@ internal object ForegroundProbe {
             ) == 1,
             serviceDeclared = declared,
             serviceExported = exported,
+            watchdogSeenOn = AccessibilityWatchdog.seenOn(context),
             usageStatsMode = mode,
             usageStatsGranted = ForegroundAppDetector.usageStatsGranted(context),
             ignoringBatteryOptimizations = ignoringBattery,
@@ -249,6 +252,7 @@ internal object ForegroundProbe {
         sb.appendLine("[无障碍]")
         sb.appendLine("服务已声明在案：${yesNo(facts.serviceDeclared)}（exported=${yesNo(facts.serviceExported)}）")
         sb.appendLine("系统总开关 ACCESSIBILITY_ENABLED：${yesNo(facts.accessibilityMasterEnabled)}")
+        sb.appendLine("掉线看护（曾开启过）：${yesNo(facts.watchdogSeenOn)}")
         sb.appendLine("已启用服务列表（截断 400 字）：${facts.enabledAccessibilityServices.take(400).ifBlank { "（空）" }}")
         sb.appendLine()
 

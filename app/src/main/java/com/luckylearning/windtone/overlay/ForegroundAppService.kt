@@ -35,6 +35,17 @@ class ForegroundAppService : AccessibilityService() {
         }
     }
 
+    /**
+     * 服务真正被系统连上 = 无障碍确实在工作，记住这一点（v1.1.85）。
+     *
+     * [AccessibilityWatchdog] 靠这个标记判断「以前开过、现在掉了」，
+     * 再去发那条一次点击就能恢复的通知。
+     */
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        runCatching { AccessibilityWatchdog.markOn(applicationContext) }
+    }
+
     override fun onInterrupt() {
         // 系统要求实现；本服务不提供反馈，无事可做
     }

@@ -193,6 +193,10 @@
     <string name="the_overlay_will_not_disappear">The overlay will not disappear. No adb needed: enable the accessibility service in system settings.</string>
     <string name="could_not_open_accessibility_settings">Could not open accessibility settings. Go to Settings → Accessibility manually</string>
     <string name="accessibility_settings">Accessibility settings</string>
+    <string name="a11y_watch_channel">Foreground detection check</string>
+    <string name="a11y_watch_channel_desc">Reminds you when the accessibility service gets turned off, one tap to re-enable</string>
+    <string name="a11y_watch_title">Accessibility was turned off by the system</string>
+    <string name="a11y_watch_text">This head unit disables WindTone\'s accessibility service after a restart. Tap here to open the accessibility page and turn it back on. If this device has no such page, use usage access instead (About &amp; diagnostics → Foreground app history).</string>
     <string name="battery_help_title">Allow background running</string>
     <string name="battery_help_body">This head unit has no battery optimisation page (common on BYD DiLink). Try any of these paths://n//n1) Settings → Apps → WindTone → Power management → Allow background activity\n2) Settings → Battery → App power management → WindTone → Unrestricted\n3) Settings → Apps → WindTone → Battery → Not optimised / Allow background\n\nIf none exists it still works: as long as the accessibility service stays on, app switches are reported instantly. The allow-list only protects against being frozen after a long standby.</string>
     <string name="battery_help_copy">Copy steps</string>

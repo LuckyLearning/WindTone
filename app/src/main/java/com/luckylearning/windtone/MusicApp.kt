@@ -53,6 +53,11 @@ class MusicApp : Application() {
             // 这些排障时最需要的线索。Debug 包打开，Release 包保持关闭（不刷用户 logcat）。
             UpdateChecker.setVerbose(BuildConfig.DEBUG)
         }
+        // 无障碍「重启后掉线」的自检（v1.1.85）：曾经开过而这次没开 → 发一条
+        // 一键恢复的通知。放在最后、且单独兜住 —— 通知失败不该影响启动。
+        step("a11y-watch") {
+            com.luckylearning.windtone.overlay.AccessibilityWatchdog.checkAndNotify(this)
+        }
         BootTrace.mark(this, "app:onCreate-done")
     }
 

@@ -44,6 +44,12 @@ class CarBootReceiver : BroadcastReceiver() {
                 "「开机后台播放」与「车载模式」都没打开",
             )
         }
+        // 无障碍掉线自检（v1.1.85）：车机会在重启时抹掉第三方无障碍服务，
+        // 这里开机就提示一次，用户点通知即可回到那个（藏在车辆设置里的）无障碍页。
+        runCatching {
+            com.luckylearning.windtone.overlay.AccessibilityWatchdog.checkAndNotify(context)
+        }
+
         when (kind) {
             BootAction.Kind.PLAY_IN_BACKGROUND -> runCatching {
                 BootTrace.mark(context, "boot:autoplay")

@@ -174,6 +174,10 @@
     <string name="the_overlay_will_not_disappear">悬浮窗不会因此消失。没有 adb 也能用：无障碍服务在系统设置里手动开启。</string>
     <string name="could_not_open_accessibility_settings">打不开无障碍设置页，请手动前往：设置 → 辅助功能</string>
     <string name="accessibility_settings">无障碍设置</string>
+    <string name="a11y_watch_channel">前台识别自检</string>
+    <string name="a11y_watch_channel_desc">无障碍服务被系统关掉时提醒，点一下即可重新开启</string>
+    <string name="a11y_watch_title">辅助功能被系统关闭了</string>
+    <string name="a11y_watch_text">重启后车机会关掉听风的辅助功能，点这里回到「无障碍」页重新打开即可恢复「按应用隐藏」。若这台机器没有该页面，改在「关于与诊断 → 前台应用记录」里用「使用情况访问」代替。</string>
     <string name="battery_help_title">允许后台运行</string>
     <string name="battery_help_body">这台车机没有「电池优化」设置页（比亚迪 DiLink 常见）。可以按下面任一路径把听风设为不受限：\n\n1）设置 → 应用管理 → 听风 → 耗电管理 → 允许后台活动\n2）设置 → 电池 → 应用耗电管理 → 听风 → 不受限制\n3）设置 → 应用 → 听风 → 电池 → 不优化 / 允许后台运行\n\n找不到也没关系：只要「无障碍服务」还开着，应用切换事件就是即时的；白名单主要防的是「息屏很久之后被系统冻结」。</string>
     <string name="battery_help_copy">复制说明</string>
