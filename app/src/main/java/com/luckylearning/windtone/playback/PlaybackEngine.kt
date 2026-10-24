@@ -448,8 +448,13 @@ class PlaybackEngine(
         }
 
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-            val song = _player.value.current
-            if (song != null && AliyunPlaybackWindow.isPending(song.uri.scheme)) {
+            // 占位地址（还没取到直链）加载失败是预期内的：等窗口补链换上真直链。
+            // 除了看界面状态里的歌，还要看**控制器当前项**——上一曲 / 跳转刚落到
+            // 未填项时，界面状态可能还停在上一首歌上，漏判会把占位错误当成真失败，
+            // 触发「失败跳下一首」，表现就是「上一曲回不去、反而往前跳」（v1.1.72 真机）。
+            val pendingNow = AliyunPlaybackWindow.isPending(_player.value.current?.uri?.scheme) ||
+                AliyunPlaybackWindow.isPending(controller?.currentMediaItem?.localConfiguration?.uri?.scheme)
+            if (pendingNow) {
                 scheduleAliyunWindow()
                 return
             }
@@ -457,11 +462,13 @@ class PlaybackEngine(
                 .filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>()
                 .firstOrNull()
                 ?.responseCode ?: 0
-            if ((code == 401 || code == 403) && !aliyunUrlRetried && song != null &&
-                TrackFragment.parse(song.uri.fragment) != null
-            ) {
+            // 直链过期重试的身份也以**控制器当前项**为准（稳定键就是 mediaId），
+            // 不能用界面状态里可能滞后的歌去解析，否则会刷错歌的地址
+            val cloudId = controller?.currentMediaItem?.mediaId
+                ?.let { TrackFragment.parse(it.removePrefix("aliyun:")) }
+            if ((code == 401 || code == 403) && !aliyunUrlRetried && cloudId != null) {
                 aliyunUrlRetried = true
-                scope.launch { refreshAliyunUrl(song) }
+                scope.launch { refreshAliyunUrl(cloudId.first, cloudId.second) }
                 return
             }
             Log.w(TAG, "播放错误: ${error.errorCodeName}", error)
@@ -635,6 +642,11 @@ class PlaybackEngine(
         val songs = ordered.filterNotNull()
         if (AliyunPlaybackWindow.pendingIndices(songs.map { it.uri.scheme }, index).isEmpty()) return
         val filled = AliyunDrive(AliyunAuth(app)).fillWindow(songs, index)
+        // ⚠️ 必须先把补到的直链记进备忘录，再 replaceMediaItem：
+        // replace 也要跨 Binder 过服务端的 resolve，晚一步的话刚补的地址会被
+        // resolve 重建回占位地址，补链等于白做（v1.1.72 的「上一曲回不去」）。
+        filled.filter { !AliyunPlaybackWindow.isPending(it.uri.scheme) }
+            .forEach { CloudUrlMemo.remember(it.stableKey, it.uri.toString()) }
         val c2 = controller ?: return
         for (song in filled) {
             val before = songs.firstOrNull { it.stableKey == song.stableKey } ?: continue
@@ -652,24 +664,24 @@ class PlaybackEngine(
         }
         val ready = filled.filter { !AliyunPlaybackWindow.isPending(it.uri.scheme) }
             .associateBy { it.stableKey }
-        ready.forEach { (key, song) -> CloudUrlMemo.remember(key, song.uri.toString()) }
         currentQueue = currentQueue.map { ready[it.stableKey] ?: it }
     }
 
-    private suspend fun refreshAliyunUrl(song: Song) {
-        val id = TrackFragment.parse(song.uri.fragment) ?: return
+    private suspend fun refreshAliyunUrl(driveId: String, fileId: String) {
         val drive = AliyunDrive(AliyunAuth(app))
-        val url = drive.downloadUrl(id.first, id.second).getOrNull() ?: return
-        val saved = aliyunTracks.get(id.first, id.second)
+        val url = drive.downloadUrl(driveId, fileId).getOrNull() ?: return
+        val saved = aliyunTracks.get(driveId, fileId)
+        val song = currentQueue.firstOrNull { it.stableKey == "aliyun:" + TrackFragment.of(driveId, fileId) }
+            ?: return
         val refreshed = drive.toSong(
             com.luckylearning.windtone.data.aliyun.AliyunEntry(
-                id.second,
+                fileId,
                 song.displayName.ifBlank { song.title },
                 false,
                 song.sizeBytes,
             ),
             url,
-            id.first,
+            driveId,
             saved?.folderName,
             saved,
         )

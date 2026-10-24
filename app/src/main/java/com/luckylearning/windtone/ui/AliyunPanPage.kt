@@ -3,6 +3,9 @@ package com.luckylearning.windtone.ui
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,10 +13,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -524,7 +536,6 @@ internal fun AliyunPanPage(
             singleLine = true,
             label = { Text("搜索文件名") },
         )
-        OnlineLists(tracks)
     }
 
     val shownPlaylists = if (query.isBlank()) playlists else playlists.filter { playlist ->
@@ -538,39 +549,103 @@ internal fun AliyunPanPage(
             modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
         )
         shownPlaylists.forEach { p ->
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
+            // 卡片样式与曲库分组卡一致（surfaceContainerLow + 圆角 + 图标位），
+            // 次要操作收进溢出菜单，主操作（播放）常驻 —— 不再一行挤三个文字按钮
+            var menuOpen by remember { mutableStateOf(false) }
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
             ) {
-                Column(Modifier.weight(1f)) {
-                    Text(p.name, style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        "${p.fileCount} 首 · 来源：${p.rootName.ifBlank { "根目录" }}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                TextButton(
-                    enabled = !loading && !scanning,
-                    onClick = {
-                        val songs = p.files.map { hit ->
-                            val folder = hit.parentPath.substringAfterLast('/').ifBlank { hit.parentPath }
-                            tracks.remember(p.driveId, hit.fileId, hit.name, folder, hit.parentFileId)
-                            drive.pendingSong(
-                                AliyunEntry(hit.fileId, hit.name, isDir = false, sizeBytes = 0L),
-                                p.driveId,
-                                folder,
-                                tracks.get(p.driveId, hit.fileId),
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(start = 10.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .background(
+                                MaterialTheme.colorScheme.surfaceContainerHighest,
+                                RoundedCornerShape(10.dp),
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            AppIcons.MusicNote,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            p.name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            "${p.fileCount} 首 · 来源：${p.rootName.ifBlank { "根目录" }}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    IconButton(
+                        enabled = !loading && !scanning,
+                        onClick = {
+                            val songs = p.files.map { hit ->
+                                val folder = hit.parentPath.substringAfterLast('/').ifBlank { hit.parentPath }
+                                tracks.remember(p.driveId, hit.fileId, hit.name, folder, hit.parentFileId)
+                                drive.pendingSong(
+                                    AliyunEntry(hit.fileId, hit.name, isDir = false, sizeBytes = 0L),
+                                    p.driveId,
+                                    folder,
+                                    tracks.get(p.driveId, hit.fileId),
+                                )
+                            }
+                            openQueue(songs, 0)
+                        },
+                    ) {
+                        Icon(
+                            Icons.Filled.PlayArrow,
+                            contentDescription = "播放 ${p.name}",
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    Box {
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(
+                                Icons.Filled.MoreVert,
+                                contentDescription = "更多操作",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        openQueue(songs, 0)
-                    },
-                ) { Text("播放") }
-                TextButton(onClick = {
-                    savedPlaylists.remove(p.id)
-                    playlists = savedPlaylists.all()
-                }) { Text("删除") }
-                TextButton(onClick = { editingPlaylistId = p.id }) { Text("曲目") }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("曲目管理") },
+                                onClick = {
+                                    menuOpen = false
+                                    editingPlaylistId = p.id
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("删除歌单") },
+                                onClick = {
+                                    menuOpen = false
+                                    savedPlaylists.remove(p.id)
+                                    playlists = savedPlaylists.all()
+                                },
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -658,26 +733,6 @@ internal fun AliyunPanPage(
                 onDismiss = { editingPlaylistId = null },
             )
         }
-    }
-}
-
-@Composable
-private fun OnlineLists(tracks: AliyunTrackStore) {
-    val favorites = tracks.favorites()
-    val recent = tracks.recent().take(8)
-    val most = tracks.mostPlayed().take(8)
-    if (favorites.isEmpty() && recent.isEmpty() && most.isEmpty()) return
-    if (favorites.isNotEmpty()) {
-        Text("在线收藏 ${favorites.size} 首", style = MaterialTheme.typography.labelLarge)
-        favorites.take(8).forEach { Text(it.title.ifBlank { it.fileName }, style = MaterialTheme.typography.bodySmall) }
-    }
-    if (recent.isNotEmpty()) {
-        Text("在线最近播放", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 6.dp))
-        recent.forEach { Text(it.title.ifBlank { it.fileName }, style = MaterialTheme.typography.bodySmall) }
-    }
-    if (most.isNotEmpty()) {
-        Text("在线最常播放", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 6.dp))
-        most.forEach { Text("${it.title.ifBlank { it.fileName }} · ${it.playCount} 次", style = MaterialTheme.typography.bodySmall) }
     }
 }
 
