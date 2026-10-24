@@ -70,6 +70,14 @@ internal object ForegroundProbe {
         val activeServices: List<String> = emptyList(),
         /** 本服务上次被系统连上的时间；0 = 从未 */
         val serviceLastConnectedAt: Long = 0L,
+        /** 省电模式（车机低电时也会限后台） */
+        val powerSaveMode: Boolean = false,
+        /** 系统是否显式标记「限制后台活动」；null = 该版本查不到 */
+        val backgroundRestricted: Boolean? = null,
+        /** AppOps android:runAnyInBackground 的模式（车厂常用它代替电池白名单） */
+        val runInBackgroundMode: String = "—",
+        /** 电池优化页的候选解析结果 */
+        val batteryCandidates: List<Candidate> = emptyList(),
         /** UsageStats 的 AppOps 模式（数值 + 人话） */
         val usageStatsMode: String,
         /** UsageStats 是否视为已授权 */
@@ -177,6 +185,12 @@ internal object ForegroundProbe {
             recentSwitches = ForegroundAppState.recent().map { it.pkg to it.atMillis },
             activeServices = ForegroundAppDetector.activeAccessibilityServices(context),
             serviceLastConnectedAt = AccessibilityWatchdog.lastConnectedAt(context),
+            powerSaveMode = ForegroundAppDetector.powerSaveMode(context),
+            backgroundRestricted = ForegroundAppDetector.backgroundRestricted(context),
+            runInBackgroundMode = ForegroundAppDetector.runInBackgroundMode(context),
+            batteryCandidates = ForegroundAppDetector.batteryOptimizationIntents(context).map {
+                Candidate("电池优化", describe(it), resolvable(it))
+            },
             usageStatsMode = mode,
             usageStatsGranted = ForegroundAppDetector.usageStatsGranted(context),
             ignoringBatteryOptimizations = ignoringBattery,
@@ -288,8 +302,34 @@ internal object ForegroundProbe {
         sb.appendLine("AppOps android:get_usage_stats：${facts.usageStatsMode}")
         sb.appendLine("判定为已授权：${yesNo(facts.usageStatsGranted)}")
         sb.appendLine("当前前台包名：${facts.currentForeground ?: "（查不到，通常是没有授权）"}")
-        sb.appendLine("电池优化白名单：${if (facts.ignoringBatteryOptimizations) "已加入（后台保活正常）" else "未加入（车机可能在息屏后杀掉轮询）"}")
         sb.appendLine("logcat 可读：${yesNo(facts.logcatReadable)}")
+        sb.appendLine()
+
+        sb.appendLine("[后台限制]")
+        sb.appendLine(
+            "电池优化白名单：${
+                if (facts.ignoringBatteryOptimizations) "已加入（后台保活正常）" else "未加入"
+            }",
+        )
+        sb.appendLine("省电模式：${yesNo(facts.powerSaveMode)}")
+        sb.appendLine(
+            "系统标记「限制后台活动」：${
+                when (facts.backgroundRestricted) {
+                    true -> "是（这个应用被系统限后台了）"
+                    false -> "否"
+                    null -> "查不到（系统版本较低）"
+                }
+            }",
+        )
+        sb.appendLine("AppOps runAnyInBackground：${facts.runInBackgroundMode}")
+        sb.appendLine("电池优化页候选：")
+        if (facts.batteryCandidates.isEmpty()) {
+            sb.appendLine("（没有候选）")
+        } else {
+            facts.batteryCandidates.forEach { c ->
+                sb.appendLine("[${if (c.resolvable) "可解析" else "  ×  "}] ${c.target}")
+            }
+        }
         sb.appendLine()
 
         sb.appendLine("[不显示悬浮窗的应用]")

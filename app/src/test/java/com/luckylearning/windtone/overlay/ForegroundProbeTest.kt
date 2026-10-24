@@ -25,6 +25,11 @@ class ForegroundProbeTest {
         liveForeground: String? = null,
         hiddenApps: List<String> = emptyList(),
         recentSwitches: List<Pair<String, Long>> = emptyList(),
+        ignoringBatteryOptimizations: Boolean = false,
+        powerSaveMode: Boolean = false,
+        backgroundRestricted: Boolean? = false,
+        runInBackgroundMode: String = "默认(3)",
+        batteryCandidates: List<ForegroundProbe.Candidate> = emptyList(),
     ) = ForegroundProbe.Facts(
         collectedAt = 1_700_000_000_000L,
         manufacturer = "BYD",
@@ -42,7 +47,6 @@ class ForegroundProbeTest {
         serviceDeclared = true,
         usageStatsMode = "MODE_DEFAULT(3)",
         usageStatsGranted = usageStatsGranted,
-        ignoringBatteryOptimizations = false,
         currentForeground = currentForeground,
         settingsApps = settingsApps,
         candidates = listOf(
@@ -53,6 +57,11 @@ class ForegroundProbeTest {
         liveForeground = liveForeground,
         hiddenApps = hiddenApps,
         recentSwitches = recentSwitches,
+        ignoringBatteryOptimizations = ignoringBatteryOptimizations,
+        powerSaveMode = powerSaveMode,
+        backgroundRestricted = backgroundRestricted,
+        runInBackgroundMode = runInBackgroundMode,
+        batteryCandidates = batteryCandidates,
     )
 
     @Test
@@ -155,5 +164,33 @@ class ForegroundProbeTest {
         )
         assertTrue(report.contains("com.byd.launcher"))
         assertTrue(report.contains("com.byd.media"))
+    }
+
+    @Test
+    fun `后台限制段列出白名单状态与 AppOps 模式`() {
+        val report = ForegroundProbe.buildReport(
+            facts(
+                runInBackgroundMode = "被忽略/拒绝(1)",
+                backgroundRestricted = true,
+                batteryCandidates = listOf(
+                    ForegroundProbe.Candidate(
+                        "电池优化",
+                        "android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+                        false,
+                    ),
+                ),
+            ),
+        )
+        assertTrue(report.contains("[后台限制]"))
+        assertTrue(report.contains("电池优化白名单：未加入"))
+        assertTrue(report.contains("AppOps runAnyInBackground：被忽略/拒绝(1)"))
+        assertTrue(report.contains("系统标记「限制后台活动」：是"))
+        assertTrue(report.contains("[  ×  ] android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"))
+    }
+
+    @Test
+    fun `系统版本查不到后台限制时如实说明`() {
+        val report = ForegroundProbe.buildReport(facts(backgroundRestricted = null))
+        assertTrue(report.contains("查不到（系统版本较低）"))
     }
 }

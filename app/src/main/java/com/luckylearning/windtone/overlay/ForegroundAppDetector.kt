@@ -235,7 +235,91 @@ internal object ForegroundAppDetector {
         Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
             .setData(android.net.Uri.parse("package:${context.packageName}"))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-    )
+    ) + discoverBatteryActivities(context).map { cn ->
+        // 车机把上面三段都裁掉时，从设置类应用里**动态找**电池 / 省电 / 后台管理页，
+        // 逻辑与无障碍的动态发现同源（DiLink 这类 ROM 改名比换实现勤快得多）。
+        Intent().setComponent(cn).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+
+    /**
+     * 动态发现「电池 / 省电 / 后台管理」相关 Activity（v1.1.87）。
+     *
+     * 只认名字里带 battery / power / optimiz / background 的页面 —— 宁可少找，
+     * 不要去点一个语焉不详的系统页面。
+     */
+    fun discoverBatteryActivities(context: Context): List<android.content.ComponentName> {
+        val pm = context.packageManager
+        val settingsPackages = runCatching {
+            pm.queryIntentActivities(
+                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),
+                0,
+            )
+        }.getOrDefault(emptyList())
+            .mapNotNull { it.activityInfo?.packageName }
+            .distinct()
+            .filter { pkg ->
+                val label = runCatching {
+                    pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+                }.getOrDefault("")
+                pkg.contains("setting", ignoreCase = true) ||
+                    pkg.contains("byd.carsettings", ignoreCase = true) ||
+                    label.contains("设置") ||
+                    label.contains("Setting", ignoreCase = true)
+            }
+
+        val keys = listOf("battery", "power", "optimiz", "background")
+        return settingsPackages.flatMap { pkg ->
+            val info = runCatching { pm.getPackageInfo(pkg, PackageManager.GET_ACTIVITIES) }.getOrNull()
+            info?.activities.orEmpty()
+                .mapNotNull { it.name }
+                .filter { name -> keys.any { name.contains(it, ignoreCase = true) } }
+                .map { android.content.ComponentName(pkg, it) }
+        }.distinct().take(6)
+    }
+
+    // ---------------------------------------------------------------- 后台限制探测
+
+    /** 当前是否处于省电模式（车机低电量时也会限后台） */
+    fun powerSaveMode(context: Context): Boolean = runCatching {
+        (context.getSystemService(Context.POWER_SERVICE) as PowerManager).isPowerSaveMode
+    }.getOrDefault(false)
+
+    /** 系统是否把这个应用标成「限制后台活动」（API 28+，用户/车厂显式设置过） */
+    fun backgroundRestricted(context: Context): Boolean? = runCatching {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            (context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager)
+                .isBackgroundRestricted
+        } else {
+            null
+        }
+    }.getOrNull()
+
+    /**
+     * `android:runAnyInBackground` 的 AppOps 模式（v1.1.87）。
+     *
+     * 车厂常常不用「电池优化白名单」而用 AppOps 直接压后台（DiLink 就是），
+     * 所以「白名单没加」不代表后台被限 —— 这一行才是真正的判据之一。
+     */
+    fun runInBackgroundMode(context: Context): String = runCatching {
+        val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            appOps.unsafeCheckOpNoThrow(
+                "android:runAnyInBackground",
+                Process.myUid(),
+                context.packageName,
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            appOps.checkOpNoThrow("android:runAnyInBackground", Process.myUid(), context.packageName)
+        }
+        when (mode) {
+            AppOpsManager.MODE_ALLOWED -> "允许(0)"
+            AppOpsManager.MODE_IGNORED -> "被忽略/拒绝(1)"
+            AppOpsManager.MODE_ERRORED -> "报错(2)"
+            AppOpsManager.MODE_DEFAULT -> "默认(3)"
+            else -> "MODE_$mode"
+        }
+    }.getOrElse { "查询失败：${it.javaClass.simpleName}" }
 
     /**
      * 跳系统「使用情况权限」页（多候选 + 兜底）。
