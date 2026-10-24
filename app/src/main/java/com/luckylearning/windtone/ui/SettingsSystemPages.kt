@@ -786,6 +786,10 @@ internal fun SettingsUpdatePage(
     onCheckUpdate: () -> Unit,
     onAutoCheckUpdate: (Boolean) -> Unit,
     onDownloadRoute: (DownloadRoute) -> Unit,
+    /** 下载中切换线路（中止旧下载、按新线路重下）—— v1.1.74，下载弹窗用 */
+    onSwitchDownloadRoute: (DownloadRoute) -> Unit,
+    /** 测各条线路延迟 —— v1.1.74，「下载线路」弹窗的「测试延迟」按钮 */
+    onPingRoutes: () -> Unit,
     onOpenReleasePage: () -> Unit,
     onIgnoreUpdate: () -> Unit,
     onDownloadUpdate: () -> Unit,
@@ -881,6 +885,12 @@ internal fun SettingsUpdatePage(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
+                            Text(
+                                routeLatencyText(update, route),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.width(6.dp))
                             if (route == downloadRoute) {
                                 Icon(
                                     Icons.Filled.Check,
@@ -889,6 +899,12 @@ internal fun SettingsUpdatePage(
                                 )
                             }
                         }
+                    }
+                    TextButton(
+                        onClick = onPingRoutes,
+                        enabled = !update.pingingRoutes,
+                    ) {
+                        Text(if (update.pingingRoutes) "正在测试延迟…" else "测试延迟")
                     }
                 }
             },
@@ -905,6 +921,19 @@ internal fun SettingsUpdatePage(
             onOpenReleasePage = onOpenReleasePage,
             onIgnore = onIgnoreUpdate,
             onDismiss = onDismissUpdateDialog,
+            onSwitchRoute = onSwitchDownloadRoute,
+            onPingRoutes = onPingRoutes,
         )
     }
+}
+
+/**
+ * 线路延迟的展示文案（与 SettingsDialogs 里的同名函数同语义）：
+ * 空 = 未测过；「…」= 正在测；「xxx ms」= 测通；「超时」= 测不通。
+ */
+private fun routeLatencyText(update: UpdateUiState, route: DownloadRoute): String {
+    if (!update.routeLatencies.containsKey(route)) {
+        return if (update.pingingRoutes) "…" else ""
+    }
+    return update.routeLatencies[route]?.let { "$it ms" } ?: "超时"
 }

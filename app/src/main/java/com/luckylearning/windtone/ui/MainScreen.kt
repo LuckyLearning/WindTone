@@ -762,6 +762,8 @@ fun MainScreen(
                     onAutoCheckUpdate = { autoCheckUpdateOn = it; updateVm.setAutoCheckUpdate(it) },
                     downloadRoute = downloadRouteOn,
                     onDownloadRoute = { downloadRouteOn = it; updateVm.setDownloadRoute(it) },
+                    onSwitchDownloadRoute = updateVm::switchDownloadRoute,
+                    onPingRoutes = updateVm::pingRoutes,
                     onOpenReleasePage = updateVm::openReleasePage,
                     onIgnoreUpdate = updateVm::ignoreUpdate,
                     onDismissUpdateDialog = updateVm::dismissUpdateDialog,

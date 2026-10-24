@@ -306,9 +306,12 @@ object UpdateChecker {
      * 两个维度相乘：
      *  - **包名维度**（[urls]）：本机 ABI 包 → 其它包 → universal，见 [orderAssets]；
      *  - **线路维度**（[route]）：由用户在「设置 → 更新 → 下载线路」里选择，默认 [DownloadRoute.AUTO]：
-     *    · [DownloadRoute.AUTO]：直链优先，慢/失败时自动落到 jsDelivr 与两个 ghproxy；
+     *    · [DownloadRoute.AUTO]：直链优先，某条线路**报错**（连不上 / HTTP 错误）时落到下一条；
      *    · [DownloadRoute.DIRECT]：只走 GitHub 官方直链；
      *    · 指定镜像：**只走这一条**（用户既然手动选了，就不该偷偷换线，失败时界面会提示去哪改）。
+     *
+     * v1.1.74 起**不再做速度自动切换**（旧版起步慢就中断换线）：下载中途换线会让进度
+     * 反复清零，用户困惑；慢线路由用户在下载弹窗里点「切换线路」手动解决。
      *
      * 镜像只做字节转发，不改动文件内容，且下载后仍有 [verifyApk] 兜底校验。
      */
@@ -374,15 +377,18 @@ object UpdateChecker {
      * 下载前会清空该目录，避免历史版本堆积；先写 `.part` 再做完整性校验后才改名。
      *
      * **线路由 [route] 决定**（见 [downloadCandidates]）：自动模式下按顺序逐条尝试，
-     * 每条线路开始后监测速度——起步 [STALL_WINDOW_MS] 内低于 [STALL_MIN_BYTES]
-     * 视为「慢线路」，中断并切换下一条（对国内直连 GitHub 的场景这几乎是必然触发）；
+     * 但**只在线路真正报错**（连不上 / HTTP 错误 / 校验失败）时才换下一条 ——
+     * v1.1.74 起不再做速度自动切换（旧版起步 [STALL 已移除] 起步慢就中断换线，
+     * 会让进度反复清零），慢线路由用户在下载弹窗里点「切换线路」手动解决。
      * 手动指定线路时只用那一条，失败即报错。
      * 全部线路失败时抛最后一次的错误，由界面引导用户浏览器手动下载。
      *
      * @param route 下载线路（设置页可选，默认自动降级）
      * @param onProgress 参数为 (已下载字节, 总字节)，总字节为 0 时表示长度未知
-     * @param onLineFallback 某条线路失败即将切换时回调 (即将尝试的线路序号, 候选总数)，
-     *   供界面提示「正在切换镜像」；进度条会从头重新计数
+     * @param onLineFallback 某条线路**报错**即将切换时回调 (即将尝试的线路序号, 候选总数)，
+     *   供界面提示「正在换线路」；进度条会从头重新计数
+     * @param checkCancelled 下载中由调用方轮询的取消探针（v1.1.74，供「切换线路」
+     *   中止旧下载用）：返回 true 时尽快抛出、让出下载通道。每个 64KB 分块查一次。
      */
     suspend fun download(
         context: Context,
@@ -390,6 +396,7 @@ object UpdateChecker {
         route: DownloadRoute = DownloadRoute.AUTO,
         onProgress: (Long, Long) -> Unit = { _, _ -> },
         onLineFallback: (Int, Int) -> Unit = { _, _ -> },
+        checkCancelled: () -> Boolean = { false },
     ): File = withContext(Dispatchers.IO) {
         val dir = File(context.cacheDir, DIR_NAME).apply { if (!exists()) mkdirs() }
         dir.listFiles()?.forEach { runCatching { it.delete() } }
@@ -403,8 +410,9 @@ object UpdateChecker {
         val candidates = downloadCandidates(info.allApkUrls, route)
         var lastError: Throwable? = null
         for ((index, candidate) in candidates.withIndex()) {
+            if (checkCancelled()) throw IOException(DOWNLOAD_ABORTED_MSG)
             try {
-                val responseTotal = downloadOnce(candidate, part, info, onProgress)
+                val responseTotal = downloadOnce(candidate, part, info, onProgress, checkCancelled)
                 verifyApk(part, info.apkSizeBytes, responseTotal, info.apkSha256)
                 if (!part.renameTo(target)) {
                     part.copyTo(target, overwrite = true)
@@ -414,6 +422,7 @@ object UpdateChecker {
             } catch (t: Throwable) {
                 lastError = t
                 runCatching { part.delete() }
+                if (checkCancelled()) throw IOException(DOWNLOAD_ABORTED_MSG)
                 if (verbose) Log.w(TAG, "下载线路失败，切换下一条: $candidate", t)
                 val next = index + 1
                 if (next < candidates.size) onLineFallback(next + 1, candidates.size)
@@ -433,6 +442,7 @@ object UpdateChecker {
         part: File,
         info: UpdateInfo,
         onProgress: (Long, Long) -> Unit,
+        checkCancelled: () -> Boolean,
     ): Long {
         var conn: HttpURLConnection? = null
         try {
@@ -449,7 +459,6 @@ object UpdateChecker {
 
             val total = conn.contentLengthLong.takeIf { it > 0 } ?: 0L
             var downloaded = 0L
-            val startedAt = System.currentTimeMillis()
             part.parentFile?.mkdirs()
             conn.inputStream.use { input ->
                 FileOutputStream(part).use { out ->
@@ -459,12 +468,9 @@ object UpdateChecker {
                         out.write(buf, 0, n)
                         downloaded += n
                         onProgress(downloaded, total)
-                        // 慢线路判定：起步窗口内几乎没进度 → 中断换线。
-                        // 直链在国内常表现为「能连上但只有几 KB/s」，不切会挂 20 分钟。
-                        val elapsed = System.currentTimeMillis() - startedAt
-                        if (elapsed > STALL_WINDOW_MS && downloaded < STALL_MIN_BYTES) {
-                            throw IOException("线路过慢（${elapsed / 1000}s 仅 ${downloaded / 1024}KB）")
-                        }
+                        // v1.1.74 起不再做速度自动切换（起步慢就中断换线会让进度反复清零），
+                        // 只响应调用方的取消探针 —— 慢线路由用户点「切换线路」手动解决。
+                        if (checkCancelled()) throw IOException(DOWNLOAD_ABORTED_MSG)
                         n = input.read(buf)
                     }
                     out.flush()
@@ -574,6 +580,39 @@ object UpdateChecker {
         val body: String,
         val connection: HttpURLConnection,
     )
+
+    /**
+     * 测一条线路的延迟（v1.1.74，「下载线路」弹窗的「测试延迟」用）。
+     *
+     * 对该线路的**首个候选 URL**（即 `latest.json`，只有几 KB）发一次带 Range 的小请求，
+     * 计时到拿到响应首包为止 —— 只衡量「这条线通不通、快不快」，不比下载大文件的速度。
+     * 失败 / 超时 / 非 2xx 一律返回 `null`（界面显示「超时」）。
+     */
+    fun measureLatency(route: DownloadRoute): Long? {
+        val url = checkCandidates(route).first()
+        var conn: HttpURLConnection? = null
+        return try {
+            conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = PING_TIMEOUT_MS
+                readTimeout = PING_TIMEOUT_MS
+                instanceFollowRedirects = true
+                setRequestProperty("User-Agent", "WindTone-Android/$currentVersion")
+                setRequestProperty("Range", "bytes=0-1023") // 只要一小段，拿到首包就断开
+            }
+            val startedAt = System.currentTimeMillis()
+            val code = conn.responseCode
+            val elapsed = System.currentTimeMillis() - startedAt
+            if (code in 200..299 || code == 206) elapsed else null
+        } catch (t: Throwable) {
+            if (verbose) Log.w(TAG, "测延迟失败：${route.label}", t)
+            null
+        } finally {
+            runCatching { conn?.inputStream?.close() }
+            runCatching { conn?.errorStream?.close() }
+            conn?.disconnect()
+        }
+    }
 
     /**
      * 统一的 GET 请求：不抛状态码异常，404 也照常返回，由调用方决定文案；
@@ -748,12 +787,6 @@ object UpdateChecker {
         "https://gh-proxy.com/",
     )
 
-    /** 慢线路判定窗口：起步 8 秒 */
-    private const val STALL_WINDOW_MS = 8_000L
-
-    /** 慢线路判定阈值：8 秒内不足 512KB（≈64KB/s）即切换 */
-    private const val STALL_MIN_BYTES = 512L * 1024
-
     /** 检查更新：单条线路的连接 / 读取超时。清单只有几 KB，连不上就尽快换线 */
     private const val CHECK_CONNECT_TIMEOUT_MS = 6_000
     private const val CHECK_READ_TIMEOUT_MS = 8_000
@@ -763,4 +796,10 @@ object UpdateChecker {
 
     /** 剩余预算低于这个值就不再开新连接（开了也来不及读完） */
     private const val MIN_LINE_BUDGET_MS = 3_000L
+
+    /** 测延迟：连接 / 读取超时（结果只要个大概，超时即视为线路不通） */
+    private const val PING_TIMEOUT_MS = 5_000
+
+    /** 「切换线路」中止旧下载时抛出的标记文案（调用方据此不把它当失败展示） */
+    internal const val DOWNLOAD_ABORTED_MSG = "下载已取消（切换线路）"
 }

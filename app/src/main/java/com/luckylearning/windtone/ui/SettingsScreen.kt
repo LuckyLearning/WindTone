@@ -256,6 +256,10 @@ fun SettingsScreen(
     onGrantInstallPermission: () -> Unit,
     onAutoCheckUpdate: (Boolean) -> Unit,
     onDownloadRoute: (DownloadRoute) -> Unit,
+    /** 下载中切换线路（下载弹窗用，v1.1.74） */
+    onSwitchDownloadRoute: (DownloadRoute) -> Unit = {},
+    /** 测各条线路延迟（下载线路弹窗用，v1.1.74） */
+    onPingRoutes: () -> Unit = {},
     onOpenReleasePage: () -> Unit,
     onIgnoreUpdate: () -> Unit,
     onDismissUpdateDialog: () -> Unit,
@@ -572,6 +576,8 @@ fun SettingsScreen(
                         onCheckUpdate = onCheckUpdate,
                         onAutoCheckUpdate = onAutoCheckUpdate,
                         onDownloadRoute = onDownloadRoute,
+                        onSwitchDownloadRoute = onSwitchDownloadRoute,
+                        onPingRoutes = onPingRoutes,
                         onOpenReleasePage = onOpenReleasePage,
                         onIgnoreUpdate = onIgnoreUpdate,
                         onDownloadUpdate = onDownloadUpdate,

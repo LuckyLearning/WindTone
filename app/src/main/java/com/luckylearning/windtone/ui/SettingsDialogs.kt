@@ -78,7 +78,7 @@ import kotlin.math.abs
 /**
  * 应用内更新对话框，三种形态：
  *  1. 发现新版本 → 展示更新说明 + 「下载并安装」
- *  2. 下载中     → 进度条（不可取消，避免留下半截文件）
+ *  2. 下载中     → 进度条（不可取消）+「切换线路」（v1.1.74：不再自动换线，慢了手动切）
  *  3. 下载完成   → 「立即安装」；未授权「安装未知应用」时先引导授权
  */
 @Composable
@@ -90,10 +90,14 @@ internal fun UpdateDialog(
     onOpenReleasePage: () -> Unit,
     onIgnore: () -> Unit,
     onDismiss: () -> Unit,
+    onSwitchRoute: (DownloadRoute) -> Unit = {},
+    onPingRoutes: () -> Unit = {},
 ) {
     val info = update.info
 
     if (update.downloading) {
+        // 「切换线路」展开的线路列表（下载弹窗内就地展开，不另起一层弹窗）
+        var showRoutes by remember { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = { },
             title = { Text("正在下载新版本") },
@@ -104,7 +108,34 @@ internal fun UpdateDialog(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Spacer(Modifier.height(6.dp))
+                    TextButton(onClick = { showRoutes = !showRoutes }) {
+                        Text(if (showRoutes) "收起线路列表" else "切换线路")
+                    }
+                    if (showRoutes) {
+                        DownloadRoute.values().forEach { route ->
+                            DownloadRouteRow(
+                                route = route,
+                                selected = route == update.route,
+                                latencyText = routeLatencyText(update, route),
+                                onClick = {
+                                    if (route != update.route) onSwitchRoute(route)
+                                    showRoutes = false
+                                },
+                            )
+                        }
+                        TextButton(
+                            onClick = onPingRoutes,
+                            enabled = !update.pingingRoutes,
+                        ) {
+                            Text(if (update.pingingRoutes) "正在测试延迟…" else "测试延迟")
+                        }
+                        Text(
+                            "切换后会中止当前下载，按新线路从头重新下载。",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                    }
                     Text(
                         if (update.progress >= 0) "已下载 ${update.progress}%"
                         else "已下载 ${UpdateChecker.formatSize(update.downloadedBytes).ifBlank { "0 MB" }}",
@@ -204,6 +235,66 @@ internal fun UpdateDialog(
 }
 
 // ---------------------------------------------------------------- 小组件
+
+/**
+ * 下载中弹窗的「切换线路」列表行，与「设置 → 更新 → 下载线路」弹窗同款样式。
+ */
+@Composable
+private fun DownloadRouteRow(
+    route: DownloadRoute,
+    selected: Boolean,
+    latencyText: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                route.label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (selected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                route.hint,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (latencyText.isNotBlank()) {
+            Text(
+                latencyText,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.width(6.dp))
+        }
+        if (selected) {
+            Icon(
+                Icons.Filled.Check,
+                contentDescription = "当前线路",
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+}
+
+/**
+ * 线路延迟的展示文案：
+ * 空 = 未测过；「…」= 正在测；「xxx ms」= 测通；「超时」= 测不通（[UpdateUiState.routeLatencies] 里为 null）。
+ */
+private fun routeLatencyText(update: UpdateUiState, route: DownloadRoute): String {
+    if (!update.routeLatencies.containsKey(route)) {
+        return if (update.pingingRoutes) "…" else ""
+    }
+    return update.routeLatencies[route]?.let { "$it ms" } ?: "超时"
+}
 
 /** 选项弹层里的一项 */
 internal data class ChoiceOption(val value: Int, val label: String, val hint: String)

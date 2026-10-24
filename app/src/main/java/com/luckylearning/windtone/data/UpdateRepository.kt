@@ -6,7 +6,11 @@ import android.net.Uri
 import com.luckylearning.windtone.state.UpdateUiState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +35,13 @@ class UpdateRepository(
 ) : UpdateActions {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    /** 进行中的下载协程（v1.1.74「切换线路」时要能取消它） */
+    private var downloadJob: Job? = null
+
+    /** 旧下载被「切换线路」中止的标记：失败分支据此不把主动取消当失败展示 */
+    @Volatile
+    private var downloadAborted = false
 
     private val _update = MutableStateFlow(
         UpdateUiState(
@@ -106,18 +117,42 @@ class UpdateRepository(
 
     /** 下载新版本 APK（下载完成后停留在待安装状态） */
     override fun downloadUpdate() {
-        val info = _update.value.info ?: return
         if (_update.value.downloading) return
-        // 线路在点「下载」这一刻定下来，避免下载中途被设置页的改动影响
-        val route = prefs.updateDownloadRoute
-        scope.launch {
+        startDownload()
+    }
+
+    /**
+     * 下载中切换线路（v1.1.74，下载弹窗的「切换线路」按钮）。
+     *
+     * 旧下载会被中止（[UpdateChecker.download] 的取消探针在每个分块处响应，
+     * 几乎立刻退出）；新线路随即从头开始 —— 半截文件会在下次下载开头被清掉。
+     * 不在下载中时等价于 [setDownloadRoute]。
+     */
+    override fun switchDownloadRoute(route: DownloadRoute) {
+        prefs.updateDownloadRoute = route
+        _update.update { it.copy(route = route) }
+        if (!_update.value.downloading) return
+        downloadAborted = true
+        downloadJob?.cancel()
+        startDownload()
+    }
+
+    /** 实际起下载协程；会先等上一个下载协程（若有）退出，避免两个下载写同一个 .part 文件 */
+    private fun startDownload() {
+        val info = _update.value.info ?: return
+        val previous = downloadJob
+        downloadJob = scope.launch {
+            previous?.cancelAndJoin()
+            val aborted = downloadAborted
+            downloadAborted = false
+            val route = prefs.updateDownloadRoute
             _update.update {
                 it.copy(
                     downloading = true,
                     progress = 0,
                     downloadedBytes = 0L,
                     totalBytes = info.apkSizeBytes,
-                    message = null,
+                    message = if (aborted) "已切换线路：${route.label}，重新下载…" else null,
                     readyApkPath = null,
                     needInstallPermission = false,
                     route = route,
@@ -133,11 +168,12 @@ class UpdateRepository(
                         _update.update { it.copy(progress = pct, downloadedBytes = done, totalBytes = total) }
                     },
                     onLineFallback = { attempt, count ->
-                        // 只有「自动」模式才有多条线路可切
+                        // 只在线路**报错**时才会触发（v1.1.74 起不再做速度自动切换）
                         _update.update {
-                            it.copy(progress = 0, downloadedBytes = 0L, message = "直连太慢，切换镜像线路 $attempt/$count…")
+                            it.copy(progress = 0, downloadedBytes = 0L, message = "线路失败，切换线路 $attempt/$count…")
                         }
                     },
+                    checkCancelled = { downloadAborted },
                 )
             }.onSuccess { file ->
                 _update.update {
@@ -146,11 +182,13 @@ class UpdateRepository(
                         progress = 100,
                         readyApkPath = file.absolutePath,
                         dialogVisible = true,
-                        message = null, // 清掉「切换镜像」之类的下载过程提示
+                        message = null, // 清掉「切换线路」之类的下载过程提示
                         needInstallPermission = !UpdateChecker.canInstall(app),
                     )
                 }
             }.onFailure { t ->
+                // 主动切换线路导致的中止不是失败：新下载协程已经接管界面，这里什么都别写
+                if (t.message == UpdateChecker.DOWNLOAD_ABORTED_MSG || downloadAborted) return@onFailure
                 _update.update {
                     it.copy(
                         downloading = false,
@@ -239,6 +277,22 @@ class UpdateRepository(
         _update.update { it.copy(route = route) }
     }
 
+    /**
+     * 测各条线路的延迟（v1.1.74，「下载线路」弹窗的「测试延迟」按钮）。
+     * 四条线并发测，互不拖累；结果（含「测不通 = null」）整体写入状态。
+     */
+    override fun pingRoutes() {
+        if (_update.value.pingingRoutes) return
+        scope.launch {
+            _update.update { it.copy(pingingRoutes = true) }
+            val results = DownloadRoute.values()
+                .map { route -> async(Dispatchers.IO) { route to UpdateChecker.measureLatency(route) } }
+                .awaitAll()
+                .toMap()
+            _update.update { it.copy(pingingRoutes = false, routeLatencies = results) }
+        }
+    }
+
     /** 浏览器打开公共仓库的版本目录（下载失败或想手动下载时的兜底） */
     override fun openReleasePage() {
         runCatching {
@@ -268,5 +322,9 @@ interface UpdateActions {
     fun autoCheckUpdateEnabled(): Boolean
     fun downloadRoute(): DownloadRoute
     fun setDownloadRoute(route: DownloadRoute)
+    /** 下载中切换线路（中止旧下载、按新线路重新下）—— v1.1.74 */
+    fun switchDownloadRoute(route: DownloadRoute)
+    /** 测各条线路延迟 —— v1.1.74 */
+    fun pingRoutes()
     fun openReleasePage()
 }

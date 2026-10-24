@@ -453,4 +453,11 @@ data class UpdateUiState(
     val needInstallPermission: Boolean = false,
     /** 本次下载使用的线路（自动 / 直连 / 指定镜像），用于在弹窗里说明当前走哪条线 */
     val route: DownloadRoute = DownloadRoute.AUTO,
+    /**
+     * 「测试延迟」的结果：每条线路到 GitHub 的响应耗时（毫秒）。
+     * `null` = 该线路测不通（超时 / 被阻断）；键缺失 = 尚未测过。
+     */
+    val routeLatencies: Map<DownloadRoute, Long?> = emptyMap(),
+    /** 正在逐条测试线路延迟 */
+    val pingingRoutes: Boolean = false,
 )
