@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>听风 WindTone · UI 原型 · 用户流程串联</title>
+<script>
+(function(){
+  try{
+    var saved=localStorage.getItem('wt-ui-theme');
+    var theme=saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme',theme);
+  }catch(e){ document.documentElement.setAttribute('data-theme','dark'); }
+})();
+</script>
+<link rel="stylesheet" href="ui.css">
+<style>
+/* ===================== 原型外壳（仅本看板用，不进入 App UI 真源） ===================== */
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--board-bg);color:var(--board-fg);
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",Roboto,sans-serif;font-size:14px}
+.proto{display:grid;grid-template-columns:288px 1fr;height:100vh}
+/* 模块树 */
+.tree{background:var(--board-card);border-right:1px solid var(--board-line);overflow:auto;padding:12px 11px}
+.tree-h{font-size:11px;font-weight:800;letter-spacing:.6px;color:var(--board-dim);padding:16px 9px 6px;text-transform:uppercase}
+.tree-h:first-child{padding-top:2px}
+.tree-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:10px;font-size:13px;color:var(--board-fg);cursor:pointer;user-select:none}
+.tree-item:hover{background:var(--board-line)}
+.tree-item.on{background:var(--primary);color:var(--on-primary);font-weight:700}
+.tree-item .dot{width:6px;height:6px;border-radius:50%;background:var(--board-dim);flex:none}
+.tree-item.on .dot{background:var(--on-primary)}
+.tree-item .n{margin-left:auto;font-size:10px;opacity:.55}
+/* 舞台 */
+.stage{display:flex;flex-direction:column;min-width:0}
+.bar2{display:flex;align-items:center;gap:12px;padding:11px 18px;border-bottom:1px solid var(--board-line);background:var(--board-bg)}
+.crumbs{font-size:13.5px;color:var(--board-fg);font-weight:700}
+.crumbs small{color:var(--board-dim);font-weight:500;margin-left:6px}
+.kbd{font-size:10.5px;color:var(--board-dim);border:1px solid var(--board-line);border-radius:6px;padding:1px 6px;margin-left:8px}
+.tools{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.btn{background:var(--board-card);border:1px solid var(--board-line);color:var(--board-fg);border-radius:999px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer}
+.btn:hover{filter:brightness(1.08)}
+.btn.pri{background:var(--primary);color:var(--on-primary);border-color:transparent}
+.canvas{flex:1;overflow:auto;display:flex;justify-content:center;align-items:flex-start;padding:26px;gap:24px;flex-wrap:wrap}
+.screen{display:none}
+.screen.on{display:block;animation:fade .25s ease}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.sc-label{width:100%;text-align:center;font-size:12px;color:var(--board-dim);margin:-8px 0 4px}
+/* 通用列表 */
+.scr{overflow:auto;flex:1;min-height:0;padding:6px 12px 16px}
+.prow{display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:12px;cursor:pointer}
+.prow:hover{background:var(--c-high)}
+.prow-ic{width:42px;height:42px;border-radius:10px;background:var(--surface-variant);color:var(--on-surface-variant);display:grid;place-items:center;flex:none}
+.prow-main{flex:1;min-width:0}
+.prow-t{font-size:14px;font-weight:600;color:var(--on-bg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow-s{font-size:11.5px;color:var(--on-surface-variant);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow-act{color:var(--on-surface-variant);display:flex;align-items:center;gap:4px;flex:none}
+.sec-t{font-size:12px;font-weight:800;color:var(--primary);padding:14px 12px 4px;letter-spacing:.4px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:4px 12px}
+.al-card{background:var(--surface-variant);border-radius:14px;padding:10px;cursor:pointer}
+.al-art{aspect-ratio:1;border-radius:10px;background:var(--c-highest);display:grid;place-items:center;color:var(--on-surface-variant);margin-bottom:8px}
+.al-t{font-size:13px;font-weight:700;color:var(--on-bg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.al-s{font-size:11px;color:var(--on-surface-variant);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 搜索框 */
+.search{display:flex;align-items:center;gap:8px;background:var(--surface-variant);border-radius:999px;padding:9px 14px;margin:6px 12px;color:var(--on-surface-variant)}
+.search input{border:0;background:none;outline:none;flex:1;color:var(--on-bg);font-size:13px}
+/* 底部弹层 */
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--glass-bg);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);
+  border-top:1px solid var(--glass-bd);border-radius:20px 20px 0 0;padding:12px 14px 22px;box-shadow:0 -12px 40px rgba(0,0,0,.45);max-height:78%;overflow:auto}
+.sheet.full{position:relative;border-radius:16px;box-shadow:none;max-height:none}
+.sheet-hd{font-size:14px;font-weight:800;text-align:center;color:var(--on-bg);padding:4px 0 12px}
+.sheet-sub{font-size:11px;color:var(--on-surface-variant);text-align:center;margin:-8px 0 10px}
+.opt{display:flex;align-items:center;gap:12px;padding:11px 6px;border-radius:10px;cursor:pointer}
+.opt:hover{background:var(--c-high)}
+.opt-ic{width:34px;height:34px;border-radius:9px;background:var(--surface-variant);color:var(--on-surface-variant);display:grid;place-items:center;flex:none}
+.opt-main{flex:1;min-width:0}
+.opt-t{font-size:13.5px;font-weight:600;color:var(--on-bg)}
+.opt-s{font-size:11px;color:var(--on-surface-variant);margin-top:2px}
+.opt-c{color:var(--primary);display:flex;align-items:center;gap:6px}
+.seg{display:flex;background:var(--surface-variant);border-radius:999px;padding:3px;gap:3px;margin:4px 0}
+.seg button{flex:1;border:0;background:none;color:var(--on-surface-variant);font-size:12px;font-weight:600;padding:7px 0;border-radius:999px;cursor:pointer}
+.seg button.on{background:var(--primary);color:var(--on-primary)}
+/* 设置行（复用 cat-row + 自建 row） */
+.row-action{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:12px;background:var(--surface-variant);margin-top:8px;cursor:pointer}
+.row-action:hover{filter:brightness(1.06)}
+.ra-ic{width:38px;height:38px;border-radius:11px;background:var(--secondary-container);color:var(--on-secondary-container);display:grid;place-items:center;flex:none}
+.ra-main{flex:1;min-width:0}
+.ra-title{font-size:14px;font-weight:700;color:var(--on-bg)}
+.ra-sub{font-size:11.5px;color:var(--on-surface-variant);margin-top:2px}
+.ra-val{font-size:12px;color:var(--on-surface-variant)}
+/* 空状态 */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;height:100%;color:var(--on-surface-variant);text-align:center;padding:30px}
+.empty .e-ic{width:64px;height:64px;border-radius:18px;background:var(--surface-variant);display:grid;place-items:center;color:var(--on-surface-variant)}
+/* 车机 */
+.carphone{width:780px;height:440px;border:6px solid var(--phone-frame);border-radius:18px;background:var(--bg);overflow:hidden;display:flex;flex-direction:row;position:relative}
+.carbar{width:156px;background:var(--c-low);display:flex;flex-direction:column;padding:14px 8px;gap:5px}
+.carbar .c-h{font-weight:800;color:var(--on-bg);font-size:15px;padding:4px 8px 12px;display:flex;align-items:center;gap:8px}
+.cnav{padding:10px 10px;border-radius:10px;color:var(--on-bg);font-size:13px;display:flex;align-items:center;gap:9px;cursor:pointer}
+.cnav.on{background:var(--secondary-container);color:var(--on-secondary-container);font-weight:700}
+.carmain{flex:1;display:flex;flex-direction:column;min-width:0}
+.carhead{padding:12px 16px;font-size:18px;font-weight:800;color:var(--on-bg)}
+.carbot{display:flex;align-items:center;gap:12px;padding:9px 16px;border-top:1px solid var(--c-high);background:var(--c-low)}
+/* 小组件 / 通知 / Tile 卡片 */
+.gcard{background:var(--surface);border:1px solid var(--board-line);border-radius:16px;padding:16px;width:300px}
+.gcard h4{margin:0 0 10px;font-size:13px;color:var(--on-bg)}
+.notify{width:330px;background:var(--surface);border-radius:14px;padding:12px 14px;box-shadow:0 6px 20px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:9px}
+.tile{width:150px;height:150px;border-radius:22px;background:var(--surface-variant);display:grid;place-items:center;color:var(--primary);gap:6px;text-align:center;font-size:11px;font-weight:700}
+/* 悬浮窗预设 */
+.flwin{width:300px;height:92px;border-radius:14px;padding:0 14px;display:flex;align-items:center;gap:12px;color:#fff;position:relative;overflow:hidden}
+.flwin .fw-ic{width:40px;height:40px;border-radius:10px;background:rgba(255,255,255,.18);display:grid;place-items:center;flex:none}
+.flwin .fw-t{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.flwin .fw-s{font-size:11px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.flwin.mini{background:linear-gradient(135deg,#23233a,#3a2f5a)}
+.flwin.glass{background:rgba(40,38,60,.55);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.18)}
+.flwin.vinyl{background:radial-gradient(circle at 30% 30%,#5B4BE0,#1a1530)}
+.flwin.block{background:#17171f;border:1px solid #333}
+.flwin.qq{background:linear-gradient(135deg,#0b1020,#1a2a4a)}
+/* 歌词菜单浮层 */
+.lyrmenu{position:absolute;left:14px;right:14px;top:54px;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);
+  border:1px solid var(--glass-bd);border-radius:18px;padding:8px;box-shadow:0 16px 44px rgba(0,0,0,.5)}
+.lyrmenu .lm-t{font-size:13px;font-weight:800;color:var(--on-bg);padding:8px 10px 4px}
+.lm-item{display:flex;align-items:center;gap:12px;padding:11px 10px;border-radius:11px;cursor:pointer}
+.lm-item:hover{background:var(--c-high)}
+.lm-item .lm-ic{width:34px;height:34px;border-radius:9px;background:var(--surface-variant);color:var(--on-surface-variant);display:grid;place-items:center;flex:none}
+.lm-item .lm-t2{font-size:13.5px;font-weight:600;color:var(--on-bg)}
+.lm-item .lm-s2{font-size:11px;color:var(--on-surface-variant);margin-top:2px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;padding:4px 2px}
+.fchip{padding:7px 13px;border-radius:999px;background:var(--surface-variant);color:var(--on-bg);font-size:12px;font-weight:600;cursor:pointer;border:1px solid transparent}
+.fchip.on{background:var(--primary-container);color:var(--on-primary-container);border-color:var(--glass-bd)}
+.hint{font-size:11px;color:var(--on-surface-variant);line-height:1.6;padding:8px 12px}
+.badge-lrc{display:inline-flex;align-items:center;gap:5px;background:var(--badge-lrc-bg);color:var(--primary);font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px}
+</style>
+</head>
+<body>
+<div class="proto">
+  <!-- ===================== 模块树 ===================== -->
+  <aside class="tree" id="tree">
+    <div class="tree-h">一 · 主界面 / 音乐库</div>
+    <div class="tree-item on" data-go="m-songs"><span class="dot"></span>歌曲列表<span class="n">①</span></div>
+    <div class="tree-item" data-go="m-drawer"><span class="dot"></span>侧边抽屉<span class="n">①C</span></div>
+    <div class="tree-item" data-go="m-search"><span class="dot"></span>搜索态<span class="n">①B</span></div>
+    <div class="tree-item" data-go="m-album"><span class="dot"></span>专辑视图<span class="n">③</span></div>
+    <div class="tree-item" data-go="m-playlist"><span class="dot"></span>歌单详情<span class="n">⑧</span></div>
+    <div class="tree-item" data-go="m-empty"><span class="dot"></span>空状态<span class="n">⑪</span></div>
+
+    <div class="tree-h">二 · 播放页</div>
+    <div class="tree-item" data-go="p-lyrics"><span class="dot"></span>歌词态<span class="n">⑫</span></div>
+    <div class="tree-item" data-go="p-immersive"><span class="dot"></span>沉浸态<span class="n">⑫D</span></div>
+    <div class="tree-item" data-go="p-cover"><span class="dot"></span>封面态<span class="n">⑬</span></div>
+    <div class="tree-item" data-go="p-volume"><span class="dot"></span>音量浮层<span class="n">⑭</span></div>
+    <div class="tree-item" data-go="p-nolyric"><span class="dot"></span>暂无歌词<span class="n">⑮</span></div>
+    <div class="tree-item" data-go="p-plain"><span class="dot"></span>纯文本/加载中<span class="n">⑯</span></div>
+
+    <div class="tree-h">三 · 抽屉与弹窗</div>
+    <div class="tree-item" data-go="s-queue"><span class="dot"></span>播放队列<span class="n">⑰</span></div>
+    <div class="tree-item" data-go="s-playback"><span class="dot"></span>播放设置<span class="n">⑱</span></div>
+    <div class="tree-item" data-go="s-eq"><span class="dot"></span>均衡器<span class="n">⑲</span></div>
+    <div class="tree-item" data-go="s-sleep"><span class="dot"></span>睡眠定时<span class="n">⑳</span></div>
+    <div class="tree-item" data-go="s-songops"><span class="dot"></span>歌曲操作<span class="n">㉑</span></div>
+    <div class="tree-item" data-go="s-scan"><span class="dot"></span>扫描范围<span class="n">㉔</span></div>
+
+    <div class="tree-h">四 · 设置</div>
+    <div class="tree-item" data-go="set-home"><span class="dot"></span>设置主页<span class="n">㉙</span></div>
+    <div class="tree-item" data-go="set-appearance"><span class="dot"></span>外观<span class="n">㉙B</span></div>
+    <div class="tree-item" data-go="set-play"><span class="dot"></span>播放<span class="n">㉙C</span></div>
+    <div class="tree-item" data-go="set-lyrics"><span class="dot"></span>歌词<span class="n">㉙D</span></div>
+    <div class="tree-item" data-go="set-lyriccolor"><span class="dot"></span>歌词配色<span class="n">㉙E</span></div>
+    <div class="tree-item" data-go="set-library"><span class="dot"></span>音乐库<span class="n">㉚</span></div>
+    <div class="tree-item" data-go="set-about"><span class="dot"></span>关于与诊断<span class="n">㉚D</span></div>
+
+    <div class="tree-h">五 · 小组件与通知</div>
+    <div class="tree-item" data-go="w-widget"><span class="dot"></span>桌面小组件<span class="n">㉛</span></div>
+    <div class="tree-item" data-go="w-notify"><span class="dot"></span>媒体通知<span class="n">㉜</span></div>
+    <div class="tree-item" data-go="w-tile"><span class="dot"></span>快捷开关 Tile<span class="n">㉝</span></div>
+
+    <div class="tree-h">六 · 车机版</div>
+    <div class="tree-item" data-go="car-home"><span class="dot"></span>车机主页<span class="n">㊱</span></div>
+    <div class="tree-item" data-go="car-player"><span class="dot"></span>车机播放页<span class="n">㊲</span></div>
+    <div class="tree-item" data-go="car-settings"><span class="dot"></span>车机设置<span class="n">㊳</span></div>
+
+    <div class="tree-h">七 · 歌词菜单与悬浮窗</div>
+    <div class="tree-item" data-go="fl-menu"><span class="dot"></span>歌词菜单<span class="n">㉔</span></div>
+    <div class="tree-item" data-go="fl-style"><span class="dot"></span>样式速选<span class="n">㉕</span></div>
+    <div class="tree-item" data-go="fl-overview"><span class="dot"></span>悬浮窗样式总览<span class="n">㉖</span></div>
+    <div class="tree-item" data-go="fl-presets"><span class="dot"></span>五套预设实景<span class="n">㉗</span></div>
+    <div class="tree-item" data-go="fl-car"><span class="dot"></span>车机悬浮窗<span class="n">㉝</span></div>
+  </aside>
+
+  <!-- ===================== 舞台 ===================== -->
+  <main class="stage">
+    <div class="bar2">
+      <button class="btn" id="backBtn" title="返回上一屏">← 返回</button>
+      <div class="crumbs" id="crumbs">主界面 / 音乐库<small>歌曲列表</small></div>
+      <div class="tools">
+        <button class="btn" id="flowBtn">▶ 流程演示</button>
+        <button class="btn pri" id="themeBtn">🌙 深色</button>
+      </div>
+    </div>
+    <div class="canvas" id="canvas">
+
+      <!-- ============ 一 · 主界面 ============ -->
+      <section class="screen on" id="m-songs" data-mod="主界面 / 音乐库" data-name="歌曲列表（默认态）">
+        <div class="app-inner">
+          <div class="topbar">
+            <div class="tb-row">
+              <button class="ibtn" data-go="m-drawer" title="侧边抽屉"><svg class="ic"><use href="#i-menu"/></svg></button>
+              <h1 class="lib-title">歌曲</h1>
+              <div class="sp"></div>
+              <button class="ibtn" data-go="m-search" title="搜索"><svg class="ic"><use href="#i-search"/></svg></button>
+              <button class="ibtn" data-go="s-scan" title="更多"><svg class="ic"><use href="#i-more"/></svg></button>
+            </div>
+            <div class="stat-row">
+              <span class="chip-scope"><svg class="ic ic-15"><use href="#i-folder"/></svg>导入文件夹</span>
+              <span class="stat-text">1280 首 · 已按 标题 排序</span>
+            </div>
+          </div>
+          <div class="scr">
+            <div class="sec-t">最近添加</div>
+            <div class="prow" data-go="p-lyrics"><div class="prow-ic"><svg class="ic"><use href="#i-note"/></svg></div><div class="prow-main"><div class="prow-t">夜曲</div><div class="prow-s">周杰伦 · 叶惠美 · FLAC 24bit/96kHz</div></div><div class="prow-act"><svg class="ic ic-18"><use href="#i-heart"/></svg><svg class="ic ic-18"><use href="#i-more"/></svg></div></div>
+            <div class="prow" data-go="p-lyrics"><div class="prow-ic"><svg class="ic"><use href="#i-note"/></svg></div><div class="prow-main"><div class="prow-t">富士山下</div><div class="prow-s">陈奕迅 · What's Going On…? · MP3 320kbps</div></div><div class="prow-act"><svg class="ic ic-18"><use href="#i-more"/></svg></div></div>
+            <div class="prow" data-go="p-lyrics"><div class="prow-ic"><svg class="ic"><use href="#i-note"/></svg></div><div class="prow-main"><div class="prow-t">海阔天空</div><div class="prow-s">Beyond · 乐与怒 · FLAC</div></div><div class="prow-act"><svg class="ic ic-18"><use href="#i-more"/></svg></div></div>
+            <div class="prow" data-go="p-lyrics"><div class="prow-ic"><svg class="ic"><use href="#i-note"/></svg></div><div class="prow-main"><div class="prow-t">起风了</div><div class="prow-s">买辣椒也用券 · 纯音乐特辑 · MP3</div></div><div class="prow-act"><svg class="ic ic-18"><use href="#i-heart"/></svg><svg class="ic ic-18"><use href="#i-more"/></svg></div></div>
+            <div class="prow" data-go="p-lyrics"><div class="prow-ic"><svg class="ic"><use href="#i-note"/></svg></div><div class="prow-main"><div class="prow-t">晴天</div><div class="prow-s">周杰伦 · 叶惠美 · FLAC</div></div><div class="prow-act"><svg class="ic ic-18"><use href="#i-more"/></svg></div></div>
+            <div class="sec-t">全部</div>
+            <div class="prow" data-go="m-album"><div class="prow-ic"><svg class="ic"><use href="#i-album"/></svg></div><div class="prow-main"><div class="prow-t">按专辑浏览</div><div class="prow-s">186 张专辑</div></div><div class="prow-act"><svg class="ic ic-18"><use href="#i-chevron"/></svg></div></div>
+            <div class="prow" data-go="m-playlist"><div class="prow-ic"><svg class="ic"><use href="#i-library"/></svg></div><div class="prow-main"><div class="prow-t">我的歌单</div><div class="prow-s">12 个歌单</div></div><div class="prow-act"><svg class="ic ic-18"><use href="#i-chevron"/></svg></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen" id="m-drawer" data-mod="主界面 / 音乐库" data-name="侧边抽屉（展开态）" data-drawer="1">
+        <div class="app-inner">
+          <div class="topbar">
+            <div class="tb-row">
+              <button class="ibtn" data-go="m-songs" title="收起"><svg class="ic"><use href="#i-menu"/></svg></button>
+              <h1 class="lib-title">歌曲</h1>
+              <div class="sp"></div>
+              <button class="ibtn"><svg class="ic"><use href="#i-search"/></svg></button>
+              <button class="ibtn"><svg class="ic"><use href="#i-more"/></svg></button>
+            </div>
+          </div>
+          <div class="scr" style="opacity:.4">
+            <div class="prow"><div class="prow-ic"><svg class="ic"><use href="#i-note"/></svg></div><div class="prow-main"><div class="prow-t">夜曲</div></div></div>
+            <div class="prow"><div class="prow-ic"><svg class="ic"><use href="#i-note"/></svg></div><div class="prow-main"><div class="prow-t">富士山下</div></div></div>
+            <div class="prow"><div class="prow-ic"><svg class="ic"><use href="#i-note"/></svg></div><div class="prow-main"><div class="prow-t">海阔天空</div></div></div>
+          </div>
+          <nav class="drawer">
+            <div class="d-brand"><span class="d-halo"><svg class="ic"><use href="#i-note"/></svg></span><span><span class="d-t">听风</span><span class="d-s">WindTone · 本地音乐</span></span></div>
+            <div class="d-label">音乐库</div>
+            <div class="d-item on" data-go="m-songs"><svg class="ic ic-22"><use href="#i-note"/></svg>歌曲</div>
+            <div class="d-item" data-go="m-album"><svg class="ic ic-22"><use href="#i-album"/></svg>专辑</div>
+            <div class="d-item" data-go="m-album"><svg class="ic ic-22"><use href="#i-artist"/></svg>歌手</div>
+            <div class="d-item" data-go="m-playlist"><svg class="ic ic-22"><use href="#i-folder"/></svg>文件夹</div>
+            <div class="d-item" data-go="m-playlist"><svg class="ic ic-22"><use href="#i-library"/></svg>歌单</div>
+            <div class="d-gap"></div>
+            <div class="d-label">更多</div>
+            <div class="d-item" data-go="s-scan"><svg class="ic ic-22"><use href="#i-folder"/></svg>扫描范围</div>
+            <div class="d-item" data-go="set-home"><svg class="ic ic-22"><use href="#i-tune"/></svg>设置</div>
+          </nav>
+        </div>
+      </section>
+
+      <section class="screen" id="m-search" data-mod="主界面 / 音乐库" data-name="搜索态">
+        <div class="app-inner">
+          <div class="topbar"><div class="tb-row"><button class="ibtn" data-go="m-songs"><svg class="ic"><use href="#i-back"/></svg></button><h1 class="lib-title">搜索</h1></div></div>
+          <div class="search"><svg class="ic ic-18"><use href="#i-search"/></svg><input value="周杰伦" /></div>
+          <div class="scr">
+            <div class="sec-t">歌曲</div>
+            <div class="prow" data-go="p-lyrics"><div class="prow-ic"><svg class="ic"><use href="#i-note"/></svg></div><div class="prow-main"><div class="prow-t">夜曲</div><div class="prow-s">周杰伦 · 叶惠美</div></div></div>
+            <div class="prow" data-go="p-lyrics"><div class="prow-ic"><svg class="ic"><use href="#i-note"/></svg></div><div class="prow-main"><div class="prow-t">晴天</div><div class="prow-s">周杰伦 · 叶惠美</div></div></div>
+            <div class="sec-t">专辑</div>
+            <div class="grid2">
+              <div class="al-card" data-go="m-album"><div class="al-art"><svg class="ic ic-34"><use href="#i-album"/></svg></div><div class="al-t">叶惠美</div><div class="al-s">周杰伦 · 2003</div></div>
+              <div class="al-card" data-go="m-album"><div class="al-art"><svg class="ic ic-34"><use href="#i-album"/></svg></div><div class="al-t">范特西</div><div class="al-s">周杰伦 · 2001</div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen" id="m-album" data-mod="主界面 / 音乐库" data-name="专辑视图">
+        <div class="app-inner">
+          <div class="topbar"><div class="tb-row"><button class="ibtn" data-go="m-songs"><svg class="ic"><use href="#i-back"/></svg></button><h1 class="lib-title">专辑</h1><div class="sp"></div><button class="ibtn"><svg class="ic"><use href="#i-sort"/></svg></button></div></div>
+          <div class="grid2" style="padding-top:10px">
+            <div class="al-card" data-go="m-playlist"><div class="al-art"><svg class="ic ic-34"><use href="#i-album"/></svg></div><div class="al-t">叶惠美</div><div class="al-s">周杰伦 · 11 首</div></div>
+            <div class="al-card" data-go="m-playlist"><div class="al-art"><svg class="ic ic-34"><use href="#i-album"/></svg></div><div class="al-t">范特西</div><div class="al-s">周杰伦 · 10 首</div></div>
+            <div class="al-card" data-go="m-playlist"><div class="al-art"><svg class="ic ic-34"><use href="#i-album"/></svg></div><div class="al-t">乐与怒</div><div class="al-s">Beyond · 11 首</div></div>
+            <div class="al-card" data-go="m-playlist"><div class="al-art"><svg class="ic ic-34"><use href="#i-album"/></svg></div><div class="al-t">What's Going On</div><div class="al-s">陈奕迅 · 10 首</div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen" id="m-playlist" data-mod="主界面 / 音乐库" data-name="歌单 / 专辑详情">
+        <div class="app-inner">
+          <div class="topbar"><div class="tb-row"><button class="ibtn" data-go="m-songs"><svg class="ic"><use href="#i-back"/></svg></button><h1 class="lib-title">叶惠美</h1><div class="sp"></div><button class="ibtn"><svg class="ic"><use href="#i-more"/></svg></button></div><div class="stat-row"><span class="chip-scope">周杰伦</span><span class="stat-text">11 首 · 47:32</span></div></div>
+          <div class="scr">
+            <div class="prow" data-go="p-lyrics"><div class="prow-ic"><svg class="ic"><use href="#i-note"/></svg></div><div class="prow-main"><div class="prow-t">夜曲</div><div class="prow-s">周杰伦</div></div><div class="prow-act"><span style="font-size:11px;color:var(--on-surface-variant)">3:46</span><svg class="ic ic-18"><use href="#i-more"/></svg></div></div>
+            <div class="prow" data-go="p-lyrics"><div class="prow-ic"><svg class="ic"><use href="#i-note"/></svg></div><div class="prow-main"><div class="prow-t">晴天</div><div class="prow-s">周杰伦</div></div><div class="prow-act"><span style="font-size:11px;color:var(--on-surface-variant)">4:29</span><svg class="ic ic-18"><use href="#i-more"/></svg></div></div>
+            <div class="prow" data-go="p-lyrics"><div class="prow-ic"><svg class="ic"><use href="#i-note"/></svg></div><div class="prow-main"><div class="prow-t">以父之名</div><div class="prow-s">周杰伦</div></div><div class="prow-act"><span style="font-size:11px;color:var(--on-surface-variant)">5:41</span><svg class="ic ic-18"><use href="#i-more"/></svg></div></div>
+            <div class="prow" data-go="p-lyrics"><div class="prow-ic"><svg class="ic"><use href="#i-note"/></svg></div><div class="prow-main"><div class="prow-t">东风破</div><div class="prow-s">周杰伦</div></div><div class="prow-act"><span style="font-size:11px;color:var(--on-surface-variant)">4:14</span><svg class="ic ic-18"><use href="#i-more"/></svg></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen" id="m-empty" data-mod="主界面 / 音乐库" data-name="空状态（未扫描）">
+        <div class="app-inner">
+          <div class="topbar"><div class="tb-row"><button class="ibtn"><svg class="ic"><use href="#i-menu"/></svg></button><h1 class="lib-title">歌曲</h1></div></div>
+          <div class="empty">
+            <div class="e-ic"><svg class="ic ic-34"><use href="#i-folder"/></svg></div>
+            <div style="font-size:15px;font-weight:700;color:var(--on-bg)">还没有歌曲</div>
+            <div style="font-size:12px;max-width:240px;line-height:1.6">前往「扫描范围」添加音乐文件夹，或把歌曲放进默认目录后重新扫描。</div>
+            <button class="btn pri" data-go="s-scan">去添加文件夹</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 二 · 播放页（复用 ui.css 真实类） ============ -->
+      <section class="screen" id="p-lyrics" data-mod="播放页" data-name="⑫ 歌词态（默认）">
+        <div class="app-inner"><div class="player">
+          <div class="p-top"><button class="ibtn"><svg class="ic"><use href="#i-down"/></svg></button><div class="t-main"><div class="sp"></div></div><button class="ibtn"><svg class="ic"><use href="#i-album"/></svg></button><button class="ibtn"><svg class="ic"><use href="#i-tune"/></svg></button></div>
+          <div class="p-mid"><div class="lyr">
+            <div class="lyr-line">一群嗜血的蚂蚁 被腐肉所吸引</div>
+            <div class="lyr-line">我面无表情 看孤独的风景</div>
+            <div class="lyr-line cur">失去你 爱恨 开始分明<span class="tr">Without you, love and hate start to blur</span></div>
+            <div class="lyr-line">失去你 还有什么事好关心</div>
+            <div class="lyr-line">当鸽子不再象征和平</div>
+            <div class="lyr-line">我终于被提醒 广场上喂食的是秃鹰</div>
+            <div class="lyr-line">我用漂亮的押韵 形容被掠夺一空的爱情</div>
+          </div></div>
+          <div class="p-nowrow"><div class="p-now-main"><div class="p-now-title">夜曲</div><div class="p-now-artist">周杰伦</div></div><button class="ibtn fav-on" title="取消收藏"><svg class="ic"><use href="#i-heart"/></svg></button></div>
+          <div class="p-progress"><div class="track"><span class="buf" style="width:88%"></span><span class="played" style="width:37%"></span><span class="thumb" style="left:37%"><i></i></span></div></div>
+          <div class="p-times"><span>1:24</span><span>3:46</span></div>
+          <div class="p-ctl"><div class="slot"><button class="ibtn mode-on" title="播放模式：单曲循环"><svg class="ic"><use href="#i-repeat-one"/></svg></button></div><div class="mid"><button class="ibtn"><svg class="ic ic-34"><use href="#i-prev"/></svg></button><button class="play-main"><svg class="ic ic-34"><use href="#i-pause"/></svg></button><button class="ibtn"><svg class="ic ic-34"><use href="#i-next"/></svg></button></div><div class="slot end"><button class="ibtn" data-go="s-queue" title="播放队列"><svg class="ic"><use href="#i-queue"/></svg></button></div></div>
+          <div class="p-status"><span class="chip-lsrc">内嵌同步歌词</span><span class="right"><span>导入文件夹</span><span>队列 500 首</span></span></div>
+        </div></div>
+      </section>
+
+      <section class="screen" id="p-immersive" data-mod="播放页" data-name="⑫D 沉浸态（5 秒无操作）">
+        <div class="app-inner"><div class="player">
+          <div class="p-mid"><div class="lyr">
+            <div class="lyr-line">一群嗜血的蚂蚁 被腐肉所吸引</div>
+            <div class="lyr-line">我面无表情 看孤独的风景</div>
+            <div class="lyr-line cur">失去你 爱恨 开始分明<span class="tr">Without you, love and hate start to blur</span></div>
+            <div class="lyr-line">失去你 还有什么事好关心</div>
+            <div class="lyr-line">当鸽子不再象征和平</div>
+            <div class="lyr-line">我终于被提醒 广场上喂食的是秃鹰</div>
+          </div></div>
+          <div class="p-nowrow"><div class="p-now-main"><div class="p-now-title">夜曲</div><div class="p-now-artist">周杰伦</div></div><button class="ibtn fav-on" title="取消收藏"><svg class="ic"><use href="#i-heart"/></svg></button></div>
+          <div class="p-progress"><div class="track"><span class="buf" style="width:88%"></span><span class="played" style="width:37%"></span><span class="thumb" style="left:37%"><i></i></span></div></div>
+          <div class="p-times"><span>1:24</span><span>3:46</span></div>
+        </div></div>
+      </section>
+
+      <section class="screen" id="p-cover" data-mod="播放页" data-name="⑬ 封面态">
+        <div class="app-inner"><div class="player">
+          <div class="p-top"><button class="ibtn"><svg class="ic"><use href="#i-down"/></svg></button><div class="t-main"><div class="sp"></div></div><button class="ibtn"><svg class="ic"><use href="#i-lyrics"/></svg></button><button class="ibtn"><svg class="ic"><use href="#i-tune"/></svg></button></div>
+          <div class="p-mid"><div class="p-cover"><div class="cov cov-292 c2"><svg><use href="#i-note"/></svg></div><div class="cover-album">叶惠美</div><div class="cover-file">夜曲.flac · 24bit / 96kHz</div><div class="ghost-chip">双击暂停 · 左右滑切歌 · 上下滑调音量</div></div><div class="mode-hint" style="display:block">随机播放</div></div>
+          <div class="p-nowrow"><div class="p-now-main"><div class="p-now-title">夜曲</div><div class="p-now-artist">周杰伦</div></div><button class="ibtn fav-on" title="取消收藏"><svg class="ic"><use href="#i-heart"/></svg></button></div>
+          <div class="p-progress"><div class="track"><span class="buf" style="width:88%"></span><span class="played" style="width:37%"></span><span class="thumb" style="left:37%"><i></i></span></div></div>
+          <div class="p-times"><span>1:24</span><span>3:46</span></div>
+          <div class="p-ctl"><div class="slot"><button class="ibtn mode-on" title="播放模式：随机播放"><svg class="ic"><use href="#i-shuffle"/></svg></button></div><div class="mid"><button class="ibtn"><svg class="ic ic-34"><use href="#i-prev"/></svg></button><button class="play-main"><svg class="ic ic-34"><use href="#i-pause"/></svg></button><button class="ibtn"><svg class="ic ic-34"><use href="#i-next"/></svg></button></div><div class="slot end"><button class="ibtn" data-go="s-queue" title="播放队列"><svg class="ic"><use href="#i-queue"/></svg></button></div></div>
+          <div class="p-status"><span class="chip-lsrc">内嵌同步歌词</span><span class="right"><span>导入文件夹</span><span>队列 500 首</span></span></div>
+        </div></div>
+      </section>
+
+      <section class="screen" id="p-volume" data-mod="播放页" data-name="⑭ 音量浮层">
+        <div class="app-inner"><div class="player">
+          <div class="p-top"><button class="ibtn"><svg class="ic"><use href="#i-down"/></svg></button><div class="t-main"><div class="sp"></div></div><button class="ibtn"><svg class="ic"><use href="#i-lyrics"/></svg></button><button class="ibtn"><svg class="ic"><use href="#i-tune"/></svg></button></div>
+          <div class="p-mid"><div class="p-cover"><div class="cov cov-292 c3"><svg><use href="#i-note"/></svg></div><div class="cover-album">What's Going On…?</div><div class="cover-file">富士山下.mp3 · 320 kbps</div><div class="ghost-chip">双击暂停 · 左右滑切歌 · 上下滑调音量</div></div><div class="vol-hud"><svg class="ic"><use href="#i-vol"/></svg><b>62%</b></div></div>
+          <div class="p-nowrow"><div class="p-now-main"><div class="p-now-title">富士山下</div><div class="p-now-artist">陈奕迅</div></div><button class="ibtn" title="收藏"><svg class="ic"><use href="#i-heart"/></svg></button></div>
+          <div class="p-progress"><div class="track"><span class="buf" style="width:96%"></span><span class="played" style="width:64%"></span><span class="thumb" style="left:64%"><i></i></span></div></div>
+          <div class="p-times"><span>2:47</span><span>4:19</span></div>
+          <div class="p-ctl"><div class="slot"><button class="ibtn mode-on" title="播放模式：列表循环"><svg class="ic"><use href="#i-repeat"/></svg></button></div><div class="mid"><button class="ibtn"><svg class="ic ic-34"><use href="#i-prev"/></svg></button><button class="play-main"><svg class="ic ic-34"><use href="#i-pause"/></svg></button><button class="ibtn"><svg class="ic ic-34"><use href="#i-next"/></svg></button></div><div class="slot end"><button class="ibtn" data-go="s-queue" title="播放队列"><svg class="ic"><use href="#i-queue"/></svg></button></div></div>
+          <div class="p-status"><span class="chip-lsrc">本地歌词文件</span><span class="chip-lsrc">睡眠 28:14</span><span class="right"><span>媒体库</span><span>队列 500 首</span></span></div>
+        </div></div>
+      </section>
+
+      <section class="screen" id="p-nolyric" data-mod="播放页" data-name="⑮ 暂无歌词">
+        <div class="app-inner"><div class="player">
+          <div class="p-top"><button class="ibtn"><svg class="ic"><use href="#i-down"/></svg></button><div class="t-main"><div class="sp"></div></div><button class="ibtn"><svg class="ic"><use href="#i-album"/></svg></button><button class="ibtn"><svg class="ic"><use href="#i-tune"/></svg></button></div>
+          <div class="p-mid"><div class="no-lyric"><div class="t">暂无歌词</div><div class="d">歌词获取顺序：
+1. 音频同目录的同名 .lrc / .krc / .yrc 文件
+2. 音频文件内嵌歌词（MP3 的 USLT/SYLT、FLAC/Ogg 的 LYRICS、M4A 的 ©lyr）
+
+把歌词文件放到歌曲同一目录，或在电脑上用音乐标签工具写入内嵌歌词即可。</div></div></div>
+          <div class="p-nowrow"><div class="p-now-main"><div class="p-now-title">海阔天空</div><div class="p-now-artist">Beyond</div></div><button class="ibtn" title="收藏"><svg class="ic"><use href="#i-heart"/></svg></button></div>
+          <div class="p-progress"><div class="track"><span class="buf" style="width:100%"></span><span class="played" style="width:12%"></span><span class="thumb" style="left:12%"><i></i></span></div></div>
+          <div class="p-times"><span>0:38</span><span>5:22</span></div>
+          <div class="p-ctl"><div class="slot"><button class="ibtn mode-off" title="播放模式：顺序播放"><svg class="ic"><use href="#i-seq"/></svg></button></div><div class="mid"><button class="ibtn"><svg class="ic ic-34"><use href="#i-prev"/></svg></button><button class="play-main"><svg class="ic ic-34"><use href="#i-play"/></svg></button><button class="ibtn"><svg class="ic ic-34"><use href="#i-next"/></svg></button></div><div class="slot end"><button class="ibtn" data-go="s-queue" title="播放队列"><svg class="ic"><use href="#i-queue"/></svg></button></div></div>
+          <div class="p-status"><span class="chip-lsrc">无歌词</span><span class="right"><span>本地文件</span><span>队列 500 首</span></span></div>
+        </div></div>
+      </section>
+
+      <section class="screen" id="p-plain" data-mod="播放页" data-name="⑯ 纯文本歌词 / 加载中">
+        <div class="app-inner"><div class="player">
+          <div class="p-top"><button class="ibtn"><svg class="ic"><use href="#i-down"/></svg></button><div class="t-main"><div class="sp"></div></div><button class="ibtn"><svg class="ic"><use href="#i-album"/></svg></button><button class="ibtn"><svg class="ic"><use href="#i-tune"/></svg></button></div>
+          <div class="p-mid"><div class="plain-note">纯文本歌词（无时间轴）</div><div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:14px;text-align:center"><div style="font-size:15px;line-height:1.75;color:var(--on-bg)">这一路上走走停停 顺着少年漂流的痕迹</div><div style="font-size:15px;line-height:1.75;color:var(--on-bg)">迈出车站的前一刻 竟有些犹豫</div><div style="font-size:15px;line-height:1.75;color:var(--on-bg)">不禁笑这近乡情怯 仍无可避免</div><div style="font-size:15px;line-height:1.75;color:var(--on-bg)">而长野的天 依旧那么暖</div><div style="font-size:15px;line-height:1.75;color:var(--on-bg)">风吹起了从前</div></div><div style="display:flex;flex-direction:column;gap:16px;margin-top:18px"><div style="height:14px;width:46%;border-radius:7px;background:var(--c-highest);margin:0 auto"></div><div style="height:14px;width:62%;border-radius:7px;background:var(--c-highest);margin:0 auto"></div><div style="height:14px;width:46%;border-radius:7px;background:var(--c-highest);margin:0 auto"></div></div><div style="font-size:11px;color:var(--on-surface-variant);text-align:center;margin-top:10px">↑ 纯文本态 · 下方三条灰条为「歌词加载中」骨架</div></div>
+          <div class="p-nowrow"><div class="p-now-main"><div class="p-now-title">起风了</div><div class="p-now-artist">买辣椒也用券</div></div><button class="ibtn" title="收藏"><svg class="ic"><use href="#i-heart"/></svg></button></div>
+          <div class="p-progress"><div class="track"><span class="buf" style="width:70%"></span><span class="played" style="width:22%"></span><span class="thumb" style="left:22%"><i></i></span></div></div>
+          <div class="p-times"><span>1:08</span><span>5:11</span></div>
+          <div class="p-ctl"><div class="slot"><button class="ibtn mode-on" title="播放模式：列表循环"><svg class="ic"><use href="#i-repeat"/></svg></button></div><div class="mid"><button class="ibtn"><svg class="ic ic-34"><use href="#i-prev"/></svg></button><button class="play-main"><svg class="ic ic-34"><use href="#i-pause"/></svg></button><button class="ibtn"><svg class="ic ic-34"><use href="#i-next"/></svg></button></div><div class="slot end"><button class="ibtn" data-go="s-queue" title="播放队列"><svg class="ic"><use href="#i-queue"/></svg></button></div></div>
+          <div class="p-status"><span class="chip-lsrc">本地文本歌词</span><span class="chip-lsrc">偏移 -300ms</span><span class="right"><span>导入文件夹</span><span>队列 500 首</span></span></div>
+        </div></div>
+      </section>
+
+      <!-- ============ 三 · 抽屉与弹窗 ============ -->
+      <section class="screen" id="s-queue" data-mod="抽屉与弹窗" data-name="⑰ 播放队列（底部弹层）">
+        <div class="app-inner">
+          <div class="topbar"><div class="tb-row"><button class="ibtn" data-go="p-lyrics"><svg class="ic"><use href="#i-down"/></svg></button><h1 class="lib-title">播放队列</h1><div class="sp"></div><button class="ibtn"><svg class="ic"><use href="#i-sort"/></svg></button></div></div>
+          <div class="scr" style="opacity:.35"><div class="prow"><div class="prow-ic"><svg class="ic"><use href="#i-note"/></svg></div><div class="prow-main"><div class="prow-t">夜曲</div></div></div><div class="prow"><div class="prow-ic"><svg class="ic"><use href="#i-note"/></svg></div><div class="prow-main"><div class="prow-t">富士山下</div></div></div></div>
+          <div class="sheet">
+            <div class="sheet-hd">正在播放 · 队列 500 首</div>
+            <div class="prow" data-go="p-lyrics" style="background:var(--playing-bg)"><div class="prow-ic" style="background:var(--primary);color:var(--on-primary)"><svg class="ic"><use href="#i-play"/></svg></div><div class="prow-main"><div class="prow-t">夜曲</div><div class="prow-s">周杰伦 · 叶惠美</div></div><span class="badge-lrc">LRC</span></div>
+            <div class="prow" data-go="p-lyrics"><div class="prow-main"><div class="prow-t">富士山下</div><div class="prow-s">陈奕迅</div></div><div class="prow-act"><span style="font-size:11px">4:19</span></div></div>
+            <div class="prow" data-go="p-lyrics"><div class="prow-main"><div class="prow-t">海阔天空</div><div class="prow-s">Beyond</div></div><div class="prow-act"><span style="font-size:11px">5:22</span></div></div>
+            <div class="prow" data-go="p-lyrics"><div class="prow-main"><div class="prow-t">起风了</div><div class="prow-s">买辣椒也用券</div></div><div class="prow-act"><span style="font-size:11px">5:11</span></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen" id="s-playback" data-mod="抽屉与弹窗" data-name="⑱ 播放设置（底部弹层）">
+        <div class="app-inner">
+          <div class="topbar"><div class="tb-row"><button class="ibtn" data-go="p-lyrics"><svg class="ic"><use href="#i-down"/></svg></button><h1 class="lib-title">播放设置</h1></div></div>
+          <div class="sheet full">
+            <div class="sheet-hd">播放设置</div>
+            <div class="opt" data-go="p-volume"><div class="opt-ic"><svg class="ic"><use href="#i-speed"/></svg></div><div class="opt-main"><div class="opt-t">倍速与变调</div><div class="opt-s">1.0× · 原调（半音 0）</div></div><svg class="ic opt-c"><use href="#i-chevron"/></svg></div>
+            <div class="opt"><div class="opt-ic"><svg class="ic"><use href="#i-vol"/></svg></div><div class="opt-main"><div class="opt-t">音量平衡</div><div class="opt-s">关</div></div><svg class="ic opt-c"><use href="#i-chevron"/></svg></div>
+            <div class="opt"><div class="opt-ic"><svg class="ic"><use href="#i-note"/></svg></div><div class="opt-main"><div class="opt-t">A · B 对比</div><div class="opt-s">未设置</div></div><svg class="ic opt-c"><use href="#i-chevron"/></svg></div>
+            <div class="opt"><div class="opt-ic"><svg class="ic"><use href="#i-tune"/></svg></div><div class="opt-main"><div class="opt-t">淡入淡出</div><div class="opt-s">开 · 800ms</div></div><label class="opt-c"><input type="checkbox" checked></label></div>
+            <div class="opt"><div class="opt-ic"><svg class="ic"><use href="#i-bed"/></svg></div><div class="opt-main"><div class="opt-t">睡眠定时</div><div class="opt-s">30 分钟后</div></div><svg class="ic opt-c"><use href="#i-chevron"/></svg></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen" id="s-eq" data-mod="抽屉与弹窗" data-name="⑲ 均衡器">
+        <div class="app-inner">
+          <div class="topbar"><div class="tb-row"><button class="ibtn" data-go="p-lyrics"><svg class="ic"><use href="#i-down"/></svg></button><h1 class="lib-title">均衡器</h1><div class="sp"></div><button class="btn pri" style="border-radius:999px;padding:6px 12px">重置</button></div></div>
+          <div class="scr">
+            <div class="seg" style="margin:10px 12px"><button class="on">流行</button><button>摇滚</button><button>古典</button><button>自定义</button></div>
+            <div class="sec-t">频段增益 (dB)</div>
+            <div class="opt"><div class="opt-main" style="text-align:center"><div class="opt-t">60Hz</div><div class="opt-s">+3.0</div></div><div class="opt-c" style="width:60%;height:6px;background:var(--surface-variant);border-radius:3px;position:relative"><span style="position:absolute;left:62%;top:-3px;width:12px;height:12px;border-radius:50%;background:var(--primary)"></span></div></div>
+            <div class="opt"><div class="opt-main" style="text-align:center"><div class="opt-t">230Hz</div><div class="opt-s">+1.5</div></div><div class="opt-c" style="width:60%;height:6px;background:var(--surface-variant);border-radius:3px;position:relative"><span style="position:absolute;left:55%;top:-3px;width:12px;height:12px;border-radius:50%;background:var(--primary)"></span></div></div>
+            <div class="opt"><div class="opt-main" style="text-align:center"><div class="opt-t">910Hz</div><div class="opt-s">0.0</div></div><div class="opt-c" style="width:60%;height:6px;background:var(--surface-variant);border-radius:3px;position:relative"><span style="position:absolute;left:50%;top:-3px;width:12px;height:12px;border-radius:50%;background:var(--primary)"></span></div></div>
+            <div class="opt"><div class="opt-main" style="text-align:center"><div class="opt-t">3kHz</div><div class="opt-s">+2.0</div></div><div class="opt-c" style="width:60%;height:6px;background:var(--surface-variant);border-radius:3px;position:relative"><span style="position:absolute;left:58%;top:-3px;width:12px;height:12px;border-radius:50%;background:var(--primary)"></span></div></div>
+            <div class="opt"><div class="opt-main" style="text-align:center"><div class="opt-t">14kHz</div><div class="opt-s">+4.0</div></div><div class="opt-c" style="width:60%;height:6px;background:var(--surface-variant);border-radius:3px;position:relative"><span style="position:absolute;left:66%;top:-3px;width:12px;height:12px;border-radius:50%;background:var(--primary)"></span></div></div>
+            <div class="hint">夜间驾驶建议降低高频；车载模式自动套用「车机音效档案」。</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen" id="s-sleep" data-mod="抽屉与弹窗" data-name="⑳ 睡眠定时">
+        <div class="app-inner">
+          <div class="topbar"><div class="tb-row"><button class="ibtn" data-go="p-lyrics"><svg class="ic"><use href="#i-down"/></svg></button><h1 class="lib-title">睡眠定时</h1></div></div>
+          <div class="sheet full"><div class="sheet-hd">多久后停止播放</div>
+            <div class="opt" style="justify-content:center"><div class="chips" style="justify-content:center"><span class="fchip">15 分钟</span><span class="fchip on">30 分钟</span><span class="fchip">45 分钟</span><span class="fchip">60 分钟</span><span class="fchip">播完当前曲</span><span class="fchip">自定义</span></div></div>
+            <div class="opt"><div class="opt-ic"><svg class="ic"><use href="#i-bed"/></svg></div><div class="opt-main"><div class="opt-t">摇动不中断</div><div class="opt-s">关</div></div><label class="opt-c"><input type="checkbox"></label></div>
+            <div class="opt"><div class="opt-ic"><svg class="ic"><use href="#i-vol"/></svg></div><div class="opt-main"><div class="opt-t">渐弱音量收尾</div><div class="opt-s">最后 20 秒淡出</div></div><label class="opt-c"><input type="checkbox" checked></label></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen" id="s-songops" data-mod="抽屉与弹窗" data-name="㉑ 歌曲操作（长按菜单）">
+        <div class="app-inner">
+          <div class="topbar"><div class="tb-row"><button class="ibtn" data-go="m-songs"><svg class="ic"><use href="#i-down"/></svg></button><h1 class="lib-title">夜曲</h1></div></div>
+          <div class="sheet full"><div class="sheet-hd">歌曲操作</div>
+            <div class="opt" data-go="p-lyrics"><div class="opt-ic"><svg class="ic"><use href="#i-play"/></svg></div><div class="opt-main"><div class="opt-t">立即播放</div></div></div>
+            <div class="opt"><div class="opt-ic"><svg class="ic"><use href="#i-queue"/></svg></div><div class="opt-main"><div class="opt-t">加入播放队列</div></div></div>
+            <div class="opt"><div class="opt-ic"><svg class="ic"><use href="#i-library"/></svg></div><div class="opt-main"><div class="opt-t">加入歌单</div></div><svg class="ic opt-c"><use href="#i-chevron"/></svg></div>
+            <div class="opt"><div class="opt-ic"><svg class="ic"><use href="#i-heart"/></svg></div><div class="opt-main"><div class="opt-t">收藏</div></div></div>
+            <div class="opt"><div class="opt-ic"><svg class="ic"><use href="#i-lyrics"/></svg></div><div class="opt-main"><div class="opt-t">查看 / 重新匹配歌词</div></div></div>
+            <div class="opt"><div class="opt-ic"><svg class="ic"><use href="#i-info"/></svg></div><div class="opt-main"><div class="opt-t">音频信息</div></div></div>
+            <div class="opt"><div class="opt-ic" style="color:var(--error)"><svg class="ic"><use href="#i-trash"/></svg></div><div class="opt-main"><div class="opt-t" style="color:var(--error)">从列表移除</div></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen" id="s-scan" data-mod="抽屉与弹窗" data-name="㉔ 扫描范围">
+        <div class="app-inner">
+          <div class="topbar"><div class="tb-row"><button class="ibtn" data-go="set-home"><svg class="ic"><use href="#i-down"/></svg></button><h1 class="lib-title">扫描范围</h1><div class="sp"></div><button class="btn pri" style="border-radius:999px;padding:6px 12px">+ 添加</button></div></div>
+          <div class="scr">
+            <div class="sec-t">已包含文件夹</div>
+            <div class="row-action"><div class="ra-ic"><svg class="ic"><use href="#i-folder"/></svg></div><div class="ra-main"><div class="ra-title">/storage/Music</div><div class="ra-sub">递归扫描 · 12,480 首</div></div><svg class="ic ic-18"><use href="#i-close"/></svg></div>
+            <div class="row-action"><div class="ra-ic"><svg class="ic"><use href="#i-folder"/></svg></div><div class="ra-main"><div class="ra-title">/storage/Download/铃声</div><div class="ra-sub">仅本目录 · 38 首</div></div><svg class="ic ic-18"><use href="#i-close"/></svg></div>
+            <div class="sec-t">排除规则</div>
+            <div class="row-action"><div class="ra-ic"><svg class="ic"><use href="#i-close"/></svg></div><div class="ra-main"><div class="ra-title">*.m4a 提示音</div><div class="ra-sub">已忽略 126 个文件</div></div><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+            <div class="hint">扫描为手动触发；新增文件夹后点「重新扫描」即可纳入曲库。</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 四 · 设置 ============ -->
+      <section class="screen" id="set-home" data-mod="设置" data-name="㉙ 设置主页（六分类卡）">
+        <div class="app-inner">
+          <div class="topbar"><div class="tb-row"><button class="ibtn" data-go="m-songs"><svg class="ic"><use href="#i-back"/></svg></button><h1 class="lib-title">设置</h1></div></div>
+          <div class="scr">
+            <div class="cat-row" data-go="set-appearance"><div class="cat-ic"><svg class="ic"><use href="#i-palette"/></svg></div><div class="cat-main"><div class="cat-t">外观</div><div class="cat-s">深色 · 默认紫 · 跟随系统</div></div><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+            <div class="cat-row" data-go="set-play"><div class="cat-ic"><svg class="ic"><use href="#i-play"/></svg></div><div class="cat-main"><div class="cat-t">播放</div><div class="cat-s">顺序播放 · 1.0× · 硬件解码</div></div><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+            <div class="cat-row" data-go="set-lyrics"><div class="cat-ic"><svg class="ic"><use href="#i-lyrics"/></svg></div><div class="cat-main"><div class="cat-t">歌词</div><div class="cat-s">逐行 · 显示歌词源 · 悬浮窗</div></div><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+            <div class="cat-row" data-go="set-library"><div class="cat-ic"><svg class="ic"><use href="#i-library"/></svg></div><div class="cat-main"><div class="cat-t">音乐库</div><div class="cat-s">2 个文件夹 · 排除提示音</div></div><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+            <div class="cat-row" data-go="set-about"><div class="cat-ic"><svg class="ic"><use href="#i-info"/></svg></div><div class="cat-main"><div class="cat-t">更新</div><div class="cat-s">v1.1.33 · 已是最新</div></div><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+            <div class="cat-row" data-go="set-about"><div class="cat-ic"><svg class="ic"><use href="#i-gear"/></svg></div><div class="cat-main"><div class="cat-t">关于与诊断</div><div class="cat-s">隐私 · 诊断日志 · 前台应用</div></div><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen" id="set-appearance" data-mod="设置" data-name="㉙B 外观">
+        <div class="app-inner">
+          <div class="topbar"><div class="tb-row"><button class="ibtn" data-go="set-home"><svg class="ic"><use href="#i-back"/></svg></button><h1 class="lib-title">外观</h1></div></div>
+          <div class="scr">
+            <div class="sec-t">主题</div>
+            <div class="seg" style="margin:4px 12px"><button class="on">跟随系统</button><button>深色</button><button>浅色</button></div>
+            <div class="sec-t">强调色</div>
+            <div class="chips" style="padding:4px 12px"><span class="fchip on">默认紫</span><span class="fchip">青</span><span class="fchip">品红</span><span class="fchip">橙</span><span class="fchip">绿</span></div>
+            <div class="row-action"><div class="ra-ic"><svg class="ic"><use href="#i-bed"/></svg></div><div class="ra-main"><div class="ra-title">深色模式定时</div></div><div class="ra-val">关</div><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+            <div class="row-action"><div class="ra-ic"><svg class="ic"><use href="#i-palette"/></svg></div><div class="ra-main"><div class="ra-title">动态取色（按封面）</div></div><label class="ra-val"><input type="checkbox"></label></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen" id="set-play" data-mod="设置" data-name="㉙C 播放">
+        <div class="app-inner">
+          <div class="topbar"><div class="tb-row"><button class="ibtn" data-go="set-home"><svg class="ic"><use href="#i-back"/></svg></button><h1 class="lib-title">播放</h1></div></div>
+          <div class="scr">
+            <div class="row-action"><div class="ra-ic"><svg class="ic"><use href="#i-repeat"/></svg></div><div class="ra-main"><div class="ra-title">默认播放模式</div></div><div class="ra-val">顺序播放</div><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+            <div class="row-action"><div class="ra-ic"><svg class="ic"><use href="#i-speed"/></svg></div><div class="ra-main"><div class="ra-title">默认倍速</div></div><div class="ra-val">1.0×</div><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+            <div class="row-action"><div class="ra-ic"><svg class="ic"><use href="#i-reset"/></svg></div><div class="ra-main"><div class="ra-title">退出后保留进度</div></div><label class="ra-val"><input type="checkbox" checked></label></div>
+            <div class="row-action"><div class="ra-ic"><svg class="ic"><use href="#i-queue"/></svg></div><div class="ra-main"><div class="ra-title">记忆上次队列</div></div><label class="ra-val"><input type="checkbox" checked></label></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen" id="set-lyrics" data-mod="设置" data-name="㉙D 歌词（分组）">
+        <div class="app-inner">
+          <div class="topbar"><div class="tb-row"><button class="ibtn" data-go="set-home"><svg class="ic"><use href="#i-back"/></svg></button><h1 class="lib-title">歌词</h1></div></div>
+          <div class="scr">
+            <div class="sec-t">显示</div>
+            <div class="row-action"><div class="ra-ic"><svg class="ic"><use href="#i-lyrics"/></svg></div><div class="ra-main"><div class="ra-title">歌词精度</div></div><div class="ra-val">逐行</div><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+            <div class="row-action"><div class="ra-ic"><svg class="ic"><use href="#i-speed"/></svg></div><div class="ra-main"><div class="ra-title">字号 / 行距</div></div><div class="ra-val">100%</div><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+            <div class="sec-t">悬浮窗</div>
+            <div class="row-action" data-go="fl-overview"><div class="ra-ic"><svg class="ic"><use href="#i-note"/></svg></div><div class="ra-main"><div class="ra-title">桌面悬浮歌词</div><div class="ra-sub">已开启 · 五套预设可选</div></div><span class="badge-lrc">开</span><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+            <div class="sec-t">高级</div>
+            <div class="row-action"><div class="ra-ic"><svg class="ic"><use href="#i-tune"/></svg></div><div class="ra-main"><div class="ra-title">歌词偏移校准</div></div><div class="ra-val">-300ms</div><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen" id="set-lyriccolor" data-mod="设置" data-name="㉙E 歌词配色">
+        <div class="app-inner">
+          <div class="topbar"><div class="tb-row"><button class="ibtn" data-go="set-lyrics"><svg class="ic"><use href="#i-back"/></svg></button><h1 class="lib-title">歌词配色</h1></div></div>
+          <div class="scr">
+            <div class="sec-t">预设方案</div>
+            <div class="chips" style="padding:4px 12px"><span class="fchip on">跟随主题</span><span class="fchip">纯白</span><span class="fchip">霓虹紫</span><span class="fchip">墨绿</span><span class="fchip">自定义</span></div>
+            <div class="row-action"><div class="ra-ic" style="background:linear-gradient(135deg,#C5BFFF,#5B4BE0)"></div><div class="ra-main"><div class="ra-title">当前行颜色</div></div><div class="ra-val">#C5BFFF</div></div>
+            <div class="row-action"><div class="ra-ic" style="background:var(--surface-variant)"></div><div class="ra-main"><div class="ra-title">非当前行</div></div><div class="ra-val">42% 不透明</div></div>
+            <div class="hint">配色同时作用于播放页歌词与桌面悬浮窗，改一处两端同步。</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen" id="set-library" data-mod="设置" data-name="㉚ 音乐库">
+        <div class="app-inner">
+          <div class="topbar"><div class="tb-row"><button class="ibtn" data-go="set-home"><svg class="ic"><use href="#i-back"/></svg></button><h1 class="lib-title">音乐库</h1><div class="sp"></div><button class="btn pri" style="border-radius:999px;padding:6px 12px">重新扫描</button></div></div>
+          <div class="scr">
+            <div class="row-action" data-go="s-scan"><div class="ra-ic"><svg class="ic"><use href="#i-folder"/></svg></div><div class="ra-main"><div class="ra-title">扫描范围</div><div class="ra-sub">2 个文件夹</div></div><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+            <div class="row-action"><div class="ra-ic"><svg class="ic"><use href="#i-sort"/></svg></div><div class="ra-main"><div class="ra-title">默认排序</div></div><div class="ra-val">标题</div><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+            <div class="row-action"><div class="ra-ic"><svg class="ic"><use href="#i-library"/></svg></div><div class="ra-main"><div class="ra-title">重建曲库</div><div class="ra-sub">清空并重新索引</div></div><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen" id="set-about" data-mod="设置" data-name="㉚D 关于与诊断">
+        <div class="app-inner">
+          <div class="topbar"><div class="tb-row"><button class="ibtn" data-go="set-home"><svg class="ic"><use href="#i-back"/></svg></button><h1 class="lib-title">关于与诊断</h1></div></div>
+          <div class="scr">
+            <div class="row-action"><div class="ra-ic"><svg class="ic"><use href="#i-info"/></svg></div><div class="ra-main"><div class="ra-title">版本</div></div><div class="ra-val">v1.1.33 (64)</div></div>
+            <div class="row-action"><div class="ra-ic"><svg class="ic"><use href="#i-edit"/></svg></div><div class="ra-main"><div class="ra-title">更新日志</div></div><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+            <div class="row-action"><div class="ra-ic"><svg class="ic"><use href="#i-cloud"/></svg></div><div class="ra-main"><div class="ra-title">检查更新</div><div class="ra-sub">已是最新</div></div><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+            <div class="row-action"><div class="ra-ic"><svg class="ic"><use href="#i-speed"/></svg></div><div class="ra-main"><div class="ra-title">前台应用记录</div><div class="ra-sub">悬浮窗按应用隐藏依据</div></div><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+            <div class="row-action"><div class="ra-ic"><svg class="ic"><use href="#i-trash"/></svg></div><div class="ra-main"><div class="ra-title">导出诊断日志</div></div><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 五 · 小组件与通知 ============ -->
+      <section class="screen" id="w-widget" data-mod="小组件与通知" data-name="㉛ 桌面小组件">
+        <div class="app-inner"><div class="scr" style="display:flex;flex-direction:column;align-items:center;gap:16px;padding-top:18px">
+          <div class="gcard"><h4>4×2 · 迷你播放器</h4><div style="display:flex;align-items:center;gap:12px"><div style="width:48px;height:48px;border-radius:10px;background:var(--c-highest);display:grid;place-items:center;color:var(--on-surface-variant)"><svg class="ic"><use href="#i-note"/></svg></div><div style="flex:1"><div style="font-weight:700;color:var(--on-bg)">夜曲</div><div style="font-size:11px;color:var(--on-surface-variant)">周杰伦</div></div><svg class="ic"><use href="#i-play"/></svg><svg class="ic"><use href="#i-next"/></svg></div></div>
+          <div class="gcard"><h4>4×1 · 单行控制条</h4><div style="display:flex;align-items:center;gap:10px;justify-content:center"><svg class="ic"><use href="#i-prev"/></svg><svg class="ic"><use href="#i-play"/></svg><svg class="ic"><use href="#i-next"/></svg></div></div>
+          <div class="gcard"><h4>5×2 · 封面 + 进度</h4><div style="width:100%;height:90px;border-radius:12px;background:var(--c-highest)"></div></div>
+        </div></div>
+      </section>
+
+      <section class="screen" id="w-notify" data-mod="小组件与通知" data-name="㉜ 媒体通知（锁屏 / 状态栏）">
+        <div class="app-inner"><div class="scr" style="display:flex;flex-direction:column;align-items:center;gap:16px;padding-top:18px">
+          <div class="notify"><div style="display:flex;align-items:center;gap:10px"><div style="width:40px;height:40px;border-radius:8px;background:var(--c-highest);display:grid;place-items:center;color:var(--on-surface-variant)"><svg class="ic"><use href="#i-note"/></svg></div><div style="flex:1"><div style="font-weight:700;color:var(--on-bg)">夜曲</div><div style="font-size:11px;color:var(--on-surface-variant)">周杰伦</div></div><span class="badge-lrc">LRC</span></div><div style="height:4px;background:var(--surface-variant);border-radius:2px"><span style="display:block;width:37%;height:100%;background:var(--primary);border-radius:2px"></span></div><div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;color:var(--on-surface-variant)">1:24</span><div style="display:flex;gap:14px"><svg class="ic"><use href="#i-prev"/></svg><svg class="ic"><use href="#i-pause"/></svg><svg class="ic"><use href="#i-next"/></svg></div><span style="font-size:11px;color:var(--on-surface-variant)">3:46</span></div></div>
+          <div class="notify" style="opacity:.9"><div style="display:flex;align-items:center;gap:10px"><div style="width:40px;height:40px;border-radius:8px;background:var(--c-highest)"></div><div style="flex:1"><div style="font-weight:700;color:var(--on-bg)">锁屏大图封面</div><div style="font-size:11px;color:var(--on-surface-variant)">可显示逐行歌词</div></div></div></div>
+        </div></div>
+      </section>
+
+      <section class="screen" id="w-tile" data-mod="小组件与通知" data-name="㉝ 快捷开关 Tile">
+        <div class="app-inner"><div class="scr" style="display:flex;flex-direction:column;align-items:center;gap:18px;padding-top:20px">
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+            <div class="tile"><svg class="ic ic-34"><use href="#i-play"/></svg>播放 / 暂停</div>
+            <div class="tile"><svg class="ic ic-34"><use href="#i-next"/></svg>下一首</div>
+            <div class="tile"><svg class="ic ic-34"><use href="#i-repeat"/></svg>循环</div>
+            <div class="tile"><svg class="ic ic-34"><use href="#i-shuffle"/></svg>随机</div>
+            <div class="tile"><svg class="ic ic-34"><use href="#i-lyrics"/></svg>歌词</div>
+            <div class="tile"><svg class="ic ic-34"><use href="#i-bed"/></svg>睡眠</div>
+          </div>
+          <div class="hint" style="max-width:300px;text-align:center">Tile 在通知栏快捷开关编辑页长按添加；长按 Tile 可直达对应设置。</div>
+        </div></div>
+      </section>
+
+      <!-- ============ 六 · 车机版（宽屏外壳） ============ -->
+      <section class="screen" id="car-home" data-mod="车机版" data-name="㊱ 车机主页（左常驻导航）" data-wide="1">
+        <div class="app-inner"><div class="carphone">
+          <div class="carbar"><div class="c-h"><svg class="ic ic-22"><use href="#i-note"/></svg>听风</div>
+            <div class="cnav on" data-go="car-home"><svg class="ic ic-18"><use href="#i-note"/></svg>歌曲</div>
+            <div class="cnav" data-go="car-home"><svg class="ic ic-18"><use href="#i-album"/></svg>专辑</div>
+            <div class="cnav" data-go="car-home"><svg class="ic ic-18"><use href="#i-artist"/></svg>歌手</div>
+            <div class="cnav" data-go="car-home"><svg class="ic ic-18"><use href="#i-folder"/></svg>文件夹</div>
+            <div class="cnav" data-go="car-home"><svg class="ic ic-18"><use href="#i-library"/></svg>歌单</div>
+            <div style="flex:1"></div>
+            <div class="cnav" data-go="car-settings"><svg class="ic ic-18"><use href="#i-gear"/></svg>设置</div>
+          </div>
+          <div class="carmain"><div class="carhead">歌曲</div><div class="scr" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-content:start">
+            <div class="prow" data-go="car-player" style="grid-column:span 2"><div class="prow-ic"><svg class="ic"><use href="#i-note"/></svg></div><div class="prow-main"><div class="prow-t">夜曲</div><div class="prow-s">周杰伦 · 叶惠美</div></div></div>
+            <div class="prow" data-go="car-player"><div class="prow-ic"><svg class="ic"><use href="#i-note"/></svg></div><div class="prow-main"><div class="prow-t">富士山下</div></div></div>
+            <div class="prow" data-go="car-player"><div class="prow-ic"><svg class="ic"><use href="#i-note"/></svg></div><div class="prow-main"><div class="prow-t">海阔天空</div></div></div>
+            <div class="prow" data-go="car-player"><div class="prow-ic"><svg class="ic"><use href="#i-note"/></svg></div><div class="prow-main"><div class="prow-t">起风了</div></div></div>
+            <div class="prow" data-go="car-player"><div class="prow-ic"><svg class="ic"><use href="#i-note"/></svg></div><div class="prow-main"><div class="prow-t">晴天</div></div></div>
+          </div>
+          <div class="carbot"><div class="prow-ic" style="width:40px;height:40px"><svg class="ic"><use href="#i-note"/></svg></div><div style="flex:1"><div style="font-weight:700;color:var(--on-bg);font-size:13px">夜曲</div><div style="font-size:11px;color:var(--on-surface-variant)">周杰伦</div></div><button class="ibtn"><svg class="ic"><use href="#i-prev"/></svg></button><button class="ibtn"><svg class="ic ic-34"><use href="#i-pause"/></svg></button><button class="ibtn"><svg class="ic"><use href="#i-next"/></svg></button></div>
+          </div>
+        </div></div>
+      </section>
+
+      <section class="screen" id="car-player" data-mod="车机版" data-name="㊲ 车机播放页（歌词态）" data-wide="1">
+        <div class="app-inner"><div class="carphone">
+          <div class="carbar"><div class="c-h"><svg class="ic ic-22"><use href="#i-note"/></svg>听风</div>
+            <div class="cnav" data-go="car-home"><svg class="ic ic-18"><use href="#i-note"/></svg>歌曲</div>
+            <div class="cnav" data-go="car-home"><svg class="ic ic-18"><use href="#i-album"/></svg>专辑</div>
+            <div class="cnav" data-go="car-home"><svg class="ic ic-18"><use href="#i-artist"/></svg>歌手</div>
+            <div class="cnav" data-go="car-home"><svg class="ic ic-18"><use href="#i-folder"/></svg>文件夹</div>
+            <div class="cnav" data-go="car-home"><svg class="ic ic-18"><use href="#i-library"/></svg>歌单</div>
+            <div style="flex:1"></div>
+            <div class="cnav" data-go="car-settings"><svg class="ic ic-18"><use href="#i-gear"/></svg>设置</div>
+          </div>
+          <div class="carmain" style="padding:18px 22px">
+            <div style="font-size:26px;font-weight:800;color:var(--on-bg)">夜曲</div>
+            <div style="font-size:14px;color:var(--on-surface-variant);margin-bottom:14px">周杰伦 · 叶惠美</div>
+            <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:18px;font-size:21px;line-height:1.5">
+              <div style="color:var(--on-surface-variant);opacity:.5">一群嗜血的蚂蚁 被腐肉所吸引</div>
+              <div style="color:var(--on-surface-variant);opacity:.5">我面无表情 看孤独的风景</div>
+              <div style="color:var(--primary);font-weight:800;background:var(--lyr-cur-bg);border-radius:10px;padding:6px 12px">失去你 爱恨 开始分明</div>
+              <div style="color:var(--on-surface-variant);opacity:.5">失去你 还有什么事好关心</div>
+              <div style="color:var(--on-surface-variant);opacity:.5">当鸽子不再象征和平</div>
+            </div>
+            <div style="height:6px;background:var(--surface-variant);border-radius:3px;margin:14px 0"><span style="display:block;width:37%;height:100%;background:var(--primary);border-radius:3px"></span></div>
+            <div class="carbot"><button class="ibtn"><svg class="ic"><use href="#i-prev"/></svg></button><button class="ibtn" style="width:60px;height:60px"><svg class="ic ic-34"><use href="#i-pause"/></svg></button><button class="ibtn"><svg class="ic"><use href="#i-next"/></svg></button><div style="flex:1"></div><button class="ibtn"><svg class="ic"><use href="#i-heart"/></svg></button><button class="ibtn"><svg class="ic"><use href="#i-queue"/></svg></button></div>
+          </div>
+        </div></div>
+      </section>
+
+      <section class="screen" id="car-settings" data-mod="车机版" data-name="㊳ 车机设置" data-wide="1">
+        <div class="app-inner"><div class="carphone">
+          <div class="carbar"><div class="c-h"><svg class="ic ic-22"><use href="#i-note"/></svg>听风</div>
+            <div class="cnav" data-go="car-home"><svg class="ic ic-18"><use href="#i-note"/></svg>歌曲</div>
+            <div class="cnav" data-go="car-home"><svg class="ic ic-18"><use href="#i-album"/></svg>专辑</div>
+            <div class="cnav" data-go="car-home"><svg class="ic ic-18"><use href="#i-artist"/></svg>歌手</div>
+            <div class="cnav" data-go="car-home"><svg class="ic ic-18"><use href="#i-folder"/></svg>文件夹</div>
+            <div class="cnav" data-go="car-home"><svg class="ic ic-18"><use href="#i-library"/></svg>歌单</div>
+            <div style="flex:1"></div>
+            <div class="cnav on"><svg class="ic ic-18"><use href="#i-gear"/></svg>设置</div>
+          </div>
+          <div class="carmain"><div class="carhead">车机设置</div><div class="scr" style="display:flex;flex-direction:column;gap:12px;align-content:start">
+            <div class="row-action"><div class="ra-ic"><svg class="ic"><use href="#i-lyrics"/></svg></div><div class="ra-main"><div class="ra-title">启动直进播放页</div></div><label class="ra-val"><input type="checkbox" checked></label></div>
+            <div class="row-action"><div class="ra-ic"><svg class="ic"><use href="#i-lock"/></svg></div><div class="ra-main"><div class="ra-title">锁定横屏</div></div><label class="ra-val"><input type="checkbox" checked></label></div>
+            <div class="row-action"><div class="ra-ic"><svg class="ic"><use href="#i-speed"/></svg></div><div class="ra-main"><div class="ra-title">歌词放大 1.5×</div></div><label class="ra-val"><input type="checkbox" checked></label></div>
+            <div class="row-action"><div class="ra-ic"><svg class="ic"><use href="#i-tune"/></svg></div><div class="ra-main"><div class="ra-title">车机音效档案</div></div><div class="ra-val">默认</div><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+            <div class="row-action"><div class="ra-ic"><svg class="ic"><use href="#i-note"/></svg></div><div class="ra-main"><div class="ra-title">桌面悬浮歌词</div></div><span class="badge-lrc">开</span></div>
+          </div></div>
+        </div></div>
+      </section>
+
+      <!-- ============ 七 · 歌词菜单与悬浮窗 ============ -->
+      <section class="screen" id="fl-menu" data-mod="歌词菜单与悬浮窗" data-name="㉔ 歌词菜单（长按歌词）">
+        <div class="app-inner"><div class="player">
+          <div class="p-top"><button class="ibtn"><svg class="ic"><use href="#i-down"/></svg></button><div class="t-main"><div class="sp"></div></div><button class="ibtn"><svg class="ic"><use href="#i-lyrics"/></svg></button><button class="ibtn"><svg class="ic"><use href="#i-tune"/></svg></button></div>
+          <div class="p-mid"><div class="lyr"><div class="lyr-line">一群嗜血的蚂蚁 被腐肉所吸引</div><div class="lyr-line cur">失去你 爱恨 开始分明</div><div class="lyr-line">失去你 还有什么事好关心</div></div></div>
+          <div class="p-nowrow"><div class="p-now-main"><div class="p-now-title">夜曲</div><div class="p-now-artist">周杰伦</div></div><button class="ibtn fav-on"><svg class="ic"><use href="#i-heart"/></svg></button></div>
+          <div class="p-progress"><div class="track"><span class="buf" style="width:88%"></span><span class="played" style="width:37%"></span><span class="thumb" style="left:37%"><i></i></span></div></div>
+          <div class="p-times"><span>1:24</span><span>3:46</span></div>
+          <div class="lyrmenu">
+            <div class="lm-t">歌词</div>
+            <div class="lm-item" data-go="fl-style"><div class="lm-ic"><svg class="ic"><use href="#i-palette"/></svg></div><div><div class="lm-t2">悬浮歌词样式速选</div><div class="lm-s2">极简单行 / 毛玻璃双行 …</div></div><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+            <div class="lm-item" data-go="fl-overview"><div class="lm-ic"><svg class="ic"><use href="#i-note"/></svg></div><div><div class="lm-t2">桌面悬浮歌词</div><div class="lm-s2">已开启</div></div><span class="badge-lrc">开</span></div>
+            <div class="lm-item"><div class="lm-ic"><svg class="ic"><use href="#i-speed"/></svg></div><div><div class="lm-t2">歌词偏移校准</div><div class="lm-s2">-300ms</div></div><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+            <div class="lm-item"><div class="lm-ic"><svg class="ic"><use href="#i-lyrics"/></svg></div><div><div class="lm-t2">复制本行歌词</div></div></div>
+          </div>
+        </div></div>
+      </section>
+
+      <section class="screen" id="fl-style" data-mod="歌词菜单与悬浮窗" data-name="㉕ 样式速选（五套预设）">
+        <div class="app-inner"><div class="scr" style="display:flex;flex-direction:column;gap:12px;padding-top:14px">
+          <div class="sec-t">选择悬浮窗预设</div>
+          <div class="chips" style="padding:0 12px"><span class="fchip on">极简单行</span><span class="fchip">毛玻璃双行</span><span class="fchip">液态渐变·唱片</span><span class="fchip">经典方块</span><span class="fchip">迷你胶囊·车机</span></div>
+          <div class="flwin mini"><div class="fw-ic"><svg class="ic"><use href="#i-note"/></svg></div><div style="flex:1"><div class="fw-t">夜曲</div><div class="fw-s">周杰伦 · 失去你 爱恨 开始分明</div></div><svg class="ic ic-18"><use href="#i-heart"/></svg></div>
+          <div class="flwin glass"><div class="fw-ic"><svg class="ic"><use href="#i-note"/></svg></div><div style="flex:1"><div class="fw-t">夜曲</div><div class="fw-s">周杰伦</div></div><div style="text-align:right"><div class="fw-t" style="font-size:12px">1:24</div><div class="fw-s">3:46</div></div></div>
+          <div class="flwin vinyl"><div class="fw-ic" style="border-radius:50%"><svg class="ic"><use href="#i-note"/></svg></div><div style="flex:1"><div class="fw-t">夜曲</div><div class="fw-s">周杰伦 · 失去你 爱恨 开始分明</div></div></div>
+          <div class="flwin block"><div class="fw-ic"><svg class="ic"><use href="#i-note"/></svg></div><div style="flex:1"><div class="fw-t">夜曲</div><div class="fw-s">周杰伦</div></div><svg class="ic ic-18"><use href="#i-play"/></svg></div>
+          <div class="flwin qq"><div class="fw-ic"><svg class="ic"><use href="#i-note"/></svg></div><div style="flex:1"><div class="fw-t">夜曲 · 周杰伦</div><div class="fw-s">车机专属 · 触控 ≥44dp</div></div><svg class="ic ic-18"><use href="#i-heart"/></svg></div>
+        </div></div>
+      </section>
+
+      <section class="screen" id="fl-overview" data-mod="歌词菜单与悬浮窗" data-name="㉖ 悬浮窗样式总览（设置→歌词→悬浮窗）">
+        <div class="app-inner">
+          <div class="topbar"><div class="tb-row"><button class="ibtn" data-go="set-lyrics"><svg class="ic"><use href="#i-back"/></svg></button><h1 class="lib-title">桌面悬浮歌词</h1><div class="sp"></div><span class="badge-lrc">开</span></div></div>
+          <div class="scr">
+            <div class="row-action"><div class="ra-ic"><svg class="ic"><use href="#i-note"/></svg></div><div class="ra-main"><div class="ra-title">启用悬浮歌词</div></div><label class="ra-val"><input type="checkbox" checked></label></div>
+            <div class="sec-t">预设</div>
+            <div class="grid2" style="gap:10px">
+              <div class="al-card" data-go="fl-style"><div class="al-art" style="background:linear-gradient(135deg,#23233a,#3a2f5a)"><svg class="ic ic-34"><use href="#i-note"/></svg></div><div class="al-t">极简单行</div></div>
+              <div class="al-card" data-go="fl-style"><div class="al-art" style="background:rgba(40,38,60,.6)"><svg class="ic ic-34"><use href="#i-note"/></svg></div><div class="al-t">毛玻璃双行</div></div>
+              <div class="al-card" data-go="fl-style"><div class="al-art" style="background:radial-gradient(circle at 30% 30%,#5B4BE0,#1a1530)"><svg class="ic ic-34"><use href="#i-note"/></svg></div><div class="al-t">液态渐变·唱片</div></div>
+              <div class="al-card" data-go="fl-style"><div class="al-art" style="background:#17171f"><svg class="ic ic-34"><use href="#i-note"/></svg></div><div class="al-t">经典方块</div></div>
+            </div>
+            <div class="sec-t">通用参数</div>
+            <div class="row-action"><div class="ra-main"><div class="ra-title">字号</div></div><div class="ra-val">14sp</div><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+            <div class="row-action"><div class="ra-main"><div class="ra-title">背景透明度</div></div><div class="ra-val">72%</div><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+            <div class="row-action"><div class="ra-main"><div class="ra-title">按应用隐藏</div></div><span class="badge-lrc">3 个</span><svg class="ic ic-18"><use href="#i-chevron"/></svg></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen" id="fl-presets" data-mod="歌词菜单与悬浮窗" data-name="㉗ 五套预设桌面实景">
+        <div class="app-inner"><div class="scr" style="display:flex;flex-direction:column;gap:18px;padding-top:16px">
+          <div class="sc-label">极简单行 · 桌面实景</div>
+          <div class="flwin mini"><div class="fw-ic"><svg class="ic"><use href="#i-note"/></svg></div><div style="flex:1"><div class="fw-t">夜曲</div><div class="fw-s">周杰伦 · 失去你 爱恨 开始分明</div></div><svg class="ic ic-18"><use href="#i-heart"/></svg></div>
+          <div class="sc-label">毛玻璃双行 · 桌面实景</div>
+          <div class="flwin glass"><div class="fw-ic"><svg class="ic"><use href="#i-note"/></svg></div><div style="flex:1"><div class="fw-t">夜曲</div><div class="fw-s">周杰伦</div></div><div style="text-align:right"><div class="fw-t" style="font-size:12px">1:24</div><div class="fw-s">3:46</div></div></div>
+          <div class="sc-label">液态渐变·唱片 · 桌面实景</div>
+          <div class="flwin vinyl"><div class="fw-ic" style="border-radius:50%"><svg class="ic"><use href="#i-note"/></svg></div><div style="flex:1"><div class="fw-t">夜曲</div><div class="fw-s">周杰伦 · 失去你 爱恨 开始分明</div></div></div>
+          <div class="sc-label">经典方块 · 桌面实景</div>
+          <div class="flwin block"><div class="fw-ic"><svg class="ic"><use href="#i-note"/></svg></div><div style="flex:1"><div class="fw-t">夜曲</div><div class="fw-s">周杰伦</div></div><svg class="ic ic-18"><use href="#i-play"/></svg></div>
+          <div class="sc-label">迷你胶囊·车机 · 桌面实景</div>
+          <div class="flwin qq"><div class="fw-ic"><svg class="ic"><use href="#i-note"/></svg></div><div style="flex:1"><div class="fw-t">夜曲 · 周杰伦</div><div class="fw-s">车机专属 · 触控 ≥44dp</div></div><svg class="ic ic-18"><use href="#i-heart"/></svg></div>
+        </div></div>
+      </section>
+
+      <section class="screen" id="fl-car" data-mod="歌词菜单与悬浮窗" data-name="㉝ 车机悬浮窗样式" data-wide="1">
+        <div class="app-inner"><div class="carphone">
+          <div class="carbar"><div class="c-h"><svg class="ic ic-22"><use href="#i-note"/></svg>听风</div><div class="cnav on"><svg class="ic ic-18"><use href="#i-note"/></svg>歌曲</div><div class="cnav"><svg class="ic ic-18"><use href="#i-gear"/></svg>设置</div><div style="flex:1"></div></div>
+          <div class="carmain" style="padding:22px;display:flex;flex-direction:column;justify-content:center;gap:16px">
+            <div class="sc-label" style="color:var(--on-surface-variant)">车机悬浮歌词 · 常驻顶部</div>
+            <div class="flwin qq" style="width:100%;height:64px"><div class="fw-ic"><svg class="ic"><use href="#i-note"/></svg></div><div style="flex:1"><div class="fw-t">夜曲</div><div class="fw-s">周杰伦 · 失去你 爱恨 开始分明</div></div><svg class="ic ic-18"><use href="#i-heart"/></svg></div>
+            <div class="hint" style="max-width:420px">车机悬浮窗触控热区 ≥44dp，歌词放大 1.5×，行驶中视线不离路。</div>
+          </div>
+        </div></div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<!-- 图标池（39 个 symbol，与 ui-sprite.js 同源） -->
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="M6 5l8.5 7L6 19zM16 5h2.2v14H16z"/></symbol>
+  <symbol id="i-prev" viewBox="0 0 24 24"><path d="M18 5l-8.5 7L18 19zM5.8 5H8v14H5.8z"/></symbol>
+  <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M10.6 9.2L5.4 4 4 5.4l5.2 5.2 1.4-1.4zM14.5 4l2 2L4 18.6 5.4 20 17.9 7.5 20 9.5V4h-5.5zm.3 9.4l-1.4 1.4 3.1 3.1L14.5 20H20v-5.5l-2 2-3.2-3.1z"/></symbol>
+  <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></symbol>
+  <symbol id="i-repeat-one" viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4zM13 15V9h-1.6l-1.9 1.2.6 1.1L11 10.7V15h2z"/></symbol>
+  <symbol id="i-seq" viewBox="0 0 24 24"><path d="M4 11h12.2l-4.6-4.6L13 5l7 7-7 7-1.4-1.4 4.6-4.6H4v-2z"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M12 3v10.6A4 4 0 1014 17V7h4V3h-6z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><path d="M15.5 14h-.8l-.3-.3a6.5 6.5 0 10-.7.7l.3.3v.8l5 5 1.5-1.5-5-5zm-6 0a4.5 4.5 0 110-9 4.5 4.5 0 010 9z"/></symbol>
+  <symbol id="i-sort" viewBox="0 0 24 24"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><path d="M12 8a2 2 0 100-4 2 2 0 000 4zm0 2a2 2 0 100 4 2 2 0 000-4zm0 6a2 2 0 100 4 2 2 0 000-4z"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M19 6.4L17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12z"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20v-2z"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M7.4 8.6L12 13.2l4.6-4.6L18 10l-6 6-6-6z"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M7.4 15.4L12 10.8l4.6 4.6L18 14l-6-6-6 6z"/></symbol>
+  <symbol id="i-add" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M10 4H4a2 2 0 00-2 2v12a2 2 0 002 2h16a2 2 0 002-2V8a2 2 0 00-2-2h-8l-2-2z"/></symbol>
+  <symbol id="i-album" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 14.5a4.5 4.5 0 110-9 4.5 4.5 0 010 9zm0-6.5a2 2 0 100 4 2 2 0 000-4z"/></symbol>
+  <symbol id="i-artist" viewBox="0 0 24 24"><path d="M12 12a4 4 0 100-8 4 4 0 000 8zm0 2c-3.3 0-8 1.7-8 5v3h16v-3c0-3.3-4.7-5-8-5z"/></symbol>
+  <symbol id="i-library" viewBox="0 0 24 24"><path d="M20 2H8a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V4a2 2 0 00-2-2zm-6 11.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5zM4 6H2v14a2 2 0 002 2h14v-2H4V6z"/></symbol>
+  <symbol id="i-queue" viewBox="0 0 24 24"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zm14-10v8.2a3 3 0 100 5.8 3 3 0 003-3V8h3V6h-6z"/></symbol>
+  <symbol id="i-lyrics" viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 012 2v9a2 2 0 01-2 2H8l-6 5V6a2 2 0 012-2zm3 4v2h10V8H7zm0 4v2h7v-2H7z"/></symbol>
+  <symbol id="i-tune" viewBox="0 0 24 24"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></symbol>
+  <symbol id="i-vol" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.8-1-3.3-2.5-4v8c1.5-.7 2.5-2.2 2.5-4zM14 3.2v2.1c2.9.9 5 3.5 5 6.7s-2.1 5.9-5 6.7v2.1c4-1 7-4.5 7-8.8s-3-7.9-7-8.8z"/></symbol>
+  <symbol id="i-bed" viewBox="0 0 24 24"><path d="M9.5 2A10 10 0 1021 13.6 8 8 0 019.5 2z"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M3 17.3V21h3.8L17.8 9.9l-3.8-3.8L3 17.3zM20.7 7a1 1 0 000-1.4l-2.3-2.3a1 1 0 00-1.4 0l-1.8 1.8 3.7 3.8L20.7 7z"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></symbol>
+  <symbol id="i-speed" viewBox="0 0 24 24"><path d="M20.4 8.6l-1.2 1.8a8 8 0 01-.2 7.6H5.1A8 8 0 0115.6 6.9l1.8-1.3A10 10 0 003.4 19a2 2 0 001.7 1h13.8a2 2 0 001.7-1 10 10 0 00-.2-10.4z"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.3-9A5.4 5.4 0 0112 6.3 5.4 5.4 0 0121.3 12c-1.8 4.4-9.3 9-9.3 9z"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 17.3l-6.2 3.7 1.6-7L2 9.2l7.1-.6L12 2l2.9 6.6 7.1.6-5.4 4.8 1.6 7z"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><path d="M19.1 12.9c0-.3.1-.6.1-.9s0-.6-.1-.9l2-1.6c.2-.2.3-.5.1-.7l-1.9-3.3c-.1-.2-.4-.3-.6-.2l-2.4 1c-.5-.4-1-.7-1.6-.9l-.4-2.5c0-.2-.2-.4-.5-.4h-3.8c-.2 0-.4.2-.5.4l-.4 2.5c-.6.2-1.1.5-1.6.9l-2.4-1c-.2-.1-.5 0-.6.2L2.7 8.8c-.1.2-.1.5.1.7l2 1.6c0 .3-.1.6-.1.9s0 .6.1.9l-2 1.6c-.2.2-.2.5-.1.7l1.9 3.3c.1.2.4.3.6.2l2.4-1c.5.4 1 .7 1.6.9l.4 2.5c0 .2.2.4.5.4h3.8c.2 0 .4-.2.5-.4l.4-2.5c.6-.2 1.1-.6 1.6-.9l2.4 1c.2.1.5 0 .6-.2l1.9-3.3c.1-.2.1-.5-.1-.7l-2-1.6zM12 15.6a3.6 3.6 0 110-7.2 3.6 3.6 0 010 7.2z"/></symbol>
+  <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M19.4 10a7.5 7.5 0 0 0 -14.3 -1.6A5 5 0 0 0 6 18h13a4 4 0 0 0 .4 -8z"/></symbol>
+  <symbol id="i-reset" viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M6 19a2 2 0 002 2h8a2 2 0 002-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/></symbol>
+  <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 2a10 10 0 000 20c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.4A4.6 4.6 0 0022 11.1C21.9 6.1 17.4 2 12 2zM6.5 12a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm3-4a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm5 0a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm3 4a1.5 1.5 0 110-3 1.5 1.5 0 010 3z"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><path d="M12 1a5 5 0 00-5 5v3H6a2 2 0 00-2 2v9a2 2 0 002 2h12a2 2 0 002-2v-9a2 2 0 00-2-2h-1V6a5 5 0 00-5-5zm3 8H9V6a3 3 0 016 0v3zm-3 4a2 2 0 011 3.7V18h-2v-1.3A2 2 0 0112 13z"/></symbol>
+</svg>
+
+<script>
+/* ===================== 构建手机外壳 ===================== */
+var SB = '<div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>';
+document.querySelectorAll('.screen').forEach(function(sec){
+  var inner = sec.querySelector('.app-inner');
+  if(!inner) return;
+  var html = inner.innerHTML;
+  sec.innerHTML = '';
+  if(sec.dataset.wide){
+    sec.innerHTML = html;
+  } else {
+    var phone = document.createElement('div');
+    phone.className = 'phone';
+    phone.innerHTML = SB;
+    var app = document.createElement('div');
+    app.className = 'app';
+    app.innerHTML = html;
+    if(sec.dataset.drawer) app.classList.add('drawer-open');
+    phone.appendChild(app);
+    sec.appendChild(phone);
+  }
+});
+
+/* ===================== 导航状态机 ===================== */
+var history = [];
+function go(id, push){
+  var sec = document.getElementById(id);
+  if(!sec) return;
+  if(push !== false && history[history.length-1] !== id) history.push(id);
+  document.querySelectorAll('.screen').forEach(function(s){ s.classList.toggle('on', s === sec); });
+  document.querySelectorAll('.tree-item').forEach(function(t){ t.classList.toggle('on', t.dataset.go === id); });
+  var cr = document.getElementById('crumbs');
+  cr.innerHTML = sec.dataset.mod + '<small>' + sec.dataset.name + '</small>';
+  document.getElementById('canvas').scrollTop = 0;
+  stopFlow();
+}
+document.addEventListener('click', function(e){
+  var t = e.target.closest('[data-go]');
+  if(t){ e.preventDefault(); go(t.dataset.go); }
+});
+document.getElementById('backBtn').addEventListener('click', function(){
+  history.pop();
+  var prev = history[history.length-1] || 'm-songs';
+  go(prev, false);
+});
+
+/* ===================== 主题切换 ===================== */
+var themeBtn = document.getElementById('themeBtn');
+function syncTheme(){
+  var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  themeBtn.textContent = dark ? '🌙 深色' : '☀ 浅色';
+}
+themeBtn.addEventListener('click', function(){
+  var cur = document.documentElement.getAttribute('data-theme');
+  var next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try{ localStorage.setItem('wt-ui-theme', next); }catch(e){}
+  syncTheme();
+});
+syncTheme();
+
+/* ===================== 流程演示 ===================== */
+var FLOW = ['m-songs','m-drawer','set-home','set-lyrics','fl-overview','fl-menu','p-lyrics','s-queue','car-home','car-player'];
+var flowTimer = null, flowIdx = 0;
+var flowBtn = document.getElementById('flowBtn');
+function stopFlow(){
+  if(flowTimer){ clearInterval(flowTimer); flowTimer = null; flowBtn.textContent = '▶ 流程演示'; flowBtn.classList.remove('pri'); }
+}
+flowBtn.addEventListener('click', function(){
+  if(flowTimer){ stopFlow(); return; }
+  flowIdx = 0; flowBtn.textContent = '⏸ 停止演示'; flowBtn.classList.add('pri');
+  go(FLOW[0], true);
+  flowTimer = setInterval(function(){
+    flowIdx++;
+    if(flowIdx >= FLOW.length){ stopFlow(); return; }
+    go(FLOW[flowIdx], true);
+  }, 1600);
+});
+
+/* 初始屏 */
+go('m-songs', false);
+</script>
+</body>
+</html>
