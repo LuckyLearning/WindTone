@@ -519,6 +519,8 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
      * 无条件更新会构成「布局 → 更新 → 布局」的死循环。
      */
     override fun applyPosition() {
+        // 收起态不接受几何重算：播放状态每帧都会算一次窗口外形，
+        // 不挡住就会下一帧弹回展开尺寸（1.1.91 的教训）。
         if (collapsed) return
         val p = layoutParams ?: return
         val prefs = Prefs(this)
@@ -1338,8 +1340,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
      */
     override fun applyVisibility() {
         val box = container ?: return
-        // v1.1.94：收起态下歌词窗整体不可见（钮是独立窗口，仍可点「展开」）
-        val show = desiredVisible && screenInteractive && !collapsed
+        val show = desiredVisible && screenInteractive
         val target = if (show) View.VISIBLE else View.INVISIBLE
         if (box.visibility != target) box.visibility = target
         // v1.1.91：收起钮跟着一起进出 —— 歌词都不显示了，单独飘一个钮只会让人困惑
@@ -1524,30 +1525,54 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
      */
     private fun toggleCollapsed() {
         val box = container ?: return
-        // v1.1.94：**不再改窗口宽高**。
-        //
-        // 1.1.91 的做法是把窗口压到 8dp 并贴左，但车机实测：点了没反应，
-        // 直到 App 切前台再回来才刷新 —— 说明 `updateViewLayout` 改尺寸这一次
-        // 没有被立即重绘（要靠后面某次完整的窗口更新才落地）。
-        // 与其继续和窗口管理器博弈，不如把「收起」定义成**视图可见性**：
-        // 收起时把整块歌词窗 INVISIBLE，只留那个独立的小圆钮（它本身就是独立窗口）。
-        // 这样收起/展开都是纯 View 层的 switch，一帧内生效，与窗口尺寸无关。
+        val p = layoutParams ?: return
         collapsed = !collapsed
+        val handle = collapseHandleView as? TextView
+
         if (collapsed) {
+            // v1.1.96：恢复 1.1.93 的「收成左侧一条」效果，但修掉它失效的那一半 ——
+            // 自动高度（WRAP_CONTENT）时改宽度不会触发重排，窗口看起来毫无变化；
+            // 高度固定时则一切正常（用户实测结论）。
+            // 所以收起时先把高度**固化成当前测量值**，再压宽度，最后强制一次布局。
             contentColumn?.visibility = View.GONE
+            val h = box.height.takeIf { it > 0 }
+                ?: p.height.takeIf { it > 0 && it != WindowManager.LayoutParams.WRAP_CONTENT }
+                ?: dp(120)
+            p.height = h
+            p.width = dp(COLLAPSED_WIDTH_DP)
+            p.x = 0
+            handle?.text = "›"
+            handle?.contentDescription = "展开悬浮歌词"
         } else {
             contentColumn?.visibility = View.VISIBLE
+            val prefs = Prefs(this)
+            val (sw, sh) = screenSize()
+            val frame = frameFor(prefs, sw, sh)
+            p.width = frame.width
+            p.height = if (frame.autoHeight) {
+                WindowManager.LayoutParams.WRAP_CONTENT
+            } else {
+                frame.height
+            }
+            p.x = frame.x
+            p.y = frame.y
+            handle?.text = "‹"
+            handle?.contentDescription = "收起悬浮歌词"
         }
-        val handle = collapseHandleView as? TextView
-        handle?.text = if (collapsed) "›" else "‹"
-        handle?.contentDescription = if (collapsed) "展开悬浮歌词" else "收起悬浮歌词"
 
-        applyVisibility()
+        val applied = runCatching { windowManager?.updateViewLayout(box, p) }
+        // 关键：改完窗口参数再显式请求一次 layout —— 自动高度那份布局缓存不会自己失效
+        runCatching {
+            box.requestLayout()
+            box.invalidate()
+        }
+        if (!collapsed) refreshModeChrome()
         updateHandlesPosition()
         com.luckylearning.windtone.diag.DiagLog.log(
             "OVERLAY",
-            "收起切换：collapsed=$collapsed 窗口可见=${box.visibility == View.VISIBLE} " +
-                "内容=${if (contentColumn?.visibility == View.GONE) "隐藏" else "显示"}",
+            "收起切换：collapsed=$collapsed 参数宽=${p.width} 实际宽=${box.width} " +
+                "内容=${if (contentColumn?.visibility == View.GONE) "隐藏" else "显示"} " +
+                "update=${if (applied.isSuccess) "ok" else "失败:" + applied.exceptionOrNull()?.javaClass?.simpleName}",
         )
     }
 
