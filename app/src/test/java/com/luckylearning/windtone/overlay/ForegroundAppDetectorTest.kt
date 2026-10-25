@@ -92,4 +92,20 @@ class ForegroundAppDetectorTest {
             )
         }
     }
+
+    @Test
+    fun `电池页识别排除充电与能量回收`() {
+        // 实测误命中：DiLink 的「能量回收 / 充电」页名字里带 Power
+        assertTrue(
+            !ForegroundAppDetector.looksLikeBatteryPage(
+                "com.byd.newenergy.energy.view.PowerRecharge.PowerRechargeDialogActivity",
+            ),
+        )
+        // 真正的电池 / 省电 / 后台页要认
+        assertTrue(ForegroundAppDetector.looksLikeBatteryPage("com.android.settings.BatterySaverSettings"))
+        assertTrue(ForegroundAppDetector.looksLikeBatteryPage("com.byd.settings.PowerManagerActivity"))
+        assertTrue(ForegroundAppDetector.looksLikeBatteryPage("com.x.Settings\$BackgroundManager"))
+        // 只有 power 但语义不明的不算
+        assertTrue(!ForegroundAppDetector.looksLikeBatteryPage("com.x.SomePowerActivity"))
+    }
 }

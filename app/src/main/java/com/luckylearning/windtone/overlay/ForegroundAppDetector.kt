@@ -116,7 +116,7 @@ internal object ForegroundAppDetector {
      * 由调用方给出「手动路径 + 使用情况权限」的替代方案。
      */
     fun openAccessibilitySettings(context: Context): Boolean =
-        startFirstResolvable(context, accessibilitySettingsIntents(context))
+        startFirstResolvable(context, accessibilitySettingsIntents(context), "无障碍设置")
 
     /** 候选 Intent（顺序即优先级；测试可直接断言顺序与兜底项） */
     fun accessibilitySettingsIntents(context: Context): List<Intent> = buildList {
@@ -150,7 +150,7 @@ internal object ForegroundAppDetector {
         discoverAccessibilityActivities(context).forEach { cn ->
             add(Intent().setComponent(cn).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
-    }
+    }.distinctBy { it.component?.flattenToString() ?: it.action }
 
     /**
      * 动态发现「无障碍」相关 Activity（OEM 改名 / 换应用时的通用兜底）。
@@ -217,7 +217,7 @@ internal object ForegroundAppDetector {
      * 让用户自己在列表里勾选。返回是否成功打开了某个页面。
      */
     fun requestIgnoreBatteryOptimizations(context: Context): Boolean =
-        startFirstResolvable(context, batteryOptimizationIntents(context))
+        startFirstResolvable(context, batteryOptimizationIntents(context), "电池优化")
 
     /**
      * 申请白名单的候选（v1.1.84 起三段）：
@@ -239,7 +239,7 @@ internal object ForegroundAppDetector {
         // 车机把上面三段都裁掉时，从设置类应用里**动态找**电池 / 省电 / 后台管理页，
         // 逻辑与无障碍的动态发现同源（DiLink 这类 ROM 改名比换实现勤快得多）。
         Intent().setComponent(cn).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
+    }.distinctBy { it.component?.flattenToString() ?: it.action }
 
     /**
      * 动态发现「电池 / 省电 / 后台管理」相关 Activity（v1.1.87）。
@@ -267,14 +267,34 @@ internal object ForegroundAppDetector {
                     label.contains("Setting", ignoreCase = true)
             }
 
-        val keys = listOf("battery", "power", "optimiz", "background")
+        // v1.1.89 收紧：`power` 单用会把「能量回收 / 充电」页也捞进来
+        // （实测命中了 com.byd.newenergy.energy.view.PowerRecharge.PowerRechargeDialogActivity），
+        // 所以 power 必须与 save/manager/usage/consumption 同现才算；充电 / 能量类一律排除。
         return settingsPackages.flatMap { pkg ->
             val info = runCatching { pm.getPackageInfo(pkg, PackageManager.GET_ACTIVITIES) }.getOrNull()
             info?.activities.orEmpty()
                 .mapNotNull { it.name }
-                .filter { name -> keys.any { name.contains(it, ignoreCase = true) } }
+                .filter { looksLikeBatteryPage(it) }
                 .map { android.content.ComponentName(pkg, it) }
         }.distinct().take(6)
+    }
+
+    /**
+     * 类名像不像「电池 / 省电 / 后台管理」页（v1.1.89 抽出成纯函数，便于单测）。
+     *
+     * 为什么不能只用 `power` 一个词：DiLink 上实测会把
+     * `...newenergy.energy.view.PowerRecharge.PowerRechargeDialogActivity`
+     * （能量回收 / 充电）也当成电池页 —— 点进去是充电设置，用户只会更困惑。
+     * 所以充电 / 能量类一律排除，`power` 必须与 manager / usage / consumption 同现。
+     */
+    internal fun looksLikeBatteryPage(className: String): Boolean {
+        val lower = className.lowercase()
+        val excluded = listOf("recharge", "charge", "energy", "newenergy")
+        if (excluded.any { lower.contains(it) }) return false
+        val strong = listOf("battery", "optimiz", "background", "powersave", "power_save")
+        if (strong.any { lower.contains(it) }) return true
+        val powerQualified = listOf("powermanager", "powerusage", "powerconsumption", "power_settings")
+        return lower.contains("power") && powerQualified.any { lower.contains(it) }
     }
 
     // ---------------------------------------------------------------- 后台限制探测
@@ -300,26 +320,34 @@ internal object ForegroundAppDetector {
      * 车厂常常不用「电池优化白名单」而用 AppOps 直接压后台（DiLink 就是），
      * 所以「白名单没加」不代表后台被限 —— 这一行才是真正的判据之一。
      */
-    fun runInBackgroundMode(context: Context): String = runCatching {
-        val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
-        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            appOps.unsafeCheckOpNoThrow(
-                "android:runAnyInBackground",
-                Process.myUid(),
-                context.packageName,
-            )
-        } else {
-            @Suppress("DEPRECATION")
-            appOps.checkOpNoThrow("android:runAnyInBackground", Process.myUid(), context.packageName)
+    fun runInBackgroundMode(context: Context): String {
+        val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager
+            ?: return "取不到 AppOpsManager"
+        // v1.1.89：DiLink 上 `android:runAnyInBackground` 会抛 IllegalArgumentException
+        // （这个 op 在它的 AppOps 表里没登记）。逐个试两个历史名称，全不行就如实说「不支持」，
+        // 而不是把异常类名当成结论。
+        val ops = listOf("android:runAnyInBackground", "android:runInBackground")
+        for (op in ops) {
+            val result = runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    appOps.unsafeCheckOpNoThrow(op, Process.myUid(), context.packageName)
+                } else {
+                    @Suppress("DEPRECATION")
+                    appOps.checkOpNoThrow(op, Process.myUid(), context.packageName)
+                }
+            }
+            if (result.isSuccess) {
+                return when (val mode = result.getOrThrow()) {
+                    AppOpsManager.MODE_ALLOWED -> "允许(0)  [$op]"
+                    AppOpsManager.MODE_IGNORED -> "被忽略/拒绝(1)  [$op]"
+                    AppOpsManager.MODE_ERRORED -> "报错(2)  [$op]"
+                    AppOpsManager.MODE_DEFAULT -> "默认(3)  [$op]"
+                    else -> "MODE_$mode  [$op]"
+                }
+            }
         }
-        when (mode) {
-            AppOpsManager.MODE_ALLOWED -> "允许(0)"
-            AppOpsManager.MODE_IGNORED -> "被忽略/拒绝(1)"
-            AppOpsManager.MODE_ERRORED -> "报错(2)"
-            AppOpsManager.MODE_DEFAULT -> "默认(3)"
-            else -> "MODE_$mode"
-        }
-    }.getOrElse { "查询失败：${it.javaClass.simpleName}" }
+        return "本机不支持该查询（两个 op 名都不认）"
+    }
 
     /**
      * 跳系统「使用情况权限」页（多候选 + 兜底）。
@@ -328,14 +356,14 @@ internal object ForegroundAppDetector {
      * 所以它必须比无障碍更容易打开。
      */
     fun openUsageAccessSettings(context: Context): Boolean =
-        startFirstResolvable(context, usageAccessIntents())
+        startFirstResolvable(context, usageAccessIntents(), "使用情况访问")
 
     fun usageAccessIntents(): List<Intent> = buildList {
         add(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         USAGE_ACCESS_ACTIVITIES.forEach { (pkg, cls) ->
             add(Intent().setClassName(pkg, cls).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
-    }
+    }.distinctBy { it.component?.flattenToString() ?: it.action }
 
     /**
      * 系统**当前认为在运行**的无障碍服务（v1.1.86）。
@@ -373,15 +401,34 @@ internal object ForegroundAppDetector {
      * 先 `resolveActivity` 过滤（不抛异常的判断），再 startActivity；
      * startActivity 仍可能因权限 / 导出限制失败，所以还要包一层 runCatching 继续试下一个。
      */
-    private fun startFirstResolvable(context: Context, intents: List<Intent>): Boolean {
+    private fun startFirstResolvable(
+        context: Context,
+        intents: List<Intent>,
+        label: String = "OPEN",
+    ): Boolean {
+        var tried = 0
         for (intent in intents) {
             val resolvable = runCatching {
                 context.packageManager.resolveActivity(intent, 0) != null
             }.getOrDefault(false)
             if (!resolvable) continue
+            tried += 1
             val ok = runCatching { context.startActivity(intent) }.isSuccess
-            if (ok) return true
+            if (ok) {
+                // v1.1.89：把「打开成功」也记一条 —— 用户反馈「点不开」时，
+                // 这条能区分「没找到页面」与「找到了但启动失败」。
+                com.luckylearning.windtone.diag.DiagLog.log(
+                    "OPEN",
+                    "$label 打开成功：$tried/${intents.size} ${intent.component ?: intent.action}",
+                )
+                return true
+            }
+            com.luckylearning.windtone.diag.DiagLog.log(
+                "OPEN",
+                "$label 启动失败（可解析但起不来）：${intent.component ?: intent.action}",
+            )
         }
+        com.luckylearning.windtone.diag.DiagLog.log("OPEN", "$label 全部失败：可解析的有 $tried 个")
         return false
     }
 

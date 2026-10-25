@@ -129,8 +129,16 @@ internal object DiagnosticsReport {
             }.getOrDefault(false),
             canDrawOverlay = runCatching { Settings.canDrawOverlays(context) }.getOrDefault(false),
             ignoringBattery = ForegroundAppDetector.ignoringBatteryOptimizations(context),
+            // v1.1.89：READ_MEDIA_AUDIO 是 Android 13+ 的权限；12 及以下必须查
+            // READ_EXTERNAL_STORAGE，否则车机上会误报「读取音频：否」——
+            // 而曲库明明有 169 首，这种自相矛盾会误导排查。
             mediaAudioGranted = runCatching {
-                context.checkSelfPermission(android.Manifest.permission.READ_MEDIA_AUDIO) ==
+                val perm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    android.Manifest.permission.READ_MEDIA_AUDIO
+                } else {
+                    android.Manifest.permission.READ_EXTERNAL_STORAGE
+                }
+                context.checkSelfPermission(perm) ==
                     android.content.pm.PackageManager.PERMISSION_GRANTED
             }.getOrDefault(false),
             installUnknownAllowed = runCatching {
