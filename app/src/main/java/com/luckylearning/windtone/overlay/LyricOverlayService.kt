@@ -106,6 +106,20 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
     private var collapseHandleView: android.view.View? = null
     private var collapseHandleParams: WindowManager.LayoutParams? = null
 
+    // v1.1.95：第二颗钮 —— 打开播放页（图标 / 颜色都与收起钮不同）
+    private var playHandleView: android.view.View? = null
+    private var playHandleParams: WindowManager.LayoutParams? = null
+
+    /**
+     * 钮的纵向锚点（v1.1.95）。
+     *
+     * 之前每次重算都用「当前测量高度」居中，而歌词行数一变窗口高度就变，
+     * 钮就跟着上下跳 —— 用户原话「位置不要变来变去」。
+     * 现在只在**窗口顶边移动**或**首次放置**时重算，内容高度变化不再影响。
+     */
+    private var handleAnchorY = -1
+    private var anchorFromWindowY = Int.MIN_VALUE
+
     /** 歌词内容列（收起时整列隐藏，只留窗口宽度的一点点） */
     private var contentColumn: android.view.View? = null
 
@@ -465,6 +479,11 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         }
         collapseHandleView = null
         collapseHandleParams = null
+        playHandleView?.let { view -> runCatching { windowManager?.removeView(view) } }
+        playHandleView = null
+        playHandleParams = null
+        handleAnchorY = -1
+        anchorFromWindowY = Int.MIN_VALUE
         contentColumn = null
         collapsed = false
 
@@ -516,7 +535,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         runCatching { windowManager?.updateViewLayout(container, p) }
         updateGeometryReport()
         // 歌词窗移了，收起钮要跟着保持「与窗垂直居中」
-        updateCollapseHandlePosition()
+        updateHandlesPosition()
     }
 
     /**
@@ -1142,7 +1161,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         refreshModeChrome()
         container?.post {
             updateGeometryReport()
-            updateCollapseHandlePosition()
+            updateHandlesPosition()
         }
     }
 
@@ -1177,7 +1196,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         // 尺寸变了，夹取上限跟着变：等一帧让布局量完再摆一次
         container?.post {
             applyPosition()
-            updateCollapseHandlePosition()
+            updateHandlesPosition()
         }
     }
 
@@ -1325,8 +1344,9 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         if (box.visibility != target) box.visibility = target
         // v1.1.91：收起钮跟着一起进出 —— 歌词都不显示了，单独飘一个钮只会让人困惑
         collapseHandleView?.let { if (it.visibility != target) it.visibility = target }
+        playHandleView?.let { if (it.visibility != target) it.visibility = target }
         windowVisible = show
-        if (show) updateCollapseHandlePosition()
+        if (show) updateHandlesPosition()
     }
 
     // ---------------------------------------------------------------- 收起钮（v1.1.91）
@@ -1381,34 +1401,116 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         }
         collapseHandleView = handle
         collapseHandleParams = lp
-        container?.post { updateCollapseHandlePosition() }
+        attachPlayHandle()
+        container?.post { updateHandlesPosition() }
     }
 
-    /** 收起钮跟随歌词窗：贴左缘、与歌词窗垂直居中（并夹在屏幕内） */
-    private fun updateCollapseHandlePosition() {
-        val handle = collapseHandleView ?: return
-        val hp = collapseHandleParams ?: return
+    /**
+     * 第二颗钮：打开播放页（v1.1.95）。
+     *
+     * 与收起钮并排放在歌词窗左侧：**蓝色圆 + 音符**，与橙色箭头一眼区分；
+     * 点击走 [AppShortcut.OPEN_PLAYER] 这条既有深链（小组件也在用），
+     * 不必新开一套 Intent 解析。
+     */
+    private fun attachPlayHandle() {
+        if (playHandleView != null) return
+        val size = dp(48)
+        val play = TextView(this).apply {
+            text = "♪"
+            setTextColor(android.graphics.Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(PLAY_HANDLE_COLOR)
+                setStroke(dp(1), 0x33FFFFFF)
+            }
+            contentDescription = "打开播放页"
+            elevation = dp(4).toFloat()
+            setOnClickListener {
+                com.luckylearning.windtone.diag.DiagLog.log("OVERLAY", "打开播放页按钮被点击")
+                openPlayerPage()
+            }
+        }
+        val lp = WindowManager.LayoutParams(
+            size,
+            size,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = 0
+            y = dp(216)
+        }
+        if (!runCatching { windowManager?.addView(play, lp) }.isSuccess) return
+        playHandleView = play
+        playHandleParams = lp
+    }
+
+    /** 从悬浮窗拉起播放页（深链与桌面小组件共用一条通道） */
+    private fun openPlayerPage() {
+        val intent = Intent(this, com.luckylearning.windtone.MainActivity::class.java).apply {
+            action = com.luckylearning.windtone.ui.AppShortcut.ACTION
+            putExtra(
+                com.luckylearning.windtone.ui.AppShortcut.EXTRA,
+                com.luckylearning.windtone.ui.AppShortcut.OPEN_PLAYER,
+            )
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        val ok = runCatching { startActivity(intent) }.isSuccess
+        com.luckylearning.windtone.diag.DiagLog.log(
+            "OVERLAY",
+            "打开播放页：${if (ok) "成功" else "失败（后台启动被限制）"}",
+        )
+    }
+
+    /**
+     * 两颗钮的位置（v1.1.95）。
+     *
+     * 三条规则，都是冲着用户那句「位置不要变来变去」：
+     *  1. **横坐标与收起状态无关**：展开 / 收起用同一个 x，点一下不会横跳；
+     *  2. **纵坐标只在窗口顶边移动时重算**：歌词行数变化会改窗口高度，此前按高度居中
+     *     导致钮上下跳；现在高度不参与，只有用户拖动窗口才跟着走；
+     *  3. 两颗钮**竖排**在歌词窗左侧（收起钮在上、播放页钮在下），整体夹在屏幕内。
+     */
+    private fun updateHandlesPosition() {
+        val collapse = collapseHandleView ?: return
+        val cp = collapseHandleParams ?: return
         val p = layoutParams ?: return
-        val size = handle.height.takeIf { it > 0 } ?: dp(40)
+        val size = collapse.height.takeIf { it > 0 } ?: dp(48)
+        val gap = dp(8)
+        val play = playHandleView
+
         val boxH = container?.height?.takeIf { it > 0 }
             ?: p.height.takeIf { it > 0 }
             ?: dp(96)
         val (screenW, screenH) = screenSize()
-        val y = (p.y + (boxH - size) / 2).coerceIn(0, (screenH - size).coerceAtLeast(0))
-        // 位置就贴在歌词窗**左侧**（用户原话「悬浮窗左边」）：
-        //  · 展开：窗左边留 4dp 间隙；窗本来就贴左缘时退化为压在窗内左侧（仍有 18dp 文字内边距）；
-        //  · 收起：歌词窗整体隐藏，钮直接贴屏幕左缘（就是「收成左边一点点」的样子）。
-        val x = if (collapsed) {
-            dp(8)
-        } else {
-            (p.x - size - dp(4)).coerceIn(0, (screenW - size).coerceAtLeast(0))
+
+        val totalH = if (play != null) size * 2 + gap else size
+        if (anchorFromWindowY != p.y || handleAnchorY < 0) {
+            val centered = p.y + (boxH - totalH) / 2
+            handleAnchorY = centered.coerceIn(0, (screenH - totalH).coerceAtLeast(0))
+            anchorFromWindowY = p.y
         }
-        // v1.1.93：即使坐标没变也调一次 updateViewLayout —— 在部分 ROM 上，
-        // 歌词窗 updateViewLayout 之后会把同层窗口重新排序，钮被盖住就点不到了；
-        // 重新 update 一次能把钮抬回同层顶部。代价是一次很轻的窗口事务。
-        hp.x = x
-        hp.y = y
-        runCatching { windowManager?.updateViewLayout(handle, hp) }
+
+        // 与「收起 / 展开」无关的固定横坐标：贴在歌词窗左侧，留 4dp 间隙；
+        // 窗本身贴左缘时退化为压在窗内左侧（文字仍有 18dp 内边距）。
+        val x = (p.x - size - dp(4)).coerceIn(0, (screenW - size).coerceAtLeast(0))
+
+        cp.x = x
+        cp.y = handleAnchorY
+        runCatching { windowManager?.updateViewLayout(collapse, cp) }
+
+        val pp = playHandleParams
+        if (play != null && pp != null) {
+            pp.x = x
+            pp.y = handleAnchorY + size + gap
+            runCatching { windowManager?.updateViewLayout(play, pp) }
+        }
     }
 
     /**
@@ -1441,7 +1543,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         handle?.contentDescription = if (collapsed) "展开悬浮歌词" else "收起悬浮歌词"
 
         applyVisibility()
-        updateCollapseHandlePosition()
+        updateHandlesPosition()
         com.luckylearning.windtone.diag.DiagLog.log(
             "OVERLAY",
             "收起切换：collapsed=$collapsed 窗口可见=${box.visibility == View.VISIBLE} " +
@@ -1560,6 +1662,9 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
 
         /** 收起钮的橙色：与歌词文字 / 底板刻意区分（v1.1.91） */
         private const val HANDLE_COLOR = 0xFFFF8A00.toInt()
+
+        /** 播放页钮的蓝色：与收起钮一眼区分（v1.1.95） */
+        private const val PLAY_HANDLE_COLOR = 0xFF1E88E5.toInt()
 
         /** 通知栏「收起 / 展开」的 Intent action（v1.1.93） */
         const val ACTION_TOGGLE_COLLAPSE = "com.luckylearning.windtone.TOGGLE_OVERLAY_COLLAPSE"
