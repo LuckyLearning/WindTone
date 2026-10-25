@@ -52,6 +52,14 @@ class ForegroundAppStateTest {
     }
 
     @Test
+    fun `recentFlow 跟随切换更新，reset 后清空`() {
+        ForegroundAppState.report("com.a")
+        assertEquals(listOf("com.a"), ForegroundAppState.recentFlow.value.map { it.pkg })
+        ForegroundAppState.reset()
+        assertTrue(ForegroundAppState.recentFlow.value.isEmpty())
+    }
+
+    @Test
     fun `reset 同时清空最近切换`() {
         ForegroundAppState.report("com.a")
         assertEquals(1, ForegroundAppState.recent().size)
@@ -184,5 +192,15 @@ class ForegroundAppLogTest {
     fun `应用名解析不到时复制文本有标注`() {
         val text = ForegroundAppLog.formatForCopy(listOf(entry(1, "com.x", null)))
         assertTrue(text.contains("解析不到"))
+    }
+
+    @Test
+    fun `输入法事件被忽略，普通应用不忽略`() {
+        val ime = setOf("com.iflytek.inputmethod")
+        assertTrue(shouldIgnoreForegroundEvent("com.iflytek.inputmethod", ime))
+        assertTrue(!shouldIgnoreForegroundEvent("com.byd.avc", ime))
+        // 拿不到输入法列表时不能误伤：一律不忽略
+        assertTrue(!shouldIgnoreForegroundEvent("com.iflytek.inputmethod", emptySet()))
+        assertTrue(!shouldIgnoreForegroundEvent(null, ime))
     }
 }

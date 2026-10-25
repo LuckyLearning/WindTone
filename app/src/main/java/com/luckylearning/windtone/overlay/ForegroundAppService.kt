@@ -24,6 +24,7 @@ class ForegroundAppService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null || event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = runCatching { event.packageName?.toString() }.getOrNull() ?: return
+        if (shouldIgnoreForegroundEvent(pkg, imePackages())) return
         if (!ForegroundAppState.report(pkg)) return
 
         if (Prefs(applicationContext).foregroundLogEnabled) {
@@ -45,6 +46,27 @@ class ForegroundAppService : AccessibilityService() {
         super.onServiceConnected()
         runCatching { AccessibilityWatchdog.markOn(applicationContext) }
         com.luckylearning.windtone.diag.DiagLog.log("A11Y", "服务已连接（可接收窗口事件）")
+    }
+
+    /**
+     * 当前输入法包名（v1.1.90）。缓存到服务实例上：输入法列表在一次会话里几乎不变，
+     * 每次事件都查一遍 InputMethodManager 没必要（事件频率虽低，但没必要更慢）。
+     */
+    private var imeCache: Set<String>? = null
+
+    private fun imePackages(): Set<String> {
+        imeCache?.let { return it }
+        val set = runCatching {
+            val imm = getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+            val enabled = imm?.enabledInputMethodList.orEmpty().map { it.packageName }
+            val default = android.provider.Settings.Secure.getString(
+                contentResolver,
+                android.provider.Settings.Secure.DEFAULT_INPUT_METHOD,
+            )?.substringBefore('/')
+            (enabled + listOfNotNull(default)).toSet()
+        }.getOrDefault(emptySet())
+        imeCache = set
+        return set
     }
 
     override fun onInterrupt() {

@@ -33,6 +33,17 @@ internal object ForegroundAppState {
 
     private val recentLog = ArrayDeque<Entry>()
 
+    private val _recentFlow = MutableStateFlow<List<Entry>>(emptyList())
+
+    /**
+     * 最近切换的**可观察**版本（v1.1.90）。
+     *
+     * 诊断页要实时列出「刚才切过哪些应用」，让用户一键把 App 加进隐藏名单 ——
+     * 不用先开「前台应用记录」开关（那是落盘历史，默认关），
+     * 也不用抄包名去搜索框里粘。
+     */
+    val recentFlow: StateFlow<List<Entry>> = _recentFlow.asStateFlow()
+
     /** 最近的前台切换（旧的在前）；供排障报告读取 */
     @Synchronized
     fun recent(): List<Entry> = recentLog.toList()
@@ -54,6 +65,7 @@ internal object ForegroundAppState {
             synchronized(this) {
                 recentLog.addLast(Entry(normalized, System.currentTimeMillis()))
                 while (recentLog.size > RECENT_MAX) recentLog.removeFirst()
+                _recentFlow.value = recentLog.toList()
             }
         }
         return true
@@ -62,9 +74,23 @@ internal object ForegroundAppState {
     /** 清空（服务销毁 / 用户关掉功能时用，避免残留一个过期包名） */
     fun reset() {
         _currentPkg.value = null
-        synchronized(this) { recentLog.clear() }
+        synchronized(this) {
+            recentLog.clear()
+            _recentFlow.value = emptyList()
+        }
     }
 }
+
+/**
+ * 这个包名是否只是「输入法弹起」，不该当成前台应用切换（v1.1.90）。
+ *
+ * 实测（DiLink 诊断包）：在名单里的 360 影像里点搜索框，事件序列会多出
+ * `com.iflytek.inputmethod` —— 于是「前台」变成输入法、不再命中名单，
+ * 悬浮窗又冒出来，看起来像「隐藏失效」。输入法不是用户要去的地方，
+ * 忽略它、保留上一个前台更符合预期。
+ */
+internal fun shouldIgnoreForegroundEvent(pkg: String?, imePackages: Set<String>): Boolean =
+    pkg != null && imePackages.isNotEmpty() && pkg in imePackages
 
 /**
  * 悬浮窗要不要因「前台应用在隐藏名单里」而收起。

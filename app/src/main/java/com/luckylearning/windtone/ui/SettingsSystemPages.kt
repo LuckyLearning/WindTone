@@ -602,6 +602,51 @@ internal fun SettingsDiagnosticsPage(
                 (currentPkg?.let { ForegroundAppLog.labelOf(context, it) }?.let { "（$it）" } ?: ""),
             style = MaterialTheme.typography.labelMedium,
         )
+        // v1.1.90：最近切换的应用（内存环形，**不需要**打开「前台应用记录」开关）。
+        // 用途很具体：用户「哪个应用该隐藏」往往是刚试出来的 —— 切过去看一眼没隐藏，
+        // 回来这里就能看到包名并一键加入，不必再走「搜索框输包名」那条路。
+        val recentSwitches by ForegroundAppState.recentFlow.collectAsStateWithLifecycle()
+        val recentUnique = recentSwitches.asReversed().distinctBy { it.pkg }.take(8)
+        if (recentUnique.isNotEmpty()) {
+            Text(
+                "最近切过的应用（点「加入」即生效）",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            recentUnique.forEach { entry ->
+                val inList = entry.pkg in player.lyricOverlayHiddenApps
+                val label = ForegroundAppLog.labelOf(context, entry.pkg) ?: entry.pkg
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.labelMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            entry.pkg,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    TextButton(
+                        enabled = !inList,
+                        onClick = {
+                            onLyricOverlayHiddenApps(player.lyricOverlayHiddenApps + entry.pkg)
+                            Toast.makeText(context, "已加入：$label", Toast.LENGTH_SHORT).show()
+                        },
+                    ) { Text(if (inList) "已在名单" else "加入") }
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+        }
+
         Text(
             text = stringResource(R.string.last_switches_newest_first, logEntries.size),
             style = MaterialTheme.typography.labelMedium,
