@@ -98,6 +98,20 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
 
     override var layoutParams: WindowManager.LayoutParams? = null
 
+    // ---------------------------------------------------------------- 收起钮（v1.1.91）
+    //
+    // 为什么是**独立窗口**而不是窗口里的一个按钮：非编辑态整块歌词窗是
+    // FLAG_NOT_TOUCHABLE（否则会挡住下面的桌面应用），窗口内的按钮永远点不到。
+    // 所以收起钮必须自己是一个可触摸的小悬浮窗，贴在屏幕左缘、与歌词窗垂直居中。
+    private var collapseHandleView: android.view.View? = null
+    private var collapseHandleParams: WindowManager.LayoutParams? = null
+
+    /** 歌词内容列（收起时整列隐藏，只留窗口宽度的一点点） */
+    private var contentColumn: android.view.View? = null
+
+    /** 是否处于「收起」态：窗口收成左侧一条，点钮还原 */
+    private var collapsed = false
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     /** 状态接线（内容/编辑/前台/预览/外观 → 窗口外观与可见性），见 [OverlayStateBinder] */
@@ -396,6 +410,8 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             container = box
             lyricView = tv
             titleView = title
+            contentColumn = column
+            attachCollapseHandle()
             layoutParams = params
             windowAttached = true
             pendingMeasureClamp = true
@@ -438,6 +454,15 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         val wm = windowManager
         val v = container
         if (wm != null && v != null) runCatching { wm.removeView(v) }
+        // v1.1.91：收起钮是独立窗口，必须一起摘掉，否则悬空留在桌面上
+        collapseHandleView?.let { view ->
+            runCatching { windowManager?.removeView(view) }
+        }
+        collapseHandleView = null
+        collapseHandleParams = null
+        contentColumn = null
+        collapsed = false
+
         container = null
         lyricView = null
         titleView = null
@@ -470,6 +495,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
      * 无条件更新会构成「布局 → 更新 → 布局」的死循环。
      */
     override fun applyPosition() {
+        if (collapsed) return
         val p = layoutParams ?: return
         val prefs = Prefs(this)
         val (screenW, screenH) = screenSize()
@@ -484,6 +510,8 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         if (p.width != frame.width) p.width = frame.width
         runCatching { windowManager?.updateViewLayout(container, p) }
         updateGeometryReport()
+        // 歌词窗移了，收起钮要跟着保持「与窗垂直居中」
+        updateCollapseHandlePosition()
     }
 
     /**
@@ -1071,6 +1099,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
      * 宽度 / 水平位置都在这里落定，设置页滑块改一下就能实时看到窗口变化。
      */
     private fun applyFullHeightChrome(full: Boolean) {
+        if (collapsed) return
         val p = layoutParams ?: return
         val tv = lyricView ?: return
         val prefs = Prefs(this)
@@ -1106,7 +1135,10 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         lastRenderKey = ""
         runCatching { windowManager?.updateViewLayout(container, p) }
         refreshModeChrome()
-        container?.post { updateGeometryReport() }
+        container?.post {
+            updateGeometryReport()
+            updateCollapseHandlePosition()
+        }
     }
 
     /**
@@ -1117,6 +1149,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
      * layoutParams —— 写进去窗口就再也不会随行数变了。
      */
     private fun applyStripChrome() {
+        if (collapsed) return
         val p = layoutParams ?: return
         val prefs = Prefs(this)
         val (screenW, screenH) = screenSize()
@@ -1137,7 +1170,10 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         appliedYPct = prefs.lyricOverlayYPercent
         runCatching { windowManager?.updateViewLayout(container, p) }
         // 尺寸变了，夹取上限跟着变：等一帧让布局量完再摆一次
-        container?.post { applyPosition() }
+        container?.post {
+            applyPosition()
+            updateCollapseHandlePosition()
+        }
     }
 
     /**
@@ -1281,7 +1317,131 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         val show = desiredVisible && screenInteractive
         val target = if (show) View.VISIBLE else View.INVISIBLE
         if (box.visibility != target) box.visibility = target
+        // v1.1.91：收起钮跟着一起进出 —— 歌词都不显示了，单独飘一个钮只会让人困惑
+        collapseHandleView?.let { if (it.visibility != target) it.visibility = target }
         windowVisible = show
+        if (show) updateCollapseHandlePosition()
+    }
+
+    // ---------------------------------------------------------------- 收起钮（v1.1.91）
+
+    /**
+     * 挂上「收起 / 展开」小圆钮（独立可触摸窗口）。
+     *
+     * 位置：屏幕左缘、与歌词窗垂直居中。风格刻意与歌词区区分：实心橙色圆钮 +
+     * 白色方向箭头，一眼能看出「这是个能点的控件」，不会被当成歌词的一部分。
+     */
+    private fun attachCollapseHandle() {
+        if (collapseHandleView != null) return
+        val size = dp(40)
+        val handle = TextView(this).apply {
+            text = "‹"
+            setTextColor(android.graphics.Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(HANDLE_COLOR)
+                setStroke(dp(1), 0x33FFFFFF)
+            }
+            contentDescription = "收起悬浮歌词"
+            elevation = dp(4).toFloat()
+            setOnClickListener { toggleCollapsed() }
+        }
+        val lp = WindowManager.LayoutParams(
+            size,
+            size,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = 0
+            y = dp(160)
+        }
+        val ok = runCatching { windowManager?.addView(handle, lp) }.isSuccess
+        if (!ok) {
+            // 加不上就别留半套：歌词功能本身不受影响
+            return
+        }
+        collapseHandleView = handle
+        collapseHandleParams = lp
+        container?.post { updateCollapseHandlePosition() }
+    }
+
+    /** 收起钮跟随歌词窗：贴左缘、与歌词窗垂直居中（并夹在屏幕内） */
+    private fun updateCollapseHandlePosition() {
+        val handle = collapseHandleView ?: return
+        val hp = collapseHandleParams ?: return
+        val p = layoutParams ?: return
+        val size = handle.height.takeIf { it > 0 } ?: dp(40)
+        val boxH = container?.height?.takeIf { it > 0 }
+            ?: p.height.takeIf { it > 0 }
+            ?: dp(96)
+        val (screenW, screenH) = screenSize()
+        val y = (p.y + (boxH - size) / 2).coerceIn(0, (screenH - size).coerceAtLeast(0))
+        // 位置就贴在歌词窗**左侧**（用户原话「悬浮窗左边」）：
+        //  · 展开：窗左边留 4dp 间隙；窗本来就贴左缘时退化为压在窗内左侧（仍有 18dp 文字内边距）；
+        //  · 收起：细窗只占 8dp，钮右移一点避免盖住它。
+        val x = if (collapsed) {
+            dp(10)
+        } else {
+            (p.x - size - dp(4)).coerceIn(0, (screenW - size).coerceAtLeast(0))
+        }
+        if (hp.x == x && hp.y == y) return
+        hp.x = x
+        hp.y = y
+        runCatching { windowManager?.updateViewLayout(handle, hp) }
+    }
+
+    /**
+     * 收起 / 展开。
+     *
+     * 收起 = 内容列隐藏 + 窗口宽度压到 [COLLAPSED_WIDTH_DP] + 贴左边缘，
+     * 屏幕上只剩左侧一条窄窗与那个橙色钮；再点一次按 Prefs 里的位置与宽度还原。
+     *
+     * 收起期间 [applyPosition] / 两个 chrome 方法都会直接 return ——
+     * 否则播放状态一变（每帧都会重算）就把窗口弹回展开尺寸，收起根本保持不住。
+     */
+    private fun toggleCollapsed() {
+        val box = container ?: return
+        val p = layoutParams ?: return
+        collapsed = !collapsed
+        val handle = collapseHandleView as? TextView
+
+        if (collapsed) {
+            contentColumn?.visibility = View.GONE
+            box.background = null
+            p.width = dp(COLLAPSED_WIDTH_DP)
+            p.x = 0
+            handle?.text = "›"
+            handle?.contentDescription = "展开悬浮歌词"
+        } else {
+            contentColumn?.visibility = View.VISIBLE
+            val prefs = Prefs(this)
+            val (sw, sh) = screenSize()
+            val frame = frameFor(prefs, sw, sh)
+            p.width = frame.width
+            p.height = if (frame.autoHeight) {
+                WindowManager.LayoutParams.WRAP_CONTENT
+            } else {
+                frame.height
+            }
+            p.x = frame.x
+            p.y = frame.y
+            handle?.text = "‹"
+            handle?.contentDescription = "收起悬浮歌词"
+        }
+        runCatching { windowManager?.updateViewLayout(box, p) }
+        if (!collapsed) refreshModeChrome()
+        container?.post { updateCollapseHandlePosition() }
+        com.luckylearning.windtone.diag.DiagLog.log(
+            "OVERLAY",
+            "收起钮：${if (collapsed) "已收起" else "已展开"}",
+        )
     }
 
     /**
@@ -1390,6 +1550,12 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         (value * resources.displayMetrics.density).toInt().coerceAtLeast(1)
 
     companion object {
+        /** 收起后窗口保留的宽度（dp）：只留一条，能看见但几乎不占地方（v1.1.91） */
+        private const val COLLAPSED_WIDTH_DP = 8
+
+        /** 收起钮的橙色：与歌词文字 / 底板刻意区分（v1.1.91） */
+        private const val HANDLE_COLOR = 0xFFFF8A00.toInt()
+
         /** 复位悬浮窗位置的 Intent action（见 [resetPosition]） */
         private const val ACTION_RESET_POSITION = "com.luckylearning.windtone.RESET_OVERLAY_POSITION"
 
