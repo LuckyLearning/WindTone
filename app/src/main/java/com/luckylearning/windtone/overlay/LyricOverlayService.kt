@@ -1333,7 +1333,10 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
      */
     private fun attachCollapseHandle() {
         if (collapseHandleView != null) return
-        val size = dp(40)
+        // v1.1.93：40dp 在车机上偏小（手指在颠簸中容易点到边缘外的歌词窗上），
+        // 放大到 48dp；点击本身先记账 —— 「点了没反应」要能区分
+        // 「没收到点击」与「收到了但没生效」，这是两种完全不同的病。
+        val size = dp(48)
         val handle = TextView(this).apply {
             text = "‹"
             setTextColor(android.graphics.Color.WHITE)
@@ -1348,7 +1351,10 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             }
             contentDescription = "收起悬浮歌词"
             elevation = dp(4).toFloat()
-            setOnClickListener { toggleCollapsed() }
+            setOnClickListener {
+                com.luckylearning.windtone.diag.DiagLog.log("OVERLAY", "收起钮被点击")
+                toggleCollapsed()
+            }
         }
         val lp = WindowManager.LayoutParams(
             size,
@@ -1391,7 +1397,9 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         } else {
             (p.x - size - dp(4)).coerceIn(0, (screenW - size).coerceAtLeast(0))
         }
-        if (hp.x == x && hp.y == y) return
+        // v1.1.93：即使坐标没变也调一次 updateViewLayout —— 在部分 ROM 上，
+        // 歌词窗 updateViewLayout 之后会把同层窗口重新排序，钮被盖住就点不到了；
+        // 重新 update 一次能把钮抬回同层顶部。代价是一次很轻的窗口事务。
         hp.x = x
         hp.y = y
         runCatching { windowManager?.updateViewLayout(handle, hp) }
@@ -1435,9 +1443,17 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             handle?.text = "‹"
             handle?.contentDescription = "收起悬浮歌词"
         }
-        runCatching { windowManager?.updateViewLayout(box, p) }
+        val applied = runCatching { windowManager?.updateViewLayout(box, p) }
         if (!collapsed) refreshModeChrome()
-        container?.post { updateCollapseHandlePosition() }
+        // 同步刷新钮位置（post 一帧会让钮短暂停在旧位置）；顺带把钮提到同层最上，
+        // 避免某些 ROM 上 updateViewLayout 之后歌词窗盖住钮导致点不到。
+        updateCollapseHandlePosition()
+        com.luckylearning.windtone.diag.DiagLog.log(
+            "OVERLAY",
+            "收起切换结果：collapsed=$collapsed 参数宽=${p.width} 实际宽=${box.width} " +
+                "内容=${if (contentColumn?.visibility == View.GONE) "隐藏" else "显示"} " +
+                "update=${if (applied.isSuccess) "ok" else "失败:" + applied.exceptionOrNull()?.javaClass?.simpleName}",
+        )
         com.luckylearning.windtone.diag.DiagLog.log(
             "OVERLAY",
             "收起钮：${if (collapsed) "已收起" else "已展开"}",
