@@ -51,6 +51,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -73,6 +74,8 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import com.luckylearning.windtone.overlay.ForegroundAppDetector
+import android.widget.Toast
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -80,6 +83,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.model.Song
@@ -171,6 +177,24 @@ fun PlayerScreen(
 ) {
     // 歌词 / 封面二选一：状态在引擎里（落盘，跨会话保留），这里只是个只读视图 + 回调。
     val showLyrics = state.lyricsPaneVisible
+
+    // v1.1.92：播放页左侧的「前台识别状态」按钮。
+    // 状态不能只在进入页面时读一次 —— 用户点按钮去系统里开/关，回来必须立刻反映，
+    // 所以挂一个 ON_RESUME 监听重读（读一次 Settings.Secure 很便宜）。
+    val a11yContext = LocalContext.current
+    var a11yEnabled by remember {
+        mutableStateOf(ForegroundAppDetector.accessibilityEnabled(a11yContext))
+    }
+    val a11yLifecycle = LocalLifecycleOwner.current
+    DisposableEffect(a11yLifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                a11yEnabled = ForegroundAppDetector.accessibilityEnabled(a11yContext)
+            }
+        }
+        a11yLifecycle.lifecycle.addObserver(observer)
+        onDispose { a11yLifecycle.lifecycle.removeObserver(observer) }
+    }
     var showOptions by remember { mutableStateOf(false) }
     // 悬浮窗样式速选面板（v1.1.78）：从播放设置弹层的「悬浮窗样式」行打开
     var showOverlayStyle by remember { mutableStateOf(false) }
@@ -458,6 +482,23 @@ fun PlayerScreen(
                                     keepAwake()
                                 },
                                 onQueue = { keepAwake(); onShowQueue() },
+                                showA11y = state.showA11yAction,
+                                a11yEnabled = a11yEnabled,
+                                onA11y = {
+                                    keepAwake()
+                                    // 直接落到系统无障碍页（DiLink 上是我们解析出的 BYD 页）；
+                                    // 全失败时给一句可执行的提示，而不是静默没反应。
+                                    if (!ForegroundAppDetector.openAccessibilitySettings(a11yContext)) {
+                                        val msg = if (
+                                            ForegroundAppDetector.canOpenAccessibilityPage(a11yContext)
+                                        ) {
+                                            "打不开无障碍页，请到 设置 → 关于与诊断 → 前台应用记录 查看路径"
+                                        } else {
+                                            "本机没有无障碍设置页，请改用「使用情况访问」"
+                                        }
+                                        Toast.makeText(a11yContext, msg, Toast.LENGTH_LONG).show()
+                                    }
+                                },
                                 onOptions = { keepAwake(); showOptions = true },
                             )
                         }
@@ -959,6 +1000,9 @@ private fun CarSideActions(
     onFavorite: () -> Unit,
     onQueue: () -> Unit,
     onOptions: () -> Unit,
+    showA11y: Boolean = false,
+    a11yEnabled: Boolean = false,
+    onA11y: () -> Unit = {},
 ) {
     val scheme = MaterialTheme.colorScheme
     Column(
@@ -980,6 +1024,16 @@ private fun CarSideActions(
             description = "播放队列",
             onClick = onQueue,
         )
+        // v1.1.92：无障碍状态按钮 —— 开着是主题色，关掉是错误色（一眼可辨）；
+        // 点击直接进系统无障碍页，开完返回即变绿。
+        if (showA11y) {
+            CarSideAction(
+                icon = AppIcons.Accessibility,
+                description = if (a11yEnabled) "前台识别：无障碍已开启" else "前台识别：无障碍已关闭，点此开启",
+                tint = if (a11yEnabled) scheme.primary else scheme.error,
+                onClick = onA11y,
+            )
+        }
         CarSideAction(
             icon = AppIcons.Tune,
             description = "播放设置",

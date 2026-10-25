@@ -311,6 +311,8 @@ data class PlayerUiState(
     val lyricScale: Float = 1f,
     /** 点击歌词行是否跳转（默认关，v1.1.23） */
     val lyricTapSeeks: Boolean = SettingsDefaults.LYRIC_TAP_SEEKS,
+    /** 播放页左侧竖排是否显示「无障碍状态」按钮（v1.1.92） */
+    val showA11yAction: Boolean = SettingsDefaults.PLAYER_A11Y_ACTION,
     /**
      * 双语歌词显示模式：0 中英都显示 / 1 只显示中文 / 2 只显示英文（v1.1.18）。
      *

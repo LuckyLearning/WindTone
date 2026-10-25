@@ -306,6 +306,15 @@ object AppIcons {
      * 那个包里的 `Refresh` 是**实心圆弧**，与效果图上「箭头 + 环绕弧线」的描边图形不是一个东西。
      * 路径逐字取自 `docs/ui/index.html` 的 `<symbol id="i-reset">`。
      */
+    /** 无障碍（人形 + 张臂）：播放页「前台识别状态」按钮用（v1.1.92） */
+    val Accessibility: ImageVector by lazy {
+        build(
+            "Accessibility",
+            "M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2z" +
+                "M21 9h-6v13h-2v-6h-2v6H9V9H3V7h18v2z",
+        )
+    }
+
     val Reset: ImageVector by lazy {
         build(
             "Reset",

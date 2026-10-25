@@ -70,6 +70,15 @@ object SettingsDefaults {
     const val LYRIC_SCALE = 1.0f
     /** 点击歌词行是否跳转进度：默认关闭（拖动歌词找人声段落时误跳很烦） */
     const val LYRIC_TAP_SEEKS = false
+
+    /**
+     * 播放页左侧竖排是否显示「无障碍状态」按钮（v1.1.92，默认显示）。
+     *
+     * 默认开：车机上无障碍随时可能被系统关掉，而这个按钮是用户**唯一**能在
+     * 播放页一眼看到「前台识别还活着吗」的入口 —— 藏在设置里等于没有。
+     * 觉得碍眼的人可以关掉，关掉后不影响功能。
+     */
+    const val PLAYER_A11Y_ACTION = true
     /** 开机后台自启播放：默认关（要用户明确打开，避免一上车就突然出声） */
     const val AUTO_PLAY_ON_BOOT = false
 
@@ -618,6 +627,14 @@ class Prefs private constructor(context: Context) {
      * 手指在歌词上滑动时稍有位移就被判成点击，播放进度莫名其妙跳到别的段落。
      * 想用「点歌词跳转」的人可以自己打开。
      */
+    /** 播放页左侧竖排是否显示「无障碍状态」按钮（v1.1.92） */
+    var playerA11yAction: Boolean
+        get() = sp.getBoolean(KEY_PLAYER_A11Y_ACTION, SettingsDefaults.PLAYER_A11Y_ACTION)
+        set(value) {
+            sp.edit().putBoolean(KEY_PLAYER_A11Y_ACTION, value).apply()
+            ioScope.launch { store.putBoolean(KEY_PLAYER_A11Y_ACTION, value) }
+        }
+
     var lyricTapSeeks: Boolean
         get() = sp.getBoolean(KEY_LYRIC_TAP_SEEKS, SettingsDefaults.LYRIC_TAP_SEEKS)
         set(value) {
@@ -1398,6 +1415,7 @@ class Prefs private constructor(context: Context) {
         // ---- 3. 播放页歌词 ----
         const val KEY_LYRIC_SCALE = "lyric_scale"
         const val KEY_LYRIC_TAP_SEEKS = "lyric_tap_seeks"
+        const val KEY_PLAYER_A11Y_ACTION = "player_a11y_action"
         const val KEY_LYRIC_BILINGUAL = "lyric_bilingual_mode"
         const val KEY_LYRICS_PANE = "lyrics_pane_visible"
         // ⚠️ 逐字歌词移除后（v1.1.8）有三个键不再读写：`lyric_word_by_word` /

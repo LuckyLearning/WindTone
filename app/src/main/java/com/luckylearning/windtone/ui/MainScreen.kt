@@ -755,6 +755,7 @@ fun MainScreen(
                     overlayHealth = overlayHealth,
                     onLyricScale = playerVm::setLyricScale,
                     onLyricTapSeeks = playerVm::setLyricTapSeeks,
+                    onPlayerA11yAction = playerVm::setPlayerA11yAction,
                     onLyricBilingual = playerVm::setLyricBilingual,
                     onSpeed = playerVm::setSpeed,
                     onPitch = playerVm::setPitchSemitones,

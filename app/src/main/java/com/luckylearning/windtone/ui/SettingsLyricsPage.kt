@@ -118,6 +118,8 @@ internal fun SettingsLyricsPage(
     onLyricScale: (Float) -> Unit,
     /** 点歌词行是否跳转（默认关，v1.1.23） */
     onLyricTapSeeks: (Boolean) -> Unit,
+    /** 播放页左侧竖排是否显示「无障碍状态」按钮（v1.1.92） */
+    onPlayerA11yAction: (Boolean) -> Unit = {},
     onLyricBilingual: (Int) -> Unit,
     /** 打开「桌面悬浮歌词」子页（v1.1.80：它不再与「歌词」平级，收进本页） */
     onOpenOverlay: () -> Unit = {},
@@ -140,6 +142,22 @@ internal fun SettingsLyricsPage(
         onValueChange = onLyricScale,
         onReset = resetAction(abs(player.lyricScale - SettingsDefaults.LYRIC_SCALE) > 0.001f) {
             onLyricScale(SettingsDefaults.LYRIC_SCALE)
+        },
+    )
+    // v1.1.92：播放页左侧竖排的「前台识别状态」按钮。
+    // 车机上无障碍会被系统悄悄关掉，这个按钮是播放页里唯一能一眼确认「还活着」的入口；
+    // 觉得占位置的人可以关掉，关掉只影响显示，不影响功能。
+    SwitchRow(
+        title = "播放页显示「前台识别」状态按钮",
+        subtitle = if (player.showA11yAction) {
+            "左侧竖排多一颗无障碍图标：灰/红=未开启，主题色=已开启；点它直接进系统无障碍页"
+        } else {
+            "已隐藏；按应用隐藏仍正常工作，只是播放页不再显示这个状态入口"
+        },
+        checked = player.showA11yAction,
+        onCheckedChange = onPlayerA11yAction,
+        onReset = resetAction(player.showA11yAction != SettingsDefaults.PLAYER_A11Y_ACTION) {
+            onPlayerA11yAction(SettingsDefaults.PLAYER_A11Y_ACTION)
         },
     )
     // 点歌词行跳转（v1.1.23，默认关）：车机上歌词要上下拖动，而「可点」会把

@@ -89,6 +89,7 @@ class PlaybackEngine(
         PlayerUiState(
             lyricScale = prefs.lyricScale,
             lyricTapSeeks = prefs.lyricTapSeeks,
+            showA11yAction = prefs.playerA11yAction,
             lyricBilingual = prefs.lyricBilingual,
             lyricsPaneVisible = prefs.lyricsPaneVisible,
             carMode = prefs.carMode,
@@ -1164,6 +1165,12 @@ class PlaybackEngine(
      * 关掉后歌词区只认滚动与长按（长按校准偏移仍然可用），
      * 手指在歌词上滑一下不会再被当成「点这一句」而跳走。
      */
+    /** 播放页左侧竖排是否显示「无障碍状态」按钮（v1.1.92） */
+    override fun setPlayerA11yAction(enabled: Boolean) {
+        prefs.playerA11yAction = enabled
+        _player.update { it.copy(showA11yAction = enabled) }
+    }
+
     override fun setLyricTapSeeks(enabled: Boolean) {
         prefs.lyricTapSeeks = enabled
         _player.update { it.copy(lyricTapSeeks = enabled) }
@@ -1638,6 +1645,9 @@ interface PlayerActions : OverlayActions {
     fun setLyricScale(scale: Float)
 
     /** 点歌词行是否跳转（默认关） */
+    /** 播放页左侧竖排是否显示「无障碍状态」按钮（v1.1.92） */
+    fun setPlayerA11yAction(enabled: Boolean)
+
     fun setLyricTapSeeks(enabled: Boolean)
 
     /**
