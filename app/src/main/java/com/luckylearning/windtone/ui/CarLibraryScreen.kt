@@ -108,7 +108,7 @@ internal fun CarLibraryHeader(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 10.dp),
+            .padding(horizontal = rememberCarMetrics().headerPadH, vertical = rememberCarMetrics().headerPadV),
     ) {
         if (searchMode) {
             TextField(
@@ -177,7 +177,8 @@ internal fun CarLibraryHeader(
 }
 
 /** 车机 v3 左导航宽度：设计稿 188px × (1707dp/1000px) ≈ 320dp，占屏宽约 19% */
-private val CAR_NAV_WIDTH = 320.dp
+/** 常规档导航宽度（v1.1.98 起实际值由 [CarMetrics] 决定，这里只留作参考上限） */
+private val CAR_NAV_WIDTH = 300.dp
 
 /** 车机左常驻导航（v3）：品牌 + 五个浏览视图 + 底部设置。选中项用 primary 淡底。 */
 @Composable
@@ -190,9 +191,10 @@ internal fun CarNavRail(
     onOpenAliyun: () -> Unit = {},
 ) {
     val scheme = MaterialTheme.colorScheme
+    val m = rememberCarMetrics()
     Row(
         modifier = Modifier
-            .width(CAR_NAV_WIDTH)
+            .width(m.navWidth)
             .fillMaxHeight()
             .background(scheme.surface),
     ) {
@@ -200,11 +202,11 @@ internal fun CarNavRail(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight()
-                .padding(horizontal = 16.dp, vertical = 18.dp),
+                .padding(horizontal = if (m.compact) 10.dp else 16.dp, vertical = if (m.compact) 12.dp else 18.dp),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(start = 8.dp, bottom = 20.dp),
+                modifier = Modifier.padding(start = 8.dp, bottom = if (m.compact) 12.dp else 20.dp),
             ) {
                 Box(
                     modifier = Modifier
@@ -221,7 +223,7 @@ internal fun CarNavRail(
                     )
                 }
                 Spacer(Modifier.width(12.dp))
-                Text("听风", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = scheme.onBackground)
+                Text("听风", fontSize = m.navTitleSp, fontWeight = FontWeight.Bold, color = scheme.onBackground)
             }
             LibraryView.entries.forEach { view ->
                 CarNavItem(
@@ -275,30 +277,31 @@ private fun CarNavItem(
     onClick: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
+    val m = rememberCarMetrics()
     var focused by remember { mutableStateOf(false) }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 3.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .padding(vertical = m.navItemGap)
+            .clip(RoundedCornerShape(m.navCorner))
             .then(if (selected) Modifier.background(scheme.primary.copy(alpha = 0.10f)) else Modifier)
-            .then(if (focused) Modifier.border(2.dp, scheme.primary, RoundedCornerShape(14.dp)) else Modifier)
+            .then(if (focused) Modifier.border(2.dp, scheme.primary, RoundedCornerShape(m.navCorner)) else Modifier)
             .onFocusChanged { focused = it.isFocused }
             .focusable()
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 13.dp),
+            .padding(horizontal = m.navPadH, vertical = m.navPadV),
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
             tint = if (selected) scheme.primary else accent,
-            modifier = Modifier.size(24.dp),
+            modifier = Modifier.size(m.navIcon),
         )
-        Spacer(Modifier.width(14.dp))
+        Spacer(Modifier.width(if (m.compact) 10.dp else 14.dp))
         Text(
             text = label,
-            fontSize = 17.sp,
+            fontSize = m.navTextSp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
             color = if (selected) scheme.onBackground else scheme.onSurfaceVariant,
         )
@@ -334,7 +337,7 @@ internal fun CarPlayerBar(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(CAR_BAR_HEIGHT)
+                .height(rememberCarMetrics().barHeight)
                 .padding(horizontal = 20.dp),
         ) {
             Box(Modifier.clip(RoundedCornerShape(16.dp)).clickable(onClick = onExpand)) {

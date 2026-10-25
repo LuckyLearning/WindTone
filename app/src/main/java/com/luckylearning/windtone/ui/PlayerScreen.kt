@@ -309,6 +309,8 @@ fun PlayerScreen(
 
     val song = state.current
     val scheme = MaterialTheme.colorScheme
+    // v1.1.98：车机版所有"块头"尺寸统一取自 [CarMetrics]，不再各处写死
+    val carM = rememberCarMetrics()
 
     // 顶层只「收集」不「读取」：State 对象可以安全地传给子组件，
     // Compose 的失效是跟着 .value 的读取点走的，所以播放页本身不会随进度重组，
@@ -587,16 +589,22 @@ fun PlayerScreen(
                         Text(
                             text = song?.title ?: "未在播放",
                             // 车机：歌名 / 歌手各放大一档（22sp / 16sp），60~70cm 视距下读得清
-                            style = if (state.carMode) MaterialTheme.typography.headlineSmall
-                            else MaterialTheme.typography.titleMedium,
+                            style = if (state.carMode) {
+                                MaterialTheme.typography.headlineSmall.copy(fontSize = carM.titleSp)
+                            } else {
+                                MaterialTheme.typography.titleMedium
+                            },
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
                             text = song?.artistOrUnknown ?: "",
-                            style = if (state.carMode) MaterialTheme.typography.bodyLarge
-                            else MaterialTheme.typography.labelMedium,
+                            style = if (state.carMode) {
+                                MaterialTheme.typography.bodyLarge.copy(fontSize = carM.artistSp)
+                            } else {
+                                MaterialTheme.typography.labelMedium
+                            },
                             color = scheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -682,7 +690,7 @@ fun PlayerScreen(
                         // 播放模式（顺序 / 列表循环 / 单曲循环 / 随机）合并在这一个按钮上轮换
                         IconButton(
                             onClick = { onCyclePlayMode(); keepAwake() },
-                            modifier = if (state.carMode) Modifier.size(CAR_SECONDARY_BUTTON) else Modifier,
+                            modifier = if (state.carMode) Modifier.size(carM.secondaryButton) else Modifier,
                         ) {
                             Icon(
                                 imageVector = playMode.icon,
@@ -702,7 +710,7 @@ fun PlayerScreen(
                     ) {
                         IconButton(
                             onClick = { onPrevious(); keepAwake() },
-                            modifier = if (state.carMode) Modifier.size(CAR_SIDE_BUTTON) else Modifier,
+                            modifier = if (state.carMode) Modifier.size(carM.sideButton) else Modifier,
                         ) {
                             Icon(
                                 imageVector = AppIcons.SkipPrevious,
@@ -715,7 +723,7 @@ fun PlayerScreen(
                         IconButton(
                             onClick = { onToggle(); keepAwake() },
                             modifier = Modifier
-                                .size(if (state.carMode) CAR_MAIN_BUTTON else 66.dp)
+                                .size(if (state.carMode) carM.mainButton else 66.dp)
                                 .windShadow(level = 3, shape = CircleShape)
                                 .clip(CircleShape)
                                 .background(AppVisual.ActionGradient),
@@ -977,7 +985,8 @@ private fun PlayerLyrics(
 }
 
 /** 车机左侧功能列的键尺寸（v1.1.53）。64dp 触控目标 = 行车中不用瞄。 */
-private val CAR_SIDE_TILE = 64.dp
+/** 常规档侧键尺寸（v1.1.98 起实际值由 [CarMetrics] 决定） */
+private val CAR_SIDE_TILE = 60.dp
 
 /**
  * 车机播放页左侧的功能列：收藏 / 播放队列 / 播放设置（v1.1.53）。
@@ -1005,11 +1014,14 @@ private fun CarSideActions(
     onA11y: () -> Unit = {},
 ) {
     val scheme = MaterialTheme.colorScheme
+    val m = rememberCarMetrics()
     Column(
         modifier = Modifier
-            .padding(end = 20.dp)
+            // v1.1.98：内侧留白跟着尺码走；SpaceEvenly 在 656dp 高的车机上会把
+            // 几颗键拉到屏幕上下两端，视线来回横跳，改成「定距 + 垂直居中」
+            .padding(end = if (m.compact) 12.dp else 20.dp)
             .fillMaxHeight(),
-        verticalArrangement = Arrangement.SpaceEvenly,
+        verticalArrangement = Arrangement.spacedBy(m.sideGap, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         CarSideAction(
@@ -1059,12 +1071,13 @@ private fun CarSideAction(
     tint: Color? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
+    val m = rememberCarMetrics()
     IconButton(
         onClick = onClick,
         enabled = enabled,
         modifier = Modifier
-            .size(CAR_SIDE_TILE)
-            .clip(RoundedCornerShape(20.dp))
+            .size(m.sideTile)
+            .clip(RoundedCornerShape(m.sideCorner))
             .background(
                 if (highlighted) scheme.primary.copy(alpha = 0.20f)
                 else scheme.onSurface.copy(alpha = 0.06f)
@@ -1078,7 +1091,7 @@ private fun CarSideAction(
                 highlighted -> scheme.primary
                 else -> tint ?: scheme.onSurface
             },
-            modifier = Modifier.size(30.dp),
+            modifier = Modifier.size(if (m.compact) 24.dp else 30.dp),
         )
     }
 }

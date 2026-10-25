@@ -318,6 +318,7 @@ private const val LYRIC_SCALE_MAX = 1.6f
 private const val LYRIC_SCALE_STEP = 0.05f
 
 /** 行高下限：Google 车机规范的 76dp 触控目标，整行可点 */
+/** 常规档行高（v1.1.98 起实际值由 [CarMetrics.rowMinHeight] 决定） */
 private val CAR_ROW_MIN_HEIGHT: Dp = 76.dp
 
 /** 常驻播放条高度（比首页的 112dp 矮一档：设置在车上不是主画面，但要留住入口） */
@@ -468,7 +469,7 @@ private fun CarWideButton(
         shape = RoundedCornerShape(16.dp),
         border = if (focused) androidx.compose.foundation.BorderStroke(3.dp, scheme.primary) else null,
         modifier = modifier
-            .height(CAR_ROW_MIN_HEIGHT)
+            .height(rememberCarMetrics().rowMinHeight)
             .onFocusChanged { focused = it.isFocused }
             .focusable()
             .windShadow(level = 1, shape = RoundedCornerShape(16.dp))
@@ -636,7 +637,7 @@ private fun CarNowPlayingDock(
                 color = scheme.primary,
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
-                    .height(CAR_ROW_MIN_HEIGHT)
+                    .height(rememberCarMetrics().rowMinHeight)
                     .clip(RoundedCornerShape(16.dp))
                     .clickable(onClick = onOpenPlayer),
             ) {

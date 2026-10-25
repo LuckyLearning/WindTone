@@ -210,16 +210,26 @@ class CarSettingsTest {
         compose.onAllNodesWithText("播放速度").assertCountEquals(0)
     }
 
-    /** 结构护栏：车载页的两个规格常量必须还在（76dp 行高、100dp 常驻条） */
+    /**
+     * 结构护栏：车机设置页的触控目标不能缩到不可点。
+     *
+     * v1.1.98 起行高改为两档（[CarMetrics]）：常规 76dp、紧凑 62dp。
+     * 62dp 仍然显著高于 Material 的 48dp 最小触控目标 —— 这台 DiLink 是 1280×656dp，
+     * 76dp 的行高叠起来会把一页设置挤到必须滚动，用户明确反馈「按钮太大、很挤」。
+     * 这里锁住两档的**下限**，防止以后有人为了"好看"把行高继续往下压。
+     */
     @Test
-    fun carSettingsKeepsAutomotiveSizes() {
+    fun carSettingsKeepsUsableTouchTargets() {
+        val metrics = com.luckylearning.windtone.ui.carMetricsFor(1280f, 656f)
+        assertTrue("紧凑档行高不得低于 60dp", metrics.rowMinHeight.value >= 60f)
+        assertTrue("紧凑档侧键不得低于 44dp", metrics.sideTile.value >= 44f)
+
+        val regular = com.luckylearning.windtone.ui.carMetricsFor(1920f, 900f)
+        assertTrue("常规档行高应回到 76dp 档", regular.rowMinHeight.value >= 76f)
+
         val source = java.io.File(
             "src/main/java/com/luckylearning/windtone/ui/CarSettingsScreen.kt",
         ).readText()
-        assertTrue(
-            "车机行高必须 ≥76dp（Google 车机规范的触控目标下限）",
-            source.contains("CAR_ROW_MIN_HEIGHT: Dp = 76.dp"),
-        )
         assertTrue(
             "常驻播放条高度应在 96~112dp 之间",
             source.contains("CAR_DOCK_BAR_HEIGHT: Dp = 100.dp"),
