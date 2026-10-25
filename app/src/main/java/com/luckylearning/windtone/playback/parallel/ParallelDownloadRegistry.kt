@@ -5,7 +5,6 @@ import android.net.Uri
 import android.util.Log
 import androidx.media3.datasource.DataSpec
 import com.luckylearning.windtone.data.aliyun.AliyunEndpoints
-import com.luckylearning.windtone.data.baidu.BaiduRules
 import com.luckylearning.windtone.data.model.TrackFragment
 import com.luckylearning.windtone.playback.CachePrefetcher
 import com.luckylearning.windtone.playback.OnlineMediaCache
@@ -107,9 +106,8 @@ object ParallelDownloadRegistry {
             return null
         }
 
-        val pan = BaiduRules.needsPanUserAgent(dataSpec.uri.host)
-        val headers = if (pan) BaiduRules.panHeaders() else emptyMap()
-        val userAgent = if (pan) "pan.baidu.com" else "WindTone/1.1 (Android; parallel)"
+        val headers = emptyMap<String, String>()
+        val userAgent = "WindTone/1.1 (Android; parallel)"
         val target = requestUri(dataSpec.uri)
 
         _status.value = "探测分段支持…"
@@ -183,12 +181,8 @@ object ParallelDownloadRegistry {
         }
     }
 
-    /** 网盘的直链要补 token、并摘掉只作缓存键的 fragment */
-    private fun requestUri(uri: Uri): Uri {
-        if (!BaiduRules.needsPanUserAgent(uri.host)) return uri.buildUpon().fragment(null).build()
-        val signed = BaiduRules.withAccessToken(uri.toString(), OnlineMediaCache.panToken())
-        return Uri.parse(signed).buildUpon().fragment(null).build()
-    }
+    /** 摘掉只作缓存键的 fragment（阿里云盘 `#ay=` / 历史 `wt=`） */
+    private fun requestUri(uri: Uri): Uri = uri.buildUpon().fragment(null).build()
 
     /**
      * 用 `Range: bytes=0-0` 问一次总长。

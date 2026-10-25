@@ -3,7 +3,6 @@ package com.luckylearning.windtone.playback
 import android.content.Context
 import android.net.Uri
 import com.luckylearning.windtone.data.aliyun.AliyunEndpoints
-import com.luckylearning.windtone.data.baidu.BaiduRules
 import com.luckylearning.windtone.data.model.TrackFragment
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
@@ -69,43 +68,19 @@ object OnlineMediaCache {
     private var failed = false
 
     /**
-     * 百度网盘的 access_token 提供方（v1.1.40）。
-     *
-     * 网盘 dlink **必须**拼 `&access_token=` 才能下载（官方文档的硬要求），而 dlink 是随
-     * [com.luckylearning.windtone.data.baidu.BaiduPan.dlinks] 一起进队列的，URI 里不该带
-     * token —— token 会被写进 Room 的播放队列、也可能进日志。所以放在这一层按请求补齐：
-     * 由 [com.luckylearning.windtone.MusicApp] 在启动时注入，取不到就原样放行（不该因为
-     * 这个装饰把本地/普通在线播放一起搞坏）。
+     * 历史百度网盘缓存键前缀（fragment `wt=<fsId>`）。产品面已删除百度，
+     * 仍保留解析以免旧缓存索引里的 `pan:` 键无法对上；新写入只用阿里云盘 `#ay=`。
      */
-    @Volatile
-    var panTokenProvider: (() -> String?)? = null
-
-    fun panToken(): String? = runCatching { panTokenProvider?.invoke() }.getOrNull()
-
-    /** 网盘直链的稳定缓存键前缀（fragment 里带 `wt=<fsId>`，见 BaiduPan.toSongs） */
     private const val PAN_FRAGMENT_PREFIX = "wt="
 
-    /**
-     * 网盘直链的稳定缓存键（v1.1.43）。
-     *
-     * 百度 dlink 每次播放都带新的签名，拿整个 URI 当键永远不可能命中 —— 之前因此**完全跳过**
-     * 网盘文件的缓存，代价是「同一首重听一遍就要重新下 28MB」，弱网下就是无尽卡顿。
-     * 现在按 fsId 做键：同一文件不同签名指向同一份缓存。
-     *
-     * 用 fragment 而不是查询参数，是因为查询参数会参与百度那边的签名校验，改成 fragment
-     * 则完全不进 HTTP 请求。
-     */
     fun panCacheKey(uri: Uri?): String? {
         val frag = uri?.fragment ?: return null
         if (!frag.startsWith(PAN_FRAGMENT_PREFIX)) return null
-        // 只取到第一个 `&` 为止：v1.1.43 里 token 曾被我误拼进 fragment，
-        // 于是键变成 `pan:123&access_token=...` —— 既不稳定（换 token 就换键、缓存全废），
-        // 也把凭据写进了缓存索引。这里兜一层，无论 fragment 后面还挂什么都不会带进来。
         val fsId = frag.removePrefix(PAN_FRAGMENT_PREFIX).substringBefore('&').trim()
         return if (fsId.isEmpty()) null else "pan:$fsId"
     }
 
-    /** 播放与预取共用的稳定键。阿里云盘优先于百度的 `wt=`。 */
+    /** 播放与预取共用的稳定键（阿里云盘 `#ay=` 优先）。 */
     fun stableKey(uri: Uri?): String? =
         TrackFragment.cacheKey(uri?.fragment) ?: panCacheKey(uri)
 
@@ -186,7 +161,7 @@ object OnlineMediaCache {
         // 会把 downloadHeaders 里的浏览器 UA 盖掉，数据节点照样掐连接。
         val aliyunHttp = httpFactory(AliyunEndpoints.DOWNLOAD_UA, AliyunEndpoints.downloadHeaders())
         val dataSource: DataSource.Factory = if (cache == null) {
-            // 缓存不可用时仍然要经过路由包装：百度直链需要改 UA，
+            // 缓存不可用时仍然走路由包装：阿里直链与本地 file 要分发到不同 DataSource。
             // 直接返回 DefaultDataSource 会让「没缓存」这种边缘状态连播放一起丢。
             SchemeRoutingFactory(
                 DefaultDataSource.Factory(context),
@@ -228,7 +203,7 @@ object OnlineMediaCache {
         .setCache(cache)
         .setUpstreamDataSourceFactory(upstream)
         // 网盘直链按 fileId 做键，避免「每次签名不同 → 永不命中」。
-        // 百度的请求在 SchemeRoutingDataSource 里已摘掉 fragment 并显式塞 key。
+        // 历史 pan: 键在 SchemeRoutingDataSource 里已摘掉 fragment；阿里直链用 fileId 做稳定键。
         .setCacheKeyFactory(keys)
         // 缓存写失败（磁盘满 / 权限）时退化成直连，不要因此中断播放
         .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
@@ -317,21 +292,13 @@ private class SchemeRoutingDataSource(
     }
 
     override fun open(dataSpec: DataSpec): Long {
-        // 网盘直链带时效签名，每次播放的 URI 都不同。v1.1.43 起用 fsId 做稳定缓存键
-        // （见 panCacheKey），所以**能缓存的就缓存**；只有拿不到 fsId 的网盘请求才跳过，
-        // 否则会白占 512MB 淘汰配额。UA / token 注入不受影响，仍在下面统一处理。
-        val pan = BaiduRules.needsPanUserAgent(dataSpec.uri.host)
         val frag = dataSpec.uri.fragment
-        // 占位地址是 aliyun-pending://，也带着 #ay=。它还没有直链，不能送进 HTTP 工厂，
-        // 否则会空等连接超时，表现为又一次「网络连接失败」。
+        // 占位地址是 aliyun-pending://，也带着 #ay=。它还没有直链，不能送进 HTTP 工厂。
         val aliyun = OnlineMediaCache.shouldCache(dataSpec.uri) && (
             (frag != null && frag.startsWith(TrackFragment.PREFIX)) ||
                 AliyunEndpoints.isDownloadHost(dataSpec.uri.host)
             )
-        // fragment 只用于「算缓存键」，不能留在真实请求里（见下面的 withAccessToken 注释）
-        val panKey = if (pan) OnlineMediaCache.panCacheKey(dataSpec.uri) else null
-        val cacheable = OnlineMediaCache.shouldCache(dataSpec.uri) &&
-            (!pan || panKey != null)
+        val cacheable = OnlineMediaCache.shouldCache(dataSpec.uri)
         val factory = when {
             aliyun -> this.aliyun
             cacheable -> remote
@@ -340,20 +307,7 @@ private class SchemeRoutingDataSource(
         val source = factory.createDataSource()
         listeners.forEach(source::addTransferListener)
         delegate = source
-        // 百度网盘的直链要求 UA 伪装成网盘客户端（见 BaiduRules.needsPanUserAgent），
-        // 并且**必须**在 URL 上补 access_token —— 两样缺一个都是 403，而 403 在播放器里
-        // 只会表现为「不出声」，没有可读的错误。
-        // 放在这一层是因为「每个文件一个 DataSource」，而 UA / token 只能按请求设置。
-        val effective = if (pan) {
-            val url = BaiduRules.withAccessToken(dataSpec.uri.toString(), OnlineMediaCache.panToken())
-            dataSpec.buildUpon()
-                // 摘掉 `#wt=<fsId>`：它只是缓存键的载体，不该出现在真实请求里。
-                // 留着它曾把 access_token 拼进了 fragment（v1.1.43 的播放全失败）。
-                .setUri(Uri.parse(url).buildUpon().fragment(null).build())
-                .setKey(panKey ?: dataSpec.key)
-                .setHttpRequestHeaders(BaiduRules.panHeaders())
-                .build()
-        } else if (aliyun) {
+        val effective = if (aliyun) {
             val built = dataSpec.buildUpon()
                 .setUri(dataSpec.uri.buildUpon().fragment(null).build())
             if (frag != null && frag.startsWith(TrackFragment.PREFIX)) {
@@ -361,7 +315,15 @@ private class SchemeRoutingDataSource(
             }
             built.build()
         } else {
-            dataSpec
+            // 摘掉仅作缓存键的 fragment（含历史 `wt=`），不进真实 HTTP。
+            if (frag != null) {
+                dataSpec.buildUpon()
+                    .setUri(dataSpec.uri.buildUpon().fragment(null).build())
+                    .setKey(OnlineMediaCache.stableKey(dataSpec.uri) ?: dataSpec.key)
+                    .build()
+            } else {
+                dataSpec
+            }
         }
         return source.open(effective)
     }

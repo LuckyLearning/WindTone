@@ -25,6 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -51,13 +52,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.luckylearning.windtone.data.OverlayPreset
+import com.luckylearning.windtone.data.SettingsDefaults
+import com.luckylearning.windtone.data.currentOverlayPreset
 import com.luckylearning.windtone.playback.Pitch
 import com.luckylearning.windtone.state.PlayerUiState
 import com.luckylearning.windtone.state.UpdateUiState
+import com.luckylearning.windtone.state.overlayPresetParams
 import com.luckylearning.windtone.ui.theme.windShadow
 
 /**
- * 车载模式专用设置页（v1.1.32）。
+ * 车载模式专用设置页（v1.1.32；v1.1.98+ FR-07 悬浮窗样式大卡）。
  *
  * ## 为什么要另做一套
  *
@@ -101,6 +106,13 @@ internal fun CarSettingsScreen(
     onAutoPlayOnBoot: (Boolean) -> Unit,
     onLyricScale: (Float) -> Unit,
     onLyricOverlay: (Boolean) -> Unit,
+    /** 套用车机悬浮歌词样式预设（FR-07；写全局外观参数，与 OverlayActions.applyOverlayPreset 同源） */
+    onApplyOverlayPreset: (OverlayPreset) -> Unit,
+    /** 悬浮窗正文字号（sp）；与预设快照 textSp 同源 */
+    onLyricOverlayTextSp: (Int) -> Unit,
+    /** 悬浮窗水平 / 垂直位置（可移动余量百分比 0..100） */
+    onLyricOverlayXPercent: (Int) -> Unit,
+    onLyricOverlayYPercent: (Int) -> Unit,
     onRescan: () -> Unit,
     onOpenScanScope: () -> Unit,
     onCheckUpdate: () -> Unit,
@@ -230,6 +242,64 @@ internal fun CarSettingsScreen(
                     onCheckedChange = onLyricOverlay,
                 )
 
+                // ------------------------------------------------ 悬浮窗样式（FR-07）
+                // 车机设置专用大卡：C1/C2/C3 + 字号步进 + 四角 chips。
+                // 套用写回全局外观参数（R4）；不含「驾驶中简化」（FR-08 已否决）。
+                CarSectionLabel("悬浮窗样式")
+                Text(
+                    "车机专属三套 · 点选后立刻套用，退出车机后样式仍保持",
+                    fontSize = 15.sp,
+                    color = scheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 10.dp),
+                )
+                val matchedCarPreset = currentOverlayPreset(player.overlayPresetParams())
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    OverlayPreset.CAR.forEach { preset ->
+                        CarOverlayPresetCard(
+                            preset = preset,
+                            selected = matchedCarPreset?.id == preset.id,
+                            icon = carOverlayPresetIcon(preset.id),
+                            onClick = { onApplyOverlayPreset(preset) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                CarStepperRow(
+                    title = "文字大小",
+                    subtitle = "悬浮窗正文字号（12~60sp）；改动后若偏离预设会显示为自定义",
+                    value = "${player.lyricOverlayTextSp}sp",
+                    onMinus = {
+                        onLyricOverlayTextSp(
+                            (player.lyricOverlayTextSp - OVERLAY_TEXT_SP_STEP).coerceIn(
+                                SettingsDefaults.OVERLAY_TEXT_SP_RANGE.first,
+                                SettingsDefaults.OVERLAY_TEXT_SP_RANGE.last,
+                            ),
+                        )
+                    },
+                    onPlus = {
+                        onLyricOverlayTextSp(
+                            (player.lyricOverlayTextSp + OVERLAY_TEXT_SP_STEP).coerceIn(
+                                SettingsDefaults.OVERLAY_TEXT_SP_RANGE.first,
+                                SettingsDefaults.OVERLAY_TEXT_SP_RANGE.last,
+                            ),
+                        )
+                    },
+                    minusDescription = "减小悬浮窗字号",
+                    plusDescription = "增大悬浮窗字号",
+                )
+                CarCornerChipsRow(
+                    xPercent = player.lyricOverlayXPercent,
+                    yPercent = player.lyricOverlayYPercent,
+                    onSelect = { x, y ->
+                        onLyricOverlayXPercent(x)
+                        onLyricOverlayYPercent(y)
+                    },
+                )
+
                 // ------------------------------------------------ 曲库
                 CarSectionLabel("曲库")
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -316,6 +386,9 @@ private const val SPEED_STEP = 0.05f
 private const val LYRIC_SCALE_MIN = 0.7f
 private const val LYRIC_SCALE_MAX = 1.6f
 private const val LYRIC_SCALE_STEP = 0.05f
+
+/** 悬浮窗正文字号步进（sp）；范围见 SettingsDefaults.OVERLAY_TEXT_SP_RANGE */
+private const val OVERLAY_TEXT_SP_STEP = 2
 
 /** 行高下限：Google 车机规范的 76dp 触控目标，整行可点 */
 /** 常规档行高（v1.1.98 起实际值由 [CarMetrics.rowMinHeight] 决定） */
@@ -667,6 +740,175 @@ private fun CarNowPlayingDock(
 // 「减」图标 Material 核心图标集里没有（`Icons.Filled.Remove` 在体积巨大的
 // icons-extended 包里），AppIcons 也没有现成的，这里按同一套路径写法自绘一条：
 // **绝对坐标、整块填充**（相对小写 m 在比亚迪车机的渲染链上会画歪，见 AppIcons 注释）。
+
+// ================================================================ FR-07 车机悬浮窗样式
+
+/** 车机三套预设卡的示意图标（效果图约 56dp） */
+private fun carOverlayPresetIcon(id: String): ImageVector = when (id) {
+    "C1" -> AppIcons.Speed
+    "C2" -> AppIcons.Lyrics
+    else -> AppIcons.MusicNote
+}
+
+/**
+ * 四角快捷落点（FR-07「位置四角 chips」）。
+ * 百分比是可移动余量上的位置：0 = 贴该方向边，100 = 贴对边。
+ */
+private data class CarCornerChip(
+    val label: String,
+    val xPercent: Int,
+    val yPercent: Int,
+)
+
+private val CAR_CORNER_CHIPS = listOf(
+    CarCornerChip("左上", 0, 0),
+    CarCornerChip("右上", 100, 0),
+    CarCornerChip("左下", 0, 100),
+    CarCornerChip("右下", 100, 100),
+)
+
+/** 当前 x/y 是否贴近某一四角落点（±8 视为选中，避免拖动微调后完全对不上） */
+private fun CarCornerChip.matches(xPercent: Int, yPercent: Int): Boolean =
+    kotlin.math.abs(xPercent - this.xPercent) <= 8 &&
+        kotlin.math.abs(yPercent - this.yPercent) <= 8
+
+/**
+ * 车机预设大卡：56dp 图标 + 名称 + 一句话定位；选中 primary 描边。
+ * 与手机 SettingsOverlayPage 的 OverlayPresetCard 同语义，版式按车机触控放大。
+ */
+@Composable
+private fun CarOverlayPresetCard(
+    preset: OverlayPreset,
+    selected: Boolean,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val scheme = MaterialTheme.colorScheme
+    var focused by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(18.dp)
+    Surface(
+        color = if (selected) scheme.primary.copy(alpha = 0.12f) else scheme.surfaceContainerHigh,
+        shape = shape,
+        border = when {
+            focused || selected -> androidx.compose.foundation.BorderStroke(3.dp, scheme.primary)
+            else -> androidx.compose.foundation.BorderStroke(1.dp, scheme.outlineVariant)
+        },
+        modifier = modifier
+            .heightIn(min = 108.dp)
+            .onFocusChanged { focused = it.isFocused }
+            .focusable()
+            .windShadow(level = 1, shape = shape)
+            .clip(shape)
+            .clickable(onClick = onClick)
+            .semantics {
+                contentDescription = "套用悬浮窗样式 ${preset.displayName}"
+            },
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(scheme.surfaceContainerHighest),
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = if (selected) scheme.primary else scheme.onSurfaceVariant,
+                    modifier = Modifier.size(28.dp),
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    preset.displayName,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (selected) scheme.primary else scheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    preset.tagline,
+                    fontSize = 13.sp,
+                    color = scheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (selected) {
+                Icon(
+                    Icons.Filled.Check,
+                    contentDescription = "当前预设",
+                    tint = scheme.primary,
+                    modifier = Modifier.size(26.dp),
+                )
+            }
+        }
+    }
+}
+
+/** 显示位置：四角 chips（FR-07） */
+@Composable
+private fun CarCornerChipsRow(
+    xPercent: Int,
+    yPercent: Int,
+    onSelect: (x: Int, y: Int) -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        color = scheme.surfaceContainerLow,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = CAR_ROW_MIN_HEIGHT)
+            .windShadow(level = 1, shape = RoundedCornerShape(16.dp)),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 22.dp, vertical = 12.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("显示位置", fontSize = 22.sp, color = scheme.onSurface)
+                Spacer(Modifier.height(3.dp))
+                Text("四角快捷；精细拖动仍可在完整设置里调", fontSize = 15.sp, color = scheme.onSurfaceVariant)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CAR_CORNER_CHIPS.forEach { chip ->
+                    val selected = chip.matches(xPercent, yPercent)
+                    val chipShape = RoundedCornerShape(14.dp)
+                    Surface(
+                        color = if (selected) scheme.primary else scheme.surfaceContainerHigh,
+                        shape = chipShape,
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .focusable()
+                            .clip(chipShape)
+                            .clickable { onSelect(chip.xPercent, chip.yPercent) }
+                            .semantics { contentDescription = "悬浮窗位置${chip.label}" },
+                    ) {
+                        Text(
+                            chip.label,
+                            fontSize = 16.sp,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (selected) scheme.onPrimary else scheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 private val MinusIcon: ImageVector by lazy {
     ImageVector.Builder(
         name = "Remove",

@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import com.luckylearning.windtone.data.DownloadRoute
+import com.luckylearning.windtone.data.OverlayPreset
 import com.luckylearning.windtone.overlay.LyricOverlayBus
 import com.luckylearning.windtone.state.LibraryUiState
 import com.luckylearning.windtone.state.PlayerUiState
@@ -54,6 +55,10 @@ class CarSettingsTest {
         onSpeed: (Float) -> Unit = {},
         onPitch: (Int) -> Unit = {},
         onCarMode: (Boolean) -> Unit = {},
+        onApplyOverlayPreset: (OverlayPreset) -> Unit = {},
+        onLyricOverlayTextSp: (Int) -> Unit = {},
+        onLyricOverlayXPercent: (Int) -> Unit = {},
+        onLyricOverlayYPercent: (Int) -> Unit = {},
     ) {
         compose.setContent {
             MusicPlayerTheme {
@@ -76,15 +81,15 @@ class CarSettingsTest {
                     onLyricOverlayFullOffsetPercent = {},
                     onLyricOverlayShowTitle = {},
                     onLyricOverlayTitlePercent = {},
-                    onLyricOverlayTextSp = {},
+                    onLyricOverlayTextSp = onLyricOverlayTextSp,
                     onLyricOverlayAlign = {},
                     onLyricOverlayPauseMode = {},
                     onLyricOverlayWidthPercent = {},
                     onLyricOverlayTextColor = {},
                     onLyricOverlayBoxHeightPercent = {},
                     onLyricOverlayFullHeightPercent = {},
-                    onLyricOverlayXPercent = {},
-                    onLyricOverlayYPercent = {},
+                    onLyricOverlayXPercent = onLyricOverlayXPercent,
+                    onLyricOverlayYPercent = onLyricOverlayYPercent,
                     onLyricOverlayFullYPercent = {},
                     onLyricOverlayBgColor = {},
                     onLyricOverlayBgAlphaPercent = {},
@@ -99,6 +104,7 @@ class CarSettingsTest {
                     onLyricOverlayFadeMs = {},
                     onLyricOverlayTitleMode = {},
                     onLyricOverlayHiddenApps = {},
+                    onApplyOverlayPreset = onApplyOverlayPreset,
                     onForegroundLogEnabled = {},
                     onDebugUnlocked = {},
                     onOverlayEditing = {},
@@ -234,5 +240,77 @@ class CarSettingsTest {
             "常驻播放条高度应在 96~112dp 之间",
             source.contains("CAR_DOCK_BAR_HEIGHT: Dp = 100.dp"),
         )
+    }
+
+    /** FR-07：车机设置页有「悬浮窗样式」三枚大卡（C1/C2/C3），无驾驶中简化开关 */
+    @Test
+    fun carModeShowsOverlayStyleBigCardsWithoutDriveSimplify() {
+        render()
+        compose.onNodeWithText("悬浮窗样式")
+            .performScrollTo()
+            .assertIsDisplayed()
+        // displayName 带 🚗（OverlayPreset.displayName）
+        compose.onNodeWithText("🚗 导航窄条")
+            .performScrollTo()
+            .assertIsDisplayed()
+        compose.onNodeWithText("🚗 驻停歌词")
+            .performScrollTo()
+            .assertIsDisplayed()
+        compose.onNodeWithText("🚗 纯净浮层")
+            .performScrollTo()
+            .assertIsDisplayed()
+        compose.onNodeWithText("文字大小")
+            .performScrollTo()
+            .assertIsDisplayed()
+        compose.onNodeWithText("显示位置")
+            .performScrollTo()
+            .assertIsDisplayed()
+        listOf("左上", "右上", "左下", "右下").forEach {
+            compose.onNodeWithText(it).assertIsDisplayed()
+        }
+        // FR-08 已否决：页面上不能出现可操作的「驾驶中简化」
+        compose.onAllNodesWithText("驾驶中简化").assertCountEquals(0)
+    }
+
+    /** FR-07 / R4：点「驻停歌词」走 applyOverlayPreset，写全局 */
+    @Test
+    fun selectingCarPresetAppliesGlobally() {
+        val applied = mutableListOf<OverlayPreset>()
+        render(onApplyOverlayPreset = { applied += it })
+        compose.onNodeWithContentDescription("套用悬浮窗样式 🚗 驻停歌词")
+            .performScrollTo()
+            .performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitForIdle()
+        assertEquals(1, applied.size)
+        assertEquals("C2", applied.single().id)
+    }
+
+    /** FR-07：字号步进与四角 chips 写穿 */
+    @Test
+    fun overlayTextSpAndCornerChipsWriteThrough() {
+        var textSp = -1
+        var x = -1
+        var y = -1
+        render(
+            player = PlayerUiState(
+                carMode = true,
+                lyricOverlayTextSp = 24,
+                lyricOverlayXPercent = 50,
+                lyricOverlayYPercent = 40,
+            ),
+            onLyricOverlayTextSp = { textSp = it },
+            onLyricOverlayXPercent = { x = it },
+            onLyricOverlayYPercent = { y = it },
+        )
+        compose.onNodeWithContentDescription("增大悬浮窗字号")
+            .performScrollTo()
+            .performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithContentDescription("悬浮窗位置右上")
+            .performScrollTo()
+            .performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitForIdle()
+        assertEquals(26, textSp)
+        assertEquals(100, x)
+        assertEquals(0, y)
     }
 }

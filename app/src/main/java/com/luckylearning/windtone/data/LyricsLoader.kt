@@ -3,7 +3,6 @@ package com.luckylearning.windtone.data
 import android.content.Context
 import android.net.Uri
 import android.util.Log
-import com.luckylearning.windtone.data.baidu.BaiduAuth
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.lyrics.BinaryReader
 import com.luckylearning.windtone.lyrics.EmbeddedTagResult
@@ -47,9 +46,6 @@ class LyricsLoader(private val context: Context) {
             override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, EmbeddedTagResult>) =
                 size > 8
         }
-
-    /** 网盘直链要 access_token，这里只读不刷新（8 小时内的 dlink 场景足够） */
-    private val baiduAuth by lazy { BaiduAuth(context) }
 
     suspend fun load(song: Song): Lyrics = withContext(Dispatchers.IO) {
         loadRaw(song)
@@ -191,7 +187,7 @@ class LyricsLoader(private val context: Context) {
         remoteEmbeddedCache[song.id]?.let { return it }
         delay(REMOTE_LYRIC_DELAY_MS)
         val result = runCatching {
-            RemoteTagFetcher.read(song.uri, ext, baiduAuth.currentToken()?.accessToken)
+            RemoteTagFetcher.read(song.uri, ext, token = null)
         }.onFailure { Log.w(TAG, "读取远程内嵌歌词失败: ${song.uri}", it) }.getOrNull() ?: return null
         if (result.hasLyrics) remoteEmbeddedCache[song.id] = result
         return result

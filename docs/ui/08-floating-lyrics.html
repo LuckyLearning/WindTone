@@ -29,7 +29,7 @@
     <span class="bh-badge">待开发</span>
     <button class="tgl" id="themeBtn">🌙 深色主题</button>
   </div>
-  <nav class="bh-nav"><a href="01-main.html">主界面</a><a href="02-player.html">播放页</a><a href="03-sheets.html">抽屉与弹窗</a><a href="04-settings.html">设置页</a><a href="05-extras.html">小组件·通知</a><a href="06-car.html">车机版</a><a href="07-spec.html">颜色与尺寸</a><a href="08-floating-lyrics.html" class="on">歌词菜单·悬浮窗</a></nav>
+  <nav class="bh-nav"><a href="01-main.html">主界面</a><a href="02-player.html">播放页</a><a href="03-sheets.html">抽屉与弹窗</a><a href="04-settings.html">设置页</a><a href="05-extras.html">小组件·通知</a><a href="06-car.html">车机版</a><a href="09-online.html">在线与云盘</a><a href="10-tools.html">工具与实验</a><a href="08-floating-lyrics.html" class="on">悬浮歌词</a><a href="07-spec.html">颜色与尺寸</a><a href="verify.html">模拟器验证</a></nav>
 </header>
 
 <div class="intro">
@@ -360,7 +360,7 @@
         <div class="app" style="position:relative;background:linear-gradient(165deg,#101426 0%,#060810 100%);padding:14px;display:flex;flex-direction:column;gap:12px;justify-content:center">
           <div style="font-size:10.5px;color:rgba(255,255,255,.4);text-align:center">车机中控屏 · 三套预设同屏对比</div>
           <div>
-            <div style="font-size:10.5px;color:#8B7CF6;font-weight:700;margin-bottom:4px">C1 导航窄条（驾驶默认 · 行驶中强制降为该形态）</div>
+            <div style="font-size:10.5px;color:#8B7CF6;font-weight:700;margin-bottom:4px">C1 导航窄条（驾驶默认 · 可手动选用；原「行驶中强制」方案已否决）</div>
             <div style="background:rgba(11,13,24,.92);border:1.5px solid #6E63F0;border-radius:14px;padding:10px 16px;font-size:15.5px;font-weight:800;color:#F4F3FA;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">我把心事写进旋律里面</div>
           </div>
           <div>
@@ -382,7 +382,7 @@
       <b>C1</b>：单行大字加粗（车机 24sp 档）+ 深色实底 90% + 高对比描边，高度 ≤64dp，贴顶居中偏右，不挡地图路线；
       <b>C2</b>：三行 + 歌名，玻璃底（强光自动加深，NFR-6），驻停场景信息量与美观优先；
       <b>C3</b>：无底板低存在感，适合干净桌面 / 大屏已在看播放页时辅助。<b>三套全部触摸穿透</b>（车机触控板误触率高）。
-      车速 > 10km/h 时任选 C2/C3 都会<b>强制降为 C1</b>（驾驶中简化，安全优先）。</p>
+      <b style="color:#B3261E">驾驶中简化（FR-08）已否决 / 不做</b>（2026-10-25）：不再按车速强制降 C1；用户可手动选 C1。</p>
     </figure>
 
   </div>
@@ -393,8 +393,8 @@
   <div class="sec-hd"><h2>四、车载模式 · 悬浮窗样式配置</h2><span>车机设置（2560×1600 中控屏）→ 新增「悬浮窗样式」分组 · 大触控预设 + 大滑杆</span></div>
   <div class="board">
 
-    <figure class="fig car" id="scr-car-overlay">
-      <div class="cap"><b>㉝ 车机 · 设置 → 悬浮窗样式（v1.1.78 新增分组）</b><em>CarSettingsScreen.kt · 车载模式专属：大触控预设卡 + 大号滑杆 + 位置四角快捷</em></div>
+    <figure class="fig car" id="scr-car-overlay-style">
+      <div class="cap"><b>㉝ 车机 · 设置 → 悬浮窗样式（FR-07 已实现）</b><em>CarSettingsScreen.kt · 三枚大卡 + 字号步进 + 四角 chips；不含驾驶中简化（FR-08 已否决）</em></div>
       <div class="carphone" style="width:900px;height:600px">
         <div class="carbar"><span class="sp"></span>
           <span class="cb-item"><svg class="ic"><use href="#i-back"/></svg></span>
@@ -423,18 +423,19 @@
               </div>
             </div>
             <div class="cset-row">
-              <div style="flex:1"><div class="cset-k">文字大小</div><div class="cset-s">车机默认 1.3x（比手机大一档，强光下可读）</div></div>
-              <div class="cset-step">−</div><div class="cset-v">1.3x</div><div class="cset-step"><svg class="ic"><use href="#i-add"/></svg></div>
+              <div style="flex:1"><div class="cset-k">文字大小</div><div class="cset-s">悬浮窗正文字号（12~60sp）；与预设 textSp 同源</div></div>
+              <div class="cset-step">−</div><div class="cset-v">28sp</div><div class="cset-step"><svg class="ic"><use href="#i-add"/></svg></div>
             </div>
             <div class="cset-row">
               <div style="flex:1"><div class="cset-k">显示位置</div><div class="cset-s">四角快捷 + 拖动微调</div></div>
               <div style="display:flex;gap:8px;flex:none">
-                <span class="fchip on">顶部</span><span class="fchip">底部</span><span class="fchip">左侧</span><span class="fchip">右侧</span>
+                <span class="fchip on">左上</span><span class="fchip">右上</span><span class="fchip">左下</span><span class="fchip">右下</span>
               </div>
             </div>
-            <div class="cset-row">
-              <div style="flex:1"><div class="cset-k">驾驶中简化</div><div class="cset-s">车速 &gt; 10km/h 时任选哪套都强制降为「导航窄条」；停车恢复</div></div>
-              <span class="switch lg"><i></i></span>
+            <div class="cset-row" style="opacity:.72;border:1px dashed #B3261E;border-radius:12px;padding:10px 12px">
+              <div style="flex:1"><div class="cset-k">驾驶中简化 <span style="color:#B3261E;font-size:11px;font-weight:700">已否决 / 不做</span></div>
+              <div class="cset-s">原方案：车速 &gt; 10km/h 强制降为「导航窄条」。用户 2026-10-25 决策 pass —— <b>不实现</b>；驾驶场景请手动选 C1。</div></div>
+              <span style="font-size:11px;color:#B3261E;font-weight:800;flex:none">PASS</span>
             </div>
             <div class="cset-row">
               <div style="flex:1"><div class="cset-k">触摸穿透</div><div class="cset-s">全形态只展示、无控制按钮；导航时触摸透传给地图应用（D1）</div></div>
@@ -451,7 +452,7 @@
         </div>
       </div>
       <p class="note"><b>车机版差异（改动 ②的车载部分）：</b>预设卡 56dp 图标 + 15sp 标题（手机 tile 是 40dp/13sp）；
-      参数行步进器 −/+ 加大到 40dp；「驾驶中简化」是车机独有（按车速强制降为导航窄条，安全优先）；
+      参数行步进器 −/+ 加大到 40dp；~~「驾驶中简化」~~ <b>已否决 / 不做</b>；
       「显示位置」给四角 chips 快捷（车机拖动不便）。</p>
     </figure>
 

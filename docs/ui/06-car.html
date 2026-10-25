@@ -27,11 +27,11 @@
   <div class="bh-row">
     <a class="backdocs" href="index.html">← 效果图总览</a>
     <div class="bh-title">六、车机版（2560×1600 中控屏）<small>UI 效果图 · 设计基准（第 6 / 7 章）</small></div>
-    <span class="bh-badge"><span id="pageCount">6</span> 屏</span>
+    <span class="bh-badge"><span id="pageCount">15</span> 屏</span>
     <span class="bh-badge">对齐 v1.1.33 · 车机 v3 布局</span>
     <button class="tgl" id="themeBtn">🌙 深色主题</button>
   </div>
-  <nav class="bh-nav"><a href="01-main.html">主界面</a><a href="02-player.html">播放页</a><a href="03-sheets.html">抽屉与弹窗</a><a href="04-settings.html">设置页</a><a href="05-extras.html">小组件·通知</a><a href="06-car.html" class="on">车机版</a><a href="07-spec.html">颜色与尺寸</a></nav>
+  <nav class="bh-nav"><a href="01-main.html">主界面</a><a href="02-player.html">播放页</a><a href="03-sheets.html">抽屉与弹窗</a><a href="04-settings.html">设置页</a><a href="05-extras.html">小组件·通知</a><a href="06-car.html" class="on">车机版</a><a href="09-online.html">在线与云盘</a><a href="10-tools.html">工具与实验</a><a href="08-floating-lyrics.html">悬浮歌词</a><a href="07-spec.html">颜色与尺寸</a><a href="verify.html">模拟器验证</a></nav>
 </header>
 
 <div class="wrap">
@@ -858,6 +858,336 @@
   <b>权限</b>：需 <code>SYSTEM_ALERT_WINDOW</code>（「出现在其他应用上」）。开启开关时若未授权自动跳系统授权页，返回后自动打开开关。<br>
   <b>比亚迪 DiLink 提示</b>：部分车型需把应用加入白名单，或先强停一次应用进程，否则授权后可能黑屏。</p>
 </figure>
+
+
+<!-- ===== 2026-10-25 补齐：歌手/文件夹/歌单/搜索/阿里云盘/N/A ===== -->
+<figure class="fig car" id="scr-car-artists">
+  <div class="cap"><b>㊱C 车机 · 歌手（圆头像网格 · v3）</b><em>CarLibraryScreen.kt — 同导航壳；歌手用 round 封面</em></div>
+  <div class="carphone v3">
+    <div class="carbar">
+      <span>9:41</span><span class="cb-item">☁ 24°C</span>
+      <span class="sp"></span><span class="cb-item">听风</span>
+    </div>
+    <div class="cv3">
+      <nav class="cv3-nav">
+        <div class="cv3-brand"><span class="cv3-logo"></span>听风</div>
+        <div class="cv3-item ac-songs"><svg class="ic"><use href="#i-note"/></svg>全部歌曲</div>
+        <div class="cv3-item ac-album"><svg class="ic"><use href="#i-album"/></svg>专辑</div>
+        <div class="cv3-item ac-artist on"><svg class="ic"><use href="#i-artist"/></svg>歌手</div>
+        <div class="cv3-item ac-folder"><svg class="ic"><use href="#i-folder"/></svg>文件夹</div>
+        <div class="cv3-item ac-pl"><svg class="ic"><use href="#i-library"/></svg>歌单</div>
+        <div class="cv3-item ac-cloud"><svg class="ic"><use href="#i-cloud"/></svg>阿里云盘</div>
+        <div class="cv3-gap"></div>
+        <div class="cv3-item"><svg class="ic"><use href="#i-gear"/></svg>设置</div>
+      </nav>
+      <div class="cv3-right">
+        <div class="cv3-main">
+          <div class="cv3-hd">
+            <div class="cv3-title">歌手</div>
+            <span class="pill">128 位</span>
+            <div class="sp"></div>
+            <button class="ibtn"><svg class="ic ic-22"><use href="#i-search"/></svg></button>
+          </div>
+          <div class="cv3-grid">
+            <div class="cv3-album"><div class="cv3-cover round">周</div><div class="cv3-album-t">周杰伦</div><div class="cv3-album-s">86 首</div></div>
+            <div class="cv3-album"><div class="cv3-cover round t2">陈</div><div class="cv3-album-t">陈奕迅</div><div class="cv3-album-s">54 首</div></div>
+            <div class="cv3-album"><div class="cv3-cover round t3">林</div><div class="cv3-album-t">林俊杰</div><div class="cv3-album-s">41 首</div></div>
+            <div class="cv3-album"><div class="cv3-cover round t4">邓</div><div class="cv3-album-t">邓紫棋</div><div class="cv3-album-s">33 首</div></div>
+            <div class="cv3-album"><div class="cv3-cover round t5">B</div><div class="cv3-album-t">Beyond</div><div class="cv3-album-s">28 首</div></div>
+            <div class="cv3-album"><div class="cv3-cover round t6">李</div><div class="cv3-album-t">李荣浩</div><div class="cv3-album-s">22 首</div></div>
+          </div>
+        </div>
+        <div class="cv3-now">
+          <div class="cv3-nb">
+            <span class="cv3-tile w2">封面</span>
+            <div style="min-width:0">
+              <div class="cv3-t">晴天（精选留声）</div>
+              <div class="cv3-s">WindTone · 原声带</div>
+            </div>
+          </div>
+          <div class="cv3-ctl">
+            <button class="cv3-btn fav-on"><svg class="ic"><use href="#i-heart"/></svg></button>
+            <button class="cv3-btn"><svg class="ic"><use href="#i-prev"/></svg></button>
+            <button class="cv3-play"><svg class="ic"><use href="#i-pause"/></svg></button>
+            <button class="cv3-btn"><svg class="ic"><use href="#i-next"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="cv3-dock"><i></i><i></i><i></i><span>系统 Dock（系统保留 · App 只出到 56dp）</span></div>
+  </div>
+  <p class="note"><b>关键点：</b>与专辑同为网格，头像加 <code>round</code>。手机对应 <code>scr-artist</code>。</p>
+</figure>
+
+<figure class="fig car" id="scr-car-folders">
+  <div class="cap"><b>㊱D 车机 · 文件夹</b><em>CarLibraryScreen.kt — 文件夹列表（大触控行）</em></div>
+  <div class="carphone v3">
+    <div class="carbar">
+      <span>9:41</span><span class="cb-item">☁ 24°C</span>
+      <span class="sp"></span><span class="cb-item">听风</span>
+    </div>
+    <div class="cv3">
+      <nav class="cv3-nav">
+        <div class="cv3-brand"><span class="cv3-logo"></span>听风</div>
+        <div class="cv3-item ac-songs"><svg class="ic"><use href="#i-note"/></svg>全部歌曲</div>
+        <div class="cv3-item ac-album"><svg class="ic"><use href="#i-album"/></svg>专辑</div>
+        <div class="cv3-item ac-artist"><svg class="ic"><use href="#i-artist"/></svg>歌手</div>
+        <div class="cv3-item ac-folder on"><svg class="ic"><use href="#i-folder"/></svg>文件夹</div>
+        <div class="cv3-item ac-pl"><svg class="ic"><use href="#i-library"/></svg>歌单</div>
+        <div class="cv3-item ac-cloud"><svg class="ic"><use href="#i-cloud"/></svg>阿里云盘</div>
+        <div class="cv3-gap"></div>
+        <div class="cv3-item"><svg class="ic"><use href="#i-gear"/></svg>设置</div>
+      </nav>
+      <div class="cv3-right">
+        <div class="cv3-main">
+          <div class="cv3-hd">
+            <div class="cv3-title">文件夹</div>
+            <span class="pill">12 个</span>
+            <div class="sp"></div>
+            <button class="ibtn"><svg class="ic ic-22"><use href="#i-search"/></svg></button>
+          </div>
+          <div class="list" style="padding:4px 8px">
+            <div class="group-row"><div class="cov cov-48 c1"><svg><use href="#i-folder"/></svg></div>
+              <div class="song-main"><div class="song-title">Music</div><div class="song-sub"><span>128 首 · /storage/emulated/0/Music</span></div></div></div>
+            <div class="group-row"><div class="cov cov-48 c2"><svg><use href="#i-folder"/></svg></div>
+              <div class="song-main"><div class="song-title">下载</div><div class="song-sub"><span>46 首 · Download</span></div></div></div>
+            <div class="group-row"><div class="cov cov-48 c3"><svg><use href="#i-folder"/></svg></div>
+              <div class="song-main"><div class="song-title">无损</div><div class="song-sub"><span>31 首</span></div></div></div>
+          </div>
+        </div>
+        <div class="cv3-now">
+          <div class="cv3-nb">
+            <span class="cv3-tile w2">封面</span>
+            <div style="min-width:0">
+              <div class="cv3-t">晴天（精选留声）</div>
+              <div class="cv3-s">WindTone · 原声带</div>
+            </div>
+          </div>
+          <div class="cv3-ctl">
+            <button class="cv3-btn fav-on"><svg class="ic"><use href="#i-heart"/></svg></button>
+            <button class="cv3-btn"><svg class="ic"><use href="#i-prev"/></svg></button>
+            <button class="cv3-play"><svg class="ic"><use href="#i-pause"/></svg></button>
+            <button class="cv3-btn"><svg class="ic"><use href="#i-next"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="cv3-dock"><i></i><i></i><i></i><span>系统 Dock（系统保留 · App 只出到 56dp）</span></div>
+  </div>
+  <p class="note"><b>关键点：</b>车机行高更大；移除扫描结果仍走确认框（与手机一致）。手机对应 <code>scr-folder</code>。</p>
+</figure>
+
+<figure class="fig car" id="scr-car-playlists">
+  <div class="cap"><b>㊱E 车机 · 歌单</b><em>CarLibraryScreen.kt — 歌单列表</em></div>
+  <div class="carphone v3">
+    <div class="carbar">
+      <span>9:41</span><span class="cb-item">☁ 24°C</span>
+      <span class="sp"></span><span class="cb-item">听风</span>
+    </div>
+    <div class="cv3">
+      <nav class="cv3-nav">
+        <div class="cv3-brand"><span class="cv3-logo"></span>听风</div>
+        <div class="cv3-item ac-songs"><svg class="ic"><use href="#i-note"/></svg>全部歌曲</div>
+        <div class="cv3-item ac-album"><svg class="ic"><use href="#i-album"/></svg>专辑</div>
+        <div class="cv3-item ac-artist"><svg class="ic"><use href="#i-artist"/></svg>歌手</div>
+        <div class="cv3-item ac-folder"><svg class="ic"><use href="#i-folder"/></svg>文件夹</div>
+        <div class="cv3-item ac-pl on"><svg class="ic"><use href="#i-library"/></svg>歌单</div>
+        <div class="cv3-item ac-cloud"><svg class="ic"><use href="#i-cloud"/></svg>阿里云盘</div>
+        <div class="cv3-gap"></div>
+        <div class="cv3-item"><svg class="ic"><use href="#i-gear"/></svg>设置</div>
+      </nav>
+      <div class="cv3-right">
+        <div class="cv3-main">
+          <div class="cv3-hd">
+            <div class="cv3-title">歌单</div>
+            <span class="pill">9 个</span>
+            <div class="sp"></div>
+            <button class="ibtn"><svg class="ic ic-22"><use href="#i-search"/></svg></button>
+          </div>
+          <div class="list" style="padding:4px 8px">
+            <div class="group-row"><div class="cov cov-48 c2"><svg><use href="#i-heart"/></svg></div>
+              <div class="song-main"><div class="song-title">我喜欢</div><div class="song-sub"><span>64 首</span></div></div></div>
+            <div class="group-row"><div class="cov cov-48 c4"><svg><use href="#i-library"/></svg></div>
+              <div class="song-main"><div class="song-title">开车专用</div><div class="song-sub"><span>28 首</span></div></div></div>
+            <div class="group-row"><div class="cov cov-48 c5"><svg><use href="#i-library"/></svg></div>
+              <div class="song-main"><div class="song-title">云盘扫描 · 流行</div><div class="song-sub"><span>112 首</span></div></div></div>
+          </div>
+        </div>
+        <div class="cv3-now">
+          <div class="cv3-nb">
+            <span class="cv3-tile w2">封面</span>
+            <div style="min-width:0">
+              <div class="cv3-t">晴天（精选留声）</div>
+              <div class="cv3-s">WindTone · 原声带</div>
+            </div>
+          </div>
+          <div class="cv3-ctl">
+            <button class="cv3-btn fav-on"><svg class="ic"><use href="#i-heart"/></svg></button>
+            <button class="cv3-btn"><svg class="ic"><use href="#i-prev"/></svg></button>
+            <button class="cv3-play"><svg class="ic"><use href="#i-pause"/></svg></button>
+            <button class="cv3-btn"><svg class="ic"><use href="#i-next"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="cv3-dock"><i></i><i></i><i></i><span>系统 Dock（系统保留 · App 只出到 56dp）</span></div>
+  </div>
+  <p class="note"><b>关键点：</b>含「我喜欢」与云盘扫描歌单。手机对应 <code>scr-playlist</code>。</p>
+</figure>
+
+<figure class="fig car" id="scr-car-search">
+  <div class="cap"><b>㊱F 车机 · 搜索</b><em>CarLibraryScreen.kt · 顶栏搜索（大输入区）</em></div>
+  <div class="carphone v3">
+    <div class="carbar">
+      <span>9:41</span><span class="cb-item">☁ 24°C</span>
+      <span class="sp"></span><span class="cb-item">听风</span>
+    </div>
+    <div class="cv3">
+      <nav class="cv3-nav">
+        <div class="cv3-brand"><span class="cv3-logo"></span>听风</div>
+        <div class="cv3-item ac-songs on"><svg class="ic"><use href="#i-note"/></svg>全部歌曲</div>
+        <div class="cv3-item ac-album"><svg class="ic"><use href="#i-album"/></svg>专辑</div>
+        <div class="cv3-item ac-artist"><svg class="ic"><use href="#i-artist"/></svg>歌手</div>
+        <div class="cv3-item ac-folder"><svg class="ic"><use href="#i-folder"/></svg>文件夹</div>
+        <div class="cv3-item ac-pl"><svg class="ic"><use href="#i-library"/></svg>歌单</div>
+        <div class="cv3-item ac-cloud"><svg class="ic"><use href="#i-cloud"/></svg>阿里云盘</div>
+        <div class="cv3-gap"></div>
+        <div class="cv3-item"><svg class="ic"><use href="#i-gear"/></svg>设置</div>
+      </nav>
+      <div class="cv3-right">
+        <div class="cv3-main">
+          <div class="cv3-hd">
+            <div class="cv3-title">搜索</div>
+            <span class="pill">36 首</span>
+            <div class="sp"></div>
+            <button class="ibtn"><svg class="ic ic-22"><use href="#i-search"/></svg></button>
+          </div>
+          <div style="padding:8px 12px 4px">
+            <div style="display:flex;align-items:center;gap:8px;background:var(--surface-variant);border-radius:999px;padding:10px 14px;margin-bottom:10px">
+              <svg class="ic"><use href="#i-search"/></svg>
+              <div style="flex:1;font-size:15px">周杰伦</div>
+              <svg class="ic"><use href="#i-close"/></svg>
+            </div>
+            <div class="stat-text" style="margin-bottom:8px">匹配 36 首 · 支持歌名 / 歌手 / 专辑 / 拼音首字母</div>
+          </div>
+          <div class="list" style="padding:0 8px">
+            <div class="song-row playing"><div class="cov cov-48 c1"><svg><use href="#i-note"/></svg></div>
+              <div class="song-main"><div class="song-title">晴天</div><div class="song-sub"><span>周杰伦</span></div></div><div class="song-time">4:29</div></div>
+            <div class="song-row"><div class="cov cov-48 c2"><svg><use href="#i-note"/></svg></div>
+              <div class="song-main"><div class="song-title">夜曲</div><div class="song-sub"><span>周杰伦</span></div></div><div class="song-time">3:46</div></div>
+            <div class="song-row"><div class="cov cov-48 c3"><svg><use href="#i-note"/></svg></div>
+              <div class="song-main"><div class="song-title">稻香</div><div class="song-sub"><span>周杰伦</span></div></div><div class="song-time">3:43</div></div>
+          </div>
+        </div>
+        <div class="cv3-now">
+          <div class="cv3-nb">
+            <span class="cv3-tile w2">封面</span>
+            <div style="min-width:0">
+              <div class="cv3-t">晴天（精选留声）</div>
+              <div class="cv3-s">WindTone · 原声带</div>
+            </div>
+          </div>
+          <div class="cv3-ctl">
+            <button class="cv3-btn fav-on"><svg class="ic"><use href="#i-heart"/></svg></button>
+            <button class="cv3-btn"><svg class="ic"><use href="#i-prev"/></svg></button>
+            <button class="cv3-play"><svg class="ic"><use href="#i-pause"/></svg></button>
+            <button class="cv3-btn"><svg class="ic"><use href="#i-next"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="cv3-dock"><i></i><i></i><i></i><span>系统 Dock（系统保留 · App 只出到 56dp）</span></div>
+  </div>
+  <p class="note"><b>关键点：</b>支持歌名 / 歌手 / 专辑 / 拼音首字母。手机对应 <code>scr-search</code>。</p>
+</figure>
+
+<figure class="fig car" id="scr-car-aliyun">
+  <div class="cap"><b>㊱G 车机 · 阿里云盘（左导航常驻入口）</b><em>CarLibraryScreen.kt · onOpenAliyun + AliyunPanPage（v1.1.84）</em></div>
+  <div class="carphone v3">
+    <div class="carbar">
+      <span>9:41</span><span class="cb-item">☁ 24°C</span>
+      <span class="sp"></span><span class="cb-item">听风</span>
+    </div>
+    <div class="cv3">
+      <nav class="cv3-nav">
+        <div class="cv3-brand"><span class="cv3-logo"></span>听风</div>
+        <div class="cv3-item ac-songs"><svg class="ic"><use href="#i-note"/></svg>全部歌曲</div>
+        <div class="cv3-item ac-album"><svg class="ic"><use href="#i-album"/></svg>专辑</div>
+        <div class="cv3-item ac-artist"><svg class="ic"><use href="#i-artist"/></svg>歌手</div>
+        <div class="cv3-item ac-folder"><svg class="ic"><use href="#i-folder"/></svg>文件夹</div>
+        <div class="cv3-item ac-pl"><svg class="ic"><use href="#i-library"/></svg>歌单</div>
+        <div class="cv3-item ac-cloud on"><svg class="ic"><use href="#i-cloud"/></svg>阿里云盘</div>
+        <div class="cv3-gap"></div>
+        <div class="cv3-item"><svg class="ic"><use href="#i-gear"/></svg>设置</div>
+      </nav>
+      <div class="cv3-right">
+        <div class="cv3-main">
+          <div class="cv3-hd">
+            <div class="cv3-title">阿里云盘</div>
+            <span class="pill">在线</span>
+            <div class="sp"></div>
+            <button class="ibtn"><svg class="ic ic-22"><use href="#i-search"/></svg></button>
+          </div>
+          <div class="list" style="padding:4px 8px">
+            <div class="stat-row" style="margin:0 0 8px"><span class="stat-text">已登录 · 资源库 /音乐</span></div>
+            <div class="song-row"><div class="cov cov-48 c1"><svg><use href="#i-folder"/></svg></div>
+              <div class="song-main"><div class="song-title">流行</div><div class="song-sub"><span>文件夹</span></div></div>
+              <button class="txtbtn">进入</button></div>
+            <div class="song-row"><div class="cov cov-48 c2"><svg><use href="#i-note"/></svg></div>
+              <div class="song-main"><div class="song-title">晴天.flac</div><div class="song-sub"><span>可播</span></div></div>
+              <button class="txtbtn">播放</button></div>
+            <div class="song-row"><div class="cov cov-48 c3"><svg><use href="#i-note"/></svg></div>
+              <div class="song-main"><div class="song-title">夜曲.mp3</div><div class="song-sub"><span>音频</span></div></div>
+              <button class="txtbtn">播放</button></div>
+            <button class="btn" style="margin:12px 4px 0;width:calc(100% - 8px)">播放本目录全部音频</button>
+          </div>
+        </div>
+        <div class="cv3-now">
+          <div class="cv3-nb">
+            <span class="cv3-tile w2">封面</span>
+            <div style="min-width:0">
+              <div class="cv3-t">晴天（精选留声）</div>
+              <div class="cv3-s">WindTone · 原声带</div>
+            </div>
+          </div>
+          <div class="cv3-ctl">
+            <button class="cv3-btn fav-on"><svg class="ic"><use href="#i-heart"/></svg></button>
+            <button class="cv3-btn"><svg class="ic"><use href="#i-prev"/></svg></button>
+            <button class="cv3-play"><svg class="ic"><use href="#i-pause"/></svg></button>
+            <button class="cv3-btn"><svg class="ic"><use href="#i-next"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="cv3-dock"><i></i><i></i><i></i><span>系统 Dock（系统保留 · App 只出到 56dp）</span></div>
+  </div>
+  <p class="note"><b>为什么在车机导航里：</b>车机没有抽屉，云盘入口必须常驻左导航（v1.1.84）。手机走抽屉「在线音乐」。</p>
+</figure>
+
+<figure class="fig car" id="scr-car-na-phone-only">
+  <div class="cap"><b>㊱H 车机 · 手机专属能力对照（N/A 说明卡）</b><em>非独立 Compose 页 · 对照说明</em></div>
+  <div class="carphone v3">
+    <div class="carbar"><span>9:41</span><span class="sp"></span><span class="cb-item">说明</span></div>
+    <div class="cv3">
+      <nav class="cv3-nav">
+        <div class="cv3-brand"><span class="cv3-logo"></span>听风</div>
+        <div class="cv3-item on"><svg class="ic"><use href="#i-info"/></svg>说明</div>
+      </nav>
+      <div class="cv3-right"><div class="cv3-main" style="padding:18px">
+        <div class="cv3-title" style="margin-bottom:12px">以下能力车机不单独出页</div>
+        <div style="font-size:14px;line-height:1.7">
+          · 桌面小组件 / 快捷设置磁贴 — 手机系统能力<br>
+          · 百度网盘设置子页 — 车机以阿里云盘导航入口为主<br>
+          · 重复歌曲清理 / 菜单排序 — 建议停车后用手机处理<br>
+          · 分栏探测 SplitProbe — 开发探针<br>
+          · 悬浮歌词样式细调 — 车机有简化预设（见第八章）
+        </div>
+      </div></div>
+    </div>
+  </div>
+  <p class="note"><b>用法：</b>清单里对应项形态标「车机 N/A」，并链到本说明卡。不是空白占位页。</p>
+</figure>
+
 
   </div>
 </section>

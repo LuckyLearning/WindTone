@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>九、在线与云盘（手机） · 听风 WindTone UI 效果图</title>
+<script>
+(function(){
+  try{
+    var saved=localStorage.getItem('wt-ui-theme');
+    var theme=saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme',theme);
+  }catch(e){
+    document.documentElement.setAttribute('data-theme','dark');
+  }
+})();
+</script>
+<link rel="stylesheet" href="ui.css">
+</head>
+<body>
+<script src="ui-sprite.js"></script>
+
+<header class="board-head">
+  <div class="bh-row">
+    <a class="backdocs" href="index.html">← 效果图总览</a>
+    <div class="bh-title">九、在线与云盘（手机）<small>UI 效果图 · 设计基准（第 9 章）</small></div>
+    <span class="bh-badge"><span id="pageCount">9</span> 屏</span>
+    <span class="bh-badge">对齐 v1.1.98 · 补齐云盘/在线缺口</span>
+    <button class="tgl" id="themeBtn">🌙 深色主题</button>
+  </div>
+  <nav class="bh-nav"><a href="01-main.html">主界面</a><a href="02-player.html">播放页</a><a href="03-sheets.html">抽屉与弹窗</a><a href="04-settings.html">设置页</a><a href="05-extras.html">小组件·通知</a><a href="06-car.html">车机版</a><a href="09-online.html" class="on">在线与云盘</a><a href="10-tools.html">工具与实验</a><a href="08-floating-lyrics.html">悬浮歌词</a><a href="07-spec.html">颜色与尺寸</a><a href="verify.html">模拟器验证</a></nav>
+</header>
+
+<div class="wrap">
+<section class="sec" id="sec-online">
+  <div class="sec-hd"><h2>九、在线与云盘（手机）</h2><span>AliyunPanPage · OnlinePlaylistsPage · SettingsOnlinePage · ListeningReportScreen</span></div>
+  <div class="board">
+<figure class="fig" id="scr-aliyun-login">
+  <div class="cap"><b>㉛ 阿里云盘 · 未登录</b><em>AliyunPanPage.kt · NotLoggedInBody（抽屉「在线音乐」一级入口）</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">阿里云盘</div></div>
+      </div>
+      <div class="list" style="padding:8px 18px 16px">
+        <div class="section-label" style="padding:0;margin:8px 0 6px">在线音乐 · 未连接</div>
+        <div style="background:var(--surface-variant);border-radius:16px;padding:18px 16px;margin-bottom:12px">
+          <div style="font-size:15px;font-weight:600;margin-bottom:6px">扫码授权阿里云盘</div>
+          <div style="font-size:12px;color:var(--on-surface-variant);line-height:1.55">应用内弹出二维码，用阿里云盘 App 扫码即可；全程不跳浏览器、不复制粘贴。<br>权限只读：不会上传、修改或删除任何文件。</div>
+          <button class="btn" style="margin-top:14px;width:100%">扫码授权</button>
+          <button class="btn ghost" style="margin-top:8px;width:100%">手动粘贴令牌</button>
+          <button class="txtbtn" style="margin-top:6px;width:100%">打开阿里云盘 App</button>
+        </div>
+        <div style="font-size:11px;color:var(--on-surface-variant);line-height:1.5">入口：侧边抽屉 → 在线音乐 → 阿里云盘（v1.1.75 起不再嵌在设置里）。</div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>形态：</b>手机一级页（覆盖曲库）。车机见第六章 <code>scr-car-aliyun</code>。<br><b>关键点：</b>登录态与目录浏览共用同一 <code>AliyunPanPage</code>；未登录只渲染 <code>NotLoggedInBody</code>。</p>
+</figure>
+
+<figure class="fig" id="scr-dlg-aliyun-qr">
+  <div class="cap"><b>㉛B 对话框 · 扫码登录阿里云盘</b><em>AliyunQrLoginDialog.kt · 应用内二维码 + 轮询</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div style="position:relative;min-height:560px;background:var(--surface)">
+        <div class="dim" style="display:block"></div>
+        <div class="dialog" style="display:block">
+          <div class="dlg-t">扫码登录阿里云盘</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:8px 4px 4px">
+            <div style="width:168px;height:168px;border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;color:#111;font-size:12px;border:1px solid var(--outline-variant)">QR · 本地渲染</div>
+            <div style="font-size:12.5px;text-align:center">用阿里云盘 App 扫这个二维码</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);text-align:center;line-height:1.45">识别不到时调高亮度，或截屏后用「扫一扫 → 相册」</div>
+          </div>
+          <div class="dlg-actions">
+            <button class="txtbtn">网页获取令牌</button>
+            <button class="txtbtn">换一张</button>
+            <button class="txtbtn">关闭</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>二维码由 ZXing 本地渲染；轮询官方 passport；成功后写入 <code>AliyunAuth</code> refresh_token。</p>
+</figure>
+
+<figure class="fig" id="scr-aliyun-browse">
+  <div class="cap"><b>㉛C 阿里云盘 · 已登录浏览</b><em>AliyunPanPage.kt · LoggedInBody（目录 / 播放 / 扫描为歌单）</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">阿里云盘</div></div>
+      </div>
+      <div class="topbar" style="padding:0 10px 6px">
+        <div class="tb-row" style="gap:8px">
+          <div style="font-size:12px;color:var(--on-surface-variant)">已登录 · 小风</div>
+          <div class="sp"></div>
+          <button class="ibtn sm"><svg class="ic ic-20"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="stat-row"><span class="stat-text">当前盘：资源库 · /音乐/流行</span></div>
+      </div>
+      <div class="list" style="padding:0 10px 12px">
+        <div class="song-row"><div class="cov cov-48 c1"><svg><use href="#i-folder"/></svg></div>
+          <div class="song-main"><div class="song-title">周杰伦</div><div class="song-sub"><span>文件夹</span></div></div>
+          <button class="txtbtn">进入</button></div>
+        <div class="song-row"><div class="cov cov-48 c2"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">晴天.flac</div><div class="song-sub"><span>音频</span><span class="badge badge-lrc">可播</span></div></div>
+          <button class="txtbtn">播放</button></div>
+        <div class="song-row"><div class="cov cov-48 c3"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">夜曲.mp3</div><div class="song-sub"><span>音频</span></div></div>
+          <button class="txtbtn">播放</button></div>
+        <button class="btn" style="margin:10px 8px 0;width:calc(100% - 16px)">播放本目录全部音频（12）</button>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>菜单：</b>打开阿里云盘 App / 扫描为歌单（下 2 层）/ 连通性自检 / 退出登录。<br><b>播放：</b>现取直链；失败提示与歌词路径分离。</p>
+</figure>
+
+<!-- 百度网盘原型（scr-baidu-login / scr-baidu-browse）已删除：产品只保留阿里云盘（2026-10-25） -->
+<figure class="fig" id="scr-online-hub">
+  <div class="cap"><b>㉝ 设置页 · 在线播放（实验室入口）</b><em>SettingsOnlinePage.kt · ONLINE_HUB（实验室 → 在线播放）</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">在线播放</div></div>
+      </div>
+      <div class="list" style="padding:4px 18px 12px">
+        <div class="section-label" style="padding:0;margin:10px 0 4px">来源</div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-bottom:8px">
+          <div style="flex:1"><div style="font-size:15px">在线歌单（M3U）</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">添加 m3u / m3u8 / pls，或一条 http(s) 音频直链</div></div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+        <div class="section-label" style="padding:0;margin:14px 0 4px">播放缓存</div>
+        <div style="font-size:12px;color:var(--on-surface-variant);margin:0 0 8px">已用 128 MB / 512 MB</div>
+        <div style="height:6px;border-radius:99px;background:var(--surface-variant);overflow:hidden;margin-bottom:10px"><i style="display:block;width:25%;height:100%;background:var(--primary)"></i></div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-bottom:8px">
+          <div style="flex:1"><div style="font-size:15px">缓存上限</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">重播读取已下载部分，默认 512MB</div></div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-bottom:8px">
+          <div style="flex:1"><div style="font-size:15px">清空缓存</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">清空后已播歌曲会重新拉取</div></div>
+          <span style="font-size:11px;color:var(--on-surface-variant)">就地</span>
+        </div>
+        <div class="section-label" style="padding:0;margin:14px 0 4px">播放记录</div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-bottom:8px">
+          <div style="flex:1"><div style="font-size:15px">收听报告</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">收听时长 · 时段 · 最常播放（来自云盘播放记录）</div></div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>入口：</b>设置主页 → 实验室 → 在线播放（v1.1.80）。阿里云盘本身不在此页。旧图 <code>scr-settings-online</code> 仍保留作对照。</p>
+</figure>
+
+<figure class="fig" id="scr-online-playlists">
+  <div class="cap"><b>㉝B 在线歌单列表</b><em>OnlinePlaylistsPage.kt · SettingsPage.ONLINE</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">在线歌单</div></div>
+      </div>
+      <div class="list" style="padding:4px 14px 12px">
+        <div style="font-size:12px;color:var(--on-surface-variant);line-height:1.5;margin:4px 0 10px">支持 m3u / m3u8 / pls 直链；走系统媒体内核，不需要下载。<br>在线条目没有本地文件，因此不参与扫描、收藏与本地播放统计。</div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-bottom:8px">
+          <div style="flex:1"><div style="font-size:15px">添加在线歌单</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">填播放列表地址，也可直接填一条 http(s) 音频直链</div></div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+        <div style="background:var(--surface-variant);border-radius:14px;padding:12px 14px;margin-top:4px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="flex:1"><div style="font-size:15px;font-weight:600">Groove Salad</div>
+              <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">24 首 · SomaFM</div></div>
+            <span class="badge badge-lrc">HLS 直播流</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">
+            <button class="txtbtn">播放全部</button><button class="txtbtn">刷新</button>
+            <button class="txtbtn">重命名</button><button class="txtbtn">查看条目</button><button class="txtbtn">删除</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>空态：</b>还没有添加过在线歌单；可提示 SomaFM / Radio Paradise 示例地址。</p>
+</figure>
+
+<figure class="fig" id="scr-dlg-online-add">
+  <div class="cap"><b>㉝C 对话框 · 添加在线歌单</b><em>OnlinePlaylistsPage.kt · OnlinePlaylistAddDialog</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div style="position:relative;min-height:420px;background:var(--surface)">
+        <div class="dim" style="display:block"></div>
+        <div class="dialog" style="display:block">
+          <div class="dlg-t">添加在线歌单</div>
+          <div style="font-size:12px;color:var(--on-surface-variant);margin-bottom:8px">播放列表地址</div>
+          <div style="border:1px solid var(--outline-variant);border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:10px;color:var(--on-surface-variant)">https://example.com/list.m3u</div>
+          <div style="font-size:12px;color:var(--on-surface-variant);margin-bottom:8px">名称（可留空）</div>
+          <div style="border:1px solid var(--outline-variant);border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:10px">&nbsp;</div>
+          <div style="font-size:11px;color:var(--on-surface-variant);line-height:1.45">支持 m3u / m3u8 / pls，也可填一条 http(s) 音频直链。添加时会先读取一次；后续内容不自动保存。</div>
+          <div class="dlg-actions"><button class="txtbtn">取消</button><button class="txtbtn" style="color:var(--primary)">添加</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>添加失败弹「出了点问题」；删除只从本地移除，不影响远端列表。</p>
+</figure>
+
+<figure class="fig" id="scr-listening-report">
+  <div class="cap"><b>㉞ 收听报告（本地 / 在线共用版式）</b><em>ListeningReportScreen.kt · 本地 listen_log 或 OnlineListeningReport</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">收听报告</div></div>
+      </div>
+      <div class="list" style="padding:4px 14px 12px">
+        <div style="display:flex;gap:8px;margin:6px 0 12px">
+          <span class="chip-lsrc on">近 7 天</span><span class="chip-lsrc">近 30 天</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+          <div style="background:var(--surface-variant);border-radius:12px;padding:10px 12px"><div style="font-size:11px;color:var(--on-surface-variant)">累计收听</div><div style="font-size:18px;font-weight:700;margin-top:4px">6h 20m</div></div>
+          <div style="background:var(--surface-variant);border-radius:12px;padding:10px 12px"><div style="font-size:11px;color:var(--on-surface-variant)">日均</div><div style="font-size:18px;font-weight:700;margin-top:4px">54m</div></div>
+          <div style="background:var(--surface-variant);border-radius:12px;padding:10px 12px"><div style="font-size:11px;color:var(--on-surface-variant)">有收听的天数</div><div style="font-size:18px;font-weight:700;margin-top:4px">6 天</div></div>
+          <div style="background:var(--surface-variant);border-radius:12px;padding:10px 12px"><div style="font-size:11px;color:var(--on-surface-variant)">最常收听时段</div><div style="font-size:18px;font-weight:700;margin-top:4px">21–22</div></div>
+        </div>
+        <div class="section-label" style="padding:0;margin:4px 0 6px">每日收听时长</div>
+        <div style="height:64px;border-radius:12px;background:linear-gradient(180deg,transparent,var(--surface-variant));margin-bottom:12px;display:flex;align-items:flex-end;gap:4px;padding:8px">
+          <i style="flex:1;height:30%;background:var(--primary);border-radius:4px 4px 0 0;opacity:.7"></i>
+          <i style="flex:1;height:55%;background:var(--primary);border-radius:4px 4px 0 0;opacity:.8"></i>
+          <i style="flex:1;height:40%;background:var(--primary);border-radius:4px 4px 0 0;opacity:.75"></i>
+          <i style="flex:1;height:80%;background:var(--primary);border-radius:4px 4px 0 0"></i>
+          <i style="flex:1;height:60%;background:var(--primary);border-radius:4px 4px 0 0;opacity:.85"></i>
+          <i style="flex:1;height:35%;background:var(--primary);border-radius:4px 4px 0 0;opacity:.7"></i>
+          <i style="flex:1;height:70%;background:var(--primary);border-radius:4px 4px 0 0"></i>
+        </div>
+        <div class="section-label" style="padding:0;margin:4px 0 6px">最常播放</div>
+        <div class="song-row"><div class="cov cov-48 c1"><svg><use href="#i-note"/></svg></div>
+          <div class="song-main"><div class="song-title">晴天</div><div class="song-sub"><span>周杰伦</span><span>12 次</span></div></div></div>
+        <button class="btn ghost" style="margin-top:8px;width:100%">播放这些歌</button>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>两处入口：</b>① 设置 → 音乐库 → 收听报告（本地）；② 实验室 → 在线播放 → 收听报告（阿里云盘小时桶）。</p>
+</figure>
+
+  </div>
+</section>
+
+  <div class="pagenav">
+    <a href="06-car.html">← 车机版</a>
+    <a href="index.html">↑ 全部屏</a>
+    <a href="10-tools.html">工具与实验 →</a>
+  </div>
+</div>
+
+<script src="ui.js"></script>
+</body>
+</html>

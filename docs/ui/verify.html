@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>模拟器验证 · 听风 WindTone UI</title>
+<script>
+(function(){
+  try{
+    var saved=localStorage.getItem('wt-ui-theme');
+    var theme=saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme',theme);
+  }catch(e){
+    document.documentElement.setAttribute('data-theme','dark');
+  }
+})();
+</script>
+<link rel="stylesheet" href="ui.css">
+</head>
+<body>
+<script src="ui-sprite.js"></script>
+<header class="board-head">
+  <div class="bh-row">
+    <a class="backdocs" href="index.html">← 效果图总览</a>
+    <div class="bh-title">模拟器验证<small>对照 HTML 原型 · 用 AVD 看真机布局</small></div>
+    <span class="bh-badge">scripts/emulator.sh</span>
+    <button class="tgl" id="themeBtn">🌙 深色主题</button>
+  </div>
+  <nav class="bh-nav"><a href="01-main.html">主界面</a><a href="02-player.html">播放页</a><a href="03-sheets.html">抽屉与弹窗</a><a href="04-settings.html">设置页</a><a href="05-extras.html">小组件·通知</a><a href="06-car.html">车机版</a><a href="09-online.html">在线与云盘</a><a href="10-tools.html">工具与实验</a><a href="08-floating-lyrics.html">悬浮歌词</a><a href="07-spec.html">颜色与尺寸</a><a href="verify.html" class="on">模拟器验证</a></nav>
+</header>
+<div class="wrap">
+<section class="sec">
+  <div class="sec-hd"><h2>用模拟器验证效果图</h2><span>不依赖 SDK 也能打开本页；下列命令在仓库根目录执行（Git Bash）</span></div>
+  <div class="intro" style="margin:0 0 18px">
+    <b>目标：</b>HTML 效果图是设计基准；AVD 用来核对 Compose 实机布局是否跟上。<br>
+    <b>Windows：</b>用 <code>C:\Program Files\Git\bin\bash.exe</code> 跑脚本。加 <code>--window</code> 会弹出模拟器窗口。<br>
+    <b>注意：</b>模拟器不能验证厂商 ROM 悬浮窗拦截与真实 EQ 听感——那两项仍需真机。
+  </div>
+  <div class="hub-grid">
+    <div class="hub-card">
+      <span class="hub-n">phone</span><b>手机 AVD · wt_phone</b>
+      <span>对照章节：01–05、08–10（手机框）</span>
+      <pre style="margin-top:10px;white-space:pre-wrap;font-size:12px;line-height:1.45">bash scripts/emulator.sh create wt_phone
+bash scripts/emulator.sh start wt_phone --window
+bash scripts/emulator.sh wait wt_phone
+# 安装 debug 包后点选对应页面
+bash scripts/emulator.sh shot wt_phone docs/ui/_shot-phone.png
+bash scripts/emulator.sh stop wt_phone</pre>
+    </div>
+    <div class="hub-card">
+      <span class="hub-n">auto</span><b>车机 AVD · wt_auto</b>
+      <span>对照章节：06-car、08 车机悬浮预设</span>
+      <pre style="margin-top:10px;white-space:pre-wrap;font-size:12px;line-height:1.45">bash scripts/emulator.sh create wt_auto
+bash scripts/emulator.sh start wt_auto --window
+bash scripts/emulator.sh wait wt_auto
+bash scripts/emulator.sh shot wt_auto docs/ui/_shot-auto.png
+bash scripts/emulator.sh stop wt_auto</pre>
+    </div>
+    <div class="hub-card">
+      <span class="hub-n">tablet</span><b>平板 AVD · wt_tablet（可选）</b>
+      <span>双栏/大屏探针；HTML 以手机+车机为主</span>
+      <pre style="margin-top:10px;white-space:pre-wrap;font-size:12px;line-height:1.45">bash scripts/emulator.sh create wt_tablet
+bash scripts/emulator.sh start wt_tablet --window
+bash scripts/emulator.sh list</pre>
+    </div>
+    <a class="hub-card" href="UI清单.md">
+      <span class="hub-n">清单</span><b>打开 UI 图清单</b>
+      <span>每屏 id · 手机/车机 · 章节 · Compose 路径 · 状态</span>
+    </a>
+  </div>
+  <div class="board" style="margin-top:18px">
+    <figure class="fig wide">
+      <div class="cap"><b>建议核对顺序</b></div>
+      <div style="padding:14px 16px;font-size:13px;line-height:1.8">
+        <b>手机 wt_phone：</b>
+        <a href="01-main.html">主界面</a> →
+        <a href="02-player.html">播放页</a> →
+        <a href="04-settings.html">设置</a> →
+        <a href="09-online.html">在线与云盘</a> →
+        <a href="10-tools.html">工具与实验</a> →
+        <a href="08-floating-lyrics.html">悬浮歌词</a><br>
+        <b>车机 wt_auto：</b>
+        <a href="06-car.html">车机版</a>（含歌手/文件夹/歌单/搜索/阿里云盘）→
+        <a href="08-floating-lyrics.html#scr-car-overlay">车机悬浮样式</a>
+      </div>
+      <p class="note">本页可在 <code>file://</code> 下直接打开。章节效果图同样支持双击 HTML 本地预览；总览页的「全部屏索引」跨章扫描需要 HTTP。</p>
+    </figure>
+  </div>
+</section>
+</div>
+<script src="ui.js"></script>
+</body>
+</html>

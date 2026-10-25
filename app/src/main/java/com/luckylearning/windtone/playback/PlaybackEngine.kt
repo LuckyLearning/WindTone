@@ -11,6 +11,7 @@ import com.luckylearning.windtone.data.AudioInspector
 import com.luckylearning.windtone.data.BootStatus
 import com.luckylearning.windtone.data.CoverRepository
 import com.luckylearning.windtone.data.CrashLog
+import com.luckylearning.windtone.data.LocalLyricsMatch
 import com.luckylearning.windtone.data.LyricsLoader
 import com.luckylearning.windtone.data.MessageBus
 import com.luckylearning.windtone.data.OverlayPreset
@@ -1405,7 +1406,14 @@ class PlaybackEngine(
         lyricsJob = scope.launch {
             // ⚠️ 这里的 runCatching 会把 CancellationException 一并吞掉，于是「被取消的旧请求」
             //    仍会往下走一步。必须用序号挡住它，否则切歌瞬间会把旧歌（或空）的歌词写回去。
-            val raw = runCatching { lyricsLoader.load(song) }.getOrDefault(Lyrics.EMPTY)
+            var raw = runCatching { lyricsLoader.load(song) }.getOrDefault(Lyrics.EMPTY)
+            // 网盘/在线曲：云侧车与远程内嵌都空时，尝试本机曲库同名曲（不联网搜词）
+            if (raw.isEmpty) {
+                val match = LocalLyricsMatch.find(librarySongs, song)
+                if (match != null && match.stableKey != song.stableKey) {
+                    raw = runCatching { lyricsLoader.load(match) }.getOrDefault(Lyrics.EMPTY)
+                }
+            }
             if (seq != lyricsSeq) return@launch
             rawLyrics = raw
             _player.update {
@@ -1592,74 +1600,4 @@ class PlaybackEngine(
         /** 睡眠定时到点前的渐弱时长：10 秒内线性降为 0（文档承诺的「淡出渐弱」） */
         private const val SLEEP_FADE_MS = 10_000L
     }
-}
-
-/**
- * 播放域对外的**动作面**。
- *
- * 抽成接口的唯一目的：让 `PlayerViewModel` 用 Kotlin 的委托（`by`）把它整块转出去，
- * 而不是手写四十个转发方法——转发代码既没有信息量，又会在加新动作时被漏掉。
- */
-interface PlayerActions : OverlayActions {
-    fun restoreQueueIfNeeded()
-
-    /** 开机后台起播：不经界面恢复上次队列并直接开播（v1.1.24） */
-    fun startPlaybackInBackground()
-    fun playQueue(queue: List<Song>, startIndex: Int)
-
-    /** 随机播放一整批歌（先切成「随机 + 列表循环」再起播），见 [PlaybackEngine.playShuffled] */
-    fun playShuffled(songs: List<Song>)
-    fun togglePlay()
-    fun next()
-    fun previous()
-    fun seekTo(ms: Long)
-    fun cyclePlayMode()
-    fun playNext(song: Song)
-    fun enqueue(songs: List<Song>)
-    fun refreshQueue()
-    fun jumpToQueue(index: Int)
-    fun removeQueueItem(index: Int)
-    fun moveQueueItem(from: Int, to: Int)
-    fun setSpeed(speed: Float)
-
-    /** 变调：半音（-12..+12，0 = 原调），见 `playback/Pitch` */
-    fun setPitchSemitones(semitones: Int)
-    fun sleepAfter(minutes: Int)
-    fun sleepEndOfSong()
-
-    /** 播完当前专辑（当前曲剩余 + 队列里后续同专辑曲目） */
-    fun sleepEndOfAlbum()
-    fun cancelSleep()
-    fun setSkipSilence(enabled: Boolean)
-
-    /** 「打开应用继续上次播放」：冷启动恢复队列后是否自动起播（v1.1.16） */
-    fun setAutoResume(enabled: Boolean)
-
-    /** 开机后台起播（默认关） */
-    fun setAutoPlayOnBoot(enabled: Boolean)
-    fun openPlayer()
-    fun closePlayer()
-    fun setLyricOffset(deltaMs: Int)
-    fun resetLyricOffset()
-    fun setLyricOffsetAbsolute(offsetMs: Int)
-    fun setLyricScale(scale: Float)
-
-    /** 点歌词行是否跳转（默认关） */
-    /** 播放页左侧竖排是否显示「无障碍状态」按钮（v1.1.92） */
-    fun setPlayerA11yAction(enabled: Boolean)
-
-    fun setLyricTapSeeks(enabled: Boolean)
-
-    /**
-     * 双语歌词显示模式：0 中英都显示 / 1 只显示中文 / 2 只显示英文（v1.1.18）。
-     * 只影响显示；歌词文件与导出不受影响。
-     */
-    fun setLyricBilingual(mode: Int)
-
-    /** 未经「双语歌词」过滤的原始歌词（导出用：译文要一起写进 LRC） */
-    fun lyricsForExport(): Lyrics
-    fun setLyricsPaneVisible(visible: Boolean)
-    fun setCarMode(enabled: Boolean)
-    fun inspectAudio(song: Song)
-    fun clearAudioInfo()
 }

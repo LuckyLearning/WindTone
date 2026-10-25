@@ -18,7 +18,7 @@ import java.net.URL
 /** 阿里云盘里的一个条目（文件或文件夹） */
 @Immutable
 data class AliyunEntry(
-    /** 文件 id（开放平台是字符串，与百度的数值 fsId 不同） */
+    /** 文件 id（开放平台是字符串） */
     val fileId: String,
     val name: String,
     val isDir: Boolean,
@@ -87,7 +87,7 @@ object AliyunRules {
     }
 
     /**
-     * 列目录的排序：文件夹在前、名称不区分大小写 —— 与百度网盘页保持同一套观感。
+     * 列目录的排序：文件夹在前、名称不区分大小写 —— 文件夹在前、名称不区分大小写。
      */
     fun sorted(entries: List<AliyunEntry>): List<AliyunEntry> =
         entries.sortedWith(compareByDescending<AliyunEntry> { it.isDir }.thenBy { it.name.lowercase() })
@@ -134,7 +134,7 @@ object AliyunRules {
  * 阿里云盘 OpenAPI 客户端 —— 在线播放（只读）。
  *
  * 只做三件事：取用户信息（拿盘 id 与昵称）、列目录（marker 分页）、取下载直链。
- * 上传/删除/重命名一律不做 —— 这个应用对网盘是**只读播放器**，与百度网盘页同一原则：
+ * 上传/删除/重命名一律不做 —— 这个应用对网盘是**只读播放器**
  * 能力越小越不容易被风控，也越好解释权限。
  *
  * 端点与参数**按令牌来源分家族**（2026-10 实锤，见 [AliyunEndpoints.WEB_BASE] 注释）：
@@ -143,7 +143,7 @@ object AliyunRules {
  *  · **开放平台线（OA，自备密钥）**→ OpenAPI `openapi.alipan.com/adrive/v1.0`（照
  *    OpenList `aliyundrive_open` 驱动对齐）。
  *  · 与阿里云盘的关键差异：
- *  · 全部 JSON POST + `Authorization: Bearer` 头（百度是 GET + query 上的 token）；
+ *  · 全部 JSON POST + `Authorization: Bearer` 头（部分网盘是 GET + query 上的 token）；
  *  · 列目录**没有路径**，靠 parent_file_id（根目录固定叫 `root`）；
  *  · 直链**没有批量接口**，一个文件一次请求，调用方按需取；
  *  · 直链本身公开可播（带 4 小时有效期签名），不需要 UA 伪装、不需要拼 token ——
@@ -311,7 +311,7 @@ class AliyunDrive(
      *
      * 有效期按 4 小时申请（与 OpenList 一致）。直链**每次播放前现取**：虽然 4 小时内
      * 可复用，但「队列里的歌明天还在不在、用户有没有重新登录」都不可控，现取的
-     * 复杂度最低，与百度页同一策略。
+     * 复杂度最低：拿到 URL 即可播。
      */
     suspend fun downloadUrl(driveId: String, fileId: String): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
@@ -340,7 +340,7 @@ class AliyunDrive(
      * 扫描编排（层深 / 排序 / 跳过）在 [AliyunScanRules.scan]，这里只负责把
      * 一个目录的所有页拉平；单页失败直接抛给上层按「跳过该目录」处理。
      */
-    private suspend fun listAll(driveId: String, parentFileId: String): List<AliyunEntry> {
+    internal suspend fun listAll(driveId: String, parentFileId: String): List<AliyunEntry> {
         val all = mutableListOf<AliyunEntry>()
         var marker = ""
         do {

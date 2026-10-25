@@ -3,9 +3,9 @@ layout: default
 title: 数据库设计 MusicDb
 ---
 
-# WindTone 数据库开发文档（MusicDb · v4）
+# WindTone 数据库开发文档（MusicDb · v5）
 
-> 更新：2026-10-14 · 对应代码：`data/db/`（`MusicDb` version **4**）· `data/Prefs.kt`
+> 更新：2026-10-25 · 对应代码：`data/db/`（`MusicDb` version **5**）· `data/Prefs.kt`
 > 回答的问题：**现在哪些数据存在哪、为什么这么分、怎么迁、改的时候别碰什么。**
 
 ---
@@ -26,7 +26,7 @@ title: 数据库设计 MusicDb
 
 ---
 
-## 二、Room v4 结构（8 表 / 7 DAO）
+## 二、Room v5 结构（9 表 / 8 DAO）
 
 文件 `music_player.db`（**勿改名**），`exportSchema = true`，schema 快照在
 `app/schemas/com.luckylearning.windtone.data.db.MusicDb/`（**入库**，改表后必须跟着提交）。
@@ -114,7 +114,8 @@ title: 数据库设计 MusicDb
 | v1 | 初版四表（`songs_cache` / `play_stats` / `song_overrides` / `playlists` 等） |
 | v2 | `play_stats` 加 `playedMs` |
 | v3 | 新增 `scanned_folders`（目录登记，当时与 `prefs.folderUris` 双写） |
-| **v4** | **曲库化：8 张表、整数主键、软删、每曲状态合并、队列入表**（当前版本） |
+| v4 | 曲库化：8 张表、整数主键、软删、每曲状态合并、队列入表 |
+| **v5** | **新增 `listen_log` 收听日志表 + ListenLogDao**（当前版本） |
 
 **不保留任何迁移路径**（2026-10-14 产品口径：**不做跨版本兼容，软件重新手动安装**）：
 代码里**没有** `Migrations.kt`、**没有** `PrefsRoomMigration.kt`，`MusicDb` 只挂 `fallbackToDestructiveMigration()`。
@@ -125,6 +126,17 @@ title: 数据库设计 MusicDb
 > 记录在 `docs/数据层重构规划.md` §十，将来重写迁移时可当参考。
 
 ---
+
+### 2.x 收听日志 `listen_log` — v5 新增
+
+按小时桶累计收听毫秒，供收听报告画日曲线 / 时段分布。**无外键、不挂 songId**。
+
+| 列 | 说明 |
+|---|---|
+| `hourEpoch` | 主键：桶的小时起点（`epochMillis / 3600000`） |
+| `ms` | 该小时内累计收听毫秒数 |
+
+DAO：`ListenLogDao`（`since` / `add` / `prune` / `clear`）。保留约 `ListenLogEntity.RETENTION_DAYS`（400）天，由 prune 清理。
 
 ## 三、没有启动期搬迁（原 `PrefsRoomMigration` 已删除）
 
@@ -169,7 +181,7 @@ v4 起全部进 Room。Prefs 里也**没有**任何遗留键搬迁逻辑或 `dat
 4. **改完结构要在真机重装验证一次**：本版没有迁移测试兜底，`LibraryDbTest` 只保证 DAO / CASCADE / 软删语义正确。
 5. **DAO 调用一律在 `Dispatchers.IO`**；跨表写入用 `db.withTransaction { }`。
 6. 手写 DDL 必须与 Room 期望**逐字一致**（列顺序无所谓，类型/约束/默认值有所谓）；
-   权威结构看 `app/schemas/com.luckylearning.windtone.data.db.MusicDb/4.json` 的 `createSql`。
+   权威结构看 `app/schemas/com.luckylearning.windtone.data.db.MusicDb/5.json` 的 `createSql`。
 
 ---
 
@@ -180,7 +192,7 @@ v4 起全部进 Room。Prefs 里也**没有**任何遗留键搬迁逻辑或 `dat
 | 加表 | `Entities.kt` 加 `@Entity` → `Daos.kt` 加 DAO → `MusicDb` 的 `entities` / 抽象方法 / **`version +1`** → 注入需要的 ViewModel |
 | 加列 | 同上；**不写 `ALTER TABLE`**（本版无迁移），改完 `version +1` 让兜底重建即可 |
 | 改索引 | 同上，索引写在 `@Entity(indices = [...])` 上 |
-| 看当前真表结构 | `app/schemas/com.luckylearning.windtone.data.db.MusicDb/4.json` 的 `createSql` |
+| 看当前真表结构 | `app/schemas/com.luckylearning.windtone.data.db.MusicDb/5.json` 的 `createSql` |
 | 真机查库 | `adb shell "run-as com.luckylearning.windtone sqlite3 databases/music_player.db 'SELECT ...'"` |
 | 跑 DAO 回归 | `./gradlew testDebugUnitTest --tests "*LibraryDbTest"`（Robolectric，真实 SQLite） |
 

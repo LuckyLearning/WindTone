@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>十、工具与实验（手机） · 听风 WindTone UI 效果图</title>
+<script>
+(function(){
+  try{
+    var saved=localStorage.getItem('wt-ui-theme');
+    var theme=saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme',theme);
+  }catch(e){
+    document.documentElement.setAttribute('data-theme','dark');
+  }
+})();
+</script>
+<link rel="stylesheet" href="ui.css">
+</head>
+<body>
+<script src="ui-sprite.js"></script>
+
+<header class="board-head">
+  <div class="bh-row">
+    <a class="backdocs" href="index.html">← 效果图总览</a>
+    <div class="bh-title">十、工具与实验（手机）<small>UI 效果图 · 设计基准（第 10 章）</small></div>
+    <span class="bh-badge"><span id="pageCount">6</span> 屏</span>
+    <span class="bh-badge">对齐 v1.1.98 · 曲库工具 / 实验室 / 诊断</span>
+    <button class="tgl" id="themeBtn">🌙 深色主题</button>
+  </div>
+  <nav class="bh-nav"><a href="01-main.html">主界面</a><a href="02-player.html">播放页</a><a href="03-sheets.html">抽屉与弹窗</a><a href="04-settings.html">设置页</a><a href="05-extras.html">小组件·通知</a><a href="06-car.html">车机版</a><a href="09-online.html">在线与云盘</a><a href="10-tools.html" class="on">工具与实验</a><a href="08-floating-lyrics.html">悬浮歌词</a><a href="07-spec.html">颜色与尺寸</a><a href="verify.html">模拟器验证</a></nav>
+</header>
+
+<div class="wrap">
+<section class="sec" id="sec-tools">
+  <div class="sec-hd"><h2>十、工具与实验（手机）</h2><span>DuplicateCleanupScreen · SettingsLabPage · SettingsMenuOrderPage · BootDiagView · SplitProbeView</span></div>
+  <div class="board">
+<figure class="fig" id="scr-dup-empty">
+  <div class="cap"><b>㉟ 重复歌曲清理 · 未扫描 / 空态</b><em>DuplicateCleanupScreen.kt</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">重复歌曲清理</div></div>
+      </div>
+      <div class="list" style="padding:8px 18px 16px">
+        <div style="font-size:12px;color:var(--on-surface-variant);line-height:1.55;margin-bottom:12px">判断依据是标题 + 时长 + 大小（精确到字节）。内容完全一样才算重复 — 宁可保守、也不误伤同名翻唱。<br>每组保留一首；移除副本不是删除文件，收藏与播放统计会保留，可在「恢复已排除」里找回。</div>
+        <button class="btn" style="width:100%">开始扫描</button>
+        <div class="hint-center" style="margin-top:28px">
+          <div class="hint-title">还没开始扫描</div>
+          <div class="hint-sub">点上面开始，或曲库更新后再扫一次。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>入口：</b>设置 → 音乐库 → 重复歌曲清理。车机无独立页（清单标 N/A）。</p>
+</figure>
+
+<figure class="fig" id="scr-dup-result">
+  <div class="cap"><b>㉟B 重复歌曲清理 · 扫描结果</b><em>DuplicateCleanupScreen.kt · GroupCard / CopyRow</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">重复歌曲清理</div></div>
+      </div>
+      <div class="list" style="padding:8px 14px 16px">
+        <div style="font-size:12px;margin-bottom:8px">找到 3 组重复，可移除 5 首</div>
+        <button class="btn" style="width:100%;margin-bottom:10px">移除这 5 首重复副本</button>
+        <div style="background:var(--surface-variant);border-radius:14px;padding:12px;margin-bottom:10px">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px">晴天 · 周杰伦 · 4:29</div>
+          <div class="song-row" style="padding:6px 0"><div class="song-main"><div class="song-title">晴天.flac</div><div class="song-sub"><span>28.4 MB · 保留</span></div></div><span class="badge badge-emb">保留</span></div>
+          <div class="song-row" style="padding:6px 0"><div class="song-main"><div class="song-title">晴天.mp3</div><div class="song-sub"><span>8.1 MB · 移除</span></div></div><span class="badge">移除</span></div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn ghost" style="flex:1">清除扫描结果</button>
+          <button class="btn ghost" style="flex:1">重新扫描</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>确认框：</b>音频文件不会被删除；只从曲库视图排除，可用「恢复已排除」找回。</p>
+</figure>
+
+<figure class="fig" id="scr-settings-lab">
+  <div class="cap"><b>㊹ 设置页 · 实验室</b><em>SettingsLabPage.kt · SettingsPage.LAB（v1.1.80）</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">实验室</div></div>
+      </div>
+      <div class="list" style="padding:4px 18px 12px">
+        <div style="font-size:12px;color:var(--on-surface-variant);line-height:1.5;margin:8px 0 12px">放着<strong>实验性 / 尚未完全打磨确认的</strong>功能。一段时间确认稳定后再挪到正式位置。</div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-bottom:8px">
+          <div style="flex:1"><div style="font-size:15px">在线播放</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">缓存上限 / 收听报告仍在打磨</div></div>
+          <span class="badge">实验</span><svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-bottom:8px">
+          <div style="flex:1"><div style="font-size:15px">调整菜单顺序</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">自定义设置主页分类卡顺序</div></div>
+          <span class="badge">实验</span><svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>主页六卡：</b>外观 / 播放 / 歌词 / 音乐库 / 关于与诊断 / 实验室。</p>
+</figure>
+
+<figure class="fig" id="scr-menu-order">
+  <div class="cap"><b>㊹B 设置页 · 调整菜单顺序</b><em>SettingsOnlinePage.kt · SettingsMenuOrderPage</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="detail-hd" style="padding:4px 10px 8px">
+        <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+        <div class="dh-main"><div class="detail-title">调整菜单顺序</div></div>
+      </div>
+      <div class="list" style="padding:8px 18px 12px">
+        <div style="font-size:12px;color:var(--on-surface-variant);margin-bottom:10px">上下移动卡片，改设置主页分类顺序。</div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <div style="flex:1;font-size:15px">外观</div>
+          <button class="ibtn sm"><svg class="ic"><use href="#i-up"/></svg></button>
+          <button class="ibtn sm"><svg class="ic"><use href="#i-down"/></svg></button>
+        </div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <div style="flex:1;font-size:15px">播放</div>
+          <button class="ibtn sm"><svg class="ic"><use href="#i-up"/></svg></button>
+          <button class="ibtn sm"><svg class="ic"><use href="#i-down"/></svg></button>
+        </div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <div style="flex:1;font-size:15px">歌词</div>
+          <button class="ibtn sm"><svg class="ic"><use href="#i-up"/></svg></button>
+          <button class="ibtn sm"><svg class="ic"><use href="#i-down"/></svg></button>
+        </div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <div style="flex:1;font-size:15px">音乐库</div>
+          <button class="ibtn sm"><svg class="ic"><use href="#i-up"/></svg></button>
+          <button class="ibtn sm"><svg class="ic"><use href="#i-down"/></svg></button>
+        </div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <div style="flex:1;font-size:15px">关于与诊断</div>
+          <button class="ibtn sm"><svg class="ic"><use href="#i-up"/></svg></button>
+          <button class="ibtn sm"><svg class="ic"><use href="#i-down"/></svg></button>
+        </div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <div style="flex:1;font-size:15px">实验室</div>
+          <button class="ibtn sm"><svg class="ic"><use href="#i-up"/></svg></button>
+          <button class="ibtn sm"><svg class="ic"><use href="#i-down"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>顺序写入设置；与 <code>SettingsPage</code> 补齐逻辑配合，避免索引越界。</p>
+</figure>
+
+<figure class="fig" id="scr-boot-diag">
+  <div class="cap"><b>㊺ 启动诊断页</b><em>BootDiagView.kt · 启动异常时的原生诊断页</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div style="padding:16px 14px;background:var(--surface);min-height:560px">
+        <div style="font-size:18px;font-weight:700;margin-bottom:8px">WindTone 启动诊断</div>
+        <div style="font-size:12px;color:var(--on-surface-variant);line-height:1.55;margin-bottom:12px">系统级排障页：每次打开都会停在这一页，直到点「继续应用」。</div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:10px 12px;margin-bottom:8px">
+          <div style="font-size:13px;font-weight:600">设备与系统</div>
+          <div style="font-size:11px;color:var(--on-surface-variant);margin-top:4px">制造商 / 型号 / Android 版本 / ABI</div>
+        </div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:10px 12px;margin-bottom:8px">
+          <div style="font-size:13px;font-weight:600">屏幕</div>
+          <div style="font-size:11px;color:var(--on-surface-variant);margin-top:4px">分辨率 · 密度 · 刷新率 · 字体缩放</div>
+        </div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:10px 12px;margin-bottom:8px">
+          <div style="font-size:13px;font-weight:600">上一轮崩溃</div>
+          <div style="font-size:11px;color:var(--on-surface-variant);margin-top:4px">还没有上一轮记录。</div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:16px">
+          <button class="btn" style="flex:1">继续应用</button>
+          <button class="btn ghost" style="flex:1">复制全部</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>形态：</b>诊断用途；清单标「诊断/实验」。</p>
+</figure>
+
+<figure class="fig" id="scr-split-probe">
+  <div class="cap"><b>㊺B 分栏探测（开发探针）</b><em>SplitProbeView.kt · 原生 View / Compose / App 半屏对照</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div style="padding:12px;background:var(--surface);min-height:560px;display:flex;flex-direction:column;gap:8px">
+        <div style="font-size:14px;font-weight:600">分栏探测</div>
+        <div style="flex:1;display:flex;gap:6px">
+          <div style="flex:1;border-radius:12px;background:var(--surface-variant);padding:10px;font-size:12px;line-height:1.45">
+            <b>第一栏：原生 View</b><br>对照系统 insets / 密度。
+          </div>
+          <div style="flex:1;border-radius:12px;background:var(--surface-variant);padding:10px;font-size:12px;line-height:1.45">
+            <b>第二栏：Compose（主题外）</b><br>不套 App 主题的对照面。
+          </div>
+        </div>
+        <div style="flex:1;border-radius:12px;background:var(--primary-container);padding:10px;font-size:12px;line-height:1.45;color:var(--on-primary-container)">
+          <b>第三栏：App Compose</b><br>走 WindTone 主题的半屏探针内容。
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>用途：</b>开发排障，不对最终用户展示。清单标「开发探针 / 待对齐产品入口」。</p>
+</figure>
+
+  </div>
+</section>
+
+  <div class="pagenav">
+    <a href="09-online.html">← 在线与云盘</a>
+    <a href="index.html">↑ 全部屏</a>
+    <a href="08-floating-lyrics.html">悬浮歌词 →</a>
+  </div>
+</div>
+
+<script src="ui.js"></script>
+</body>
+</html>

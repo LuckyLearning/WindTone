@@ -40,4 +40,10 @@ object LyricsMatcher {
         }
         return s
     }
+
+    /** 在文件名列表里挑得分最高的歌词文件；没有命中返回 null */
+    fun pickBest(names: List<String>, baseName: String): String? =
+        names.mapNotNull { n -> score(n, baseName).takeIf { it >= 0 }?.let { it to n } }
+            .maxByOrNull { it.first }
+            ?.second
 }

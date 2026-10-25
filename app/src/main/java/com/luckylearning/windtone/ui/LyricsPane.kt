@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -42,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.lyrics.LyricLine
 import com.luckylearning.windtone.lyrics.Lyrics
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -144,16 +146,13 @@ private fun NoLyricsHint() {
         modifier = Modifier.padding(28.dp),
     ) {
         Text(
-            "暂无歌词",
+            stringResource(R.string.lyrics_none),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(10.dp))
         Text(
-            "歌词获取顺序：\n" +
-                "1. 音频同目录的同名 .lrc / .krc / .yrc 文件\n" +
-                "2. 音频文件内嵌歌词（MP3 的 USLT/SYLT、FLAC/Ogg 的 LYRICS、M4A 的 ©lyr）\n\n" +
-                "把歌词文件放到歌曲同一目录，或在电脑上用音乐标签工具写入内嵌歌词即可。",
+            stringResource(R.string.lyrics_fetch_order_hint),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -173,7 +172,7 @@ private fun PlainLyrics(lyrics: Lyrics, scale: Float) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            "纯文本歌词（无时间轴）",
+            stringResource(R.string.lyrics_plain_text_no_timeline),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 14.dp),

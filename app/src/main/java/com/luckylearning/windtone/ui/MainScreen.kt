@@ -75,13 +75,6 @@ import com.luckylearning.windtone.state.PlaylistInfo
 import com.luckylearning.windtone.state.VirtualPlaylist
 import com.luckylearning.windtone.state.virtualPlaylistInfo
 
-fun requiredAudioPermission(): String =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_AUDIO
-    else Manifest.permission.READ_EXTERNAL_STORAGE
-
-fun hasPermission(context: Context, permission: String): Boolean =
-    ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
-
 /**
  * 大屏阈值：≥ 840dp 视为「车机 / 平板 / 折叠屏展开」。
  *

@@ -321,8 +321,6 @@ internal fun SettingsLibraryPage(
     onOpenReport: () -> Unit,
     onOpenDuplicates: () -> Unit,
     onOpenStats: () -> Unit,
-    /** 打开「百度网盘」子页（v1.1.39） */
-    onOpenBaidu: () -> Unit,
     library: LibraryUiState,
 ) {
     var showMinDurationDialog by remember { mutableStateOf(false) }
@@ -353,13 +351,6 @@ internal fun SettingsLibraryPage(
         onReset = resetAction(minSongDurationSec != SettingsDefaults.MIN_DURATION_SEC) {
             onMinSongDurationSec(SettingsDefaults.MIN_DURATION_SEC)
         },
-    )
-
-    ActionRow(
-        title = stringResource(R.string.baidu_netdisk),
-        subtitle = stringResource(R.string.scan_to_authorize_and_play),
-        onClick = onOpenBaidu,
-        chevron = true,
     )
 
     if (showMinDurationDialog) {

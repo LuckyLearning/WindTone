@@ -12,7 +12,7 @@ class AliyunDriveTest {
     // ------------------------------------------------------------ 文件类型与展示名
 
     @Test
-    fun `可播放音频的判定与百度页同一套后缀`() {
+    fun `可播放音频的判定可播放音频后缀判定`() {
         assertTrue(AliyunRules.isPlayableAudio("晴天.mp3"))
         assertTrue(AliyunRules.isPlayableAudio("晴天.FLAC"))
         assertTrue(AliyunRules.isPlayableAudio("a.b.c.m4a"))

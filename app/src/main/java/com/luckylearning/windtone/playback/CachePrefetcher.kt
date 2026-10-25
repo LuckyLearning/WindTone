@@ -15,7 +15,6 @@ import androidx.media3.datasource.cache.CacheKeyFactory
 import androidx.media3.exoplayer.offline.Downloader
 import androidx.media3.exoplayer.offline.ProgressiveDownloader
 import com.luckylearning.windtone.data.aliyun.AliyunEndpoints
-import com.luckylearning.windtone.data.baidu.BaiduRules
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.data.model.TrackFragment
 import kotlinx.coroutines.CoroutineScope
@@ -30,9 +29,8 @@ import kotlinx.coroutines.launch
 /**
  * 队列后续曲目的**后台预取**（v1.1.46）。
  *
- * 为什么这样做：百度对第三方应用的下载限速是按**单个连接**算的（这不是猜测 —— 同一首歌
- * 用两个连接分段拉，合计速度明显高于单连接）。而 ExoPlayer 播放时只开一条连接，
- * 所以「当前这首」首播速度的上限被那条连接钉死了，代码里绕不过去。
+ * 为什么要预取：网盘直链常有单连接吞吐上限；同一首歌用多连接分段下载，合计速度通常高于播放器单连接，
+ * 所以「当前这首」的垫底速度由并行连接数抬高，听感卡顿会少一些。
  *
  * 但切歌那一下的等待是可以在用户没注意时消掉的：当前这首播稳（缓冲领先 20 秒）之后，
  * 用最多两个连接把**接下来两首**先拉进 [OnlineMediaCache] 的同一个 `SimpleCache`，
@@ -136,17 +134,10 @@ object CachePrefetcher {
     /** 下载一首到缓存；返回是否真的下成功（已完整缓存也算成功） */
     private fun download(context: Context, song: Song): Boolean {
         val cache = OnlineMediaCache.cacheForPrefetch(context) ?: return false
-        val pan = BaiduRules.needsPanUserAgent(song.uri.host)
-        // 键与播放侧完全一致：网盘用 pan:<fsId>，普通在线地址用完整 URI
+        // 键与播放路径一致（阿里云盘稳定键优先）
         val key = OnlineMediaCache.stableKey(song.uri)
             ?: song.uri.buildUpon().fragment(null).build().toString()
-        val uri = if (pan) {
-            val signed = BaiduRules.withAccessToken(song.uri.toString(), OnlineMediaCache.panToken())
-            // 摘掉只用于算键的 `#wt=…`，它不该进真实请求（v1.1.45 的教训）
-            Uri.parse(signed).buildUpon().fragment(null).build()
-        } else {
-            song.uri.buildUpon().fragment(null).build()
-        }
+        val uri = song.uri.buildUpon().fragment(null).build()
 
         val cacheFactory = CacheDataSource.Factory()
             .setCache(cache)
@@ -170,21 +161,16 @@ object CachePrefetcher {
     }
 
     private fun httpFactory(song: Song): DefaultHttpDataSource.Factory {
-        val pan = BaiduRules.needsPanUserAgent(song.uri.host)
-        val aliyun = TrackFragment.parse(song.uri.fragment) != null
+        val aliyun = TrackFragment.parse(song.uri.fragment) != null ||
+            AliyunEndpoints.isDownloadHost(song.uri.host)
         val factory = DefaultHttpDataSource.Factory()
             .setUserAgent(
-                when {
-                    pan -> "pan.baidu.com"
-                    aliyun -> AliyunEndpoints.DOWNLOAD_UA
-                    else -> USER_AGENT
-                },
+                if (aliyun) AliyunEndpoints.DOWNLOAD_UA else USER_AGENT,
             )
             .setConnectTimeoutMs(15_000)
             .setReadTimeoutMs(20_000)
-            // 网盘 / 电台经常 302 到别的节点甚至别的协议，不放开会直接失败
+            // 车机 / 后台常走 302 跨协议节点，关掉跨协议会直接失败
             .setAllowCrossProtocolRedirects(true)
-        if (pan) factory.setDefaultRequestProperties(BaiduRules.panHeaders())
         if (aliyun) factory.setDefaultRequestProperties(AliyunEndpoints.downloadHeaders())
         return factory
     }

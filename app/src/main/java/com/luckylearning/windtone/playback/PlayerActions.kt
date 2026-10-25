@@ -1,0 +1,71 @@
+package com.luckylearning.windtone.playback
+
+import com.luckylearning.windtone.data.model.Song
+import com.luckylearning.windtone.lyrics.Lyrics
+
+/**
+ * Playback actions facade for UI / ViewModel (`by` delegation).
+ */
+interface PlayerActions : OverlayActions {
+    fun restoreQueueIfNeeded()
+
+    /** 开机后台起播：不经界面恢复上次队列并直接开播（v1.1.24） */
+    fun startPlaybackInBackground()
+    fun playQueue(queue: List<Song>, startIndex: Int)
+
+    /** 随机播放一整批歌（先切成「随机 + 列表循环」再起播），见 [PlaybackEngine.playShuffled] */
+    fun playShuffled(songs: List<Song>)
+    fun togglePlay()
+    fun next()
+    fun previous()
+    fun seekTo(ms: Long)
+    fun cyclePlayMode()
+    fun playNext(song: Song)
+    fun enqueue(songs: List<Song>)
+    fun refreshQueue()
+    fun jumpToQueue(index: Int)
+    fun removeQueueItem(index: Int)
+    fun moveQueueItem(from: Int, to: Int)
+    fun setSpeed(speed: Float)
+
+    /** 变调：半音（-12..+12，0 = 原调），见 `playback/Pitch` */
+    fun setPitchSemitones(semitones: Int)
+    fun sleepAfter(minutes: Int)
+    fun sleepEndOfSong()
+
+    /** 播完当前专辑（当前曲剩余 + 队列里后续同专辑曲目） */
+    fun sleepEndOfAlbum()
+    fun cancelSleep()
+    fun setSkipSilence(enabled: Boolean)
+
+    /** 「打开应用继续上次播放」：冷启动恢复队列后是否自动起播（v1.1.16） */
+    fun setAutoResume(enabled: Boolean)
+
+    /** 开机后台起播（默认关） */
+    fun setAutoPlayOnBoot(enabled: Boolean)
+    fun openPlayer()
+    fun closePlayer()
+    fun setLyricOffset(deltaMs: Int)
+    fun resetLyricOffset()
+    fun setLyricOffsetAbsolute(offsetMs: Int)
+    fun setLyricScale(scale: Float)
+
+    /** 点歌词行是否跳转（默认关） */
+    /** 播放页左侧竖排是否显示「无障碍状态」按钮（v1.1.92） */
+    fun setPlayerA11yAction(enabled: Boolean)
+
+    fun setLyricTapSeeks(enabled: Boolean)
+
+    /**
+     * 双语歌词显示模式：0 中英都显示 / 1 只显示中文 / 2 只显示英文（v1.1.18）。
+     * 只影响显示；歌词文件与导出不受影响。
+     */
+    fun setLyricBilingual(mode: Int)
+
+    /** 未经「双语歌词」过滤的原始歌词（导出用：译文要一起写进 LRC） */
+    fun lyricsForExport(): Lyrics
+    fun setLyricsPaneVisible(visible: Boolean)
+    fun setCarMode(enabled: Boolean)
+    fun inspectAudio(song: Song)
+    fun clearAudioInfo()
+}

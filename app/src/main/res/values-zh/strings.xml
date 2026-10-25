@@ -497,7 +497,6 @@
     <string name="short_audio_filter_s">过滤短音频（&lt; %1$s 秒）</string>
     <string name="short_audio_filter_off">过滤短音频（未开启）</string>
     <string name="rescans_automatically_after_a_change">修改后自动重新扫描；填 0 关闭过滤</string>
-    <string name="baidu_netdisk">百度网盘</string>
     <string name="scan_to_authorize_and_play">扫码授权后直接播放网盘里的音乐（只读；需放在「我的应用数据/&lt;应用名&gt;」目录）</string>
     <string name="short_audio_filter">过滤短音频</string>
     <string name="audio_shorter_than_this_many">时长小于该秒数的音频不进入曲库；填 0 关闭过滤。默认 60 秒。</string>
@@ -606,4 +605,95 @@
     <!-- 通知渠道 -->
     <string name="notif_channel_name">音乐播放</string>
     <string name="notif_channel_desc">播放控制与当前曲目信息</string>
+
+    <!-- Debt 2026-10-25: lyrics empty + Aliyun chrome -->
+    <string name="lyrics_none">暂无歌词</string>
+    <string name="lyrics_fetch_order_hint">歌词获取顺序：\n1. 阿里云盘同目录侧车（.lrc / .krc / .yrc / .txt）\n2. 音频同目录的同名歌词文件\n3. 音频文件内嵌歌词（MP3 USLT/SYLT、FLAC/Ogg LYRICS、M4A ©lyr）\n4. 本机曲库同名曲的歌词（仅本地，不联网搜词）\n\n网盘曲若以上都没有，会如实显示本提示；请在云盘同目录放同名歌词，或把歌加入本机曲库。</string>
+    <string name="lyrics_plain_text_no_timeline">纯文本歌词（无时间轴）</string>
+    <string name="aliyun_status_not_signed_in">在线音乐 · 未连接</string>
+    <string name="aliyun_status_signed_in">已登录</string>
+    <string name="aliyun_status_signed_in_as">已登录 · %1$s</string>
+    <string name="aliyun_cd_back">返回</string>
+    <string name="aliyun_cd_open_menu">打开菜单</string>
+    <string name="aliyun_cd_more">更多操作</string>
+    <string name="aliyun_menu_open_app">打开网盘 App</string>
+    <string name="aliyun_menu_scan_playlist">扫描为歌单（含 2 层子目录）</string>
+    <string name="aliyun_menu_probe">播放自检（测直链）</string>
+    <string name="aliyun_menu_sign_out">退出登录</string>
+    <string name="aliyun_progress_checking_token">正在校验令牌…</string>
+    <string name="aliyun_default_playlist_name">云盘歌单</string>
+    <string name="aliyun_error_title">没能完成</string>
+    <string name="aliyun_probe_title">播放自检</string>
+    <string name="aliyun_got_it">知道了</string>
+
+    <!-- AliyunPanPage remaining UI (debt pass) -->
+    <string name="aliyun_account_default">阿里云盘账号</string>
+    <string name="aliyun_account_read_failed">账号信息读取失败</string>
+    <string name="aliyun_cd_enter_named">进入 %1$s</string>
+    <string name="aliyun_cd_load_more">清空搜索</string>
+    <string name="aliyun_cd_play_named">播放 %1$s</string>
+    <string name="aliyun_cd_refresh_dir">刷新当前目录</string>
+    <string name="aliyun_connect_body">扫码授权在应用内完成：用阿里云盘 App 扫二维码即可，无需跳转浏览器、无需复制粘贴。
+应用对网盘只读，不会上传、修改或删除任何文件。</string>
+    <string name="aliyun_connect_title">连接你的阿里云盘</string>
+    <string name="aliyun_creds_configured">已配置应用凭据：令牌刷新直连官方接口，只保存在本机。</string>
+    <string name="aliyun_creds_missing">未配置应用凭据：令牌刷新走 OpenList 在线接口，只保存在本机。</string>
+    <string name="aliyun_current_drive">当前盘：%1$s</string>
+    <string name="aliyun_delete_playlist">删除歌单</string>
+    <string name="aliyun_empty_folder">这个目录里没有内容。</string>
+    <string name="aliyun_error_account_detail">读取账号信息失败：%1$s</string>
+    <string name="aliyun_error_list_dir">列目录失败</string>
+    <string name="aliyun_error_no_drive_id">还没读到账号信息（盘 id 为空），等账号信息加载完再播放</string>
+    <string name="aliyun_error_no_playable_url">没有取到可播放的地址（文件可能已被删除、移入回收站或被屏蔽）</string>
+    <string name="aliyun_error_read_account">读取账号信息失败</string>
+    <string name="aliyun_error_scan_empty_hint">这个目录里没有音频文件，先进入一个有歌的目录再自检</string>
+    <string name="aliyun_error_scan_failed">扫描失败</string>
+    <string name="aliyun_folder">文件夹</string>
+    <string name="aliyun_format_unsupported"> · 格式暂不支持播放</string>
+    <string name="aliyun_load_more">加载更多</string>
+    <string name="aliyun_move_down">下移</string>
+    <string name="aliyun_move_up">上移</string>
+    <string name="aliyun_open_app">打开阿里云盘 App</string>
+    <string name="aliyun_paste_token">手动粘贴令牌</string>
+    <string name="aliyun_paste_token_body">把获取令牌页面上显示的「刷新令牌（Refresh Token）」整段粘贴进来。应用会先换一次令牌做校验，成功才保存。令牌是敏感凭据，只保存在本机，退出登录即清除。</string>
+    <string name="aliyun_paste_token_title">粘贴刷新令牌</string>
+    <string name="aliyun_play_all_count">播放本目录全部 · %1$d 首</string>
+    <string name="aliyun_playlist_meta">%1$d 首 · 来源：%2$s</string>
+    <string name="aliyun_playlist_name_label">歌单名</string>
+    <string name="aliyun_playlists_header">云盘歌单（%1$d）</string>
+    <string name="aliyun_probe_host">
+
+主机：%1$s</string>
+    <string name="aliyun_probe_no_account">还没读到账号信息，正在重新获取…</string>
+    <string name="aliyun_probe_no_drive_id">取不到账号的盘 id：%1$s
+
+「读取账号信息」这一步失败了，直链无从谈起；</string>
+    <string name="aliyun_probe_no_playable_file">没有可测的文件</string>
+    <string name="aliyun_probe_ok_hint">
+
+直链本身没问题，若仍播不了，问题在播放器侧（本地缓存或文件格式）。</string>
+    <string name="aliyun_probe_ok_settings">可以到「设置 → 在线播放」清一次在线缓存再试。</string>
+    <string name="aliyun_probe_relogin_hint">先解决它（页面上有重试按钮），再回来测直链。</string>
+    <string name="aliyun_probe_url_fail">取直链失败：%1$s</string>
+    <string name="aliyun_progress_prepare_urls">正在准备附近几首的播放地址…</string>
+    <string name="aliyun_progress_reading_account">正在读取账号信息…</string>
+    <string name="aliyun_progress_reading_drive">正在读取网盘…</string>
+    <string name="aliyun_progress_scanning">正在扫描…</string>
+    <string name="aliyun_remove">移除</string>
+    <string name="aliyun_rename">更多操作</string>
+    <string name="aliyun_root_dir">根目录</string>
+    <string name="aliyun_save">保存</string>
+    <string name="aliyun_save_as_playlist">保存为歌单</string>
+    <string name="aliyun_save_playlist_body">扫描结果已就绪，起个名字存下来。歌单只保存文件引用，播放时现取直链，文件被删除或移走后播放会自动跳过。</string>
+    <string name="aliyun_scan_auth">扫码授权</string>
+    <string name="aliyun_scan_empty_dir">这个目录（含 2 层子目录）里没有音频文件</string>
+    <string name="aliyun_scan_no_audio">没有扫到音频文件。</string>
+    <string name="aliyun_scan_progress_count">已扫 %1$d 个目录，收到 %2$d 首…</string>
+    <string name="aliyun_search_files">搜索文件名</string>
+    <string name="aliyun_sign_in">登录</string>
+    <string name="aliyun_stop">停止</string>
+    <string name="aliyun_toast_app_missing">没有找到阿里云盘 App</string>
+    <string name="aliyun_unknown_reason">未知原因</string>
+    <string name="aliyun_up">上级</string>
+    <string name="aliyun_view_folder">曲目管理</string>
 </resources>

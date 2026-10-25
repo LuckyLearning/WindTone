@@ -46,14 +46,6 @@ class MusicApp : Application() {
         step("cover") { CoverRepository.attach(this) }
         step("channel") { ensureNotificationChannel() }
         step("lyric-overlay") { restoreLyricOverlay() }
-        step("pan-token") {
-            // 百度网盘 dlink 必须拼 access_token 才能下载，见 BaiduRules.withAccessToken。
-            // 这里只注入「怎么取 token」，不预先读 —— 用户随时可能重新扫码，读的时候再取最新的。
-            val baidu = com.luckylearning.windtone.data.baidu.BaiduAuth(this)
-            com.luckylearning.windtone.playback.OnlineMediaCache.panTokenProvider = {
-                if (baidu.isConfigured()) baidu.currentToken()?.accessToken else null
-            }
-        }
         step("update-log") {
             // 调试日志开关（2026-10-15 补上的一处「挂了账」）：
             // 这个调用此前一直缺失，`UpdateChecker.verbose` 恒为 false，五处

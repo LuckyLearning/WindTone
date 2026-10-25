@@ -516,7 +516,6 @@
     <string name="short_audio_filter_s">Short-audio filter (&lt; %1$s s)</string>
     <string name="short_audio_filter_off">Short-audio filter (off)</string>
     <string name="rescans_automatically_after_a_change">Rescans automatically after a change; enter 0 to disable the filter</string>
-    <string name="baidu_netdisk">Baidu Netdisk</string>
     <string name="scan_to_authorize_and_play">Scan to authorize and play music from Netdisk directly (read-only; files must sit under My App Data/&lt;app name&gt;)</string>
     <string name="short_audio_filter">Short-audio filter</string>
     <string name="audio_shorter_than_this_many">Audio shorter than this many seconds is skipped; 0 disables the filter. Default 60 seconds.</string>
@@ -625,4 +624,95 @@
     <!-- 通知渠道 -->
     <string name="notif_channel_name">Music playback</string>
     <string name="notif_channel_desc">Playback controls and current track info</string>
+
+    <!-- Debt 2026-10-25: lyrics empty + Aliyun chrome -->
+    <string name="lyrics_none">No lyrics</string>
+    <string name="lyrics_fetch_order_hint">How lyrics are found:\n1. Sidecar in the same Aliyun Drive folder (.lrc / .krc / .yrc / .txt)\n2. Same-named lyric file next to the audio\n3. Embedded lyrics (MP3 USLT/SYLT, FLAC/Ogg LYRICS, M4A ©lyr)\n4. Lyrics from a same-named track in the local library (local only; no online search)\n\nIf a cloud track has none of the above, this hint is shown as-is. Put a same-named lyric file in the cloud folder, or add the song to the local library.</string>
+    <string name="lyrics_plain_text_no_timeline">Plain-text lyrics (no timeline)</string>
+    <string name="aliyun_status_not_signed_in">Aliyun Drive · Not signed in</string>
+    <string name="aliyun_status_signed_in">Signed in</string>
+    <string name="aliyun_status_signed_in_as">Signed in · %1$s</string>
+    <string name="aliyun_cd_back">Back</string>
+    <string name="aliyun_cd_open_menu">Open menu</string>
+    <string name="aliyun_cd_more">More actions</string>
+    <string name="aliyun_menu_open_app">Open Aliyun Drive app</string>
+    <string name="aliyun_menu_scan_playlist">Scan as playlist (2 subfolder levels)</string>
+    <string name="aliyun_menu_probe">Connection check (test direct link)</string>
+    <string name="aliyun_menu_sign_out">Sign out</string>
+    <string name="aliyun_progress_checking_token">Checking token…</string>
+    <string name="aliyun_default_playlist_name">Cloud playlist</string>
+    <string name="aliyun_error_title">Something went wrong</string>
+    <string name="aliyun_probe_title">Connection check</string>
+    <string name="aliyun_got_it">Got it</string>
+
+    <!-- AliyunPanPage remaining UI (debt pass) -->
+    <string name="aliyun_account_default">Aliyun Drive account</string>
+    <string name="aliyun_account_read_failed">Failed to read account</string>
+    <string name="aliyun_cd_enter_named">Open %1$s</string>
+    <string name="aliyun_cd_load_more">Load more</string>
+    <string name="aliyun_cd_play_named">Play %1$s</string>
+    <string name="aliyun_cd_refresh_dir">Refresh current folder</string>
+    <string name="aliyun_connect_body">Finish QR authorization in the app: scan with Aliyun Drive App. No browser jump or copy-paste.
+App is read-only; it will not upload, change, or delete files.</string>
+    <string name="aliyun_connect_title">Connect your Aliyun Drive</string>
+    <string name="aliyun_creds_configured">App credentials set: token refresh hits the official API. Stored on device only.</string>
+    <string name="aliyun_creds_missing">No app credentials: token refresh uses OpenList online API. Stored on device only.</string>
+    <string name="aliyun_current_drive">Current drive: %1$s</string>
+    <string name="aliyun_delete_playlist">Delete playlist</string>
+    <string name="aliyun_empty_folder">This folder is empty.</string>
+    <string name="aliyun_error_account_detail">Failed to read account: %1$s</string>
+    <string name="aliyun_error_list_dir">Failed to list folder</string>
+    <string name="aliyun_error_no_drive_id">No account info yet (empty drive id). Refresh account, then try again</string>
+    <string name="aliyun_error_no_playable_url">No playable URL (file may be deleted, in recycle bin, or restricted)</string>
+    <string name="aliyun_error_read_account">Failed to read account</string>
+    <string name="aliyun_error_scan_empty_hint">No audio here. Open a folder that has songs, then try again</string>
+    <string name="aliyun_error_scan_failed">Scan failed</string>
+    <string name="aliyun_folder">Folder</string>
+    <string name="aliyun_format_unsupported"> · Format not supported for playback</string>
+    <string name="aliyun_load_more">Load more</string>
+    <string name="aliyun_move_down">Down</string>
+    <string name="aliyun_move_up">Up</string>
+    <string name="aliyun_open_app">Open Aliyun Drive App</string>
+    <string name="aliyun_paste_token">Paste token manually</string>
+    <string name="aliyun_paste_token_body">Paste the Refresh Token shown on the authorization page. The app verifies it online once, then saves it. Tokens are sensitive credentials and stay on this device only; signing out clears them.</string>
+    <string name="aliyun_paste_token_title">Paste refresh token</string>
+    <string name="aliyun_play_all_count">Play all in folder · %1$d tracks</string>
+    <string name="aliyun_playlist_meta">%1$d tracks · Source: %2$s</string>
+    <string name="aliyun_playlist_name_label">Playlist name</string>
+    <string name="aliyun_playlists_header">Drive playlists (%1$d)</string>
+    <string name="aliyun_probe_host">
+
+Host: %1$s</string>
+    <string name="aliyun_probe_no_account">No account info yet. Refresh and try again…</string>
+    <string name="aliyun_probe_no_drive_id">Could not get drive id: %1$s
+
+Account info step failed, so direct links are unavailable.</string>
+    <string name="aliyun_probe_no_playable_file">No playable file</string>
+    <string name="aliyun_probe_ok_hint">
+
+Direct link looks fine; the issue is in playback (host, cache, or file format).</string>
+    <string name="aliyun_probe_ok_settings">Try Settings → Online playback for route or cache.</string>
+    <string name="aliyun_probe_relogin_hint">Open Settings (re-login button at top-left), or retry later.</string>
+    <string name="aliyun_probe_url_fail">Failed to get direct link: %1$s</string>
+    <string name="aliyun_progress_prepare_urls">Preparing playback URLs…</string>
+    <string name="aliyun_progress_reading_account">Reading account…</string>
+    <string name="aliyun_progress_reading_drive">Reading drive…</string>
+    <string name="aliyun_progress_scanning">Scanning…</string>
+    <string name="aliyun_remove">Remove</string>
+    <string name="aliyun_rename">Rename</string>
+    <string name="aliyun_root_dir">Root folder</string>
+    <string name="aliyun_save">Save</string>
+    <string name="aliyun_save_as_playlist">Save as playlist</string>
+    <string name="aliyun_save_playlist_body">Scan finished. Name this playlist; it stores file IDs only and fetches direct links at play time. If files are deleted or moved, playback skips them automatically.</string>
+    <string name="aliyun_scan_auth">Scan to authorize</string>
+    <string name="aliyun_scan_empty_dir">No audio in this folder (including 2 levels of subfolders)</string>
+    <string name="aliyun_scan_no_audio">No audio files found.</string>
+    <string name="aliyun_scan_progress_count">Scanned %1$d folders, got %2$d tracks…</string>
+    <string name="aliyun_search_files">Search files</string>
+    <string name="aliyun_sign_in">Sign in</string>
+    <string name="aliyun_stop">Stop</string>
+    <string name="aliyun_toast_app_missing">Aliyun Drive App not found</string>
+    <string name="aliyun_unknown_reason">Unknown reason</string>
+    <string name="aliyun_up">Up</string>
+    <string name="aliyun_view_folder">Browse folder</string>
 </resources>

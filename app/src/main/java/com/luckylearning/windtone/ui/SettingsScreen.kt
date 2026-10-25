@@ -115,9 +115,6 @@ enum class SettingsPage(val title: String) {
     /** 在线歌单（M3U / M3U8 / PLS）—— v1.1.37 */
     ONLINE(AppStrings.s(R.string.online_playlists)),
 
-    /** 百度网盘 —— v1.1.39 */
-    BAIDU(AppStrings.s(R.string.baidu_netdisk)),
-
     // 「阿里云盘」页（原 SettingsPage.ALIYUN）已于 v1.1.75 移除：
     // 云盘页升为一级入口（抽屉 → 在线音乐 → 阿里云盘），不再嵌在设置里。
 
@@ -148,7 +145,6 @@ internal fun SettingsPage.parent(): SettingsPage = when (this) {
     SettingsPage.UPDATE -> SettingsPage.DIAGNOSTICS
     SettingsPage.ONLINE_HUB, SettingsPage.MENU_ORDER -> SettingsPage.LAB
     SettingsPage.ONLINE -> SettingsPage.ONLINE_HUB
-    SettingsPage.BAIDU -> SettingsPage.LIBRARY
     else -> SettingsPage.ROOT
 }
 
@@ -350,6 +346,10 @@ fun SettingsScreen(
             onAutoPlayOnBoot = onAutoPlayOnBoot,
             onLyricScale = onLyricScale,
             onLyricOverlay = onLyricOverlay,
+            onApplyOverlayPreset = onApplyOverlayPreset,
+            onLyricOverlayTextSp = onLyricOverlayTextSp,
+            onLyricOverlayXPercent = onLyricOverlayXPercent,
+            onLyricOverlayYPercent = onLyricOverlayYPercent,
             onRescan = onRescan,
             onOpenScanScope = onOpenScanScope,
             onCheckUpdate = onCheckUpdate,
@@ -559,8 +559,7 @@ fun SettingsScreen(
                         onOpenReport = onOpenReport,
                         onOpenDuplicates = onOpenDuplicates,
                         onOpenStats = onOpenStats,
-                        onOpenBaidu = { page = SettingsPage.BAIDU },
-                        library = library,
+                                    library = library,
                     )
 
                     SettingsPage.ONLINE_HUB -> SettingsOnlinePage(
@@ -578,7 +577,6 @@ fun SettingsScreen(
 
                     SettingsPage.ONLINE -> OnlinePlaylistsPage(onPlay = onPlayQueue)
 
-                    SettingsPage.BAIDU -> BaiduPanPage(onPlay = onPlayQueue)
 
                     SettingsPage.DIAGNOSTICS -> SettingsDiagnosticsPage(
                         player = player,
