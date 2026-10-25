@@ -87,3 +87,10 @@ SecretKey
 # 阿里云盘开放平台凭据（本机开发用，绝不入库）
 aliyunClientId
 aliyunClientSecret
+\
+# local release helper junk
+_release_log.txt
+_gh_rel.json
+_fetch_rel.sh
+_*.tmp
+\
