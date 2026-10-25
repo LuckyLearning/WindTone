@@ -250,6 +250,11 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             return START_NOT_STICKY
         }
         if (container == null) attachWindow()
+        if (intent?.action == ACTION_TOGGLE_COLLAPSE) {
+            // v1.1.93：通知栏的「收起 / 展开」入口 —— 万一屏上那个小钮在车机上
+            // 点不到（触摸被系统吞 / 被别的窗口盖住），用户仍有一条可靠的路。
+            toggleCollapsed()
+        }
         if (intent?.action == ACTION_RESET_POSITION) {
             // 自检里的「重置位置」：清掉存下来的坐标，回到默认位置
             pendingPositionSave = false
@@ -1571,6 +1576,9 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
 
         /** 收起钮的橙色：与歌词文字 / 底板刻意区分（v1.1.91） */
         private const val HANDLE_COLOR = 0xFFFF8A00.toInt()
+
+        /** 通知栏「收起 / 展开」的 Intent action（v1.1.93） */
+        const val ACTION_TOGGLE_COLLAPSE = "com.luckylearning.windtone.TOGGLE_OVERLAY_COLLAPSE"
 
         /** 复位悬浮窗位置的 Intent action（见 [resetPosition]） */
         private const val ACTION_RESET_POSITION = "com.luckylearning.windtone.RESET_OVERLAY_POSITION"

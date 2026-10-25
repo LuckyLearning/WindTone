@@ -46,12 +46,23 @@ internal object OverlayNotification {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
+        // v1.1.93：动作按钮「收起 / 展开」。屏上的小圆钮可能点不到（车机触摸被吞），
+        // 通知栏这条是稳定可用的兜底入口。
+        val toggle = PendingIntent.getService(
+            context,
+            1,
+            Intent(context, LyricOverlayService::class.java)
+                .setAction(LyricOverlayService.ACTION_TOGGLE_COLLAPSE),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_widget_music)
             .setContentTitle("悬浮歌词已开启")
             .setContentText("退到桌面后显示当前歌词行")
             .setContentIntent(openApp)
             .setOngoing(true)
+            .addAction(0, "收起 / 展开", toggle)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .build()
