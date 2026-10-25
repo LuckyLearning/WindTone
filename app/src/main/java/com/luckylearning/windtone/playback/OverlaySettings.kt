@@ -278,6 +278,7 @@ class OverlaySettings(
      * 刻意不碰：主开关、全屏形态及其尺寸位置、隐藏名单（FR-05；
      * 全屏形态是「结构切换」不是「皮肤」，见设计文档 §7.2 末尾）。
      */
+    /** FR-07 车机大卡与手机预设网格同源：23 项外观一次性写盘（与 OverlayPresetParams / toParams 对齐），不碰主开关/全屏/隐藏名单（FR-05）。 */
     override fun applyOverlayPreset(preset: OverlayPreset) {
         val lines = settings.setOverlayLines(preset.lines)
         val width = settings.setOverlayWidthPercent(preset.widthPercent)

@@ -1482,42 +1482,52 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         val collapse = collapseHandleView ?: return
         val cp = collapseHandleParams ?: return
         val p = layoutParams ?: return
-        val size = collapse.height.takeIf { it > 0 } ?: dp(48)
-        val gap = dp(8)
+        val size = collapse.height.takeIf { it > 0 }
+            ?: dp(OverlayCollapseHelper.DEFAULT_HANDLE_SIZE_DP)
+        val gap = dp(OverlayCollapseHelper.HANDLE_GAP_DP)
         val play = playHandleView
 
         val boxH = container?.height?.takeIf { it > 0 }
             ?: p.height.takeIf { it > 0 }
-            ?: dp(96)
+            ?: dp(OverlayCollapseHelper.FALLBACK_BOX_HEIGHT_DP)
         val (screenW, screenH) = screenSize()
 
         val totalH = if (play != null) size * 2 + gap else size
-        if (anchorFromWindowY != p.y || handleAnchorY < 0) {
-            val centered = p.y + (boxH - totalH) / 2
-            handleAnchorY = centered.coerceIn(0, (screenH - totalH).coerceAtLeast(0))
-            anchorFromWindowY = p.y
-        }
+        val anchor = OverlayCollapseHelper.resolveHandleAnchor(
+            windowY = p.y,
+            boxHeightPx = boxH,
+            totalHandlesHeightPx = totalH,
+            screenH = screenH,
+            currentAnchorY = handleAnchorY,
+            currentAnchorFromWindowY = anchorFromWindowY,
+        )
+        handleAnchorY = anchor.anchorY
+        anchorFromWindowY = anchor.anchorFromWindowY
 
-        // 与「收起 / 展开」无关的固定横坐标：贴在歌词窗左侧，留 4dp 间隙；
-        // 窗本身贴左缘时退化为压在窗内左侧（文字仍有 18dp 内边距）。
-        val x = (p.x - size - dp(4)).coerceIn(0, (screenW - size).coerceAtLeast(0))
+        val pos = OverlayCollapseHelper.handlePositions(
+            windowX = p.x,
+            handleSizePx = size,
+            gapPx = gap,
+            edgeGapPx = dp(OverlayCollapseHelper.HANDLE_EDGE_GAP_DP),
+            screenW = screenW,
+            anchorY = handleAnchorY,
+        )
 
-        cp.x = x
-        cp.y = handleAnchorY
+        cp.x = pos.x
+        cp.y = pos.collapseY
         runCatching { windowManager?.updateViewLayout(collapse, cp) }
 
         val pp = playHandleParams
         if (play != null && pp != null) {
-            pp.x = x
-            pp.y = handleAnchorY + size + gap
+            pp.x = pos.x
+            pp.y = pos.playY
             runCatching { windowManager?.updateViewLayout(play, pp) }
         }
     }
-
     /**
      * 收起 / 展开。
      *
-     * 收起 = 内容列隐藏 + 窗口宽度压到 [COLLAPSED_WIDTH_DP] + 贴左边缘，
+     * 收起 = 内容列隐藏 + 窗口宽度压到 [OverlayCollapseHelper.COLLAPSED_WIDTH_DP] + 贴左边缘，
      * 屏幕上只剩左侧一条窄窗与那个橙色钮；再点一次按 Prefs 里的位置与宽度还原。
      *
      * 收起期间 [applyPosition] / 两个 chrome 方法都会直接 return ——
@@ -1530,17 +1540,18 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         val handle = collapseHandleView as? TextView
 
         if (collapsed) {
-            // v1.1.96：恢复 1.1.93 的「收成左侧一条」效果，但修掉它失效的那一半 ——
-            // 自动高度（WRAP_CONTENT）时改宽度不会触发重排，窗口看起来毫无变化；
-            // 高度固定时则一切正常（用户实测结论）。
-            // 所以收起时先把高度**固化成当前测量值**，再压宽度，最后强制一次布局。
+            // v1.1.96: collapse geometry via OverlayCollapseHelper (unit-tested).
             contentColumn?.visibility = View.GONE
-            val h = box.height.takeIf { it > 0 }
-                ?: p.height.takeIf { it > 0 && it != WindowManager.LayoutParams.WRAP_CONTENT }
-                ?: dp(120)
-            p.height = h
-            p.width = dp(COLLAPSED_WIDTH_DP)
-            p.x = 0
+            val geo = OverlayCollapseHelper.collapsedWindow(
+                measuredHeightPx = box.height,
+                layoutHeightPx = p.height,
+                wrapContentSentinel = WindowManager.LayoutParams.WRAP_CONTENT,
+                collapsedWidthPx = dp(OverlayCollapseHelper.COLLAPSED_WIDTH_DP),
+                fallbackHeightPx = dp(OverlayCollapseHelper.FALLBACK_COLLAPSE_HEIGHT_DP),
+            )
+            p.height = geo.heightPx
+            p.width = geo.widthPx
+            p.x = geo.x
             handle?.text = "›"
             handle?.contentDescription = "展开悬浮歌词"
         } else {
@@ -1682,8 +1693,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         (value * resources.displayMetrics.density).toInt().coerceAtLeast(1)
 
     companion object {
-        /** 收起后窗口保留的宽度（dp）：只留一条，能看见但几乎不占地方（v1.1.91） */
-        private const val COLLAPSED_WIDTH_DP = 8
+        // collapse width: OverlayCollapseHelper.COLLAPSED_WIDTH_DP
 
         /** 收起钮的橙色：与歌词文字 / 底板刻意区分（v1.1.91） */
         private const val HANDLE_COLOR = 0xFFFF8A00.toInt()

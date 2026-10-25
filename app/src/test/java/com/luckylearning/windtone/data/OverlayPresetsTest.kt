@@ -123,4 +123,62 @@ class OverlayPresetsTest {
             OverlayPresetTracker.lastAppliedId = before
         }
     }
+
+    // ---------------------------------------------------------- FR-07 car cards + apply contract
+
+    @Test
+    fun `FR-07 car three-card snapshots match shipped values`() {
+        val c1 = OverlayPreset.byId("C1")!!
+        assertEquals("导航窄条", c1.name)
+        assertEquals(1, c1.lines)
+        assertEquals(28, c1.textSp)
+        assertEquals(64, c1.widthPercent)
+        assertEquals(62, c1.xPercent)
+        assertEquals(0, c1.yPercent)
+        assertEquals(90, c1.bgAlphaPercent)
+        assertTrue(c1.carOnly)
+
+        val c2 = OverlayPreset.byId("C2")!!
+        assertEquals("驻停歌词", c2.name)
+        assertEquals(3, c2.lines)
+        assertEquals(24, c2.textSp)
+        assertEquals(80, c2.widthPercent)
+        assertTrue(c2.showTitle)
+        assertEquals(60, c2.bgAlphaPercent)
+
+        val c3 = OverlayPreset.byId("C3")!!
+        assertEquals("纯净浮层", c3.name)
+        assertEquals(1, c3.lines)
+        assertEquals(20, c3.textSp)
+        assertEquals(0, c3.bgAlphaPercent)
+        assertEquals(0, c3.cornerRadiusDp)
+    }
+
+    /**
+     * applyOverlayPreset 写盘项 = [OverlayPreset.toParams] 全部分量。
+     * 增删外观字段时本断言会红，避免车机 FR-07 大卡与手机网格漏写。
+     */
+    @Test
+    fun `toParams field count matches applyOverlayPreset contract`() {
+        val params = OverlayPreset.byId("C1")!!.toParams()
+        val values = listOf(
+            params.lines, params.widthPercent, params.boxHeightPercent,
+            params.xPercent, params.yPercent,
+            params.textSp, params.align, params.textColor, params.currentColor,
+            params.dimPercent, params.strokeWidthDp, params.strokeColor, params.lineSpacingDp,
+            params.showTitle, params.titlePercent, params.titleMode,
+            params.bgAlphaPercent, params.bgColor, params.cornerRadiusDp,
+            params.borderWidthDp, params.borderColor,
+            params.pauseMode, params.fadeMs,
+        )
+        assertEquals(23, values.size)
+        assertEquals(params, OverlayPreset.byId("C1")!!.toParams())
+        // FR-05: Params 不含隐藏名单等全局键
+        assertTrue(params.javaClass.declaredFields.none { it.name.contains("hidden", ignoreCase = true) })
+    }
+
+    @Test
+    fun `car presets remain exactly three for FR-07 cards`() {
+        assertEquals(listOf("C1", "C2", "C3"), OverlayPreset.CAR.map { it.id })
+    }
 }
