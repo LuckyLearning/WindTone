@@ -34,6 +34,15 @@ class MusicApp : Application() {
         // 「设置 → 诊断」全都来不及出现，等于完全没有线索。这几步里没有一步是
         // 「失败了就宁可不启动」的，所以一律降级继续，把失败记下来。
         step("crash-log") { CrashLog.install(this) }
+        // 安装包签名自检（v1.1.97）：改包版拿不到自更新，官方包不受影响。
+        // 放在最前面：后面几步的日志/诊断都要能读到这个结论。
+        step("integrity") {
+            com.luckylearning.windtone.data.AppIntegrity.evaluate(this)
+            com.luckylearning.windtone.diag.DiagLog.log(
+                "APP",
+                "签名：${com.luckylearning.windtone.data.AppIntegrity.describe()}",
+            )
+        }
         step("cover") { CoverRepository.attach(this) }
         step("channel") { ensureNotificationChannel() }
         step("lyric-overlay") { restoreLyricOverlay() }

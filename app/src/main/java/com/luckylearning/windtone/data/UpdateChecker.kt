@@ -177,6 +177,13 @@ object UpdateChecker {
         current: String = currentVersion,
         route: DownloadRoute = DownloadRoute.AUTO,
     ): UpdateCheckResult = withContext(Dispatchers.IO) {
+        // v1.1.97：非官方签名构建（改包 / 二次分发）不再提供更新链路 ——
+        // 这是签名校验唯一"卡住"的地方，播放等核心功能不受影响，避免误伤自编译用户。
+        if (!AppIntegrity.isOfficial) {
+            return@withContext UpdateCheckResult.Failed(
+                "当前安装包不是官方签名构建（${AppIntegrity.describe()}），已停用应用内更新",
+            )
+        }
         val candidates = checkCandidates(route)
         val deadline = System.currentTimeMillis() + CHECK_BUDGET_MS
         var lastError: Throwable? = null

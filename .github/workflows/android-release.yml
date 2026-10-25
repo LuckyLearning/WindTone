@@ -111,6 +111,9 @@ jobs:
 
       - name: 收集产物并计算校验值
         id: apk
+        env:
+          # mapping 归档要用版本号命名（mapping 与 APK 一一对应）
+          VERSION_NAME: ${{ steps.ver.outputs.name }}
         run: |
           mkdir -p dist
           shopt -s nullglob
@@ -138,11 +141,24 @@ jobs:
           done
           echo "count=$(ls dist/*.apk | wc -l)" >> "$GITHUB_OUTPUT"
 
+          # v1.1.97：混淆后的崩溃栈必须靠这份 mapping 还原，**与 APK 同等重要**。
+          # 命名带版本号——mapping 与 APK 一一对应，混用会还原出错误的名字。
+          MAP="app/build/outputs/mapping/release/mapping.txt"
+          if [ -f "$MAP" ]; then
+            cp "$MAP" "dist/mapping-v${VERSION_NAME}.txt"
+            echo "mapping 已归档：mapping-v${VERSION_NAME}.txt（$(stat -c%s "dist/mapping-v${VERSION_NAME}.txt") 字节）"
+          else
+            echo "::error::未找到 mapping.txt —— 开了混淆却没有它，线上崩溃将无法还原"
+            exit 1
+          fi
+
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
         with:
           name: WindTone-v${{ steps.ver.outputs.name }}
-          path: dist/*.apk
+          path: |
+            dist/*.apk
+            dist/mapping-v*.txt
           if-no-files-found: error
           retention-days: 90
 
@@ -168,7 +184,9 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: 听风 WindTone ${{ github.ref_name }}
-          files: dist/*.apk
+          files: |
+            dist/*.apk
+            dist/mapping-v*.txt
           body_path: ${{ steps.notes.outputs.path }}
           fail_on_unmatched_files: true
 

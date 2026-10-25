@@ -58,6 +58,11 @@ class DiagnosticsReportTest {
     }
 
     @Test
+    fun `报告里有安装包签名一行`() {
+        assertTrue(report().contains("安装包签名："))
+    }
+
+    @Test
     fun `事件日志为空时说明原因`() {
         DiagLog.clear()
         val text = report()

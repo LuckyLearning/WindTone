@@ -37,6 +37,8 @@ internal object DiagnosticsReport {
     data class Facts(
         val collectedAt: Long,
         val appVersion: String,
+        /** 安装包签名状态（v1.1.97）：官方 / 非官方 */
+        val integrity: String = "—",
         val buildType: String,
         val packageName: String,
         val androidRelease: String,
@@ -109,6 +111,7 @@ internal object DiagnosticsReport {
         return Facts(
             collectedAt = System.currentTimeMillis(),
             appVersion = BuildConfig.VERSION_NAME,
+            integrity = com.luckylearning.windtone.data.AppIntegrity.describe(),
             buildType = BuildConfig.BUILD_TYPE,
             packageName = context.packageName,
             androidRelease = Build.VERSION.RELEASE.orEmpty(),
@@ -195,6 +198,7 @@ internal object DiagnosticsReport {
 
         sb.appendLine("[环境]")
         sb.appendLine("应用：v${f.appVersion}（${f.buildType}）  ${f.packageName}")
+        sb.appendLine("安装包签名：${f.integrity}")
         sb.appendLine("系统：Android ${f.androidRelease}（API ${f.sdkInt}）  ${f.manufacturer} ${f.model}（${f.device}）")
         sb.appendLine("ABI：${f.abi}   语言：${f.locale}   时区：${f.timeZone}")
         sb.appendLine("屏幕：${f.screenPx}   ${f.density}")

@@ -15,6 +15,7 @@ import com.luckylearning.windtone.data.UpdateChecker
 import com.luckylearning.windtone.overlay.ForegroundAppDetector
 import com.luckylearning.windtone.overlay.ForegroundProbe
 import com.luckylearning.windtone.diag.DiagnosticsReport
+import com.luckylearning.windtone.data.AppIntegrity
 import com.luckylearning.windtone.overlay.ForegroundAppLog
 import com.luckylearning.windtone.overlay.ForegroundAppState
 import com.luckylearning.windtone.overlay.LyricOverlayBridge
@@ -597,6 +598,22 @@ internal fun SettingsDiagnosticsPage(
             )
         }
         Spacer(Modifier.height(6.dp))
+        // v1.1.97：非官方签名构建（改包 / 二次分发）在这里如实标注；
+        // 官方包不会出现这一行。自更新已被停用，原因也写在这儿。
+        if (!AppIntegrity.isOfficial) {
+            Text(
+                text = "⚠️ ${AppIntegrity.describe()}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+            Text(
+                "这个安装包不是官方发布版本，应用内更新已停用；播放与歌词功能不受影响。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(6.dp))
+        }
+
         Text(
             text = stringResource(R.string.in_foreground, (currentPkg ?: stringResource(R.string.unknown))) +
                 (currentPkg?.let { ForegroundAppLog.labelOf(context, it) }?.let { "（$it）" } ?: ""),
