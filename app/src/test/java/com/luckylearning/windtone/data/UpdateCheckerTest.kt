@@ -163,14 +163,30 @@ class UpdateCheckerTest {
         "https://raw.githubusercontent.com/LuckyLearning/Release/main/WindTone/v1.1.30/WindTone-v1.1.30-arm64-v8a.apk"
 
     @Test
-    fun autoRouteTriesDirectThenJsdelivrThenGhproxy() {
+    fun autoRoutePrefersJsdelivrThenMirrorsThenOfficial() {
         val list = UpdateChecker.downloadCandidates(rawUrl)
-        assertEquals(rawUrl, list.first())
+        assertTrue(
+            "AUTO 首条应为国内可达的 fastly.jsdelivr",
+            list.first().startsWith("https://fastly.jsdelivr.net/gh/LuckyLearning/Release@main/"),
+        )
         assertTrue(
             "jsDelivr 必须按 owner/repo@branch/path 重排（不能简单拼前缀）",
-            "https://cdn.jsdelivr.net/gh/LuckyLearning/Release@main/WindTone/v1.1.30/WindTone-v1.1.30-arm64-v8a.apk" in list,
+            "https://fastly.jsdelivr.net/gh/LuckyLearning/Release@main/WindTone/v1.1.30/WindTone-v1.1.30-arm64-v8a.apk" in list,
         )
+        assertTrue(list.any { it.startsWith("https://gcore.jsdelivr.net/gh/") })
+        assertTrue(list.any { it.startsWith("https://gh-proxy.com/https://raw.githubusercontent.com/") })
         assertTrue(list.any { it.startsWith("https://ghproxy.net/https://raw.githubusercontent.com/") })
+        assertEquals("官方直连应排在最后兜底", rawUrl, list.last())
+    }
+
+    @Test
+    fun jsdelivrRouteUsesOnlyFastlyHost() {
+        val list = UpdateChecker.downloadCandidates(rawUrl, DownloadRoute.JSDELIVR)
+        assertEquals(1, list.size)
+        assertEquals(
+            "https://fastly.jsdelivr.net/gh/LuckyLearning/Release@main/WindTone/v1.1.30/WindTone-v1.1.30-arm64-v8a.apk",
+            list.first(),
+        )
     }
 
     @Test
@@ -220,19 +236,28 @@ class UpdateCheckerTest {
     // ------------------------------------------------------------ 检查更新线路
 
     @Test
-    fun checkCandidatesStartWithOfficialThenFallBackToMirrors() {
+    fun checkCandidatesPreferChinaReachableThenOfficialFallback() {
         val list = UpdateChecker.checkCandidates(DownloadRoute.AUTO)
         assertTrue(
-            "第一条必须是官方直连：镜像有 CDN 缓存，不能抢在直连前面给出旧结论",
-            list.first().startsWith("https://raw.githubusercontent.com/"),
+            "AUTO 首条应为 fastly.jsdelivr（国内可达性优先）",
+            list.first().startsWith("https://fastly.jsdelivr.net/gh/"),
         )
-        assertTrue(list.any { it.startsWith("https://ghproxy.net/") })
+        assertTrue(list.any { it.startsWith("https://gcore.jsdelivr.net/gh/") })
         assertTrue(list.any { it.startsWith("https://gh-proxy.com/") })
-        assertTrue(list.first().endsWith("/WindTone/latest.json"))
+        assertTrue(list.any { it.startsWith("https://ghproxy.net/") })
         assertTrue(
-            "jsDelivr 缓存最久，必须排在最后一条",
-            list.last().startsWith("https://cdn.jsdelivr.net/gh/"),
+            "官方 raw 必须保留作兜底（最后一条）",
+            list.last().startsWith("https://raw.githubusercontent.com/") &&
+                list.last().endsWith("/WindTone/latest.json"),
         )
+    }
+
+    @Test
+    fun checkCandidatesJsdelivrRouteUsesOnlyFastly() {
+        val list = UpdateChecker.checkCandidates(DownloadRoute.JSDELIVR)
+        assertEquals(1, list.size)
+        assertTrue(list.first().startsWith("https://fastly.jsdelivr.net/gh/"))
+        assertTrue(list.first().endsWith("/WindTone/latest.json"))
     }
 
     @Test
@@ -322,5 +347,25 @@ class UpdateCheckerTest {
     @Test
     fun blankNotesStayBlank() {
         assertEquals("", UpdateChecker.plainNotes("   \n  "))
+    }
+
+    // ------------------------------------------------------------ Range 续传辅助
+
+    @Test
+    fun parseContentRangeTotalReadsSlashTail() {
+        assertEquals(1234L, UpdateChecker.parseContentRangeTotal("bytes 100-199/1234"))
+        assertEquals(null, UpdateChecker.parseContentRangeTotal("bytes 100-199/*"))
+        assertEquals(null, UpdateChecker.parseContentRangeTotal(null))
+        assertEquals(null, UpdateChecker.parseContentRangeTotal(""))
+    }
+
+    @Test
+    fun isOfficialRawDetectsGithubRawOnly() {
+        assertTrue(UpdateChecker.isOfficialRaw(
+            "https://raw.githubusercontent.com/LuckyLearning/Release/main/WindTone/latest.json",
+        ))
+        assertFalse(UpdateChecker.isOfficialRaw(
+            "https://fastly.jsdelivr.net/gh/LuckyLearning/Release@main/WindTone/latest.json",
+        ))
     }
 }

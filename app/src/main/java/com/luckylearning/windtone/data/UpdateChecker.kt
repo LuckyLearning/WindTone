@@ -8,8 +8,15 @@ import android.provider.Settings
 import android.util.Log
 import androidx.core.content.FileProvider
 import com.luckylearning.windtone.BuildConfig
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.coroutines.cancellation.CancellationException
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -90,14 +97,16 @@ sealed interface UpdateCheckResult {
  * ## 关于「镜像 / 代理」（重要）
  *
  * **检查更新与下载安装包共用同一套线路**（[DownloadRoute]，默认自动）：
- * 先直连 GitHub 官方地址（`raw.githubusercontent.com`），直连不通（超时 / 被阻断）时
- * 依次退到 ghproxy.net → gh-proxy.com → jsDelivr。
+ * AUTO 下**国内优先**（jsDelivr Fastly/Gcore → gh-proxy.com → ghproxy.net），
+ * 官方 `raw.githubusercontent.com` 放最后兜底。检查更新在 AUTO 下对多线**并行竞速**，
+ * 谁先返回可用清单用谁，避免「先卡官方超时再换线」。
  *
- * 为什么检查更新也要兜底：`raw.githubusercontent.com` 在国内经常整段连不通，
- * 只走一条线时「检查更新」必然报「连接超时」——功能等于不可用（2026-10-19 用户反馈）。
+ * 为什么默认不再先直连：本机 2026-10 在中国大陆实测 raw / 部分 ghproxy 常超时，
+ * `fastly.jsdelivr.net` / `gcore.jsdelivr.net` 可达性明显更好。
  *
- * 镜像有 CDN 缓存，刚发布的版本可能稍有滞后：只有**直连失败**才用镜像，且
- * 经镜像得到的「已是最新」结论会在界面注明「可能有延迟」，不会把新版本悄悄报成最新。
+ * 镜像有 CDN 缓存，刚发布的版本可能稍有滞后：经非官方线路得到的「已是最新」
+ * 结论会在界面注明「可能有延迟」，不会把新版本悄悄报成最新。手动选「直连 GitHub」
+ * 仍只走官方，发版后立刻可见。
  *
  * 全流程只在用户点击「检查更新 / 下载」或启动时自动检查（可关闭）时发生，
  * 不上报任何设备信息，也不访问除 GitHub 与其加速镜像之外的任何域名。
@@ -148,18 +157,24 @@ object UpdateChecker {
     /**
      * 检查更新的候选线路（按尝试优先级）。
      *
-     * - [DownloadRoute.AUTO]：官方直连 → ghproxy.net → gh-proxy.com → jsDelivr。
-     *   镜像顺序是按「实时性」排的：两个 ghproxy 都是整串转发、基本不缓存，jsDelivr 走 CDN
-     *   有小时级缓存，所以放最后 —— 它只在直连和 ghproxy 全挂时才用得上。
+     * - [DownloadRoute.AUTO]：jsDelivr（fastly → gcore → cdn）→ gh-proxy.com →
+     *   ghproxy.net → 官方 raw 兜底。国内优先可达性；官方放最后避免先卡超时。
      * - [DownloadRoute.DIRECT]：只走官方直连（用户明确选的）。
-     * - 指定镜像：只走那一条，与下载侧同语义 —— 既然手动选了线路，就不该偷偷换线。
+     * - [DownloadRoute.JSDELIVR]：只走 fastly.jsdelivr.net。
+     * - 其它指定镜像：只走那一条，与下载侧同语义。
      */
     internal fun checkCandidates(route: DownloadRoute = DownloadRoute.AUTO): List<String> {
         val base = manifestUrl
-        val prefix = route.prefix ?: return buildList {
-            add(base)
-            MIRROR_PREFIXES.forEach { add(it + base) }
-            jsdelivr(base)?.let { add(it) }
+        val prefix = route.prefix
+        if (prefix == null) {
+            return buildList {
+                jsdelivrHosts().forEach { host -> jsdelivr(base, host)?.let { add(it) } }
+                MIRROR_PREFIXES.forEach { add(it + base) }
+                add(base)
+            }
+        }
+        if (prefix.startsWith(JSDELIVR_PREFIX_MARK)) {
+            return listOfNotNull(jsdelivr(base, jsdelivrHostFromPrefix(prefix)))
         }
         return listOf(if (prefix.isEmpty()) base else prefix + base)
     }
@@ -167,11 +182,11 @@ object UpdateChecker {
     /**
      * 查询最新版本。永不抛异常，失败一律折成 [UpdateCheckResult.Failed]。
      *
-     * 按 [route] 依次尝试候选线路（见 [checkCandidates]）：直连超时 / 被阻断时自动退到镜像，
-     * 总耗时受 [CHECK_BUDGET_MS] 约束 —— 国内网络下「一路干等到十几秒再报错」是最糟的体验。
+     * - 手动指定单线路：探一次即可；
+     * - [DownloadRoute.AUTO]：对 [checkCandidates] 多线**并行竞速**，谁先返回可用清单用谁，
+     *   总耗时受 [CHECK_BUDGET_MS] 约束 —— 避免国内「先卡官方超时再换线」。
      *
-     * 采用第一个**解析成功**的响应：某条线路返回坏数据（代理错误页、半截 JSON）时继续换线，
-     * 而不是把「格式不正确」直接甩给用户。
+     * 坏数据（代理错误页、半截 JSON）计为该线失败，不直接甩给用户。
      */
     suspend fun checkLatest(
         current: String = currentVersion,
@@ -185,36 +200,72 @@ object UpdateChecker {
             )
         }
         val candidates = checkCandidates(route)
-        val deadline = System.currentTimeMillis() + CHECK_BUDGET_MS
-        var lastError: Throwable? = null
-        var lastCode = 0
+        // 单线路（手动指定）：顺序探一次即可
+        if (candidates.size == 1) {
+            return@withContext runCatching { probeManifestUrl(candidates[0], current) }
+                .getOrElse { foldCheckFailure(it) }
+        }
+        // AUTO：多线并行竞速——谁先返回可用清单用谁，避免国内「官方超时再换线」。
+        raceManifestCheck(candidates, current)
+    }
 
-        for ((index, url) in candidates.withIndex()) {
-            // 第一条之外的线路先看预算：剩余时间不够就别开新连接了，早点给出可操作的提示
-            if (index > 0 && deadline - System.currentTimeMillis() < MIN_LINE_BUDGET_MS) break
-            try {
-                val resp = httpGet(url, accept = "application/json")
-                lastCode = resp.code
-                if (resp.code == 200) {
-                    val parsed = parseManifest(resp.body, current, viaMirror = index > 0)
-                    if (parsed !is UpdateCheckResult.Failed) return@withContext parsed
-                    if (verbose) Log.w(TAG, "线路返回的清单不可用，换下一条：$url")
-                    continue
+    /**
+     * 对单条候选 URL 拉清单并解析；失败抛异常（含 [HttpFail] 以便汇总 HTTP 码）。
+     */
+    private fun probeManifestUrl(url: String, current: String): UpdateCheckResult {
+        val resp = httpGet(url, accept = "application/json")
+        if (resp.code != 200) throw HttpFail(resp.code, url)
+        val parsed = parseManifest(resp.body, current, viaMirror = !isOfficialRaw(url))
+        if (parsed is UpdateCheckResult.Failed) throw IOException(parsed.reason)
+        return parsed
+    }
+
+    /**
+     * 多线并行：任一成功即取消其余；全部失败或总预算耗尽则折成 Failed。
+     */
+    private suspend fun raceManifestCheck(
+        candidates: List<String>,
+        current: String,
+    ): UpdateCheckResult = coroutineScope {
+        val winner = CompletableDeferred<UpdateCheckResult>()
+        val failures = AtomicInteger(0)
+        val n = candidates.size
+        val lastError = AtomicReference<Throwable?>(null)
+        val jobs = candidates.map { url ->
+            launch(Dispatchers.IO) {
+                try {
+                    val result = probeManifestUrl(url, current)
+                    winner.complete(result)
+                } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
+                    lastError.set(t)
+                    if (failures.incrementAndGet() >= n) {
+                        winner.complete(foldCheckFailure(lastError.get()))
+                    }
                 }
-                if (verbose) Log.w(TAG, "线路返回 HTTP ${resp.code}：$url")
-            } catch (t: Throwable) {
-                lastError = t
-                if (verbose) Log.w(TAG, "线路失败：$url", t)
             }
         }
-
-        when {
-            // 404 是确定性结论：文件在仓库里就是不存在，换线路也变不出来
-            lastCode == 404 -> UpdateCheckResult.Failed("公共仓库还没有发布版本")
-            lastCode != 0 -> UpdateCheckResult.Failed("检查更新失败（HTTP $lastCode）")
-            else -> UpdateCheckResult.Failed(describe(lastError ?: IOException("网络异常")))
+        try {
+            withTimeoutOrNull(CHECK_BUDGET_MS) { winner.await() }
+                ?: foldCheckFailure(
+                    lastError.get() ?: java.net.SocketTimeoutException("连接更新服务器超时"),
+                )
+        } finally {
+            jobs.forEach { it.cancel() }
         }
     }
+
+    private fun foldCheckFailure(error: Throwable?): UpdateCheckResult {
+        val http = error as? HttpFail
+        return when {
+            http?.code == 404 -> UpdateCheckResult.Failed("公共仓库还没有发布版本")
+            http != null -> UpdateCheckResult.Failed("检查更新失败（HTTP ${http.code}）")
+            else -> UpdateCheckResult.Failed(describe(error ?: IOException("网络异常")))
+        }
+    }
+
+    /** HTTP 非 2xx，用于竞速失败汇总。 */
+    private class HttpFail(val code: Int, val url: String) : IOException("HTTP $code")
 
     /**
      * 解析 `latest.json` 并做出结论。纯函数、可单测。
@@ -313,12 +364,13 @@ object UpdateChecker {
      * 两个维度相乘：
      *  - **包名维度**（[urls]）：本机 ABI 包 → 其它包 → universal，见 [orderAssets]；
      *  - **线路维度**（[route]）：由用户在「设置 → 更新 → 下载线路」里选择，默认 [DownloadRoute.AUTO]：
-     *    · [DownloadRoute.AUTO]：直链优先，某条线路**报错**（连不上 / HTTP 错误）时落到下一条；
+     *    · [DownloadRoute.AUTO]：国内 CDN/镜像优先，官方直连最后兜底；某条**报错**时落到下一条；
      *    · [DownloadRoute.DIRECT]：只走 GitHub 官方直链；
-     *    · 指定镜像：**只走这一条**（用户既然手动选了，就不该偷偷换线，失败时界面会提示去哪改）。
+     *    · [DownloadRoute.JSDELIVR] / 其它指定镜像：**只走这一条**。
      *
      * v1.1.74 起**不再做速度自动切换**（旧版起步慢就中断换线）：下载中途换线会让进度
      * 反复清零，用户困惑；慢线路由用户在下载弹窗里点「切换线路」手动解决。
+     * 跨线路失败时保留 `.part` 并用 Range 续传（见 [downloadOnce]）。
      *
      * 镜像只做字节转发，不改动文件内容，且下载后仍有 [verifyApk] 兜底校验。
      */
@@ -334,12 +386,20 @@ object UpdateChecker {
                 return@forEach
             }
             val prefix = route.prefix
-            if (prefix == null) {
-                out.add(url)
-                mirrors.forEach { out.add(it) }
-            } else {
-                // 手动指定：只给这一条（空前缀 = 直链）
-                out.add(if (prefix.isEmpty()) url else prefix + url)
+            when {
+                prefix == null -> {
+                    // AUTO：国内镜像/CDN 优先，官方直连最后兜底
+                    mirrors.forEach { out.add(it) }
+                    out.add(url)
+                }
+                prefix.startsWith(JSDELIVR_PREFIX_MARK) -> {
+                    val host = jsdelivrHostFromPrefix(prefix)
+                    out.add(jsdelivr(url, host) ?: url)
+                }
+                else -> {
+                    // 手动指定：只给这一条（空前缀 = 直链）
+                    out.add(if (prefix.isEmpty()) url else prefix + url)
+                }
             }
         }
         return out.toList().ifEmpty { urls }
@@ -361,22 +421,41 @@ object UpdateChecker {
     private fun mirrorUrls(url: String): List<String> {
         if (!url.startsWith("https://", ignoreCase = true)) return emptyList()
         val list = mutableListOf<String>()
-        jsdelivr(url)?.let { list.add(it) }
+        // CDN 节点按国内可达性排序（本机 2026-10 实测：fastly/gcore 通，cdn.jsdelivr 常超时）
+        jsdelivrHosts().forEach { host -> jsdelivr(url, host)?.let { list.add(it) } }
         if (url.contains("githubusercontent.com/") || url.contains("github.com/")) {
             MIRROR_PREFIXES.forEach { list.add(it + url) }
         }
         return list
     }
 
+    /** 是否官方 raw 直链（用于 viaMirror 标记与竞速判定） */
+    internal fun isOfficialRaw(url: String): Boolean =
+        url.startsWith("https://raw.githubusercontent.com/", ignoreCase = true)
+
+    /** jsDelivr CDN 主机列表（AUTO 竞速与下载共用） */
+    private fun jsdelivrHosts(): List<String> = listOf(
+        "fastly.jsdelivr.net",
+        "gcore.jsdelivr.net",
+        "cdn.jsdelivr.net",
+    )
+
+    private fun jsdelivrHostFromPrefix(prefix: String): String =
+        when (prefix.removePrefix(JSDELIVR_PREFIX_MARK)) {
+            "gcore" -> "gcore.jsdelivr.net"
+            "cdn" -> "cdn.jsdelivr.net"
+            else -> "fastly.jsdelivr.net"
+        }
+
     /** raw 直链 → jsDelivr 仓库文件链接；不是 raw 直链时返回 null */
-    private fun jsdelivr(url: String): String? {
+    private fun jsdelivr(url: String, host: String = "fastly.jsdelivr.net"): String? {
         val prefix = "https://raw.githubusercontent.com/"
         if (!url.startsWith(prefix, ignoreCase = true)) return null
         val parts = url.substring(prefix.length).split('/', limit = 4)
         if (parts.size < 4) return null
         val (owner, repo, branch, path) = parts
         if (owner.isBlank() || repo.isBlank() || branch.isBlank() || path.isBlank()) return null
-        return "https://cdn.jsdelivr.net/gh/$owner/$repo@$branch/$path"
+        return "https://$host/gh/$owner/$repo@$branch/$path"
     }
 
     /**
@@ -406,13 +485,17 @@ object UpdateChecker {
         checkCancelled: () -> Boolean = { false },
     ): File = withContext(Dispatchers.IO) {
         val dir = File(context.cacheDir, DIR_NAME).apply { if (!exists()) mkdirs() }
-        dir.listFiles()?.forEach { runCatching { it.delete() } }
 
         val safeName = info.apkName
             .ifBlank { "WindTone-v${info.version}.apk" }
             .replace(Regex("[^A-Za-z0-9._\\-]"), "_")
         val target = File(dir, safeName)
         val part = File(dir, "$safeName.part")
+
+        // 清掉其它版本残留；保留当前 .part 以便跨线路 Range 续传（内容同 SHA-256）
+        dir.listFiles()?.forEach { f ->
+            if (f.name != part.name && f.name != target.name) runCatching { f.delete() }
+        }
 
         val candidates = downloadCandidates(info.allApkUrls, route)
         var lastError: Throwable? = null
@@ -428,7 +511,11 @@ object UpdateChecker {
                 return@withContext target
             } catch (t: Throwable) {
                 lastError = t
-                runCatching { part.delete() }
+                // 校验失败（内容坏了）才丢掉半截；网络失败保留 .part 给下一条线路续传
+                val msg = t.message.orEmpty()
+                if ("安装包" in msg || "APK" in msg || "SHA" in msg || "大小不符" in msg) {
+                    runCatching { part.delete() }
+                }
                 if (checkCancelled()) throw IOException(DOWNLOAD_ABORTED_MSG)
                 if (verbose) Log.w(TAG, "下载线路失败，切换下一条: $candidate", t)
                 val next = index + 1
@@ -441,8 +528,8 @@ object UpdateChecker {
     /**
      * 下载单个候选线路到 [part]，返回响应声明的总字节数（0 = 未知）。
      *
-     * 断点续传刻意不做：安装包只有 3MB，而 `.part` 与「换线路重来」已经够用；
-     * 续传要处理 206/416、ETag 变化与代理返回错误页，投入产出不划算。
+     * 支持 Range 续传：已有 `.part` 时带 `Range: bytes=N-`；206 续写，200 覆写，
+     * 416 丢掉半截重来。跨镜像换线时内容同 SHA-256，续传安全。
      */
     private fun downloadOnce(
         url: String,
@@ -451,42 +538,98 @@ object UpdateChecker {
         onProgress: (Long, Long) -> Unit,
         checkCancelled: () -> Boolean,
     ): Long {
+        val existing = if (part.exists()) part.length().coerceAtLeast(0L) else 0L
         var conn: HttpURLConnection? = null
         try {
             conn = (URL(url).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
-                connectTimeout = 12_000
-                readTimeout = 20_000
+                connectTimeout = DOWNLOAD_CONNECT_TIMEOUT_MS
+                readTimeout = DOWNLOAD_READ_TIMEOUT_MS
                 instanceFollowRedirects = true
                 setRequestProperty("User-Agent", "WindTone-Android/$currentVersion")
                 setRequestProperty("Accept", "application/octet-stream")
-            }
-            val code = conn.responseCode
-            if (code !in 200..299) throw IOException("HTTP $code")
-
-            val total = conn.contentLengthLong.takeIf { it > 0 } ?: 0L
-            var downloaded = 0L
-            part.parentFile?.mkdirs()
-            conn.inputStream.use { input ->
-                FileOutputStream(part).use { out ->
-                    val buf = ByteArray(64 * 1024)
-                    var n = input.read(buf)
-                    while (n > 0) {
-                        out.write(buf, 0, n)
-                        downloaded += n
-                        onProgress(downloaded, total)
-                        // v1.1.74 起不再做速度自动切换（起步慢就中断换线会让进度反复清零），
-                        // 只响应调用方的取消探针 —— 慢线路由用户点「切换线路」手动解决。
-                        if (checkCancelled()) throw IOException(DOWNLOAD_ABORTED_MSG)
-                        n = input.read(buf)
-                    }
-                    out.flush()
+                if (existing > 0L) {
+                    setRequestProperty("Range", "bytes=$existing-")
                 }
             }
-            return total
+            val code = conn.responseCode
+            when (code) {
+                200 -> {
+                    // 服务端忽略 Range 或返回全文：从头覆写
+                    if (existing > 0L) runCatching { part.delete() }
+                    return writeDownloadBody(
+                        conn, part, append = false, startAt = 0L,
+                        onProgress, checkCancelled,
+                    )
+                }
+                206 -> {
+                    return writeDownloadBody(
+                        conn, part, append = true, startAt = existing,
+                        onProgress, checkCancelled,
+                    )
+                }
+                416 -> {
+                    // 半截文件与服务端对不上：丢掉重来（无 Range）
+                    runCatching { part.delete() }
+                    if (existing > 0L) {
+                        return downloadOnce(url, part, info, onProgress, checkCancelled)
+                    }
+                    throw IOException("HTTP 416")
+                }
+                else -> throw IOException("HTTP $code")
+            }
         } finally {
             conn?.disconnect()
         }
+    }
+
+    /**
+     * 把响应体写入 [part]；[append]=true 时从 [startAt] 续写（配合 206）。
+     * @return 文件总字节（已知时），否则 0
+     */
+    private fun writeDownloadBody(
+        conn: HttpURLConnection,
+        part: File,
+        append: Boolean,
+        startAt: Long,
+        onProgress: (Long, Long) -> Unit,
+        checkCancelled: () -> Boolean,
+    ): Long {
+        val contentLen = conn.contentLengthLong.takeIf { it > 0 } ?: 0L
+        val total = parseContentRangeTotal(conn.getHeaderField("Content-Range"))
+            ?: when {
+                !append && contentLen > 0 -> contentLen
+                append && contentLen > 0 -> startAt + contentLen
+                else -> 0L
+            }
+        var downloaded = startAt
+        onProgress(downloaded, total)
+        part.parentFile?.mkdirs()
+        conn.inputStream.use { input ->
+            FileOutputStream(part, append).use { out ->
+                val buf = ByteArray(64 * 1024)
+                var n = input.read(buf)
+                while (n > 0) {
+                    out.write(buf, 0, n)
+                    downloaded += n
+                    onProgress(downloaded, total)
+                    if (checkCancelled()) throw IOException(DOWNLOAD_ABORTED_MSG)
+                    n = input.read(buf)
+                }
+                out.flush()
+            }
+        }
+        return total
+    }
+
+    /** 解析 `Content-Range: bytes 0-99/1234` 里的总长；解析失败返回 null */
+    internal fun parseContentRangeTotal(contentRange: String?): Long? {
+        if (contentRange.isNullOrBlank()) return null
+        val slash = contentRange.lastIndexOf('/')
+        if (slash < 0 || slash == contentRange.lastIndex) return null
+        val totalRaw = contentRange.substring(slash + 1).trim()
+        if (totalRaw == "*") return null
+        return totalRaw.toLongOrNull()?.takeIf { it > 0 }
     }
 
     /**
@@ -788,24 +931,31 @@ object UpdateChecker {
 
     private const val DIR_NAME = "updates"
 
-    /** GitHub 加速镜像（给原始 URL 加前缀即生效；均为公开代理，只转发字节，仅用于下载安装包） */
+    /** DownloadRoute.prefix 里 jsDelivr 的特殊标记（不是 URL 前缀拼接） */
+    private const val JSDELIVR_PREFIX_MARK = "jsdelivr:"
+
+    /**
+     * GitHub 加速镜像前缀（整串 URL 拼接）。
+     * 顺序：国内探测里相对更稳的 gh-proxy.com 在前，ghproxy.net 备用。
+     */
     private val MIRROR_PREFIXES = listOf(
-        "https://ghproxy.net/",
         "https://gh-proxy.com/",
+        "https://ghproxy.net/",
     )
 
-    /** 检查更新：单条线路的连接 / 读取超时。清单只有几 KB，连不上就尽快换线 */
-    private const val CHECK_CONNECT_TIMEOUT_MS = 6_000
-    private const val CHECK_READ_TIMEOUT_MS = 8_000
+    /** 检查更新：单条线路的连接 / 读取超时。清单只有几 KB，竞速下可更短 */
+    private const val CHECK_CONNECT_TIMEOUT_MS = 4_000
+    private const val CHECK_READ_TIMEOUT_MS = 6_000
 
-    /** 检查更新的总预算：用完就停，别让用户盯着「正在检查更新…」干等 */
-    private const val CHECK_BUDGET_MS = 18_000L
+    /** 检查更新的总预算（并行竞速上限） */
+    private const val CHECK_BUDGET_MS = 12_000L
 
-    /** 剩余预算低于这个值就不再开新连接（开了也来不及读完） */
-    private const val MIN_LINE_BUDGET_MS = 3_000L
+    /** 下载：连接 / 读取超时（大文件；失败后换下一条线路） */
+    private const val DOWNLOAD_CONNECT_TIMEOUT_MS = 10_000
+    private const val DOWNLOAD_READ_TIMEOUT_MS = 25_000
 
     /** 测延迟：连接 / 读取超时（结果只要个大概，超时即视为线路不通） */
-    private const val PING_TIMEOUT_MS = 5_000
+    private const val PING_TIMEOUT_MS = 4_000
 
     /** 「切换线路」中止旧下载时抛出的标记文案（调用方据此不把它当失败展示） */
     internal const val DOWNLOAD_ABORTED_MSG = "下载已取消（切换线路）"

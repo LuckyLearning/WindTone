@@ -400,10 +400,20 @@ enum class ScanScope(val label: String) {
  * 其余为镜像前缀（给原始 github.com 地址拼前缀即生效）。
  */
 enum class DownloadRoute(val label: String, val hint: String, val prefix: String?) {
-    AUTO("自动", "直连优先，连不上自动换镜像", null),
+    /**
+     * 自动：国内优先（jsDelivr Fastly/Gcore → gh-proxy → ghproxy → 官方直连兜底）。
+     * [prefix] = null。
+     */
+    AUTO("自动", "国内优先 CDN/镜像，失败再试官方", null),
+    /** 只用 raw.githubusercontent.com；国内常慢或超时。prefix 空串。 */
     DIRECT("直连 GitHub", "只用官方地址，最及时；国内可能较慢", ""),
-    GHPROXY_NET("ghproxy.net", "公共加速镜像，速度较快", "https://ghproxy.net/"),
-    GH_PROXY_COM("gh-proxy.com", "公共加速镜像，ghproxy 不通时备用", "https://gh-proxy.com/"),
+    /**
+     * jsDelivr CDN（fastly 节点）。prefix 以 `jsdelivr:` 开头，不是 URL 前缀拼接。
+     * 本机 2026-10 实测国内可达性明显好于 raw / 部分 ghproxy。
+     */
+    JSDELIVR("jsDelivr CDN", "国内节点较快，偶有缓存延迟", "jsdelivr:fastly"),
+    GH_PROXY_COM("gh-proxy.com", "公共加速镜像", "https://gh-proxy.com/"),
+    GHPROXY_NET("ghproxy.net", "公共加速镜像，备用", "https://ghproxy.net/"),
 }
 
 /**
