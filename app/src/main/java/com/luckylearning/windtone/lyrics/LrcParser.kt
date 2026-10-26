@@ -82,19 +82,42 @@ object LrcParser {
                 Stamp(if (t < 0) 0L else t, s.text)
             }.sortedBy { it.ms }
 
-            // 双语合并：相邻且时间差 <= 50ms 的两行，后者作为前者的翻译副行
+            // 双语合并（v1.2.1 修正）：把「同一句的译文」认成副行，而不是多出一行歌词。
+            //
+            // 原判据是 `next.ms - cur.ms in 1..50`，**恰好排除了时间戳完全相同**这一档 ——
+            // 而这正是带翻译 LRC 最常见的写法（`[00:12.00]原文` 紧跟 `[00:12.00]译文`）。
+            // 结果译文被当成独立歌词行：播放页一行行往下滚，用户看到的就是"译文不跟随 / 错行"。
+            //
+            // 现在的规则：
+            //  1. 同一时间戳（差 0）或相差 ≤50ms 的相邻行，**文本不同**时，后一行作为译文；
+            //  2. 因为整份歌词按时间排序，"原文全在前、译文全在后"那种块状写法也会落到相邻位置，
+            //     所以不需要额外区分两种排版；
+            //  3. 文本完全相同不合并 —— 重复副歌里双写同一句时不该被吃掉。
             val merged = ArrayList<LyricLine>(adjusted.size)
             var i = 0
             while (i < adjusted.size) {
                 val cur = adjusted[i]
-                val next = adjusted.getOrNull(i + 1)
-                if (next != null && next.ms - cur.ms in 1..50 && cur.text.isNotEmpty() && next.text.isNotEmpty()) {
-                    merged.add(LyricLine(timeMs = cur.ms, text = cur.text, translation = next.text))
-                    i += 2
-                } else {
+                if (cur.text.isEmpty()) {
                     merged.add(LyricLine(cur.ms, cur.text))
                     i += 1
+                    continue
                 }
+                var translation: String? = null
+                var j = i + 1
+                while (j < adjusted.size) {
+                    val cand = adjusted[j]
+                    val gap = cand.ms - cur.ms
+                    if (gap !in 0..50) break
+                    if (cand.text.isEmpty()) break
+                    if (translation == null && cand.text != cur.text) {
+                        translation = cand.text
+                        j += 1
+                        continue
+                    }
+                    break
+                }
+                merged.add(LyricLine(timeMs = cur.ms, text = cur.text, translation = translation))
+                i = j
             }
             lines = merged
         } else {

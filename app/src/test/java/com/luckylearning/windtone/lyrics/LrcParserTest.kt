@@ -139,4 +139,57 @@ class LrcParserTest {
         assertEquals(1, lyrics.indexAt(20_000L))
         assertEquals(2, lyrics.indexAt(999_999L))
     }
+
+    /**
+     * 同一时间戳的两行 = 原文 + 译文（v1.2.1 修正）。
+     *
+     * 这是带翻译 LRC 最常见的写法，而旧判据 `next.ms - cur.ms in 1..50` 恰好把它排除在外，
+     * 导致译文被当成独立歌词行 —— 表现就是「译文不跟随、一行行往下滚」（真机清单 P1-1 标"没实现"）。
+     */
+    @Test
+    fun mergesSameTimestampLineAsTranslation() {
+        val lyrics = LrcParser.parse(
+            "[00:12.00]I love you\n[00:12.00]我爱你\n[00:20.00]alone",
+            LyricSource.SIDECAR_LRC,
+        )
+        assertEquals(2, lyrics.lines.size)
+        assertEquals("I love you", lyrics.lines[0].text)
+        assertEquals("我爱你", lyrics.lines[0].translation)
+        assertEquals(20_000L, lyrics.lines[1].timeMs)
+    }
+
+    /** 「原文全在前、译文全在后」的块状写法：排序后同一时间戳会相邻，应合并 */
+    @Test
+    fun mergesBlockStyleTranslation() {
+        val lyrics = LrcParser.parse(
+            "[00:12.00]I love you\n[00:20.00]alone\n[00:12.00]我爱你\n[00:20.00]孤单",
+            LyricSource.SIDECAR_LRC,
+        )
+        assertEquals(2, lyrics.lines.size)
+        assertEquals("我爱你", lyrics.lines[0].translation)
+        assertEquals("孤单", lyrics.lines[1].translation)
+    }
+
+    /** 重复副歌里同一句被写了两遍：不该被当成译文吃掉 */
+    @Test
+    fun identicalTextIsNotMergedAsTranslation() {
+        val lyrics = LrcParser.parse(
+            "[00:12.00]la la\n[00:12.00]la la",
+            LyricSource.SIDECAR_LRC,
+        )
+        assertEquals(2, lyrics.lines.size)
+        assertEquals(null, lyrics.lines[0].translation)
+    }
+
+    /** 同一时间戳挤了三行：只认第一行原文 + 第一行不同文本作译文，第三行保留为独立行 */
+    @Test
+    fun thirdLineWithSameTimestampStaysSeparate() {
+        val lyrics = LrcParser.parse(
+            "[00:12.00]original\n[00:12.00]译文\n[00:12.00]romaji",
+            LyricSource.SIDECAR_LRC,
+        )
+        assertEquals(2, lyrics.lines.size)
+        assertEquals("译文", lyrics.lines[0].translation)
+        assertEquals("romaji", lyrics.lines[1].text)
+    }
 }
