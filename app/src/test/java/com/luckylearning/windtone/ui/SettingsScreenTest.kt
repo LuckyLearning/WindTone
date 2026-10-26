@@ -65,7 +65,6 @@ class SettingsScreenTest {
         dynamicTheme: Boolean = SettingsDefaults.DYNAMIC_THEME,
         onCarMode: (Boolean) -> Unit = {},
         onLyricScale: (Float) -> Unit = {},
-        onLyricBilingual: (Int) -> Unit = {},
         onLyricOverlayTextColor: (Int) -> Unit = {},
         onLyricOverlayBoxHeightPercent: (Int) -> Unit = {},
         onLyricOverlayFullHeightPercent: (Int) -> Unit = {},
@@ -134,7 +133,6 @@ class SettingsScreenTest {
                     overlayHealth = LyricOverlayBus.Health(),
                     onLyricScale = onLyricScale,
                     onLyricTapSeeks = {},
-                    onLyricBilingual = onLyricBilingual,
                     onSpeed = {},
                     onPitch = {},
                     onSkipSilence = {},
@@ -602,36 +600,20 @@ class SettingsScreenTest {
     // ================================================================ v1.1.18 双语歌词
 
     /**
-     * 「歌词」子页有「双语歌词」入口，弹层三选一，点选即回调。
+     * 「歌词」子页**不再有**「双语歌词」入口（v1.2.2 用户要求移除切换功能）。
      *
-     * 入口行丢了不会编译失败也不会报错，只会让这个功能从界面上消失 ——
-     * 与上面「格式与容量」入口同理，必须有一条编译期之外的回归。
+     * 这条是反向守护：功能删掉后最怕有人"顺手加回来"，或者删了 UI 却没删状态，
+     * 让设置页留一条点不动的死行。断言的是"界面上找不到这个词"。
      */
     @Test
-    fun lyricsPageExposesBilingualModeChoice() {
-        var mode: Int? = null
-        render(onLyricBilingual = { mode = it })
+    fun lyricsPageNoLongerExposesBilingualSwitch() {
+        render()
 
         compose.onNodeWithText("歌词").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText("双语歌词 · 都显示", substring = true)
-            .performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("双语歌词 · 都显示", substring = true).performClick()
-        compose.waitForIdle()
-        compose.onNodeWithText("只显示中文").performClick()
-        compose.waitForIdle()
-        assertEquals("点「只显示中文」应当回调 1", 1, mode)
+        compose.onAllNodesWithText("双语歌词", substring = true).assertCountEquals(0)
     }
 
-    /**
-     * v1.1.30 两个入口分家；v1.1.52 再拆页。
-     *
-     *  · 「不显示悬浮窗的应用」跟着悬浮歌词整体搬进「悬浮歌词」子页；
-     *  · 「记录前台应用切换」在 关于与诊断 → **调试**，和「加入名单」放在同一屏。
-     *
-     * 防的是「功能从界面上悄悄消失」—— 这两处都是用户在自己车上配名单的唯一入口，
-     * 丢了不会编译失败、不会报错。
-     */
     @Test
     fun lyricsPageKeepsOnlyHiddenAppsRow() {
         render(player = PlayerUiState(lyricOverlay = true))

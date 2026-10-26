@@ -144,14 +144,6 @@ class SettingsRepositoryTest {
         assertEquals(100, settings.setOverlayFullOffsetPercent(101))
     }
 
-    @Test
-    fun `setLyricBilingual 夹到 0到2`() {
-        assertEquals(2, settings.setLyricBilingual(9))
-        assertEquals(0, settings.setLyricBilingual(-1))
-        assertEquals(1, settings.setLyricBilingual(1))
-        assertEquals(1, prefs.lyricBilingual)
-    }
-
     // ---------------------------------------------------------------- 集合与颜色
 
     @Test

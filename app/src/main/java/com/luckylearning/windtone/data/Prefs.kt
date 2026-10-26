@@ -90,14 +90,6 @@ object SettingsDefaults {
     /** 开机后台自启播放：默认关（要用户明确打开，避免一上车就突然出声） */
     const val AUTO_PLAY_ON_BOOT = false
 
-    /**
-     * 双语歌词显示模式（v1.1.18）：0 中英都显示 / 1 只显示中文 / 2 只显示英文。
-     *
-     * 默认 0 = 与历史行为完全一致：老用户升级后不会突然少掉译文那一行。
-     * 取值与 `lyrics/BilingualMode.index` 一一对应。
-     */
-    const val BILINGUAL = 0
-
     const val LYRIC_OVERLAY = false
 
     /** 悬浮歌词行数默认值：1 = 只显示当前行（老行为不变） */
@@ -656,20 +648,6 @@ class Prefs private constructor(context: Context) {
         set(value) {
             sp.edit().putBoolean(KEY_LYRIC_TAP_SEEKS, value).apply()
             ioScope.launch { store.putBoolean(KEY_LYRIC_TAP_SEEKS, value) }
-        }
-
-    /**
-     * 双语歌词显示模式：0 中英都显示（默认）/ 1 只显示中文 / 2 只显示英文。
-     *
-     * 只影响**显示**：歌词文件、导出的 LRC、解析结果都保持原样。
-     * 夹取到 0..2，防旧数据或手改写出越界值（`BilingualMode.of` 也会兜底）。
-     */
-    var lyricBilingual: Int
-        get() = sp.getInt(KEY_LYRIC_BILINGUAL, SettingsDefaults.BILINGUAL).coerceIn(0, 2)
-        set(value) {
-            val v = value.coerceIn(0, 2)
-            sp.edit().putInt(KEY_LYRIC_BILINGUAL, v).apply()
-            ioScope.launch { store.putInt(KEY_LYRIC_BILINGUAL, v) }
         }
 
     /**
@@ -1433,7 +1411,6 @@ class Prefs private constructor(context: Context) {
         const val KEY_LYRIC_TAP_SEEKS = "lyric_tap_seeks"
         const val KEY_PLAYER_A11Y_ACTION = "player_a11y_action"
         const val KEY_OVERLAY_HANDLES = "overlay_handles"
-        const val KEY_LYRIC_BILINGUAL = "lyric_bilingual_mode"
         const val KEY_LYRICS_PANE = "lyrics_pane_visible"
         // ⚠️ 逐字歌词移除后（v1.1.8）有三个键不再读写：`lyric_word_by_word` /
         //    `lyric_sung_color` / `lyric_overlay_sung_color`。它们仍留在老用户的

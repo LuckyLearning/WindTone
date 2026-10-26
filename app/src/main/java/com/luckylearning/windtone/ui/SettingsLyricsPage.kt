@@ -88,7 +88,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luckylearning.windtone.BuildConfig
-import com.luckylearning.windtone.lyrics.BilingualMode
 import com.luckylearning.windtone.playback.Pitch
 import com.luckylearning.windtone.ui.theme.windShadow
 import kotlin.math.abs
@@ -120,7 +119,6 @@ internal fun SettingsLyricsPage(
     onLyricTapSeeks: (Boolean) -> Unit,
     /** 播放页左侧竖排是否显示「无障碍状态」按钮（v1.1.92） */
     onPlayerA11yAction: (Boolean) -> Unit = {},
-    onLyricBilingual: (Int) -> Unit,
     /** 打开「桌面悬浮歌词」子页（v1.1.80：它不再与「歌词」平级，收进本页） */
     onOpenOverlay: () -> Unit = {},
     /** 全屏模式的宽度（屏宽百分比，30..100）—— v1.1.20，与单条字幕的宽度分开 */
@@ -130,7 +128,6 @@ internal fun SettingsLyricsPage(
     // 自定义尺寸 / 位置 / 背景（v1.1.48）
 ) {
     val context = LocalContext.current
-    var bilingualChoice by remember { mutableStateOf(false) }
 
 
     // ------------------------------------------------ 播放页歌词
@@ -175,13 +172,9 @@ internal fun SettingsLyricsPage(
             onLyricTapSeeks(SettingsDefaults.LYRIC_TAP_SEEKS)
         },
     )
-    // v1.1.18：双语歌词显示模式（默认「中英都显示」= 历史行为）
-    ActionRow(
-        title = stringResource(R.string.bilingual_lyrics_2, BilingualMode.of(player.lyricBilingual).shortLabel),
-        subtitle = stringResource(R.string.which_lines_translated_lyrics_show),
-        onClick = { bilingualChoice = true },
-        chevron = true,
-    )
+    // v1.2.2：**移除「双语歌词」三档切换**（用户要求）。
+    // 从此固定为「原文 + 译文都显示」—— 这也是原本的默认档与历史行为，
+    // 所以对绝大多数人没有观感变化，只是少了一个可以把自己绕进去的开关。
     // ⚠️ 这里原先还有两项：「逐字歌词」开关与「已唱部分的颜色」（v1.1.8 移除）。
     //    逐字染色（含给普通 LRC 派生字级时间轴、以及它专用的已唱色）已整体删除，
     //    播放页现在只有「当前行整行高亮」——靠主题色 + 字号 + 字重区分，没有可调项。
@@ -208,65 +201,5 @@ internal fun SettingsLyricsPage(
     // SettingsPage.ROOT 分支）—— 原来这里只有音乐库 / 更新 / 关于与诊断
     // 三条 ActionRow，现在外观 / 播放 / 歌词也各自成了分类卡。
 
-    // 双语歌词选择弹层（v1.1.18）：结构与悬浮歌词那套一致，但没有 6 秒预览 ——
-    // 选中即对当前歌立即重算，播放页本来就看得到差别。
-    if (bilingualChoice) {
-        val choice = BilingualChoice.MODE
-        val selected = player.lyricBilingual
-        AlertDialog(
-            onDismissRequest = { bilingualChoice = false },
-            title = { Text(choice.title) },
-            text = {
-                Column {
-                    Text(
-                        choice.intro,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    choice.options.forEach { option ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .clickable {
-                                    onLyricBilingual(option.value)
-                                    bilingualChoice = false
-                                }
-                                .padding(vertical = 10.dp, horizontal = 4.dp),
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    option.label,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = if (option.value == selected) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurface
-                                    },
-                                )
-                                Text(
-                                    option.hint,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            if (option.value == selected) {
-                                Icon(
-                                    Icons.Filled.Check,
-                                    contentDescription = stringResource(R.string.selected),
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { bilingualChoice = false }) { Text(stringResource(R.string.off)) }
-            },
-        )
-    }
+    // （v1.2.2 起「双语歌词」切换弹层已移除，见上方说明）
 }

@@ -32,8 +32,6 @@ import com.luckylearning.windtone.data.aliyun.AliyunQueueSnapshot
 import com.luckylearning.windtone.data.aliyun.AliyunTrackStore
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.data.model.TrackFragment
-import com.luckylearning.windtone.lyrics.BilingualLyrics
-import com.luckylearning.windtone.lyrics.BilingualMode
 import com.luckylearning.windtone.lyrics.Lyrics
 import com.luckylearning.windtone.overlay.LyricOverlayBridge
 import com.luckylearning.windtone.overlay.LyricOverlayBus
@@ -92,7 +90,6 @@ class PlaybackEngine(
             overlayHandles = prefs.overlayHandles,
             lyricTapSeeks = prefs.lyricTapSeeks,
             showA11yAction = prefs.playerA11yAction,
-            lyricBilingual = prefs.lyricBilingual,
             lyricsPaneVisible = prefs.lyricsPaneVisible,
             carMode = prefs.carMode,
             lyricOverlay = prefs.lyricOverlay,
@@ -1185,26 +1182,7 @@ class PlaybackEngine(
         _player.update { it.copy(lyricTapSeeks = enabled) }
     }
 
-    /**
-     * 双语歌词显示模式：0 中英都显示 / 1 只显示中文 / 2 只显示英文（v1.1.18）。
-     *
-     * 不重读歌词文件：原始歌词一直在 [rawLyrics] 里，这里只是重新裁剪一遍，
-     * 所以切换是**立刻**生效的（当前歌不用重新加载，也不会闪一下空白）。
-     * 悬浮窗开着时顺带给一次前台预览，让用户在设置页就能看到差别。
-     */
-    override fun setLyricBilingual(mode: Int) {
-        val normalized = mode.coerceIn(0, 2)
-        prefs.lyricBilingual = normalized
-        _player.update {
-            it.copy(
-                lyricBilingual = normalized,
-                lyrics = BilingualLyrics.apply(rawLyrics, BilingualMode.of(normalized)),
-            )
-        }
-        overlaySettings.previewOverlayAfterConfigChange()
-    }
-
-    /** 导出用的原始歌词：带双语副行，不受「双语歌词」显示模式影响 */
+    /** 导出用的原始歌词：带双语副行（v1.2.2 起显示也固定为中英都显示） */
     override fun lyricsForExport(): Lyrics = rawLyrics
 
     /** 播放页展示歌词还是封面：落盘，下次进播放页保持这一状态 */
@@ -1426,13 +1404,10 @@ class PlaybackEngine(
             if (seq != lyricsSeq) return@launch
             rawLyrics = raw
             _player.update {
-                it.copy(lyrics = BilingualLyrics.apply(raw, bilingualMode()), lyricsLoading = false)
+                it.copy(lyrics = raw, lyricsLoading = false)
             }
         }
     }
-
-    /** 当前的「双语歌词」显示模式（设置页只存下标，枚举的还原与兜底都在 [BilingualMode.of]） */
-    private fun bilingualMode(): BilingualMode = BilingualMode.of(prefs.lyricBilingual)
 
     /**
      * 断点续播后的**歌词自愈**（v1.1.18）。

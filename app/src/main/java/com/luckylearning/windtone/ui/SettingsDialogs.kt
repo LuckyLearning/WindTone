@@ -301,31 +301,6 @@ private fun routeLatencyText(update: UpdateUiState, route: DownloadRoute): Strin
 internal data class ChoiceOption(val value: Int, val label: String, val hint: String)
 
 /**
- * 「双语歌词」显示模式（v1.1.18）：中英都显示 / 只显示中文 / 只显示英文。
- *
- * 与悬浮歌词的 [OverlayChoice] 分开立枚举：语义上它属于**播放页歌词**，
- * 而且没有「6 秒预览」那套联动（切换是对当前歌立即重算，播放页本身就看得到）。
- * 取值与 `lyrics/BilingualMode.index` 一一对应。
- */
-internal enum class BilingualChoice(
-    val title: String,
-    val intro: String,
-    val options: List<ChoiceOption>,
-) {
-    MODE(
-        AppStrings.s(R.string.bilingual_lyrics),
-        AppStrings.s(R.string.applies_to_lyrics_that_carry),
-        listOf(
-            ChoiceOption(0, AppStrings.s(R.string.show_both_languages), AppStrings.s(R.string.original_and_translation_one_line)),
-            ChoiceOption(1, AppStrings.s(R.string.chinese_only), AppStrings.s(R.string.show_chinese_translations_for_foreign)),
-            ChoiceOption(2, AppStrings.s(R.string.english_only), AppStrings.s(R.string.show_english_translations_for_chinese)),
-        ),
-    ),
-    ;
-}
-
-
-/**
  * 悬浮歌词的外观选项（行数 / 对齐 / 暂停表现）。
  *
  * 把「标题 + 说明 + 选项列表」一起收进枚举，是为了让这些设置项共用同一个弹层实现——

@@ -255,7 +255,6 @@ fun SettingsScreen(
     onLyricTapSeeks: (Boolean) -> Unit,
     onPlayerA11yAction: (Boolean) -> Unit = {},
     /** 双语歌词显示模式：0 都显示 / 1 只中文 / 2 只英文 —— v1.1.18 */
-    onLyricBilingual: (Int) -> Unit,
     onSpeed: (Float) -> Unit,
     /** 变调：半音（-12..+12，0 = 原调） */
     onPitch: (Int) -> Unit,
@@ -510,7 +509,6 @@ fun SettingsScreen(
                         onLyricScale = onLyricScale,
                         onLyricTapSeeks = onLyricTapSeeks,
                         onPlayerA11yAction = onPlayerA11yAction,
-                        onLyricBilingual = onLyricBilingual,
                         onOpenOverlay = { page = SettingsPage.OVERLAY },
                     )
 

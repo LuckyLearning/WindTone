@@ -81,10 +81,6 @@ class SettingsRepository(val prefs: Prefs) {
     }
 
     /** @return 夹取到 0..2 后的值 */
-    fun setLyricBilingual(mode: Int): Int {
-        prefs.lyricBilingual = mode
-        return prefs.lyricBilingual
-    }
 
     fun setLyricsPaneVisible(visible: Boolean) {
         prefs.lyricsPaneVisible = visible

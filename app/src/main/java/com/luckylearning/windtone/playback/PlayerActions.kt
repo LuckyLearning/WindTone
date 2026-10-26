@@ -60,7 +60,6 @@ interface PlayerActions : OverlayActions {
      * 双语歌词显示模式：0 中英都显示 / 1 只显示中文 / 2 只显示英文（v1.1.18）。
      * 只影响显示；歌词文件与导出不受影响。
      */
-    fun setLyricBilingual(mode: Int)
 
     /** 未经「双语歌词」过滤的原始歌词（导出用：译文要一起写进 LRC） */
     fun lyricsForExport(): Lyrics

@@ -114,7 +114,6 @@ class CarSettingsTest {
                     overlayHealth = LyricOverlayBus.Health(),
                     onLyricScale = {},
                     onLyricTapSeeks = {},
-                    onLyricBilingual = {},
                     onSpeed = onSpeed,
                     onPitch = onPitch,
                     onSkipSilence = {},
