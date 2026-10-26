@@ -92,6 +92,7 @@ internal fun PlayerPane(
             onMarkAbLoopA = playerVm::markAbLoopA,
             onMarkAbLoopB = playerVm::markAbLoopB,
             onClearAbLoop = playerVm::clearAbLoop,
+            onLoopLyricLine = playerVm::loopLyricLine,
             onExportLyrics = onExportLyrics ?: { playerVm.exportLyrics(it) },
             onShowAudioInfo = onShowAudioInfo,
             // 车载沉浸态常驻歌名行的红心：收藏状态存在 LibraryUiState 里，

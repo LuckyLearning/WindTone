@@ -416,6 +416,8 @@ data class PlayerUiState(
      */
     val abLoopAMs: Long? = null,
     val abLoopBMs: Long? = null,
+    /** D1：当前 A-B 是否来自「逐句循环」（与手动设 A/B 共用引擎；切歌清除） */
+    val abLoopFromLyric: Boolean = false,
     /**
      * 打开应用时是否从上次的进度接着播（v1.1.16）。
      *

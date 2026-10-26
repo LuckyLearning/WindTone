@@ -62,4 +62,12 @@ class AbLoopTest {
         assertNull(s.aMs)
         assertNull(s.bMs)
     }
+
+    @Test
+    fun `D1 lyric line interval arms and seeks`() {
+        val s = AbLoopState.fromInterval(12_000L, 15_500L)
+        assertTrue(s.armed)
+        assertNull(s.seekIfNeeded(14_000L))
+        assertEquals(12_000L, s.seekIfNeeded(15_500L))
+    }
 }

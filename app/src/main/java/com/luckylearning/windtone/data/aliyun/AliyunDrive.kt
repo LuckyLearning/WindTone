@@ -490,7 +490,7 @@ class AliyunDrive(
         // 让一次本可以自愈的 401 变成必须用户重新授权。
         if (code == 401) {
             if (!retried && forceRefresher()) return api(url, body, retried = true)
-            error("登录状态已失效，请重新扫码授权")
+            error("登录状态已失效。下一步：到设置 → 在线服务重新扫码授权")
         }
         if (text.isBlank()) error("阿里云盘返回空响应（HTTP $code）")
         val json = JSONObject(text)

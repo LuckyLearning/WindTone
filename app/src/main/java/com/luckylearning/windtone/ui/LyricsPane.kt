@@ -80,7 +80,8 @@ fun LyricsPane(
      * 用来做「就唱到这句」的偏移校准（批次 10.4-②）——用户听到唱到哪一句时
      * 直接长按那一行，比在设置里按 ±100ms 试错直观得多。传 null 关闭该手势。
      */
-    onLineLongPress: ((Long) -> Unit)? = null,
+    /** 长按歌词行：(行号, 该行 timeMs)；null = 不接管长按 */
+    onLineLongPress: ((Int, Long) -> Unit)? = null,
     /**
      * 点歌词行是否跳转到那一句（v1.1.23，默认关）。
      *
@@ -197,7 +198,7 @@ private fun SyncedLyrics(
     offsetMs: Int,
     scale: Float,
     onSeekTo: (Long) -> Unit,
-    onLineLongPress: ((Long) -> Unit)?,
+    onLineLongPress: ((Int, Long) -> Unit)?,
     tapSeeks: Boolean,
 ) {
     val listState = rememberLazyListState()
@@ -274,7 +275,7 @@ private fun SyncedLyrics(
                 // 无意义的巨大数字，等于把偏移一次搞坏。
                 onLongClick = onLineLongPress
                     ?.takeIf { line.timeMs >= 0 }
-                    ?.let { cb -> { cb(line.timeMs) } },
+                    ?.let { cb -> { cb(index, line.timeMs) } },
             )
         }
     }

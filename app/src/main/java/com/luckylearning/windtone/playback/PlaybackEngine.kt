@@ -254,8 +254,10 @@ class PlaybackEngine(
     private var artworkJob: Job? = null
     private var positionJob: Job? = null
 
-    /** A-B 循环（C2）：会话级，切歌清除；与 [_player] 中 abLoop* 字段同步 */
+    /** A-B 循环（C2 / D1）：会话级，切歌清除；与 [_player] 中 abLoop* 字段同步 */
     private var abLoop: AbLoopState = AbLoopState()
+    /** D1：true = 当前区间来自歌词逐句循环（仅影响文案与 UI 标记） */
+    private var abLoopFromLyric: Boolean = false
     /** 本次恢复是否**强制**起播（开机后台播放用；不受「打开应用继续上次播放」开关限制） */
     private var forceAutoplayOnRestore = false
 
@@ -1119,6 +1121,7 @@ class PlaybackEngine(
 
     override fun markAbLoopA() {
         val pos = controller?.currentPosition?.coerceAtLeast(0L) ?: _progress.value.positionMs
+        abLoopFromLyric = false
         abLoop = abLoop.markA(pos)
         publishAbLoop()
         messages.post("已设 A 点 " + formatAbMs(pos))
@@ -1128,33 +1131,61 @@ class PlaybackEngine(
         val pos = controller?.currentPosition?.coerceAtLeast(0L) ?: _progress.value.positionMs
         if (!abLoop.canMarkB(pos)) {
             messages.post(
-                if (abLoop.aMs == null) "请先设 A 点"
-                else "B 点需晚于 A 点",
+                if (abLoop.aMs == null) "请先设 A 点。下一步：先点「设 A」再设 B"
+                else "B 点需晚于 A 点。下一步：把进度拖到 A 点之后再设 B",
             )
             return
         }
+        abLoopFromLyric = false
         abLoop = abLoop.markB(pos)
         publishAbLoop()
         messages.post("已设 B 点 " + formatAbMs(pos) + "，区间循环中")
     }
 
     override fun clearAbLoop() {
+        val wasLyric = abLoopFromLyric
         clearAbLoopInternal()
-        messages.post("已清除 A-B 循环")
+        messages.post(if (wasLyric) "已退出逐句循环" else "已清除 A-B 循环")
+    }
+
+    override fun loopLyricLine(startMs: Long, endMs: Long) {
+        val next = AbLoopState.fromInterval(startMs, endMs)
+        if (!next.armed) {
+            messages.post("这句没有有效时间轴，无法循环。下一步：换一句有时间戳的歌词，或用播放设置手动设 A/B")
+            return
+        }
+        abLoop = next
+        abLoopFromLyric = true
+        publishAbLoop()
+        val a = next.aMs!!
+        controller?.seekTo(a)
+        controller?.play()
+        messages.post("逐句循环中（" + formatAbMs(a) + "–" + formatAbMs(next.bMs!!) + "）。下一步：长按该句或到播放设置清除即可退出")
     }
 
     private fun clearAbLoopInternal() {
-        if (abLoop.aMs == null && abLoop.bMs == null) {
+        if (abLoop.aMs == null && abLoop.bMs == null && !abLoopFromLyric) {
             // 仍同步一次 UI，避免冷启动残留观感
-            if (_player.value.abLoopAMs != null || _player.value.abLoopBMs != null) publishAbLoop()
+            if (_player.value.abLoopAMs != null || _player.value.abLoopBMs != null ||
+                _player.value.abLoopFromLyric
+            ) {
+                publishAbLoop()
+            }
             return
         }
         abLoop = AbLoopState()
+        abLoopFromLyric = false
         publishAbLoop()
     }
 
     private fun publishAbLoop() {
-        _player.update { it.copy(abLoopAMs = abLoop.aMs, abLoopBMs = abLoop.bMs) }
+        _player.update {
+            it.copy(
+                abLoopAMs = abLoop.aMs,
+                abLoopBMs = abLoop.bMs,
+                abLoopFromLyric = abLoopFromLyric,
+            )
+        }
     }
 
     private fun formatAbMs(ms: Long): String {

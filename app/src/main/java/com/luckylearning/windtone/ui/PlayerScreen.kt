@@ -153,6 +153,8 @@ fun PlayerScreen(
     onMarkAbLoopA: () -> Unit = {},
     onMarkAbLoopB: () -> Unit = {},
     onClearAbLoop: () -> Unit = {},
+    /** D1：逐句循环（灌入同一 A-B 引擎） */
+    onLoopLyricLine: (Long, Long) -> Unit = { _, _ -> },
     onExportLyrics: (android.net.Uri) -> Unit,
     onShowAudioInfo: () -> Unit = {},
     /**
@@ -204,6 +206,8 @@ fun PlayerScreen(
     // 刻意在按下瞬间把位置**快照**下来，而不是让弹窗每 250ms 读一次进度——
     // 否则用户盯着弹窗读数字的那几秒里，"当前要设成多少"一直在跳。
     var offsetCalibrate by remember { mutableStateOf<Pair<Long, Long>?>(null) }
+    // D1：长按歌词 → 先选「循环此句 / 校准偏移」；存行号 + 行时间戳 + 按下时进度
+    var lyricLineMenu by remember { mutableStateOf<Triple<Int, Long, Long>?>(null) }
 
     // 播放模式（顺序 / 列表循环 / 单曲循环 / 随机）—— 4 个档位共用下面控制区的一个按钮
     val playMode = playModeOf(state.repeatMode, state.shuffle)
@@ -456,9 +460,9 @@ fun PlayerScreen(
             // --------------------------------------------- 中部：封面 / 歌词
             Box(Modifier.weight(1f)) {
                 // 长按哪一行就在哪一刻对表：位置在这里取一次快照
-                val onLineLongPress: (Long) -> Unit = { lineMs ->
+                val onLineLongPress: (Int, Long) -> Unit = { lineIndex, lineMs ->
                     keepAwake()
-                    offsetCalibrate = lineMs to progressState.value.positionMs
+                    lyricLineMenu = Triple(lineIndex, lineMs, progressState.value.positionMs)
                 }
                 if (state.carMode) {
                     // 车机（v1.1.44）：参考车机版音乐应用的版式 —— **左歌词、右唱片**，
@@ -872,6 +876,7 @@ fun PlayerScreen(
             onOpenOverlayStyle = { showOptions = false; showOverlayStyle = true },
             abLoopAMs = state.abLoopAMs,
             abLoopBMs = state.abLoopBMs,
+            abLoopFromLyric = state.abLoopFromLyric,
             onMarkAbLoopA = onMarkAbLoopA,
             onMarkAbLoopB = onMarkAbLoopB,
             onClearAbLoop = onClearAbLoop,
@@ -895,6 +900,63 @@ fun PlayerScreen(
         onEndOfAlbum = { onSleepEndOfAlbum(); showSleep = false },
         onCancel = { onCancelSleep(); showSleep = false },
     )
+
+    // ---------------------------------------------- 长按歌词行 → D1 菜单 / 校准偏移
+    lyricLineMenu?.let { (lineIndex, lineMs, positionMs) ->
+        val durationMs = progressState.value.durationMs
+        val interval = state.lyrics.lineIntervalMs(lineIndex, fallbackEndMs = durationMs)
+        val loopingThis = state.abLoopFromLyric &&
+            state.abLoopAMs != null &&
+            interval != null &&
+            state.abLoopAMs == interval.first &&
+            state.abLoopBMs == interval.second
+        AlertDialog(
+            onDismissRequest = { lyricLineMenu = null },
+            title = { Text(if (loopingThis) "逐句循环中" else "这一句") },
+            text = {
+                Text(
+                    if (loopingThis) {
+                        "正在循环此句。可退出循环，或改去校准歌词偏移。"
+                    } else {
+                        "可循环播放这一句，或把播放位置对准这句来校准偏移。"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                if (loopingThis) {
+                    TextButton(
+                        onClick = {
+                            onClearAbLoop()
+                            lyricLineMenu = null
+                        },
+                    ) { Text("退出循环") }
+                } else {
+                    TextButton(
+                        onClick = {
+                            val pair = interval
+                            if (pair != null) {
+                                onLoopLyricLine(pair.first, pair.second)
+                            }
+                            lyricLineMenu = null
+                        },
+                        enabled = interval != null,
+                    ) { Text("循环此句") }
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(
+                        onClick = {
+                            offsetCalibrate = lineMs to positionMs
+                            lyricLineMenu = null
+                        },
+                    ) { Text("校准偏移") }
+                    TextButton(onClick = { lyricLineMenu = null }) { Text("取消") }
+                }
+            },
+        )
+    }
 
     // ---------------------------------------------- 长按歌词行 → 校准偏移（10.4-②）
     //
@@ -972,7 +1034,7 @@ private fun PlayerLyrics(
     state: PlayerUiState,
     progressState: State<PlaybackProgress>,
     onSeekTo: (Long) -> Unit,
-    onLineLongPress: (Long) -> Unit,
+    onLineLongPress: (Int, Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LyricsPane(

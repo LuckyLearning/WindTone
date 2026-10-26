@@ -641,16 +641,24 @@ object AliyunErrors {
     fun hint(code: String): String = when (code) {
         "" -> ""
         "AccessTokenExpired", "AccessTokenInvalid", "InvalidAccessToken", "I400JD" ->
-            "登录状态已过期，请重新登录"
-        "InvalidGrant", "invalid_grant" -> "刷新令牌无效或已失效，请重新获取"
-        "InvalidClient", "invalid_client" -> "应用凭据无效（ClientId / ClientSecret）"
-        "InvalidParameter", "invalid_parameter" -> "请求参数错误"
-        "BadRequest" -> "请求参数无效（多为 drive_id / file_id 为空或不匹配，不是登录问题）"
-        "NotFound", "ResourceNotFound" -> "文件或目录不存在（可能已被移动或删除）"
-        "AccessDenied", "PermissionDenied", "Forbidden" -> "没有权限访问这个资源"
-        "QuotaExceeded", "TooManyRequests", "TooManyRequestsError" -> "请求过于频繁，被限流了，等几分钟再试"
-        "ExceedCapacityForbidden" -> "网盘容量超限，播放被限制（需清理或扩容）"
-        else -> "阿里云盘返回错误：$code"
+            "登录状态已过期。下一步：到设置 → 在线服务重新扫码授权"
+        "InvalidGrant", "invalid_grant" ->
+            "刷新令牌无效或已失效。下一步：到设置 → 在线服务重新扫码授权"
+        "InvalidClient", "invalid_client" ->
+            "应用凭据无效（ClientId / ClientSecret）。下一步：核对自建应用配置后重试"
+        "InvalidParameter", "invalid_parameter" ->
+            "请求参数错误。下一步：稍后重试；若反复出现请反馈诊断包"
+        "BadRequest" ->
+            "请求参数无效（多为 drive_id / file_id 为空或不匹配，不是登录问题）。下一步：重新进入云盘目录再试"
+        "NotFound", "ResourceNotFound" ->
+            "文件或目录不存在（可能已被移动或删除）。下一步：回云盘根目录重新浏览，或从曲库移除失效项"
+        "AccessDenied", "PermissionDenied", "Forbidden" ->
+            "没有权限访问这个资源。下一步：确认账号有权访问该文件，或重新授权云盘"
+        "QuotaExceeded", "TooManyRequests", "TooManyRequestsError" ->
+            "请求过于频繁，被限流了。下一步：等几分钟再试"
+        "ExceedCapacityForbidden" ->
+            "网盘容量超限，播放被限制。下一步：到阿里云盘清理空间或扩容后再播"
+        else -> "阿里云盘返回错误：$code。下一步：到设置 → 关于与诊断复制诊断包反馈"
     }
 
     /** API 响应（带 code 字段）→ 人话 */

@@ -88,16 +88,15 @@ class PlaybackErrorMessagesTest {
 
     @Test
     fun `真正的网络失败码仍说网络连接失败`() {
-        assertEquals(
-            "网络连接失败",
-            PlaybackErrorMessages.describe(
-                httpStatus = 0,
-                errorCode = PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
-                errorCodeName = "ERROR_CODE_IO_NETWORK_CONNECTION_FAILED",
-                causeChain = emptyList(),
-                hasHttpDataSourceException = true,
-            ),
+        val net = PlaybackErrorMessages.describe(
+            httpStatus = 0,
+            errorCode = PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+            errorCodeName = "ERROR_CODE_IO_NETWORK_CONNECTION_FAILED",
+            causeChain = emptyList(),
+            hasHttpDataSourceException = true,
         )
+        assertTrue(net.startsWith("网络连接失败"))
+        assertTrue(net.contains("下一步"))
     }
 
     @Test
@@ -141,5 +140,40 @@ class PlaybackErrorMessagesTest {
     @Test
     fun `DEFAULT_CACHED_PREFIX_BYTES 合理`() {
         assertEquals(512L * 1024, OnlineMediaCache.DEFAULT_CACHED_PREFIX_BYTES)
+    }
+
+    @Test
+    fun `A4 文案带下一步`() {
+        val msg = PlaybackErrorMessages.describe(
+            httpStatus = 403,
+            errorCode = PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
+            errorCodeName = "ERROR_CODE_IO_BAD_HTTP_STATUS",
+            causeChain = emptyList(),
+            hasHttpDataSourceException = true,
+        )
+        assertTrue(msg.contains("下一步"))
+        assertTrue(msg.contains("授权") || msg.contains("设置"))
+    }
+
+    @Test
+    fun `A4 权限缺失带系统设置路径`() {
+        val msg = PlaybackErrorMessages.describe(
+            httpStatus = 0,
+            errorCode = PlaybackException.ERROR_CODE_IO_NO_PERMISSION,
+            errorCodeName = "ERROR_CODE_IO_NO_PERMISSION",
+            causeChain = emptyList(),
+            hasHttpDataSourceException = false,
+        )
+        assertTrue(msg.contains("没有读取权限"))
+        assertTrue(msg.contains("下一步"))
+        assertTrue(msg.contains("权限"))
+    }
+
+    @Test
+    fun `withNext 拼接原因与路径`() {
+        assertEquals(
+            "原因。下一步：去做这件事",
+            PlaybackErrorMessages.withNext("原因", "去做这件事"),
+        )
     }
 }

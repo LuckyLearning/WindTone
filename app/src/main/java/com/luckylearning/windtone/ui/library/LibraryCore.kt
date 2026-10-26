@@ -238,7 +238,7 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
                 pushMessage(
                     when (scopeNow) {
                         ScanScope.FOLDERS -> "所选目录里没有找到音频文件"
-                        else -> "没有找到可播放的音频，可授予「所有文件访问权限」后重试，或改为导入指定的音乐目录"
+                        else -> "没有找到可播放的音频。下一步：授予「所有文件访问权限」后重试，或到扫描范围改导入指定音乐目录"
                     }
                 )
             }

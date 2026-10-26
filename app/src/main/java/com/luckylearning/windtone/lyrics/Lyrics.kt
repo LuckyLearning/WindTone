@@ -35,6 +35,25 @@ data class Lyrics(
 ) {
     val isEmpty: Boolean get() = lines.isEmpty()
 
+    /**
+     * D1：第 [index] 句的起止（毫秒），灌入 [com.luckylearning.windtone.playback.AbLoopState.fromInterval]。
+     *
+     * 结束时刻取下一句起点；末句用 [fallbackEndMs]（通常是歌曲时长）；再不行就给 5 秒兜底，
+     * 保证 `end > start` 才能武装循环。无时间轴 / 越界返回 null。
+     */
+    fun lineIntervalMs(index: Int, fallbackEndMs: Long = Long.MAX_VALUE): Pair<Long, Long>? {
+        if (!synced || index !in lines.indices) return null
+        val start = lines[index].timeMs
+        if (start < 0L) return null
+        val next = lines.getOrNull(index + 1)?.timeMs?.takeIf { it > start }
+        val end = when {
+            next != null -> next
+            fallbackEndMs > start && fallbackEndMs != Long.MAX_VALUE -> fallbackEndMs
+            else -> start + 5_000L
+        }
+        return if (end > start) start to end else null
+    }
+
     /** 返回 positionMs 时刻应当高亮的行号；无匹配返回 -1 */
     fun indexAt(positionMs: Long): Int {
         if (lines.isEmpty() || !synced) return -1

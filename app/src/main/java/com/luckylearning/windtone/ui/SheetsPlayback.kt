@@ -278,6 +278,7 @@ fun PlayerOptionsSheet(
     /** C2 A-B 循环：当前 A/B（毫秒，null=未设） */
     abLoopAMs: Long? = null,
     abLoopBMs: Long? = null,
+    abLoopFromLyric: Boolean = false,
     onMarkAbLoopA: () -> Unit = {},
     onMarkAbLoopB: () -> Unit = {},
     onClearAbLoop: () -> Unit = {},
@@ -332,6 +333,11 @@ fun PlayerOptionsSheet(
             SectionLabel("A-B 循环")
             Text(
                 text = when {
+                    abLoopFromLyric && abLoopAMs != null && abLoopBMs != null ->
+                        "逐句循环中 %s–%s".format(
+                            formatAbClock(abLoopAMs),
+                            formatAbClock(abLoopBMs),
+                        )
                     abLoopAMs != null && abLoopBMs != null ->
                         "区间 %s → %s（到 B 回 A；与变速兼容）".format(
                             formatAbClock(abLoopAMs),
@@ -356,7 +362,9 @@ fun PlayerOptionsSheet(
                     Text(if (abLoopBMs != null) "重设 B" else "设 B")
                 }
                 if (abLoopAMs != null || abLoopBMs != null) {
-                    TextButton(onClick = onClearAbLoop) { Text("清除") }
+                    TextButton(onClick = onClearAbLoop) {
+                        Text(if (abLoopFromLyric) "退出逐句" else "清除")
+                    }
                 }
             }
 

@@ -9,7 +9,7 @@ import java.net.UnknownHostException
 import javax.net.ssl.SSLException
 
 /**
- * 把播放失败翻成用户能看懂、也能截图反馈的一句话。
+ * 把播放失败翻成用户能看懂、也能截图反馈的一句话（A4：原因 + 一条可操作路径）。
  *
  * 歌词与音频是两条独立路径（同目录 `.lrc` / 云盘旁路歌词可以成功，音频直链仍可能挂），
  * 所以提示条**不能**凡是 IO 一律写成「网络连接失败」——并行分片超时、缓存片段坏了、
@@ -44,46 +44,102 @@ object PlaybackErrorMessages {
         hasHttpDataSourceException: Boolean,
     ): String {
         when (httpStatus) {
-            401, 403 -> return "HTTP $httpStatus，直链没有权限或已过期"
-            404 -> return "HTTP 404，文件已不在原位置"
-            416 -> return "HTTP 416，缓存片段不完整"
-            in 400..599 -> return "HTTP $httpStatus"
+            401, 403 -> return withNext(
+                "HTTP $httpStatus，直链没有权限或已过期",
+                "到设置 → 在线服务重新授权云盘",
+            )
+            404 -> return withNext(
+                "HTTP 404，文件已不在原位置",
+                "确认云盘文件还在，或从曲库移除后重新导入",
+            )
+            416 -> return withNext(
+                "HTTP 416，缓存片段不完整",
+                "到设置 → 在线服务清理缓存后重试",
+            )
+            in 400..599 -> return withNext(
+                "HTTP $httpStatus",
+                "稍后重试；若反复出现，到设置 → 在线服务重新授权",
+            )
         }
 
         parallelOrCacheHint(causeChain)?.let { return it }
 
         for (t in causeChain) {
             when (t) {
-                is UnknownHostException -> return "无法解析服务器地址（DNS）"
-                is SocketTimeoutException -> return "网络连接超时"
-                is SSLException -> return "安全连接失败"
-                is FileNotFoundException -> return "本地文件不存在或无法打开"
-                is EOFException -> return "文件数据不完整"
+                is UnknownHostException -> return withNext(
+                    "无法解析服务器地址（DNS）",
+                    "检查网络后重试",
+                )
+                is SocketTimeoutException -> return withNext(
+                    "网络连接超时",
+                    "检查网络后重试；弱网可到设置降低并行下载",
+                )
+                is SSLException -> return withNext(
+                    "安全连接失败",
+                    "核对系统时间是否准确，再检查网络后重试",
+                )
+                is FileNotFoundException -> return withNext(
+                    "本地文件不存在或无法打开",
+                    "确认文件还在，或重新扫描曲库",
+                )
+                is EOFException -> return withNext(
+                    "文件数据不完整",
+                    "重新下载或换一份完整文件",
+                )
             }
         }
 
         when (errorCode) {
-            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED -> return "网络连接失败"
-            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT -> return "网络连接超时"
-            PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND -> return "文件不存在或无法打开"
-            PlaybackException.ERROR_CODE_IO_NO_PERMISSION -> return "没有读取权限"
-            PlaybackException.ERROR_CODE_IO_CLEARTEXT_NOT_PERMITTED -> return "禁止明文 HTTP 连接"
-            PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE ->
-                return "读取位置超出范围（缓存可能损坏）"
-            PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> return "服务器返回异常状态"
-            PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE -> return "服务器返回了非音频内容"
+            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED -> return withNext(
+                "网络连接失败",
+                "检查网络后重试",
+            )
+            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT -> return withNext(
+                "网络连接超时",
+                "检查网络后重试；弱网可到设置降低并行下载",
+            )
+            PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND -> return withNext(
+                "文件不存在或无法打开",
+                "确认文件还在，或重新扫描曲库",
+            )
+            PlaybackException.ERROR_CODE_IO_NO_PERMISSION -> return withNext(
+                "没有读取权限",
+                "到系统设置为本应用授予存储/音频权限",
+            )
+            PlaybackException.ERROR_CODE_IO_CLEARTEXT_NOT_PERMITTED -> return withNext(
+                "禁止明文 HTTP 连接",
+                "改用 HTTPS 源，或到系统允许本应用明文流量",
+            )
+            PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE -> return withNext(
+                "读取位置超出范围（缓存可能损坏）",
+                "到设置 → 在线服务清理缓存后重试",
+            )
+            PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> return withNext(
+                "服务器返回异常状态",
+                "稍后重试；云盘歌可到设置 → 在线服务重新授权",
+            )
+            PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE -> return withNext(
+                "服务器返回了非音频内容",
+                "确认链接仍是音频；云盘歌请重新授权后再试",
+            )
             PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
             PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
-            -> return "音频格式无法解析"
+            -> return withNext(
+                "音频格式无法解析",
+                "换编码格式或转码后再试",
+            )
             PlaybackException.ERROR_CODE_IO_UNSPECIFIED -> {
                 val detail = firstUsefulMessage(causeChain)
                 return when {
                     detail != null && looksLocalOrCache(detail) ->
-                        trimDetail(detail)
+                        withNext(trimDetail(detail), "到设置 → 在线服务清理缓存后重试")
                     hasHttpDataSourceException && isNetworkish(causeChain, detail) ->
-                        "网络连接失败"
-                    detail != null -> "读取音频失败（${trimDetail(detail)}）"
-                    else -> "读取音频失败"
+                        withNext("网络连接失败", "检查网络后重试")
+                    detail != null -> withNext(
+                        "读取音频失败（${trimDetail(detail)}）",
+                        "检查网络或文件后重试",
+                    )
+                    else -> withNext("读取音频失败", "检查网络或文件后重试")
                 }
             }
         }
@@ -92,32 +148,54 @@ object PlaybackErrorMessages {
         if (hasHttpDataSourceException) {
             val detail = firstUsefulMessage(causeChain)
             return when {
-                detail != null && looksLocalOrCache(detail) -> trimDetail(detail)
-                isNetworkish(causeChain, detail) -> "网络连接失败"
-                detail != null -> "读取在线音频失败（${trimDetail(detail)}）"
-                else -> "读取在线音频失败"
+                detail != null && looksLocalOrCache(detail) ->
+                    withNext(trimDetail(detail), "到设置 → 在线服务清理缓存后重试")
+                isNetworkish(causeChain, detail) ->
+                    withNext("网络连接失败", "检查网络后重试")
+                detail != null -> withNext(
+                    "读取在线音频失败（${trimDetail(detail)}）",
+                    "检查网络后重试；云盘歌可重新授权",
+                )
+                else -> withNext("读取在线音频失败", "检查网络后重试；云盘歌可重新授权")
             }
         }
 
-        return errorCodeName
+        return withNext(errorCodeName, "到设置 → 关于与诊断复制诊断包反馈")
     }
+
+    /** A4：原因 + 一条可操作路径（句号衔接，便于 Snackbar 一次读完） */
+    internal fun withNext(reason: String, nextStep: String): String =
+        if (nextStep.isBlank()) reason else "$reason。下一步：$nextStep"
 
     private fun parallelOrCacheHint(chain: List<Throwable>): String? {
         val joined = chain.mapNotNull { it.message }.joinToString(" ")
         return when {
-            "等待分段数据超时" in joined -> "并行分片等待超时（未必是断网）"
-            "分段数据不完整" in joined -> "并行分片数据不完整"
-            "并行下载已取消" in joined -> "并行下载已取消"
-            "服务器不支持分段" in joined -> "服务器不支持分段下载"
+            "等待分段数据超时" in joined -> withNext(
+                "并行分片等待超时（未必是断网）",
+                "到设置降低并行下载，或检查网络后重试",
+            )
+            "分段数据不完整" in joined -> withNext(
+                "并行分片数据不完整",
+                "到设置 → 在线服务清理缓存后重试",
+            )
+            "并行下载已取消" in joined -> withNext(
+                "并行下载已取消",
+                "重新点播放即可",
+            )
+            "服务器不支持分段" in joined -> withNext(
+                "服务器不支持分段下载",
+                "到设置关闭并行下载后重试",
+            )
             "并行下载失败" in joined -> {
                 val inner = chain.mapNotNull { it.message }
                     .firstOrNull { it.startsWith("并行下载失败") }
                     ?.substringAfter("：", "")
                     ?.ifBlank { null }
-                if (inner != null) "并行下载失败（${trimDetail(inner)}）" else "并行下载失败"
+                val reason = if (inner != null) "并行下载失败（${trimDetail(inner)}）" else "并行下载失败"
+                withNext(reason, "检查网络后重试，或到设置关闭并行下载")
             }
             "缓存片段" in joined || ("Cache" in joined && "span" in joined.lowercase()) ->
-                "本地缓存读取失败"
+                withNext("本地缓存读取失败", "到设置 → 在线服务清理缓存后重试")
             else -> null
         }
     }

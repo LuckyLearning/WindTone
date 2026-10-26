@@ -48,8 +48,14 @@ interface PlayerActions : OverlayActions {
     /** 记 A-B 循环 B 点为当前进度（C2）；需已设 A 且当前位置 > A */
     fun markAbLoopB()
 
-    /** 清除 A-B 循环（C2） */
+    /** 清除 A-B 循环（C2 / D1） */
     fun clearAbLoop()
+
+    /**
+     * D1 逐句循环：把一句歌词的起止灌入同一 [AbLoopState] 引擎（[AbLoopState.fromInterval]）。
+     * 切歌会清除；与手动 A-B、变速共用 seek 路径。
+     */
+    fun loopLyricLine(startMs: Long, endMs: Long)
 
     /** 「打开应用继续上次播放」：冷启动恢复队列后是否自动起播（v1.1.16） */
     fun setAutoResume(enabled: Boolean)

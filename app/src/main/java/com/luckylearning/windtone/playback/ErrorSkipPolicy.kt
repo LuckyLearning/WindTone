@@ -11,6 +11,8 @@ package com.luckylearning.windtone.playback
  * 现在的规则：
  *  - 队列里还有下一首、且连续失败**没到** [MAX_CONSECUTIVE] 首 → 跳（单曲文件坏了不该卡住整张专辑）；
  *  - 到了上限 → 停下并说清原因（整批不可用时继续跳只是噪音）。
+ *
+ * A4：停止话术带「下一步」，与 [PlaybackErrorMessages] 的「原因 + 可操作路径」一致。
  */
 object ErrorSkipPolicy {
 
@@ -24,7 +26,12 @@ object ErrorSkipPolicy {
     fun shouldSkip(queueSize: Int, consecutiveErrors: Int): Boolean =
         queueSize > 1 && consecutiveErrors < MAX_CONSECUTIVE
 
-    /** 到达上限时给用户的一句话（把原因带上，否则只能再猜一轮） */
+    /**
+     * 到达上限（或单曲失败）时给用户的一句话。
+     *
+     * [reason] 通常已是 [PlaybackErrorMessages.describe] 的结果（含「下一步」）；
+     * 这里再补一层「已暂停 / 怎么处理队列」的上下文，避免只剩技术原因。
+     */
     fun stopMessage(consecutiveErrors: Int, reason: String): String =
         if (consecutiveErrors >= MAX_CONSECUTIVE) {
             "连续 $consecutiveErrors 首播放失败，已暂停（$reason）"
