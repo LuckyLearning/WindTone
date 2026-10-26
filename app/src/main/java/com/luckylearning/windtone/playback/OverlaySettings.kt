@@ -86,6 +86,13 @@ class OverlaySettings(
         previewOverlayAfterConfigChange()
     }
 
+    override fun setOverlayHandles(enabled: Boolean) {
+        settings.setOverlayHandles(enabled)
+        state.update { it.copy(overlayHandles = enabled) }
+        // 侧钮的增删由服务在下一帧自检（syncHandlesVisibility），这里只需催一次重绘
+        previewOverlayAfterConfigChange()
+    }
+
     override fun setLyricOverlayFullHeight(enabled: Boolean) {
         settings.setOverlayFullHeight(enabled)
         state.update { it.copy(lyricOverlayFullHeight = enabled) }

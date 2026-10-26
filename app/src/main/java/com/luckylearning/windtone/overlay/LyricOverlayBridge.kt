@@ -234,6 +234,9 @@ object LyricOverlayBridge {
     /** 服务请求退出调整态（长时间无操作）；由播放域收集 */
     val exitEditingRequests: SharedFlow<Unit> get() = LyricOverlayBus.exitEditingRequests
 
+    /** 悬浮窗「播放 / 暂停」按钮的请求流（v1.2.0） */
+    val togglePlayRequests: SharedFlow<Unit> get() = LyricOverlayBus.togglePlayRequests
+
     /** 服务在桌面拖动落盘后的通知；由播放域回读位置设置，保证设置页滑块跟手 */
     val positionSaves: SharedFlow<Unit> get() = LyricOverlayBus.positionSaves
 

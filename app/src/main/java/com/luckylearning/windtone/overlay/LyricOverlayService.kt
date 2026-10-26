@@ -106,9 +106,13 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
     private var collapseHandleView: android.view.View? = null
     private var collapseHandleParams: WindowManager.LayoutParams? = null
 
-    // v1.1.95：第二颗钮 —— 打开播放页（图标 / 颜色都与收起钮不同）
+    // v1.1.95：第二颗钮 —— 打开播放页
     private var playHandleView: android.view.View? = null
     private var playHandleParams: WindowManager.LayoutParams? = null
+
+    // v1.2.0：第三颗钮 —— 播放 / 暂停（图标自绘，不依赖系统字体里的符号）
+    private var pauseHandleView: PlayPauseIconView? = null
+    private var pauseHandleParams: WindowManager.LayoutParams? = null
 
     /**
      * 钮的纵向锚点（v1.1.95）。
@@ -482,6 +486,9 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         playHandleView?.let { view -> runCatching { windowManager?.removeView(view) } }
         playHandleView = null
         playHandleParams = null
+        pauseHandleView?.let { view -> runCatching { windowManager?.removeView(view) } }
+        pauseHandleView = null
+        pauseHandleParams = null
         handleAnchorY = -1
         anchorFromWindowY = Int.MIN_VALUE
         contentColumn = null
@@ -950,6 +957,10 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
     override fun applyAppearance(prefs: Prefs) {
         val tv = lyricView ?: return
 
+        // v1.2.0：侧钮随「车载模式 / 开关」变化实时增删 ——
+        // 用户切到手机模式或关掉开关时不能留三颗钮飘在桌面上。
+        syncHandlesVisibility()
+
         // 底板透明度变了就重算一次文字的「可读性包」：不透明度 0 = 无底板，文字直接
         // 压在任何画面上，必须有更硬的描边，否则浅色文字落在浅色地图 / 泊车画面上
         // 就是一片糊（v1.1.25）。v1.1.51 起背景只有「颜色 + 不透明度」一套语义。
@@ -1346,6 +1357,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         // v1.1.91：收起钮跟着一起进出 —— 歌词都不显示了，单独飘一个钮只会让人困惑
         collapseHandleView?.let { if (it.visibility != target) it.visibility = target }
         playHandleView?.let { if (it.visibility != target) it.visibility = target }
+        pauseHandleView?.let { if (it.visibility != target) it.visibility = target }
         windowVisible = show
         if (show) updateHandlesPosition()
     }
@@ -1358,8 +1370,15 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
      * 位置：屏幕左缘、与歌词窗垂直居中。风格刻意与歌词区区分：实心橙色圆钮 +
      * 白色方向箭头，一眼能看出「这是个能点的控件」，不会被当成歌词的一部分。
      */
+    /** 侧钮该不该出现在屏幕上：**仅车载模式**且开关打开（v1.2.0） */
+    private fun handlesEnabled(): Boolean {
+        val prefs = Prefs(this)
+        return prefs.carMode && prefs.overlayHandles
+    }
+
     private fun attachCollapseHandle() {
         if (collapseHandleView != null) return
+        if (!handlesEnabled()) return
         // v1.1.93：40dp 在车机上偏小（手指在颠簸中容易点到边缘外的歌词窗上），
         // 放大到 48dp；点击本身先记账 —— 「点了没反应」要能区分
         // 「没收到点击」与「收到了但没生效」，这是两种完全不同的病。
@@ -1371,11 +1390,9 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             gravity = Gravity.CENTER
             includeFontPadding = false
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            background = android.graphics.drawable.GradientDrawable().apply {
-                shape = android.graphics.drawable.GradientDrawable.OVAL
-                setColor(HANDLE_COLOR)
-                setStroke(dp(1), 0x33FFFFFF)
-            }
+            // v1.2.0：按用户给的截图统一风格 —— 深色半透明底 + 白色图标，
+            // 不再用实心橙 / 蓝大圆块（在车机上"按钮特别大"的观感一半来自那个色块）
+            background = handleDisc(HANDLE_DISC_ALPHA)
             contentDescription = "收起悬浮歌词"
             elevation = dp(4).toFloat()
             setOnClickListener {
@@ -1402,6 +1419,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         }
         collapseHandleView = handle
         collapseHandleParams = lp
+        attachPauseHandle()
         attachPlayHandle()
         container?.post { updateHandlesPosition() }
     }
@@ -1423,11 +1441,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             gravity = Gravity.CENTER
             includeFontPadding = false
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            background = android.graphics.drawable.GradientDrawable().apply {
-                shape = android.graphics.drawable.GradientDrawable.OVAL
-                setColor(PLAY_HANDLE_COLOR)
-                setStroke(dp(1), 0x33FFFFFF)
-            }
+            background = handleDisc(HANDLE_DISC_ALPHA)
             contentDescription = "打开播放页"
             elevation = dp(4).toFloat()
             setOnClickListener {
@@ -1451,6 +1465,81 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         playHandleView = play
         playHandleParams = lp
     }
+
+    /**
+     * 第三颗钮：播放 / 暂停（v1.2.0）。
+     *
+     * 排在三颗钮的中间 —— 收起（上）/ 播放暂停（中）/ 打开播放页（下）。
+     * 图标用 [PlayPauseIconView] 自绘：车机字体常把 `⏸` 这类符号裁成豆腐块。
+     */
+    private fun attachPauseHandle() {
+        if (pauseHandleView != null) return
+        val size = dp(48)
+        val view = PlayPauseIconView(this).apply {
+            background = handleDisc(HANDLE_DISC_ALPHA)
+            setPlaying(false)
+            elevation = dp(4).toFloat()
+            setOnClickListener {
+                com.luckylearning.windtone.diag.DiagLog.log("OVERLAY", "播放/暂停按钮被点击")
+                LyricOverlayBus.requestTogglePlay()
+            }
+        }
+        val lp = WindowManager.LayoutParams(
+            size,
+            size,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = 0
+            y = dp(264)
+        }
+        if (!runCatching { windowManager?.addView(view, lp) }.isSuccess) return
+        pauseHandleView = view
+        pauseHandleParams = lp
+        // 状态由播放域推送（content.playing），这里只负责换图标 ——
+        // 服务不判断"该不该播"，避免与播放域各算一套。
+        scope.launch {
+            LyricOverlayBus.content.collect { content ->
+                pauseHandleView?.setPlaying(content.playing)
+            }
+        }
+    }
+
+    /** 按当前模式与开关，挂上或摘掉侧钮（v1.2.0） */
+    private fun syncHandlesVisibility() {
+        val want = handlesEnabled()
+        if (want && collapseHandleView == null) {
+            attachCollapseHandle()
+        } else if (!want && collapseHandleView != null) {
+            detachHandles()
+        }
+    }
+
+    /** 摘掉三颗侧钮（不碰歌词窗本身） */
+    private fun detachHandles() {
+        collapseHandleView?.let { runCatching { windowManager?.removeView(it) } }
+        collapseHandleView = null
+        collapseHandleParams = null
+        playHandleView?.let { runCatching { windowManager?.removeView(it) } }
+        playHandleView = null
+        playHandleParams = null
+        pauseHandleView?.let { runCatching { windowManager?.removeView(it) } }
+        pauseHandleView = null
+        pauseHandleParams = null
+        handleAnchorY = -1
+        anchorFromWindowY = Int.MIN_VALUE
+    }
+
+    /** 钮的统一底片：深色半透明圆，图标一律白色（参考截图里的控制键风格） */
+    private fun handleDisc(alpha: Int): android.graphics.drawable.GradientDrawable =
+        android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.OVAL
+            setColor((alpha shl 24) or 0x000000)
+            setStroke(dp(1), 0x33FFFFFF)
+        }
 
     /** 从悬浮窗拉起播放页（深链与桌面小组件共用一条通道） */
     private fun openPlayerPage() {
@@ -1486,13 +1575,15 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             ?: dp(OverlayCollapseHelper.DEFAULT_HANDLE_SIZE_DP)
         val gap = dp(OverlayCollapseHelper.HANDLE_GAP_DP)
         val play = playHandleView
+        val pause = pauseHandleView
 
         val boxH = container?.height?.takeIf { it > 0 }
             ?: p.height.takeIf { it > 0 }
             ?: dp(OverlayCollapseHelper.FALLBACK_BOX_HEIGHT_DP)
         val (screenW, screenH) = screenSize()
 
-        val totalH = if (play != null) size * 2 + gap else size
+        val count = 1 + (if (pause != null) 1 else 0) + (if (play != null) 1 else 0)
+        val totalH = size * count + gap * (count - 1)
         val anchor = OverlayCollapseHelper.resolveHandleAnchor(
             windowY = p.y,
             boxHeightPx = boxH,
@@ -1504,23 +1595,33 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         handleAnchorY = anchor.anchorY
         anchorFromWindowY = anchor.anchorFromWindowY
 
-        val pos = OverlayCollapseHelper.handlePositions(
+        val column = OverlayCollapseHelper.handleColumn(
             windowX = p.x,
             handleSizePx = size,
             gapPx = gap,
             edgeGapPx = dp(OverlayCollapseHelper.HANDLE_EDGE_GAP_DP),
             screenW = screenW,
             anchorY = handleAnchorY,
+            count = 3,
         )
 
-        cp.x = pos.x
-        cp.y = pos.collapseY
+        cp.x = column.x
+        cp.y = column.ys[0]
         runCatching { windowManager?.updateViewLayout(collapse, cp) }
 
+        // 中间：播放 / 暂停
+        val ps = pauseHandleParams
+        if (pause != null && ps != null) {
+            ps.x = column.x
+            ps.y = column.ys[1]
+            runCatching { windowManager?.updateViewLayout(pause, ps) }
+        }
+
+        // 最下：打开播放页
         val pp = playHandleParams
         if (play != null && pp != null) {
-            pp.x = pos.x
-            pp.y = pos.playY
+            pp.x = column.x
+            pp.y = column.ys[2]
             runCatching { windowManager?.updateViewLayout(play, pp) }
         }
     }
@@ -1695,11 +1796,14 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
     companion object {
         // collapse width: OverlayCollapseHelper.COLLAPSED_WIDTH_DP
 
-        /** 收起钮的橙色：与歌词文字 / 底板刻意区分（v1.1.91） */
-        private const val HANDLE_COLOR = 0xFFFF8A00.toInt()
-
-        /** 播放页钮的蓝色：与收起钮一眼区分（v1.1.95） */
-        private const val PLAY_HANDLE_COLOR = 0xFF1E88E5.toInt()
+        /**
+         * 钮底片的黑色不透明度（v1.2.0：统一为深色半透明，图标白色）。
+         *
+         * 从"橙色 / 蓝色实心大圆"改过来：车机上那两块饱和色块很抢眼，
+         * 用户明确要求照截图那种**轻描淡写**的控制键风格。
+         * 0x59 ≈ 35%，压在亮画面（导航地图 / 视频）上也有足够对比。
+         */
+        private const val HANDLE_DISC_ALPHA = 0x59
 
         /** 通知栏「收起 / 展开」的 Intent action（v1.1.93） */
         const val ACTION_TOGGLE_COLLAPSE = "com.luckylearning.windtone.TOGGLE_OVERLAY_COLLAPSE"

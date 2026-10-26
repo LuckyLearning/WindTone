@@ -109,7 +109,16 @@ object LyricOverlayBus {
      * 服务只能判定「该收了」，但状态归播放域所有，所以发个请求让它来收。
      */
     private val _exitEditingRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    /**
+     * 悬浮窗上的「播放 / 暂停」按钮请求（v1.2.0）。
+     *
+     * 状态归播放域所有，服务只发意图 —— 与 [exitEditingRequests] 同一套做法：
+     * 服务不碰 MediaController，也不必知道当前是不是在播。
+     */
+    private val _togglePlayRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val exitEditingRequests: SharedFlow<Unit> = _exitEditingRequests.asSharedFlow()
+    val togglePlayRequests: SharedFlow<Unit> = _togglePlayRequests.asSharedFlow()
 
     /**
      * 服务 → 播放域的一次性通知：用户在桌面上拖动后，位置已落盘。
@@ -168,6 +177,11 @@ object LyricOverlayBus {
     /** 服务在启动 / 挂窗成功 / 失败等节点调用 */
     fun report(status: Status, detail: String = "") {
         _health.value = Health(status, detail)
+    }
+
+    /** 服务请求切换播放 / 暂停；由播放域收集处理（v1.2.0） */
+    fun requestTogglePlay() {
+        _togglePlayRequests.tryEmit(Unit)
     }
 
     /** 服务请求退出调整态（长时间无操作）；由播放域收集处理 */

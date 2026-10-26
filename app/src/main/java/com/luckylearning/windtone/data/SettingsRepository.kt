@@ -71,6 +71,11 @@ class SettingsRepository(val prefs: Prefs) {
         prefs.lyricScale = scale
     }
 
+    /** 悬浮窗侧钮开关（v1.2.0） */
+    fun setOverlayHandles(enabled: Boolean) {
+        prefs.overlayHandles = enabled
+    }
+
     fun setLyricTapSeeks(enabled: Boolean) {
         prefs.lyricTapSeeks = enabled
     }

@@ -79,6 +79,14 @@ object SettingsDefaults {
      * 觉得碍眼的人可以关掉，关掉后不影响功能。
      */
     const val PLAYER_A11Y_ACTION = true
+
+    /**
+     * 悬浮窗左侧的侧钮（收起 / 播放暂停 / 打开播放页，v1.2.0）是否显示。
+     *
+     * 只在**车载模式**下才会真正挂出来 —— 鼠标键盘的手机上，那三颗钮纯属遮挡；
+     * 车机上仍给一个开关，觉得挡视线的人可以关掉（关掉不影响按应用隐藏与收起逻辑本身）。
+     */
+    const val OVERLAY_HANDLES = true
     /** 开机后台自启播放：默认关（要用户明确打开，避免一上车就突然出声） */
     const val AUTO_PLAY_ON_BOOT = false
 
@@ -627,6 +635,14 @@ class Prefs private constructor(context: Context) {
      * 手指在歌词上滑动时稍有位移就被判成点击，播放进度莫名其妙跳到别的段落。
      * 想用「点歌词跳转」的人可以自己打开。
      */
+    /** 悬浮窗侧钮开关（v1.2.0；仅在车载模式下生效） */
+    var overlayHandles: Boolean
+        get() = sp.getBoolean(KEY_OVERLAY_HANDLES, SettingsDefaults.OVERLAY_HANDLES)
+        set(value) {
+            sp.edit().putBoolean(KEY_OVERLAY_HANDLES, value).apply()
+            ioScope.launch { store.putBoolean(KEY_OVERLAY_HANDLES, value) }
+        }
+
     /** 播放页左侧竖排是否显示「无障碍状态」按钮（v1.1.92） */
     var playerA11yAction: Boolean
         get() = sp.getBoolean(KEY_PLAYER_A11Y_ACTION, SettingsDefaults.PLAYER_A11Y_ACTION)
@@ -1416,6 +1432,7 @@ class Prefs private constructor(context: Context) {
         const val KEY_LYRIC_SCALE = "lyric_scale"
         const val KEY_LYRIC_TAP_SEEKS = "lyric_tap_seeks"
         const val KEY_PLAYER_A11Y_ACTION = "player_a11y_action"
+        const val KEY_OVERLAY_HANDLES = "overlay_handles"
         const val KEY_LYRIC_BILINGUAL = "lyric_bilingual_mode"
         const val KEY_LYRICS_PANE = "lyrics_pane_visible"
         // ⚠️ 逐字歌词移除后（v1.1.8）有三个键不再读写：`lyric_word_by_word` /

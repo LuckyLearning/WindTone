@@ -89,6 +89,7 @@ class PlaybackEngine(
     private val _player = MutableStateFlow(
         PlayerUiState(
             lyricScale = prefs.lyricScale,
+            overlayHandles = prefs.overlayHandles,
             lyricTapSeeks = prefs.lyricTapSeeks,
             showA11yAction = prefs.playerA11yAction,
             lyricBilingual = prefs.lyricBilingual,
@@ -321,6 +322,13 @@ class PlaybackEngine(
         // 悬浮窗服务请求「退出调整态」（长时间无操作，见 LyricOverlayService.armEditingTimeout）。
         // 状态归播放域所有，所以由服务发请求、这里来收——顺手提示一句，
         // 否则用户会以为是自己点错了什么。
+        // 悬浮窗上的播放 / 暂停键（v1.2.0）：服务只发意图，这里统一走 togglePlay，
+        // 保证与界面按钮、耳机键的行为完全一致（含"队列空时什么都不做"）。
+        scope.launch {
+            LyricOverlayBridge.togglePlayRequests.collect {
+                if (_player.value.current != null) togglePlay()
+            }
+        }
         scope.launch {
             LyricOverlayBridge.exitEditingRequests.collect {
                 if (_player.value.overlayEditing) {
@@ -1234,6 +1242,7 @@ class PlaybackEngine(
 
     override fun setLyricOverlay(enabled: Boolean) = overlaySettings.setLyricOverlay(enabled)
     override fun setLyricOverlayLines(lines: Int) = overlaySettings.setLyricOverlayLines(lines)
+    override fun setOverlayHandles(enabled: Boolean) = overlaySettings.setOverlayHandles(enabled)
     override fun setLyricOverlayFullHeight(enabled: Boolean) =
         overlaySettings.setLyricOverlayFullHeight(enabled)
 

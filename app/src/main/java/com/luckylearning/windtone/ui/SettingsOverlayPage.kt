@@ -120,6 +120,8 @@ internal fun SettingsOverlayPage(
     onLyricOverlayHiddenApps: (Set<String>) -> Unit,
     /** 套用样式预设（v1.1.78；批量写盘，走 OverlayActions.applyOverlayPreset） */
     onApplyOverlayPreset: (OverlayPreset) -> Unit = {},
+    /** 悬浮窗左侧三颗侧钮的显示开关（v1.2.0，仅车载模式生效） */
+    onOverlayHandles: (Boolean) -> Unit = {},
     onOverlayEditing: (Boolean) -> Unit,
     onOverlayPreview: () -> Unit,
 ) {
@@ -192,6 +194,21 @@ internal fun SettingsOverlayPage(
         // 全屏高度开关（v1.1.19）**不进预设体系**：整屏形态是「结构切换」而不是
         // 「皮肤」，与预设混在一起会造成「选了预设却变了结构」的困惑（设计文档 §7.2）。
         // 所以它保持在预设网格之上独立可见。
+        // v1.2.0：左侧三颗侧钮（收起 / 播放暂停 / 打开播放页）的显示开关。
+        // 只在车载模式下才真正挂出来 —— 手机上那三颗钮纯属遮挡。
+        SwitchRow(
+            title = "显示悬浮窗侧钮（仅车载模式）",
+            subtitle = if (player.overlayHandles) {
+                "歌词窗左侧三颗钮：收起 / 播放暂停 / 打开播放页"
+            } else {
+                "已隐藏；收起与按应用隐藏仍照常工作，只是屏幕上不再显示这三颗钮"
+            },
+            checked = player.overlayHandles,
+            onCheckedChange = onOverlayHandles,
+            onReset = resetAction(player.overlayHandles != SettingsDefaults.OVERLAY_HANDLES) {
+                onOverlayHandles(SettingsDefaults.OVERLAY_HANDLES)
+            },
+        )
         SwitchRow(
             title = stringResource(R.string.full_screen_height),
             subtitle = if (player.lyricOverlayFullHeight) {

@@ -102,4 +102,50 @@ class OverlayCollapseHelperTest {
         )
         assertEquals(0, flushLeft.x)
     }
+
+    @Test
+    fun `三颗钮按尺寸加间隙依次下排`() {
+        val column = OverlayCollapseHelper.handleColumn(
+            windowX = 200,
+            handleSizePx = 48,
+            gapPx = 8,
+            edgeGapPx = 4,
+            screenW = 1080,
+            anchorY = 100,
+            count = 3,
+        )
+        assertEquals(200 - 48 - 4, column.x)
+        assertEquals(listOf(100, 156, 212), column.ys)
+    }
+
+    @Test
+    fun `钮数为一颗时不产生额外间距`() {
+        val column = OverlayCollapseHelper.handleColumn(
+            windowX = 0,
+            handleSizePx = 48,
+            gapPx = 8,
+            edgeGapPx = 4,
+            screenW = 1080,
+            anchorY = 10,
+            count = 1,
+        )
+        assertEquals(listOf(10), column.ys)
+        assertEquals(0, column.x)
+    }
+
+    @Test
+    fun `窗口贴右缘时钮被夹回屏内`() {
+        val column = OverlayCollapseHelper.handleColumn(
+            windowX = 1080,
+            handleSizePx = 48,
+            gapPx = 8,
+            edgeGapPx = 4,
+            screenW = 1080,
+            anchorY = 0,
+            count = 2,
+        )
+        // x 先按「窗口左边 − 钮宽 − 间隙」算，再夹到 [0, 屏宽−钮宽]；
+        // 贴右缘时结果是 1080 − 48 − 4 = 1028（不是贴到 1032）
+        assertEquals(1080 - 48 - 4, column.x)
+    }
 }

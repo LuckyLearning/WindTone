@@ -91,6 +91,29 @@ object OverlayCollapseHelper {
         val playY: Int,
     )
 
+    data class HandleColumn(val x: Int, val ys: List<Int>)
+
+    /**
+     * **任意颗**侧钮的坐标（v1.2.0：从两颗扩到三颗）。
+     *
+     * 竖排贴歌词窗左侧；横坐标与收起/展开无关（点一下不横跳）；
+     * 纵坐标从 [anchorY] 起按「尺寸 + 间隙」依次下排。
+     */
+    fun handleColumn(
+        windowX: Int,
+        handleSizePx: Int,
+        gapPx: Int,
+        edgeGapPx: Int,
+        screenW: Int,
+        anchorY: Int,
+        count: Int,
+    ): HandleColumn {
+        val size = handleSizePx.coerceAtLeast(1)
+        val x = (windowX - size - edgeGapPx).coerceIn(0, (screenW - size).coerceAtLeast(0))
+        val ys = (0 until count.coerceAtLeast(1)).map { i -> anchorY + i * (size + gapPx) }
+        return HandleColumn(x = x, ys = ys)
+    }
+
     /**
      * 两颗侧钮的坐标：竖排贴歌词窗左侧；横坐标与收起/展开无关（点一下不横跳）。
      */

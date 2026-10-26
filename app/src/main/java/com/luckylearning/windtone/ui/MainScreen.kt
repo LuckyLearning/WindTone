@@ -711,6 +711,7 @@ fun MainScreen(
                     onTestBootPlayback = playerVm::startPlaybackInBackground,
                     onPlayQueue = playerVm::playQueue,
                     onLyricOverlayLines = playerVm::setLyricOverlayLines,
+                    onLyricOverlayHandles = playerVm::setOverlayHandles,
                     onLyricOverlayFullHeight = playerVm::setLyricOverlayFullHeight,
                     onLyricOverlayFullWidthPercent = playerVm::setLyricOverlayFullWidthPercent,
                     onLyricOverlayFullOffsetPercent = playerVm::setLyricOverlayFullOffsetPercent,
