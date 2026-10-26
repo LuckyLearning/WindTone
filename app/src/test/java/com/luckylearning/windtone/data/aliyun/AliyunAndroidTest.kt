@@ -20,11 +20,11 @@ class AliyunAndroidTest {
     @Test
     fun `错误响应两种字段名都认`() {
         assertEquals(
-            "登录状态已过期，请重新登录",
+            "登录状态已过期。下一步：到设置 → 在线服务重新扫码授权",
             AliyunErrors.hint(JSONObject("""{"code":"AccessTokenExpired"}""")),
         )
         assertEquals(
-            "刷新令牌无效或已失效，请重新获取",
+            "刷新令牌无效或已失效。下一步：到设置 → 在线服务重新扫码授权",
             AliyunErrors.hint(JSONObject("""{"error":"invalid_grant"}""")),
         )
         assertEquals("网络超时", AliyunErrors.hint(JSONObject("""{"message":"网络超时"}""")))
@@ -35,7 +35,7 @@ class AliyunAndroidTest {
         // 真机排障教训：drive_id 为空时发 getDownloadUrl，阿里回 {"code":"BadRequest"}，
         // 旧文案「阿里云盘返回错误：BadRequest」让人以为是账号/服务端问题
         assertEquals(
-            "请求参数无效（多为 drive_id / file_id 为空或不匹配，不是登录问题）",
+            "请求参数无效（多为 drive_id / file_id 为空或不匹配，不是登录问题）。下一步：重新进入云盘目录再试",
             AliyunErrors.hint(JSONObject("""{"code":"BadRequest"}""")),
         )
     }

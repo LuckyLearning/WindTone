@@ -53,9 +53,9 @@ class AliyunAuthTest {
 
     @Test
     fun `错误码翻成人话`() {
-        assertEquals("登录状态已过期，请重新登录", AliyunErrors.hint("AccessTokenExpired"))
-        assertEquals("刷新令牌无效或已失效，请重新获取", AliyunErrors.hint("invalid_grant"))
-        assertEquals("应用凭据无效（ClientId / ClientSecret）", AliyunErrors.hint("invalid_client"))
+        assertEquals("登录状态已过期。下一步：到设置 → 在线服务重新扫码授权", AliyunErrors.hint("AccessTokenExpired"))
+        assertEquals("刷新令牌无效或已失效。下一步：到设置 → 在线服务重新扫码授权", AliyunErrors.hint("invalid_grant"))
+        assertEquals("应用凭据无效（ClientId / ClientSecret）。下一步：核对自建应用配置后重试", AliyunErrors.hint("invalid_client"))
         assertEquals("", AliyunErrors.hint(""))
         assertTrue(AliyunErrors.hint("SomeNewCode").contains("SomeNewCode"))
     }
