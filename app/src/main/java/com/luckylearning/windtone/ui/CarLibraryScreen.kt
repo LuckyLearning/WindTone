@@ -73,13 +73,12 @@ import kotlinx.coroutines.flow.StateFlow
  *
  * 布局约束（不要再踩）：
  *  · 车机底部 Dock 是车机自己画的浮层，`WindowInsets` 不报，必须由 `MainScreen` 留出 56dp；
- *  · **v3（2026-10-20）改为左常驻导航 + 右内容区**：左导航 [CAR_NAV_WIDTH] 贯穿全高，
+ *  · **v3（2026-10-20）改为左常驻导航 + 右内容区**：左导航（宽度见 `CarMetrics.navWidth`）贯穿全高，
  *    播放条只铺右侧内容区（不再横贯全宽）。与 v1.1.14 被否决的「两栏」不同：导航收窄成卡式、
  *    播放条不压导航、Dock 安全区照留，三处都处理过；
  *  · 内容区限宽 [CAR_CONTENT_MAX_WIDTH]（约束的是列表，不含车机左导航）。
  */
 internal val CAR_TOUCH_TARGET: Dp = 76.dp
-internal val CAR_BAR_HEIGHT: Dp = 112.dp
 private val CAR_COVER_SIZE: Dp = 80.dp
 private val CAR_MAIN_BUTTON: Dp = 88.dp
 
@@ -177,8 +176,6 @@ internal fun CarLibraryHeader(
 }
 
 /** 车机 v3 左导航宽度：设计稿 188px × (1707dp/1000px) ≈ 320dp，占屏宽约 19% */
-/** 常规档导航宽度（v1.1.98 起实际值由 [CarMetrics] 决定，这里只留作参考上限） */
-private val CAR_NAV_WIDTH = 300.dp
 
 /** 车机左常驻导航（v3）：品牌 + 五个浏览视图 + 底部设置。选中项用 primary 淡底。 */
 @Composable

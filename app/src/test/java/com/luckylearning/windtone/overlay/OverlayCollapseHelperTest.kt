@@ -79,31 +79,6 @@ class OverlayCollapseHelperTest {
     }
 
     @Test
-    fun handleXStaysLeftOfWindowAndClampsToScreen() {
-        val mid = OverlayCollapseHelper.handlePositions(
-            windowX = 200,
-            handleSizePx = 48,
-            gapPx = 8,
-            edgeGapPx = 4,
-            screenW = 1080,
-            anchorY = 40,
-        )
-        assertEquals(200 - 48 - 4, mid.x)
-        assertEquals(40, mid.collapseY)
-        assertEquals(40 + 48 + 8, mid.playY)
-
-        val flushLeft = OverlayCollapseHelper.handlePositions(
-            windowX = 0,
-            handleSizePx = 48,
-            gapPx = 8,
-            edgeGapPx = 4,
-            screenW = 1080,
-            anchorY = 10,
-        )
-        assertEquals(0, flushLeft.x)
-    }
-
-    @Test
     fun `三颗钮按尺寸加间隙依次下排`() {
         val column = OverlayCollapseHelper.handleColumn(
             windowX = 200,

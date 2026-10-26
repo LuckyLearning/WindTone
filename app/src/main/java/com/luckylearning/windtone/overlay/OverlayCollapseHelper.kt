@@ -85,12 +85,6 @@ object OverlayCollapseHelper {
         )
     }
 
-    data class HandlePositions(
-        val x: Int,
-        val collapseY: Int,
-        val playY: Int,
-    )
-
     data class HandleColumn(val x: Int, val ys: List<Int>)
 
     /**
@@ -112,25 +106,5 @@ object OverlayCollapseHelper {
         val x = (windowX - size - edgeGapPx).coerceIn(0, (screenW - size).coerceAtLeast(0))
         val ys = (0 until count.coerceAtLeast(1)).map { i -> anchorY + i * (size + gapPx) }
         return HandleColumn(x = x, ys = ys)
-    }
-
-    /**
-     * 两颗侧钮的坐标：竖排贴歌词窗左侧；横坐标与收起/展开无关（点一下不横跳）。
-     */
-    fun handlePositions(
-        windowX: Int,
-        handleSizePx: Int,
-        gapPx: Int,
-        edgeGapPx: Int,
-        screenW: Int,
-        anchorY: Int,
-    ): HandlePositions {
-        val size = handleSizePx.coerceAtLeast(1)
-        val x = (windowX - size - edgeGapPx).coerceIn(0, (screenW - size).coerceAtLeast(0))
-        return HandlePositions(
-            x = x,
-            collapseY = anchorY,
-            playY = anchorY + size + gapPx,
-        )
     }
 }

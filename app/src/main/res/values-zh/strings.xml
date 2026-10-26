@@ -422,14 +422,7 @@
     <string name="download_and_install">下载并安装</string>
     <string name="skip">忽略</string>
     <string name="current_route">当前线路</string>
-    <string name="bilingual_lyrics">双语歌词</string>
     <string name="lyric_files_are_not_modified">不改歌词文件，导出 LRC 时翻译仍然完整保留。</string>
-    <string name="show_both_languages">中英都显示</string>
-    <string name="original_and_translation_one_line">原文一行、译文一行，默认</string>
-    <string name="chinese_only">只显示中文</string>
-    <string name="show_chinese_translations_for_foreign">外文歌词换中文译文显示</string>
-    <string name="english_only">只显示英文</string>
-    <string name="show_english_translations_for_chinese">中文歌词换英文译文显示</string>
     <string name="selection_shows_a_6_second">选中后立刻给一次 6 秒预览。</string>
     <string name="auto_fit_to_height">自动（按高度适配）</string>
     <string name="lines">%1$s 行</string>
@@ -537,8 +530,6 @@
     <string name="tap_lyrics_to_seek">点击歌词跳转</string>
     <string name="tapping_a_line_seeks_to">点某一句歌词直接跳到那一句；拖动歌词时也可能被误判成点击</string>
     <string name="off_recommended_lyrics_only_scroll">关闭（推荐）：歌词只能上下拖动，播放进度不会被误触改动；长按校准偏移仍可用</string>
-    <string name="bilingual_lyrics_2">双语歌词 · %1$s</string>
-    <string name="which_lines_translated_lyrics_show">带翻译的歌词显示哪些行；只影响显示，导出的 LRC 不受影响</string>
     <string name="off_shows_the_current_lyric">关闭中 · 退到桌面 / 导航页后在最上层显示当前歌词行</string>
     <string name="on_full_screen_lyrics_style">已开启 · 全屏歌词 · 样式：%1$s</string>
     <string name="on_single_subtitle_style">已开启 · 单条字幕 · 样式：%1$s</string>
@@ -587,7 +578,6 @@
     <string name="diagram_width_and_the_grey">示意图：宽 %1$s%%、%2$s；底部灰色是车机 Dock（56dp 内不画歌词）。实际效果退到桌面查看 —— 全屏歌词不会盖住这一页，否则没法边调边看。</string>
     <string name="tapping_install_now_opens_the">点击「立即安装」会调起系统安装器，确认后即可完成升级。歌单、收藏、播放统计都会保留。</string>
     <string name="current_version_v">当前版本 v%1$s%2$s</string>
-    <string name="applies_to_lyrics_that_carry">对同时带原文和翻译的歌词生效：只影响播放页与悬浮窗的显示，不改歌词文件，导出 LRC 时翻译仍然完整保留。</string>
     <string name="how_many_lines_the_home">桌面悬浮歌词一次显示几行（当前行居中高亮，上下带上下文）。选「自动」时按悬浮窗高度算：窗口高就多给几行，窗口矮就只留当前句，不会被裁掉。选中后立刻给一次 6 秒预览。</string>
     <string name="how_lyric_text_is_laid">歌词文字在悬浮窗**内部**怎么排（窗口在屏幕上的位置由「调整悬浮歌词位置」自由拖动，与此无关）。居中适合每句都不长的歌词；居左更适合长句——每行都从同一条竖线起排，读起来比居中的参差边缘省力。</string>
     <string name="opens_the_player_directly_and">启动后直接进入播放页并锁定横屏，适合车机或手机横放。\n\n切换后立即生效：打开就转横屏并展开播放页，不用重开应用（关闭时不打断当前页面，只是下次启动回到曲库）。\n\n曲库页换成车机版式：顶部横向分类、行高与字号放大、底部大播放条，触摸目标都 ≥76dp，并关掉长按多选与滑动切歌这类在车上容易误触的手势。\n\n播放页 5 秒无操作会自动收起顶栏、控制键与底部状态行，只留歌词、歌名、进度与时间；触摸任意位置恢复。切到封面态不收起。\n\n开启后，设备开机时应用会自动拉起（车载场景）。</string>

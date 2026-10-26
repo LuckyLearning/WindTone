@@ -441,14 +441,7 @@
     <string name="download_and_install">Download and install</string>
     <string name="skip">Skip</string>
     <string name="current_route">Current route</string>
-    <string name="bilingual_lyrics">Bilingual lyrics</string>
     <string name="lyric_files_are_not_modified">Lyric files are not modified; translations stay intact when exporting LRC.</string>
-    <string name="show_both_languages">Show both languages</string>
-    <string name="original_and_translation_one_line">Original and translation, one line each (default)</string>
-    <string name="chinese_only">Chinese only</string>
-    <string name="show_chinese_translations_for_foreign">Show Chinese translations for foreign lyrics</string>
-    <string name="english_only">English only</string>
-    <string name="show_english_translations_for_chinese">Show English translations for Chinese lyrics</string>
     <string name="selection_shows_a_6_second">Selection shows a 6-second preview immediately.</string>
     <string name="auto_fit_to_height">Auto (fit to height)</string>
     <string name="lines">%1$s lines</string>
@@ -481,7 +474,7 @@
     <string name="playback">Playback</string>
     <string name="speed_x_pitch_skip_silence">Speed %1$sx · Pitch %2$s · Skip silence · Equalizer and effects</string>
     <string name="lyrics">Lyrics</string>
-    <string name="text_size_x_bilingual_lyrics">Text size %1$sx · Bilingual lyrics · Floating lyrics</string>
+    <string name="text_size_x_bilingual_lyrics">Text size %1$sx · Lyrics · Floating lyrics</string>
     <string name="formats_and_storage_filters_under">Formats and storage · Filters under %1$s s</string>
     <string name="formats_and_storage_short_audio">Formats and storage · Short-audio filter off</string>
     <string name="about_diagnostics">About &amp; diagnostics</string>
@@ -556,8 +549,6 @@
     <string name="tap_lyrics_to_seek">Tap lyrics to seek</string>
     <string name="tapping_a_line_seeks_to">Tapping a line seeks to it; dragging lyrics may occasionally register as a tap</string>
     <string name="off_recommended_lyrics_only_scroll">Off (recommended): lyrics only scroll vertically, so playback is never changed by accident; long-press offset calibration still works</string>
-    <string name="bilingual_lyrics_2">Bilingual lyrics · %1$s</string>
-    <string name="which_lines_translated_lyrics_show">Which lines translated lyrics show; display only, exported LRC is unaffected</string>
     <string name="off_shows_the_current_lyric">Off · Shows the current lyric line above the home screen or navigation apps</string>
     <string name="on_full_screen_lyrics_style">On · Full-screen lyrics · Style: %1$s</string>
     <string name="on_single_subtitle_style">On · Single subtitle · Style: %1$s</string>
@@ -606,7 +597,6 @@
     <string name="diagram_width_and_the_grey">Diagram: width %1$s%% and %2$s; the grey band at the bottom is the head-unit dock (no lyrics within 56dp). See the result on the home screen — full-screen lyrics do not cover this page, so you can adjust while watching.</string>
     <string name="tapping_install_now_opens_the">Tapping Install now opens the system installer; confirm there to finish upgrading. Playlists, favorites and playback stats are kept.</string>
     <string name="current_version_v">Current version v%1$s %2$s</string>
-    <string name="applies_to_lyrics_that_carry">Applies to lyrics that carry both original and translation: it only affects the player and the overlay; lyric files are not modified and translations stay intact when exporting LRC.</string>
     <string name="how_many_lines_the_home">How many lines the home-screen floating lyrics show at once (current line centered and highlighted, with context above and below). Auto sizes by the overlay height: a tall window gets more lines, a short one keeps only the current line so nothing is clipped. Selection shows a 6-second preview immediately.</string>
     <string name="how_lyric_text_is_laid">How lyric text is laid out **inside** the overlay window (its position on screen is set by dragging in Adjust floating lyric position and is unrelated). Centering suits lyrics with short lines; left alignment suits long lines — every line starts on the same vertical edge, which reads more easily than the ragged edges of centered text.</string>
     <string name="opens_the_player_directly_and">Opens the player directly and locks landscape, which suits head units and phones mounted sideways.\n\nApplies immediately: launching turns landscape and expands the player without restarting the app (when off, the current page is not interrupted and the next launch returns to the library).\n\nThe library switches to a head-unit layout: horizontal categories on top, larger rows and text, a big playback bar at the bottom, touch targets of at least 76dp, and gestures that are easy to trigger by accident in a car (long-press multi-select, swipe to skip) are disabled.\n\nThe player hides the top bar, controls and status row after 5 seconds of inactivity, leaving lyrics, title, progress and time; touching anywhere brings them back. It does not collapse in cover view.\n\nWhen on, the app starts automatically when the device boots (for car use).</string>

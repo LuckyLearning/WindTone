@@ -80,11 +80,43 @@ LibraryViewModel   PlayerViewModel    UpdateViewModel    SettingsViewModel
 > 换句话说：**当前形态就是唯一形态**。改 schema 时把 `version` +1、重导 schema 快照、同步文档即可，
 > 不必再考虑"老用户升级怎么办"。若日后想恢复兼容，Room 会优先走 `addMigrations(...)` 而非兜底，补上即可。
 
-### 三条铁律
+### 四条铁律
 
 1. **不要改包名、DB 名、Prefs 名、通知渠道 ID**——它们决定老用户能否覆盖升级、数据能否保留。改名 = 所有歌单/收藏/播放统计清零。
 2. **版本号只改 `app/build.gradle.kts` 顶部那两行**，别去改 `defaultConfig` 里的 `versionCode`/`versionName`。CI 的一致性校验按顶部变量做正则匹配，改错地方会导致 tag 校验失败。
 3. **`docs/` 已在 `.gitignore` 里**——本目录是本地开发资料，**不会推到 GitHub**。往这里写文档是安全的。
+4. **过期没用的东西一律删掉，不要"先留着"**（用户 2026-10-26 明确要求，见 0.1 节）。
+
+---
+
+### 0.1 删除优于保留（铁律 4 的展开）
+
+这个项目里"留着以防万一"的东西最后都变成了误导读者的噪声：旧尺寸常量、
+已被新实现取代的函数、删了功能却留下的状态与文案。**默认动作是删，不是注释掉、不是标记 deprecated。**
+
+#### 命中任一条就删
+
+| 情况 | 例子（真实发生过的） |
+| --- | --- |
+| 符号已无引用（类 / 函数 / 常量 / 字符串资源） | `CAR_SIDE_TILE`、`CAR_MAIN_BUTTON` 在改用 `CarMetrics` 后没人读 |
+| 被新实现取代的旧路径，**连同它的测试** | `OverlayCollapseHelper.handlePositions`（两钮）→ `handleColumn`（任意颗） |
+| 功能整体移除后留下的状态 / Prefs 字段 / 动作 / 文案 / 文档段落 | 移除「双语歌词」切换后清掉 `lyricBilingual`、`setLyricBilingual`、`BilingualLyrics` 与 10 条字符串 |
+| 只在注释里"作为参考"保留的代码 | 旧尺码常量——历史写进注释即可，代码不占位 |
+| 过期文档 | 进 `docs/archive/`，并在 `docs/DELETIONS.md` 记一行 |
+
+#### 必须保留的（别删错）
+
+1. **对外契约**：包名、DB 名、Prefs 名、通知渠道 ID、已发布的 `action` 字符串（铁律 1）。
+2. **老用户 SharedPreferences 里的死键**：不再读取即可，**但不要为它写兼容分支**；也不主动清理。
+   现存死键：`lyric_word_by_word`、`lyric_sung_color`、`lyric_bilingual_mode` —— 见到别当 bug 排查。
+3. **发布过的文案 key 若仍被商店/文档引用**（本项目没有商店，可忽略）。
+
+#### 执行方式（四步，缺一不可）
+
+1. **删前全仓 grep**：`app/src`（含 test）+ `docs/`，确认零引用；注意 `R.string.xxx` 与 `getIdentifier` 两种引用方式；
+2. **连测试一起删**：留着测一个已删函数，等于留了一处必然失败的负债；
+3. **删后必须** `./gradlew compileDebugKotlin compileDebugUnitTestKotlin testDebugUnitTest` 全绿；
+4. **记账**：代码删除在版本历史写一句"删了什么"；文档删除/归档必须在 `docs/DELETIONS.md` 追加一行。
 
 ---
 

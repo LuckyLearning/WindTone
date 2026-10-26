@@ -108,9 +108,6 @@ private const val CAR_IMMERSIVE_DELAY_MS = 5_000L
  * 用户的原话是「不要播放按钮的占高度」。现在整排压到 64~76dp：
  * 触控目标仍在 64dp 以上（行车中按得中），但纵向只占原来的一半。
  */
-private val CAR_MAIN_BUTTON = 76.dp
-private val CAR_SIDE_BUTTON = 64.dp
-private val CAR_SECONDARY_BUTTON = 64.dp
 
 @Composable
 fun PlayerScreen(
@@ -737,7 +734,7 @@ fun PlayerScreen(
                         }
                         IconButton(
                             onClick = { onNext(); keepAwake() },
-                            modifier = if (state.carMode) Modifier.size(CAR_SIDE_BUTTON) else Modifier,
+                            modifier = if (state.carMode) Modifier.size(carM.sideButton) else Modifier,
                         ) {
                             Icon(
                                 imageVector = AppIcons.SkipNext,
@@ -985,8 +982,6 @@ private fun PlayerLyrics(
 }
 
 /** 车机左侧功能列的键尺寸（v1.1.53）。64dp 触控目标 = 行车中不用瞄。 */
-/** 常规档侧键尺寸（v1.1.98 起实际值由 [CarMetrics] 决定） */
-private val CAR_SIDE_TILE = 60.dp
 
 /**
  * 车机播放页左侧的功能列：收藏 / 播放队列 / 播放设置（v1.1.53）。

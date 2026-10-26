@@ -391,8 +391,6 @@ private const val LYRIC_SCALE_STEP = 0.05f
 private const val OVERLAY_TEXT_SP_STEP = 2
 
 /** 行高下限：Google 车机规范的 76dp 触控目标，整行可点 */
-/** 常规档行高（v1.1.98 起实际值由 [CarMetrics.rowMinHeight] 决定） */
-private val CAR_ROW_MIN_HEIGHT: Dp = 76.dp
 
 /** 常驻播放条高度（比首页的 112dp 矮一档：设置在车上不是主画面，但要留住入口） */
 private val CAR_DOCK_BAR_HEIGHT: Dp = 100.dp
@@ -430,7 +428,7 @@ private fun CarToggleRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 5.dp)
-            .heightIn(min = CAR_ROW_MIN_HEIGHT)
+            .heightIn(min = rememberCarMetrics().rowMinHeight)
             .onFocusChanged { focused = it.isFocused }
             .focusable()
             .windShadow(level = 1, shape = RoundedCornerShape(16.dp))
@@ -479,7 +477,7 @@ private fun CarStepperRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 5.dp)
-            .heightIn(min = CAR_ROW_MIN_HEIGHT)
+            .heightIn(min = rememberCarMetrics().rowMinHeight)
             .windShadow(level = 1, shape = RoundedCornerShape(16.dp)),
     ) {
         Row(
@@ -515,7 +513,7 @@ private fun CarStepButton(icon: ImageVector, description: String, onClick: () ->
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
-            .size(CAR_ROW_MIN_HEIGHT)
+            .size(rememberCarMetrics().rowMinHeight)
             .clip(CircleShape)
             .background(scheme.surfaceContainerHigh)
             .then(if (focused) Modifier.border(3.dp, scheme.primary, CircleShape) else Modifier)
@@ -572,7 +570,7 @@ private fun CarEntryRow(title: String, subtitle: String, onClick: () -> Unit) {
         border = if (focused) androidx.compose.foundation.BorderStroke(3.dp, scheme.primary) else null,
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = CAR_ROW_MIN_HEIGHT)
+            .heightIn(min = rememberCarMetrics().rowMinHeight)
             .onFocusChanged { focused = it.isFocused }
             .focusable()
             .windShadow(level = 1, shape = RoundedCornerShape(16.dp))
@@ -869,7 +867,7 @@ private fun CarCornerChipsRow(
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = CAR_ROW_MIN_HEIGHT)
+            .heightIn(min = rememberCarMetrics().rowMinHeight)
             .windShadow(level = 1, shape = RoundedCornerShape(16.dp)),
     ) {
         Row(

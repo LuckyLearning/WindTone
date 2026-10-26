@@ -25,4 +25,9 @@ title: 文档删除与归档记录
 
 ## 硬删记录
 
-（尚无。优先归档。）
+| 日期（Asia/Shanghai） | 动作 | 对象 | 原因 | 备注 |
+|---|---|---|---|---|
+| 2026-10-26 | 硬删 | `app/.../lyrics/BilingualLyrics.kt` + `BilingualLyricsTest.kt` | v1.2.2 移除「双语歌词」三档切换，过滤实现整体作废 | 固定为"原文+译文都显示"，见版本历史 1.2.2 |
+| 2026-10-26 | 硬删 | `OverlayCollapseHelper.handlePositions`（两钮版）+ 对应测试 | 已被 `handleColumn`（任意颗）取代，三钮后无人调用 | 测试合并进 `handleColumn` 的用例 |
+| 2026-10-26 | 硬删 | 车机旧尺码常量：`CAR_NAV_WIDTH`、`CAR_SIDE_TILE`、`CAR_MAIN_BUTTON`、`CAR_SIDE_BUTTON`、`CAR_SECONDARY_BUTTON`、`CAR_ROW_MIN_HEIGHT`、`CAR_BAR_HEIGHT` | v1.1.98 起尺寸统一由 `CarMetrics` 决定，这些只剩注释价值 | 历史保留在 `CarMetrics` 的档位表里 |
+| 2026-10-26 | 硬删 | 10 条双语字符串（`bilingual_lyrics*`、`show_both_languages`、`chinese_only`、`english_only`、`which_lines_translated_lyrics_show`、`applies_to_lyrics_that_carry` 等） | 功能已移除，`values` / `values-zh` 两份都无引用 | 顺带把 `text_size_x_bilingual_lyrics` 的英文文案去掉"Bilingual lyrics"字样 |
