@@ -145,7 +145,19 @@ internal object DiagnosticsReport {
                     android.content.pm.PackageManager.PERMISSION_GRANTED
             }.getOrDefault(false),
             installUnknownAllowed = runCatching {
-                context.packageManager.canRequestPackageInstalls()
+                // canRequestPackageInstalls 是 API 26 才有的（minSdk 24）：
+                // 直接调在 24/25 上会抛 NoSuchMethodError，被 runCatching 吞成「否」——
+                // 表现为老设备上永远显示「未知来源安装：否」，而实际是开着的。
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.packageManager.canRequestPackageInstalls()
+                } else {
+                    // Android 7.x 只有全局「未知来源」总开关
+                    android.provider.Settings.Secure.getInt(
+                        context.contentResolver,
+                        android.provider.Settings.Secure.INSTALL_NON_MARKET_APPS,
+                        0,
+                    ) == 1
+                }
             }.getOrDefault(false),
             accessibilityOn = ForegroundAppDetector.accessibilityEnabled(context),
             usageStatsOn = ForegroundAppDetector.usageStatsGranted(context),
