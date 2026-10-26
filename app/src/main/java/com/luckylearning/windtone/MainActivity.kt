@@ -112,7 +112,7 @@ class MainActivity : ComponentActivity() {
             val themeMode by playerVm.themeMode.collectAsStateWithLifecycle()
             MusicPlayerTheme(
                 seedColor = if (playerVm.dynamicThemeEnabled()) seed else null,
-                // 明暗模式（设置 → 外观 → 主题模式，v1.2.4）：
+                // 明暗模式（设置 → 外观 → 主题模式，v1.2.5）：
                 // 「跟随系统」才去问系统，浅色 / 深色是**越过系统**的明确选择。
                 // 只在这一层决定，子页面一律从 `MaterialTheme.colorScheme` 取色 ——
                 // 任何地方再写一次 `isSystemInDarkTheme()` 都会在强制模式下画错。

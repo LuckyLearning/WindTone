@@ -68,7 +68,7 @@ interface PlayerActions : OverlayActions {
     fun setCarMode(enabled: Boolean)
 
     /**
-     * 界面明暗模式：跟随系统 / 浅色 / 深色（v1.2.4）。
+     * 界面明暗模式：跟随系统 / 浅色 / 深色（v1.2.5）。
      *
      * 语义是「是否允许越过系统」——选浅色或深色时，即使系统是另一种模式也照用户的选择画。
      * 当前值经 [com.luckylearning.windtone.playback.PlaybackEngine.themeMode] 流式暴露给

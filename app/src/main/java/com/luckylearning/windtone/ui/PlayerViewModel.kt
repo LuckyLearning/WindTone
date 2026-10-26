@@ -35,7 +35,7 @@ class PlayerViewModel(private val app: Application) :
     /** 封面主色（动态主题的种子色）；未开启动态主题时为 null */
     val themeSeed: StateFlow<Int?> = engine.themeSeed
 
-    /** 界面明暗模式（跟随系统 / 浅色 / 深色，v1.2.4）：最外层换肤订阅它 */
+    /** 界面明暗模式（跟随系统 / 浅色 / 深色，v1.2.5）：最外层换肤订阅它 */
     val themeMode: StateFlow<ThemeMode> = engine.themeMode
 
     /** 桌面悬浮窗的运行状态：设置页据此显示「运行中 / 启动失败原因」 */

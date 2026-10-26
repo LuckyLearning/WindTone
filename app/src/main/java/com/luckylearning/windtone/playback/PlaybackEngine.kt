@@ -154,7 +154,7 @@ class PlaybackEngine(
     val themeSeed: StateFlow<Int?> = _themeSeed.asStateFlow()
 
     /**
-     * 界面明暗模式（v1.2.4）。
+     * 界面明暗模式（v1.2.5）。
      *
      * 为什么要一条流而不是像其它偏好那样「用时再读 prefs」：换肤发生在**最外层**
      * 的组合（`MainActivity` 的 `MusicPlayerTheme`），设置页里点一下必须立刻让整棵树
