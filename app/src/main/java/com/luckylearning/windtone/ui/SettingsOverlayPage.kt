@@ -122,6 +122,8 @@ internal fun SettingsOverlayPage(
     onApplyOverlayPreset: (OverlayPreset) -> Unit = {},
     /** 悬浮窗左侧三颗侧钮的显示开关（v1.2.0，仅车载模式生效） */
     onOverlayHandles: (Boolean) -> Unit = {},
+    /** 单颗侧钮开关：0 收起 / 1 播放暂停 / 2 打开播放页（v1.3.0） */
+    onOverlayHandle: (Int, Boolean) -> Unit = { _, _ -> },
     onOverlayEditing: (Boolean) -> Unit,
     onOverlayPreview: () -> Unit,
 ) {
@@ -209,6 +211,28 @@ internal fun SettingsOverlayPage(
                 onOverlayHandles(SettingsDefaults.OVERLAY_HANDLES)
             },
         )
+        // v1.3.0：三颗钮各自可关。整体开关关掉时这些行不显示 —— 它们只在
+        // "已经决定显示侧钮"的前提下才有意义，否则就是三行点了没反应的死人开关。
+        if (player.overlayHandles) {
+            SwitchRow(
+                title = "　显示「收起 / 展开」钮",
+                subtitle = "关掉后只能从通知栏「收起 / 展开」操作悬浮歌词",
+                checked = player.overlayHandleCollapse,
+                onCheckedChange = { onOverlayHandle(0, it) },
+            )
+            SwitchRow(
+                title = "　显示「播放 / 暂停」钮",
+                subtitle = "关掉后仍可用播放页、通知栏或方向盘控制",
+                checked = player.overlayHandlePlayPause,
+                onCheckedChange = { onOverlayHandle(1, it) },
+            )
+            SwitchRow(
+                title = "　显示「打开播放页」钮",
+                subtitle = "关掉后可从桌面图标或通知栏进入播放页",
+                checked = player.overlayHandlePlayer,
+                onCheckedChange = { onOverlayHandle(2, it) },
+            )
+        }
         SwitchRow(
             title = stringResource(R.string.full_screen_height),
             subtitle = if (player.lyricOverlayFullHeight) {

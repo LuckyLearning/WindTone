@@ -87,6 +87,11 @@ object SettingsDefaults {
      * 车机上仍给一个开关，觉得挡视线的人可以关掉（关掉不影响按应用隐藏与收起逻辑本身）。
      */
     const val OVERLAY_HANDLES = true
+
+    /** 单颗侧钮开关（v1.3.0）。默认全开：升级后观感与 v1.2.x 一致。 */
+    const val OVERLAY_HANDLE_COLLAPSE = true
+    const val OVERLAY_HANDLE_PLAY_PAUSE = true
+    const val OVERLAY_HANDLE_PLAYER = true
     /** 开机后台自启播放：默认关（要用户明确打开，避免一上车就突然出声） */
     const val AUTO_PLAY_ON_BOOT = false
 
@@ -627,6 +632,30 @@ class Prefs private constructor(context: Context) {
      * 手指在歌词上滑动时稍有位移就被判成点击，播放进度莫名其妙跳到别的段落。
      * 想用「点歌词跳转」的人可以自己打开。
      */
+    /** 单颗侧钮：收起（v1.3.0） */
+    var overlayHandleCollapse: Boolean
+        get() = sp.getBoolean(KEY_OVERLAY_HANDLE_COLLAPSE, SettingsDefaults.OVERLAY_HANDLE_COLLAPSE)
+        set(value) {
+            sp.edit().putBoolean(KEY_OVERLAY_HANDLE_COLLAPSE, value).apply()
+            ioScope.launch { store.putBoolean(KEY_OVERLAY_HANDLE_COLLAPSE, value) }
+        }
+
+    /** 单颗侧钮：播放 / 暂停（v1.3.0） */
+    var overlayHandlePlayPause: Boolean
+        get() = sp.getBoolean(KEY_OVERLAY_HANDLE_PLAY_PAUSE, SettingsDefaults.OVERLAY_HANDLE_PLAY_PAUSE)
+        set(value) {
+            sp.edit().putBoolean(KEY_OVERLAY_HANDLE_PLAY_PAUSE, value).apply()
+            ioScope.launch { store.putBoolean(KEY_OVERLAY_HANDLE_PLAY_PAUSE, value) }
+        }
+
+    /** 单颗侧钮：打开播放页（v1.3.0） */
+    var overlayHandlePlayer: Boolean
+        get() = sp.getBoolean(KEY_OVERLAY_HANDLE_PLAYER, SettingsDefaults.OVERLAY_HANDLE_PLAYER)
+        set(value) {
+            sp.edit().putBoolean(KEY_OVERLAY_HANDLE_PLAYER, value).apply()
+            ioScope.launch { store.putBoolean(KEY_OVERLAY_HANDLE_PLAYER, value) }
+        }
+
     /** 悬浮窗侧钮开关（v1.2.0；仅在车载模式下生效） */
     var overlayHandles: Boolean
         get() = sp.getBoolean(KEY_OVERLAY_HANDLES, SettingsDefaults.OVERLAY_HANDLES)
@@ -1411,6 +1440,9 @@ class Prefs private constructor(context: Context) {
         const val KEY_LYRIC_TAP_SEEKS = "lyric_tap_seeks"
         const val KEY_PLAYER_A11Y_ACTION = "player_a11y_action"
         const val KEY_OVERLAY_HANDLES = "overlay_handles"
+        const val KEY_OVERLAY_HANDLE_COLLAPSE = "overlay_handle_collapse"
+        const val KEY_OVERLAY_HANDLE_PLAY_PAUSE = "overlay_handle_play_pause"
+        const val KEY_OVERLAY_HANDLE_PLAYER = "overlay_handle_player"
         const val KEY_LYRICS_PANE = "lyrics_pane_visible"
         // ⚠️ 逐字歌词移除后（v1.1.8）有三个键不再读写：`lyric_word_by_word` /
         //    `lyric_sung_color` / `lyric_overlay_sung_color`。它们仍留在老用户的

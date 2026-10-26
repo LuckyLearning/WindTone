@@ -122,6 +122,14 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
      * 现在只在**窗口顶边移动**或**首次放置**时重算，内容高度变化不再影响。
      */
     private var handleAnchorY = -1
+
+    /**
+     * 已挂出的是「哪几颗」钮（v1.3.0）。
+     *
+     * 三颗钮各有开关，配置一变就必须**整组重建** —— 单独增删会让锚点与序号错位，
+     * 出现"点第二颗其实是第三颗"这种问题。用位掩码比较，最省事也最不容易错。
+     */
+    private var appliedHandleMask = -1
     private var anchorFromWindowY = Int.MIN_VALUE
 
     /** 歌词内容列（收起时整列隐藏，只留窗口宽度的一点点） */
@@ -1370,15 +1378,26 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
      * 位置：屏幕左缘、与歌词窗垂直居中。风格刻意与歌词区区分：实心橙色圆钮 +
      * 白色方向箭头，一眼能看出「这是个能点的控件」，不会被当成歌词的一部分。
      */
-    /** 侧钮该不该出现在屏幕上：**仅车载模式**且开关打开（v1.2.0） */
-    private fun handlesEnabled(): Boolean {
+    /**
+     * 当前配置下"应该显示哪几颗"侧钮（v1.3.0）。
+     *
+     * 位掩码：bit0 收起 / bit1 播放暂停 / bit2 打开播放页。
+     * 只在**车载模式**且整体开关打开时才可能有钮；两者任一关掉就是 0。
+     */
+    private fun desiredHandleMask(): Int {
         val prefs = Prefs(this)
-        return prefs.carMode && prefs.overlayHandles
+        return OverlayCollapseHelper.handleMask(
+            carMode = prefs.carMode,
+            handlesEnabled = prefs.overlayHandles,
+            collapse = prefs.overlayHandleCollapse,
+            playPause = prefs.overlayHandlePlayPause,
+            player = prefs.overlayHandlePlayer,
+        )
     }
 
     private fun attachCollapseHandle() {
         if (collapseHandleView != null) return
-        if (!handlesEnabled()) return
+        if (desiredHandleMask() and 1 == 0) return
         // v1.1.93：40dp 在车机上偏小（手指在颠簸中容易点到边缘外的歌词窗上），
         // 放大到 48dp；点击本身先记账 —— 「点了没反应」要能区分
         // 「没收到点击」与「收到了但没生效」，这是两种完全不同的病。
@@ -1433,6 +1452,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
      */
     private fun attachPlayHandle() {
         if (playHandleView != null) return
+        if (desiredHandleMask() and 4 == 0) return
         val size = dp(48)
         val play = TextView(this).apply {
             text = "♪"
@@ -1474,6 +1494,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
      */
     private fun attachPauseHandle() {
         if (pauseHandleView != null) return
+        if (desiredHandleMask() and 2 == 0) return
         val size = dp(48)
         val view = PlayPauseIconView(this).apply {
             background = handleDisc(HANDLE_DISC_ALPHA)
@@ -1510,12 +1531,17 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
 
     /** 按当前模式与开关，挂上或摘掉侧钮（v1.2.0） */
     private fun syncHandlesVisibility() {
-        val want = handlesEnabled()
-        if (want && collapseHandleView == null) {
-            attachCollapseHandle()
-        } else if (!want && collapseHandleView != null) {
-            detachHandles()
-        }
+        val mask = desiredHandleMask()
+        if (mask == appliedHandleMask) return
+        // 配置变了（整体关掉、或某颗单独关掉/打开）：整组摘掉再按新配置挂，
+        // 避免残留的钮与新序号错位。
+        detachHandles()
+        if (mask == 0) return
+        attachCollapseHandle()
+        attachPauseHandle()
+        attachPlayHandle()
+        appliedHandleMask = mask
+        updateHandlesPosition()
     }
 
     /** 摘掉三颗侧钮（不碰歌词窗本身） */
@@ -1595,6 +1621,11 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         handleAnchorY = anchor.anchorY
         anchorFromWindowY = anchor.anchorFromWindowY
 
+        val visible = listOfNotNull(
+            collapse to cp,
+            pause?.let { it to pauseHandleParams },
+            play?.let { it to playHandleParams },
+        )
         val column = OverlayCollapseHelper.handleColumn(
             windowX = p.x,
             handleSizePx = size,
@@ -1602,29 +1633,16 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             edgeGapPx = dp(OverlayCollapseHelper.HANDLE_EDGE_GAP_DP),
             screenW = screenW,
             anchorY = handleAnchorY,
-            count = 3,
+            count = visible.size,
         )
-
-        cp.x = column.x
-        cp.y = column.ys[0]
-        runCatching { windowManager?.updateViewLayout(collapse, cp) }
-
-        // 中间：播放 / 暂停
-        val ps = pauseHandleParams
-        if (pause != null && ps != null) {
-            ps.x = column.x
-            ps.y = column.ys[1]
-            runCatching { windowManager?.updateViewLayout(pause, ps) }
-        }
-
-        // 最下：打开播放页
-        val pp = playHandleParams
-        if (play != null && pp != null) {
-            pp.x = column.x
-            pp.y = column.ys[2]
-            runCatching { windowManager?.updateViewLayout(play, pp) }
+        visible.forEachIndexed { index, (view, params) ->
+            if (params == null) return@forEachIndexed
+            params.x = column.x
+            params.y = column.ys[index]
+            runCatching { windowManager?.updateViewLayout(view, params) }
         }
     }
+
     /**
      * 收起 / 展开。
      *

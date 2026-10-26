@@ -76,6 +76,19 @@ class SettingsRepository(val prefs: Prefs) {
         prefs.overlayHandles = enabled
     }
 
+    /** 单颗侧钮开关（v1.3.0） */
+    fun setOverlayHandleCollapse(enabled: Boolean) {
+        prefs.overlayHandleCollapse = enabled
+    }
+
+    fun setOverlayHandlePlayPause(enabled: Boolean) {
+        prefs.overlayHandlePlayPause = enabled
+    }
+
+    fun setOverlayHandlePlayer(enabled: Boolean) {
+        prefs.overlayHandlePlayer = enabled
+    }
+
     fun setLyricTapSeeks(enabled: Boolean) {
         prefs.lyricTapSeeks = enabled
     }

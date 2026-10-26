@@ -86,6 +86,26 @@ class OverlaySettings(
         previewOverlayAfterConfigChange()
     }
 
+    override fun setOverlayHandle(kind: Int, enabled: Boolean) {
+        when (kind) {
+            0 -> {
+                settings.setOverlayHandleCollapse(enabled)
+                state.update { it.copy(overlayHandleCollapse = enabled) }
+            }
+            1 -> {
+                settings.setOverlayHandlePlayPause(enabled)
+                state.update { it.copy(overlayHandlePlayPause = enabled) }
+            }
+            2 -> {
+                settings.setOverlayHandlePlayer(enabled)
+                state.update { it.copy(overlayHandlePlayer = enabled) }
+            }
+            else -> return
+        }
+        // 由服务在下一帧按新的掩码整组重建（syncHandlesVisibility）
+        previewOverlayAfterConfigChange()
+    }
+
     override fun setOverlayHandles(enabled: Boolean) {
         settings.setOverlayHandles(enabled)
         state.update { it.copy(overlayHandles = enabled) }

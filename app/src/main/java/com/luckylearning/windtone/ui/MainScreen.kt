@@ -531,6 +531,7 @@ fun MainScreen(
                         onOpenSettings = { settingsEntryPage = SettingsPage.ROOT; showSettings = true },
                         aliyunActive = showAliyun,
                         onOpenAliyun = { showAliyun = true },
+                        onOpenScanScope = { showScanScope = true },
                     )
                 }
                 Column(Modifier.weight(1f)) {
@@ -712,6 +713,7 @@ fun MainScreen(
                     onPlayQueue = playerVm::playQueue,
                     onLyricOverlayLines = playerVm::setLyricOverlayLines,
                     onLyricOverlayHandles = playerVm::setOverlayHandles,
+                    onOverlayHandle = playerVm::setOverlayHandle,
                     onLyricOverlayFullHeight = playerVm::setLyricOverlayFullHeight,
                     onLyricOverlayFullWidthPercent = playerVm::setLyricOverlayFullWidthPercent,
                     onLyricOverlayFullOffsetPercent = playerVm::setLyricOverlayFullOffsetPercent,

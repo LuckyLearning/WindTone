@@ -17,6 +17,13 @@ interface OverlayActions {
     /** 悬浮窗左侧三颗侧钮是否显示（v1.2.0，仅车载模式生效） */
     fun setOverlayHandles(enabled: Boolean)
 
+    /**
+     * 单颗侧钮开关（v1.3.0）。
+     *
+     * @param kind 0 = 收起 / 1 = 播放暂停 / 2 = 打开播放页
+     */
+    fun setOverlayHandle(kind: Int, enabled: Boolean)
+
     /** 悬浮歌词全屏高度（铺满屏宽、避开底部车机 Dock，内容按播放页歌词区排版） */
     fun setLyricOverlayFullHeight(enabled: Boolean)
 

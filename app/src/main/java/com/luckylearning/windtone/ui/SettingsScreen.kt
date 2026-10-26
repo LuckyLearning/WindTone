@@ -206,6 +206,7 @@ fun SettingsScreen(
     onLyricOverlayLines: (Int) -> Unit,
     /** 悬浮歌词全屏高度（v1.1.19） */
     onLyricOverlayHandles: (Boolean) -> Unit = {},
+    onOverlayHandle: (Int, Boolean) -> Unit = { _, _ -> },
     onLyricOverlayFullHeight: (Boolean) -> Unit,
     /** 全屏歌词的宽度（屏宽百分比）与水平位置（余量百分比）—— v1.1.20 */
     onLyricOverlayFullWidthPercent: (Int) -> Unit,
@@ -518,6 +519,7 @@ fun SettingsScreen(
                         overlayHealth = overlayHealth,
                         onLyricOverlay = onLyricOverlay,
                         onOverlayHandles = onLyricOverlayHandles,
+                        onOverlayHandle = onOverlayHandle,
                         onLyricOverlayLines = onLyricOverlayLines,
                         onLyricOverlayFullHeight = onLyricOverlayFullHeight,
                         onLyricOverlayFullWidthPercent = onLyricOverlayFullWidthPercent,

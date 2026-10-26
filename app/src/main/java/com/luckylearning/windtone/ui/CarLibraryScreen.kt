@@ -186,6 +186,8 @@ internal fun CarNavRail(
     /** 阿里云盘页是否打开（v1.1.84：车机没有抽屉，云盘入口必须常驻在左导航里） */
     aliyunActive: Boolean = false,
     onOpenAliyun: () -> Unit = {},
+    /** 扫描范围（v1.3.0：与手机抽屉对齐 —— 车机此前没有这个入口，只能进设置里找） */
+    onOpenScanScope: () -> Unit = {},
 ) {
     val scheme = MaterialTheme.colorScheme
     val m = rememberCarMetrics()
@@ -235,15 +237,24 @@ internal fun CarNavRail(
             // v1.1.84：车机模式下没有抽屉，阿里云盘原本只能从抽屉进 —— 等于进不去。
             // 这里补一个常驻入口，位置紧跟曲库视图，与手机端「在线音乐」组同一个层级。
             CarNavItem(
-                label = "云盘",
+                label = androidx.compose.ui.res.stringResource(com.luckylearning.windtone.R.string.drawer_aliyun),
                 icon = AppIcons.Cloud,
                 accent = scheme.onSurfaceVariant,
                 selected = aliyunActive,
                 onClick = onOpenAliyun,
             )
             Spacer(Modifier.weight(1f))
+            // v1.3.0：与手机抽屉「更多」组对齐 —— 扫描范围 + 设置。
+            // 之前车机只有「设置」，用户想换扫描目录得先点进设置再找，与手机上多一层。
             CarNavItem(
-                label = "设置",
+                label = androidx.compose.ui.res.stringResource(com.luckylearning.windtone.R.string.drawer_scan_scope),
+                icon = AppIcons.Folder,
+                accent = scheme.onSurfaceVariant,
+                selected = false,
+                onClick = onOpenScanScope,
+            )
+            CarNavItem(
+                label = androidx.compose.ui.res.stringResource(com.luckylearning.windtone.R.string.drawer_settings),
                 icon = AppIcons.Tune,
                 accent = scheme.onSurfaceVariant,
                 selected = false,

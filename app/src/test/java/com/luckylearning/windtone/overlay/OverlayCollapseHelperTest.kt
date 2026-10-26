@@ -123,4 +123,18 @@ class OverlayCollapseHelperTest {
         // 贴右缘时结果是 1080 − 48 − 4 = 1028（不是贴到 1032）
         assertEquals(1080 - 48 - 4, column.x)
     }
+
+    @Test
+    fun `侧钮掩码与整体开关、车载模式联动`() {
+        // 全开：三颗（1+2+4）
+        assertEquals(7, OverlayCollapseHelper.handleMask(true, true, true, true, true))
+        // 只留播放暂停
+        assertEquals(2, OverlayCollapseHelper.handleMask(true, true, false, true, false))
+        // 手机模式：一颗都不显示
+        assertEquals(0, OverlayCollapseHelper.handleMask(false, true, true, true, true))
+        // 整体开关关掉：即使单颗都开着也不显示
+        assertEquals(0, OverlayCollapseHelper.handleMask(true, false, true, true, true))
+        // 全关
+        assertEquals(0, OverlayCollapseHelper.handleMask(true, true, false, false, false))
+    }
 }

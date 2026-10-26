@@ -4,6 +4,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.core.app.ApplicationProvider
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.state.LibraryView
 import com.luckylearning.windtone.ui.theme.MusicPlayerTheme
 import org.junit.Assert.assertTrue
@@ -28,6 +30,11 @@ class CarNavRailTest {
 
     @get:Rule
     val compose = createComposeRule()
+
+    /** 菜单文案统一走资源（v1.3.0 起车机与手机共用同一批字符串），测试也照资源取 */
+    private val aliyunLabel: String
+        get() = ApplicationProvider.getApplicationContext<android.content.Context>()
+            .getString(R.string.drawer_aliyun)
 
     private fun render(
         current: LibraryView = LibraryView.SONGS,
@@ -54,8 +61,8 @@ class CarNavRailTest {
         var opened = false
         render(onOpenAliyun = { opened = true })
 
-        compose.onNodeWithText("云盘").assertIsDisplayed()
-        compose.onNodeWithText("云盘").performClick()
+        compose.onNodeWithText(aliyunLabel).assertIsDisplayed()
+        compose.onNodeWithText(aliyunLabel).performClick()
         compose.waitForIdle()
         assertTrue("点云盘应打开阿里云盘页", opened)
     }
@@ -70,6 +77,6 @@ class CarNavRailTest {
         compose.onNodeWithText(carViewLabel(LibraryView.ALBUM)).performClick()
         compose.waitForIdle()
         assertTrue("云盘页打开时曲库视图仍可点（用于退出云盘）", selected == LibraryView.ALBUM)
-        compose.onNodeWithText("云盘").assertIsDisplayed()
+        compose.onNodeWithText(aliyunLabel).assertIsDisplayed()
     }
 }

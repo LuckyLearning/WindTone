@@ -313,6 +313,10 @@ data class PlayerUiState(
     val lyricTapSeeks: Boolean = SettingsDefaults.LYRIC_TAP_SEEKS,
     /** 悬浮窗侧钮（收起 / 播放暂停 / 播放页）是否显示（v1.2.0，仅车载模式生效） */
     val overlayHandles: Boolean = SettingsDefaults.OVERLAY_HANDLES,
+    /** 单颗侧钮开关（v1.3.0） */
+    val overlayHandleCollapse: Boolean = SettingsDefaults.OVERLAY_HANDLE_COLLAPSE,
+    val overlayHandlePlayPause: Boolean = SettingsDefaults.OVERLAY_HANDLE_PLAY_PAUSE,
+    val overlayHandlePlayer: Boolean = SettingsDefaults.OVERLAY_HANDLE_PLAYER,
     /** 播放页左侧竖排是否显示「无障碍状态」按钮（v1.1.92） */
     val showA11yAction: Boolean = SettingsDefaults.PLAYER_A11Y_ACTION,
     /**

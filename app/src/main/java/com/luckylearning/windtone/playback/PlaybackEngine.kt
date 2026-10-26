@@ -88,6 +88,9 @@ class PlaybackEngine(
         PlayerUiState(
             lyricScale = prefs.lyricScale,
             overlayHandles = prefs.overlayHandles,
+            overlayHandleCollapse = prefs.overlayHandleCollapse,
+            overlayHandlePlayPause = prefs.overlayHandlePlayPause,
+            overlayHandlePlayer = prefs.overlayHandlePlayer,
             lyricTapSeeks = prefs.lyricTapSeeks,
             showA11yAction = prefs.playerA11yAction,
             lyricsPaneVisible = prefs.lyricsPaneVisible,
@@ -1221,6 +1224,8 @@ class PlaybackEngine(
     override fun setLyricOverlay(enabled: Boolean) = overlaySettings.setLyricOverlay(enabled)
     override fun setLyricOverlayLines(lines: Int) = overlaySettings.setLyricOverlayLines(lines)
     override fun setOverlayHandles(enabled: Boolean) = overlaySettings.setOverlayHandles(enabled)
+    override fun setOverlayHandle(kind: Int, enabled: Boolean) =
+        overlaySettings.setOverlayHandle(kind, enabled)
     override fun setLyricOverlayFullHeight(enabled: Boolean) =
         overlaySettings.setLyricOverlayFullHeight(enabled)
 

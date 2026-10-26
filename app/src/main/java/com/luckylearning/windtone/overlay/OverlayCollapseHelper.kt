@@ -85,6 +85,27 @@ object OverlayCollapseHelper {
         )
     }
 
+    /**
+     * 该显示哪几颗侧钮（v1.3.0）：bit0 收起 / bit1 播放暂停 / bit2 打开播放页。
+     *
+     * 抽成纯函数是为了能测：这里一旦算错，用户看到的就是"关掉的那颗还在、
+     * 或者点了第二颗触发的是第三颗"——窗口层没法靠肉眼定位。
+     */
+    fun handleMask(
+        carMode: Boolean,
+        handlesEnabled: Boolean,
+        collapse: Boolean,
+        playPause: Boolean,
+        player: Boolean,
+    ): Int {
+        if (!carMode || !handlesEnabled) return 0
+        var mask = 0
+        if (collapse) mask = mask or 1
+        if (playPause) mask = mask or 2
+        if (player) mask = mask or 4
+        return mask
+    }
+
     data class HandleColumn(val x: Int, val ys: List<Int>)
 
     /**
