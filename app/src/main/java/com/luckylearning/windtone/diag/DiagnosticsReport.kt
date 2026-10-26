@@ -7,6 +7,9 @@ import android.os.StatFs
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import com.luckylearning.windtone.BuildConfig
+import com.luckylearning.windtone.data.CrashLog
+import com.luckylearning.windtone.playback.PlaybackQualityProbe
+import com.luckylearning.windtone.playback.PlayerHandle
 import com.luckylearning.windtone.data.UpdateChecker
 import com.luckylearning.windtone.overlay.AccessibilityWatchdog
 import com.luckylearning.windtone.overlay.ForegroundAppDetector
@@ -89,6 +92,11 @@ internal object DiagnosticsReport {
         // 前台识别（整份报告原文）
         val foregroundReport: String,
         val logLines: List<String>,
+        /** 性能段原文（冷启动 / 首帧 / 悬浮窗挂载） */
+        val performanceBlock: String = "",
+        /** 播放质量段原文 */
+        val playbackQualityBlock: String = "",
+        val versionCode: Long = 0L,
     )
 
     /** 取数 */
@@ -107,6 +115,7 @@ internal object DiagnosticsReport {
             -1L
         }
         val song = player.current
+        runCatching { PlaybackQualityProbe.refreshFromPlayer(PlayerHandle.player) }
 
         return Facts(
             collectedAt = System.currentTimeMillis(),
@@ -185,6 +194,9 @@ internal object DiagnosticsReport {
             librarySkipped = library.skippedUnsupported,
             foregroundReport = ForegroundProbe.buildReport(ForegroundProbe.collect(context)),
             logLines = DiagLog.snapshot(),
+            performanceBlock = PerfMarks.buildReport(context),
+            playbackQualityBlock = PlaybackQualityProbe.report(),
+            versionCode = BuildConfig.VERSION_CODE.toLong(),
         )
     }
 
@@ -210,6 +222,8 @@ internal object DiagnosticsReport {
 
         sb.appendLine("[环境]")
         sb.appendLine("应用：v${f.appVersion}（${f.buildType}）  ${f.packageName}")
+        sb.appendLine("mapping：${CrashLog.mappingAssetName()}（与 Release 资产同名）")
+        sb.appendLine("versionCode：${f.versionCode}")
         sb.appendLine("安装包签名：${f.integrity}")
         sb.appendLine("系统：Android ${f.androidRelease}（API ${f.sdkInt}）  ${f.manufacturer} ${f.model}（${f.device}）")
         sb.appendLine("ABI：${f.abi}   语言：${f.locale}   时区：${f.timeZone}")
@@ -254,6 +268,14 @@ internal object DiagnosticsReport {
         sb.appendLine("扫描中：${yn(f.libraryScanning)}   状态：${f.libraryStatus.ifBlank { "（空）" }}")
         sb.appendLine()
 
+        if (f.performanceBlock.isNotBlank()) {
+            sb.appendLine(f.performanceBlock.trimEnd())
+            sb.appendLine()
+        }
+        if (f.playbackQualityBlock.isNotBlank()) {
+            sb.appendLine(f.playbackQualityBlock.trimEnd())
+            sb.appendLine()
+        }
         sb.appendLine(f.foregroundReport.trimEnd())
         sb.appendLine()
 
@@ -264,6 +286,18 @@ internal object DiagnosticsReport {
             f.logLines.forEach { sb.appendLine(it) }
         }
         sb.appendLine()
+        sb.appendLine("[一键取证]")
+        sb.appendLine(ForensicsScript.shortHint(f.packageName, f.appVersion))
+        sb.appendLine("--- 完整脚本（复制到电脑执行）---")
+        sb.appendLine(
+            ForensicsScript.build(
+                packageName = f.packageName,
+                versionName = f.appVersion,
+                versionCode = f.versionCode,
+            ).trimEnd(),
+        )
+        sb.appendLine()
+        sb.appendLine()
         sb.appendLine("=== 诊断包结束 ===")
         return sb.toString()
     }
@@ -272,9 +306,6 @@ internal object DiagnosticsReport {
 
     /**
      * 落盘到应用私有目录（卸载即清），返回路径。
-     *
-     * 与悬浮窗排障报告分开存放：那份专讲前台识别，这份是全量快照，
-     * 用户回传时可以只挑一份。
      */
     fun saveToFile(context: Context, report: String): String? = runCatching {
         val dir = java.io.File(context.getExternalFilesDir(null) ?: context.filesDir, "diagnostics")

@@ -22,6 +22,7 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.TextView
 import com.luckylearning.windtone.data.CrashLog
+import com.luckylearning.windtone.diag.PerfMarks
 import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.data.SettingsDefaults
 import kotlinx.coroutines.CoroutineScope
@@ -325,6 +326,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
     private fun attachWindow(): Boolean {
         val wm = windowManager ?: return false
         if (container != null) return true
+        PerfMarks.overlayMountBegin()
 
         val tv = TextView(this).apply {
             // 正文色取自设置（默认纯白）。已唱部分的颜色**不在这里设**——它要按行内
@@ -464,6 +466,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             }
             box.post { updateGeometryReport() }
             LyricOverlayBridge.report(LyricOverlayBus.Status.RUNNING, "窗口已显示")
+            PerfMarks.overlayMountEnd(ok = true)
             true
         } catch (t: Throwable) {
             // 授权被撤销 / 厂商 ROM 拦白名单时会走到这里。
@@ -471,6 +474,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             // 但必须**留下痕迹**：只进 logcat 的话用户在手机上无从排查，
             // 设置页 → 关于与诊断 → 崩溃日志里能看到这条诊断。
             windowAttached = false
+            PerfMarks.overlayMountEnd(ok = false)
             val detail = "挂载悬浮窗失败：${t.javaClass.simpleName}: ${t.message}"
             CrashLog.record(this, "LyricOverlay", detail + "\n\n" + t.stackTraceToString())
             LyricOverlayBridge.report(LyricOverlayBus.Status.FAILED, detail)

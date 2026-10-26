@@ -2,6 +2,7 @@ package com.luckylearning.windtone.data
 
 import android.content.Context
 import android.os.Build
+import com.luckylearning.windtone.BuildConfig
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -21,6 +22,12 @@ object CrashLog {
     private const val CRASH_PREFIX = "crash-"
     private const val SEEN_PREFS = "crash_seen"
     private const val KEY_SEEN_MTIME = "seen_mtime"
+
+    /** 与 Release 资产 mapping-v<versionName>.txt 同名，供 retrace 对版 */
+    fun mappingAssetName(): String = "mapping-v${BuildConfig.VERSION_NAME}"
+
+    fun appVersionLine(): String =
+        "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) ${BuildConfig.BUILD_TYPE}"
 
     /** 在 Application.onCreate 里安装全局兜底处理器 */
     fun install(context: Context) {
@@ -75,7 +82,21 @@ object CrashLog {
             .getLong(KEY_SEEN_MTIME, 0L)
 
     /** 全部崩溃日志合并（供导出） */
+    /**
+     * 全部崩溃/诊断日志合并导出。
+     *
+     * 导出时自动附上 mapping 版本号（A2），方便对着 Release 资产 retrace：
+     * `bash scripts/retrace.sh --from-log <本文件> [mapping目录]`
+     */
     fun allText(context: Context): String = buildString {
+        appendLine("=== WindTone 崩溃日志导出 ===")
+        appendLine("应用：${appVersionLine()}")
+        appendLine("包名：${context.packageName}")
+        appendLine("mapping：${mappingAssetName()}")
+        appendLine(
+            "还原：bash scripts/retrace.sh --from-log <本文件> [含 ${mappingAssetName()}.txt 的目录]",
+        )
+        appendLine()
         val list = files(context)
         if (list.isEmpty()) {
             appendLine("（暂无崩溃记录）")
@@ -114,6 +135,8 @@ object CrashLog {
 
     private fun header(): String = buildString {
         appendLine("时间：${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())}")
+        appendLine("应用：${appVersionLine()}")
+        appendLine("mapping：${mappingAssetName()}")
         appendLine("线程：${Thread.currentThread().name}")
         appendLine("设备：${Build.MANUFACTURER} ${Build.MODEL}")
         appendLine("系统：Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")

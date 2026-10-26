@@ -71,4 +71,25 @@ class CrashLogTest {
         writeCrash("diag-20261017-114100.txt", "overlay failed", 1_000L)
         assertNull(CrashLog.latestUnseen(context))
     }
+
+    @Test
+    fun `导出头带 mapping 版本与应用版本`() {
+        writeCrash("crash-20261026-120000.txt", "java.lang.IllegalStateException: boom", 3_000L)
+        val text = CrashLog.allText(context)
+        assertTrue(text.contains("mapping：") || text.contains("mapping:"))
+        assertTrue(text.contains(CrashLog.mappingAssetName()))
+        assertTrue(text.contains("retrace"))
+        assertTrue(text.contains("boom"))
+    }
+
+    @Test
+    fun `单条崩溃文件头也写 mapping`() {
+        // 走 record 路径验证 header()
+        CrashLog.record(context, "unit", "hello-stack")
+        val file = CrashLog.files(context).first { it.name.startsWith("diag-") }
+        val body = file.readText()
+        assertTrue(body.contains(CrashLog.mappingAssetName()))
+        assertTrue(body.contains("hello-stack"))
+    }
+
 }

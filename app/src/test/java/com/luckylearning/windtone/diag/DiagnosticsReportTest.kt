@@ -81,4 +81,20 @@ class DiagnosticsReportTest {
         val overlay = text.indexOf("[OVERLAY]")
         assertTrue("旧事件应排在前面", fg < overlay)
     }
+
+    @Test
+    fun `含性能与播放质量两段`() {
+        val text = report()
+        assertTrue("缺性能段", text.contains("[性能]"))
+        assertTrue("缺播放质量段", text.contains("[播放质量]"))
+    }
+
+    @Test
+    fun `含一键取证与 mapping 版本`() {
+        val text = report()
+        assertTrue(text.contains("[一键取证]"))
+        assertTrue(text.contains("adb"))
+        assertTrue(text.contains("mapping-v") || text.contains("mapping："))
+    }
+
 }

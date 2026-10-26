@@ -15,6 +15,8 @@ import com.luckylearning.windtone.data.UpdateChecker
 import com.luckylearning.windtone.overlay.ForegroundAppDetector
 import com.luckylearning.windtone.overlay.ForegroundProbe
 import com.luckylearning.windtone.diag.DiagnosticsReport
+import com.luckylearning.windtone.diag.ForensicsScript
+import com.luckylearning.windtone.BuildConfig
 import com.luckylearning.windtone.data.AppIntegrity
 import com.luckylearning.windtone.overlay.ForegroundAppLog
 import com.luckylearning.windtone.overlay.ForegroundAppState
@@ -97,7 +99,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.luckylearning.windtone.BuildConfig
 import com.luckylearning.windtone.playback.Pitch
 import com.luckylearning.windtone.ui.theme.windShadow
 import kotlinx.coroutines.launch
@@ -482,6 +483,54 @@ internal fun SettingsDiagnosticsPage(
             },
             chevron = true,
         )
+
+        // A1：一键取证 —— 只复制 adb 脚本，不改任何设置
+        var forensicsText by remember { mutableStateOf<String?>(null) }
+        ActionRow(
+            title = "一键取证（复制 adb 脚本）",
+            subtitle = "把 logcat / dumpsys 命令与当前包名、版本拼好，粘到电脑即可跑",
+            onClick = {
+                val script = ForensicsScript.build(
+                    packageName = context.packageName,
+                    versionName = BuildConfig.VERSION_NAME,
+                    versionCode = BuildConfig.VERSION_CODE.toLong(),
+                )
+                clipboard.setText(AnnotatedString(script))
+                forensicsText = script
+                Toast.makeText(context, "取证脚本已复制", Toast.LENGTH_SHORT).show()
+            },
+            chevron = true,
+        )
+        if (forensicsText != null) {
+            val script = forensicsText!!
+            AlertDialog(
+                onDismissRequest = { forensicsText = null },
+                title = { Text("一键取证脚本") },
+                text = {
+                    Column(
+                        Modifier
+                            .heightIn(max = 380.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        Text(
+                            script,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = FontFamily.Monospace,
+                            ),
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        clipboard.setText(AnnotatedString(script))
+                        Toast.makeText(context, "取证脚本已复制", Toast.LENGTH_SHORT).show()
+                    }) { Text("再复制一次") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { forensicsText = null }) { Text("关闭") }
+                },
+            )
+        }
         if (diagReport != null) {
             val report = diagReport!!
             AlertDialog(

@@ -120,6 +120,7 @@ class PlaybackService : MediaLibraryService() {
             .build()
 
         PlayerHandle.player = player
+        PlaybackQualityProbe.attach(player)
         SleepTimer.fireAction = { player.pause() }
 
         player.addListener(object : Player.Listener {
