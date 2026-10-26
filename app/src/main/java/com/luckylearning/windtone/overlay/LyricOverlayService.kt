@@ -131,6 +131,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
      * 出现"点第二颗其实是第三颗"这种问题。用位掩码比较，最省事也最不容易错。
      */
     private var appliedHandleMask = -1
+    private var appliedHandleOrder: String = ""
     private var anchorFromWindowY = Int.MIN_VALUE
 
     /** 歌词内容列（收起时整列隐藏，只留窗口宽度的一点点） */
@@ -1536,11 +1537,16 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
     /** 按当前模式与开关，挂上或摘掉侧钮（v1.2.0） */
     private fun syncHandlesVisibility() {
         val mask = desiredHandleMask()
-        if (mask == appliedHandleMask) return
-        // 配置变了（整体关掉、或某颗单独关掉/打开）：整组摘掉再按新配置挂，
+        val order = Prefs(this).overlayHandleOrder
+        if (mask == appliedHandleMask && order == appliedHandleOrder) return
+        // 配置变了（整体关掉、或某颗单独关掉/打开、或上下顺序）：整组摘掉再按新配置挂，
         // 避免残留的钮与新序号错位。
         detachHandles()
-        if (mask == 0) return
+        appliedHandleOrder = order
+        if (mask == 0) {
+            appliedHandleMask = 0
+            return
+        }
         attachCollapseHandle()
         attachPauseHandle()
         attachPlayHandle()
@@ -1561,6 +1567,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         pauseHandleParams = null
         handleAnchorY = -1
         anchorFromWindowY = Int.MIN_VALUE
+        // appliedHandleMask / Order 由 syncHandlesVisibility 在重建时重写
     }
 
     /** 钮的统一底片：深色半透明圆，图标一律白色（参考截图里的控制键风格） */
@@ -1598,22 +1605,25 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
      *  3. 两颗钮**竖排**在歌词窗左侧（收起钮在上、播放页钮在下），整体夹在屏幕内。
      */
     private fun updateHandlesPosition() {
-        val collapse = collapseHandleView ?: return
-        val cp = collapseHandleParams ?: return
         val p = layoutParams ?: return
-        val size = collapse.height.takeIf { it > 0 }
+        val anyView = collapseHandleView ?: pauseHandleView ?: playHandleView ?: return
+        val size = anyView.height.takeIf { it > 0 }
             ?: dp(OverlayCollapseHelper.DEFAULT_HANDLE_SIZE_DP)
         val gap = dp(OverlayCollapseHelper.HANDLE_GAP_DP)
-        val play = playHandleView
-        val pause = pauseHandleView
 
         val boxH = container?.height?.takeIf { it > 0 }
             ?: p.height.takeIf { it > 0 }
             ?: dp(OverlayCollapseHelper.FALLBACK_BOX_HEIGHT_DP)
         val (screenW, screenH) = screenSize()
 
-        val count = 1 + (if (pause != null) 1 else 0) + (if (play != null) 1 else 0)
-        val totalH = size * count + gap * (count - 1)
+        val order = OverlayCollapseHelper.mergeHandleOrder(
+            Prefs(this).overlayHandleOrder.split(',').map { it.trim() }.filter { it.isNotEmpty() },
+        )
+        val mask = desiredHandleMask()
+        val kinds = OverlayCollapseHelper.visibleHandles(order, mask)
+        if (kinds.isEmpty()) return
+
+        val totalH = size * kinds.size + gap * (kinds.size - 1)
         val anchor = OverlayCollapseHelper.resolveHandleAnchor(
             windowY = p.y,
             boxHeightPx = boxH,
@@ -1625,11 +1635,6 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         handleAnchorY = anchor.anchorY
         anchorFromWindowY = anchor.anchorFromWindowY
 
-        val visible = listOfNotNull(
-            collapse to cp,
-            pause?.let { it to pauseHandleParams },
-            play?.let { it to playHandleParams },
-        )
         val column = OverlayCollapseHelper.handleColumn(
             windowX = p.x,
             handleSizePx = size,
@@ -1637,10 +1642,18 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             edgeGapPx = dp(OverlayCollapseHelper.HANDLE_EDGE_GAP_DP),
             screenW = screenW,
             anchorY = handleAnchorY,
-            count = visible.size,
+            count = kinds.size,
         )
-        visible.forEachIndexed { index, (view, params) ->
-            if (params == null) return@forEachIndexed
+        kinds.forEachIndexed { index, kind ->
+            val (view, params) = when (kind) {
+                OverlayCollapseHelper.OverlayHandleKind.COLLAPSE ->
+                    collapseHandleView to collapseHandleParams
+                OverlayCollapseHelper.OverlayHandleKind.PLAY_PAUSE ->
+                    pauseHandleView to pauseHandleParams
+                OverlayCollapseHelper.OverlayHandleKind.PLAYER ->
+                    playHandleView to playHandleParams
+            }
+            if (view == null || params == null) return@forEachIndexed
             params.x = column.x
             params.y = column.ys[index]
             runCatching { windowManager?.updateViewLayout(view, params) }

@@ -215,6 +215,7 @@ fun SettingsScreen(
     /** 悬浮歌词全屏高度（v1.1.19） */
     onLyricOverlayHandles: (Boolean) -> Unit = {},
     onOverlayHandle: (Int, Boolean) -> Unit = { _, _ -> },
+    onOverlayHandleOrder: (String) -> Unit = {},
     onLyricOverlayFullHeight: (Boolean) -> Unit,
     /** 全屏歌词的宽度（屏宽百分比）与水平位置（余量百分比）—— v1.1.20 */
     onLyricOverlayFullWidthPercent: (Int) -> Unit,
@@ -268,6 +269,7 @@ fun SettingsScreen(
     /** 变调：半音（-12..+12，0 = 原调） */
     onPitch: (Int) -> Unit,
     onSkipSilence: (Boolean) -> Unit,
+    onGaplessPlayback: (Boolean) -> Unit = {},
     /** 「打开应用继续上次播放」：冷启动恢复队列后是否自动起播 —— v1.1.16 */
     onAutoResume: (Boolean) -> Unit,
     /** 开机后台起播（v1.1.24） */
@@ -351,6 +353,7 @@ fun SettingsScreen(
             onSpeed = onSpeed,
             onPitch = onPitch,
             onSkipSilence = onSkipSilence,
+            onGaplessPlayback = onGaplessPlayback,
             onAutoResume = onAutoResume,
             onAutoPlayOnBoot = onAutoPlayOnBoot,
             onLyricScale = onLyricScale,
@@ -511,6 +514,7 @@ fun SettingsScreen(
                         onSpeed = onSpeed,
                         onPitch = onPitch,
                         onSkipSilence = onSkipSilence,
+                        onGaplessPlayback = onGaplessPlayback,
                         onAutoResume = onAutoResume,
                         onAutoPlayOnBoot = onAutoPlayOnBoot,
                     )
@@ -530,6 +534,7 @@ fun SettingsScreen(
                         onLyricOverlay = onLyricOverlay,
                         onOverlayHandles = onLyricOverlayHandles,
                         onOverlayHandle = onOverlayHandle,
+            onOverlayHandleOrder = onOverlayHandleOrder,
                         onLyricOverlayLines = onLyricOverlayLines,
                         onLyricOverlayFullHeight = onLyricOverlayFullHeight,
                         onLyricOverlayFullWidthPercent = onLyricOverlayFullWidthPercent,

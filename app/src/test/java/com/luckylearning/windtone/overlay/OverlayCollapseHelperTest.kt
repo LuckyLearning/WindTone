@@ -137,4 +137,50 @@ class OverlayCollapseHelperTest {
         // 全关
         assertEquals(0, OverlayCollapseHelper.handleMask(true, true, false, false, false))
     }
+
+    @Test
+    fun `侧钮顺序默认与改前写死一致`() {
+        val order = OverlayCollapseHelper.DEFAULT_HANDLE_ORDER
+        assertEquals(
+            listOf(
+                OverlayCollapseHelper.OverlayHandleKind.COLLAPSE,
+                OverlayCollapseHelper.OverlayHandleKind.PLAY_PAUSE,
+                OverlayCollapseHelper.OverlayHandleKind.PLAYER,
+            ),
+            order,
+        )
+        assertEquals("collapse,play_pause,player", OverlayCollapseHelper.handleOrderCsv())
+    }
+
+    @Test
+    fun `mergeHandleOrder 纠正未知项并补齐缺项`() {
+        val merged = OverlayCollapseHelper.mergeHandleOrder(
+            listOf("player", "bogus", "collapse"),
+        )
+        // 缺的 play_pause 按默认相对位置插到 player 前（与 SettingsMenuOrder.merge 同口径）
+        assertEquals(
+            listOf(
+                OverlayCollapseHelper.OverlayHandleKind.PLAY_PAUSE,
+                OverlayCollapseHelper.OverlayHandleKind.PLAYER,
+                OverlayCollapseHelper.OverlayHandleKind.COLLAPSE,
+            ),
+            merged,
+        )
+    }
+
+    @Test
+    fun `visibleHandles 按用户顺序筛掩码`() {
+        val order = OverlayCollapseHelper.mergeHandleOrder(
+            listOf("player", "collapse", "play_pause"),
+        )
+        // 只开收起+播放页 = 1+4
+        val visible = OverlayCollapseHelper.visibleHandles(order, mask = 1 or 4)
+        assertEquals(
+            listOf(
+                OverlayCollapseHelper.OverlayHandleKind.PLAYER,
+                OverlayCollapseHelper.OverlayHandleKind.COLLAPSE,
+            ),
+            visible,
+        )
+    }
 }

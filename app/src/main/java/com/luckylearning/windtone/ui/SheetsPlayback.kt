@@ -40,6 +40,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -274,6 +275,12 @@ fun PlayerOptionsSheet(
     overlayPresetLabel: String = "",
     /** 打开「悬浮窗样式」速选面板（FR-02） */
     onOpenOverlayStyle: () -> Unit = {},
+    /** C2 A-B 循环：当前 A/B（毫秒，null=未设） */
+    abLoopAMs: Long? = null,
+    abLoopBMs: Long? = null,
+    onMarkAbLoopA: () -> Unit = {},
+    onMarkAbLoopB: () -> Unit = {},
+    onClearAbLoop: () -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
@@ -321,6 +328,37 @@ fun PlayerOptionsSheet(
             SectionLabel("速度与变调")
             SpeedControl(speed = speed, onSpeed = onSpeed)
             PitchControl(semitones = pitchSemitones, onPitch = onPitch)
+
+            SectionLabel("A-B 循环")
+            Text(
+                text = when {
+                    abLoopAMs != null && abLoopBMs != null ->
+                        "区间 %s → %s（到 B 回 A；与变速兼容）".format(
+                            formatAbClock(abLoopAMs),
+                            formatAbClock(abLoopBMs),
+                        )
+                    abLoopAMs != null ->
+                        "已设 A %s，再设 B 开始循环".format(formatAbClock(abLoopAMs))
+                    else -> "练唱：先设 A，再设 B；切歌自动清除"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 6.dp),
+            )
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(onClick = onMarkAbLoopA, modifier = Modifier.weight(1f)) {
+                    Text(if (abLoopAMs != null) "重设 A" else "设 A")
+                }
+                OutlinedButton(onClick = onMarkAbLoopB, modifier = Modifier.weight(1f)) {
+                    Text(if (abLoopBMs != null) "重设 B" else "设 B")
+                }
+                if (abLoopAMs != null || abLoopBMs != null) {
+                    TextButton(onClick = onClearAbLoop) { Text("清除") }
+                }
+            }
 
             SectionLabel("歌词")
             // 悬浮歌词放在「歌词」分组第一位：它是这首歌「往哪儿显示」最常用的一个选择，
@@ -623,4 +661,10 @@ fun OverlayStyleSheet(
             Spacer(Modifier.height(20.dp))
         }
     }
+}
+
+
+private fun formatAbClock(ms: Long): String {
+    val totalSec = (ms.coerceAtLeast(0L) / 1000L).toInt()
+    return "%d:%02d".format(totalSec / 60, totalSec % 60)
 }

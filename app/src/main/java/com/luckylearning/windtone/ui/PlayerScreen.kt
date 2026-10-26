@@ -150,6 +150,9 @@ fun PlayerScreen(
     onSpeed: (Float) -> Unit,
     /** 变调：半音（-12..+12，0 = 原调） */
     onPitch: (Int) -> Unit,
+    onMarkAbLoopA: () -> Unit = {},
+    onMarkAbLoopB: () -> Unit = {},
+    onClearAbLoop: () -> Unit = {},
     onExportLyrics: (android.net.Uri) -> Unit,
     onShowAudioInfo: () -> Unit = {},
     /**
@@ -867,6 +870,11 @@ fun PlayerScreen(
             // v1.1.78 歌词菜单：开关副标题报当前预设名 + 「悬浮窗样式」速选入口
             overlayPresetLabel = overlayPresetLabel(state.overlayPresetParams()),
             onOpenOverlayStyle = { showOptions = false; showOverlayStyle = true },
+            abLoopAMs = state.abLoopAMs,
+            abLoopBMs = state.abLoopBMs,
+            onMarkAbLoopA = onMarkAbLoopA,
+            onMarkAbLoopB = onMarkAbLoopB,
+            onClearAbLoop = onClearAbLoop,
             onDismiss = { showOptions = false },
         )
     }

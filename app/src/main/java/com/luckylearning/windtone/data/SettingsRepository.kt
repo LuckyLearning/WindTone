@@ -1,5 +1,7 @@
 package com.luckylearning.windtone.data
 
+import com.luckylearning.windtone.overlay.OverlayCollapseHelper
+
 /**
  * 设置域的**持久化门面**（v1.1.37 重构抽出）。
  *
@@ -87,6 +89,17 @@ class SettingsRepository(val prefs: Prefs) {
 
     fun setOverlayHandlePlayer(enabled: Boolean) {
         prefs.overlayHandlePlayer = enabled
+    }
+
+    fun setOverlayHandleOrder(orderCsv: String) {
+        val merged = OverlayCollapseHelper.mergeHandleOrder(
+            orderCsv.split(',').map { it.trim() }.filter { it.isNotEmpty() },
+        )
+        prefs.overlayHandleOrder = OverlayCollapseHelper.handleOrderCsv(merged)
+    }
+
+    fun setGaplessPlayback(enabled: Boolean) {
+        prefs.gaplessPlayback = enabled
     }
 
     fun setLyricTapSeeks(enabled: Boolean) {

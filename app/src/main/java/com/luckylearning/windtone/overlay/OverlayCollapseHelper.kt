@@ -128,4 +128,49 @@ object OverlayCollapseHelper {
         val ys = (0 until count.coerceAtLeast(1)).map { i -> anchorY + i * (size + gapPx) }
         return HandleColumn(x = x, ys = ys)
     }
+
+
+    /** 侧钮种类（与位掩码 bit0/1/2、设置页 kind 0/1/2 对齐） */
+    enum class OverlayHandleKind(val id: String, val bit: Int, val kind: Int) {
+        COLLAPSE("collapse", 1, 0),
+        PLAY_PAUSE("play_pause", 2, 1),
+        PLAYER("player", 4, 2),
+        ;
+
+        companion object {
+            fun fromId(id: String): OverlayHandleKind? = entries.firstOrNull { it.id == id }
+        }
+    }
+
+    /** 出厂上下顺序：收起 → 播放暂停 → 打开播放页（与改前写死顺序一致） */
+    val DEFAULT_HANDLE_ORDER: List<OverlayHandleKind> = listOf(
+        OverlayHandleKind.COLLAPSE,
+        OverlayHandleKind.PLAY_PAUSE,
+        OverlayHandleKind.PLAYER,
+    )
+
+    /**
+     * 合并用户保存的侧钮顺序：未知 id 丢掉，缺的按默认顺序插回。
+     * 与 [com.luckylearning.windtone.ui.SettingsMenuOrder.merge] 同口径。
+     */
+    fun mergeHandleOrder(savedIds: List<String>): List<OverlayHandleKind> {
+        val defaultIds = DEFAULT_HANDLE_ORDER.map { it.id }
+        val known = defaultIds.toSet()
+        val out = savedIds.filter { it in known }.distinct().toMutableList()
+        for (id in defaultIds) {
+            if (id in out) continue
+            val later = defaultIds.drop(defaultIds.indexOf(id) + 1).firstOrNull { it in out }
+            val at = if (later == null) out.size else out.indexOf(later)
+            out.add(at, id)
+        }
+        return out.mapNotNull { OverlayHandleKind.fromId(it) }
+    }
+
+    fun handleOrderCsv(order: List<OverlayHandleKind> = DEFAULT_HANDLE_ORDER): String =
+        order.joinToString(",") { it.id }
+
+    /** 按用户顺序筛出当前掩码下可见的侧钮 */
+    fun visibleHandles(order: List<OverlayHandleKind>, mask: Int): List<OverlayHandleKind> =
+        order.filter { mask and it.bit != 0 }
+
 }

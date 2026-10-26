@@ -39,6 +39,18 @@ interface PlayerActions : OverlayActions {
     fun cancelSleep()
     fun setSkipSilence(enabled: Boolean)
 
+    /** 无缝播放显式开关（C1，默认开；Media3 默认识别分轨 gapless 元数据） */
+    fun setGaplessPlayback(enabled: Boolean)
+
+    /** 记 A-B 循环 A 点为当前进度（C2） */
+    fun markAbLoopA()
+
+    /** 记 A-B 循环 B 点为当前进度（C2）；需已设 A 且当前位置 > A */
+    fun markAbLoopB()
+
+    /** 清除 A-B 循环（C2） */
+    fun clearAbLoop()
+
     /** 「打开应用继续上次播放」：冷启动恢复队列后是否自动起播（v1.1.16） */
     fun setAutoResume(enabled: Boolean)
 

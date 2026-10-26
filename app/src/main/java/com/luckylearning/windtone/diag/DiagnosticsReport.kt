@@ -8,6 +8,7 @@ import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import com.luckylearning.windtone.BuildConfig
 import com.luckylearning.windtone.data.CrashLog
+import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.playback.PlaybackQualityProbe
 import com.luckylearning.windtone.playback.PlayerHandle
 import com.luckylearning.windtone.data.UpdateChecker
@@ -195,7 +196,14 @@ internal object DiagnosticsReport {
             foregroundReport = ForegroundProbe.buildReport(ForegroundProbe.collect(context)),
             logLines = DiagLog.snapshot(),
             performanceBlock = PerfMarks.buildReport(context),
-            playbackQualityBlock = PlaybackQualityProbe.report(),
+            playbackQualityBlock = buildString {
+                appendLine(PlaybackQualityProbe.report())
+                val prefs = Prefs(context)
+                appendLine(
+                    "无缝播放：${if (prefs.gaplessPlayback) "开（偏好；Media3 单实例队列 + 分轨 encoder delay/padding）" else "关（偏好声明；播放仍为单 ExoPlayer 实例）"}",
+                )
+                appendLine("跳过静音：${if (prefs.skipSilence) "开" else "关"}")
+            }.trimEnd(),
             versionCode = BuildConfig.VERSION_CODE.toLong(),
         )
     }

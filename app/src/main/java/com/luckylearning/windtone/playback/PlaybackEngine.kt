@@ -92,6 +92,7 @@ class PlaybackEngine(
             overlayHandleCollapse = prefs.overlayHandleCollapse,
             overlayHandlePlayPause = prefs.overlayHandlePlayPause,
             overlayHandlePlayer = prefs.overlayHandlePlayer,
+            overlayHandleOrder = prefs.overlayHandleOrder,
             lyricTapSeeks = prefs.lyricTapSeeks,
             showA11yAction = prefs.playerA11yAction,
             lyricsPaneVisible = prefs.lyricsPaneVisible,
@@ -139,6 +140,7 @@ class PlaybackEngine(
             speed = prefs.playbackSpeed,
             pitchSemitones = prefs.playbackPitchSemitones,
             skipSilence = prefs.skipSilence,
+            gaplessPlayback = prefs.gaplessPlayback,
             autoResume = prefs.autoResume,
             autoPlayOnBoot = prefs.autoPlayOnBoot,
         )
@@ -251,6 +253,9 @@ class PlaybackEngine(
     private var healLyricsJob: Job? = null
     private var artworkJob: Job? = null
     private var positionJob: Job? = null
+
+    /** A-B 循环（C2）：会话级，切歌清除；与 [_player] 中 abLoop* 字段同步 */
+    private var abLoop: AbLoopState = AbLoopState()
     /** 本次恢复是否**强制**起播（开机后台播放用；不受「打开应用继续上次播放」开关限制） */
     private var forceAutoplayOnRestore = false
 
@@ -434,6 +439,8 @@ class PlaybackEngine(
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            clearAbLoopInternal()
+
             val c = controller ?: return
             _player.update {
                 it.copy(
@@ -1104,6 +1111,59 @@ class PlaybackEngine(
         PlayerHandle.setSkipSilence(enabled)
     }
 
+    override fun setGaplessPlayback(enabled: Boolean) {
+        settings.setGaplessPlayback(enabled)
+        _player.update { it.copy(gaplessPlayback = enabled) }
+        // Media3 无缝靠单实例 + 连续队列 + 分轨 encoder delay/padding；本开关只作显式声明与诊断可读点
+    }
+
+    override fun markAbLoopA() {
+        val pos = controller?.currentPosition?.coerceAtLeast(0L) ?: _progress.value.positionMs
+        abLoop = abLoop.markA(pos)
+        publishAbLoop()
+        messages.post("已设 A 点 " + formatAbMs(pos))
+    }
+
+    override fun markAbLoopB() {
+        val pos = controller?.currentPosition?.coerceAtLeast(0L) ?: _progress.value.positionMs
+        if (!abLoop.canMarkB(pos)) {
+            messages.post(
+                if (abLoop.aMs == null) "请先设 A 点"
+                else "B 点需晚于 A 点",
+            )
+            return
+        }
+        abLoop = abLoop.markB(pos)
+        publishAbLoop()
+        messages.post("已设 B 点 " + formatAbMs(pos) + "，区间循环中")
+    }
+
+    override fun clearAbLoop() {
+        clearAbLoopInternal()
+        messages.post("已清除 A-B 循环")
+    }
+
+    private fun clearAbLoopInternal() {
+        if (abLoop.aMs == null && abLoop.bMs == null) {
+            // 仍同步一次 UI，避免冷启动残留观感
+            if (_player.value.abLoopAMs != null || _player.value.abLoopBMs != null) publishAbLoop()
+            return
+        }
+        abLoop = AbLoopState()
+        publishAbLoop()
+    }
+
+    private fun publishAbLoop() {
+        _player.update { it.copy(abLoopAMs = abLoop.aMs, abLoopBMs = abLoop.bMs) }
+    }
+
+    private fun formatAbMs(ms: Long): String {
+        val totalSec = (ms / 1000L).toInt()
+        val m = totalSec / 60
+        val s = totalSec % 60
+        return "%d:%02d".format(m, s)
+    }
+
     /**
      * 「打开应用继续上次播放」开关（v1.1.16）。
      *
@@ -1244,6 +1304,9 @@ class PlaybackEngine(
     override fun setOverlayHandles(enabled: Boolean) = overlaySettings.setOverlayHandles(enabled)
     override fun setOverlayHandle(kind: Int, enabled: Boolean) =
         overlaySettings.setOverlayHandle(kind, enabled)
+
+    override fun setOverlayHandleOrder(orderCsv: String) =
+        overlaySettings.setOverlayHandleOrder(orderCsv)
     override fun setLyricOverlayFullHeight(enabled: Boolean) =
         overlaySettings.setLyricOverlayFullHeight(enabled)
 
@@ -1524,6 +1587,11 @@ class PlaybackEngine(
             while (isActive) {
                 val c = controller ?: break
                 val pos = c.currentPosition.coerceAtLeast(0L)
+                // C2 A-B：到 B 则 seek 回 A（媒体时间轴，与变速兼容）
+                val abSeek = abLoop.seekIfNeeded(pos)
+                if (abSeek != null) {
+                    runCatching { c.seekTo(abSeek) }
+                }
                 val buffered = c.bufferedPosition.coerceAtLeast(0L)
                 val rawDuration = c.duration
                 val duration = if (rawDuration > 0) rawDuration else (_player.value.current?.durationMs ?: 0L)

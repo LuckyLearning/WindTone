@@ -317,6 +317,8 @@ data class PlayerUiState(
     val overlayHandleCollapse: Boolean = SettingsDefaults.OVERLAY_HANDLE_COLLAPSE,
     val overlayHandlePlayPause: Boolean = SettingsDefaults.OVERLAY_HANDLE_PLAY_PAUSE,
     val overlayHandlePlayer: Boolean = SettingsDefaults.OVERLAY_HANDLE_PLAYER,
+    /** 侧钮上下顺序 CSV（B1），默认与改前写死顺序一致 */
+    val overlayHandleOrder: String = SettingsDefaults.OVERLAY_HANDLE_ORDER,
     /** 播放页左侧竖排是否显示「无障碍状态」按钮（v1.1.92） */
     val showA11yAction: Boolean = SettingsDefaults.PLAYER_A11Y_ACTION,
     /**
@@ -406,6 +408,14 @@ data class PlayerUiState(
     val audioInfo: AudioInspector.Info? = null,
     val audioInfoLoading: Boolean = false,
     val skipSilence: Boolean = false,
+    /** 无缝播放显式开关（C1，默认开） */
+    val gaplessPlayback: Boolean = SettingsDefaults.GAPLESS_PLAYBACK,
+    /**
+     * A-B 循环点（C2，会话级，不落盘；切歌清除）。
+     * null = 未设；两端都有且 B>A 时引擎在进度 ticker 里 seek 回 A。
+     */
+    val abLoopAMs: Long? = null,
+    val abLoopBMs: Long? = null,
     /**
      * 打开应用时是否从上次的进度接着播（v1.1.16）。
      *

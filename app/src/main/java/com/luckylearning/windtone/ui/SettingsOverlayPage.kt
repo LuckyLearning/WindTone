@@ -61,6 +61,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material3.IconButton
+import com.luckylearning.windtone.overlay.OverlayCollapseHelper
 
 /**
  * 桌面悬浮歌词的**独立设置子页**（v1.1.52 从「歌词」子页拆出）。
@@ -124,6 +128,8 @@ internal fun SettingsOverlayPage(
     onOverlayHandles: (Boolean) -> Unit = {},
     /** 单颗侧钮开关：0 收起 / 1 播放暂停 / 2 打开播放页（v1.3.0） */
     onOverlayHandle: (Int, Boolean) -> Unit = { _, _ -> },
+    /** 侧钮上下顺序 CSV（B1），如 collapse,play_pause,player */
+    onOverlayHandleOrder: (String) -> Unit = {},
     onOverlayEditing: (Boolean) -> Unit,
     onOverlayPreview: () -> Unit,
 ) {

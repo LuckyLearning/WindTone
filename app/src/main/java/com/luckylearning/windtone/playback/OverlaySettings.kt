@@ -113,6 +113,13 @@ class OverlaySettings(
         previewOverlayAfterConfigChange()
     }
 
+    override fun setOverlayHandleOrder(orderCsv: String) {
+        settings.setOverlayHandleOrder(orderCsv)
+        state.update { it.copy(overlayHandleOrder = settings.prefs.overlayHandleOrder) }
+        // 顺序变了不增删 View，但要让服务按新序重排 y；bumpAppearance → syncHandlesVisibility
+        previewOverlayAfterConfigChange()
+    }
+
     override fun setLyricOverlayFullHeight(enabled: Boolean) {
         settings.setOverlayFullHeight(enabled)
         state.update { it.copy(lyricOverlayFullHeight = enabled) }

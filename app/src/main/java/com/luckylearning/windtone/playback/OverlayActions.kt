@@ -24,6 +24,12 @@ interface OverlayActions {
      */
     fun setOverlayHandle(kind: Int, enabled: Boolean)
 
+    /**
+     * 侧钮上下顺序（B1）。
+     * @param orderCsv 如 "collapse,play_pause,player"；非法项由 merge 纠正
+     */
+    fun setOverlayHandleOrder(orderCsv: String)
+
     /** 悬浮歌词全屏高度（铺满屏宽、避开底部车机 Dock，内容按播放页歌词区排版） */
     fun setLyricOverlayFullHeight(enabled: Boolean)
 

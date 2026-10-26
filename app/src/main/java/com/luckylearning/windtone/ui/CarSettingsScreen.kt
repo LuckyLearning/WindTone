@@ -102,6 +102,7 @@ internal fun CarSettingsScreen(
     onSpeed: (Float) -> Unit,
     onPitch: (Int) -> Unit,
     onSkipSilence: (Boolean) -> Unit,
+    onGaplessPlayback: (Boolean) -> Unit = {},
     onAutoResume: (Boolean) -> Unit,
     onAutoPlayOnBoot: (Boolean) -> Unit,
     onLyricScale: (Float) -> Unit,
@@ -198,6 +199,12 @@ internal fun CarSettingsScreen(
                     subtitle = "自动跳过录音开头的空白段",
                     checked = player.skipSilence,
                     onCheckedChange = onSkipSilence,
+                )
+                CarToggleRow(
+                    title = "无缝播放",
+                    subtitle = "整轨/分轨专辑不断点（偏好声明）",
+                    checked = player.gaplessPlayback,
+                    onCheckedChange = onGaplessPlayback,
                 )
                 CarToggleRow(
                     title = "继续上次播放",

@@ -115,6 +115,18 @@ object SettingsDefaults {
     const val OVERLAY_HANDLE_COLLAPSE = true
     const val OVERLAY_HANDLE_PLAY_PAUSE = true
     const val OVERLAY_HANDLE_PLAYER = true
+
+    /**
+     * 悬浮窗侧钮上下顺序（B1）：CSV，id 为 collapse / play_pause / player。
+     * 默认与改前写死顺序一致。解析见 OverlayCollapseHelper.mergeHandleOrder。
+     */
+    const val OVERLAY_HANDLE_ORDER = "collapse,play_pause,player"
+
+    /**
+     * 无缝播放（C1）：Media3 单实例 + 连续 MediaItems 默认识别分轨 encoder delay/padding。
+     * 本开关默认开，供设置 / 诊断显式声明；关闭不主动插入间隙。
+     */
+    const val GAPLESS_PLAYBACK = true
     /** 开机后台自启播放：默认关（要用户明确打开，避免一上车就突然出声） */
     const val AUTO_PLAY_ON_BOOT = false
 
@@ -695,6 +707,24 @@ class Prefs private constructor(context: Context) {
         set(value) {
             sp.edit().putBoolean(KEY_OVERLAY_HANDLES, value).apply()
             ioScope.launch { store.putBoolean(KEY_OVERLAY_HANDLES, value) }
+        }
+
+    /** 悬浮窗侧钮上下顺序（B1），CSV；非法/缺项由 OverlayCollapseHelper.mergeHandleOrder 合并 */
+    var overlayHandleOrder: String
+        get() = sp.getString(KEY_OVERLAY_HANDLE_ORDER, SettingsDefaults.OVERLAY_HANDLE_ORDER)
+            ?: SettingsDefaults.OVERLAY_HANDLE_ORDER
+        set(value) {
+            val normalized = value.ifBlank { SettingsDefaults.OVERLAY_HANDLE_ORDER }
+            sp.edit().putString(KEY_OVERLAY_HANDLE_ORDER, normalized).apply()
+            ioScope.launch { store.putString(KEY_OVERLAY_HANDLE_ORDER, normalized) }
+        }
+
+    /** 无缝播放显式开关（C1，默认开；Media3 侧默认即无缝） */
+    var gaplessPlayback: Boolean
+        get() = sp.getBoolean(KEY_GAPLESS_PLAYBACK, SettingsDefaults.GAPLESS_PLAYBACK)
+        set(value) {
+            sp.edit().putBoolean(KEY_GAPLESS_PLAYBACK, value).apply()
+            ioScope.launch { store.putBoolean(KEY_GAPLESS_PLAYBACK, value) }
         }
 
     /** 播放页左侧竖排是否显示「无障碍状态」按钮（v1.1.92） */
@@ -1491,6 +1521,8 @@ class Prefs private constructor(context: Context) {
         const val KEY_OVERLAY_HANDLE_COLLAPSE = "overlay_handle_collapse"
         const val KEY_OVERLAY_HANDLE_PLAY_PAUSE = "overlay_handle_play_pause"
         const val KEY_OVERLAY_HANDLE_PLAYER = "overlay_handle_player"
+        const val KEY_OVERLAY_HANDLE_ORDER = "overlay_handle_order"
+        const val KEY_GAPLESS_PLAYBACK = "gapless_playback"
         const val KEY_LYRICS_PANE = "lyrics_pane_visible"
         // ⚠️ 逐字歌词移除后（v1.1.8）有三个键不再读写：`lyric_word_by_word` /
         //    `lyric_sung_color` / `lyric_overlay_sung_color`。它们仍留在老用户的

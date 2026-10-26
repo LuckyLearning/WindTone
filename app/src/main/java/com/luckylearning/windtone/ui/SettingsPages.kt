@@ -248,6 +248,7 @@ internal fun SettingsPlaybackPage(
     onSpeed: (Float) -> Unit,
     onPitch: (Int) -> Unit,
     onSkipSilence: (Boolean) -> Unit,
+    onGaplessPlayback: (Boolean) -> Unit = {},
     onAutoResume: (Boolean) -> Unit,
     /** 开机后台起播（v1.1.24） */
     onAutoPlayOnBoot: (Boolean) -> Unit,
@@ -314,6 +315,19 @@ internal fun SettingsPlaybackPage(
         onCheckedChange = onSkipSilence,
         onReset = resetAction(player.skipSilence != SettingsDefaults.SKIP_SILENCE) {
             onSkipSilence(SettingsDefaults.SKIP_SILENCE)
+        },
+    )
+    SwitchRow(
+        title = "无缝播放",
+        subtitle = if (player.gaplessPlayback) {
+            "已开：单播放器连续队列；分轨 FLAC/专辑靠 encoder delay/padding 无断点（C1）"
+        } else {
+            "已关（仅偏好声明；内核仍是单 ExoPlayer，不插入静音）"
+        },
+        checked = player.gaplessPlayback,
+        onCheckedChange = onGaplessPlayback,
+        onReset = resetAction(player.gaplessPlayback != SettingsDefaults.GAPLESS_PLAYBACK) {
+            onGaplessPlayback(SettingsDefaults.GAPLESS_PLAYBACK)
         },
     )
     ActionRow(
