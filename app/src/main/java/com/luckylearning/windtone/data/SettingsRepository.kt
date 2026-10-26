@@ -279,6 +279,11 @@ class SettingsRepository(val prefs: Prefs) {
 
     // ---------------------------------------------------------------- 外观与主题
 
+    /** 界面明暗模式（跟随系统 / 浅色 / 深色，v1.2.4） */
+    fun setThemeMode(mode: ThemeMode) {
+        prefs.themeMode = mode
+    }
+
     fun setDynamicTheme(enabled: Boolean) {
         prefs.dynamicTheme = enabled
     }

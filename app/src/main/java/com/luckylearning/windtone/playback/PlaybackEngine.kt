@@ -20,6 +20,7 @@ import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.data.SettingsRepository
 import com.luckylearning.windtone.data.SongIndex
 import com.luckylearning.windtone.data.ThemeColorExtractor
+import com.luckylearning.windtone.data.ThemeMode
 import com.luckylearning.windtone.data.db.PlayerStateEntity
 import com.luckylearning.windtone.data.db.QueueSongEntity
 import com.luckylearning.windtone.data.aliyun.AliyunAuth
@@ -151,6 +152,16 @@ class PlaybackEngine(
     /** 主题取色（当前封面主色；dynamicTheme 关闭时为 null） */
     private val _themeSeed = MutableStateFlow<Int?>(null)
     val themeSeed: StateFlow<Int?> = _themeSeed.asStateFlow()
+
+    /**
+     * 界面明暗模式（v1.2.4）。
+     *
+     * 为什么要一条流而不是像其它偏好那样「用时再读 prefs」：换肤发生在**最外层**
+     * 的组合（`MainActivity` 的 `MusicPlayerTheme`），设置页里点一下必须立刻让整棵树
+     * 重组。一次性读快照的话，用户点完只看到开关变了、界面没变，只能重启应用。
+     */
+    private val _themeMode = MutableStateFlow(prefs.themeMode)
+    val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
 
     /**
      * 悬浮歌词 / 外观设置：整簇动作委托给它，引擎只提供 [OverlaySettings.Host] 的窄接口。
@@ -1202,6 +1213,13 @@ class PlaybackEngine(
      * 是「车载模式开关感觉没用」的主要来源之一。关闭时不强行退出播放页 —— 正在听着歌
      * 被弹回列表页更突兀，只让「下次启动回库页」生效。
      */
+    override fun setThemeMode(mode: ThemeMode) {
+        // 先落盘再更新流：`MainActivity` 收流后立刻重画整棵树，
+        // 流里必须是已经写进去的那个值，避免「画的是新主题、读回来是旧值」。
+        settings.setThemeMode(mode)
+        _themeMode.value = mode
+    }
+
     override fun setCarMode(enabled: Boolean) {
         prefs.carMode = enabled
         // 车载音效档案（v1.1.52）：进车先快照手机侧音效值再套车载方案，出车原样还原。

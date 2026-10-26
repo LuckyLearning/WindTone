@@ -30,6 +30,21 @@ enum class SortOrder(val label: String) {
 }
 
 /**
+ * 界面明暗模式（v1.2.4）。
+ *
+ * 存在数据层的只有「三选一」这个语义，**不含任何展示文案** ——
+ * 标签走 `ui/UiText.kt` 的 `ThemeMode.labelRes()`，这样加语言不用动数据层。
+ *
+ * 顺序即设置页里选项的排列顺序（跟随系统 / 浅色 / 深色），
+ * 界面按 `ordinal` 直接映射选中项，所以**不要随意调整枚举顺序**。
+ */
+enum class ThemeMode {
+    SYSTEM,
+    LIGHT,
+    DARK,
+}
+
+/**
  * 各设置项的**出厂默认值**，集中放这里。
  *
  * 为什么要集中：设置页从 v1.1.4 起每项右侧都有「↺ 恢复默认」，如果默认值散在
@@ -39,6 +54,14 @@ enum class SortOrder(val label: String) {
  * 一致性由 `SettingsDefaultsTest.prefsGettersAgreeWithSettingsDefaults` 逐项对质。
  */
 object SettingsDefaults {
+    /**
+     * 界面明暗模式默认「跟随系统」。
+     *
+     * 默认值必须是它，而不是浅色或深色：升级到本功能的用户此前一直就是跟随系统的，
+     * 默认值一变，所有老用户在系统深色下的观感会当场被改掉。
+     */
+    val THEME_MODE = ThemeMode.SYSTEM
+
     const val DYNAMIC_THEME = true
     const val CAR_MODE = false
 
@@ -1326,6 +1349,21 @@ class Prefs private constructor(context: Context) {
 
     // ============================================================ 7. 外观与主题
 
+    /**
+     * 界面明暗模式：跟随系统 / 浅色 / 深色（v1.2.4）。
+     *
+     * 存 `name` 而不是 ordinal —— 枚举顺序是界面排列顺序，将来插入档位时
+     * ordinal 会整体错位，把老用户的选择读成另一档。解析失败（脏值 / 降级安装）
+     * 一律回落到出厂默认，不让一条坏字符串把界面锁死在某个模式上。
+     */
+    var themeMode: ThemeMode
+        get() = runCatching { ThemeMode.valueOf(sp.getString(KEY_THEME_MODE, null)!!) }
+            .getOrDefault(SettingsDefaults.THEME_MODE)
+        set(value) {
+            sp.edit().putString(KEY_THEME_MODE, value.name).apply()
+            ioScope.launch { store.putString(KEY_THEME_MODE, value.name) }
+        }
+
     /** 主题是否跟随封面取色 */
     var dynamicTheme: Boolean
         get() = sp.getBoolean(KEY_DYNAMIC_THEME, SettingsDefaults.DYNAMIC_THEME)
@@ -1518,6 +1556,7 @@ class Prefs private constructor(context: Context) {
         const val KEY_DEBUG_UNLOCKED = "settings_debug_unlocked"
 
         // ---- 7. 外观与主题 ----
+        const val KEY_THEME_MODE = "theme_mode"
         const val KEY_DYNAMIC_THEME = "dynamic_theme"
         const val KEY_CAR_MODE = "car_mode"
 

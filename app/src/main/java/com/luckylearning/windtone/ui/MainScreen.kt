@@ -107,6 +107,9 @@ fun MainScreen(
     val library by lib.library.collectAsStateWithLifecycle()
     val player by playerVm.player.collectAsStateWithLifecycle()
     val update by updateVm.update.collectAsStateWithLifecycle()
+    // 明暗模式（v1.2.4）：设置页里改档要立刻反映到选中态，所以读同一条流，
+    // 而不是像其它只写 SharedPreferences 的偏好那样用一次性快照 + 本地 state 兜。
+    val themeMode by playerVm.themeMode.collectAsStateWithLifecycle()
     // 诊断页的「数据与存储」快照：null 表示尚未刷新过，进诊断子页时才拉一次
     val maintenanceReport by settings.maintenanceReport.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -697,6 +700,7 @@ fun MainScreen(
                     library = library,
                     player = player,
                     update = update,
+                    themeMode = themeMode,
                     dynamicTheme = dynamicThemeOn,
                     autoCheckUpdate = autoCheckUpdateOn,
                     crashLogCount = crashLogCount,
@@ -707,6 +711,7 @@ fun MainScreen(
                         crashLogText = null
                     },
                     onDynamicTheme = { dynamicThemeOn = it; playerVm.setDynamicTheme(it) },
+                    onThemeMode = playerVm::setThemeMode,
                     onCarMode = playerVm::setCarMode,
                     onLyricOverlay = playerVm::setLyricOverlay,
                     onTestBootPlayback = playerVm::startPlaybackInBackground,

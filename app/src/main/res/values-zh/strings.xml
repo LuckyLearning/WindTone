@@ -451,7 +451,7 @@
     <string name="title_only_2">只歌名</string>
     <string name="artist_only_2">只歌手</string>
     <string name="appearance">外观</string>
-    <string name="theme_colors_car_mode">主题取色 · 车载模式</string>
+    <string name="theme_colors_car_mode">主题模式 · 主题取色 · 车载模式</string>
     <string name="playback">播放</string>
     <string name="speed_x_pitch_skip_silence">速度 %1$sx · 变调 %2$s · 跳过静音 · 均衡器与音效</string>
     <string name="lyrics">歌词</string>
@@ -464,6 +464,11 @@
     <string name="theme">主题</string>
     <string name="theme_follows_cover_colors">主题跟随封面取色</string>
     <string name="extracts_the_dominant_color_from">从当前歌曲封面提取主色，驱动整个界面的配色</string>
+    <string name="theme_mode">主题模式</string>
+    <string name="theme_mode_desc">跟随系统，固定用浅色，或固定用深色</string>
+    <string name="theme_mode_system">跟随系统</string>
+    <string name="theme_mode_light">浅色</string>
+    <string name="theme_mode_dark">深色</string>
     <string name="car">车载</string>
     <string name="car_mode">车载模式</string>
     <string name="opens_on_the_player_large">启动直进播放页 · 大控件首页 · 切换后立即生效</string>

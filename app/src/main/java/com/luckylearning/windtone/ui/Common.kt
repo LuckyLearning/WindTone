@@ -21,7 +21,6 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -82,6 +81,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.luckylearning.windtone.data.CoverRepository
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.ui.theme.AppVisual
+import com.luckylearning.windtone.ui.theme.isDarkScheme
 import com.luckylearning.windtone.ui.theme.windShadow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -358,7 +358,9 @@ fun MiniPlayer(
     val btnSize = if (large) 64.dp else 46.dp
     val iconSize = if (large) 32.dp else 24.dp
 
-    val dark = isSystemInDarkTheme()
+    // 按**实际绘制亮度**判断，而不是问系统：主题可被「浅色 / 深色」强制覆盖，
+    // 也可由封面取色派生 —— 这两种情况下系统明暗与画出来的明暗都不一定一致。
+    val dark = isDarkScheme()
     Surface(
         color = AppVisual.glassBg(dark),
         shape = MaterialTheme.shapes.large,

@@ -470,7 +470,7 @@
     <string name="title_only_2">Title only</string>
     <string name="artist_only_2">Artist only</string>
     <string name="appearance">Appearance</string>
-    <string name="theme_colors_car_mode">Theme colors · Car mode</string>
+    <string name="theme_colors_car_mode">Theme mode · Theme colors · Car mode</string>
     <string name="playback">Playback</string>
     <string name="speed_x_pitch_skip_silence">Speed %1$sx · Pitch %2$s · Skip silence · Equalizer and effects</string>
     <string name="lyrics">Lyrics</string>
@@ -483,6 +483,11 @@
     <string name="theme">Theme</string>
     <string name="theme_follows_cover_colors">Theme follows cover colors</string>
     <string name="extracts_the_dominant_color_from">Extracts the dominant color from the current cover to drive the whole UI palette</string>
+    <string name="theme_mode">Theme mode</string>
+    <string name="theme_mode_desc">Follow the system, or always use light / dark</string>
+    <string name="theme_mode_system">Follow system</string>
+    <string name="theme_mode_light">Light</string>
+    <string name="theme_mode_dark">Dark</string>
     <string name="car">Car</string>
     <string name="car_mode">Car mode</string>
     <string name="opens_on_the_player_large">Opens on the player · Large-control home · Applies immediately</string>

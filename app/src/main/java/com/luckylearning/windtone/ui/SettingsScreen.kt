@@ -79,6 +79,7 @@ import com.luckylearning.windtone.data.DataMaintenance
 import com.luckylearning.windtone.data.DownloadRoute
 import com.luckylearning.windtone.data.OverlayPreset
 import com.luckylearning.windtone.data.SettingsDefaults
+import com.luckylearning.windtone.data.ThemeMode
 import com.luckylearning.windtone.data.UpdateChecker
 import com.luckylearning.windtone.playback.Pitch
 import kotlin.math.abs
@@ -183,6 +184,11 @@ fun SettingsScreen(
     library: LibraryUiState,
     player: PlayerUiState,
     update: UpdateUiState,
+    /**
+     * 界面明暗模式（v1.2.4）。带默认值是为了测试与预览能只传关心的参数；
+     * 真实运行由 `MainScreen` 从 `PlayerViewModel.themeMode` 的流里取。
+     */
+    themeMode: ThemeMode = SettingsDefaults.THEME_MODE,
     dynamicTheme: Boolean,
     autoCheckUpdate: Boolean,
     downloadRoute: DownloadRoute,
@@ -197,6 +203,8 @@ fun SettingsScreen(
     initialPage: SettingsPage = SettingsPage.ROOT,
     onClose: () -> Unit,
     onDynamicTheme: (Boolean) -> Unit,
+    /** 明暗模式切换（v1.2.4）：改完立刻换肤，不需要重启 */
+    onThemeMode: (ThemeMode) -> Unit = {},
     onCarMode: (Boolean) -> Unit,
     onLyricOverlay: (Boolean) -> Unit,
     /** 立刻走一次「开机后台起播」（v1.1.27，诊断页用） */
@@ -491,6 +499,8 @@ fun SettingsScreen(
 
                     SettingsPage.APPEARANCE -> SettingsAppearancePage(
                         player = player,
+                        themeMode = themeMode,
+                        onThemeMode = onThemeMode,
                         dynamicTheme = dynamicTheme,
                         onDynamicTheme = onDynamicTheme,
                         onCarMode = onCarMode,

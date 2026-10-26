@@ -1,5 +1,6 @@
 package com.luckylearning.windtone.playback
 
+import com.luckylearning.windtone.data.ThemeMode
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.lyrics.Lyrics
 
@@ -65,6 +66,15 @@ interface PlayerActions : OverlayActions {
     fun lyricsForExport(): Lyrics
     fun setLyricsPaneVisible(visible: Boolean)
     fun setCarMode(enabled: Boolean)
+
+    /**
+     * 界面明暗模式：跟随系统 / 浅色 / 深色（v1.2.4）。
+     *
+     * 语义是「是否允许越过系统」——选浅色或深色时，即使系统是另一种模式也照用户的选择画。
+     * 当前值经 [com.luckylearning.windtone.playback.PlaybackEngine.themeMode] 流式暴露给
+     * `MainActivity`，改完当场换肤，不要求重启。
+     */
+    fun setThemeMode(mode: ThemeMode)
     fun inspectAudio(song: Song)
     fun clearAudioInfo()
 }

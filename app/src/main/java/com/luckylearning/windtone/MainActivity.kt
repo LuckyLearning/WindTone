@@ -7,12 +7,14 @@ import android.view.ViewTreeObserver
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.luckylearning.windtone.data.BootTrace
 import com.luckylearning.windtone.data.CrashLog
 import com.luckylearning.windtone.data.Prefs
+import com.luckylearning.windtone.data.ThemeMode
 import com.luckylearning.windtone.ui.AppShortcut
 import com.luckylearning.windtone.ui.BootDiagView
 import com.luckylearning.windtone.ui.LibraryViewModel
@@ -107,8 +109,18 @@ class MainActivity : ComponentActivity() {
             val settings: SettingsViewModel = viewModel()
 
             val seed by playerVm.themeSeed.collectAsStateWithLifecycle()
+            val themeMode by playerVm.themeMode.collectAsStateWithLifecycle()
             MusicPlayerTheme(
                 seedColor = if (playerVm.dynamicThemeEnabled()) seed else null,
+                // 明暗模式（设置 → 外观 → 主题模式，v1.2.4）：
+                // 「跟随系统」才去问系统，浅色 / 深色是**越过系统**的明确选择。
+                // 只在这一层决定，子页面一律从 `MaterialTheme.colorScheme` 取色 ——
+                // 任何地方再写一次 `isSystemInDarkTheme()` 都会在强制模式下画错。
+                darkTheme = when (themeMode) {
+                    ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                    ThemeMode.LIGHT -> false
+                    ThemeMode.DARK -> true
+                },
             ) {
                 MainScreen(lib = lib, playerVm = playerVm, updateVm = updateVm, settings = settings)
             }

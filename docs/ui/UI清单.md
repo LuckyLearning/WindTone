@@ -53,7 +53,7 @@
 | scr-dlg-delete | ㉗ 对话框 · 删除歌曲文件（危险操作） | 手机 | 03-sheets.html | MainScreen · 删除确认（仅文件夹视图可触发） | 已有 |  |
 | scr-dlg-removefolder | ㉘ 对话框 · 移除文件夹扫描结果 | 手机 | 03-sheets.html | MainScreen · 文件夹视图 ⋮ → 移除扫描结果 | 已有 |  |
 | scr-settings-1 | ㉙ 设置页 · 主页面（二级分类） | 手机 | 04-settings.html | SettingsScreen.kt · 分类入口卡：外观 / 播放 / 歌词 / 音乐库 / 关于与诊断 / 实验室（v1.1.80） | 已有 |  |
-| scr-settings-appearance | ㉙B 设置页 · 外观子页 | 手机 | 04-settings.html | SettingsScreen.kt · 主题跟随封面取色 / 车载模式 | 已有 |  |
+| scr-settings-appearance | ㉙B 设置页 · 外观子页 | 手机 | 04-settings.html | SettingsScreen.kt · 主题模式（跟随系统 / 浅色 / 深色）· 主题跟随封面取色 · 车载模式 | 已有 |  |
 | scr-settings-playback | ㉙C 设置页 · 播放子页 | 手机 | 04-settings.html | SettingsScreen.kt · 默认播放速度 / 继续上次播放 / 跳过静音 / 均衡器与音效 | 已有 |  |
 | scr-settings-lyrics | ㉙D 设置页 · 歌词子页 | 手机 | 04-settings.html | SettingsScreen.kt · 歌词字号 / 桌面悬浮歌词及其外观选项 | 已有 |  |
 | scr-settings-colorpicker | ㉙E 颜色选择弹层 | 手机 | 04-settings.html | SettingsScreen.kt · ColorPickerSheet（v1.1.8 起只剩「悬浮歌词文字颜色」一处调用） | 已有 |  |

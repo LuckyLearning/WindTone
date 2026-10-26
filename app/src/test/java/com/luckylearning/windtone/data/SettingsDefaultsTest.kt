@@ -57,6 +57,7 @@ class SettingsDefaultsTest {
         }
 
         // 外观
+        check("themeMode", prefs.themeMode, SettingsDefaults.THEME_MODE)
         check("dynamicTheme", prefs.dynamicTheme, SettingsDefaults.DYNAMIC_THEME)
         check("carMode", prefs.carMode, SettingsDefaults.CAR_MODE)
 

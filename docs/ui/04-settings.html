@@ -49,7 +49,7 @@
       </div>
       <div class="list" style="padding:4px 18px 12px">
         <div class="cat-row"><span class="cat-ic"><svg class="ic"><use href="#i-palette"/></svg></span>
-          <div class="cat-main"><div class="cat-t">外观</div><div class="cat-s">主题取色 · 车载模式</div></div>
+          <div class="cat-main"><div class="cat-t">外观</div><div class="cat-s">主题模式 · 主题取色 · 车载模式</div></div>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
         <div class="cat-row"><span class="cat-ic"><svg class="ic"><use href="#i-play"/></svg></span>
           <div class="cat-main"><div class="cat-t">播放</div><div class="cat-s">速度 1.00x · 变调 原调 · 跳过静音 · 均衡器与音效</div></div>
@@ -86,7 +86,7 @@
 </figure>
 
 <figure class="fig" id="scr-settings-appearance">
-  <div class="cap"><b>㉙B 设置页 · 外观子页</b><em>SettingsScreen.kt · 主题跟随封面取色 / 车载模式</em></div>
+  <div class="cap"><b>㉙B 设置页 · 外观子页</b><em>SettingsScreen.kt · 主题模式（跟随系统 / 浅色 / 深色）· 主题跟随封面取色 · 车载模式</em></div>
   <div class="phone">
     <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
     <div class="app">
@@ -96,6 +96,9 @@
       </div>
       <div class="list" style="padding:4px 18px 12px">
         <div class="section-label" style="padding:0;margin:12px 0 4px">主题</div>
+        <div class="sw-row" style="display:block"><div style="font-size:15px">主题模式</div>
+          <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">跟随系统，固定用浅色，或固定用深色</div>
+          <div class="chips"><span class="fchip on">跟随系统</span><span class="fchip">浅色</span><span class="fchip">深色</span></div></div>
         <div class="sw-row"><div class="sw-main"><div class="sw-t">主题跟随封面取色</div>
           <div class="sw-s">从当前歌曲封面提取主色，驱动整个界面的配色</div></div><span class="switch"><i></i></span></div>
         <div class="section-label" style="padding:0;margin:14px 0 4px">车载</div>
@@ -104,7 +107,9 @@
       </div>
     </div>
   </div>
-  <p class="note"><b>关键点：</b>「车载模式」副标题仍是压缩后的一行三要点，标题右侧 13px 的 <code>i-info</code> 图标点开完整说明弹窗（见 <a href="#scr-dlg-carmode">㉚E</a>）；
+  <p class="note"><b>关键点：</b>「主题模式」是三档互斥（跟随系统 / 浅色 / 深色，v1.2.4），用一排 chip 而不是开关——三态塞进开关只能拆成两个互斥开关，用户会点出「既浅色又深色」的矛盾态。
+  跟随系统 = 读系统 `uiMode`；浅色 / 深色 = **越过系统**的明确选择，连状态栏图标明暗一起切。选完当场换肤（`PlaybackEngine.themeMode` 是一条流，`MainActivity` 在最外层订阅），不需要重启。出厂默认「跟随系统」，升级用户观感不变。<br>
+  「车载模式」副标题仍是压缩后的一行三要点，标题右侧 13px 的 <code>i-info</code> 图标点开完整说明弹窗（见 <a href="#scr-dlg-carmode">㉚E</a>）；
   点图标只开弹窗、不切换开关（<code>SwitchRow</code> 的可选参数 <code>onInfo</code>）。<br>
   <b>为什么独立成子页</b>：这一组是「界面长什么样」的总开关，改动频率低；留在主页只会让六张分类卡之外又开始长第三层内容。</p>
 </figure>
@@ -581,7 +586,7 @@
       </div>
       <div class="list" style="padding:4px 18px 12px">
         <div class="cat-row"><span class="cat-ic"><svg class="ic"><use href="#i-palette"/></svg></span>
-          <div class="cat-main"><div class="cat-t">外观</div><div class="cat-s">主题取色 · 车载模式</div></div>
+          <div class="cat-main"><div class="cat-t">外观</div><div class="cat-s">主题模式 · 主题取色 · 车载模式</div></div>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
         <div class="cat-row"><span class="cat-ic"><svg class="ic"><use href="#i-play"/></svg></span>
           <div class="cat-main"><div class="cat-t">播放</div><div class="cat-s">速度 1.00x · 变调 原调 · 跳过静音 · 均衡器与音效</div></div>

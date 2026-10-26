@@ -16,6 +16,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.luckylearning.windtone.data.DownloadRoute
 import com.luckylearning.windtone.playback.OnlineMediaCache
 import com.luckylearning.windtone.data.SettingsDefaults
+import com.luckylearning.windtone.data.ThemeMode
 import com.luckylearning.windtone.overlay.ForegroundAppLog
 import com.luckylearning.windtone.overlay.LyricOverlayBus
 import com.luckylearning.windtone.state.LibraryUiState
@@ -62,7 +63,9 @@ class SettingsScreenTest {
      */
     private fun render(
         player: PlayerUiState = PlayerUiState(),
+        themeMode: ThemeMode = SettingsDefaults.THEME_MODE,
         dynamicTheme: Boolean = SettingsDefaults.DYNAMIC_THEME,
+        onThemeMode: (ThemeMode) -> Unit = {},
         onCarMode: (Boolean) -> Unit = {},
         onLyricScale: (Float) -> Unit = {},
         onLyricOverlayTextColor: (Int) -> Unit = {},
@@ -85,6 +88,7 @@ class SettingsScreenTest {
                     library = LibraryUiState(),
                     player = player,
                     update = UpdateUiState(),
+                    themeMode = themeMode,
                     dynamicTheme = dynamicTheme,
                     autoCheckUpdate = true,
                     downloadRoute = DownloadRoute.AUTO,
@@ -92,6 +96,7 @@ class SettingsScreenTest {
                     crashLogText = null,
                     onClose = {},
                     onDynamicTheme = {},
+                    onThemeMode = onThemeMode,
                     onCarMode = onCarMode,
                     onLyricOverlay = {},
                     onLyricOverlayLines = {},
@@ -219,7 +224,7 @@ class SettingsScreenTest {
         // 再退一次才回主页（分类卡出现）
         compose.onNodeWithContentDescription("返回").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText("主题取色 · 车载模式").assertIsDisplayed()
+        compose.onNodeWithText("主题模式 · 主题取色 · 车载模式").assertIsDisplayed()
     }
 
     /** v1.1.80：更新从主页卡降级为「关于与诊断」里的一行，点进去仍是原来的更新页。 */
@@ -242,7 +247,7 @@ class SettingsScreenTest {
         }
         // 分类卡与子页里的 ActionRow 的区别就在这一行摘要（连摘要一起断言，
         // 免得以后退回成没有摘要的普通 ActionRow 也照样"通过"）
-        compose.onNodeWithText("主题取色 · 车载模式").assertIsDisplayed()
+        compose.onNodeWithText("主题模式 · 主题取色 · 车载模式").assertIsDisplayed()
         compose.onNodeWithText("格式与容量 · 过滤 < 60 秒").assertIsDisplayed()
         // 降级成入口行的三个分类不许再出现在主页
         listOf("悬浮歌词", "在线播放", "更新", "调整菜单顺序").forEach {
@@ -746,5 +751,54 @@ class SettingsScreenTest {
             .performScrollTo().performClick()
         compose.waitForIdle()
         assertEquals("关掉开关应把解锁状态写回 false", false, unlocked)
+    }
+
+    /**
+     * 主题模式（v1.2.4）：外观页三档 chip 全部可见，点「深色」回报 DARK。
+     *
+     * 为什么要测「点下去回报的是不是那一档」：三档是**按 ordinal 映射**的，
+     * 文案列表与枚举顺序一旦错位，界面上看着能点、选中的却是隔壁那一档 ——
+     * 这种错位不会崩、不会报错，只能靠断言守住。
+     */
+    @Test
+    fun appearancePageThemeModeChipsReportTheirOwnMode() {
+        var picked: ThemeMode? = null
+        render(onThemeMode = { picked = it })
+
+        compose.onNodeWithText("外观").performClick()
+        compose.waitForIdle()
+        // 三档都在（出厂默认选中「跟随系统」）
+        compose.onNodeWithText("主题模式").assertIsDisplayed()
+        compose.onNodeWithText("跟随系统").assertIsDisplayed()
+        compose.onNodeWithText("浅色").assertIsDisplayed()
+        compose.onNodeWithText("深色").assertIsDisplayed()
+
+        compose.onNodeWithText("深色").performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals(ThemeMode.DARK, picked)
+
+        compose.onNodeWithText("浅色").performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals(ThemeMode.LIGHT, picked)
+    }
+
+    /**
+     * 主题模式偏离默认（深色）后 ↺ 出现，点它写回 `SettingsDefaults`（跟随系统）。
+     *
+     * 出厂默认必须是「跟随系统」：升级用户此前一直跟随系统，
+     * 默认值一变，系统深色用户会当场被改成浅色。
+     */
+    @Test
+    fun themeModeResetGoesBackToSystem() {
+        var picked: ThemeMode? = null
+        render(themeMode = ThemeMode.DARK, onThemeMode = { picked = it })
+
+        compose.onNodeWithText("外观").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("恢复默认")
+            .performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals(SettingsDefaults.THEME_MODE, picked)
+        assertEquals(ThemeMode.SYSTEM, picked)
     }
 }

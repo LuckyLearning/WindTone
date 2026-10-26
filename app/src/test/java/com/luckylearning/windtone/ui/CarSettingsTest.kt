@@ -159,7 +159,7 @@ class CarSettingsTest {
         compose.onNodeWithText("播放速度").assertIsDisplayed()
         compose.onNodeWithText("跳过静音").assertIsDisplayed()
         // 分类卡的摘要文案 = 手机版主页的标志；它出现就说明又退回多级了
-        compose.onAllNodesWithText("主题取色 · 车载模式").assertCountEquals(0)
+        compose.onAllNodesWithText("主题模式 · 主题取色 · 车载模式").assertCountEquals(0)
         compose.onAllNodesWithText("版本信息 · 播放统计 · 隐私说明").assertCountEquals(0)
         // 行车中不该出现的细调项也不在车载页上（只收在「完整设置」里）
         compose.onAllNodesWithText("均衡器与音效").assertCountEquals(0)
@@ -201,7 +201,7 @@ class CarSettingsTest {
             .performSemanticsAction(SemanticsActions.OnClick)
         compose.waitForIdle()
         // 六卡出现 = 已进入手机版那套结构；此时标题也换成「完整设置」
-        compose.onNodeWithText("主题取色 · 车载模式").assertIsDisplayed()
+        compose.onNodeWithText("主题模式 · 主题取色 · 车载模式").assertIsDisplayed()
         compose.onAllNodesWithText("完整设置").assertCountEquals(1)
     }
 

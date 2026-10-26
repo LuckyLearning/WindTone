@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.SortOrder
+import com.luckylearning.windtone.data.ThemeMode
 import com.luckylearning.windtone.state.LibraryView
 import com.luckylearning.windtone.state.PlayMode
 
@@ -53,6 +54,12 @@ internal fun PlayMode.labelRes(): Int = when (this) {
     PlayMode.SHUFFLE -> R.string.play_mode_shuffle
 }
 
+internal fun ThemeMode.labelRes(): Int = when (this) {
+    ThemeMode.SYSTEM -> R.string.theme_mode_system
+    ThemeMode.LIGHT -> R.string.theme_mode_light
+    ThemeMode.DARK -> R.string.theme_mode_dark
+}
+
 @Composable
 internal fun LibraryView.displayName(): String = stringResource(labelRes())
 
@@ -61,3 +68,6 @@ internal fun SortOrder.displayName(view: LibraryView): String = stringResource(l
 
 @Composable
 internal fun PlayMode.displayName(): String = stringResource(labelRes())
+
+@Composable
+internal fun ThemeMode.displayName(): String = stringResource(labelRes())

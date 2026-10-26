@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -182,6 +183,55 @@ internal fun SwitchRow(
             onCheckedChange = onCheckedChange,
             modifier = Modifier.semantics { contentDescription = title },
         )
+    }
+}
+
+/**
+ * 互斥多选项（v1.2.4，首个使用者是「主题模式」：跟随系统 / 浅色 / 深色）。
+ *
+ * 为什么不用开关：开关只能表达两态，三档要么拆成两个互斥开关（用户能点出自相矛盾
+ * 的状态），要么塞进弹层（多一次点击，且看不到还有哪些档）。
+ * 一排 chip 把**全部可选值**直接摆出来，点哪个就是哪个。
+ *
+ * @param options 与 [selectedIndex] 同序的展示文案；调用方负责本地化。
+ * @param onReset 非空时在标题行右侧画一个 ↺（只在当前值偏离出厂默认时由调用方传入）。
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun ChoiceRow(
+    title: String,
+    subtitle: String? = null,
+    options: List<String>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    onReset: (() -> Unit)? = null,
+) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.bodyLarge)
+                if (subtitle != null) {
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            if (onReset != null) ResetButton(onReset)
+        }
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(top = 8.dp),
+        ) {
+            options.forEachIndexed { index, label ->
+                FilterChip(
+                    selected = index == selectedIndex,
+                    onClick = { onSelect(index) },
+                    label = { Text(label) },
+                )
+            }
+        }
     }
 }
 

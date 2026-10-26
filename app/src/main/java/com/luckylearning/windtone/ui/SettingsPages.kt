@@ -7,6 +7,7 @@ import android.content.Context
 import com.luckylearning.windtone.data.DataMaintenance
 import com.luckylearning.windtone.data.DownloadRoute
 import com.luckylearning.windtone.data.SettingsDefaults
+import com.luckylearning.windtone.data.ThemeMode
 import com.luckylearning.windtone.data.UpdateChecker
 import com.luckylearning.windtone.data.buildLibraryStats
 import com.luckylearning.windtone.data.formatByteSize
@@ -168,6 +169,8 @@ internal fun SettingsRootPage(
 @Composable
 internal fun SettingsAppearancePage(
     player: PlayerUiState,
+    themeMode: ThemeMode,
+    onThemeMode: (ThemeMode) -> Unit,
     dynamicTheme: Boolean,
     onDynamicTheme: (Boolean) -> Unit,
     onCarMode: (Boolean) -> Unit,
@@ -178,6 +181,22 @@ internal fun SettingsAppearancePage(
 
     // ------------------------------------------------ 主题
     SectionTitle(stringResource(R.string.theme))
+
+    // 明暗模式（v1.2.4）：跟随系统 / 浅色 / 深色。
+    // 顺序与 `ThemeMode` 枚举一致，选中态直接用 ordinal 比 —— 中间不要插排序逻辑，
+    // 否则「点浅色却选中深色」这种错位只能靠肉眼发现。
+    val modes = ThemeMode.entries
+    ChoiceRow(
+        title = stringResource(R.string.theme_mode),
+        subtitle = stringResource(R.string.theme_mode_desc),
+        options = modes.map { it.displayName() },
+        selectedIndex = modes.indexOf(themeMode),
+        onSelect = { onThemeMode(modes[it]) },
+        onReset = resetAction(themeMode != SettingsDefaults.THEME_MODE) {
+            onThemeMode(SettingsDefaults.THEME_MODE)
+        },
+    )
+
     SwitchRow(
         title = stringResource(R.string.theme_follows_cover_colors),
         subtitle = stringResource(R.string.extracts_the_dominant_color_from),
