@@ -9,6 +9,7 @@ import androidx.core.app.NotificationManagerCompat
 import com.luckylearning.windtone.BuildConfig
 import com.luckylearning.windtone.data.CrashLog
 import com.luckylearning.windtone.data.Prefs
+import androidx.media3.common.util.UnstableApi
 import com.luckylearning.windtone.playback.PlaybackQualityProbe
 import com.luckylearning.windtone.playback.PlayerHandle
 import com.luckylearning.windtone.data.UpdateChecker
@@ -101,6 +102,7 @@ internal object DiagnosticsReport {
     )
 
     /** 取数 */
+    @androidx.annotation.OptIn(UnstableApi::class)
     fun collect(
         context: Context,
         player: PlayerUiState,
