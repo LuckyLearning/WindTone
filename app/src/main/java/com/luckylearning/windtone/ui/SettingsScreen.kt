@@ -40,6 +40,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -384,27 +385,14 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                 )
-                // 车载：**每一页**（主页与所有子页）顶栏都有「播放页」——一步回正在播放。
-                // v1.2.8 起车载与手机共用这套设置页，这是两者唯一的区别；
-                // 手机横竖屏不显示，避免多一个用不上的入口。
-                if (player.carMode) {
-                    Spacer(Modifier.weight(1f))
-                    TextButton(onClick = onOpenPlayer) {
-                        Icon(
-                            AppIcons.Lyrics,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(AppStrings.s(R.string.player), color = MaterialTheme.colorScheme.primary)
-                    }
-                }
             }
 
             Column(
                 Modifier
                     .fillMaxSize()
+                    // 车载：左下角常驻「播放页」按钮压在滚动区上（Box 覆盖层），
+                    // 这里给底部留出按钮高度 + 边距，最后一条设置不被盖住。
+                    .padding(bottom = if (player.carMode) 84.dp else 0.dp)
                     .verticalScroll(pageScroll)
                     // 车机横屏可用宽度约 1700dp，若内容铺满整行，开关会被推到离文字
                     // 一两千像素远的地方，视线要在两端来回跳。这里限宽并水平居中；
@@ -592,6 +580,27 @@ fun SettingsScreen(
                 onClose = { showOnlineReport = false },
                 onPlay = onPlayQueue,
             )
+        }
+        // 车载：常驻「播放页」固定在**左下角**（v1.2.8 用户拍板：驾驶员左手边顺手）。
+        // 放在 Box 覆盖层里不随页面滚动 —— 主页与每个子页都在，一步回正在播放；
+        // 这是车载与手机版设置页的唯一区别，手机不渲染（底部播放条本来就常在）。
+        // 顶栏方案已废弃：右上角离方向盘最远，行车中不好够。
+        if (player.carMode) {
+            Button(
+                onClick = onOpenPlayer,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .navigationBarsPadding()
+                    .padding(start = 20.dp, bottom = 20.dp),
+            ) {
+                Icon(
+                    AppIcons.Lyrics,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(AppStrings.s(R.string.player))
+            }
         }
         }
     }

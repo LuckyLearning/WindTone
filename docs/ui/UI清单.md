@@ -78,7 +78,7 @@
 | scr-car-player-nolyr | ㊲B 车机 · 播放页 · 暂无歌词 | 车机 | 06-car.html | PlayerScreen.kt —— 本地无 .lrc / 内嵌歌词时的占位态，绝不联网抓取 | 已有 |  |
 | scr-car-player-vol | ㊲C 车机 · 播放页 · 音量浮层 | 车机 | 06-car.html | PlayerScreen.kt · VolumeHud —— 方向盘音量键 / 旋钮触发，2 秒无操作自动消失 | 已有 |  |
 | scr-car-player-immersive | ㊲D 车机 · 播放页 · 沉浸态（歌词态 · 5 秒无触摸） | 车机 | 06-car.html | PlayerScreen.kt · immersive —— 歌词态 5 秒无触摸触发（手机 / 车机通用）；车机收起左导航与控制键，歌词铺满全宽 | 已有 |  |
-| scr-car-settings-flat | ㊳ 车机 · 设置（与手机同一套 · v1.2.8） | 车机 | 06-car.html | SettingsScreen.kt —— 车载复用手机版「六卡 → 子页」，**唯一区别**：顶栏右侧每页常驻「播放页」一步回播放；旧扁平大卡 CarSettingsScreen.kt 已删除 | 改版 |  |
+| scr-car-settings-flat | ㊳ 车机 · 设置（与手机同一套 · v1.2.8） | 车机 | 06-car.html | SettingsScreen.kt —— 车载复用手机版「六卡 → 子页」，**唯一区别**：左下角每页常驻「播放页」按钮一步回播放（v1.2.8 用户拍板：方便驾驶员点）；旧扁平大卡 CarSettingsScreen.kt 已删除 | 改版 |  |
 | scr-car-overlay | ㊴ 车机 · 桌面悬浮歌词（四种状态） | 车机 | 06-car.html | LyricOverlayService.kt —— 对齐可配（默认居中）· 锁定态穿透 · 调整态可拖 · App 前台自动隐藏 | 已有 |  |
 | scr-car-overlay-style | 车机 · 设置 → 悬浮窗样式 | 车机 | 08-floating-lyrics.html | SettingsScreen.kt · SettingsOverlayPage（车载预设池含 🚗 三套；**FR-07 已接**；v1.2.8 起与手机同一套页面） | 已有 | FR-08 驾驶中简化仍为 **已否决 / 不做** |
 | scr-car-artists | ㊱C 车机 · 歌手（圆头像网格 · v3） | 车机 | 06-car.html | CarLibraryScreen.kt — 同导航壳；歌手用 round 封面 | 新建 |  |

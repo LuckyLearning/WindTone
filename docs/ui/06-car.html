@@ -597,7 +597,7 @@
 </figure>
 
 <figure class="fig car" id="scr-car-settings-flat">
-  <div class="cap"><b>㊳ 车机 · 设置（与手机同一套 · v1.2.8）</b><em>SettingsScreen.kt —— 车载复用手机版「六卡 → 子页」，<b>唯一区别</b>：顶栏右侧每页都常驻「播放页」，一步回正在播放</em></div>
+  <div class="cap"><b>㊳ 车机 · 设置（与手机同一套 · v1.2.8）</b><em>SettingsScreen.kt —— 车载复用手机版「六卡 → 子页」，<b>唯一区别</b>：左下角每页都常驻「播放页」实体按钮（Box 覆盖层不随滚动），一步回正在播放</em></div>
   <div class="carphone v3">
     <div class="carbar">
       <span>9:41</span><span class="cb-item">🌡 24°C</span>
@@ -621,7 +621,6 @@
               <svg class="ic" style="flex:none"><use href="#i-back"/></svg>
               <div class="cset-k" style="font-size:18px">设置</div>
               <div style="flex:1"></div>
-              <div class="cset-btn" style="color:var(--primary)"><svg class="ic"><use href="#i-lyrics"/></svg>播放页</div>
             </div>
             <div class="cset-sec" style="border:none;padding-top:0">分类</div>
             <div class="cset-row"><div class="cset-k">外观</div><div class="cset-s">主题模式 · 主题取色 · 车载模式</div><svg class="ic"><use href="#i-chev"/></svg></div>
@@ -630,6 +629,11 @@
             <div class="cset-row"><div class="cset-k">音乐库</div><div class="cset-s">扫描 · 数据维护</div><svg class="ic"><use href="#i-chev"/></svg></div>
             <div class="cset-row"><div class="cset-k">在线</div><div class="cset-s">在线歌单 · 阿里云盘</div><svg class="ic"><use href="#i-chev"/></svg></div>
             <div class="cset-row"><div class="cset-k">关于与诊断</div><div class="cset-s">版本 · 诊断包 · 检查更新</div><svg class="ic"><use href="#i-chev"/></svg></div>
+          </div>
+          <div style="display:flex;justify-content:flex-start;padding:10px 0 14px">
+            <span style="display:inline-flex;align-items:center;gap:6px;background:var(--primary);color:#fff;border-radius:22px;padding:10px 18px;font-size:14px;font-weight:600">
+              <svg class="ic"><use href="#i-lyrics"/></svg>播放页
+            </span>
           </div>
         </div>
         <div class="cv3-now">
@@ -655,7 +659,7 @@
   （<code>CarSettingsScreen.kt</code>，930 行）按 Google 车机规范做了「层级 1、控件大、now playing 常在」，
   但两套信息结构意味着两条维护线，用户要求<b>与手机模式完全一致</b>。<br>
   <b>现在的行为</b>：车载直接渲染手机版 <code>SettingsScreen</code>（六卡 → 子页 → 弹层），返回键逐级退（v1.1.80 起）；
-  <b>唯一区别</b>是顶栏右侧（主页与每一个子页都有）常驻「播放页」按钮 —— 调用方先收设置覆盖层再展开播放页，
+  <b>唯一区别</b>是左下角（主页与每一个子页都有，Box 覆盖层不随页面滚动）常驻「播放页」实体按钮 —— 位置按用户拍板放左下角（驾驶员左手边顺手，右上角离方向盘最远已废弃）；调用方先收设置覆盖层再展开播放页，
   任何页面都一步回正在播放。手机模式不显示（底部播放条本来就常在）。<br>
   <b>删除的载体</b>：<code>CarSettingsScreen.kt</code> 与 <code>CarSettingsTest.kt</code> 整文件、
   <code>SettingsScreen</code> 的 5 个车载专用参数（onTogglePlay / onPrevious / onNext / onRescan / onOpenScanScope）、
