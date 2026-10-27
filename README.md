@@ -40,7 +40,7 @@ Android 原生本地音乐播放器 —— Kotlin + Jetpack Compose，**数据�
 | [版本历史](https://luckylearning.github.io/WindTone/版本历史.html) | 每个版本改了什么 |
 | [AI 开发指南](https://luckylearning.github.io/WindTone/AI开发指南.html) | 项目约定、架构分层与踩坑记录 |
 | [数据库设计](https://luckylearning.github.io/WindTone/数据库设计-MusicDb.html) | MusicDb schema 与各表职责 |
-| [发版规范](https://luckylearning.github.io/WindTone/发版规范-Release说明与多平台产物.html) | Release 说明与多平台产物 |
+| [发版规则](https://luckylearning.github.io/WindTone/版本号发版规则.html) | 版本号规则与发版流程（一键发版 + 验证链） |
 | [功能规划](https://luckylearning.github.io/WindTone/功能规划.html) | 各期规划与已否决的方案 |
 
 ---

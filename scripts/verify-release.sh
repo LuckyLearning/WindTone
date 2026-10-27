@@ -150,7 +150,7 @@ else
   if [[ "$LATEST_V" == "$NEW_NAME" ]]; then
     echo "     补查通过 ✅"
   else
-    echo "     补查仍不符 ⚠️（不阻塞发版，但应用内更新会拿不到新版；见 docs/发版规范）"
+    echo "     补查仍不符 ⚠️（不阻塞发版，但应用内更新会拿不到新版；见 docs/版本号发版规则.md）"
   fi
 fi
 

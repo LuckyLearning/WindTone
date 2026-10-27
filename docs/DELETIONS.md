@@ -34,3 +34,4 @@ title: 文档删除与归档记录
 | 2026-10-27 | 硬删 | `app/.../ui/CarSettingsScreen.kt`（930 行）+ `app/src/test/.../ui/CarSettingsTest.kt` | v1.2.8 用户拍板：车载设置与手机用同一套 `SettingsScreen`，唯一区别是顶栏每页常驻「播放页」；两套信息结构 = 两条维护线 | 效果图 ㊳ 已重画（`docs/ui/06-car.html`）；车载预设池行为不变 |
 | 2026-10-27 | 硬删 | `SettingsScreen` 的 5 个车载专用参数（`onTogglePlay` / `onPrevious` / `onNext` / `onRescan` / `onOpenScanScope`）及其 `MainScreen` 实参 | 只有大卡页消费；大卡删除后无人调用（`onOpenPlayer` 保留，顶栏「播放页」用） | 回调本体（`playerVm.togglePlay` 等）在其他入口仍正常使用 |
 | 2026-10-27 | 硬删 | 「完整设置」机制（`fullSettings` 状态 + 返回键分支 + 顶栏标题切换）与 `all_settings` 字符串（values / values-zh 两份） | 大卡删除后「完整设置」入口不复存在 | `SettingsScreenTest` 相应断言改为直接进子页 |
+| 2026-10-27 | 合并删除 | `docs/发版规范-Release说明与多平台产物.md`（发版流程 / 多平台产物 / 公共分发仓库 / 一键发版） | 与 `docs/版本号发版规则.md` 合并为**唯一**发版规则文件，避免两份发版文档并存 | 内容并入 `版本号发版规则.md`（§二 发版产物 / §三 发版流程 / §四 Release 说明）；index / README / _layouts / DOC_INVENTORY / 权限与更新 / AI开发指南 / verify-release.sh 引用已改指向新文件 |
