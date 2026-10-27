@@ -81,6 +81,7 @@ class SettingsScreenTest {
         onDebugUnlocked: (Boolean) -> Unit = {},
         onAutoResume: (Boolean) -> Unit = {},
         onOpenStats: () -> Unit = {},
+        onOpenPlayer: () -> Unit = {},
     ) {
         compose.setContent {
             MusicPlayerTheme {
@@ -154,6 +155,7 @@ class SettingsScreenTest {
                     onOpenReport = {},
                     onOpenDuplicates = {},
                     onOpenStats = onOpenStats,
+                    onOpenPlayer = onOpenPlayer,
                     minSongDurationSec = 60,
                     onMinSongDurationSec = {},
                     onLoadCrashLog = {},
@@ -301,16 +303,9 @@ class SettingsScreenTest {
     @Test
     fun resetButtonAppearsOnDeviationAndWritesBackFactoryDefault() {
         var carMode: Boolean? = null
-        // 车载模式开着（偏离默认），主题取色仍在默认上 → 全页应当只有**一枚** ↺
+        // 车载模式开着（偏离默认），主题取色仍在默认上 → 全页应当只有**一枚** ↺。
+        // v1.2.8 起车载与手机共用同一套设置页，不再有「完整设置」中转。
         render(player = PlayerUiState(carMode = true), onCarMode = { carMode = it })
-
-        // ⚠️ v1.1.32 起车载模式默认走「扁平单页」设置，六张分类卡收在「完整设置」里。
-        // 这条用例验的是手机版六卡结构里的 ↺，所以先经「完整设置」进到那套页面
-        // （这条路径本身也顺带被覆盖：车载下唯一的多级入口必须通）。
-        compose.onNodeWithText("完整设置")
-            .performScrollTo()
-            .performSemanticsAction(SemanticsActions.OnClick)
-        compose.waitForIdle()
 
         compose.onNodeWithText("外观").performClick()
         compose.waitForIdle()
@@ -319,6 +314,28 @@ class SettingsScreenTest {
         compose.onNodeWithContentDescription("恢复默认").performClick()
         compose.waitForIdle()
         assertEquals(SettingsDefaults.CAR_MODE, carMode)
+    }
+
+    /**
+     * v1.2.8 起车载与手机共用同一套设置页，**唯一**区别是：车载模式下每一页顶栏都有
+     * 「播放页」，一步回正在播放；手机模式不显示（底部播放条本来就常在）。
+     */
+    @Test
+    fun carModeShowsPlayerButtonOnEveryPageAndItOpensPlayer() {
+        var opened = 0
+        render(player = PlayerUiState(carMode = true), onOpenPlayer = { opened++ })
+
+        compose.onNodeWithText("播放页").assertIsDisplayed()
+        compose.onNodeWithText("播放页").performClick()
+        compose.waitForIdle()
+        assertEquals("点「播放页」必须回调 onOpenPlayer", 1, opened)
+    }
+
+    /** 手机模式没有「播放页」按钮：底部播放条本来就常在，多一个入口是噪音 */
+    @Test
+    fun phoneModeDoesNotShowPlayerButtonInSettings() {
+        render(player = PlayerUiState())
+        compose.onNodeWithText("播放页").assertDoesNotExist()
     }
 
     /**

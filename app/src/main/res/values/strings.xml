@@ -433,6 +433,8 @@
     <string name="playlists_favorites_and_playback_stats">Playlists, favorites and playback stats are kept.</string>
     <string name="grant">Grant</string>
     <string name="install_now">Install now</string>
+    <string name="install_downloaded_update">Install downloaded update</string>
+    <string name="update_ready_no_redownload">v%1$s is ready. Tap to install directly — no need to download again</string>
     <string name="later">Later</string>
     <string name="new_version">· New version %1$s</string>
     <string name="download_route_change_it_in">Download route: %1$s (change it in Settings → Update → Download route)</string>
@@ -544,7 +546,6 @@
     <string name="move_down">Move down</string>
     <string name="online_playlists">Online playlists</string>
     <string name="back">Back</string>
-    <string name="all_settings">All settings</string>
     <string name="player">Player</string>
     <string name="s">%1$s s</string>
     <string name="h_min">%1$s h %2$s min</string>

@@ -414,6 +414,8 @@
     <string name="playlists_favorites_and_playback_stats">歌单、收藏、播放统计都会保留。</string>
     <string name="grant">去授权</string>
     <string name="install_now">立即安装</string>
+    <string name="install_downloaded_update">安装已下载的更新包</string>
+    <string name="update_ready_no_redownload">v%1$s 已下载就绪，点此直接安装，无需重新下载</string>
     <string name="later">稍后</string>
     <string name="new_version">" · 新版本 %1$s"</string>
     <string name="download_route_change_it_in">下载线路：%1$s（可在「设置 → 更新 → 下载线路」中更换）</string>
@@ -525,7 +527,6 @@
     <string name="move_down">下移</string>
     <string name="online_playlists">在线歌单</string>
     <string name="back">返回</string>
-    <string name="all_settings">完整设置</string>
     <string name="player">播放页</string>
     <string name="s">%1$s 秒</string>
     <string name="h_min">%1$s 小时 %2$s 分钟</string>

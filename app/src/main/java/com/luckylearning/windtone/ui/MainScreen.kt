@@ -807,22 +807,12 @@ fun MainScreen(
                     onOpenReleasePage = updateVm::openReleasePage,
                     onIgnoreUpdate = updateVm::ignoreUpdate,
                     onDismissUpdateDialog = updateVm::dismissUpdateDialog,
-                    // 车载设置页的一步回播放：先收起设置再展开播放页，
+                    // 车载设置页（与手机同一套）顶栏的一步回播放：先收起设置再展开播放页，
                     // 否则播放页会被设置覆盖层压在下面（层级顺序在 Box 里是固定的）。
                     onOpenPlayer = {
                         showSettings = false
                         crashLogText = null
                         playerVm.openPlayer()
-                    },
-                    onTogglePlay = playerVm::togglePlay,
-                    onPrevious = playerVm::previous,
-                    onNext = playerVm::next,
-                    onRescan = { lib.scan() },
-                    // 扫描范围是弹层：先关设置，弹层才不会浮在设置页上面关不掉
-                    onOpenScanScope = {
-                        showSettings = false
-                        crashLogText = null
-                        showScanScope = true
                     },
                 )
             }
