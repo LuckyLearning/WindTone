@@ -1461,6 +1461,28 @@ class Prefs private constructor(context: Context) {
             ioScope.launch { store.putString(KEY_UPDATE_ROUTE, value.name) }
         }
 
+    /**
+     * 已下载完成、待安装的 APK 路径（v1.2.8）。
+     *
+     * 此前它只存在于内存状态里：下载完弹一次「立即安装」，用户切出去（去授权、
+     * 接电话、杀后台）回来后弹窗没了，只能从头再下载一遍。现在落盘持久化，
+     * 冷启动后只要文件还在就能直接装。空串 = 没有待安装的包。
+     */
+    var updateReadyApkPath: String
+        get() = sp.getString(KEY_UPDATE_READY_APK, "") ?: ""
+        set(value) {
+            sp.edit().putString(KEY_UPDATE_READY_APK, value).apply()
+            ioScope.launch { store.putString(KEY_UPDATE_READY_APK, value) }
+        }
+
+    /** 待安装 APK 对应的版本号（与 [updateReadyApkPath] 成对出现） */
+    var updateReadyApkVersion: String
+        get() = sp.getString(KEY_UPDATE_READY_APK_VERSION, "") ?: ""
+        set(value) {
+            sp.edit().putString(KEY_UPDATE_READY_APK_VERSION, value).apply()
+            ioScope.launch { store.putString(KEY_UPDATE_READY_APK_VERSION, value) }
+        }
+
     // ================================================================ 私有
 
     companion object {
@@ -1606,5 +1628,7 @@ class Prefs private constructor(context: Context) {
         const val KEY_AUTO_UPDATE = "auto_check_update"
         const val KEY_LAST_UPDATE_CHECK = "last_update_check_at"
         const val KEY_UPDATE_ROUTE = "update_download_route"
+        const val KEY_UPDATE_READY_APK = "update_ready_apk_path"
+        const val KEY_UPDATE_READY_APK_VERSION = "update_ready_apk_version"
     }
 }

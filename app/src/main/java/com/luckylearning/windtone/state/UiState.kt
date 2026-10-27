@@ -501,6 +501,8 @@ data class UpdateUiState(
     val message: String? = null,
     /** 下载完成、待安装的本地文件路径 */
     val readyApkPath: String? = null,
+    /** 待安装 APK 的版本号（v1.2.8 起随路径一起持久化，重启后更新页仍能显示「装的是哪个版本」） */
+    val readyApkVersion: String = "",
     /** 需要用户先授权「安装未知应用」 */
     val needInstallPermission: Boolean = false,
     /** 本次下载使用的线路（自动 / 直连 / 指定镜像），用于在弹窗里说明当前走哪条线 */

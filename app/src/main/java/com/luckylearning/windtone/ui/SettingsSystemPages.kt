@@ -1159,6 +1159,19 @@ internal fun SettingsUpdatePage(
         },
         onClick = onCheckUpdate,
     )
+    // v1.2.8：已下载待装的包在这里**常驻**一个安装入口。
+    // 此前「立即安装」只在下载完的那次弹窗里，用户切出去（授权 / 接电话 / 杀后台）
+    // 回来弹窗没了，只能从头再下载。待装状态现在会持久化并在这里恢复：
+    // 点这一行直接拉起安装器，不重新下载。
+    val readyVersion = update.readyApkVersion.ifBlank { info?.version.orEmpty() }
+    if (update.readyApkPath != null && !update.downloading && readyVersion.isNotBlank()) {
+        ActionRow(
+            title = stringResource(R.string.install_downloaded_update),
+            subtitle = stringResource(R.string.update_ready_no_redownload, readyVersion),
+            onClick = onInstallUpdate,
+            chevron = true,
+        )
+    }
     SwitchRow(
         title = stringResource(R.string.check_for_updates_on_launch),
         subtitle = stringResource(R.string.when_off_the_app_makes),

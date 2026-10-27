@@ -52,7 +52,35 @@ class UpdateRepository(
     val update: StateFlow<UpdateUiState> = _update.asStateFlow()
 
     init {
+        restoreReadyApk()
         maybeAutoCheck()
+    }
+
+    /**
+     * 恢复上次下载完成、还没装的安装包（v1.2.8）。
+     *
+     * 此前待安装状态只活在内存里：下载完弹一次「立即安装」，用户切出去（授权 /
+     * 接电话 / 杀后台）回来，弹窗没了，只能从头再下载。现在路径持久化在
+     * [Prefs.updateReadyApkPath]，启动时文件还在就恢复待装状态；文件被系统
+     * 清缓存清掉了就清掉记录，界面当无事发生。
+     * 待装版本号若已等于当前版本（装完重启），记录同样清掉。
+     */
+    private fun restoreReadyApk() {
+        val path = prefs.updateReadyApkPath
+        if (path.isBlank()) return
+        val version = prefs.updateReadyApkVersion
+        if (version == UpdateChecker.currentVersion || !File(path).exists()) {
+            prefs.updateReadyApkPath = ""
+            prefs.updateReadyApkVersion = ""
+            return
+        }
+        _update.update {
+            it.copy(
+                readyApkPath = path,
+                readyApkVersion = version,
+                needInstallPermission = !UpdateChecker.canInstall(app),
+            )
+        }
     }
 
     /**
@@ -154,10 +182,14 @@ class UpdateRepository(
                     totalBytes = info.apkSizeBytes,
                     message = if (aborted) "已切换线路：${route.label}，重新下载…" else null,
                     readyApkPath = null,
+                    readyApkVersion = "",
                     needInstallPermission = false,
                     route = route,
                 )
             }
+            // 旧包让位：新一轮下载开始后，上一份待装记录（含落盘的）作废
+            prefs.updateReadyApkPath = ""
+            prefs.updateReadyApkVersion = ""
             runCatching {
                 UpdateChecker.download(
                     app,
@@ -176,11 +208,16 @@ class UpdateRepository(
                     checkCancelled = { downloadAborted },
                 )
             }.onSuccess { file ->
+                // 路径落盘持久化：切出去 / 杀后台后重启，待装状态照样恢复，
+                // 不用再下载一遍（v1.2.8）
+                prefs.updateReadyApkPath = file.absolutePath
+                prefs.updateReadyApkVersion = info.version
                 _update.update {
                     it.copy(
                         downloading = false,
                         progress = 100,
                         readyApkPath = file.absolutePath,
+                        readyApkVersion = info.version,
                         dialogVisible = true,
                         message = null, // 清掉「切换线路」之类的下载过程提示
                         needInstallPermission = !UpdateChecker.canInstall(app),
@@ -204,7 +241,9 @@ class UpdateRepository(
     override fun installUpdate() {
         val path = _update.value.readyApkPath ?: return
         if (!UpdateChecker.canInstall(app)) {
-            _update.update { it.copy(needInstallPermission = true) }
+            // 从「设置 → 更新」页的安装行进来时弹窗多半是关着的：把弹窗一并
+            // 打开，授权按钮才有着落（v1.2.8）
+            _update.update { it.copy(needInstallPermission = true, dialogVisible = true) }
             return
         }
         UpdateChecker.install(app, File(path))
@@ -251,10 +290,13 @@ class UpdateRepository(
 
     /** 已发现新版本但用户暂时不升级：连同信息一起清掉 */
     override fun ignoreUpdate() = _update.update {
+        prefs.updateReadyApkPath = ""
+        prefs.updateReadyApkVersion = ""
         it.copy(
             info = null,
             dialogVisible = false,
             readyApkPath = null,
+            readyApkVersion = "",
             needInstallPermission = false,
             progress = 0,
         )
