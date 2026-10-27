@@ -60,7 +60,7 @@
 | scr-dlg-overlay-hidden-apps | ㉙F 不显示悬浮窗的应用 · 名单弹窗 | 手机 | 04-settings.html | SettingsLyricsOverlayAppsDialog.kt · OverlayHiddenAppsDialog（v1.1.29 新增） | 已有 |  |
 | scr-settings-2 | ㉚ 设置页 · 音乐库子页 | 手机 | 04-settings.html | SettingsScreen.kt · 本地曲库（短音频过滤） | 已有 |  |
 | scr-libstats | ㉚H 曲库格式与容量 | 手机 | 04-settings.html | LibraryStatsScreen.kt · 各格式首数 / 占用 / 占比 · 无损拆分 | 已有 |  |
-| scr-settings-update | ㉚C 设置页 · 更新子页 | 手机 | 04-settings.html | SettingsScreen.kt · 检查更新 / 自动检查 / 下载线路 | 已有 |  |
+| scr-settings-update | ㉚C 设置页 · 更新子页 | 手机 | 04-settings.html | SettingsScreen.kt · 检查更新 / **安装已下载的更新包（v1.2.8，待装状态持久化，切走/重启不丢）** / 自动检查 / 下载线路 | 已有 |  |
 | scr-settings-diagnostics | ㉚D 设置页 · 关于与诊断子页 | 手机 | 04-settings.html | SettingsScreen.kt · 播放统计 / 数据与存储 / 关于（「调试」分区默认隐藏，见 ㉚F） | 已有 |  |
 | scr-diagnostics-foreground-log | ㉚F 关于与诊断 · 调试 | 手机 | 04-settings.html | SettingsSystemPages.kt · SettingsDiagnosticsPage 的「调试」分区（v1.1.29 起，v1.1.31 重排） | 已有 |  |
 | scr-dlg-carmode | ㉚E 设置页 · 车载模式说明弹窗 | 手机 | 04-settings.html | SettingsScreen.kt · showCarModeInfo（AlertDialog） | 已有 |  |
@@ -78,9 +78,9 @@
 | scr-car-player-nolyr | ㊲B 车机 · 播放页 · 暂无歌词 | 车机 | 06-car.html | PlayerScreen.kt —— 本地无 .lrc / 内嵌歌词时的占位态，绝不联网抓取 | 已有 |  |
 | scr-car-player-vol | ㊲C 车机 · 播放页 · 音量浮层 | 车机 | 06-car.html | PlayerScreen.kt · VolumeHud —— 方向盘音量键 / 旋钮触发，2 秒无操作自动消失 | 已有 |  |
 | scr-car-player-immersive | ㊲D 车机 · 播放页 · 沉浸态（歌词态 · 5 秒无触摸） | 车机 | 06-car.html | PlayerScreen.kt · immersive —— 歌词态 5 秒无触摸触发（手机 / 车机通用）；车机收起左导航与控制键，歌词铺满全宽 | 已有 |  |
-| scr-car-settings-flat | ㊳ 车机 · 设置（扁平单页 · v3 布局） | 车机 | 06-car.html | CarSettingsScreen.kt —— 导航「设置」选中；层级 1，打开即可改；底部常驻播放条一步回播放页 | 已有 |  |
+| scr-car-settings-flat | ㊳ 车机 · 设置（与手机同一套 · v1.2.8） | 车机 | 06-car.html | SettingsScreen.kt —— 车载复用手机版「六卡 → 子页」，**唯一区别**：顶栏右侧每页常驻「播放页」一步回播放；旧扁平大卡 CarSettingsScreen.kt 已删除 | 改版 |  |
 | scr-car-overlay | ㊴ 车机 · 桌面悬浮歌词（四种状态） | 车机 | 06-car.html | LyricOverlayService.kt —— 对齐可配（默认居中）· 锁定态穿透 · 调整态可拖 · App 前台自动隐藏 | 已有 |  |
-| scr-car-overlay-style | 车机 · 设置 → 悬浮窗样式 | 车机 | 08-floating-lyrics.html | CarSettingsScreen.kt（**FR-07 已接**：三枚大卡 + 字号步进 + 四角 chips；无驾驶中简化） | 已有 | FR-08 驾驶中简化仍为 **已否决 / 不做** |
+| scr-car-overlay-style | 车机 · 设置 → 悬浮窗样式 | 车机 | 08-floating-lyrics.html | SettingsScreen.kt · SettingsOverlayPage（车载预设池含 🚗 三套；**FR-07 已接**；v1.2.8 起与手机同一套页面） | 已有 | FR-08 驾驶中简化仍为 **已否决 / 不做** |
 | scr-car-artists | ㊱C 车机 · 歌手（圆头像网格 · v3） | 车机 | 06-car.html | CarLibraryScreen.kt — 同导航壳；歌手用 round 封面 | 新建 |  |
 | scr-car-folders | ㊱D 车机 · 文件夹 | 车机 | 06-car.html | CarLibraryScreen.kt — 文件夹列表（大触控行） | 新建 |  |
 | scr-car-playlists | ㊱E 车机 · 歌单 | 车机 | 06-car.html | CarLibraryScreen.kt — 歌单列表 | 新建 |  |
@@ -147,4 +147,4 @@
 - 车机阿里云盘未登录态：复用手机 `scr-aliyun-login` 信息架构，车机框可再出一版细稿。
 - `flow.html` 用户流程图未纳入本清单屏表（非 figure 屏）。
 - **FR-08 驾驶中简化**：用户 2026-10-25 **否决 / 不做**；`08-floating-lyrics.html` 已改为 PASS 标注，不再当交付功能。
-- **FR-07 车机三枚大卡**：已在 `CarSettingsScreen` 落地（三枚大卡 + 字号步进 + 四角 chips；套用写全局）。
+- **FR-07 车机三枚大卡**：v1.2.8 起随 `CarSettingsScreen` 删除，车机走与手机同一套设置页（悬浮歌词子页内预设池含 🚗 三套，行为不变、套用写全局）。

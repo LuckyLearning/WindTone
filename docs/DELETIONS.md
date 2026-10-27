@@ -31,3 +31,6 @@ title: 文档删除与归档记录
 | 2026-10-26 | 硬删 | `OverlayCollapseHelper.handlePositions`（两钮版）+ 对应测试 | 已被 `handleColumn`（任意颗）取代，三钮后无人调用 | 测试合并进 `handleColumn` 的用例 |
 | 2026-10-26 | 硬删 | 车机旧尺码常量：`CAR_NAV_WIDTH`、`CAR_SIDE_TILE`、`CAR_MAIN_BUTTON`、`CAR_SIDE_BUTTON`、`CAR_SECONDARY_BUTTON`、`CAR_ROW_MIN_HEIGHT`、`CAR_BAR_HEIGHT` | v1.1.98 起尺寸统一由 `CarMetrics` 决定，这些只剩注释价值 | 历史保留在 `CarMetrics` 的档位表里 |
 | 2026-10-26 | 硬删 | 10 条双语字符串（`bilingual_lyrics*`、`show_both_languages`、`chinese_only`、`english_only`、`which_lines_translated_lyrics_show`、`applies_to_lyrics_that_carry` 等） | 功能已移除，`values` / `values-zh` 两份都无引用 | 顺带把 `text_size_x_bilingual_lyrics` 的英文文案去掉"Bilingual lyrics"字样 |
+| 2026-10-27 | 硬删 | `app/.../ui/CarSettingsScreen.kt`（930 行）+ `app/src/test/.../ui/CarSettingsTest.kt` | v1.2.8 用户拍板：车载设置与手机用同一套 `SettingsScreen`，唯一区别是顶栏每页常驻「播放页」；两套信息结构 = 两条维护线 | 效果图 ㊳ 已重画（`docs/ui/06-car.html`）；车载预设池行为不变 |
+| 2026-10-27 | 硬删 | `SettingsScreen` 的 5 个车载专用参数（`onTogglePlay` / `onPrevious` / `onNext` / `onRescan` / `onOpenScanScope`）及其 `MainScreen` 实参 | 只有大卡页消费；大卡删除后无人调用（`onOpenPlayer` 保留，顶栏「播放页」用） | 回调本体（`playerVm.togglePlay` 等）在其他入口仍正常使用 |
+| 2026-10-27 | 硬删 | 「完整设置」机制（`fullSettings` 状态 + 返回键分支 + 顶栏标题切换）与 `all_settings` 字符串（values / values-zh 两份） | 大卡删除后「完整设置」入口不复存在 | `SettingsScreenTest` 相应断言改为直接进子页 |

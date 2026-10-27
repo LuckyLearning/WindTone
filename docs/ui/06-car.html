@@ -597,7 +597,7 @@
 </figure>
 
 <figure class="fig car" id="scr-car-settings-flat">
-  <div class="cap"><b>㊳ 车机 · 设置（扁平单页 · v3 布局）</b><em>CarSettingsScreen.kt —— 导航「设置」选中；层级 1，打开即可改；底部常驻播放条一步回播放页</em></div>
+  <div class="cap"><b>㊳ 车机 · 设置（与手机同一套 · v1.2.8）</b><em>SettingsScreen.kt —— 车载复用手机版「六卡 → 子页」，<b>唯一区别</b>：顶栏右侧每页都常驻「播放页」，一步回正在播放</em></div>
   <div class="carphone v3">
     <div class="carbar">
       <span>9:41</span><span class="cb-item">🌡 24°C</span>
@@ -616,47 +616,20 @@
       </nav>
       <div class="cv3-right">
         <div class="cv3-main tight">
-          <div class="cv3-hd">
-            <div class="cv3-title">设置</div>
-            <span class="pill">v1.1.33</span>
-            <div class="sp"></div>
-            <span style="font-size:12px;color:var(--on-surface-variant)">行车中只留会改的项</span>
-          </div>
           <div class="cset" style="margin-top:6px">
-            <div class="cset-sec">播放</div>
-            <div class="cset-row">
-              <div style="flex:1"><div class="cset-k">播放速度</div><div class="cset-s">0.75x ~ 2.00x，每档 0.05x</div></div>
-              <div class="cset-step">−</div>
-              <div class="cset-v">1.00x</div>
-              <div class="cset-step"><svg class="ic"><use href="#i-add"/></svg></div>
+            <div class="cset-row" style="border:none">
+              <svg class="ic" style="flex:none"><use href="#i-back"/></svg>
+              <div class="cset-k" style="font-size:18px">设置</div>
+              <div style="flex:1"></div>
+              <div class="cset-btn" style="color:var(--primary)"><svg class="ic"><use href="#i-lyrics"/></svg>播放页</div>
             </div>
-            <div class="cset-row">
-              <div style="flex:1"><div class="cset-k">变调</div><div class="cset-s">升降调不改速度（±12 半音 = 一个八度）</div></div>
-              <div class="cset-step">−</div>
-              <div class="cset-v">原调</div>
-              <div class="cset-step"><svg class="ic"><use href="#i-add"/></svg></div>
-            </div>
-            <div class="cset-row">
-              <div style="flex:1"><div class="cset-k">跳过静音</div><div class="cset-s">自动跳过录音开头的空白段</div></div>
-              <span class="switch"><i></i></span>
-            </div>
-            <div class="cset-sec">歌词</div>
-            <div class="cset-row">
-              <div style="flex:1"><div class="cset-k">歌词字号</div><div class="cset-s">只影响播放页歌词，车载下已自动放大一档</div></div>
-              <div class="cset-step">−</div>
-              <div class="cset-v">1.0x</div>
-              <div class="cset-step"><svg class="ic"><use href="#i-add"/></svg></div>
-            </div>
-            <div class="cset-row">
-              <div style="flex:1"><div class="cset-k">桌面悬浮歌词</div><div class="cset-s">退到桌面后在最上层显示当前歌词行</div></div>
-              <span class="switch"><i></i></span>
-            </div>
-            <div class="cset-sec">曲库与更多</div>
-            <div style="display:flex;gap:10px;flex:none">
-              <div class="cset-btn"><svg class="ic"><use href="#i-cloud"/></svg>重新扫描</div>
-              <div class="cset-btn"><svg class="ic"><use href="#i-folder"/></svg>扫描范围</div>
-              <div class="cset-btn"><svg class="ic"><use href="#i-tune"/></svg>完整设置</div>
-            </div>
+            <div class="cset-sec" style="border:none;padding-top:0">分类</div>
+            <div class="cset-row"><div class="cset-k">外观</div><div class="cset-s">主题模式 · 主题取色 · 车载模式</div><svg class="ic"><use href="#i-chev"/></svg></div>
+            <div class="cset-row"><div class="cset-k">播放</div><div class="cset-s">播放速度 · 变调 · 跳过静音 · 音效</div><svg class="ic"><use href="#i-chev"/></svg></div>
+            <div class="cset-row"><div class="cset-k">歌词</div><div class="cset-s">歌词页 · 桌面悬浮歌词</div><svg class="ic"><use href="#i-chev"/></svg></div>
+            <div class="cset-row"><div class="cset-k">音乐库</div><div class="cset-s">扫描 · 数据维护</div><svg class="ic"><use href="#i-chev"/></svg></div>
+            <div class="cset-row"><div class="cset-k">在线</div><div class="cset-s">在线歌单 · 阿里云盘</div><svg class="ic"><use href="#i-chev"/></svg></div>
+            <div class="cset-row"><div class="cset-k">关于与诊断</div><div class="cset-s">版本 · 诊断包 · 检查更新</div><svg class="ic"><use href="#i-chev"/></svg></div>
           </div>
         </div>
         <div class="cv3-now">
@@ -678,17 +651,15 @@
     </div>
     <div class="cv3-dock"><i></i><i></i><i></i><span>车机 Dock（系统浮层 · App 只让出 56dp）</span></div>
   </div>
-  <p class="note"><b>为什么设置要单独做一页：</b>Google 车机设计规范（Android for Cars · 驾驶分心准则）对设置这类非驾驶任务要求三条——
-  <b>层级要浅</b>（打开即可改，不在行驶中做多级导航）、<b>控件要大</b>（触控目标 ≥ 76dp、主操作 ≥ 88dp）、
-  <b>now playing 常在</b>（任何画面都能一步回到正在播放）。手机版「六卡 → 子页 → 弹层」三层，在横屏上既要滚很久、第三条也做不到。<br>
-  <b>只保留行车中会改的项</b>：速度 / 变调 / 跳过静音 / 歌词字号 / 悬浮歌词 / 曲库 —— 全部就地改，<b>层级 1</b>；
-  Slider 一律换成 <b>− 值 +</b> 的 44px 圆键（拖动在行车中几乎按不中，而且拖到多少只能盯着数字跳）。<br>
-  <b>底部播放条换成「实用三键 + 播放页」</b>：设置页里最常做的是「换一首 / 停一下」，所以只留 ⏮ ⏯ ⏭，
-  最右边那颗固定是「进播放页」。没有当前曲时这条仍然显示，只把握手换成说明——<b>入口不能时有时无</b>。<br>
-  <b>「完整设置」</b>是唯一的多级入口（均衡器 / 悬浮歌词外观 / 双语歌词 / 数据维护 / 下载线路），
-  点进去顶部仍有「播放页」，所以<b>任何子页也是一步回播放</b>。返回键先退车载设置页，再按才退出。<br>
-  <b>排版密度</b>：车机设置行压到 48px 高（≈76dp 触控）、副标题 12sp，是为了让<b>一屏放完、不用滚</b>；
-  滚动在行车中既难操作又容易误触。手机端完全不受影响——<code>carMode == false</code> 时一行代码都不走这条分支。</p>
+  <p class="note"><b>v1.2.8 改版（用户拍板）：车载设置不再单独做版式。</b>此前 v1.1.32 的「扁平大卡 + 完整设置」
+  （<code>CarSettingsScreen.kt</code>，930 行）按 Google 车机规范做了「层级 1、控件大、now playing 常在」，
+  但两套信息结构意味着两条维护线，用户要求<b>与手机模式完全一致</b>。<br>
+  <b>现在的行为</b>：车载直接渲染手机版 <code>SettingsScreen</code>（六卡 → 子页 → 弹层），返回键逐级退（v1.1.80 起）；
+  <b>唯一区别</b>是顶栏右侧（主页与每一个子页都有）常驻「播放页」按钮 —— 调用方先收设置覆盖层再展开播放页，
+  任何页面都一步回正在播放。手机模式不显示（底部播放条本来就常在）。<br>
+  <b>删除的载体</b>：<code>CarSettingsScreen.kt</code> 与 <code>CarSettingsTest.kt</code> 整文件、
+  <code>SettingsScreen</code> 的 5 个车载专用参数（onTogglePlay / onPrevious / onNext / onRescan / onOpenScanScope）、
+  「完整设置」机制与 <code>all_settings</code> 字符串；登记见 <code>docs/DELETIONS.md</code>。</p>
 </figure>
 
 <figure class="fig car" id="scr-car-overlay">
