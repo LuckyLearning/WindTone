@@ -79,6 +79,7 @@
     <string name="cd_open_drawer">Open navigation drawer</string>
     <string name="cd_close_search">Close search</string>
     <string name="cd_search">Search</string>
+    <string name="cd_voice_search">Voice search</string>
     <string name="cd_sort">Sort</string>
     <string name="cd_more">More</string>
 
@@ -97,6 +98,7 @@
     <string name="lib_listening_report">Listening report</string>
 
     <string name="lib_search_hint">Search title / artist / album / file name / pinyin</string>
+    <string name="lib_voice_unavailable">No speech recognition here — use the voice key on your keyboard</string>
     <string name="lib_search_history">History</string>
 
     <string name="lib_setup_title">Choose where your music is</string>

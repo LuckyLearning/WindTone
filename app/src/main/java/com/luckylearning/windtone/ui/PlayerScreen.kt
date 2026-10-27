@@ -57,6 +57,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -251,6 +252,17 @@ fun PlayerScreen(
         immersiveOn = false
         lastActionAt = System.currentTimeMillis()
     }
+
+    // ------------------------------------------------------ 左右滑动切歌
+    //
+    // 中部内容区的横向滑动（左滑下一首 / 右滑上一首），判据与参数见 PlayerSwipe。
+    // 偏移量在这里持有、在下面那层 Box 上用 graphicsLayer 平移 —— 只动中部，
+    // 顶栏与底部控制行不跟着晃。
+    //
+    // ⚠️ 作用域必须在组合期取一次：手势回调不是挂起函数，而 snapTo / animateTo 是，
+    //    在 modifier 内部每次重组新建 scope 会让进行中的回弹动画被取消。
+    val swipeScope = rememberCoroutineScope()
+    val swipeOffset = remember { Animatable(0f) }
 
     // 进入车载模式且停在播放页时，先给满 5 秒再考虑收起
     LaunchedEffect(state.carMode) {
@@ -458,7 +470,27 @@ fun PlayerScreen(
             }
 
             // --------------------------------------------- 中部：封面 / 歌词
-            Box(Modifier.weight(1f)) {
+            //
+            // 2026-10-27：这一层同时是「左滑下一首 / 右滑上一首」的手势区。
+            // **只挂中部、不挂整页**：底部进度条本身就是横向拖动，整页挂必然抢手势；
+            // 中部歌词区是纵向滚动，与横向手势方向互斥，不会互相打岔。
+            Box(
+                Modifier
+                    .weight(1f)
+                    .graphicsLayer { translationX = swipeOffset.value }
+                    .playerSwipeToSwitch(
+                        offset = swipeOffset,
+                        scope = swipeScope,
+                        onSwipe = { dir ->
+                            keepAwake()
+                            when (dir) {
+                                SwipeSwitch.NEXT -> onNext()
+                                SwipeSwitch.PREVIOUS -> onPrevious()
+                                SwipeSwitch.NONE -> Unit
+                            }
+                        },
+                    )
+            ) {
                 // 长按哪一行就在哪一刻对表：位置在这里取一次快照
                 val onLineLongPress: (Int, Long) -> Unit = { lineIndex, lineMs ->
                     keepAwake()

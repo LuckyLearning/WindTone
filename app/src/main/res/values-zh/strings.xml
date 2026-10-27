@@ -64,6 +64,7 @@
     <string name="cd_open_drawer">打开侧边抽屉</string>
     <string name="cd_close_search">关闭搜索</string>
     <string name="cd_search">搜索</string>
+    <string name="cd_voice_search">语音搜索</string>
     <string name="cd_sort">排序</string>
     <string name="cd_more">更多</string>
 
@@ -82,6 +83,7 @@
     <string name="lib_listening_report">收听报告</string>
 
     <string name="lib_search_hint">搜索歌名 / 歌手 / 专辑 / 文件名 / 拼音</string>
+    <string name="lib_voice_unavailable">本机没有语音识别服务，请改用输入法的语音键</string>
     <string name="lib_search_history">历史</string>
 
     <string name="lib_setup_title">选择音乐位置</string>

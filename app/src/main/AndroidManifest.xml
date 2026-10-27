@@ -49,10 +49,15 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!--
-      `tools:ignore` 挂在 `<application>` 上而不是 meta-data 上：
-      `MissingIntentFilterForMediaSearch` 这条 lint 的报错位置就是 `<application>`（见 2026-10-16 实测），
-      挂在 meta-data 上不生效。忽略的理由写在下面那段 meta-data 注释里。
+      语音识别可见性（Android 11+ 的包可见性）：不声明的话，判断「本机有没有语音识别
+      服务」一律返回 null，麦克风入口会永远走兜底。语音听写只用于搜索框，不上传音频。
     -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+    </queries>
+
     <application
         android:name=".MusicApp"
         android:networkSecurityConfig="@xml/network_security_config"
@@ -63,19 +68,17 @@
         android:requestLegacyExternalStorage="true"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="false"
-        android:theme="@style/Theme.MusicPlayer"
-        tools:ignore="MissingIntentFilterForMediaSearch">
+        android:theme="@style/Theme.MusicPlayer">
 
         <!--
           Android Auto：声明本应用提供「媒体」能力。
           没有这份描述，Android Auto 不会把应用列进车机的媒体面板，
           浏览树再完整也没人看（车机自带的 DiLink 面板不走这条，靠上面的 service action 发现）。
 
-          上面那条 `tools:ignore` 的理由：lint 的 `MissingIntentFilterForMediaSearch` 要求
-          同时声明 `android.media.action.MEDIA_PLAY_FROM_SEARCH`（车机语音搜索「放周杰伦」的入口）。
-          本应用的浏览树**只做歌单层级，不含搜索**（口径见《权限与更新》「已知限制」），
-          所以刻意不声明该 action —— 显式忽略，而不是声明了却什么都不做
-          （那会让语音搜索落到一个空实现上，比不支持更糟）。
+          早先这里挂过 `tools:ignore="MissingIntentFilterForMediaSearch"`：当时浏览树只做歌单
+          层级、不含搜索，声明 `MEDIA_PLAY_FROM_SEARCH` 等于交一个空实现。2026-10-27 起
+          曲库搜索已具备（文本 / 全拼 / 首字母），该 action 已在 MainActivity 上真正声明并有实现，
+          这条 lint 不再需要忽略 —— 忽略反而会掩盖以后别处漏声明的情况。
         -->
         <meta-data
             android:name="com.google.android.gms.car.application"
@@ -91,6 +94,51 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!--
+              ②「我是音乐播放器」——车机把本应用列进「默认音乐」候选的依据（2026-10-27）。
+
+              比亚迪 DiLink（以及多数国产车机）判定「谁是音乐应用」没有统一标准，实测可查的
+              三条依据我们**全部**声明，命中哪条都能被列进去：
+                · `CATEGORY_APP_MUSIC`：桌面/启动器的「音乐」分类，部分车机直接读这个；
+                · `ACTION_VIEW` + `audio/*`：文件管理器里点一首歌的「用什么打开」，
+                  车机常把这份解析结果当成音乐应用清单；
+                · `MEDIA_PLAY_FROM_SEARCH`：系统语音「播放周杰伦」的入口（见下一条）。
+              声明了就必须真的能处理，否则点进来是空的 —— 处理逻辑在 `ui/ExternalMedia.kt`，
+              由 `MainScreen` 消费（曲库就绪后才动作，不抢冷启动）。
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.APP_MUSIC" />
+            </intent-filter>
+
+            <!--
+              `tools:ignore="AppLinkUrlError"`：lint 看到 `ACTION_VIEW` 就要求给一个
+              scheme + host（它以为这是 App Link 声明）。这里要的只是「文件管理器点开音频时
+              能选到本应用」，匹配靠 **mimeType**，URI 由系统用 content: / file: 传进来 ——
+              补一个假域名反而是错的（会把 http 链接也劫到本应用上）。
+            -->
+            <intent-filter tools:ignore="AppLinkUrlError">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="application/ogg" />
+                <data android:mimeType="application/x-flac" />
+            </intent-filter>
+
+            <!--
+              系统级语音点歌：`MEDIA_PLAY_FROM_SEARCH`。
+              以前刻意不声明（lint 的 `MissingIntentFilterForMediaSearch` 就指着这条），
+              理由是「浏览树不含搜索，声明了等于一个空实现」。现在曲库搜索已经具备
+              （`data/LibrarySearch.kt`：文本 / 全拼 / 首字母三路），这个入口终于有真东西可交：
+              小迪只要把查询词塞进 `SearchManager.QUERY`，我们就能把第一首命中的播起来。
+              ⚠️ 这条能否真的被小迪调用取决于车机是否把本应用设为「默认音乐」——
+              那一步在系统设置里，应用无法自己完成。
+            -->
+            <intent-filter>
+                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
 
             <!--
@@ -151,6 +199,20 @@
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
+
+        <!--
+          媒体按键接收器（2026-10-27）：方向盘 / 蓝牙耳机 / 车机方控按下播放键时，
+          系统会把 `MEDIA_BUTTON` 广播发给「当前媒体应用」。没有这个接收器时，
+          有些 ROM 干脆不把本应用算作媒体应用 —— 这也是「默认音乐」列表里看不到它的原因之一。
+          media3 的实现会自己找回已声明的 MediaSessionService 并把按键转成会话命令。
+        -->
+        <receiver
+            android:name="androidx.media3.session.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
 
         <!--
           悬浮歌词服务：承载桌面最上层那一行歌词。

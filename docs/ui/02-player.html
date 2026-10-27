@@ -37,6 +37,15 @@
 <div class="wrap">
 <section class="sec" id="sec-player">
   <div class="sec-hd"><h2>二、播放页</h2><span>PlayerScreen.kt · PlayerScreenParts.kt · LyricsPane.kt —— 歌词态 / 封面态 / 音量浮层 / 暂无歌词 / 纯文本 / 沉浸态（手机 + 车机）</span></div>
+  <div class="legend">
+    <b>左右滑动切歌（2026-10-27）</b>：中部内容区（歌词 / 唱片）<b>左滑 → 下一首、右滑 → 上一首</b>。
+    手指拖动时这一层跟着平移一小段（阻力 0.45、上限屏宽 1/6），松手没过阈值就弹回 —— 有这一步
+    用户才知道「这一划被认了」，否则歌变了、屏幕上什么都没发生。阈值取屏宽 12%，<b>或者</b>甩得够快
+    （900px/s）也算 —— 行车中手指划不长，只认位移会让人觉得「划了没反应」；两者方向冲突时<b>以位移为准</b>
+    （甩出去又拉回来，本意就是不切）。<br>
+    手势<b>只挂中部</b>，不挂整页：底部进度条本身就是横向拖动，挂整页必然抢手势；中部歌词区是纵向滚动，
+    与横向手势方向互斥，不会互相打岔。判据与参数集中在 <code>PlayerSwipe.kt</code>（纯函数，有单测）。
+  </div>
   <div class="board">
 <figure class="fig" id="scr-player-lyrics">
   <div class="cap"><b>⑫ 播放页 · 歌词态（默认）</b><em>PlayerScreen.kt · LyricsPane（showLyrics = true）</em></div>

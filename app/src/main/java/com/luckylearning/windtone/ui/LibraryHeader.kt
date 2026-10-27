@@ -1,5 +1,11 @@
 package com.luckylearning.windtone.ui
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.speech.RecognizerIntent
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,7 +46,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -133,6 +143,30 @@ internal fun LibraryHeader(
     var sortMenu by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
     var searchMode by remember { mutableStateOf(false) }
+
+    // ------------------------------------------------------ 搜索框语音听写（2026-10-27）
+    //
+    // 车机上打字成本高，竞品（汽水 / QQ 车机版）都有「说一句就出结果」。小迪语音直控
+    // 要官方合作，进不去（见 docs/竞品调研-车机音乐应用.md），这里做的是**可用的平替**：
+    // 点麦克风 → 系统语音识别 → 结果直接落进搜索框并起播。
+    // 本机没有识别服务时退回「聚焦输入框 + 弹键盘」，让用户用输入法自带的语音键 ——
+    // 车机上装的讯飞输入法本身就有语音，这条路走得通，总比按钮点了没反应强。
+    val voiceContext = LocalContext.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val searchFocus = remember { FocusRequester() }
+    val voicePrompt = stringResource(R.string.lib_search_hint)
+    val voiceFallback = stringResource(R.string.lib_voice_unavailable)
+    val voiceLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val text = result.data
+            ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            ?.firstOrNull()
+        if (!text.isNullOrBlank()) {
+            onQuery(text)
+            onSubmitSearch(text)
+        }
+    }
 
     Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -296,7 +330,42 @@ internal fun LibraryHeader(
                 shape = MaterialTheme.shapes.small,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { onSubmitSearch(library.query) }),
-                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                trailingIcon = {
+                    IconButton(onClick = {
+                        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                            putExtra(
+                                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+                            )
+                            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                            putExtra(RecognizerIntent.EXTRA_PROMPT, voicePrompt)
+                        }
+                        // 没有识别服务时 launch 会同步抛 ActivityNotFoundException
+                        // （不带 queries 声明的机型也可能解析不到），
+                        // 兜底是「弹键盘 + 一句提示」，不是静默无反应。
+                        val started = try {
+                            voiceLauncher.launch(intent)
+                            true
+                        } catch (_: ActivityNotFoundException) {
+                            false
+                        }
+                        if (!started) {
+                            searchFocus.requestFocus()
+                            keyboard?.show()
+                            Toast.makeText(voiceContext, voiceFallback, Toast.LENGTH_LONG).show()
+                        }
+                    }) {
+                        Icon(
+                            imageVector = AppIcons.Mic,
+                            contentDescription = stringResource(R.string.cd_voice_search),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp)
+                    .focusRequester(searchFocus),
             )
             if (library.query.isBlank() && library.searchHistory.isNotEmpty()) {
                 Row(

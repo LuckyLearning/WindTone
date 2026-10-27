@@ -67,6 +67,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.luckylearning.windtone.data.ScanScope
+import com.luckylearning.windtone.data.LibrarySearch
 import com.luckylearning.windtone.data.buildLibraryStats
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.state.GroupInfo
@@ -368,6 +369,39 @@ fun MainScreen(
     if (showReport) {
         // 进入报告页时按当前档位拉一次数据（切 7/30 天时由页面内部再拉）
         LaunchedEffect(Unit) { if (library.report == null) lib.loadReport() }
+    }
+
+    // ---------------------------------------------------------------- 外部播放入口
+    //
+    // 文件管理器点歌（ACTION_VIEW audio/*）与系统语音点歌（MEDIA_PLAY_FROM_SEARCH）。
+    // 与快捷方式同一套「先登记、等曲库就绪再执行」的理由，但这里**不禁**在最开始执行：
+    //  · 点歌（OpenUri）其实不依赖曲库 —— 不在库里就走临时曲，所以立刻可执行；
+    //  · 语音搜索必须在曲库装载完之后才有得搜，否则搜出来是空，用户以为没这首歌。
+    val externalRequest by ExternalMedia.pending.collectAsStateWithLifecycle()
+    LaunchedEffect(externalRequest, library.libraryLoaded, library.songs.size) {
+        val request = externalRequest ?: return@LaunchedEffect
+        when (request) {
+            is ExternalRequest.OpenUri -> {
+                ExternalMedia.consumePending()
+                // 曲库里已有同一首（同一个 uri）就用库里的那份 —— 它有封面缓存、
+                // 歌词、收藏状态；找不到才退化成临时曲。
+                val hit = library.songs.firstOrNull { it.uri.toString() == request.uri }
+                    ?: ExternalMedia.transientSong(context, request.uri)
+                playerVm.playQueue(listOf(hit), 0)
+            }
+
+            is ExternalRequest.SearchSong -> {
+                // 曲库还没装载完就等（结论没出来之前搜索必然为空）
+                if (!library.libraryLoaded) return@LaunchedEffect
+                ExternalMedia.consumePending()
+                val hits = LibrarySearch.search(library.songs, request.query)
+                if (hits.isEmpty()) {
+                    snackbarHostState.showSnackbar("没找到「${request.query}」，试试歌名或歌手")
+                } else {
+                    playerVm.playQueue(hits, 0)
+                }
+            }
+        }
     }
 
     BackHandler(enabled = player.playerExpanded) { playerVm.closePlayer() }

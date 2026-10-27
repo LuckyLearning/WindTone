@@ -98,6 +98,8 @@ internal object DiagnosticsReport {
         val performanceBlock: String = "",
         /** 播放质量段原文 */
         val playbackQualityBlock: String = "",
+        /** 「默认音乐候选资格」自检（2026-10-27），见 DefaultMusicProbe */
+        val defaultMusicBlock: String = "",
         val versionCode: Long = 0L,
     )
 
@@ -206,6 +208,7 @@ internal object DiagnosticsReport {
                 )
                 appendLine("跳过静音：${if (prefs.skipSilence) "开" else "关"}")
             }.trimEnd(),
+            defaultMusicBlock = DefaultMusicProbe.buildReport(context),
             versionCode = BuildConfig.VERSION_CODE.toLong(),
         )
     }
@@ -251,6 +254,12 @@ internal object DiagnosticsReport {
                 "使用情况访问：${yn(f.usageStatsOn)}",
         )
         sb.appendLine()
+
+        // 「默认音乐」列表里看不到本应用时，这一段能直接说明是没声明还是车机不认
+        if (f.defaultMusicBlock.isNotBlank()) {
+            sb.appendLine(f.defaultMusicBlock.trimEnd())
+            sb.appendLine()
+        }
 
         sb.appendLine("[播放]")
         sb.appendLine("曲目：${f.songTitle}${if (f.songArtist.isBlank()) "" else " - ${f.songArtist}"}")

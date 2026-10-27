@@ -99,6 +99,21 @@ object AppIcons {
         build("Tune", "M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z")
     }
 
+    /**
+     * 麦克风（搜索框语音听写入口）。
+     *
+     * ⚠️ 第二个子路径刻意写成 `Z M17 11`（大写 M 绝对移动）——Material 原写法是
+     * `zM17 11`（closepath 后接小写相对 moveto），比亚迪车机会把它画成残缺形状
+     * （与 2026-10-18 那批播放控制图标同一个坑，见文件顶部说明）。
+     */
+    val Mic: ImageVector by lazy {
+        build(
+            "Mic",
+            "M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z " +
+                "M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z",
+        )
+    }
+
     val Album: ImageVector by lazy {
         build(
             "Album",

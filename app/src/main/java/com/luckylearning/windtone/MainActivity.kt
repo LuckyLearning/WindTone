@@ -17,6 +17,7 @@ import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.data.ThemeMode
 import com.luckylearning.windtone.ui.AppShortcut
 import com.luckylearning.windtone.ui.BootDiagView
+import com.luckylearning.windtone.ui.ExternalMedia
 import com.luckylearning.windtone.ui.LibraryViewModel
 import com.luckylearning.windtone.ui.MainScreen
 import com.luckylearning.windtone.ui.PlayerViewModel
@@ -37,6 +38,10 @@ class MainActivity : ComponentActivity() {
         // 桌面快捷方式（批次 9.4）只把意图记下来，真正的执行在 MainScreen 里 ——
         // 曲库此时还没装载完，这里直接调 playQueue 只会拿到空列表。
         AppShortcut.put(AppShortcut.from(intent))
+
+        // 外部入口（2026-10-27）：文件管理器点歌（ACTION_VIEW audio/*）与系统语音点歌
+        // （MEDIA_PLAY_FROM_SEARCH）。同样只登记、不执行，理由同上。
+        ExternalMedia.put(ExternalMedia.from(intent))
 
         // 车载模式（设置 → 外观 → 车载模式）：
         //  · 仅 `persistent=true`（用户主动选择的车机安装）时主动请求横屏，
@@ -164,5 +169,6 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         AppShortcut.put(AppShortcut.from(intent))
+        ExternalMedia.put(ExternalMedia.from(intent))
     }
 }
