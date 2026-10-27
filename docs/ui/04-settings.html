@@ -37,6 +37,10 @@
 <div class="wrap">
 <section class="sec" id="sec-set">
   <div class="sec-hd"><h2>四、设置页</h2><span>SettingsScreen.kt —— 主页面只放二级分类入口卡（六类）+ 各分类子页（顺序与代码一致）</span></div>
+  <div class="legend">
+    <b>下钻 / 返回动效（v1.2.9）</b>：主页 → 分类 → 子项 之间统一横向滑动 —— <b>下钻</b>时新页从<b>右侧</b>推入、旧页向左退出 1/4 屏宽；<b>返回</b>时反向（新页从左侧推入、旧页向右退出）。时长取全站令牌 <code>--dur-2 .26s</code>、缓动 <code>--ease</code>；标题只淡入淡出（<code>--dur-1 .18s</code>），不跟着横向滑 —— 否则会从返回键上方穿过去，且标题长度随页变化，整栏会被撑得忽宽忽窄。方向由层级深度决定（<code>SettingsMotion.depth()</code>），不是「前进 / 后退」标志位。动效定义集中在 <code>SettingsMotion.kt</code>，禁止在各页手写 <code>tween</code> 魔法数。<br>
+    <b>滚动位置各页独立（v1.2.9 连带修正）</b>：转场期间新旧两页同时在 composition 里，若共用一份 <code>ScrollState</code>，正在退出的那页会被新页的滚动位置当场拖走。现在每个页面各持一份，返回时仍停在上次读到的位置。
+  </div>
   <div class="board">
 <figure class="fig" id="scr-settings-1">
   <div class="cap"><b>㉙ 设置页 · 主页面（二级分类）</b><em>SettingsScreen.kt · 分类入口卡：外观 / 播放 / 歌词 / 音乐库 / 关于与诊断 / 实验室（v1.1.80）</em></div>

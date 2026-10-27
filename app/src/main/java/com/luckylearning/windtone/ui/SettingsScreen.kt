@@ -10,6 +10,7 @@ import com.luckylearning.windtone.state.PlayerUiState
 import com.luckylearning.windtone.state.UpdateUiState
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -66,6 +67,7 @@ import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -341,17 +343,9 @@ fun SettingsScreen(
     val pagePositions = rememberSaveable(saver = PagePositionsSaver) {
         initialPagePositions().toMutableStateList()
     }
-    val pageIndex = page.ordinal
-    val pageScroll = remember(pageIndex) { ScrollState(pagePositions.getOrElse(pageIndex) { 0 }) }
-    DisposableEffect(pageIndex, pageScroll) {
-        // 切换页面时旧 state 已被 verticalScroll 卸下，不会再被测量 / 夹取，
-        // 此刻读到的一定是用户真正停下的位置。
-        onDispose {
-            // 兜底：恢复自更老的存档 / 未来再加页面时，表可能比枚举短，先补齐再写。
-            while (pagePositions.size <= pageIndex) pagePositions.add(0)
-            pagePositions[pageIndex] = pageScroll.value
-        }
-    }
+    // 滚动位置的挂载 / 存档在下方 AnimatedContent 的 content 里按页做（v1.2.9）：
+    // 加了滑动动效后，转场期间**新旧两页同时存在**，共用一份 ScrollState 会让旧的
+    // 那页被新的滚动位置当场拖动。各页各持一份，谁都不影响谁。
 
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize()) {
@@ -380,199 +374,244 @@ fun SettingsScreen(
                         tint = MaterialTheme.colorScheme.onBackground,
                     )
                 }
-                Text(
-                    page.title,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    // 车载：左下角常驻「播放页」按钮压在滚动区上（Box 覆盖层），
-                    // 这里给底部留出按钮高度 + 边距，最后一条设置不被盖住。
-                    .padding(bottom = if (player.carMode) 84.dp else 0.dp)
-                    .verticalScroll(pageScroll)
-                    // 车机横屏可用宽度约 1700dp，若内容铺满整行，开关会被推到离文字
-                    // 一两千像素远的地方，视线要在两端来回跳。这里限宽并水平居中；
-                    // 手机宽度本就小于该上限，约束不生效，行为完全不变。
-                    .widthIn(max = if (player.carMode) 1100.dp else 720.dp)
-                    .align(Alignment.CenterHorizontally)
-                    .padding(horizontal = if (player.carMode) 32.dp else 18.dp),
-            ) {
-                // ================================================== 主设置页（六张二级分类卡）
-                // v1.1.3 二次重构：主页**只放分类入口卡**，一张卡一个分类 ——
-                // 左侧语义图标（40dp 圆角 12 容器、secondaryContainer 底）+ 分类名
-                // + 一行摘要 + 右箭头。此前「外观 / 播放 / 歌词」三组平铺在主页，
-                // 悬浮歌词五个外观选项加入后「歌词」一组独占两屏，主页又长回去了；
-                // 现在三组各自下沉成子页，主页回到**一屏六张卡**、任何设置最多两层直达。
-                //
-                // 与子页里 ActionRow 的区别（效果图《子页入口行与分类卡的区别》）：
-                // ActionRow 是「某一类设置里的一条」，无图标；CategoryRow 是
-                // 「一整类设置的门面」，带图标 + 摘要 —— 两层信息密度不同，不会混淆。
-
-                // ================================================== 页面调度
-                // v1.1.6：六个子页的正文全部搬到 `SettingsPages.kt`（本文件一度 2165 行，
-                // 远超 §8.6 定的 600 行）。这里只剩编排 —— 一个页面一个调用。
-                // 页面自己的弹层与「哪个弹窗开着」的状态也一并搬过去了：
-                // 那些本来就是各页的私事，挂在顶层只是历史原因。
-                when (page) {
-                    SettingsPage.ROOT -> SettingsRootPage(
-                        player = player,
-                        minSongDurationSec = minSongDurationSec,
-                        pages = SettingsMenuOrder.pages(menuOrder),
-                        onNavigate = { page = it },
-                    )
-
-                    SettingsPage.APPEARANCE -> SettingsAppearancePage(
-                        player = player,
-                        themeMode = themeMode,
-                        onThemeMode = onThemeMode,
-                        dynamicTheme = dynamicTheme,
-                        onDynamicTheme = onDynamicTheme,
-                        onCarMode = onCarMode,
-                    )
-
-                    SettingsPage.PLAYBACK -> SettingsPlaybackPage(
-                        player = player,
-                        onSpeed = onSpeed,
-                        onPitch = onPitch,
-                        onSkipSilence = onSkipSilence,
-                        onGaplessPlayback = onGaplessPlayback,
-                        onAutoResume = onAutoResume,
-                        onAutoPlayOnBoot = onAutoPlayOnBoot,
-                    )
-
-                    SettingsPage.LYRICS -> SettingsLyricsPage(
-                        player = player,
-                        onLyricScale = onLyricScale,
-                        onLyricTapSeeks = onLyricTapSeeks,
-                        onPlayerA11yAction = onPlayerA11yAction,
-                        onOpenOverlay = { page = SettingsPage.OVERLAY },
-                    )
-
-                    SettingsPage.OVERLAY -> SettingsOverlayPage(
-                        player = player,
-                        canDrawOverlay = canDrawOverlay,
-                        overlayHealth = overlayHealth,
-                        onLyricOverlay = onLyricOverlay,
-                        onOverlayHandles = onLyricOverlayHandles,
-                        onOverlayHandle = onOverlayHandle,
-            onOverlayHandleOrder = onOverlayHandleOrder,
-                        onLyricOverlayLines = onLyricOverlayLines,
-                        onLyricOverlayFullHeight = onLyricOverlayFullHeight,
-                        onLyricOverlayFullWidthPercent = onLyricOverlayFullWidthPercent,
-                        onLyricOverlayFullOffsetPercent = onLyricOverlayFullOffsetPercent,
-                        onLyricOverlayShowTitle = onLyricOverlayShowTitle,
-                        onLyricOverlayTitlePercent = onLyricOverlayTitlePercent,
-                        onLyricOverlayTextSp = onLyricOverlayTextSp,
-                        onLyricOverlayAlign = onLyricOverlayAlign,
-                        onLyricOverlayPauseMode = onLyricOverlayPauseMode,
-                        onLyricOverlayWidthPercent = onLyricOverlayWidthPercent,
-                        onLyricOverlayBoxHeightPercent = onLyricOverlayBoxHeightPercent,
-                        onLyricOverlayFullHeightPercent = onLyricOverlayFullHeightPercent,
-                        onLyricOverlayXPercent = onLyricOverlayXPercent,
-                        onLyricOverlayYPercent = onLyricOverlayYPercent,
-                        onLyricOverlayFullYPercent = onLyricOverlayFullYPercent,
-                        onLyricOverlayBgColor = onLyricOverlayBgColor,
-                        onLyricOverlayBgAlphaPercent = onLyricOverlayBgAlphaPercent,
-                        onLyricOverlayCornerRadiusDp = onLyricOverlayCornerRadiusDp,
-                        onLyricOverlayBorderWidthDp = onLyricOverlayBorderWidthDp,
-                        onLyricOverlayBorderColor = onLyricOverlayBorderColor,
-                        onLyricOverlayLineSpacingDp = onLyricOverlayLineSpacingDp,
-                        onLyricOverlayCurrentColor = onLyricOverlayCurrentColor,
-                        onLyricOverlayDimPercent = onLyricOverlayDimPercent,
-                        onLyricOverlayStrokeWidthDp = onLyricOverlayStrokeWidthDp,
-                        onLyricOverlayStrokeColor = onLyricOverlayStrokeColor,
-                        onLyricOverlayFadeMs = onLyricOverlayFadeMs,
-                        onLyricOverlayTitleMode = onLyricOverlayTitleMode,
-                        onLyricOverlayTextColor = onLyricOverlayTextColor,
-                        onLyricOverlayHiddenApps = onLyricOverlayHiddenApps,
-                        onApplyOverlayPreset = onApplyOverlayPreset,
-                        onOverlayEditing = onOverlayEditing,
-                        onOverlayPreview = onOverlayPreview,
-                    )
-
-                    SettingsPage.LIBRARY -> SettingsLibraryPage(
-                        minSongDurationSec = minSongDurationSec,
-                        onMinSongDurationSec = onMinSongDurationSec,
-                        onRestoreExcluded = onRestoreExcluded,
-                        onOpenReport = onOpenReport,
-                        onOpenDuplicates = onOpenDuplicates,
-                        onOpenStats = onOpenStats,
-                                    library = library,
-                    )
-
-                    SettingsPage.ONLINE_HUB -> SettingsOnlinePage(
-                        onOpenPlaylists = { page = SettingsPage.ONLINE },
-                        onOpenReport = { showOnlineReport = true },
-                    )
-
-                    SettingsPage.MENU_ORDER -> SettingsMenuOrderPage(
-                        order = menuOrder,
-                        onChange = { next ->
-                            menuOrder = next
-                            menuStore.save(next)
-                        },
-                    )
-
-                    SettingsPage.ONLINE -> OnlinePlaylistsPage(onPlay = onPlayQueue)
-
-
-                    SettingsPage.DIAGNOSTICS -> SettingsDiagnosticsPage(
-                        player = player,
-                        library = library,
-                        maintenance = maintenance,
-                        crashLogCount = crashLogCount,
-                        crashLogText = crashLogText,
-                        onRefreshMaintenance = onRefreshMaintenance,
-                        onCleanupMissingSongs = onCleanupMissingSongs,
-                        onClearCoverCache = onClearCoverCache,
-                        onResetUserData = onResetUserData,
-                        onResetLibrary = onResetLibrary,
-                        onClearStats = onClearStats,
-                        onRestoreExcluded = onRestoreExcluded,
-                        onOpenReport = onOpenReport,
-                        onOpenDuplicates = onOpenDuplicates,
-                        onLoadCrashLog = onLoadCrashLog,
-                        onExportCrashLog = onExportCrashLog,
-                        onClearCrashLog = onClearCrashLog,
-                        onOverlayPreview = onOverlayPreview,
-                        onLyricOverlay = onLyricOverlay,
-                        onForegroundLogEnabled = onForegroundLogEnabled,
-                        onLyricOverlayHiddenApps = onLyricOverlayHiddenApps,
-                        onTestBootPlayback = onTestBootPlayback,
-                        onDebugUnlocked = onDebugUnlocked,
-                        update = update,
-                        autoCheckUpdate = autoCheckUpdate,
-                        onOpenUpdate = { page = SettingsPage.UPDATE },
-                    )
-
-                    // v1.1.80：实验室功能（在线播放 / 调整菜单顺序先收在这里）
-                    SettingsPage.LAB -> SettingsLabPage(
-                        onOpenOnline = { page = SettingsPage.ONLINE_HUB },
-                        onOpenMenuOrder = { page = SettingsPage.MENU_ORDER },
-                    )
-
-                    SettingsPage.UPDATE -> SettingsUpdatePage(
-                        update = update,
-                        downloadRoute = downloadRoute,
-                        autoCheckUpdate = autoCheckUpdate,
-                        onCheckUpdate = onCheckUpdate,
-                        onAutoCheckUpdate = onAutoCheckUpdate,
-                        onDownloadRoute = onDownloadRoute,
-                        onSwitchDownloadRoute = onSwitchDownloadRoute,
-                        onPingRoutes = onPingRoutes,
-                        onOpenReleasePage = onOpenReleasePage,
-                        onIgnoreUpdate = onIgnoreUpdate,
-                        onDownloadUpdate = onDownloadUpdate,
-                        onInstallUpdate = onInstallUpdate,
-                        onGrantInstallPermission = onGrantInstallPermission,
-                        onDismissUpdateDialog = onDismissUpdateDialog,
+                // 标题跟着页面走，但只淡入淡出 —— 见 SettingsMotion.titleFade() 的说明。
+                AnimatedContent(
+                    targetState = page,
+                    transitionSpec = { SettingsMotion.titleFade() },
+                    label = "settings-title",
+                ) { target ->
+                    Text(
+                        target.title,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
                     )
                 }
-                Spacer(Modifier.height(28.dp))
+            }
+
+            // ================================================== 页面调度 + 滑行动效（v1.2.9）
+            // 之前是 `when (page)` 直接换，一帧之内整屏替换；三级结构下根本看不出
+            // 是「钻进下一层」还是「还停在这一层」。现在统一成横向滑动，
+            // 方向由层级深度决定：往下钻 → 新页从右推入，返回 → 从左侧推回。
+            // 动效定义集中在 SettingsMotion，时长取全站令牌（--dur-2 = 260ms）。
+            //
+            // ⚠️ 滚动容器挪进了 content 里，不能再挂在外层：转场期间新旧两页同时composed，
+            // 共用一份 ScrollState 会让正在退出的那页被新页的滚动位置当场拖走。
+            AnimatedContent(
+                targetState = page,
+                modifier = Modifier
+                    .fillMaxSize()
+                    // 滑动中的页面会移出内容区，不裁剪就会盖到顶栏的标题与返回键上。
+                    .clipToBounds(),
+                // 车机上限宽后要水平居中（原来靠 ColumnScope.align，现在父级换成了
+                // AnimatedContent，align 不再可用，改由容器对齐统一处理）。
+                contentAlignment = Alignment.TopCenter,
+                transitionSpec = {
+                    SettingsMotion.slide(forward = targetState.depth() > initialState.depth())
+                },
+                label = "settings-page",
+            ) { target ->
+                val index = target.ordinal
+                val pageScroll = remember(target) {
+                    ScrollState(pagePositions.getOrElse(index) { 0 })
+                }
+                // 离开某页时把滚动位置存回表里；存的是 Int，与 ScrollState 的生死无关。
+                DisposableEffect(target, pageScroll) {
+                    onDispose {
+                        // 兜底：恢复自更老的存档 / 未来再加页面时，表可能比枚举短，先补齐再写。
+                        while (pagePositions.size <= index) pagePositions.add(0)
+                        pagePositions[index] = pageScroll.value
+                    }
+                }
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        // 车载：左下角常驻「播放页」按钮压在滚动区上（Box 覆盖层），
+                        // 这里给底部留出按钮高度 + 边距，最后一条设置不被盖住。
+                        .padding(bottom = if (player.carMode) 84.dp else 0.dp)
+                        .verticalScroll(pageScroll)
+                        // 车机横屏可用宽度约 1700dp，若内容铺满整行，开关会被推到离文字
+                        // 一两千像素远的地方，视线要在两端来回跳。这里限宽（居中由外层
+                        // AnimatedContent 的 contentAlignment 负责）；手机宽度本就小于
+                        // 该上限，约束不生效，行为完全不变。
+                        .widthIn(max = if (player.carMode) 1100.dp else 720.dp)
+                        .padding(horizontal = if (player.carMode) 32.dp else 18.dp),
+                ) {
+                    // ================================================== 主设置页（六张二级分类卡）
+                    // v1.1.3 二次重构：主页**只放分类入口卡**，一张卡一个分类 ——
+                    // 左侧语义图标（40dp 圆角 12 容器、secondaryContainer 底）+ 分类名
+                    // + 一行摘要 + 右箭头。此前「外观 / 播放 / 歌词」三组平铺在主页，
+                    // 悬浮歌词五个外观选项加入后「歌词」一组独占两屏，主页又长回去了；
+                    // 现在三组各自下沉成子页，主页回到**一屏六张卡**、任何设置最多两层直达。
+                    //
+                    // 与子页里 ActionRow 的区别（效果图《子页入口行与分类卡的区别》）：
+                    // ActionRow 是「某一类设置里的一条」，无图标；CategoryRow 是
+                    // 「一整类设置的门面」，带图标 + 摘要 —— 两层信息密度不同，不会混淆。
+
+                    // ================================================== 页面调度
+                    // v1.1.6：六个子页的正文全部搬到 `SettingsPages.kt`（本文件一度 2165 行，
+                    // 远超 §8.6 定的 600 行）。这里只剩编排 —— 一个页面一个调用。
+                    // 页面自己的弹层与「哪个弹窗开着」的状态也一并搬过去了：
+                    // 那些本来就是各页的私事，挂在顶层只是历史原因。
+                    // ⚠️ 必须渲染 target 而不是 page：转场期间两页同时在 composition 里，
+                    // 都用 page 的话正在退出的那页会当场变成新页内容，滑动等于空转。
+                    // 分支里的 `page = …` 是导航回调，写的仍是外层状态，不受影响。
+                    when (target) {
+                        SettingsPage.ROOT -> SettingsRootPage(
+                            player = player,
+                            minSongDurationSec = minSongDurationSec,
+                            pages = SettingsMenuOrder.pages(menuOrder),
+                            onNavigate = { page = it },
+                        )
+
+                        SettingsPage.APPEARANCE -> SettingsAppearancePage(
+                            player = player,
+                            themeMode = themeMode,
+                            onThemeMode = onThemeMode,
+                            dynamicTheme = dynamicTheme,
+                            onDynamicTheme = onDynamicTheme,
+                            onCarMode = onCarMode,
+                        )
+
+                        SettingsPage.PLAYBACK -> SettingsPlaybackPage(
+                            player = player,
+                            onSpeed = onSpeed,
+                            onPitch = onPitch,
+                            onSkipSilence = onSkipSilence,
+                            onGaplessPlayback = onGaplessPlayback,
+                            onAutoResume = onAutoResume,
+                            onAutoPlayOnBoot = onAutoPlayOnBoot,
+                        )
+
+                        SettingsPage.LYRICS -> SettingsLyricsPage(
+                            player = player,
+                            onLyricScale = onLyricScale,
+                            onLyricTapSeeks = onLyricTapSeeks,
+                            onPlayerA11yAction = onPlayerA11yAction,
+                            onOpenOverlay = { page = SettingsPage.OVERLAY },
+                        )
+
+                        SettingsPage.OVERLAY -> SettingsOverlayPage(
+                            player = player,
+                            canDrawOverlay = canDrawOverlay,
+                            overlayHealth = overlayHealth,
+                            onLyricOverlay = onLyricOverlay,
+                            onOverlayHandles = onLyricOverlayHandles,
+                            onOverlayHandle = onOverlayHandle,
+                onOverlayHandleOrder = onOverlayHandleOrder,
+                            onLyricOverlayLines = onLyricOverlayLines,
+                            onLyricOverlayFullHeight = onLyricOverlayFullHeight,
+                            onLyricOverlayFullWidthPercent = onLyricOverlayFullWidthPercent,
+                            onLyricOverlayFullOffsetPercent = onLyricOverlayFullOffsetPercent,
+                            onLyricOverlayShowTitle = onLyricOverlayShowTitle,
+                            onLyricOverlayTitlePercent = onLyricOverlayTitlePercent,
+                            onLyricOverlayTextSp = onLyricOverlayTextSp,
+                            onLyricOverlayAlign = onLyricOverlayAlign,
+                            onLyricOverlayPauseMode = onLyricOverlayPauseMode,
+                            onLyricOverlayWidthPercent = onLyricOverlayWidthPercent,
+                            onLyricOverlayBoxHeightPercent = onLyricOverlayBoxHeightPercent,
+                            onLyricOverlayFullHeightPercent = onLyricOverlayFullHeightPercent,
+                            onLyricOverlayXPercent = onLyricOverlayXPercent,
+                            onLyricOverlayYPercent = onLyricOverlayYPercent,
+                            onLyricOverlayFullYPercent = onLyricOverlayFullYPercent,
+                            onLyricOverlayBgColor = onLyricOverlayBgColor,
+                            onLyricOverlayBgAlphaPercent = onLyricOverlayBgAlphaPercent,
+                            onLyricOverlayCornerRadiusDp = onLyricOverlayCornerRadiusDp,
+                            onLyricOverlayBorderWidthDp = onLyricOverlayBorderWidthDp,
+                            onLyricOverlayBorderColor = onLyricOverlayBorderColor,
+                            onLyricOverlayLineSpacingDp = onLyricOverlayLineSpacingDp,
+                            onLyricOverlayCurrentColor = onLyricOverlayCurrentColor,
+                            onLyricOverlayDimPercent = onLyricOverlayDimPercent,
+                            onLyricOverlayStrokeWidthDp = onLyricOverlayStrokeWidthDp,
+                            onLyricOverlayStrokeColor = onLyricOverlayStrokeColor,
+                            onLyricOverlayFadeMs = onLyricOverlayFadeMs,
+                            onLyricOverlayTitleMode = onLyricOverlayTitleMode,
+                            onLyricOverlayTextColor = onLyricOverlayTextColor,
+                            onLyricOverlayHiddenApps = onLyricOverlayHiddenApps,
+                            onApplyOverlayPreset = onApplyOverlayPreset,
+                            onOverlayEditing = onOverlayEditing,
+                            onOverlayPreview = onOverlayPreview,
+                        )
+
+                        SettingsPage.LIBRARY -> SettingsLibraryPage(
+                            minSongDurationSec = minSongDurationSec,
+                            onMinSongDurationSec = onMinSongDurationSec,
+                            onRestoreExcluded = onRestoreExcluded,
+                            onOpenReport = onOpenReport,
+                            onOpenDuplicates = onOpenDuplicates,
+                            onOpenStats = onOpenStats,
+                                        library = library,
+                        )
+
+                        SettingsPage.ONLINE_HUB -> SettingsOnlinePage(
+                            onOpenPlaylists = { page = SettingsPage.ONLINE },
+                            onOpenReport = { showOnlineReport = true },
+                        )
+
+                        SettingsPage.MENU_ORDER -> SettingsMenuOrderPage(
+                            order = menuOrder,
+                            onChange = { next ->
+                                menuOrder = next
+                                menuStore.save(next)
+                            },
+                        )
+
+                        SettingsPage.ONLINE -> OnlinePlaylistsPage(onPlay = onPlayQueue)
+
+
+                        SettingsPage.DIAGNOSTICS -> SettingsDiagnosticsPage(
+                            player = player,
+                            library = library,
+                            maintenance = maintenance,
+                            crashLogCount = crashLogCount,
+                            crashLogText = crashLogText,
+                            onRefreshMaintenance = onRefreshMaintenance,
+                            onCleanupMissingSongs = onCleanupMissingSongs,
+                            onClearCoverCache = onClearCoverCache,
+                            onResetUserData = onResetUserData,
+                            onResetLibrary = onResetLibrary,
+                            onClearStats = onClearStats,
+                            onRestoreExcluded = onRestoreExcluded,
+                            onOpenReport = onOpenReport,
+                            onOpenDuplicates = onOpenDuplicates,
+                            onLoadCrashLog = onLoadCrashLog,
+                            onExportCrashLog = onExportCrashLog,
+                            onClearCrashLog = onClearCrashLog,
+                            onOverlayPreview = onOverlayPreview,
+                            onLyricOverlay = onLyricOverlay,
+                            onForegroundLogEnabled = onForegroundLogEnabled,
+                            onLyricOverlayHiddenApps = onLyricOverlayHiddenApps,
+                            onTestBootPlayback = onTestBootPlayback,
+                            onDebugUnlocked = onDebugUnlocked,
+                            update = update,
+                            autoCheckUpdate = autoCheckUpdate,
+                            onOpenUpdate = { page = SettingsPage.UPDATE },
+                        )
+
+                        // v1.1.80：实验室功能（在线播放 / 调整菜单顺序先收在这里）
+                        SettingsPage.LAB -> SettingsLabPage(
+                            onOpenOnline = { page = SettingsPage.ONLINE_HUB },
+                            onOpenMenuOrder = { page = SettingsPage.MENU_ORDER },
+                        )
+
+                        SettingsPage.UPDATE -> SettingsUpdatePage(
+                            update = update,
+                            downloadRoute = downloadRoute,
+                            autoCheckUpdate = autoCheckUpdate,
+                            onCheckUpdate = onCheckUpdate,
+                            onAutoCheckUpdate = onAutoCheckUpdate,
+                            onDownloadRoute = onDownloadRoute,
+                            onSwitchDownloadRoute = onSwitchDownloadRoute,
+                            onPingRoutes = onPingRoutes,
+                            onOpenReleasePage = onOpenReleasePage,
+                            onIgnoreUpdate = onIgnoreUpdate,
+                            onDownloadUpdate = onDownloadUpdate,
+                            onInstallUpdate = onInstallUpdate,
+                            onGrantInstallPermission = onGrantInstallPermission,
+                            onDismissUpdateDialog = onDismissUpdateDialog,
+                        )
+                    }
+                    Spacer(Modifier.height(28.dp))
+                }
             }
         }
         if (showOnlineReport) {

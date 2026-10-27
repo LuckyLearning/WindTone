@@ -92,6 +92,7 @@
     <b>玻璃拟态</b>：迷你播放条 / 顶栏 / 侧边抽屉 / 底部弹窗 / 菜单 / 对话框 / 车机常驻条，统一半透明 + <code>backdrop-filter: blur</code> + 彩色描边 <code>--glass-bd</code>。深色 <code>rgba(28,26,37,.90)</code>、浅色 <code>rgba(255,255,255,.94)</code>（2026-10-22 用户反馈透明度太高压不住底下内容，整体上调）。。<br>
     <b>层级投影（靛蓝 tint）</b>：<code>--sh-1/2/3</code> 三级取代原中性灰阴影，悬浮即有品牌色漫反射。<br>
     <b>统一动效</b>：缓动 <code>--ease: cubic-bezier(.2,.8,.2,1)</code>；时长 <code>--dur-1 .18s / --dur-2 .26s / --dur-3 .4s</code>。歌词 120ms 淡入、封面呼吸/旋转、播放键按压回弹，全部 <code>prefers-reduced-motion</code> 兜底。<br>
+    <b>页面转场（v1.2.9 起）</b>：<b>层级之间的下钻 / 返回</b>统一横向滑动 —— 新页从前进方向推入（下钻从右、返回从左），旧页向反方向退出 1/4 屏宽并淡出（<code>--dur-2</code>）；容器顶栏标题只做 <code>--dur-1</code> 淡入淡出。方向由页面层级深度决定，不设"前进/后退"标志位。实现集中在 <code>ui/SettingsMotion.kt</code>，业务页不得自写时长。<br>
     <b>图标风格</b>：24dp 光学方格、2px 圆角描边（<code>stroke-linecap:round</code>）、<code>currentColor</code> 着色；同簇不混用实心/空心，视觉权重统一。生产 App 采用描边集（见下方 do / don't）；文档站 glyph 为 Material fill 集（保真原型，<code>.ic{fill:currentColor}</code>）。<br>
     <b>交互反馈五态</b>：默认 / 悬停（底色 +10% on-bg）/ 按下（缩放 .88~.97 + 底色 +16%）/ 焦点（3px 靛蓝环 <code>--ring</code>）/ 禁用（opacity .4）。列表行悬停微抬升 1px。<br>
     <b>无障碍</b>：≥44dp 触控、3px 焦点环、200% 缩放、正文/背景过 WCAG AA（既有令牌已满足）。<br>
