@@ -80,13 +80,13 @@ LibraryViewModel   PlayerViewModel    UpdateViewModel    SettingsViewModel
 > 换句话说：**当前形态就是唯一形态**。改 schema 时把 `version` +1、重导 schema 快照、同步文档即可，
 > 不必再考虑"老用户升级怎么办"。若日后想恢复兼容，Room 会优先走 `addMigrations(...)` 而非兜底，补上即可。
 
-### 四条铁律
+### 五条铁律
 
 1. **不要改包名、DB 名、Prefs 名、通知渠道 ID**——它们决定老用户能否覆盖升级、数据能否保留。改名 = 所有歌单/收藏/播放统计清零。
 2. **版本号只改 `app/build.gradle.kts` 顶部那两行**，别去改 `defaultConfig` 里的 `versionCode`/`versionName`。CI 的一致性校验按顶部变量做正则匹配，改错地方会导致 tag 校验失败。
 3. **`docs/` 已在 `.gitignore` 里**——本目录是本地开发资料，**不会推到 GitHub**。往这里写文档是安全的。
 4. **过期没用的东西一律删掉，不要"先留着"**（用户 2026-10-26 明确要求，见 0.1 节）。
-
+5. **GitHub 一律用本地 `.github-token`，禁止弹窗要账号**（用户 2026-10-28 明确要求，见 0.2 节）。拉取、推送、发版、查 Actions/Release、应用内更新链路的 API 核验都适用。
 ---
 
 ### 0.1 删除优于保留（铁律 4 的展开）
@@ -119,6 +119,34 @@ LibraryViewModel   PlayerViewModel    UpdateViewModel    SettingsViewModel
 4. **记账**：代码删除在版本历史写一句"删了什么"；文档删除/归档必须在 `docs/DELETIONS.md` 追加一行。
 
 ---
+
+
+### 0.2 GitHub 鉴权须知（AI / 自动化必读，2026-10-28）
+
+> **做错一次就会反复弹窗烦用户。** 本机已有 PAT，不要再走交互登录。
+
+#### 必须
+
+| 动作 | 正确做法 |
+| --- | --- |
+| `git fetch` / `git pull` / `git push` / 推 tag | **`bash scripts/push.sh`**（推送）；拉取同等用同一套 `GIT_ASKPASS` + `.github-token`。详见根目录 **`.github-token.example`** |
+| 查 Release / Actions / 删 tag / verify | `Authorization: Bearer $TOKEN`，TOKEN 只从 `.github-token` 用下面的 `grep` 抽出 |
+| 发版 | `bash scripts/release.sh …`（内部已走 `push.sh`） |
+
+#### 禁止
+
+- 弹 Vault / 账号确认卡 / 浏览器 `gh auth login` / `gh auth refresh` / 让用户一次次点授权
+- 把 token 写进 remote URL、`git config`、commit、聊天、日志摘要
+- 整文件 `cat .github-token` 当 token（文件可能含注释）——**必须** `grep -oE '(ghp_|github_pat_)[A-Za-z0-9_]+' .github-token | head -1`
+- 本机没有 `gh` CLI 时硬装并交互登录；用 `git` + REST 即可
+
+#### 怎么配（给人看的）
+
+1. 复制 `.github-token.example` → `.github-token`
+2. 只留**一行** PAT（`ghp_` 或 `github_pat_` 开头），无引号、无注释混在同行
+3. 权限见 example（Contents / Workflows / Actions 读写）
+
+`.github-token` 已在 `.gitignore`，**绝不要改名后提交**。
 
 ## 1. 产品概览
 
