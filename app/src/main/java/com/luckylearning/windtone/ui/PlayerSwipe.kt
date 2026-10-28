@@ -9,6 +9,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import com.luckylearning.windtone.ui.theme.AppVisual
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
@@ -94,42 +95,51 @@ internal fun Modifier.playerSwipeToSwitch(
     offset: Animatable<Float, AnimationVector1D>,
     scope: CoroutineScope,
     onSwipe: (SwipeSwitch) -> Unit,
-): Modifier = this.pointerInput(Unit) {
-    pointerInput(Unit) {
-        val tracker = VelocityTracker()
-        var accum = 0f
-        detectHorizontalDragGestures(
-            onDragStart = {
-                accum = 0f
-                tracker.resetTracking()
-            },
-            onHorizontalDrag = { change, dragAmount ->
-                accum += dragAmount
-                tracker.addPosition(change.uptimeMillis, change.position)
-                // 手势已被识别为横向：这里 consume 掉，歌词区的纵向滚动就不会
-                // 在后续事件里再抢一次（两者本来方向互斥，消费只是省掉竞争）。
-                change.consume()
-                scope.launch { offset.snapTo(PlayerSwipe.resisted(accum, size.width.toFloat())) }
-            },
-            onDragEnd = {
-                val vx = tracker.calculateVelocity().x
-                val dir = PlayerSwipe.resolve(accum, size.width.toFloat(), vx)
-                if (dir != SwipeSwitch.NONE) onSwipe(dir)
-                scope.launch {
-                    offset.animateTo(
-                        0f,
-                        tween(PlayerSwipe.SettleMs, easing = AppVisual.Motion.Ease),
-                    )
-                }
-            },
-            onDragCancel = {
-                scope.launch {
-                    offset.animateTo(
-                        0f,
-                        tween(PlayerSwipe.SettleMs, easing = AppVisual.Motion.Ease),
-                    )
-                }
-            },
-        )
-    }
+): Modifier = pointerInput(Unit) {
+    // ⚠️ 这里**只能有一层** `pointerInput`。
+    // v1.2.10 曾写成 `pointerInput(Unit) { pointerInput(Unit) { ... } }`：外层 block 里
+    // 那次 `pointerInput` 只是又构造了一个 Modifier（扩展函数接收者仍是本函数的 `this`），
+    // 返回值没人接，等于**手势检测器从未挂到任何节点上** —— 滑动完全无反应，而编译、
+    // 单测、lint、打包全都不会报（判据纯函数的 8 例单测照样全绿）。
+    // 回归锁：`PlayerSwipeGestureTest`（真滑一次，断言回调收到了方向）。
+    val tracker = VelocityTracker()
+    var accum = 0f
+    detectHorizontalDragGestures(
+        onDragStart = {
+            accum = 0f
+            tracker.resetTracking()
+        },
+        onHorizontalDrag = { change, dragAmount ->
+            accum += dragAmount
+            tracker.addPosition(change.uptimeMillis, change.position)
+            // 手势已被识别为横向：这里 consume 掉，歌词区的纵向滚动就不会
+            // 在后续事件里再抢一次（两者本来方向互斥，消费只是省掉竞争）。
+            change.consume()
+            // UNDISPATCHED：跟手位移必须**当场**写进 Animatable。
+            // 普通 launch 会先入队再派发，120Hz 拖动时几十个协程排队，
+            // 屏幕上就会出现「手指已经走了、内容还在追」的滞后。
+            scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                offset.snapTo(PlayerSwipe.resisted(accum, size.width.toFloat()))
+            }
+        },
+        onDragEnd = {
+            val vx = tracker.calculateVelocity().x
+            val dir = PlayerSwipe.resolve(accum, size.width.toFloat(), vx)
+            if (dir != SwipeSwitch.NONE) onSwipe(dir)
+            scope.launch {
+                offset.animateTo(
+                    0f,
+                    tween(PlayerSwipe.SettleMs, easing = AppVisual.Motion.Ease),
+                )
+            }
+        },
+        onDragCancel = {
+            scope.launch {
+                offset.animateTo(
+                    0f,
+                    tween(PlayerSwipe.SettleMs, easing = AppVisual.Motion.Ease),
+                )
+            }
+        },
+    )
 }

@@ -1928,6 +1928,43 @@ launcher 应用列表 + 搜索 + 图标 + 手动贴包名，`Drawable→Bitmap` 
 
 ---
 
+### 11.17 给 Compose 挂手势：装饰器里不能再套 Modifier（2026-10-28，v1.2.10 的教训）
+
+**症状**：手势类功能上线后**完全没反应**，而编译、全量单测、lint、打包**全部通过**。
+
+**根因**：`Modifier` 扩展函数里误写了两层 `pointerInput`。外层是 `Modifier` 的扩展函数，`this` 始终是那个 Modifier，
+于是里层 `pointerInput(Unit) { … }` 被解析成 `this.pointerInput(…)` —— 只是**又构造了一个 Modifier 当表达式丢弃**，
+没有任何节点承载它，手势检测器一次都没被执行过：
+
+```kotlin
+// ✗ 里层构造即丢弃：手势永远不会装上
+internal fun Modifier.bad(): Modifier = this.pointerInput(Unit) {
+    pointerInput(Unit) { detectHorizontalDragGestures(onHorizontalDrag = { _, _ -> }) }
+}
+
+// ✓ 只留一层，手势检测直接写在 block 里
+internal fun Modifier.good(): Modifier = pointerInput(Unit) {
+    detectHorizontalDragGestures(onHorizontalDrag = { _, _ -> })
+}
+```
+
+编译器不报错的原因：`pointerInput` 的 block 签名是 `suspend PointerInputScope.() -> Unit`，返回 `Unit`，
+"构造了一个没用上的 Modifier" 属于合法表达式，不会触发未使用返回值告警。
+
+**判据（写任何手势装饰器前先自查）**：`Modifier.xxx(): Modifier = pointerInput(...) { … }` 的 block 里
+**只放手势检测调用**（`detectTapGestures` / `detectDragGestures` / `awaitEachGesture` 等）；
+出现 `pointerInput` / `graphicsLayer` / `clickable` 这类**链式 Modifier 调用**就是把装饰器写错了 —— 它们构造即丢弃。
+
+**为什么纯函数单测抓不到**：`PlayerSwipe.resolve()` / `resisted()` 的 8 例全绿，因为它们测的是**判据**；
+"手势有没有装上"是完全独立的另一层。要抓只能**真滑一次**：见 `PlayerSwipeGestureTest`
+（Robolectric + `performTouchInput { swipeLeft() }`，父级挂手势、子级是 `verticalScroll` 的歌词列，
+断言回调收到了方向）。**新增任何手势，必须配一条这种"滑一次"的测试**，否则这类故障只能等用户在真机上发现。
+
+> 顺带确认的一条事实：父级 `detectHorizontalDragGestures` + 子级 `verticalScroll` 可以共存 ——
+> 纵向滚动容器只消费竖直方向，横向手势会正常上浮给父级（`PlayerSwipeGestureTest` 钉住了这一点）。
+
+---
+
 ## 12. 已知限制与技术债
 
 | 项 | 现状 | 影响 / 建议 |
