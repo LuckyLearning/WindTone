@@ -8,7 +8,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -51,7 +51,6 @@ import androidx.compose.ui.unit.sp
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.ui.theme.AppVisual
 import com.luckylearning.windtone.ui.theme.windShadow
-import kotlin.math.abs
 
 /**
  * 播放页的自绘零件（PlayerScreen.kt 的拆出文件，2026-10-21）。
@@ -197,18 +196,23 @@ internal fun TimeLabel(
 // ================================================================ 封面面板
 
 /**
- * 封面面板：双击播放暂停、左右滑切歌、上下滑调音量。
+ * 封面面板：双击播放暂停、上下滑调音量；**左右滑切歌不在这里做**。
  *
- * 三个手势共用一个 drag 检测器，按首次位移的主轴方向锁定，
- * 避免「斜着滑」时同时触发切歌与音量。
+ * 2026-10-28 统一手势：横向切歌上移到 `PlayerScreen` 中部那一层（`PlayerSwipe`），
+ * 封面态与歌词态从此共用同一套判据（位移 ≥ 屏宽 12% 或甩速 ≥ 900px/s）与同一种跟手位移。
+ * 这里只保留**纵向**音量手势 —— `detectVerticalDragGestures` 只在判定为纵向后才消费事件，
+ * 横向的按下 / 移动会原样上浮给父级，所以「封面能调音量」与「封面能滑歌」不再互相抢。
+ *
+ * 改之前是什么样：一个 `detectDragGestures` 自己按主轴分横 / 纵，横向用固定 **90px** 阈值判切歌。
+ * 三个问题：①判据两处（90px vs 12% 屏宽）—— 同一动作在歌词态和封面态灵敏度不同；
+ * ②它 `consume()` 了所有拖动，父级那个统一手势永远收不到，封面态因此**没有跟手位移**；
+ * ③90px 在 3x 屏上是 30dp、在车机 1707dp 屏上是极短一划，跨设备行为不一致。
  */
 @Composable
 internal fun CoverPane(
     song: Song?,
     isPlaying: Boolean,
     onToggle: () -> Unit,
-    onNext: () -> Unit,
-    onPrevious: () -> Unit,
     onVolumeDelta: (Float) -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -229,34 +233,13 @@ internal fun CoverPane(
         modifier = Modifier
             .fillMaxSize()
             .pointerInput(Unit) {
-                var accumX = 0f
-                var accumY = 0f
-                var axis = 0 // 0 未定 / 1 横向 / 2 纵向
-                detectDragGestures(
-                    onDragStart = {
-                        accumX = 0f
-                        accumY = 0f
-                        axis = 0
-                    },
-                    onDragEnd = {
-                        if (axis == 1) {
-                            if (accumX < -90f) onNext() else if (accumX > 90f) onPrevious()
-                        }
-                    },
-                    onDrag = { change, drag ->
-                        accumX += drag.x
-                        accumY += drag.y
-                        if (axis == 0 && (abs(accumX) > 14f || abs(accumY) > 14f)) {
-                            axis = if (abs(accumX) > abs(accumY)) 1 else 2
-                        }
-                        if (axis == 2) {
-                            // 向上滑增大音量：每 42px 一档
-                            onVolumeDelta(-drag.y / 42f)
-                            accumY = 0f
-                        }
-                        change.consume()
-                    },
-                )
+                // 只认纵向：向上滑增大音量，每 42px 一档。
+                // `detectVerticalDragGestures` 在判定为纵向之前不消费事件，
+                // 横向滑动因此会继续上浮到父级（PlayerScreen 的 playerSwipeToSwitch）。
+                detectVerticalDragGestures { change, dragAmount ->
+                    onVolumeDelta(-dragAmount / 42f)
+                    change.consume()
+                }
             }
             .pointerInput(Unit) {
                 detectTapGestures(onDoubleTap = { onToggle() })

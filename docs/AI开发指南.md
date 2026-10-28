@@ -1963,6 +1963,12 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 > 顺带确认的一条事实：父级 `detectHorizontalDragGestures` + 子级 `verticalScroll` 可以共存 ——
 > 纵向滚动容器只消费竖直方向，横向手势会正常上浮给父级（`PlayerSwipeGestureTest` 钉住了这一点）。
 
+**反向推论（2026-10-28 补）**：子级要保留自己的**纵向**手势时，只能用 `detectVerticalDragGestures`。
+`detectDragGestures` 是在 `onDrag` 里自己 `consume()` 的，横向会被一起吃掉 —— 手机封面态就是这样
+长期收不到父级的横滑，于是它自己另立了一套固定 90px 阈值、且没有跟手位移（同一动作在歌词态和封面态
+手感不一样）。**判据要唯一：子级只处理自己那一轴，另一轴原样上浮给父级。**
+接线用 `CoverCarSwipeTest` 钉住（封面 / 车机唱片区横滑要能上浮到父级，纵滑只能调音量）。
+
 ---
 
 ## 12. 已知限制与技术债

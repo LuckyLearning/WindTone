@@ -19,7 +19,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -471,13 +470,17 @@ fun PlayerScreen(
 
             // --------------------------------------------- 中部：封面 / 歌词
             //
-            // 2026-10-27：这一层同时是「左滑下一首 / 右滑上一首」的手势区。
+            // 2026-10-27：这一层是「左滑下一首 / 右滑上一首」的手势区。
             // **只挂中部、不挂整页**：底部进度条本身就是横向拖动，整页挂必然抢手势；
             // 中部歌词区是纵向滚动，与横向手势方向互斥，不会互相打岔。
+            //
+            // 2026-10-28 统一：跟手位移不再加在**这一层**，而是加在各分支的**内容**上。
+            // 因为车机分支里同一层还装着左侧那列功能键（收藏 / 队列 / 设置），
+            // 挂整层会让三颗键跟着横滑 —— 那是导航控件，不该跟着歌走。
+            // 手机上三个分支的唯一内容就是这个 slide，效果与挂整层等价。
             Box(
                 Modifier
                     .weight(1f)
-                    .graphicsLayer { translationX = swipeOffset.value }
                     .playerSwipeToSwitch(
                         offset = swipeOffset,
                         scope = swipeScope,
@@ -491,6 +494,8 @@ fun PlayerScreen(
                         },
                     )
             ) {
+                // 跟手位移（只动内容，不动容器）
+                val slide = Modifier.graphicsLayer { translationX = swipeOffset.value }
                 // 长按哪一行就在哪一刻对表：位置在这里取一次快照
                 val onLineLongPress: (Int, Long) -> Unit = { lineIndex, lineMs ->
                     keepAwake()
@@ -548,7 +553,8 @@ fun PlayerScreen(
                             modifier = Modifier
                                 .weight(1.08f)
                                 .fillMaxHeight()
-                                .padding(end = 24.dp),
+                                .padding(end = 24.dp)
+                                .then(slide),
                         )
                         CarVinylPane(
                             song = song,
@@ -558,7 +564,8 @@ fun PlayerScreen(
                                 .weight(0.92f)
                                 .fillMaxHeight()
                                 // 右侧留一点边，唱片不要贴到屏幕右缘（参考车机版布局是居中偏右）
-                                .padding(end = 16.dp),
+                                .padding(end = 16.dp)
+                                .then(slide),
                         )
                     }
                 } else if (showLyrics) {
@@ -567,17 +574,21 @@ fun PlayerScreen(
                         progressState = progressState,
                         onSeekTo = onSeekTo,
                         onLineLongPress = onLineLongPress,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .then(slide),
                     )
                 } else {
-                    CoverPane(
-                        song = song,
-                        isPlaying = state.isPlaying,
-                        onToggle = onToggle,
-                        onNext = onNext,
-                        onPrevious = onPrevious,
-                        onVolumeDelta = onVolumeDelta,
-                    )
+                    // 封面态：横向切歌由父级那层统一手势负责（跟手 + 双判据），
+                    // 这里只留纵向音量与双击播放/暂停 —— 见 CoverPane 的注释。
+                    Box(Modifier.fillMaxSize().then(slide)) {
+                        CoverPane(
+                            song = song,
+                            isPlaying = state.isPlaying,
+                            onToggle = onToggle,
+                            onVolumeDelta = onVolumeDelta,
+                        )
+                    }
                 }
 
                 // 播放模式切换提示：浮在封面 / 歌词之上，不参与布局，所以不会顶动其他元素
@@ -1203,9 +1214,14 @@ private fun CarSideAction(
  * 旋转用 [Animatable] 而不是 `rememberInfiniteTransition`：后者在暂停时会把角度
  * 跳回起点，观感像"唱片被拨回原位"。这里暂停即停在当前角度，继续播接着转。
  * 一圈 24 秒，接近真实 33 转唱片的观感，也不会让人眼晕。
+ *
+ * 2026-10-28：这里**没有**左右滑切歌 —— 横向切歌由 `PlayerScreen` 中部那层统一手势负责
+ * （跟手 + 双判据，与手机封面 / 歌词态完全一致）。本组件只挂了双击播放/暂停，
+ * `detectTapGestures` 只消费按下与抬起、不消费移动，横向拖动会正常上浮给父级。
+ * 可见性由 `private` 放到 `internal` 是为了让 `CarPaneSwipeTest` 能直接验这一条。
  */
 @Composable
-private fun CarVinylPane(
+internal fun CarVinylPane(
     song: Song?,
     isPlaying: Boolean,
     onToggle: () -> Unit,
