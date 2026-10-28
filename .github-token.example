@@ -3,6 +3,18 @@
 # ⚠️ .github-token 已在 .gitignore 中，绝不会被提交。请勿把它改名为别的文件。
 #
 # ------------------------------------------------------------------
+# 0) AI / 自动化须知（2026-10-28，务必遵守）
+# ------------------------------------------------------------------
+# · 本仓库一切 git fetch / pull / push、打 tag、查 Actions/Release、发版核验，
+#   一律用本文件旁的 .github-token，走非交互方式。
+# · 禁止：弹窗确认账号、Vault、浏览器登录、gh auth login / refresh。
+# · 禁止：把 token 写进 remote URL、git config、commit、聊天或日志。
+# · 取 token 正确姿势（忽略注释行）：
+#       TOKEN="$(grep -oE '(ghp_|github_pat_)[A-Za-z0-9_]+' .github-token | head -1)"
+# · 推送请用：bash scripts/push.sh
+# · 更完整的规矩见本地 docs/AI开发指南.md §0.2（docs 目录 gitignore，仅本机）。
+#
+# ------------------------------------------------------------------
 # 1) 生成 Token
 # ------------------------------------------------------------------
 # 推荐 Fine-grained token（GitHub → Settings → Developer settings →
@@ -20,16 +32,17 @@
 #
 #     （经典 token 则以 ghp_ 开头）
 #
-# 3) 推送
+# 3) 推送 / 拉取
 # ------------------------------------------------------------------
-# 方式 A：命令行临时使用（每次推送都要手动输入或粘贴）
+# 方式 A：命令行临时使用（每次都要手动输入或粘贴，不推荐给 AI）
 #     git push https://<token>@github.com/LuckyLearning/WindTone.git main
 #
-# 方式 B：让 git 记住凭据（推荐，长期使用）
+# 方式 B：让 git 记住凭据（人用可以；AI 不要弹窗去配）
 #     git config --global credential.helper manager
 #     第一次 push 时用户名填 GitHub 用户名，密码处粘贴 Token。
 #
-# 方式 C：用脚本读取本文件（见 scripts/push.sh）
+# 方式 C：用脚本读取本文件（推荐，AI / 发版必须走这条）
 #     bash scripts/push.sh
 #     原理：把 Token 通过 GIT_ASKPASS 临时交给 git，不会写进 remote URL，
 #           也不会出现在 git 的配置文件里。
+#     fetch/pull 同样用 GIT_ASKPASS + 上面的 TOKEN 提取方式，不要交互登录。
