@@ -91,8 +91,19 @@ object PinyinIndex {
         return py
     }
 
-    private fun convert(text: String): Pair<String, String> {
-        val full = StringBuilder(text.length * 4)
+    /**
+     * 丢弃派生缓存（`onTrimMemory` 的完整回收档调用，v1.2.12）。
+     *
+     * 只清 [charCache] / [initialCache] 这两张查表 —— 它们是「单字 → 拼音」的中间结果，
+     * 全部命中最多几千条，重建成本几毫秒。**刻意不动** [index] / [textByKey]：
+     * 那两份是搜索与字母索引的依赖，清掉会让搜索退化，而它们本身也不可回收。
+     */
+    fun dropCaches() {
+        charCache.clear()
+        initialCache.clear()
+    }
+
+    private fun convert(text: String): Pair<String, String> {        val full = StringBuilder(text.length * 4)
         val ini = StringBuilder(text.length)
         for (c in text) {
             if (c.isWhitespace()) {

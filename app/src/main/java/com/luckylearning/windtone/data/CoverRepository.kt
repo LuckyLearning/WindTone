@@ -6,9 +6,17 @@ import android.graphics.BitmapFactory
 import android.util.Log
 import android.util.LruCache
 import com.luckylearning.windtone.data.model.Song
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.max
+import kotlin.math.roundToInt
 
 /**
  * 内嵌封面（专辑图）加载与缓存。三级结构：
@@ -20,6 +28,22 @@ import java.io.File
  *
  * 磁盘缓存是**派生数据**：可随时整体删除，不影响任何用户数据。
  * 用 `cacheDir` 而不是 `filesDir`：系统在存储紧张时可以自行回收。
+ *
+ * ## 内存预算（2026-10-29 收紧，v1.2.12）
+ *
+ * 两级内存缓存都**按堆比例**取上限，不再有固定常量：
+ *  - 位图：`maxMemory/8`，夹 8~32MB（按 `byteCount` 计量，即真实像素内存）；
+ *  - 原始字节：`maxMemory/16`，夹 2~6MB（旧实现固定 16MB —— 在车机
+ *    192MB 堆上占 8%，而它只是通知栏封面与主题取色的中转，收益远不值这个价）。
+ *
+ * 另有两条配套纪律：
+ *  - **解码尺寸 = 显示尺寸**（见 [targetPx]）。旧实现乘了 2，等于按 4 倍面积解码，
+ *    还把「目标大于原图 → 不降采样 → 全尺寸解码」这条路径暴露出来（3000px 内嵌图
+ *    在播放页可解出 18MB）。
+ *  - **同一键并发只解一次**（[cover] 的 in-flight 表）。列表现项、迷你播放条、
+ *    播放页会同时请求同一首歌，旧实现会并发解 2~3 份，峰值瞬时翻倍。
+ *
+ * 系统内存紧张时由 [trim] 分级释放（`MusicApp.onTrimMemory` 调用）。
  */
 object CoverRepository {
 
@@ -30,6 +54,12 @@ object CoverRepository {
     private const val DISK_LIMIT_BYTES = 50L * 1024 * 1024
     private const val DISK_TRIM_RATIO = 0.8
 
+    /**
+     * 「大图」门槛：显示像素超过它才给 1.25 倍解码余量。
+     * 512px 之上只有播放页封面与车机唱片中心贴纸，列表缩略图远低于此。
+     */
+    private const val LARGE_COVER_PX = 512
+
     @Volatile
     private var appContext: Context? = null
 
@@ -38,9 +68,26 @@ object CoverRepository {
 
     private val empty = ByteArray(0)
 
-    private val cache = object : LruCache<String, ByteArray>(16 * 1024 * 1024) {
+    /** 原始封面字节。上限按堆比例，见类文档「内存预算」 */
+    private val cache = object : LruCache<String, ByteArray>(rawCacheSize()) {
         override fun sizeOf(key: String, value: ByteArray): Int = value.size.coerceAtLeast(1)
     }
+
+    /**
+     * 在途解码表：同一 `key` 并发只解一份。
+     *
+     * 触发场景很常见 —— 列表现项、底部迷你播放条、播放页副标题会同时请求同一首歌，
+     * 旧实现三方各解一次，峰值瞬时翻 3 倍。
+     */
+    private val inFlight = ConcurrentHashMap<String, Deferred<Bitmap?>>()
+
+    /**
+     * 单飞任务的作用域。
+     *
+     * **刻意不挂调用方的 Job**：第一个请求方离开（滚出屏幕）时只该取消它自己的等待，
+     * 不该把别的等待者一起拖死。
+     */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
      * 解码后的位图缓存。
@@ -50,10 +97,30 @@ object CoverRepository {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount.coerceAtLeast(1)
     }
 
-    private fun bitmapCacheSize(): Int {
-        val max = Runtime.getRuntime().maxMemory() / 8
-        return max.coerceIn(8L * 1024 * 1024, 32L * 1024 * 1024).toInt()
-    }
+    private fun bitmapCacheSize(): Int = bitmapCacheSizeFor(Runtime.getRuntime().maxMemory())
+
+    /**
+     * 位图缓存上限：堆的 1/8，夹 8~32MB。
+     *
+     * 抽成「接收 heapMax 的纯函数」是为了能按不同设备直接断言 —— 纯 JVM 单测里
+     * `android.util.LruCache` 是 stub（`testOptions.unitTests.isReturnDefaultValues = true`），
+     * 读 `maxSize()` 只会得到 0，测不出任何东西。
+     */
+    internal fun bitmapCacheSizeFor(heapMax: Long): Int =
+        (heapMax / 8).coerceIn(8L * 1024 * 1024, 32L * 1024 * 1024).toInt()
+
+    /**
+     * 原始字节缓存上限：堆的 1/16，夹 2~6MB。
+     *
+     * 旧实现是固定 16MB，与位图缓存内容重复（同一首歌既存 JPEG 字节又存解码结果），
+     * 而在车机 192MB 的堆上这一项就吃掉 8%。它的唯一用途是通知栏封面和主题取色，
+     * 两者都能从磁盘缓存重新解码（几十毫秒），不值得为它留 16MB。
+     */
+    private fun rawCacheSize(): Int = rawCacheSizeFor(Runtime.getRuntime().maxMemory())
+
+    /** 见 [bitmapCacheSizeFor] 的说明；夹 2~6MB */
+    internal fun rawCacheSizeFor(heapMax: Long): Int =
+        (heapMax / 16).coerceIn(2L * 1024 * 1024, 6L * 1024 * 1024).toInt()
 
     /** 由 [com.luckylearning.windtone.MusicApp] 在启动时注入；未注入时退化为纯内存缓存 */
     fun attach(context: Context) {
@@ -67,24 +134,44 @@ object CoverRepository {
 
     /**
      * 取「已按目标边长解码且带缓存」的封面位图。
-     * 键为 `stableKey@目标边长`，同一首歌在列表（48dp）与播放页（320dp）各缓存一份。
+     * 键为 `stableKey@目标边长`，同一首歌在列表与播放页各缓存一份。
+     *
+     * 并发语义：同一 `key` 的并发调用共享一次解码（[inFlight]），谁抢到谁去解，
+     * 其余人等结果。等待方被取消不会影响解码本身。
      */
     suspend fun cover(context: Context, song: Song, targetPx: Int): Bitmap? {
         if (targetPx <= 0) return null
         val key = "${song.stableKey}@$targetPx"
         bitmapCache.get(key)?.let { return it }
 
+        // 快速路径：已有同键任务在跑，直接等
+        inFlight[key]?.let { return runCatching { it.await() }.getOrNull() }
+
+        val fresh = scope.async(start = CoroutineStart.LAZY) { decodeInto(key, context, song, targetPx) }
+        // 完成后自摘表项；用 remove(key, fresh) 保证不会误删别人的任务
+        fresh.invokeOnCompletion { inFlight.remove(key, fresh) }
+
+        val existing = inFlight.putIfAbsent(key, fresh)
+        if (existing != null) {
+            // 抢输了：丢弃自己这个还没启动的任务，改等别人的结果
+            fresh.cancel()
+            return runCatching { existing.await() }.getOrNull()
+        }
+        fresh.start()
+        return runCatching { fresh.await() }.getOrNull()
+    }
+
+    /** [cover] 的实际加载：磁盘命中 → 原始字节 → 解码 → 写盘。只由单飞任务调用 */
+    private suspend fun decodeInto(key: String, context: Context, song: Song, targetPx: Int): Bitmap? {
         val file = diskFile(song, targetPx)
         if (file != null && file.exists()) {
-            val cached = withContext(Dispatchers.IO) {
-                runCatching { BitmapFactory.decodeFile(file.absolutePath) }.getOrNull()
-            }
+            val cached = runCatching { BitmapFactory.decodeFile(file.absolutePath) }.getOrNull()
             if (cached != null) {
                 bitmapCache.put(key, cached)
                 return cached
             }
             // 文件损坏：删掉，走后续流程重新生成
-            withContext(Dispatchers.IO) { runCatching { file.delete() } }
+            runCatching { file.delete() }
         }
 
         val raw = loadRaw(context, song) ?: return null
@@ -113,25 +200,78 @@ object CoverRepository {
         cache.put(song.stableKey, bytes)
     }
 
-    /** 等比缩放到目标边长，避免在列表里解码超大封面 */
+    /**
+     * 等比缩放到目标边长。
+     *
+     * **两段式**：先用 [sampleSizeFor] 让 `inSampleSize` 粗降到「长边 ≥ target」，
+     * 再用 [fitSize] 精确缩到 target。第二段不是优化而是必须 —— 只用 `inSampleSize`
+     * 时，目标值一旦大于原图就完全不降采样（旧实现会乘 2，更容易触发），
+     * 3000px 的内嵌封面会按全尺寸解出来，单张 18MB。
+     */
     fun decodeScaled(raw: ByteArray, targetPx: Int): Bitmap? {
+        if (targetPx <= 0) return null
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(raw, 0, raw.size, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
 
-        var sample = 1
-        var w = bounds.outWidth
-        var h = bounds.outHeight
-        while (w / 2 >= targetPx && h / 2 >= targetPx) {
-            sample *= 2
-            w /= 2
-            h /= 2
-        }
         val opts = BitmapFactory.Options().apply {
-            inSampleSize = sample
+            inSampleSize = sampleSizeFor(bounds.outWidth, bounds.outHeight, targetPx)
             inPreferredConfig = Bitmap.Config.RGB_565
         }
-        return runCatching { BitmapFactory.decodeByteArray(raw, 0, raw.size, opts) }.getOrNull()
+        val decoded = runCatching { BitmapFactory.decodeByteArray(raw, 0, raw.size, opts) }.getOrNull()
+            ?: return null
+
+        val (w, h) = fitSize(decoded.width, decoded.height, targetPx)
+        if (w == decoded.width && h == decoded.height) return decoded
+        val scaled = runCatching { Bitmap.createScaledBitmap(decoded, w, h, true) }.getOrNull()
+            ?: return decoded
+        // 像素已经搬到新位图，旧的大图立刻还给堆（`!==` 兜住「尺寸本就相同、返回自身」的情况）
+        if (scaled !== decoded) decoded.recycle()
+        return scaled
+    }
+
+    /**
+     * 显示像素 → 解码像素。
+     *
+     * **不再乘 2**：`roundToPx()` 返回的已经是物理像素，乘 2 等于按 4 倍面积解码 ——
+     * 1080p 手机上播放页封面（292dp ≈ 803px）会解成 1606px、5.2MB，列表缩略图
+     * （52dp ≈ 143px）解成 286px。改成 1:1 之后，同一份 32MB 位图预算能放
+     * 约 4 倍张数，长列表滚过 200 首才开始淘汰，这是「滚动掉帧」的主因之一。
+     *
+     * 只给大图（≥ [LARGE_COVER_PX]）留 1.25 倍余量：播放页 / 车机唱片在悬浮窗、
+     * 分屏、投屏时可能被放大显示，这点余量换「放大不变糊」，面积代价 1.56 倍。
+     */
+    fun targetPxFor(displayPx: Int): Int {
+        if (displayPx <= 0) return 0
+        val scale = if (displayPx >= LARGE_COVER_PX) 1.25f else 1f
+        return (displayPx * scale).roundToInt()
+    }
+
+    /**
+     * `inSampleSize` 取值：解出来的**长边**落在 `[target, 2×target)`。
+     *
+     * 与旧实现按「宽和高都 ≥ 2×target」判定的差别：极端比例（长方形专辑图、
+     * 扫描残图）在旧判定下永远不降采样，直接全尺寸解码。
+     */
+    internal fun sampleSizeFor(srcW: Int, srcH: Int, targetPx: Int): Int {
+        if (srcW <= 0 || srcH <= 0 || targetPx <= 0) return 1
+        var sample = 1
+        while (max(srcW, srcH) / (sample * 2) >= targetPx) sample *= 2
+        return sample
+    }
+
+    /**
+     * 精确目标尺寸：长边对齐 [targetPx]，短边等比（至少 1px）。
+     * 原图比目标还小时**不放大** —— 放大只会变糊，且白占内存。
+     */
+    internal fun fitSize(srcW: Int, srcH: Int, targetPx: Int): Pair<Int, Int> {
+        if (srcW <= 0 || srcH <= 0 || targetPx <= 0) return srcW to srcH
+        val longSide = max(srcW, srcH)
+        if (longSide <= targetPx) return srcW to srcH
+        val scale = targetPx.toFloat() / longSide
+        val w = (srcW * scale).roundToInt().coerceAtLeast(1)
+        val h = (srcH * scale).roundToInt().coerceAtLeast(1)
+        return w to h
     }
 
     /** 只清内存（进程级），磁盘缓存保留 */
@@ -139,6 +279,43 @@ object CoverRepository {
         cache.evictAll()
         bitmapCache.evictAll()
     }
+
+    /**
+     * 按内存压力分级释放**内存**缓存。磁盘缓存一律保留 —— 它就是「丢了内存还能快速回来」
+     * 的那条退路，在这里删掉等于把退路一起堵上。
+     *
+     * 调用方是 `MusicApp.onTrimMemory`；本类不直接实现 `ComponentCallbacks2`，
+     * 是为了让这份逻辑能在纯 JVM 单测里跑（不依赖 Activity 的常量语义）。
+     */
+    fun trim(level: CoverTrimLevel) {
+        bitmapCache.evictAll()
+        if (level == CoverTrimLevel.RUNNING_LOW) cache.evictAll()
+    }
+
+    /** 缓存画像（诊断包 `[内存]` 段与设置页展示用） */
+    data class Stats(
+        val bitmapBytes: Int,
+        val bitmapMax: Int,
+        val bitmapHits: Int,
+        val bitmapMisses: Int,
+        val rawBytes: Int,
+        val rawMax: Int,
+        val rawHits: Int,
+        val rawMisses: Int,
+        val diskBytes: Long,
+    )
+
+    fun stats(): Stats = Stats(
+        bitmapBytes = bitmapCache.size(),
+        bitmapMax = bitmapCache.maxSize(),
+        bitmapHits = bitmapCache.hitCount(),
+        bitmapMisses = bitmapCache.missCount(),
+        rawBytes = cache.size(),
+        rawMax = cache.maxSize(),
+        rawHits = cache.hitCount(),
+        rawMisses = cache.missCount(),
+        diskBytes = diskUsageBytes(),
+    )
 
     /** 连磁盘一起清（设置页「清空封面缓存」） */
     fun clearAll() {
@@ -198,4 +375,19 @@ object CoverRepository {
             if (runCatching { f.delete() }.getOrDefault(false)) total -= len
         }
     }
+}
+
+/**
+ * 内存压力等级。
+ *
+ * 刻意不复用 Android 的 `ComponentCallbacks2.TRIM_MEMORY_*` 常量：那些常量的数值
+ * **不随严重程度单调递增**（`RUNNING_CRITICAL = 15` 比 `UI_HIDDEN = 20` 更急），
+ * 直接用大小比较判定会写错。这里只留两档，映射在 `MusicApp.onTrimMemory` 里一次做完。
+ */
+enum class CoverTrimLevel {
+    /** 界面已不可见：位图可以全丢，回来时靠磁盘缓存重解 */
+    UI_HIDDEN,
+
+    /** 系统内存已经吃紧：连原始字节一起丢 */
+    RUNNING_LOW,
 }

@@ -315,7 +315,7 @@ data/                     ── 数据与 IO 层 ──
   LyricsLoader.kt         歌词装配：内嵌 → 旁挂文件 的优先级
   LyricsMatcher.kt        同名歌词文件匹配策略
   PinyinIndex.kt          拼音索引 + 首字母（带缓存）
-  CoverRepository.kt      封面三级缓存：内存位图 → 磁盘（cacheDir/covers，50MB LRU）→ 解码
+  CoverRepository.kt      封面三级缓存：内存位图（maxMemory/8）→ 磁盘（cacheDir/covers，50MB LRU）→ 解码（尺寸=显示尺寸，并发单飞）
   AudioInspector.kt       解析音频文件技术信息（采样率/位深/码率）供设置页展示
   SongDeleter.kt          删除歌曲文件（媒体库确认框 / SAF / 直接路径）+ 联动清理
   DataMaintenance.kt      数据自检与维护（统计快照 / 清理失效歌曲 / 重置用户数据 / 封面缓存）
@@ -711,6 +711,9 @@ install()
 `data/ThemeColorExtractor`（**在 `data/` 包，不在 `ui/`** —— 它是无 UI 依赖的纯算法）从封面位图抽样聚类出主色，
 经 `PlaybackEngine.themeSeed` 流出，`MainActivity` 订阅后传给 `MusicPlayerTheme(seedColor)` 生成 M3 色板。
 `CoverRepository` 负责位图解码 + 内存 LruCache + 磁盘缓存，`MusicApp.onCreate` 会清一次内存缓存防脏数据。
+**两级内存缓存都按堆比例取上限**（位图 `maxMemory/8` 夹 8~32MB、原始字节 `maxMemory/16` 夹 2~6MB，v1.2.12 起；
+旧实现原始字节是固定 16MB）；`MusicApp.onTrimMemory` 按压力等级调用 `CoverRepository.trim(...)`，
+**磁盘缓存一律不清** —— 它是「丢掉内存还能快速回来」的退路。
 **动态主题默认开启**，设置页可关。
 
 ### 6.5 崩溃日志
@@ -1996,6 +1999,46 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 长期收不到父级的横滑，于是它自己另立了一套固定 90px 阈值、且没有跟手位移（同一动作在歌词态和封面态
 手感不一样）。**判据要唯一：子级只处理自己那一轴，另一轴原样上浮给父级。**
 接线用 `CoverCarSwipeTest` 钉住（封面 / 车机唱片区横滑要能上浮到父级，纵滑只能调音量）。
+
+---
+
+### 11.18 封面内存：解码尺寸必须等于显示尺寸（2026-10-29，v1.2.12）
+
+**症状**：长列表滚过一两百首后开始反复重解码、掉帧；低内存设备（车机）切后台容易被杀；
+播放页封面切换时偶发明显卡顿。三项都不是「功能坏了」，所以永远不会出现在功能测试里。
+
+**三个根因，都在封面这一条链上**：
+
+1. **解码尺寸乘了 2**。`Common.kt` 原来是 `with(density) { decodeDp.roundToPx() } * 2`。
+   `roundToPx()` 返回的**已经是物理像素**，再乘 2 就是按 4 倍面积解码：
+   1080p 手机上播放页封面（292dp ≈ 803px）解成 1606px（5.2MB），列表缩略图（52dp ≈ 143px）解成 286px。
+   后果不只是费内存 —— 32MB 位图预算原本只能放约 196 张缩略图，滚过 200 首就开始淘汰重解。
+2. **`inSampleSize` 单独用会漏降**。它只能取 2 的幂，且旧实现要求「宽和高都 ≥ 2×目标」才降一档。
+   目标值一旦大于原图（乘 2 之后很容易），就完全不降采样：3000px 的内嵌封面**按全尺寸解出 18MB**。
+3. **原始字节缓存固定 16MB**，内容与位图缓存重复，在车机 192MB 堆上占 8%；
+   而它只是通知栏封面与主题取色的中转，两者都能从磁盘缓存重解。
+
+**改法（三条缺一不可）**：
+
+- 解码尺寸 = 显示像素，**只有 ≥ 512px 的大图**留 1.25 倍余量（`CoverRepository.targetPxFor`）；
+- 两段式缩放：`inSampleSize` 按**长边**粗降 → `fitSize` 算出精确目标 → `createScaledBitmap` 收尾，
+  旧图 `recycle()`（用 `!==` 兜住「尺寸已相同、返回自身」）；
+- 两级内存缓存都按堆比例取上限（位图 `maxMemory/8`、原始 `maxMemory/16`），
+  并由 `MusicApp.onTrimMemory` 分档释放（`CoverRepository.trim`）。
+
+**判据（改任何图片加载先看这三条）**：
+① 目标尺寸的单位必须是**物理像素**，不是 dp、更不是「dp × 倍率」；
+② 只用 `inSampleSize` 的缩放**必然**存在「目标大于原图 → 全尺寸」的漏洞，必须配精确收尾；
+③ 常驻缓存的上限必须与 `Runtime.maxMemory()` 挂钩，**不能写死 MB 数** —— 手机与车机的堆差 2~3 倍。
+
+**为什么这组测试写成纯函数**：`CoverCacheTest` 测 `targetPxFor` / `sampleSizeFor` / `fitSize`
+三个纯函数，不需要 Context、不需要真实图片。其中一条专门断言
+`sampleSizeFor(3000, 3000, 1606) == 1` —— 把「旧倍率下会全尺寸解码」这个事实钉在测试里，
+任何人把倍率调回去都会红。
+
+**上线后怎么量化**：诊断包新增 `[内存]` 段（`diag/MemoryProbe.kt`），给 Java 堆 used/max、native 堆、
+系统可用与低内存标志、封面两级缓存的占用与命中率、磁盘缓存大小。车机不让 adb，这一段是唯一能拿到的数：
+**命中率低 → 预算给小了或键设计有问题；位图占用贴着上限 → 列表尺寸档位太多或 targetPx 又算大了。**
 
 ---
 

@@ -97,4 +97,24 @@ class DiagnosticsReportTest {
         assertTrue(text.contains("mapping-v") || text.contains("mapping："))
     }
 
+    /**
+     * v1.2.12 新增 `[内存]` 段。
+     *
+     * 这一段是车机上唯一能量化内存的入口（那类设备不给 adb），所以**字段名也要锁住** ——
+     * 改名字等于让历史回传的包与新包无法对比。
+     */
+    @Test
+    fun `含内存画像段且指标齐全`() {
+        val text = report()
+        assertTrue("缺内存段", text.contains("[内存]"))
+        assertTrue("缺 Java 堆", text.contains("Java 堆："))
+        assertTrue("缺 native 堆", text.contains("native 堆："))
+        assertTrue("缺系统可用", text.contains("系统可用："))
+        assertTrue("缺位图缓存", text.contains("封面位图缓存："))
+        assertTrue("缺原始缓存", text.contains("封面原始缓存："))
+        assertTrue("缺命中率", text.contains("命中 "))
+        // 段位顺序：内存段必须在 [权限] 之前，否则在长报告里会被翻页漏看
+        assertTrue(text.indexOf("[内存]") < text.indexOf("[权限]"))
+    }
+
 }

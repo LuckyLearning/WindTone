@@ -136,14 +136,17 @@ fun CoverArt(
     val appContext = LocalContext.current.applicationContext
     val density = LocalDensity.current
     // 大屏（车机）上封面尺寸不适合写死 dp，允许调用方传 fillContainer 让父级决定边长；
-    // 解码倍率按 2x 估算，按 400dp 起步避免超大封面解码出过小的位图。
+    // 仍按 400dp 起步，避免父级尺寸尚未测量时解出过小的位图。
     val decodeDp = if (fillContainer && size < 400.dp) 400.dp else size
     var bitmap by remember(song?.stableKey, decodeDp) { mutableStateOf<Bitmap?>(null) }
 
     LaunchedEffect(song?.stableKey, decodeDp) {
         bitmap = null
         val s = song ?: return@LaunchedEffect
-        val targetPx = with(density) { decodeDp.roundToPx() } * 2
+        // 解码尺寸 = 显示尺寸：roundToPx() 已经是物理像素，**不能再乘倍率**。
+        // 旧实现乘 2（= 4 倍面积），播放页封面 803px 会解成 1606px（5.2MB），
+        // 列表 143px 解成 286px。余量只给大图，由 targetPxFor 统一处理。
+        val targetPx = CoverRepository.targetPxFor(with(density) { decodeDp.roundToPx() })
         bitmap = runCatching { CoverRepository.cover(appContext, s, targetPx) }.getOrNull()
     }
 

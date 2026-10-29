@@ -100,6 +100,8 @@ internal object DiagnosticsReport {
         val playbackQualityBlock: String = "",
         /** 「默认音乐候选资格」自检（2026-10-27），见 DefaultMusicProbe */
         val defaultMusicBlock: String = "",
+        /** 内存画像（2026-10-29），见 MemoryProbe */
+        val memoryBlock: String = "",
         val versionCode: Long = 0L,
     )
 
@@ -209,6 +211,7 @@ internal object DiagnosticsReport {
                 appendLine("跳过静音：${if (prefs.skipSilence) "开" else "关"}")
             }.trimEnd(),
             defaultMusicBlock = DefaultMusicProbe.buildReport(context),
+            memoryBlock = MemoryProbe.buildReport(context, library.songs.size),
             versionCode = BuildConfig.VERSION_CODE.toLong(),
         )
     }
@@ -245,6 +248,11 @@ internal object DiagnosticsReport {
         sb.appendLine("可用存储：${if (f.freeStorageMb >= 0) "${f.freeStorageMb} MB" else "查询失败"}")
         sb.appendLine()
 
+        // 应用侧内存画像（v1.2.12）：车机上唯一能拿到的量化入口，不要挪到文末
+        if (f.memoryBlock.isNotBlank()) {
+            sb.appendLine(f.memoryBlock.trimEnd())
+            sb.appendLine()
+        }
         sb.appendLine("[权限]")
         sb.appendLine("通知：${yn(f.notificationAllowed)}   悬浮窗：${yn(f.canDrawOverlay)}")
         sb.appendLine("电池优化白名单：${yn(f.ignoringBattery)}")
