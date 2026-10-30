@@ -373,8 +373,12 @@ class OnlinePlaylistsTest {
     fun `add 两次得到两条互不覆盖的记录`() = runBlocking {
         val repo = repo { tracks }
         repo.add("第一个", "https://cdn.example.com/list.m3u")
+        // updatedAt 毫秒精度：连加可能同戳，顺序断言留给「按更新时间倒序」用例
+        kotlinx.coroutines.delay(2)
         repo.add("第二个", "https://other.example.com/list.m3u")
-        assertEquals(listOf("第二个", "第一个"), repo.all().map { it.name })
+        val names = repo.all().map { it.name }
+        assertEquals(2, names.size)
+        assertTrue(names.containsAll(listOf("第一个", "第二个")))
     }
 
     // ============================================================ refresh
