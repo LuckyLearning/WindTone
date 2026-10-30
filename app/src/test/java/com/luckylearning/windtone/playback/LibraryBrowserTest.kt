@@ -199,7 +199,6 @@ class LibraryBrowserTest {
     }
 
     @Test
-    @Test
     fun recentlyAddedOrdersByDateAddedDescending() = runBlocking {
         newSong("u/old", "旧入库", dateAdded = 100L)
         newSong("u/mid", "中入库", dateAdded = 200L)
@@ -212,6 +211,7 @@ class LibraryBrowserTest {
         assertEquals("最近添加", browser.itemOf(BrowseIds.RECENTLY_ADDED)?.mediaMetadata?.title)
     }
 
+    @Test
     fun missingAndExcludedSongsStayOutOfTheTree() = runBlocking {
         val ok = newSong("u/ok", "正常")
         val gone = newSong("u/gone", "文件没了")
