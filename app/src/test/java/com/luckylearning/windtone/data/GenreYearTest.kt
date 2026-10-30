@@ -1,13 +1,36 @@
 package com.luckylearning.windtone.data
 
+import android.net.Uri
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.data.model.SongSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
+/** G1 genre/year pure functions; Robolectric for android.net.Uri on Song. */
+@RunWith(RobolectricTestRunner::class)
 class GenreYearTest {
+    private fun song(
+        id: Long,
+        name: String,
+        genre: String? = null,
+        year: Int? = null,
+    ) = Song(
+        id = id,
+        uri = Uri.parse("content://song/$id"),
+        title = name,
+        artist = null,
+        album = null,
+        displayName = "$name.mp3",
+        durationMs = 1L,
+        source = SongSource.MEDIA_STORE,
+        genre = genre,
+        year = year,
+    )
+
     @Test
     fun normalizeGenre_trimsAndDropsPlaceholders() {
         assertNull(normalizeGenre(null))
@@ -32,13 +55,7 @@ class GenreYearTest {
 
     @Test
     fun genreOrUnknown_and_yearOrUnknown() {
-        val base = Song(
-            uri = android.net.Uri.parse("file://x"),
-            displayName = "a.mp3",
-            title = "T",
-            durationMs = 1L,
-            source = SongSource.MEDIA_STORE,
-        )
+        val base = song(1L, "T")
         assertEquals(UNKNOWN_GENRE_LABEL, base.genreOrUnknown())
         assertEquals(UNKNOWN_YEAR_LABEL, base.yearOrUnknown())
         assertEquals("Rock", base.copy(genre = "Rock").genreOrUnknown())
@@ -47,33 +64,9 @@ class GenreYearTest {
 
     @Test
     fun buildGroups_unknownBucketAndSortYearsDesc() {
-        val a = Song(
-            uri = android.net.Uri.parse("file://a"),
-            displayName = "a.mp3",
-            title = "A",
-            durationMs = 1L,
-            source = SongSource.MEDIA_STORE,
-            genre = "Jazz",
-            year = 2001,
-        )
-        val b = Song(
-            uri = android.net.Uri.parse("file://b"),
-            displayName = "b.mp3",
-            title = "B",
-            durationMs = 1L,
-            source = SongSource.MEDIA_STORE,
-            genre = null,
-            year = null,
-        )
-        val c = Song(
-            uri = android.net.Uri.parse("file://c"),
-            displayName = "c.mp3",
-            title = "C",
-            durationMs = 1L,
-            source = SongSource.MEDIA_STORE,
-            genre = "Jazz",
-            year = 1990,
-        )
+        val a = song(1L, "A", genre = "Jazz", year = 2001)
+        val b = song(2L, "B", genre = null, year = null)
+        val c = song(3L, "C", genre = "Jazz", year = 1990)
         val genres = buildGenreGroups(listOf(a, b, c))
         assertEquals(2, genres.size)
         assertTrue(genres.any { it.key == "Jazz" && it.count == 2 })
