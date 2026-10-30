@@ -87,31 +87,39 @@ SecretKey
 # 阿里云盘开放平台凭据（本机开发用，绝不入库）
 aliyunClientId
 aliyunClientSecret
-\
-# local release helper junk
+# local agent scratch (never commit)
+# 根目录临时脚本 / 日志 / 隔离构建 / park 工作区 —— 一律不入库
+_a2_*.py
+_bal9_*
+_g3_*
+_g8_*
+_h3_*
+_h4_*
+_h7_*
+_eq*
+_diag*
+_e1_*
+_e2_*
+_b1_*
+_fix_*
+_write_*
+_patch_*
+_run_*.sh
+_rel_snip.txt
 _release_log.txt
 _gh_rel.json
 _fetch_rel.sh
 _*.tmp
-\
-
-# local release helper wrappers (never commit)
-_run_release.sh
-
-
-# local CI log dumps
-_ci_logs/
-_ci_logs.zip
-
-# local agent scratch (never commit)
-_a2_*.py
-_run_i18n_release.sh
-_rel_snip.txt
-_run_*.sh
 _h3_work/
 _h7_work/
 _g8_recover/
 _park_*/
 _gradle_*/
 _gradle_h3_iso/
+_build_*/
+.gradle-diag*/
+_agent_tmp*/
+*_dead/
 _g8_commit.py
+_run_i18n_release.sh
+_run_release.sh
