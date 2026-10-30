@@ -10,6 +10,7 @@ import com.luckylearning.windtone.data.SettingsDefaults
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.luckylearning.windtone.playback.softEq.SoftEqPath
 
 /**
  * 均衡器与音效控制。
@@ -406,6 +407,8 @@ object AudioFx {
             unavailableDetail = t?.let { it.javaClass.simpleName + ": " + (it.message ?: "") }.orEmpty(),
             userPresets = loadUserPresets(),
         )
+        // E1 soft-EQ candidate hook (default off; SoftEqSpike.ENABLED)
+        SoftEqPath.onHardEqUnavailable(Unavailable.DEVICE_REJECTED)
     }
 
     /**

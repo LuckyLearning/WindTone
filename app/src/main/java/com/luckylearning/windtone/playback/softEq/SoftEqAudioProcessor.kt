@@ -6,7 +6,7 @@ import androidx.media3.common.audio.BaseAudioProcessor
 import androidx.media3.common.util.UnstableApi
 import java.nio.ByteBuffer
 
-/** Soft-EQ Spike Media3 processor. Not wired into PlaybackService. See SoftEqSpike / docs/spike-软EQ.md */
+/** Soft-EQ Media3 processor (E1 via SoftEqPath into PlaybackService; default off). See SoftEqPath / docs/功能-软EQ.md */
 @UnstableApi
 class SoftEqAudioProcessor : BaseAudioProcessor() {
     private val engine: SoftEqEngine = SoftEqEngine()

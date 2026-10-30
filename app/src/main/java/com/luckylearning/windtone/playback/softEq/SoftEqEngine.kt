@@ -2,7 +2,7 @@ package com.luckylearning.windtone.playback.softEq
 
 import kotlin.math.abs
 
-/** Multi-band Soft EQ; gains in mB like AudioFx. Spike only — see docs/spike-软EQ.md */
+/** Multi-band Soft EQ; gains in mB like AudioFx. See SoftEqPath / docs/功能-软EQ.md */
 internal class SoftEqEngine(private val q: Float = 1.0f) {
     private var sampleRate = 0
     private var channelCount = 2

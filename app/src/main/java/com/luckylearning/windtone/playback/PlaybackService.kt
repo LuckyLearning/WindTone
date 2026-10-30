@@ -10,8 +10,13 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
@@ -24,6 +29,7 @@ import com.luckylearning.windtone.MainActivity
 import com.luckylearning.windtone.MusicApp
 import com.luckylearning.windtone.data.CrashLog
 import com.luckylearning.windtone.data.Prefs
+import com.luckylearning.windtone.playback.softEq.SoftEqPath
 import com.luckylearning.windtone.data.aliyun.AliyunAuth
 import com.luckylearning.windtone.data.aliyun.AliyunDrive
 import com.luckylearning.windtone.widget.MusicWidgetProvider
@@ -90,7 +96,22 @@ class PlaybackService : MediaLibraryService() {
 
         // A7 无缝：单 ExoPlayer + 连续 MediaItem 队列；Media3 读分轨 encoder delay/padding。
         // 平台无关闭 API；设置页为只读说明（Prefs.gaplessPlayback 为 C1 死键）。
+        // E1 Soft EQ: Media3 AudioProcessor path skeleton (default off; SoftEqPath).
+        val renderersFactory = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(
+                context: android.content.Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean,
+            ): AudioSink {
+                return DefaultAudioSink.Builder(context)
+                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                    .setAudioProcessors(arrayOf<AudioProcessor>(SoftEqPath.processor))
+                    .build()
+            }
+        }
         val player = ExoPlayer.Builder(this)
+            .setRenderersFactory(renderersFactory)
             // 在线音频的磁盘缓存（v1.1.38）：http(s) 走 CacheDataSource，本地文件不受影响。
             // 放在这里而不是 PlaybackEngine，是因为 ExoPlayer 只在这个服务里创建 ——
             // 换实例就得跟着换缓存源，否则缓存只对创建它的那个实例有效。
