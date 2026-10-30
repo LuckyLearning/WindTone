@@ -16,7 +16,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
+import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.test.swipeDown
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -25,19 +28,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * 播放页「滑动切歌」的**接线**回归（2026-10-28）。
+ * 播放页中部手势接线回归（2026-10-30 Spike）。
  *
- * 为什么要单独测接线：[PlayerSwipe] 的判据（阈值 / 阻力 / 回弹）早就有 8 例单测覆盖，
- * 但那些测的是 `resolve()` / `resisted()` 这两个纯函数 —— 纯函数全对、手势没装上，
- * 表现就是「滑了完全没反应」。v1.2.10 正是这样：`playerSwipeToSwitch` 里
- * `pointerInput` 套了两层，里层的 Modifier 构造出来就丢了，没有任何节点承载手势，
- * 于是判据一次都没被执行过，而单测、lint、编译、打包全都不会报。
- *
- * 场景刻意贴近真机：父级挂手势、子级是 `verticalScroll` 的歌词列 ——
- * 这样才能验证「纵向滚动容器吃掉事件」不会把横向手势一起吃掉。
- *
- * ⚠️ Robolectric 三个坑见 [LibraryDrawerTest] 类注释：给窗口尺寸、开 NATIVE 图形模式、
- * 一个测试只调一次 `setContent`。
+ * 手机：左右 → 歌词/封面；上下 → 切歌（本测试封面直滑路径）。
+ * 歌词滚动 vs 切歌：边缘策略见 [VerticalSkipConnection]，此处用无滚动子级验直滑。
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "zh-rCN-w360dp-h800dp-xhdpi")
@@ -47,8 +41,14 @@ class PlayerSwipeGestureTest {
     @get:Rule
     val compose = createComposeRule()
 
-    /** 渲染「父级手势 + 子级纵向滚动」这个与播放页一致的层级。 */
-    private fun renderPane(onSwipe: (SwipeSwitch) -> Unit) {
+    private class Rec {
+        var pane: SwipePane? = null
+        var skip: SwipeSwitch? = null
+    }
+
+    /** 父级：横切面板 + 纵切歌；子级可带纵向滚动（验横滑不被吃掉）。 */
+    private fun renderPane(scrollChild: Boolean): Rec {
+        val rec = Rec()
         compose.setContent {
             val scope = rememberCoroutineScope()
             val offset = remember { Animatable(0f) }
@@ -56,38 +56,56 @@ class PlayerSwipeGestureTest {
                 Modifier
                     .fillMaxSize()
                     .testTag("pane")
-                    .playerSwipeToSwitch(offset = offset, scope = scope, onSwipe = onSwipe)
+                    .playerSwipeToPane(offset = offset, scope = scope) { rec.pane = it }
+                    .playerVerticalSkipDirect { rec.skip = it }
             ) {
-                Column(
-                    Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                ) {
-                    repeat(40) { Text("第 $it 行歌词") }
+                if (scrollChild) {
+                    Column(
+                        Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        repeat(40) { Text("第 $it 行歌词") }
+                    }
                 }
             }
         }
+        return rec
     }
 
     @Test
-    fun `左滑触发下一首`() {
-        var got: SwipeSwitch? = null
-        renderPane { got = it }
-
+    fun `左滑切换到封面`() {
+        val rec = renderPane(scrollChild = true)
         compose.onNodeWithTag("pane").performTouchInput { swipeLeft() }
         compose.waitForIdle()
-
-        assertEquals(SwipeSwitch.NEXT, got)
+        assertEquals(SwipePane.SHOW_COVER, rec.pane)
+        assertNull(rec.skip)
     }
 
     @Test
-    fun `右滑触发上一首`() {
-        var got: SwipeSwitch? = null
-        renderPane { got = it }
-
+    fun `右滑切换到歌词`() {
+        val rec = renderPane(scrollChild = true)
         compose.onNodeWithTag("pane").performTouchInput { swipeRight() }
         compose.waitForIdle()
+        assertEquals(SwipePane.SHOW_LYRICS, rec.pane)
+        assertNull(rec.skip)
+    }
 
-        assertEquals(SwipeSwitch.PREVIOUS, got)
+    @Test
+    fun `无滚动子级时上滑切下一首`() {
+        val rec = renderPane(scrollChild = false)
+        compose.onNodeWithTag("pane").performTouchInput { swipeUp() }
+        compose.waitForIdle()
+        assertEquals(SwipeSwitch.NEXT, rec.skip)
+        assertNull(rec.pane)
+    }
+
+    @Test
+    fun `无滚动子级时下滑切上一首`() {
+        val rec = renderPane(scrollChild = false)
+        compose.onNodeWithTag("pane").performTouchInput { swipeDown() }
+        compose.waitForIdle()
+        assertEquals(SwipeSwitch.PREVIOUS, rec.skip)
+        assertNull(rec.pane)
     }
 }

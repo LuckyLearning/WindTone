@@ -5,10 +5,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 播放页横向滑动的判据（[PlayerSwipe]）。
+ * 播放页滑动判据（[PlayerSwipe]）：纵向切歌 + 横向切面板。
  *
  * 这几条是「手势会不会误切歌」的唯一防线：判错方向就是划右跳下一首，
- * 阈值判松就是在歌词区纵向滚动时误切。真机手感靠 P0-N13 验，逻辑靠这里锁。
+ * 阈值判松就会误切。歌词中段滚动靠 nestedScroll 边缘策略，不在本纯函数里。
  */
 class PlayerSwipeTest {
 
@@ -62,5 +62,27 @@ class PlayerSwipeTest {
         assertEquals(0f, PlayerSwipe.resisted(0f, width), 0.01f)
         assertTrue(PlayerSwipe.resisted(-80f, width) < 0f)
         assertTrue(PlayerSwipe.resisted(80f, width) > 0f)
+    }
+
+
+    @Test
+    fun `向左越过阈值切到封面`() {
+        assertEquals(SwipePane.SHOW_COVER, PlayerSwipe.resolvePane(-150f, width, 0f))
+    }
+
+    @Test
+    fun `向右越过阈值切到歌词`() {
+        assertEquals(SwipePane.SHOW_LYRICS, PlayerSwipe.resolvePane(150f, width, 0f))
+    }
+
+    @Test
+    fun `横向位移不够且速度慢时不切面板`() {
+        assertEquals(SwipePane.NONE, PlayerSwipe.resolvePane(-60f, width, 200f))
+    }
+
+    @Test
+    fun `纵向向上越过阈值切下一首`() {
+        // 与横向同一套 resolve：负向 = NEXT
+        assertEquals(SwipeSwitch.NEXT, PlayerSwipe.resolve(-150f, width, 0f))
     }
 }

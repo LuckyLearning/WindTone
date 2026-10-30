@@ -8,7 +8,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -58,7 +57,7 @@ import com.luckylearning.windtone.ui.theme.windShadow
  * 收的都是「签名自包含、与播放页主体不共享局部状态」的 composable：
  *  - [PlaybackSlider]：自绘进度条（缓冲 / 拖动气泡 / 风之渐变）；
  *  - [TimeLabel]：时间文字（单独抽是为了让它只在需要的时间刻度上重组）；
- *  - [CoverPane]：封面面板（双击暂停 / 左右滑切歌 / 上下滑调音量）；
+ *  - [CoverPane]：封面面板（双击暂停 / 左右由父级切视图 / 上下滑切歌）；
  *  - [PlayMode.icon]：播放模式 → 图标。
  *
  * 为什么不继续拆：播放页主体（沉浸态计时、音量手势、顶栏、歌名行、控制行）
@@ -196,24 +195,19 @@ internal fun TimeLabel(
 // ================================================================ 封面面板
 
 /**
- * 封面面板：双击播放暂停、上下滑调音量；**左右滑切歌不在这里做**。
+ * 封面面板：双击播放暂停、上下滑切歌；**左右切视图不在这里做**。
  *
- * 2026-10-28 统一手势：横向切歌上移到 `PlayerScreen` 中部那一层（`PlayerSwipe`），
- * 封面态与歌词态从此共用同一套判据（位移 ≥ 屏宽 12% 或甩速 ≥ 900px/s）与同一种跟手位移。
- * 这里只保留**纵向**音量手势 —— `detectVerticalDragGestures` 只在判定为纵向后才消费事件，
- * 横向的按下 / 移动会原样上浮给父级，所以「封面能调音量」与「封面能滑歌」不再互相抢。
+ * 2026-10-30：纵向改切歌（[playerVerticalSkipDirect]），音量交给系统键 / 车机旋钮。
+ * 横向仍上浮给父级 `playerSwipeToPane`（手机切歌词↔封面）——本面板不挂横向检测。
  *
- * 改之前是什么样：一个 `detectDragGestures` 自己按主轴分横 / 纵，横向用固定 **90px** 阈值判切歌。
- * 三个问题：①判据两处（90px vs 12% 屏宽）—— 同一动作在歌词态和封面态灵敏度不同；
- * ②它 `consume()` 了所有拖动，父级那个统一手势永远收不到，封面态因此**没有跟手位移**；
- * ③90px 在 3x 屏上是 30dp、在车机 1707dp 屏上是极短一划，跨设备行为不一致。
+ * 2026-10-28：横向切歌曾上移到 `PlayerScreen` 中部；封面不再自判 90px 阈值。
  */
 @Composable
 internal fun CoverPane(
     song: Song?,
     isPlaying: Boolean,
     onToggle: () -> Unit,
-    onVolumeDelta: (Float) -> Unit,
+    onSkip: (SwipeSwitch) -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
 
@@ -232,15 +226,7 @@ internal fun CoverPane(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .pointerInput(Unit) {
-                // 只认纵向：向上滑增大音量，每 42px 一档。
-                // `detectVerticalDragGestures` 在判定为纵向之前不消费事件，
-                // 横向滑动因此会继续上浮到父级（PlayerScreen 的 playerSwipeToSwitch）。
-                detectVerticalDragGestures { change, dragAmount ->
-                    onVolumeDelta(-dragAmount / 42f)
-                    change.consume()
-                }
-            }
+            .playerVerticalSkipDirect(onSwipe = onSkip)
             .pointerInput(Unit) {
                 detectTapGestures(onDoubleTap = { onToggle() })
             },
@@ -284,7 +270,7 @@ internal fun CoverPane(
             color = scheme.surfaceContainerHigh.copy(alpha = 0.9f),
         ) {
             Text(
-                text = "双击暂停 · 左右滑切歌 · 上下滑调音量",
+                text = "双击暂停 · 左右滑切视图 · 上下滑切歌",
                 fontSize = 10.sp,
                 color = scheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),

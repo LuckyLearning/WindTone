@@ -15,7 +15,6 @@ import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.swipeUp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -24,16 +23,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * 封面态 / 车机唱片区「横向滑动切歌交给父级」的接线回归（2026-10-28）。
+ * 封面态 / 车机唱片区手势接线（2026-10-30 Spike）。
  *
- * 背景：这两块以前各有一套横向判据 —— 手机封面用固定 90px 阈值 + `consume()` 全部拖动，
- * 车机唱片区干脆没有横滑。统一之后横向一律上浮给 `PlayerScreen` 中部那层
- * [playerSwipeToSwitch]，两处都不再自己判方向。**能不能上浮**取决于子级的手势是否消费
- * 了移动事件：封面若还用 `detectDragGestures` 并 `consume()`，父级就永远收不到。
- * 这条链路纯靠代码审查很容易看着"对"，所以这里真滑一次钉住。
- *
- * ⚠️ Robolectric 三个坑见 [LibraryDrawerTest] 类注释：给窗口尺寸、开 NATIVE 图形模式、
- * 一个测试只调一次 `setContent`。
+ * 手机封面：左右上浮父级切面板；上下在 CoverPane 内切歌。
+ * 车机：左右仍切歌（playerSwipeToSwitch）；唱片区不吃横向。
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "zh-rCN-w360dp-h800dp-xhdpi")
@@ -43,11 +36,12 @@ class CoverCarSwipeTest {
     @get:Rule
     val compose = createComposeRule()
 
-    /**
-     * 复刻 `PlayerScreen` 的真实层级：父级挂统一手势，子级是封面（或车机唱片）。
-     *
-     * @return 记录「父级收到的方向」与「音量增量累计」的容器
-     */
+    private class Recorder {
+        var pane: SwipePane? = null
+        var skip: SwipeSwitch? = null
+        var toggleCount = 0
+    }
+
     private fun renderCover(): Recorder {
         val rec = Recorder()
         compose.setContent {
@@ -57,58 +51,43 @@ class CoverCarSwipeTest {
                 Modifier
                     .fillMaxSize()
                     .testTag("pane")
-                    .playerSwipeToSwitch(offset = offset, scope = scope) { rec.swipe = it }
+                    .playerSwipeToPane(offset = offset, scope = scope) { rec.pane = it }
             ) {
                 CoverPane(
                     song = null,
                     isPlaying = false,
                     onToggle = { rec.toggleCount++ },
-                    onVolumeDelta = { rec.volume += it },
+                    onSkip = { rec.skip = it },
                 )
             }
         }
         return rec
     }
 
-    private class Recorder {
-        var swipe: SwipeSwitch? = null
-        var volume = 0f
-        var toggleCount = 0
-    }
-
     @Test
-    fun `封面态左滑上浮到父级并判为下一首`() {
+    fun `封面态左滑上浮到父级并判为切封面`() {
         val rec = renderCover()
-
         compose.onNodeWithTag("pane").performTouchInput { swipeLeft() }
         compose.waitForIdle()
-
-        assertEquals(SwipeSwitch.NEXT, rec.swipe)
-        // 横向滑动不该顺手改音量
-        assertEquals(0f, rec.volume, 0.001f)
+        assertEquals(SwipePane.SHOW_COVER, rec.pane)
+        assertNull(rec.skip)
     }
 
     @Test
-    fun `封面态右滑上浮到父级并判为上一首`() {
+    fun `封面态右滑上浮到父级并判为切歌词`() {
         val rec = renderCover()
-
         compose.onNodeWithTag("pane").performTouchInput { swipeRight() }
         compose.waitForIdle()
-
-        assertEquals(SwipeSwitch.PREVIOUS, rec.swipe)
+        assertEquals(SwipePane.SHOW_LYRICS, rec.pane)
     }
 
     @Test
-    fun `封面态纵滑只调音量不切歌`() {
+    fun `封面态上滑切下一首不切面板`() {
         val rec = renderCover()
-
         compose.onNodeWithTag("pane").performTouchInput { swipeUp() }
         compose.waitForIdle()
-
-        // 向上滑 = 增大音量，增量为正
-        assertTrue("向上滑应给出正音量增量，实际 ${rec.volume}", rec.volume > 0f)
-        // 纵向手势不能顺带切歌（方向互斥）
-        assertNull(rec.swipe)
+        assertEquals(SwipeSwitch.NEXT, rec.skip)
+        assertNull(rec.pane)
     }
 
     @Test
@@ -121,9 +100,8 @@ class CoverCarSwipeTest {
                 Modifier
                     .fillMaxSize()
                     .testTag("pane")
-                    .playerSwipeToSwitch(offset = offset, scope = scope) { rec.swipe = it }
+                    .playerSwipeToSwitch(offset = offset, scope = scope) { rec.skip = it }
             ) {
-                // 车机右侧唱片：只挂双击，不该吃掉横向拖动
                 CarVinylPane(
                     song = null,
                     isPlaying = false,
@@ -131,12 +109,9 @@ class CoverCarSwipeTest {
                 )
             }
         }
-
         compose.onNodeWithTag("pane").performTouchInput { swipeLeft() }
         compose.waitForIdle()
-
-        assertEquals(SwipeSwitch.NEXT, rec.swipe)
-        // 拖动不该被当成双击
+        assertEquals(SwipeSwitch.NEXT, rec.skip)
         assertEquals(0, rec.toggleCount)
     }
 }

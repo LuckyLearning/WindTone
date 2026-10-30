@@ -252,16 +252,24 @@ fun PlayerScreen(
         lastActionAt = System.currentTimeMillis()
     }
 
-    // ------------------------------------------------------ 左右滑动切歌
+    // ------------------------------------------------------ 中部手势（2026-10-30 Spike）
     //
-    // 中部内容区的横向滑动（左滑下一首 / 右滑上一首），判据与参数见 PlayerSwipe。
-    // 偏移量在这里持有、在下面那层 Box 上用 graphicsLayer 平移 —— 只动中部，
-    // 顶栏与底部控制行不跟着晃。
+    // 手机：左右 = 歌词↔封面；上下 = 切歌（歌词态边缘 overscroll / 封面态整区）。
+    // 车机：左右仍切歌（双栏同场无视图可切）；上下同样切歌。
+    // 偏移量只服务横向跟手；顶栏与底部控制行不跟着晃。
     //
     // ⚠️ 作用域必须在组合期取一次：手势回调不是挂起函数，而 snapTo / animateTo 是，
     //    在 modifier 内部每次重组新建 scope 会让进行中的回弹动画被取消。
     val swipeScope = rememberCoroutineScope()
     val swipeOffset = remember { Animatable(0f) }
+    val onVerticalSkip: (SwipeSwitch) -> Unit = { dir ->
+        keepAwake()
+        when (dir) {
+            SwipeSwitch.NEXT -> onNext()
+            SwipeSwitch.PREVIOUS -> onPrevious()
+            SwipeSwitch.NONE -> Unit
+        }
+    }
 
     // 进入车载模式且停在播放页时，先给满 5 秒再考虑收起
     LaunchedEffect(state.carMode) {
@@ -307,6 +315,7 @@ fun PlayerScreen(
         }
     }
 
+    @Suppress("UNUSED_VARIABLE")
     val onVolumeDelta: (Float) -> Unit = { delta ->
         volumeAccum += delta
         val steps = volumeAccum.toInt()
@@ -470,27 +479,42 @@ fun PlayerScreen(
 
             // --------------------------------------------- 中部：封面 / 歌词
             //
-            // 2026-10-27：这一层是「左滑下一首 / 右滑上一首」的手势区。
-            // **只挂中部、不挂整页**：底部进度条本身就是横向拖动，整页挂必然抢手势；
-            // 中部歌词区是纵向滚动，与横向手势方向互斥，不会互相打岔。
+            // 2026-10-30：手机左右切视图、上下切歌；车机左右仍切歌。
+            // **只挂中部、不挂整页**：底部进度条是横向拖动，整页挂必然抢手势。
+            // 歌词纵向滚动 vs 上下切歌：边缘 overscroll 才切（playerVerticalSkipEdge）。
             //
-            // 2026-10-28 统一：跟手位移不再加在**这一层**，而是加在各分支的**内容**上。
-            // 因为车机分支里同一层还装着左侧那列功能键（收藏 / 队列 / 设置），
-            // 挂整层会让三颗键跟着横滑 —— 那是导航控件，不该跟着歌走。
-            // 手机上三个分支的唯一内容就是这个 slide，效果与挂整层等价。
+            // 2026-10-28 起跟手位移加在各分支**内容**上，避免车机左侧功能键跟着横滑。
             Box(
                 Modifier
                     .weight(1f)
-                    .playerSwipeToSwitch(
-                        offset = swipeOffset,
-                        scope = swipeScope,
-                        onSwipe = { dir ->
-                            keepAwake()
-                            when (dir) {
-                                SwipeSwitch.NEXT -> onNext()
-                                SwipeSwitch.PREVIOUS -> onPrevious()
-                                SwipeSwitch.NONE -> Unit
-                            }
+                    .then(
+                        if (state.carMode) {
+                            Modifier.playerSwipeToSwitch(
+                                offset = swipeOffset,
+                                scope = swipeScope,
+                                onSwipe = onVerticalSkip,
+                            )
+                        } else {
+                            Modifier.playerSwipeToPane(
+                                offset = swipeOffset,
+                                scope = swipeScope,
+                                onPane = { pane ->
+                                    keepAwake()
+                                    when (pane) {
+                                        SwipePane.SHOW_COVER -> onLyricsPaneVisible(false)
+                                        SwipePane.SHOW_LYRICS -> onLyricsPaneVisible(true)
+                                        SwipePane.NONE -> Unit
+                                    }
+                                },
+                            )
+                        },
+                    )
+                    // 歌词态 / 车机：边缘 overscroll 切歌。封面态改走 CoverPane 内 direct。
+                    .then(
+                        if (state.carMode || showLyrics) {
+                            Modifier.playerVerticalSkipEdge(onSwipe = onVerticalSkip)
+                        } else {
+                            Modifier
                         },
                     )
             ) {
@@ -579,14 +603,15 @@ fun PlayerScreen(
                             .then(slide),
                     )
                 } else {
-                    // 封面态：横向切歌由父级那层统一手势负责（跟手 + 双判据），
-                    // 这里只留纵向音量与双击播放/暂停 —— 见 CoverPane 的注释。
+                    // 封面态：横向切视图由父级 playerSwipeToPane 负责；
+                    // 纵向切歌在 CoverPane 内 direct（无滚动子级）。
+                    // 音量改回系统键 / 车机旋钮 —— 上下滑让给切歌（2026-10-30 Spike）。
                     Box(Modifier.fillMaxSize().then(slide)) {
                         CoverPane(
                             song = song,
                             isPlaying = state.isPlaying,
                             onToggle = onToggle,
-                            onVolumeDelta = onVolumeDelta,
+                            onSkip = onVerticalSkip,
                         )
                     }
                 }
