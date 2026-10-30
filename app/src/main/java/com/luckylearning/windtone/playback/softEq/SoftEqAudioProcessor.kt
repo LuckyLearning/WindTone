@@ -28,6 +28,13 @@ class SoftEqAudioProcessor : BaseAudioProcessor() {
         this.gainsMb = gainsMb.copyOf()
         if (configuredSampleRate > 0) engine.setGainsMb(this.gainsMb)
     }
+
+    /** E3: snapshot of centers currently configured on the processor. */
+    fun currentCentersHz(): IntArray = centersHz.copyOf()
+
+    /** E3: snapshot of band gains (mB) currently configured on the processor. */
+    fun currentGainsMb(): IntArray = gainsMb.copyOf()
+
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT && inputAudioFormat.encoding != C.ENCODING_PCM_FLOAT) {
             throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)

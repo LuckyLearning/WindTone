@@ -3,7 +3,7 @@
 > 日期：2026-10-31（Asia/Shanghai）  
 > 仓库路径：`app/src/main/java/com/luckylearning/windtone/playback/softEq/`  
 > 文档路径：`docs/spike-软EQ.md`  
-> 状态：**E1 主路径骨架已接；SoftEqPath 默认关；SoftEqSpike.ENABLED=false；main 未发版 / E1**
+> 状态：**E3 曲线桥接已接（SoftEqCurve）；SoftEqPath 默认关；SoftEqSpike.ENABLED=false；main 未发版 / E3**
 
 ## 1. 问题
 

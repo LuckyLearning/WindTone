@@ -160,6 +160,7 @@ object AudioFx {
         val s = _state.value
         if (!s.available || s.bandCount <= 0) {
             _state.value = s.copy(enabled = enabled, presetId = presetId, schemeId = schemeId)
+            syncSoftEqCurve()
             return
         }
         val preset = EqPresets.byId(presetId)
@@ -186,6 +187,7 @@ object AudioFx {
             reverbId = reverbId,
             schemeId = schemeId,
         )
+        syncSoftEqCurve()
     }
 
     /**
@@ -395,6 +397,8 @@ object AudioFx {
             schemeId = activeSchemeId(p),
             userPresets = users,
         )
+        SoftEqPath.onHardBandLayout(centerHz)
+        SoftEqPath.syncCurve(p.eqPresetId, p.eqBands, centerHz.toIntArray())
         SoftEqPath.onHardEqAvailable()
         apply(p.eqEnabled)
     }
@@ -592,6 +596,7 @@ object AudioFx {
         clearActiveSchemeId()
         leaveSceneIfManual()
         _state.value = s.copy(bandLevels = levels, presetId = "", schemeId = "")
+        syncSoftEqCurve()
     }
 
     /**
@@ -609,6 +614,7 @@ object AudioFx {
         clearActiveSchemeId()
         leaveSceneIfManual()
         _state.value = s.copy(presetId = preset.id, bandLevels = levels, schemeId = "")
+        syncSoftEqCurve()
     }
 
     fun setBassStrength(strength: Int) {
@@ -694,6 +700,7 @@ object AudioFx {
 
         val flat = IntArray(s.bandCount)
         prefs?.eqBands = encodeBands(flat)
+        syncSoftEqCurve()
         equalizer?.let { applyBands(it, flat) }
         runCatching { bass?.setStrength(0) }
         runCatching { virtualizer?.setStrength(0) }
@@ -725,6 +732,17 @@ object AudioFx {
             val preset = ReverbPresets.byId(_state.value.reverbId)
             reverb?.enabled = enabled && preset != null && preset != ReverbPresets.OFF
         }
+    }
+
+    /** E3: push current Prefs / state curve onto SoftEqPath (ready for SOFT_ACTIVE). */
+    private fun syncSoftEqCurve() {
+        val p = prefs ?: return
+        val hardCenters = _state.value.bandCenterHz
+        SoftEqPath.syncCurve(
+            presetId = p.eqPresetId,
+            bandsCsv = p.eqBands,
+            hardCentersHz = hardCenters.takeIf { it.isNotEmpty() }?.toIntArray(),
+        )
     }
 
     private fun applyBands(eq: Equalizer, levels: IntArray) {
