@@ -385,6 +385,12 @@ object SettingsDefaults {
 
     /** 用户命名的均衡器预设（[com.luckylearning.windtone.playback.UserEqPresets] 编码）；空串 = 还没存过 */
     const val EQ_USER_PRESETS = ""
+
+    /** Active scene profile id ([com.luckylearning.windtone.playback.SceneProfiles]); empty = off */
+    const val SCENE_ID = ""
+
+    /** Snapshot before entering a scene ([com.luckylearning.windtone.playback.SceneStash]) */
+    const val SCENE_STASH = ""
 }
 
 /**
@@ -899,6 +905,25 @@ class Prefs private constructor(context: Context) {
         set(value) {
             sp.edit().putString(KEY_EQ_USER_PRESETS, value).apply()
             ioScope.launch { store.putString(KEY_EQ_USER_PRESETS, value) }
+        }
+
+    /**
+     * Active scene = [com.luckylearning.windtone.playback.SceneProfiles] id.
+     * Empty = off / left after a manual EQ edit.
+     */
+    var sceneId: String
+        get() = sp.getString(KEY_SCENE_ID, SettingsDefaults.SCENE_ID).orEmpty()
+        set(value) {
+            sp.edit().putString(KEY_SCENE_ID, value).apply()
+            ioScope.launch { store.putString(KEY_SCENE_ID, value) }
+        }
+
+    /** Snapshot before entering a scene ([com.luckylearning.windtone.playback.SceneStash]); empty = none */
+    var sceneStash: String
+        get() = sp.getString(KEY_SCENE_STASH, SettingsDefaults.SCENE_STASH).orEmpty()
+        set(value) {
+            sp.edit().putString(KEY_SCENE_STASH, value).apply()
+            ioScope.launch { store.putString(KEY_SCENE_STASH, value) }
         }
 
     // ============================================================ 5. 桌面悬浮歌词
@@ -1583,6 +1608,8 @@ class Prefs private constructor(context: Context) {
         const val KEY_FADE_DURATION_MS = "fade_duration_ms"
         const val KEY_LOUDNESS_BALANCE = "loudness_balance"
         const val KEY_EQ_USER_PRESETS = "eq_user_presets"
+        const val KEY_SCENE_ID = "scene_id"
+        const val KEY_SCENE_STASH = "scene_stash"
 
         // ---- 5. 桌面悬浮歌词 ----
         const val KEY_LYRIC_OVERLAY = "lyric_overlay"

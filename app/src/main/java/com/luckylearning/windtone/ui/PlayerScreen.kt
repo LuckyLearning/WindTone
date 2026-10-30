@@ -751,6 +751,17 @@ fun PlayerScreen(
             // 用户 2026-10-18 反馈「播放按钮及上一曲下一曲等按钮应该居中，不应该居右」
             // → 恢复独立三段式控制行：播放模式左槽 / ⏮ ⏯ ⏭ 居中 / 队列右槽，
             // 与手机同一套结构，只是尺寸放大（车机尺寸分支保留至今）。
+                        // Car scene chips (large targets)
+            if (state.carMode && !immersive) {
+                SceneChipsRow(
+                    large = true,
+                    showHint = false,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                )
+            }
+
             if (!immersive) {
                 // 三段式布局：左右两个等宽槽位夹住中间的「上一首 / 播放 / 下一首」，
                 // 保证主控按钮绝对居中；播放模式固定在左槽，不再把整排按钮挤偏。

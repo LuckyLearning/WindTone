@@ -256,6 +256,8 @@ fun PlayerOptionsSheet(
     lyricScale: Float,
     lyricOffsetMs: Int,
     sleepRemainingMs: Long,
+    /** 车机：场景芯片用更大触控目标 */
+    carMode: Boolean = false,
     onSpeed: (Float) -> Unit,
     onPitch: (Int) -> Unit,
     onLyricScale: (Float) -> Unit,
@@ -317,6 +319,10 @@ fun PlayerOptionsSheet(
                 subtitle = "预设 / 频段曲线 / 低音增强 / 环绕声 / 响度增强 / 混响",
                 onClick = onOpenEq,
             )
+
+            SectionLabel(stringResource(R.string.scene_section))
+            SceneChipsRow(large = carMode, showHint = true)
+            Spacer(Modifier.height(8.dp))
 
             SectionLabel("睡眠定时")
             OptionRow(

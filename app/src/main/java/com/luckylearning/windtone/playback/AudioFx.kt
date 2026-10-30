@@ -108,6 +108,7 @@ object AudioFx {
     /** 只动增强、曲线没变：用户预设离开，内置曲线预设留着。方案一律离开。 */
     private fun leaveEnhancementEdit() {
         clearActiveSchemeId()
+        SceneMode.onManualEqEdit()
         val nextPreset = UserEqPresets.presetIdAfterManualEnhancement(_state.value.presetId)
         if (nextPreset != _state.value.presetId) prefs?.eqPresetId = nextPreset
         _state.value = _state.value.copy(presetId = nextPreset, schemeId = "")
@@ -122,6 +123,11 @@ object AudioFx {
     private fun clearActiveSchemeId() {
         val p = prefs ?: return
         if (p.carMode) p.carSchemeId = "" else p.soundSchemeId = ""
+    }
+
+    /** 手动改曲线 / 另选预设或方案时离开场景（[setScheme] 由场景自己套用时已设 applying 旗） */
+    private fun leaveSceneIfManual() {
+        SceneMode.onManualEqEdit()
     }
 
     /** 方案值 → Prefs（启用总开关；频段曲线由 [pushValuesToEffects] 按设备频段生成回写） */
@@ -185,6 +191,7 @@ object AudioFx {
      * 仍可单独微调，微调即离开方案（id 清空，界面不再显示选中态）。
      */
     fun setScheme(id: String) {
+        leaveSceneIfManual()
         val p = prefs ?: return
         val scheme = SoundSchemes.byId(id) ?: return
         writeSchemeValues(p, scheme)
@@ -244,6 +251,36 @@ object AudioFx {
             snap.bass, snap.virtual, snap.loudness, snap.reverbId, activeSchemeId(p),
         )
         apply(snap.enabled)
+    }
+
+    /**
+     * 还原一组音效值（场景退出 / 外部快照）。
+     * [schemeId] 写回当前模式对应的方案位（车载 / 手机）。
+     */
+    fun restoreSoundValues(
+        enabled: Boolean,
+        presetId: String,
+        bandsCsv: String,
+        bass: Int,
+        virtual: Int,
+        loudness: Int,
+        reverbId: String,
+        schemeId: String,
+    ) {
+        val p = prefs ?: return
+        p.eqEnabled = enabled
+        p.eqPresetId = presetId
+        p.eqBands = bandsCsv
+        p.eqBassBoost = bass.coerceIn(0, 1000)
+        p.eqVirtualizer = virtual.coerceIn(0, 1000)
+        p.eqLoudness = loudness.coerceIn(0, 1500)
+        p.eqReverbId = reverbId
+        if (p.carMode) p.carSchemeId = schemeId else p.soundSchemeId = schemeId
+        pushValuesToEffects(
+            enabled, presetId, bandsCsv,
+            bass, virtual, loudness, reverbId, schemeId,
+        )
+        apply(enabled)
     }
 
     /**
@@ -400,6 +437,7 @@ object AudioFx {
         p.eqLoudness = preset.loudness
         p.eqReverbId = preset.reverbId
         clearActiveSchemeId()
+        leaveSceneIfManual()
         pushValuesToEffects(
             true, preset.id, preset.bandsCsv,
             preset.bass, preset.virtualizer, preset.loudness, preset.reverbId, "",
@@ -521,6 +559,7 @@ object AudioFx {
         prefs?.eqPresetId = ""
         prefs?.eqBands = encodeBands(levels)
         clearActiveSchemeId()
+        leaveSceneIfManual()
         _state.value = s.copy(bandLevels = levels, presetId = "", schemeId = "")
     }
 
@@ -537,6 +576,7 @@ object AudioFx {
         prefs?.eqPresetId = preset.id
         prefs?.eqBands = encodeBands(levels)
         clearActiveSchemeId()
+        leaveSceneIfManual()
         _state.value = s.copy(presetId = preset.id, bandLevels = levels, schemeId = "")
     }
 

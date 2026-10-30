@@ -317,6 +317,16 @@ class PlaybackEngine(
 
     init {
         AudioFx.init(app)
+        SceneMode.init(prefs)
+        SceneMode.setHooks(
+            SceneMode.Hooks(
+                setSpeed = { setSpeed(it) },
+                setPitchSemitones = { setPitchSemitones(it) },
+                startSleepMs = { SleepTimer.start(it) },
+                cancelSleep = { SleepTimer.cancel() },
+                sleepRemainingMs = { SleepTimer.remainingMs.value },
+            ),
+        )
         TrackVolume.init(app)
         scope.launch {
             SleepTimer.remainingMs.collect { ms ->

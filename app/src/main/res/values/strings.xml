@@ -736,4 +736,15 @@ Direct link looks fine; the issue is in playback (host, cache, or file format).<
     <string name="eq_unavailable_pending">The player does not have an audio session yet.\nStart playing any song, then you can adjust these.</string>
     <string name="eq_still_available_title">Still available</string>
     <string name="eq_volume_balance_hint">Uses ReplayGain or iTunes volume tags when the file has them, and falls back to a loudness estimate otherwise. This is not Loudness Enhance.</string>
+
+    <string name="scene_section">Scenes</string>
+    <string name="scene_off">Off</string>
+    <string name="scene_drive">Drive</string>
+    <string name="scene_commute">Commute</string>
+    <string name="scene_sleep">Sleep</string>
+    <string name="scene_hint">One tap for EQ, speed, and sleep timer. Tap the active scene again or Off to restore what you had.</string>
+    <string name="scene_drive_desc">Car-drive sound profile; sleep timer off</string>
+    <string name="scene_commute_desc">Clear vocals for podcasts and pop on the go</string>
+    <string name="scene_sleep_desc">Soft surround with a 45-minute sleep timer</string>
+
 </resources>
