@@ -208,6 +208,7 @@ fun PlayerScreen(
     var showOverlayStyle by remember { mutableStateOf(false) }
     var showEq by remember { mutableStateOf(false) }
     var showSleep by remember { mutableStateOf(false) }
+    var showBookmarks by remember { mutableStateOf(false) }
     // 长按歌词行校准偏移：存「该行时间戳 to 按下时的播放位置」。
     // 刻意在按下瞬间把位置**快照**下来，而不是让弹窗每 250ms 读一次进度——
     // 否则用户盯着弹窗读数字的那几秒里，"当前要设成多少"一直在跳。
@@ -991,9 +992,16 @@ fun PlayerScreen(
             onMarkAbLoopA = onMarkAbLoopA,
             onMarkAbLoopB = onMarkAbLoopB,
             onClearAbLoop = onClearAbLoop,
+            onOpenBookmarks = { showOptions = false; showBookmarks = true },
             onDismiss = { showOptions = false },
         )
     }
+    if (showBookmarks) BookmarkSheet(
+        song = song,
+        positionMs = progressState.value.positionMs,
+        onSeekTo = onSeekTo,
+        onClose = { showBookmarks = false },
+    )
     if (showOverlayStyle) {
         OverlayStyleSheet(
             carMode = state.carMode,

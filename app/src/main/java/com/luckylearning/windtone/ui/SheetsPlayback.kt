@@ -428,6 +428,7 @@ fun PlayerOptionsSheet(
     onAudioInfo: () -> Unit,
     /** N1：分享当前曲（文本；本地可读时附带音频） */
     onShareCurrent: () -> Unit = {},
+    onOpenBookmarks: () -> Unit = {},
     /** 悬浮歌词开关（右侧 ✓ 表示已开启） */
     lyricOverlay: Boolean,
     /** 是否已拿到「显示悬浮窗」授权；未授权时点击会去系统授权页 */
@@ -477,6 +478,12 @@ fun PlayerOptionsSheet(
                 title = "分享当前曲",
                 subtitle = "标题 / 艺人 / 专辑；本地可读时附带音频",
                 onClick = onShareCurrent,
+            )
+            OptionRow(
+                icon = AppIcons.Bookmark,
+                title = "播放书签",
+                subtitle = "长曲记位置 / 列表跳转",
+                onClick = onOpenBookmarks,
             )
 
             SectionLabel("音效")

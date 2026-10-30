@@ -1,6 +1,7 @@
 package com.luckylearning.windtone
 
 import android.app.Application
+import com.luckylearning.windtone.data.BookmarkRepository
 import com.luckylearning.windtone.data.DataMaintenance
 import com.luckylearning.windtone.data.FavoriteToggle
 import com.luckylearning.windtone.data.LyricsLoader
@@ -51,6 +52,9 @@ class AppContainer(private val app: Application) {
     val messages: MessageBus by lazy { MessageBus() }
 
     /** 收藏切换（播放页红心与快捷磁贴共用） */
+    /** H3 */
+    val bookmarks: BookmarkRepository by lazy { BookmarkRepository(app, messages) }
+
     val favorites: FavoriteToggle by lazy { FavoriteToggle(app, db, songIndex, messages) }
 
     /** 数据自检 / 清理 / 重置 */
