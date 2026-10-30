@@ -1087,4 +1087,37 @@ The list is fetched once on add — nothing is saved if the fetch fails.</string
     <string name="oh_order_item">%1$d. %2$s</string>
     <string name="oh_restore_order">Restore default order</string>
 
+
+    <!-- i18n batch 9: EqSheet chrome (non-SoftEq; 2026-10-31) -->
+    <string name="eq_global_effects_warning">This device\'s playback session does not support effects, so controls are attached to the system audio output: they affect all sounds (including navigation prompts and ringtones).</string>
+    <string name="eq_unavailable_detail">Diagnostics: %1$s</string>
+    <string name="eq_section_scheme">Schemes</string>
+    <string name="eq_scheme_hint">One tap for a full sound profile; tweaking any control below leaves the scheme</string>
+    <string name="eq_scheme_car_suffix">·Car</string>
+    <string name="eq_scheme_none">No scheme</string>
+    <string name="eq_scheme_none_desc">Pick one above for a full profile in one tap; you can still fine-tune each section below.</string>
+    <string name="eq_ab_compare">Hold to compare dry sound</string>
+    <string name="eq_ab_bypassed">Effects bypassed (dry)</string>
+    <string name="eq_section_transition">Playback transition</string>
+    <string name="eq_fade_title">Fade in/out</string>
+    <string name="eq_fade_hint">On auto skip, the old track fades out and the new one fades in</string>
+    <string name="eq_fade_duration">Duration</string>
+    <string name="eq_fade_seconds">%1$s s</string>
+    <string name="eq_volume_balance_title">Volume balance</string>
+    <string name="eq_section_preset">Presets</string>
+    <string name="eq_preset_custom">Custom</string>
+    <string name="eq_section_bands">Bands</string>
+    <string name="eq_bands_hint">Dragging any band leaves the preset and enters Custom</string>
+    <string name="eq_section_enhance">Enhancements</string>
+    <string name="eq_bass_boost">Bass boost</string>
+    <string name="eq_virtualizer">Surround</string>
+    <string name="eq_loudness_enhance">Loudness enhance</string>
+    <string name="eq_off">Off</string>
+    <string name="eq_percent">%1$d%%</string>
+    <string name="eq_loudness_mb">+%1$d mB</string>
+    <string name="eq_loudness_hint">Pulls quieter recordings toward a shared loudness. Too high can clip; stay under +600 mB.</string>
+    <string name="eq_reverb">Reverb</string>
+    <string name="eq_reverb_unavailable">This device does not support reverb; your choice is kept but will not take effect.</string>
+
 </resources>
+

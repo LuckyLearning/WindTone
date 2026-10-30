@@ -128,7 +128,7 @@ fun EqSheet(onClose: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(AppIcons.Tune, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp))
-                Text("均衡器与音效", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.po_eq_effects), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.weight(1f))
                 // 恢复默认：关掉均衡器 + 频段全平 + 三处增强归零 + 混响关闭（= 全新安装那份值）。
                 // 均衡器的值没有对应的设置页行（那一行只是弹层入口），所以这里必须有。
@@ -144,8 +144,7 @@ fun EqSheet(onClose: () -> Unit) {
             // 提示音也会被一起调。
             if (state.available && state.globalEffects) {
                 Text(
-                    "本机的播放会话不支持音效，已改挂到系统音频输出：" +
-                        "这些调节对所有声音生效（包括导航提示音与铃音）。",
+                    stringResource(R.string.eq_global_effects_warning),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp),
@@ -164,7 +163,7 @@ fun EqSheet(onClose: () -> Unit) {
                 )
                 if (state.unavailableDetail.isNotBlank()) {
                     Text(
-                        text = "诊断：${state.unavailableDetail}",
+                        text = stringResource(R.string.eq_unavailable_detail, state.unavailableDetail),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 16.dp),
@@ -224,9 +223,9 @@ fun EqSheet(onClose: () -> Unit) {
  */
 @Composable
 private fun SchemeSection(state: AudioFx.EqState) {
-    SectionLabel("方案")
+    SectionLabel(stringResource(R.string.eq_section_scheme))
     Text(
-        "一键应用完整听感；微调下方任一参数即离开方案",
+        stringResource(R.string.eq_scheme_hint),
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -240,7 +239,12 @@ private fun SchemeSection(state: AudioFx.EqState) {
             FilterChip(
                 selected = state.schemeId == s.id,
                 onClick = { AudioFx.setScheme(s.id) },
-                label = { Text(if (s.forCar) "${s.name}·车载" else s.name) },
+                label = {
+                    Text(
+                        if (s.forCar) s.name + stringResource(R.string.eq_scheme_car_suffix)
+                        else s.name,
+                    )
+                },
             )
         }
     }
@@ -254,13 +258,13 @@ private fun SchemeSection(state: AudioFx.EqState) {
     ) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
             Text(
-                current?.name ?: "未使用方案",
+                current?.name ?: stringResource(R.string.eq_scheme_none),
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
             Text(
-                current?.desc ?: "从上面选一个，一键换一组完整听感；下面各段仍可单独细调。",
+                current?.desc ?: stringResource(R.string.eq_scheme_none_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
@@ -281,7 +285,10 @@ private fun AbCompareButton() {
             .fillMaxWidth()
             .padding(top = 14.dp),
     ) {
-        Text(if (pressed) "已旁路音效（原始声音）" else "按住对比原声")
+        Text(
+            if (pressed) stringResource(R.string.eq_ab_bypassed)
+            else stringResource(R.string.eq_ab_compare),
+        )
     }
 }
 
@@ -299,12 +306,12 @@ private fun PlaybackTransitionSection(
     tv: TrackVolume.State,
     balance: StereoBalanceFx.State,
 ) {
-    SectionLabel("播放过渡")
+    SectionLabel(stringResource(R.string.eq_section_transition))
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text("淡入淡出", style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.eq_fade_title), style = MaterialTheme.typography.bodyMedium)
             Text(
-                "自动切歌时旧曲结尾淡出、新曲开头淡入",
+                stringResource(R.string.eq_fade_hint),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -313,8 +320,11 @@ private fun PlaybackTransitionSection(
     }
     if (tv.fadeEnabled) {
         FxSlider(
-            title = "时长",
-            valueText = "%.1f 秒".format(tv.fadeDurationMs / 1000f),
+            title = stringResource(R.string.eq_fade_duration),
+            valueText = stringResource(
+                R.string.eq_fade_seconds,
+                "%.1f".format(tv.fadeDurationMs / 1000f),
+            ),
             value = tv.fadeDurationMs.toFloat(),
             range = 500f..6000f,
             onValueChange = { TrackVolume.setFadeDurationMs(it.toInt()) },
@@ -322,7 +332,7 @@ private fun PlaybackTransitionSection(
     }
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 10.dp)) {
         Column(Modifier.weight(1f)) {
-            Text("音量平衡", style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.eq_volume_balance_title), style = MaterialTheme.typography.bodyMedium)
             Text(
                 stringResource(R.string.eq_volume_balance_hint),
                 style = MaterialTheme.typography.labelSmall,
@@ -439,7 +449,7 @@ private fun PresetSection(state: AudioFx.EqState) {
         editor = PresetEditor.ConfirmImport(raw = raw, count = parsed.size)
     }
 
-    SectionLabel("预设")
+    SectionLabel(stringResource(R.string.eq_section_preset))
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         FilterChip(
             selected = tab == PresetTab.FEEL,
@@ -585,7 +595,7 @@ private fun PresetSection(state: AudioFx.EqState) {
     ) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
             Text(
-                user?.name ?: builtin?.name ?: "自定义",
+                user?.name ?: builtin?.name ?: stringResource(R.string.eq_preset_custom),
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -732,9 +742,9 @@ private fun PresetNameDialog(
 /** 频段：曲线预览在上（调之前先看一眼形状），频段滑块在下 */
 @Composable
 private fun CurveSection(state: AudioFx.EqState) {
-    SectionLabel("频段")
+    SectionLabel(stringResource(R.string.eq_section_bands))
     Text(
-        "拖动任一频段即离开预设，进入自定义",
+        stringResource(R.string.eq_bands_hint),
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -832,35 +842,48 @@ private fun EqCurvePreview(
 /** 低音增强 / 环绕声 / 响度增强 / 混响 */
 @Composable
 private fun EnhancementSection(state: AudioFx.EqState, reverbPreset: ReverbPresets.Preset?) {
-    SectionLabel("增强音效")
+    SectionLabel(stringResource(R.string.eq_section_enhance))
     TonePads(state)
+    val offLabel = stringResource(R.string.eq_off)
     FxSlider(
-        title = "低音增强",
-        valueText = if (state.bassStrength > 0) "${state.bassStrength / 10}%" else "关闭",
+        title = stringResource(R.string.eq_bass_boost),
+        valueText = if (state.bassStrength > 0) {
+            stringResource(R.string.eq_percent, state.bassStrength / 10)
+        } else {
+            offLabel
+        },
         value = state.bassStrength.toFloat(),
         range = 0f..state.bassMax.toFloat(),
         onValueChange = { AudioFx.setBassStrength(it.toInt()) },
     )
     FxSlider(
-        title = "环绕声",
-        valueText = if (state.virtualStrength > 0) "${state.virtualStrength / 10}%" else "关闭",
+        title = stringResource(R.string.eq_virtualizer),
+        valueText = if (state.virtualStrength > 0) {
+            stringResource(R.string.eq_percent, state.virtualStrength / 10)
+        } else {
+            offLabel
+        },
         value = state.virtualStrength.toFloat(),
         range = 0f..1000f,
         onValueChange = { AudioFx.setVirtualStrength(it.toInt()) },
     )
     FxSlider(
-        title = "响度增强",
-        valueText = if (state.loudnessGain > 0) "+${state.loudnessGain} mB" else "关闭",
+        title = stringResource(R.string.eq_loudness_enhance),
+        valueText = if (state.loudnessGain > 0) {
+            stringResource(R.string.eq_loudness_mb, state.loudnessGain)
+        } else {
+            offLabel
+        },
         value = state.loudnessGain.toFloat(),
         range = 0f..state.loudnessMax.toFloat(),
         onValueChange = { AudioFx.setLoudnessGain(it.toInt()) },
-        hint = "把音量偏小的录音拉到统一响度，过大易削波，建议不超过 +600 mB。",
+        hint = stringResource(R.string.eq_loudness_hint),
     )
 
     // ---------------- 混响 ----------------
     // 档位由平台效果器给死、没有连续量，所以用一排片而不是滑块（与均衡器预设同一套交互）
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 12.dp)) {
-        Text("混响", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Text(stringResource(R.string.eq_reverb), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         Text(
             (reverbPreset ?: ReverbPresets.OFF).name,
             style = MaterialTheme.typography.labelSmall,
@@ -869,7 +892,7 @@ private fun EnhancementSection(state: AudioFx.EqState, reverbPreset: ReverbPrese
     }
     if (!state.reverbAvailable) {
         Text(
-            "本机不支持混响效果，选择会保留但不会生效。",
+            stringResource(R.string.eq_reverb_unavailable),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -917,7 +940,11 @@ private fun TonePads(state: AudioFx.EqState) {
         val up = stringResource(R.string.eq_tone_up)
         TonePad(
             title = stringResource(R.string.eq_tone_bass),
-            valueText = if (state.bassStrength > 0) "${state.bassStrength / 10}%" else "关闭",
+            valueText = if (state.bassStrength > 0) {
+                stringResource(R.string.eq_percent, state.bassStrength / 10)
+            } else {
+                stringResource(R.string.eq_off)
+            },
             downDescription = down,
             upDescription = up,
             onDown = {

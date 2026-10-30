@@ -2237,3 +2237,12 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 
 注意：无业务逻辑改动。未改 SoftEq / EqSheet / SceneMode 引擎 / versionName。诊断包 `[场景]` 段仍中文。
 
+
+
+### i18n 第 9 批（2026-10-31）
+
+**EqSheet chrome（非 SoftEq）**：分区标题、全局效果提示、播放过渡、增强音效与 A/B 对比等用户可见文案进 `values` / `values-zh`；标题复用 `po_eq_effects`。
+
+- SoftEq 区块保持 SoftEqCopy / `soft_eq_*`，本批不改生产逻辑
+- `SoundSchemes` / `EqPresets` / `ReverbPresets` 名称描述仍硬编码，留给后续内容库批次
+- 文档：`docs/功能-i18n均衡器Sheet.md`

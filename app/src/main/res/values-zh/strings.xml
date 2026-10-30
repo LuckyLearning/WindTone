@@ -1053,4 +1053,37 @@
     <string name="oh_order_item">%1$d. %2$s</string>
     <string name="oh_restore_order">恢复默认顺序</string>
 
+
+    <!-- i18n batch 9: EqSheet chrome (non-SoftEq; 2026-10-31) -->
+    <string name="eq_global_effects_warning">本机的播放会话不支持音效，已改挂到系统音频输出：这些调节对所有声音生效（包括导航提示音与铃音）。</string>
+    <string name="eq_unavailable_detail">诊断：%1$s</string>
+    <string name="eq_section_scheme">方案</string>
+    <string name="eq_scheme_hint">一键应用完整听感；微调下方任一参数即离开方案</string>
+    <string name="eq_scheme_car_suffix">·车载</string>
+    <string name="eq_scheme_none">未使用方案</string>
+    <string name="eq_scheme_none_desc">从上面选一个，一键换一组完整听感；下面各段仍可单独细调。</string>
+    <string name="eq_ab_compare">按住对比原声</string>
+    <string name="eq_ab_bypassed">已旁路音效（原始声音）</string>
+    <string name="eq_section_transition">播放过渡</string>
+    <string name="eq_fade_title">淡入淡出</string>
+    <string name="eq_fade_hint">自动切歌时旧曲结尾淡出、新曲开头淡入</string>
+    <string name="eq_fade_duration">时长</string>
+    <string name="eq_fade_seconds">%1$s 秒</string>
+    <string name="eq_volume_balance_title">音量平衡</string>
+    <string name="eq_section_preset">预设</string>
+    <string name="eq_preset_custom">自定义</string>
+    <string name="eq_section_bands">频段</string>
+    <string name="eq_bands_hint">拖动任一频段即离开预设，进入自定义</string>
+    <string name="eq_section_enhance">增强音效</string>
+    <string name="eq_bass_boost">低音增强</string>
+    <string name="eq_virtualizer">环绕声</string>
+    <string name="eq_loudness_enhance">响度增强</string>
+    <string name="eq_off">关闭</string>
+    <string name="eq_percent">%1$d%%</string>
+    <string name="eq_loudness_mb">+%1$d mB</string>
+    <string name="eq_loudness_hint">把音量偏小的录音拉到统一响度，过大易削波，建议不超过 +600 mB。</string>
+    <string name="eq_reverb">混响</string>
+    <string name="eq_reverb_unavailable">本机不支持混响效果，选择会保留但不会生效。</string>
+
 </resources>
+
