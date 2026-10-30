@@ -11,6 +11,7 @@ import com.luckylearning.windtone.data.CoverTrimLevel
 import com.luckylearning.windtone.data.CrashLog
 import com.luckylearning.windtone.data.PinyinIndex
 import com.luckylearning.windtone.data.Prefs
+import com.luckylearning.windtone.data.StorageHotplugMonitor
 import com.luckylearning.windtone.data.UpdateChecker
 import com.luckylearning.windtone.overlay.LyricOverlayBridge
 import com.luckylearning.windtone.ui.AppStrings
@@ -61,6 +62,11 @@ class MusicApp : Application() {
         // 一键恢复的通知。放在最后、且单独兜住 —— 通知失败不该影响启动。
         step("a11y-watch") {
             com.luckylearning.windtone.overlay.AccessibilityWatchdog.checkAndNotify(this)
+        }
+        // 存储热插拔：U 盘 / SD 挂载后节流重扫；卸载时播放域按策略跳过或停住。
+        // 必须动态注册（target 26+ 收不到 manifest 里的 MEDIA_* 隐式广播）。
+        step("storage-hotplug") {
+            StorageHotplugMonitor(this).start()
         }
         BootTrace.mark(this, "app:onCreate-done")
     }

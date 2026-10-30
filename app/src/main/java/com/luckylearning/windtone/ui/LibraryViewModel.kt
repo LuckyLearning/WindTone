@@ -52,6 +52,7 @@ class LibraryViewModel private constructor(
         // 行为类统一挂到本 ViewModel 的 viewModelScope 上：作用域与调度器
         // （以及「随 ViewModel 一起取消」的语义）与拆分前的 `viewModelScope.launch` 完全一致。
         session.scope = viewModelScope
+        session.core.startHotplugWatch()
         // 磁贴与播放页共用 FavoriteToggle：这里订阅变更，让 favoriteUris / 虚拟歌单对齐。
         viewModelScope.launch {
             val favorites = (getApplication<Application>() as com.luckylearning.windtone.MusicApp)

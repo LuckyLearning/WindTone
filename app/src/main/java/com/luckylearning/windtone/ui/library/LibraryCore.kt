@@ -18,6 +18,7 @@ import com.luckylearning.windtone.data.LibrarySearch
 import com.luckylearning.windtone.data.applyLibraryFormatFilter
 import com.luckylearning.windtone.data.PinyinIndex
 import com.luckylearning.windtone.data.ScanScope
+import com.luckylearning.windtone.data.StorageHotplugBus
 import com.luckylearning.windtone.data.SongDeleter
 import com.luckylearning.windtone.data.SortOrder
 import com.luckylearning.windtone.data.db.toEntity
@@ -69,6 +70,30 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
 
     /** 搜索防抖任务 */
     private var searchJob: Job? = null
+
+    /**
+     * 订阅存储热插拔重扫（必须在 [LibrarySession.scope] 已被覆盖成 viewModelScope 之后调用，
+     * 见 LibraryViewModel.init —— 构造期 init{} 会挂到随后被丢弃的临时 scope 上）。
+     *
+     * 走既有 `scan(auto = false)`：与手动「扫描」同管道，绕过冷启动 10 分钟节流。
+     * Bus 自带 3s 合并；这里再挡「正在扫 / 未选范围」。
+     */
+    fun startHotplugWatch() {
+        scope.launch {
+            StorageHotplugBus.rescanRequests.collect {
+                if (_library.value.scanning) {
+                    Log.i(TAG, "热插拔重扫忽略：已在扫描中")
+                    return@collect
+                }
+                if (_library.value.scanScope == ScanScope.UNSET) {
+                    Log.i(TAG, "热插拔重扫忽略：尚未选择扫描范围")
+                    return@collect
+                }
+                Log.i(TAG, "热插拔触发重扫 path=${it.ifEmpty { "(未知)" }}")
+                scan(auto = false)
+            }
+        }
+    }
 
     /**
      * 重新装载曲库与用户数据。

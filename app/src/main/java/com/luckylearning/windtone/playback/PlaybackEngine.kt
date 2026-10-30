@@ -1,6 +1,10 @@
 package com.luckylearning.windtone.playback
 
 import com.luckylearning.windtone.data.UserFacingCopy
+import com.luckylearning.windtone.data.StorageHotplugBus
+import com.luckylearning.windtone.data.StorageHotplugPolicy
+import com.luckylearning.windtone.ui.AppStrings
+import com.luckylearning.windtone.R
 import android.app.Application
 import android.os.SystemClock
 import android.util.Log
@@ -345,6 +349,12 @@ class PlaybackEngine(
         SceneMode.restoreOnColdStart()
         // G7：按 Prefs 决定是否挂蓝牙音频设备监听（默认关，不耗电）
         btAutoCarMonitor.syncRegistration()
+        // 存储卸载：若正在播的曲落在已卸卷上，按 ErrorSkip 同口径跳下一首或停住。
+        scope.launch {
+            StorageHotplugBus.unmountEvents.collect { volumePath ->
+                handleStorageUnmounted(volumePath)
+            }
+        }
         TrackVolume.init(app)
         StereoBalanceFx.init(app) // #9
         scope.launch {
@@ -574,6 +584,49 @@ class PlaybackEngine(
     }
 
     /**
+     * 可移动存储被卸：若当前曲在该卷上，主动跳下一首 / 停住（不等 Media3 报 FileNotFound）。
+     * 无 path 的 MediaStore content:// 曲无法判定归属 → 交给随后的重扫软删 + 播放错误跳过。
+     */
+    private fun handleStorageUnmounted(volumePath: String) {
+        if (volumePath.isBlank()) return
+        val current = _player.value.current ?: return
+        val onVol = StorageHotplugPolicy.songOnVolume(
+            songPath = current.path,
+            songUriString = current.uri.toString(),
+            volumeRoot = volumePath,
+        )
+        val action = StorageHotplugPolicy.decideUnmountPlayback(
+            currentOnGoneVolume = onVol,
+            queueSize = currentQueue.size,
+        )
+        val name = current.displayName.ifBlank { current.title }
+        when (action) {
+            StorageHotplugPolicy.UnmountPlaybackAction.None -> Unit
+            StorageHotplugPolicy.UnmountPlaybackAction.SkipNext -> {
+                messages.post(
+                    UserFacingCopy.ensureNext(
+                        AppStrings.s(R.string.storage_unmount_skip, name),
+                        AppStrings.s(R.string.storage_unmount_next_hint),
+                    ),
+                )
+                val c = controller
+                c?.seekToNextMediaItem()
+                c?.play()
+            }
+            StorageHotplugPolicy.UnmountPlaybackAction.StopAndNotify -> {
+                runCatching { controller?.pause() }
+                _player.update { it.copy(isPlaying = false) }
+                messages.post(
+                    UserFacingCopy.ensureNext(
+                        AppStrings.s(R.string.storage_unmount_stop, name),
+                        AppStrings.s(R.string.storage_unmount_stop_hint),
+                    ),
+                )
+            }
+        }
+    }
+
+    /**
      * 把播放失败的**技术细节**写进崩溃日志（设置 → 关于与诊断 → 崩溃日志可见）。
      *
      * 为什么需要它：提示条只能给一句人话（「网络连接失败」/`ERROR_CODE_IO_UNSPECIFIED`），
@@ -583,6 +636,7 @@ class PlaybackEngine(
      *
      * 只记 host + path 前缀，**不记 query**：阿里直链的 query 是签名，等于临时凭据。
      */
+
     private fun logPlaybackError(error: androidx.media3.common.PlaybackException) {
         runCatching {
             val uri = controller?.currentMediaItem?.localConfiguration?.uri

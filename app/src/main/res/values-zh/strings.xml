@@ -1153,4 +1153,11 @@
     <string name="diag_recent_apps">最近切过的应用（点「加入」即生效）</string>
     <string name="diag_added">已加入：%1$s</string>
 
+
+    <!-- 存储热插拔：播放中卸可移动卷 -->
+    <string name="storage_unmount_skip">存储已卸下，已跳过「%1$s」</string>
+    <string name="storage_unmount_next_hint">重新插入后若缺歌，到曲库点「扫描」</string>
+    <string name="storage_unmount_stop">存储已卸下，已停止「%1$s」</string>
+    <string name="storage_unmount_stop_hint">重新插入后先到曲库「扫描」，再播放</string>
+
 </resources>

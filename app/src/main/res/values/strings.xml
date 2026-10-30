@@ -1187,4 +1187,11 @@ The list is fetched once on add — nothing is saved if the fetch fails.</string
     <string name="diag_recent_apps">Recently switched apps (tap Add to apply)</string>
     <string name="diag_added">Added: %1$s</string>
 
+
+    <!-- Storage hotplug: removable volume unmount while playing -->
+    <string name="storage_unmount_skip">Storage removed; skipped «%1$s»</string>
+    <string name="storage_unmount_next_hint">Reinsert the drive and tap Scan in the library if songs are missing</string>
+    <string name="storage_unmount_stop">Storage removed; stopped on «%1$s»</string>
+    <string name="storage_unmount_stop_hint">Reinsert the drive, then Scan in the library before playing again</string>
+
 </resources>
