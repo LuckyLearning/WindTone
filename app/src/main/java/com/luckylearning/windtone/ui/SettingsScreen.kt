@@ -286,6 +286,10 @@ fun SettingsScreen(
     /** 变调：半音（-12..+12，0 = 原调） */
     onPitch: (Int) -> Unit,
     onSkipSilence: (Boolean) -> Unit,
+    /** H2：片头固定秒 */
+    onSkipIntroSeconds: (Int) -> Unit,
+    /** H2：片尾固定秒 */
+    onSkipOutroSeconds: (Int) -> Unit,
     /** 「打开应用继续上次播放」：冷启动恢复队列后是否自动起播 —— v1.1.16 */
     onAutoResume: (Boolean) -> Unit,
     /** 开机后台起播（v1.1.24） */
@@ -490,6 +494,8 @@ fun SettingsScreen(
                             onSpeed = onSpeed,
                             onPitch = onPitch,
                             onSkipSilence = onSkipSilence,
+                            onSkipIntroSeconds = onSkipIntroSeconds,
+                            onSkipOutroSeconds = onSkipOutroSeconds,
                             onAutoResume = onAutoResume,
                             onAutoPlayOnBoot = onAutoPlayOnBoot,
                         )

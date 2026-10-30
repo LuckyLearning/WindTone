@@ -140,6 +140,8 @@ class PlaybackEngine(
             speed = prefs.playbackSpeed,
             pitchSemitones = prefs.playbackPitchSemitones,
             skipSilence = prefs.skipSilence,
+            skipIntroSeconds = prefs.skipIntroSeconds,
+            skipOutroSeconds = prefs.skipOutroSeconds,
             autoResume = prefs.autoResume,
             autoPlayOnBoot = prefs.autoPlayOnBoot,
         )
@@ -257,6 +259,10 @@ class PlaybackEngine(
     private var abLoop: AbLoopState = AbLoopState()
     /** D1：true = 当前区间来自歌词逐句循环（仅影响文案与 UI 标记） */
     private var abLoopFromLyric: Boolean = false
+    /** H2：本曲是否已做片头 seek */
+    private var introAppliedMediaId: String? = null
+    /** H2：本曲是否已触发片尾切歌 */
+    private var outroFiredMediaId: String? = null
     /** 本次恢复是否**强制**起播（开机后台播放用；不受「打开应用继续上次播放」开关限制） */
     private var forceAutoplayOnRestore = false
 
@@ -446,13 +452,18 @@ class PlaybackEngine(
 
         override fun onPlaybackStateChanged(playbackState: Int) {
             val c = controller ?: return
-            if (playbackState == Player.STATE_READY) consecutiveErrors = 0
+            if (playbackState == Player.STATE_READY) {
+                consecutiveErrors = 0
+                maybeApplyIntroSkip(c)
+            }
             _player.update { it.copy(durationMs = c.duration.coerceAtLeast(0L)) }
             _progress.update { it.copy(bufferedMs = c.bufferedPosition.coerceAtLeast(0L)) }
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             clearAbLoopInternal()
+            introAppliedMediaId = null
+            outroFiredMediaId = null
 
             val c = controller ?: return
             _player.update {
@@ -477,6 +488,7 @@ class PlaybackEngine(
             mediaItem?.mediaId?.takeIf { stats.shouldCountPlay(it) }?.let { stats.recordPlay(it) }
             aliyunUrlRetried = false
             scheduleAliyunWindow()
+            maybeApplyIntroSkip(c)
         }
 
         override fun onRepeatModeChanged(repeatMode: Int) {
@@ -1174,6 +1186,17 @@ class PlaybackEngine(
         PlayerHandle.setSkipSilence(enabled)
     }
 
+    override fun setSkipIntroSeconds(seconds: Int) {
+        val v = settings.setSkipIntroSeconds(seconds)
+        _player.update { it.copy(skipIntroSeconds = v) }
+        controller?.let { maybeApplyIntroSkip(it) }
+    }
+
+    override fun setSkipOutroSeconds(seconds: Int) {
+        val v = settings.setSkipOutroSeconds(seconds)
+        _player.update { it.copy(skipOutroSeconds = v) }
+    }
+
     override fun markAbLoopA() {
         val pos = controller?.currentPosition?.coerceAtLeast(0L) ?: _progress.value.positionMs
         abLoopFromLyric = false
@@ -1666,6 +1689,37 @@ class PlaybackEngine(
      * 不能像以前那样靠界面销毁来停表）；回到前台或重新播放时由
      * [setAppForeground] / [onIsPlayingChanged] 重新拉起。
      */
+
+    /** H2：片头固定秒 seek（每曲一次；用户已拖过片头则不拉回） */
+    private fun maybeApplyIntroSkip(c: MediaController) {
+        val mediaId = c.currentMediaItem?.mediaId
+        val rawDuration = c.duration
+        val duration = if (rawDuration > 0) rawDuration else (_player.value.current?.durationMs ?: 0L)
+        val pos = c.currentPosition.coerceAtLeast(0L)
+        val target = IntroOutroSkip.shouldApplyIntro(
+            alreadyApplied = mediaId != null && mediaId == introAppliedMediaId,
+            positionMs = pos,
+            introSec = prefs.skipIntroSeconds,
+            durationMs = duration,
+        ) ?: return
+        runCatching { c.seekTo(target) }
+        if (mediaId != null) introAppliedMediaId = mediaId
+    }
+
+    /** H2：片尾窗口内切下一首；每曲最多触发一次 */
+    private fun maybeApplyOutroSkip(c: MediaController, positionMs: Long) {
+        val mediaId = c.currentMediaItem?.mediaId
+        if (mediaId != null && mediaId == outroFiredMediaId) return
+        val rawDuration = c.duration
+        val duration = if (rawDuration > 0) rawDuration else (_player.value.current?.durationMs ?: 0L)
+        if (!IntroOutroSkip.shouldSkipOutro(positionMs, duration, prefs.skipOutroSeconds)) return
+        if (mediaId != null) outroFiredMediaId = mediaId
+        runCatching {
+            c.seekToNextMediaItem()
+            if (!c.playWhenReady) c.play()
+        }
+    }
+
     private fun startPositionTicker() {
         if (positionJob?.isActive == true) return
         positionJob = scope.launch {
@@ -1678,6 +1732,7 @@ class PlaybackEngine(
                 if (abSeek != null) {
                     runCatching { c.seekTo(abSeek) }
                 }
+                maybeApplyOutroSkip(c, pos)
                 val buffered = c.bufferedPosition.coerceAtLeast(0L)
                 val rawDuration = c.duration
                 val duration = if (rawDuration > 0) rawDuration else (_player.value.current?.durationMs ?: 0L)

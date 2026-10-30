@@ -502,6 +502,10 @@
     <string name="when_off_boot_does_nothing">关闭时开机不做任何播放入口动作；打开后上车通电即续播，且不弹界面</string>
     <string name="skip_silence">跳过静音</string>
     <string name="skips_leading_silence_in_recordings">自动跳过录音开头的空白段（对整轨 / 现场录音有效）</string>
+    <string name="skip_intro_seconds_title">跳过片头：%1$d 秒</string>
+    <string name="skip_intro_seconds_subtitle">开播后自动跳到该秒数。0 = 关闭。固定秒数，不是静音检测（见上方「跳过静音」）。</string>
+    <string name="skip_outro_seconds_title">跳过片尾：%1$d 秒</string>
+    <string name="skip_outro_seconds_subtitle">剩余不足该秒数时切下一首。0 = 关闭。同为固定秒，与「跳过静音」无关。</string>
     <string name="gapless_playback">无缝播放</string>
     <string name="gapless_playback_subtitle">Media3 单播放器连续队列始终提供；分轨含 encoder delay/padding 时无断点</string>
     <string name="gapless_playback_always_on">始终开启</string>
@@ -864,4 +868,8 @@
     <string name="player_reset_offset_zero">重置为 0</string>
     <string name="player_cover_gesture_hint">双击暂停 · 左右滑切视图 · 上下滑切歌</string>
 
+    <string name="eq_replaygain_mode_label">ReplayGain 模式</string>
+    <string name="eq_replaygain_mode_hint">曲目模式逐曲拉平响度；专辑模式保留专辑内动态。缺标签先回退另一侧，再回落 RMS。</string>
+    <string name="eq_replaygain_mode_track">曲目</string>
+    <string name="eq_replaygain_mode_album">专辑</string>
 </resources>

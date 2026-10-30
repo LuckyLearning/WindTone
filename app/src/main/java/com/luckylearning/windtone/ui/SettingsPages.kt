@@ -250,6 +250,10 @@ internal fun SettingsPlaybackPage(
     onSpeed: (Float) -> Unit,
     onPitch: (Int) -> Unit,
     onSkipSilence: (Boolean) -> Unit,
+    /** H2：片头固定秒（0=关，上限 120） */
+    onSkipIntroSeconds: (Int) -> Unit,
+    /** H2：片尾固定秒（0=关，上限 120） */
+    onSkipOutroSeconds: (Int) -> Unit,
     onAutoResume: (Boolean) -> Unit,
     /** 开机后台起播（v1.1.24） */
     onAutoPlayOnBoot: (Boolean) -> Unit,
@@ -333,6 +337,33 @@ internal fun SettingsPlaybackPage(
         onCheckedChange = onSkipSilence,
         onReset = resetAction(player.skipSilence != SettingsDefaults.SKIP_SILENCE) {
             onSkipSilence(SettingsDefaults.SKIP_SILENCE)
+        },
+    )
+    // H2：片头/片尾固定秒（与上方「跳过静音」无关——那是静音检测）
+    SliderRow(
+        title = stringResource(
+            R.string.skip_intro_seconds_title,
+            player.skipIntroSeconds,
+        ),
+        subtitle = stringResource(R.string.skip_intro_seconds_subtitle),
+        value = player.skipIntroSeconds.toFloat(),
+        range = 0f..120f,
+        onValueChange = { onSkipIntroSeconds(it.roundToInt()) },
+        onReset = resetAction(player.skipIntroSeconds != SettingsDefaults.SKIP_INTRO_SECONDS) {
+            onSkipIntroSeconds(SettingsDefaults.SKIP_INTRO_SECONDS)
+        },
+    )
+    SliderRow(
+        title = stringResource(
+            R.string.skip_outro_seconds_title,
+            player.skipOutroSeconds,
+        ),
+        subtitle = stringResource(R.string.skip_outro_seconds_subtitle),
+        value = player.skipOutroSeconds.toFloat(),
+        range = 0f..120f,
+        onValueChange = { onSkipOutroSeconds(it.roundToInt()) },
+        onReset = resetAction(player.skipOutroSeconds != SettingsDefaults.SKIP_OUTRO_SECONDS) {
+            onSkipOutroSeconds(SettingsDefaults.SKIP_OUTRO_SECONDS)
         },
     )
     // A7：无缝播放诚实化 —— Media3/ExoPlayer 无关闭 API；单实例 + 连续队列

@@ -54,6 +54,10 @@ interface PlayerActions : OverlayActions {
     fun sleepAfterSongs(count: Int)
     fun cancelSleep()
     fun setSkipSilence(enabled: Boolean)
+    /** H2：片头固定秒（0=关，上限 120） */
+    fun setSkipIntroSeconds(seconds: Int)
+    /** H2：片尾固定秒（0=关，上限 120） */
+    fun setSkipOutroSeconds(seconds: Int)
 
     /** 记 A-B 循环 A 点为当前进度（C2） */
     fun markAbLoopA()

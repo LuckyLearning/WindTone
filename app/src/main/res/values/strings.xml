@@ -521,6 +521,10 @@
     <string name="when_off_boot_does_nothing">When off, boot does nothing; when on, playback resumes as soon as the car powers up, with no UI</string>
     <string name="skip_silence">Skip silence</string>
     <string name="skips_leading_silence_in_recordings">Skips leading silence in recordings (works for full albums and live recordings)</string>
+    <string name="skip_intro_seconds_title">Skip intro: %1$d s</string>
+    <string name="skip_intro_seconds_subtitle">On play, seek to this many seconds. 0 = off. Fixed seconds — not silence detection (see Skip silence above).</string>
+    <string name="skip_outro_seconds_title">Skip outro: %1$d s</string>
+    <string name="skip_outro_seconds_subtitle">When this many seconds remain, go to next track. 0 = off. Same as intro: fixed seconds, not silence detection.</string>
     <string name="gapless_playback">Gapless playback</string>
     <string name="gapless_playback_subtitle">Always on via Media3 single-player continuous queue; tracks with encoder delay/padding play without gaps</string>
     <string name="gapless_playback_always_on">Always on</string>
@@ -884,4 +888,8 @@ The list is fetched once on add — nothing is saved if the fetch fails.</string
     <string name="player_reset_offset_zero">Reset to 0</string>
     <string name="player_cover_gesture_hint">Double-tap pause · swipe L/R to switch view · swipe U/D to change track</string>
 
+    <string name="eq_replaygain_mode_label">ReplayGain mode</string>
+    <string name="eq_replaygain_mode_hint">Track keeps per-song loudness; Album keeps album dynamics. Missing tags fall back to the other side, then RMS.</string>
+    <string name="eq_replaygain_mode_track">Track</string>
+    <string name="eq_replaygain_mode_album">Album</string>
 </resources>

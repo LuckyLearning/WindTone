@@ -65,6 +65,8 @@ class SettingsDefaultsTest {
         check("playbackSpeed", prefs.playbackSpeed, SettingsDefaults.SPEED)
         check("playbackPitchSemitones", prefs.playbackPitchSemitones, SettingsDefaults.PITCH_SEMITONES)
         check("skipSilence", prefs.skipSilence, SettingsDefaults.SKIP_SILENCE)
+        check("skipIntroSeconds", prefs.skipIntroSeconds, SettingsDefaults.SKIP_INTRO_SECONDS)
+        check("skipOutroSeconds", prefs.skipOutroSeconds, SettingsDefaults.SKIP_OUTRO_SECONDS)
         check("autoResume", prefs.autoResume, SettingsDefaults.AUTO_RESUME)
         check("autoPlayOnBoot", prefs.autoPlayOnBoot, SettingsDefaults.AUTO_PLAY_ON_BOOT)
 
@@ -111,6 +113,7 @@ class SettingsDefaultsTest {
         check("fadeEnabled", prefs.fadeEnabled, SettingsDefaults.FADE_ENABLED)
         check("fadeDurationMs", prefs.fadeDurationMs, SettingsDefaults.FADE_DURATION_MS)
         check("loudnessBalance", prefs.loudnessBalance, SettingsDefaults.LOUDNESS_BALANCE)
+        check("replayGainMode", prefs.replayGainMode.name, SettingsDefaults.REPLAY_GAIN_MODE)
         check("eqUserPresets", prefs.eqUserPresets, SettingsDefaults.EQ_USER_PRESETS)
 
         assertTrue(

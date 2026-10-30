@@ -209,6 +209,8 @@ internal object DiagnosticsReport {
                     "无缝播放：平台默认开启（Media3 单实例连续队列 + 分轨 encoder delay/padding；无关闭 API，设置页仅说明；历史偏好死键=" + (if (prefs.gaplessPlayback) "开" else "关") + ")",
                 )
                 appendLine("跳过静音：${if (prefs.skipSilence) "开" else "关"}")
+                appendLine("片头跳过：${prefs.skipIntroSeconds} 秒（0=关）")
+                appendLine("片尾跳过：${prefs.skipOutroSeconds} 秒（0=关）")
             }.trimEnd(),
             defaultMusicBlock = DefaultMusicProbe.buildReport(context),
             memoryBlock = MemoryProbe.buildReport(context, library.songs.size),

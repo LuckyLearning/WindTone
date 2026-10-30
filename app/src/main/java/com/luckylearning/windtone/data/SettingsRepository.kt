@@ -59,6 +59,18 @@ class SettingsRepository(val prefs: Prefs) {
         prefs.skipSilence = enabled
     }
 
+    /** H2：片头固定秒；返回夹紧后的值 */
+    fun setSkipIntroSeconds(seconds: Int): Int {
+        prefs.skipIntroSeconds = seconds
+        return prefs.skipIntroSeconds
+    }
+
+    /** H2：片尾固定秒；返回夹紧后的值 */
+    fun setSkipOutroSeconds(seconds: Int): Int {
+        prefs.skipOutroSeconds = seconds
+        return prefs.skipOutroSeconds
+    }
+
     fun setAutoResume(enabled: Boolean) {
         prefs.autoResume = enabled
     }
