@@ -502,6 +502,29 @@ object AudioFx {
         }
     }
 
+    /** 当前「我的」预设的导出 JSON（可空列表）。 */
+    fun exportUserPresetsJson(): String =
+        UserEqPresets.toExportJson(loadUserPresets())
+
+    /**
+     * 从导出 JSON 导入。解析失败返回 null；成功则按 [mode] 合并或覆盖并落盘。
+     * 若当前选中的用户预设在覆盖后不在新列表里，选中态回到「自定义」。
+     */
+    fun importUserPresetsFromJson(
+        raw: String,
+        mode: UserEqPresets.ImportMode,
+    ): UserEqPresets.ImportOutcome? {
+        val imported = UserEqPresets.fromExportJson(raw) ?: return null
+        val outcome = UserEqPresets.importPresets(loadUserPresets(), imported, mode)
+        storeUserPresets(outcome.presets)
+        val cur = _state.value.presetId
+        if (UserEqPresets.isUserId(cur) && outcome.presets.none { it.id == cur }) {
+            prefs?.eqPresetId = ""
+            _state.value = _state.value.copy(presetId = "", userPresets = outcome.presets)
+        }
+        return outcome
+    }
+
     /**
      * 高音快捷旋钮：把 4 kHz 及以上的频段收成同一增益。
      * 曲线变了，内置预设和用户预设、方案一并离开。

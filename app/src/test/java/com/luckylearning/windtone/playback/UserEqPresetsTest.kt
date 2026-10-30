@@ -88,4 +88,69 @@ class UserEqPresetsTest {
         assertEquals("夜路一", p.name)
         assertEquals("夜路一", UserEqPresets.decode(UserEqPresets.encode(listOf(p)))[0].name)
     }
+
+    @Test
+    fun `JSON 往返与坏文件`() {
+        val saved = listOf(sample("夜路", 1), sample("晨跑", 2))
+        val json = UserEqPresets.toExportJson(saved, exportedAtMillis = 42L)
+        assertTrue(json.contains("\"format\":\"windtone.user_eq_presets\""))
+        assertTrue(json.contains("\"exportedAt\":42"))
+        val again = UserEqPresets.fromExportJson(json)!!
+        assertEquals(saved, again)
+        assertNull(UserEqPresets.fromExportJson(""))
+        assertNull(UserEqPresets.fromExportJson("{}"))
+        assertNull(UserEqPresets.fromExportJson("""{"format":"other","presets":[]}"""))
+        assertEquals(
+            emptyList<UserEqPresets.Preset>(),
+            UserEqPresets.fromExportJson(
+                """{"format":"windtone.user_eq_presets","version":1,"presets":[]}""",
+            ),
+        )
+        val oneGood = UserEqPresets.toExportJson(listOf(sample("好", 3)), 1L)
+        val goodObj = oneGood.substring(oneGood.indexOf("[") + 1, oneGood.lastIndexOf("]"))
+        val mixedRaw =
+            """{"format":"windtone.user_eq_presets","presets":[{"id":"nope","name":"x","bands":"0","bass":0,"virtualizer":0,"loudness":0,"reverbId":""},""" +
+                goodObj + "]}"
+        val parsed = UserEqPresets.fromExportJson(mixedRaw)!!
+        assertEquals(1, parsed.size)
+        assertEquals("好", parsed[0].name)
+    }
+
+    @Test
+    fun `导入合并与覆盖`() {
+        val a = sample("甲", 1)
+        val b = sample("乙", 2)
+        val a2 = a.copy(name = "甲改", bass = 100)
+        val c = sample("丙", 3)
+        val merge = UserEqPresets.importPresets(listOf(a, b), listOf(a2, c), UserEqPresets.ImportMode.MERGE)
+        assertEquals(listOf("甲改", "乙", "丙"), merge.presets.map { it.name })
+        assertEquals(1, merge.added)
+        assertEquals(1, merge.updated)
+        assertEquals(0, merge.skipped)
+        val replace = UserEqPresets.importPresets(listOf(a, b), listOf(c), UserEqPresets.ImportMode.REPLACE)
+        assertEquals(listOf(c), replace.presets)
+        assertEquals(1, replace.added)
+        assertEquals(0, replace.updated)
+        val full = (0 until UserEqPresets.MAX_PRESETS).map { sample("n$it", it) }
+        val extra = sample("溢", 99)
+        val capped = UserEqPresets.importPresets(full, listOf(extra), UserEqPresets.ImportMode.MERGE)
+        assertEquals(1, capped.skipped)
+        assertEquals(UserEqPresets.MAX_PRESETS, capped.presets.size)
+        val replaceCap = UserEqPresets.importPresets(
+            emptyList(),
+            full + extra,
+            UserEqPresets.ImportMode.REPLACE,
+        )
+        assertEquals(UserEqPresets.MAX_PRESETS, replaceCap.presets.size)
+        assertEquals(1, replaceCap.skipped)
+    }
+
+    @Test
+    fun `JSON 名字转义`() {
+        val p = UserEqPresets.create(
+            "引\"号\\斜", "0,0", 0, 0, 0, "off", nowMillis = 9L, salt = 1,
+        )!!
+        val again = UserEqPresets.fromExportJson(UserEqPresets.toExportJson(listOf(p)))!!
+        assertEquals("引\"号\\斜", again[0].name)
+    }
 }

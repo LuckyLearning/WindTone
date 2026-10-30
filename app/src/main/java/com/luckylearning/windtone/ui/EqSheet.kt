@@ -5,6 +5,11 @@
 
 package com.luckylearning.windtone.ui
 
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.Canvas
@@ -355,6 +360,7 @@ private sealed class PresetEditor {
     data object Create : PresetEditor()
     data class Rename(val id: String, val initial: String) : PresetEditor()
     data class ConfirmDelete(val id: String, val name: String) : PresetEditor()
+    data class ConfirmImport(val raw: String, val count: Int) : PresetEditor()
 }
 
 @Composable
@@ -373,6 +379,42 @@ private fun PresetSection(state: AudioFx.EqState) {
     }
     var editor by remember { mutableStateOf<PresetEditor?>(null) }
     var libraryFull by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val json = AudioFx.exportUserPresetsJson()
+        val ok = runCatching {
+            context.contentResolver.openOutputStream(uri)?.use { out ->
+                out.write(json.toByteArray(Charsets.UTF_8))
+            } != null
+        }.getOrDefault(false)
+        val msg = if (ok) {
+            context.getString(R.string.eq_user_preset_export_ok, state.userPresets.size)
+        } else {
+            context.getString(R.string.eq_user_preset_export_fail)
+        }
+        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+    }
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val raw = runCatching {
+            context.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
+        }.getOrNull()
+        if (raw == null) {
+            Toast.makeText(context, context.getString(R.string.eq_user_preset_import_read_fail), Toast.LENGTH_SHORT).show()
+            return@rememberLauncherForActivityResult
+        }
+        val parsed = UserEqPresets.fromExportJson(raw)
+        if (parsed == null) {
+            Toast.makeText(context, context.getString(R.string.eq_user_preset_import_bad), Toast.LENGTH_SHORT).show()
+            return@rememberLauncherForActivityResult
+        }
+        editor = PresetEditor.ConfirmImport(raw = raw, count = parsed.size)
+    }
 
     SectionLabel("预设")
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -467,6 +509,31 @@ private fun PresetSection(state: AudioFx.EqState) {
                 ) { Text(stringResource(R.string.eq_user_preset_delete)) }
             }
         }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp),
+        ) {
+            TextButton(
+                onClick = {
+                    if (state.userPresets.isEmpty()) {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.eq_user_preset_export_empty),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    } else {
+                        exportLauncher.launch("windtone-eq-presets.json")
+                    }
+                },
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) { Text(stringResource(R.string.eq_user_preset_export)) }
+            TextButton(
+                onClick = { importLauncher.launch(arrayOf("application/json", "text/*", "*/*")) },
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) { Text(stringResource(R.string.eq_user_preset_import)) }
+        }
     } else {
         val group = if (tab == PresetTab.GENRE) EqPresets.Group.GENRE else EqPresets.Group.FEEL
         FlowRow(
@@ -514,6 +581,66 @@ private fun PresetSection(state: AudioFx.EqState) {
 
     when (val current = editor) {
         null -> Unit
+        is PresetEditor.ConfirmImport -> AlertDialog(
+            onDismissRequest = { editor = null },
+            title = { Text(stringResource(R.string.eq_user_preset_import_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.eq_user_preset_import_body,
+                        current.count,
+                        state.userPresets.size,
+                        UserEqPresets.MAX_PRESETS,
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val outcome = AudioFx.importUserPresetsFromJson(
+                        current.raw,
+                        UserEqPresets.ImportMode.MERGE,
+                    )
+                    editor = null
+                    tab = PresetTab.MINE
+                    val msg = if (outcome == null) {
+                        context.getString(R.string.eq_user_preset_import_bad)
+                    } else {
+                        context.getString(
+                            R.string.eq_user_preset_import_done,
+                            outcome.added,
+                            outcome.updated,
+                            outcome.skipped,
+                        )
+                    }
+                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                }) { Text(stringResource(R.string.eq_user_preset_import_merge)) }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        val outcome = AudioFx.importUserPresetsFromJson(
+                            current.raw,
+                            UserEqPresets.ImportMode.REPLACE,
+                        )
+                        editor = null
+                        tab = PresetTab.MINE
+                        val msg = if (outcome == null) {
+                            context.getString(R.string.eq_user_preset_import_bad)
+                        } else {
+                            context.getString(
+                                R.string.eq_user_preset_import_done_replace,
+                                outcome.added,
+                                outcome.skipped,
+                            )
+                        }
+                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                    }) { Text(stringResource(R.string.eq_user_preset_import_replace)) }
+                    TextButton(onClick = { editor = null }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            },
+        )
         is PresetEditor.ConfirmDelete -> AlertDialog(
             onDismissRequest = { editor = null },
             title = { Text(stringResource(R.string.eq_user_preset_delete)) },
