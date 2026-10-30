@@ -1119,5 +1119,44 @@ The list is fetched once on add — nothing is saved if the fetch fails.</string
     <string name="eq_reverb">Reverb</string>
     <string name="eq_reverb_unavailable">This device does not support reverb; your choice is kept but will not take effect.</string>
 
-</resources>
+    <!-- i18n batch 10: BootDiagView startup diagnostics page (2026-10-31) -->
+    <string name="boot_diag_probe_ok">If you can see the color bars above and this line, the car head unit can display this app\'s window normally.</string>
+    <string name="boot_diag_title">WindTone startup diagnostics</string>
+    <string name="boot_diag_status_forced_first">This is a diagnostic build: every launch stops on this page first. This is the first launch after install, so there is no previous-run record yet.</string>
+    <string name="boot_diag_status_no_record">The last launch exited abnormally. The leftover record is below.</string>
+    <string name="boot_diag_status_stopped_at_diag">The last launch stopped on the diagnostics page without tapping Enter app, so there is no first-frame record — tap the button below to continue.</string>
+    <string name="boot_diag_status_reached_frame">The last launch did draw a first frame. If the screen is still all black, the UI was drawn but not visible (compositor/rendering side), not that nothing was drawn.</string>
+    <string name="boot_diag_status_no_frame">The last launch did not draw UI — the process was alive but no frame was submitted (so there was neither a crash dialog nor anything to see).</string>
+    <string name="boot_diag_section_device">Device &amp; system</string>
+    <string name="boot_diag_section_screen">Screen</string>
+    <string name="boot_diag_section_insets">System bar insets</string>
+    <string name="boot_diag_section_window">Window &amp; display</string>
+    <string name="boot_diag_section_last_boot">Last launch</string>
+    <string name="boot_diag_no_last_boot">(no previous launch record yet)</string>
+    <string name="boot_diag_section_crash">Latest crash</string>
+    <string name="boot_diag_enter_app">Enter app</string>
+    <string name="boot_diag_copy_all">Copy all</string>
+    <string name="boot_diag_insets_prefix">insets: %1$s</string>
+    <string name="boot_diag_copy_crash_header">--- Latest crash ---</string>
+    <string name="boot_diag_footer">If tapping Enter app leads to a black screen again, the window can display but the UI cannot be drawn — please photograph this page and send it back.</string>
+    <string name="boot_diag_insets_unavailable">Unavailable (rootWindowInsets = null)</string>
+    <string name="boot_diag_window_size">Window: %1$d × %2$d px (decorView)</string>
+    <string name="boot_diag_window_display">Page display: displayId=%1$d</string>
+    <string name="boot_diag_window_modes">Multi-window: %1$s　PiP: %2$s</string>
+    <string name="boot_diag_yes">Yes</string>
+    <string name="boot_diag_no">No</string>
+    <string name="boot_diag_window_metrics">WindowMetrics: %1$d × %2$d</string>
+    <string name="boot_diag_displays_count">Displays: %1$d</string>
+    <string name="boot_diag_unavailable">Unavailable: %1$s</string>
+    <string name="boot_diag_pixels">Pixels: %1$d × %2$d</string>
+    <string name="boot_diag_dp">dp: %1$d × %2$d (density %3$s / dpi %4$d)</string>
+    <string name="boot_diag_orientation_line">Orientation: %1$s　Dark mode: %2$s</string>
+    <string name="boot_diag_landscape">Landscape</string>
+    <string name="boot_diag_portrait">Portrait</string>
+    <string name="boot_diag_refresh_rate">Refresh rate: %1$s</string>
+    <string name="boot_diag_font_scale">Font scale: %1$s</string>
+    <string name="boot_diag_truncated">\n…(truncated)</string>
+    <string name="boot_diag_clip_label">WindTone diagnostics</string>
+    <string name="boot_diag_copied">Copied — you can paste it back to us</string>
 
+</resources>

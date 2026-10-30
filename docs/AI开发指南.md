@@ -2246,3 +2246,12 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 - SoftEq 区块保持 SoftEqCopy / `soft_eq_*`，本批不改生产逻辑
 - `SoundSchemes` / `EqPresets` / `ReverbPresets` 名称描述仍硬编码，留给后续内容库批次
 - 文档：`docs/功能-i18n均衡器Sheet.md`
+
+### i18n 第 10 批（2026-10-31）
+
+**BootDiagView 启动诊断页**：探针 / 状态说明 / 分区标题 / 按钮与 Toast / 屏幕·窗口快照字段进 alues / alues-zh（oot_diag_*）。纯 View，用 getString。
+
+- 曲库格式筛选已在既有 lib_format_filter_*，本批不改
+- 设置诊断导出 chrome、DiagnosticsReport 正文留给后续
+- 文档：docs/功能-i18n启动诊断页.md
+

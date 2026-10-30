@@ -1085,5 +1085,44 @@
     <string name="eq_reverb">混响</string>
     <string name="eq_reverb_unavailable">本机不支持混响效果，选择会保留但不会生效。</string>
 
-</resources>
+    <!-- i18n batch 10: BootDiagView 启动诊断页（2026-10-31） -->
+    <string name="boot_diag_probe_ok">能看到上面的色条和这一行字，说明车机能正常显示本应用的窗口</string>
+    <string name="boot_diag_title">WindTone 启动诊断</string>
+    <string name="boot_diag_status_forced_first">这是诊断构建：每次打开都先停在这一页。这是安装后的第一次启动，还没有上一轮记录。</string>
+    <string name="boot_diag_status_no_record">上次启动异常退出。下面是留下的记录。</string>
+    <string name="boot_diag_status_stopped_at_diag">上一轮停在诊断页，没点「进入应用」，所以没有首帧记录 —— 点下面的按钮继续。</string>
+    <string name="boot_diag_status_reached_frame">上一轮已经画出首帧。如果屏幕仍然全黑，说明界面画出来了但看不见（渲染/合成侧），不是没画。</string>
+    <string name="boot_diag_status_no_frame">上一轮没有画出界面 —— 进程活着，但一帧都没送出去（所以既没有崩溃对话框，也没什么可看）。</string>
+    <string name="boot_diag_section_device">设备与系统</string>
+    <string name="boot_diag_section_screen">屏幕</string>
+    <string name="boot_diag_section_insets">系统栏 insets</string>
+    <string name="boot_diag_section_window">窗口与显示</string>
+    <string name="boot_diag_section_last_boot">上一轮启动</string>
+    <string name="boot_diag_no_last_boot">（还没有上一轮记录）</string>
+    <string name="boot_diag_section_crash">最近一次崩溃</string>
+    <string name="boot_diag_enter_app">进入应用</string>
+    <string name="boot_diag_copy_all">复制全部</string>
+    <string name="boot_diag_insets_prefix">insets：%1$s</string>
+    <string name="boot_diag_copy_crash_header">--- 最近崩溃 ---</string>
+    <string name="boot_diag_footer">如果点「进入应用」后又是全黑，说明窗口能显示、但界面画不出来 —— 请把这个页面拍照发回。</string>
+    <string name="boot_diag_insets_unavailable">取不到（rootWindowInsets = null）</string>
+    <string name="boot_diag_window_size">窗口：%1$d × %2$d px（decorView）</string>
+    <string name="boot_diag_window_display">页面所在屏：displayId=%1$d</string>
+    <string name="boot_diag_window_modes">多窗口：%1$s　画中画：%2$s</string>
+    <string name="boot_diag_yes">是</string>
+    <string name="boot_diag_no">否</string>
+    <string name="boot_diag_window_metrics">WindowMetrics：%1$d × %2$d</string>
+    <string name="boot_diag_displays_count">显示设备：%1$d 个</string>
+    <string name="boot_diag_unavailable">取不到：%1$s</string>
+    <string name="boot_diag_pixels">像素：%1$d × %2$d</string>
+    <string name="boot_diag_dp">dp：%1$d × %2$d（density %3$s / dpi %4$d）</string>
+    <string name="boot_diag_orientation_line">方向：%1$s　深色模式：%2$s</string>
+    <string name="boot_diag_landscape">横屏</string>
+    <string name="boot_diag_portrait">竖屏</string>
+    <string name="boot_diag_refresh_rate">刷新率：%1$s</string>
+    <string name="boot_diag_font_scale">字体缩放：%1$s</string>
+    <string name="boot_diag_truncated">\n…（已截断）</string>
+    <string name="boot_diag_clip_label">WindTone 诊断</string>
+    <string name="boot_diag_copied">已复制，可以直接粘贴发回</string>
 
+</resources>

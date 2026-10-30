@@ -22,6 +22,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.BootRecord
 import com.luckylearning.windtone.data.BootTrace
 import com.luckylearning.windtone.data.CrashLog
@@ -39,6 +40,9 @@ import java.util.Locale
  *
  * 页面内容按「一眼能看完就够定位」排序：设备与系统 → 屏幕与 insets → 上一轮启动记录
  * → 最近崩溃。全部可复制，用户拍照也行。
+ *
+ * 用户可见文案走 `R.string.boot_diag_*`（i18n 第 10 批）；本页刻意不用 Compose，
+ * 因此用 `Context.getString` 而不是 `stringResource`。
  */
 object BootDiagView {
 
@@ -72,7 +76,7 @@ object BootDiagView {
         content.addView(BarsView(ctx))
         content.addView(
             TextView(ctx).apply {
-                text = "能看到上面的色条和这一行字，说明车机能正常显示本应用的窗口"
+                text = ctx.getString(R.string.boot_diag_probe_ok)
                 setTextColor(0xFF7A0F5A.toInt())
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
                 setTypeface(typeface, Typeface.BOLD)
@@ -80,7 +84,7 @@ object BootDiagView {
             }
         )
 
-        content.addView(title(ctx, "WindTone 启动诊断"))
+        content.addView(title(ctx, ctx.getString(R.string.boot_diag_title)))
         content.addView(
             paragraph(
                 ctx,
@@ -89,42 +93,58 @@ object BootDiagView {
                     // 「崩了」→ 有栈；「没画」→ 渲染链在首帧之前就断了；
                     // 「画了但看不见」→ 画布/合成侧，不是没画。
                     record == null && forced ->
-                        "这是诊断构建：每次打开都先停在这一页。这是安装后的第一次启动，还没有上一轮记录。"
-                    record == null -> "上次启动异常退出。下面是留下的记录。"
+                        ctx.getString(R.string.boot_diag_status_forced_first)
+                    record == null ->
+                        ctx.getString(R.string.boot_diag_status_no_record)
                     record.stoppedAtDiag ->
-                        "上一轮停在诊断页，没点「进入应用」，所以没有首帧记录 —— 点下面的按钮继续。"
+                        ctx.getString(R.string.boot_diag_status_stopped_at_diag)
                     record.reachedFrame ->
-                        "上一轮已经画出首帧。如果屏幕仍然全黑，说明界面画出来了但看不见（渲染/合成侧），不是没画。"
+                        ctx.getString(R.string.boot_diag_status_reached_frame)
                     else ->
-                        "上一轮没有画出界面 —— 进程活着，但一帧都没送出去（所以既没有崩溃对话框，也没什么可看）。"
+                        ctx.getString(R.string.boot_diag_status_no_frame)
                 },
                 color = MUTED,
             )
         )
 
-        content.addView(section(ctx, "设备与系统", BootTrace.deviceInfo(ctx)))
-        content.addView(section(ctx, "屏幕", screenInfo(ctx)))
+        content.addView(
+            section(ctx, ctx.getString(R.string.boot_diag_section_device), BootTrace.deviceInfo(ctx)),
+        )
+        content.addView(
+            section(ctx, ctx.getString(R.string.boot_diag_section_screen), screenInfo(ctx)),
+        )
 
         // insets 必须等 View 挂上去才拿得到，先占位、post 里回填
         val insetsText = paragraph(ctx, "…")
-        content.addView(sectionView(ctx, "系统栏 insets", insetsText))
+        content.addView(
+            sectionView(ctx, ctx.getString(R.string.boot_diag_section_insets), insetsText),
+        )
 
         // 车机上还有一个必须排除的可能：界面被放到了另一块屏幕上（中控 + 仪表是两块 display），
         // 主屏只会显示桌面。窗口尺寸和 displayId 能把这种情况直接暴露出来。
         val windowText = paragraph(ctx, "…")
-        content.addView(sectionView(ctx, "窗口与显示", windowText))
+        content.addView(
+            sectionView(ctx, ctx.getString(R.string.boot_diag_section_window), windowText),
+        )
 
         content.addView(
             section(
                 ctx,
-                "上一轮启动",
-                record?.let { BootTrace.summary(it) } ?: "（还没有上一轮记录）",
+                ctx.getString(R.string.boot_diag_section_last_boot),
+                record?.let { BootTrace.summary(it) }
+                    ?: ctx.getString(R.string.boot_diag_no_last_boot),
             )
         )
 
         val crash = runCatching { CrashLog.latest(ctx) }.getOrNull()
         if (!crash.isNullOrBlank()) {
-            content.addView(section(ctx, "最近一次崩溃", truncate(crash, 2000)))
+            content.addView(
+                section(
+                    ctx,
+                    ctx.getString(R.string.boot_diag_section_crash),
+                    truncate(ctx, crash, 2000),
+                ),
+            )
         }
 
         val buttons = LinearLayout(ctx).apply {
@@ -133,21 +153,26 @@ object BootDiagView {
         }
         buttons.addView(
             Button(ctx).apply {
-                text = "进入应用"
+                text = ctx.getString(R.string.boot_diag_enter_app)
                 setOnClickListener { onEnter() }
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             }
         )
         buttons.addView(
             Button(ctx).apply {
-                text = "复制全部"
+                text = ctx.getString(R.string.boot_diag_copy_all)
                 setOnClickListener {
                     val all = buildString {
                         appendLine(BootTrace.deviceInfo(ctx))
                         appendLine(screenInfo(ctx))
-                        appendLine("insets：" + insetsText.text)
+                        appendLine(
+                            ctx.getString(R.string.boot_diag_insets_prefix, insetsText.text),
+                        )
                         record?.let { appendLine(BootTrace.summary(it)) }
-                        crash?.let { appendLine("--- 最近崩溃 ---"); appendLine(it) }
+                        crash?.let {
+                            appendLine(ctx.getString(R.string.boot_diag_copy_crash_header))
+                            appendLine(it)
+                        }
                     }
                     copy(ctx, all)
                 }
@@ -159,7 +184,7 @@ object BootDiagView {
         content.addView(
             paragraph(
                 ctx,
-                "如果点「进入应用」后又是全黑，说明窗口能显示、但界面画不出来 —— 请把这个页面拍照发回。",
+                ctx.getString(R.string.boot_diag_footer),
                 color = ACCENT,
                 topPaddingDp = 20,
             )
@@ -173,7 +198,7 @@ object BootDiagView {
         scroll.post {
             val insets = runCatching { ViewCompat.getRootWindowInsets(scroll) }.getOrNull()
             insetsText.text = if (insets == null) {
-                "取不到（rootWindowInsets = null）"
+                ctx.getString(R.string.boot_diag_insets_unavailable)
             } else {
                 buildString {
                     appendLine("statusBars     ${insets.getInsets(WindowInsetsCompat.Type.statusBars())}")
@@ -201,43 +226,89 @@ object BootDiagView {
     private fun windowInfo(ctx: Activity, root: View): String = buildString {
         runCatching {
             val decor = ctx.window.decorView
-            appendLine("窗口：${decor.width} × ${decor.height} px（decorView）")
-            appendLine("页面所在屏：displayId=${root.display?.displayId ?: -1}")
-            appendLine("多窗口：${ctx.isInMultiWindowMode}　画中画：${ctx.isInPictureInPictureMode}")
+            appendLine(
+                ctx.getString(R.string.boot_diag_window_size, decor.width, decor.height),
+            )
+            appendLine(
+                ctx.getString(
+                    R.string.boot_diag_window_display,
+                    root.display?.displayId ?: -1,
+                ),
+            )
+            val yes = ctx.getString(R.string.boot_diag_yes)
+            val no = ctx.getString(R.string.boot_diag_no)
+            appendLine(
+                ctx.getString(
+                    R.string.boot_diag_window_modes,
+                    if (ctx.isInMultiWindowMode) yes else no,
+                    if (ctx.isInPictureInPictureMode) yes else no,
+                ),
+            )
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 val bounds = ctx.windowManager.currentWindowMetrics.bounds
-                appendLine("WindowMetrics：${bounds.width()} × ${bounds.height()}")
+                appendLine(
+                    ctx.getString(
+                        R.string.boot_diag_window_metrics,
+                        bounds.width(),
+                        bounds.height(),
+                    ),
+                )
             }
             val dm = ctx.getSystemService(DisplayManager::class.java)
             val displays = dm?.displays.orEmpty()
-            appendLine("显示设备：${displays.size} 个")
+            appendLine(ctx.getString(R.string.boot_diag_displays_count, displays.size))
             displays.forEach { d ->
                 val mode = d.mode
                 append(
                     "  #${d.displayId}  ${d.name}  ${mode.physicalWidth}×${mode.physicalHeight}" +
-                        " @${String.format(Locale.US, "%.0f", d.refreshRate ?: 0f)}\n"
+                        " @${String.format(Locale.US, "%.0f", d.refreshRate ?: 0f)}\n",
                 )
             }
-        }.onFailure { append("取不到：${it.javaClass.simpleName}") }
+        }.onFailure {
+            append(ctx.getString(R.string.boot_diag_unavailable, it.javaClass.simpleName))
+        }
     }.trimEnd()
 
     private fun screenInfo(ctx: Context): String {
         val dm = ctx.resources.displayMetrics
         val cfg = ctx.resources.configuration
         val night = (cfg.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-        val orientation = if (cfg.orientation == Configuration.ORIENTATION_LANDSCAPE) "横屏" else "竖屏"
+        val orientation = if (cfg.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            ctx.getString(R.string.boot_diag_landscape)
+        } else {
+            ctx.getString(R.string.boot_diag_portrait)
+        }
+        val yes = ctx.getString(R.string.boot_diag_yes)
+        val no = ctx.getString(R.string.boot_diag_no)
         return buildString {
-            appendLine("像素：${dm.widthPixels} × ${dm.heightPixels}")
+            appendLine(ctx.getString(R.string.boot_diag_pixels, dm.widthPixels, dm.heightPixels))
             appendLine(
-                "dp：${(dm.widthPixels / dm.density).toInt()} × ${(dm.heightPixels / dm.density).toInt()}" +
-                    "（density ${dm.density} / dpi ${dm.densityDpi}）"
+                ctx.getString(
+                    R.string.boot_diag_dp,
+                    (dm.widthPixels / dm.density).toInt(),
+                    (dm.heightPixels / dm.density).toInt(),
+                    dm.density.toString(),
+                    dm.densityDpi,
+                ),
             )
-            appendLine("方向：$orientation　深色模式：${if (night) "是" else "否"}")
+            appendLine(
+                ctx.getString(
+                    R.string.boot_diag_orientation_line,
+                    orientation,
+                    if (night) yes else no,
+                ),
+            )
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 val rate = runCatching { ctx.display?.refreshRate }.getOrNull()
-                appendLine("刷新率：${rate?.let { String.format(Locale.US, "%.0f", it) } ?: "未知"}")
+                appendLine(
+                    ctx.getString(
+                        R.string.boot_diag_refresh_rate,
+                        rate?.let { String.format(Locale.US, "%.0f", it) }
+                            ?: ctx.getString(R.string.unknown),
+                    ),
+                )
             }
-            append("字体缩放：${cfg.fontScale}")
+            append(ctx.getString(R.string.boot_diag_font_scale, cfg.fontScale.toString()))
         }
     }
 
@@ -323,14 +394,20 @@ object BootDiagView {
         }
     }
 
-    private fun truncate(text: String, limit: Int): String =
-        if (text.length <= limit) text else text.substring(0, limit) + "\n…（已截断）"
+    private fun truncate(ctx: Context, text: String, limit: Int): String =
+        if (text.length <= limit) {
+            text
+        } else {
+            text.substring(0, limit) + ctx.getString(R.string.boot_diag_truncated)
+        }
 
     private fun copy(ctx: Context, text: String) {
         runCatching {
             val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            cm.setPrimaryClip(ClipData.newPlainText("WindTone 诊断", text))
-            Toast.makeText(ctx, "已复制，可以直接粘贴发回", Toast.LENGTH_SHORT).show()
+            cm.setPrimaryClip(
+                ClipData.newPlainText(ctx.getString(R.string.boot_diag_clip_label), text),
+            )
+            Toast.makeText(ctx, ctx.getString(R.string.boot_diag_copied), Toast.LENGTH_SHORT).show()
         }
     }
 
