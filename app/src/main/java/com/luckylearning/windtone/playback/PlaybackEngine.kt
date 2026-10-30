@@ -34,6 +34,7 @@ import com.luckylearning.windtone.data.aliyun.AliyunTrackStore
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.data.model.TrackFragment
 import com.luckylearning.windtone.lyrics.Lyrics
+import com.luckylearning.windtone.lyrics.LockScreenLyricPublisher
 import com.luckylearning.windtone.overlay.LyricOverlayBridge
 import com.luckylearning.windtone.overlay.LyricOverlayBus
 import com.luckylearning.windtone.overlay.LyricOverlayService
@@ -461,6 +462,10 @@ class PlaybackEngine(
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            // H4：锁屏歌词只改 metadata 的 replaceMediaItem 也会触发本回调；
+            // 若照常清 A-B / 重载歌词，等于每换一行歌词就「切歌」一次。
+            if (LockScreenLyricPublisher.isUpdating) return
+            LockScreenLyricPublisher.reset()
             clearAbLoopInternal()
             introAppliedMediaId = null
             outroFiredMediaId = null
@@ -1784,6 +1789,8 @@ class PlaybackEngine(
                 // 悬浮歌词：与进度同频驱动，去重在 LyricOverlayBridge 内部按内容比对完成。
                 // 转发逻辑抽到 OverlayTickHelper，开关关闭时直接跳过。
                 if (prefs.lyricOverlay) OverlayTickHelper.publishLyric(pos, playing, _player.value)
+                // H4：通知栏 / 锁屏 SYNOPSIS（与悬浮窗同源时间轴；不依赖悬浮窗开关）
+                runCatching { LockScreenLyricPublisher.publish(c, _player.value, pos) }
                 // 顺便看一眼服务还在不在（进程被 ROM 杀掉的情况）——带 30 秒节流，
                 // 正常情况下就是读一个 volatile boolean。决策抽到 OverlayTickHelper。
                 if (OverlayTickHelper.shouldReviveOverlay(

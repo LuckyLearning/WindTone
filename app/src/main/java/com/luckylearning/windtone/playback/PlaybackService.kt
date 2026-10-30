@@ -156,6 +156,9 @@ class PlaybackService : MediaLibraryService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
+        // H4：通知栏第二行优先显示 MediaMetadata.description（当前歌词）
+        setMediaNotificationProvider(LyricMediaNotificationProvider(this))
+
         val session = MediaLibrarySession.Builder(this, player, LibraryCallback())
             .setSessionActivity(sessionActivity)
             .build()
