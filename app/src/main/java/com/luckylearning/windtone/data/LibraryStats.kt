@@ -29,7 +29,7 @@ data class FormatStat(
     val label: String get() = if (ext.isEmpty()) "未知格式" else ext.uppercase()
 
     /** 是否无损容器（用于「无损 / 有损」拆分） */
-    val lossless: Boolean get() = ext in LOSSLESS_EXTS
+    val lossless: Boolean get() = ext in LOSSLESS_AUDIO_EXTS
 
     /** 平均码率（kbps，取整）；时长未知时返回 0 —— 0 表示"算不出来"，不是"0 kbps" */
     val averageKbps: Int get() = if (durationMs <= 0L || bytes <= 0L) {
@@ -76,8 +76,15 @@ data class LibraryStats(
         if (totalBytes <= 0L) 0f else (stat.bytes.toDouble() / totalBytes).toFloat().coerceIn(0f, 1f)
 }
 
-/** 无损容器扩展名。m4a / mp4 **不在此列**：它们既可能是 ALAC 也可能是 AAC，光看名字判不出来 */
-private val LOSSLESS_EXTS = setOf("flac", "wav", "aif", "aiff", "ape", "dsf", "dff", "tta", "tak", "wv", "alac")
+/**
+ * 无损容器扩展名（与格式统计 / 曲库格式筛选共用）。
+ * m4a / mp4 **不在此列**：它们既可能是 ALAC 也可能是 AAC，光看名字判不出来。
+ */
+val LOSSLESS_AUDIO_EXTS = setOf("flac", "wav", "aif", "aiff", "ape", "dsf", "dff", "tta", "tak", "wv", "alac")
+
+/** 扩展名是否按「无损」口径计入（先 [normalizeAudioExtension]） */
+fun isLosslessAudioExt(ext: String): Boolean =
+    normalizeAudioExtension(ext) in LOSSLESS_AUDIO_EXTS
 
 /**
  * 同一格式的多种写法归一到一处，否则「WAV / WAVE」「OGG / OGA」会被拆成两行，

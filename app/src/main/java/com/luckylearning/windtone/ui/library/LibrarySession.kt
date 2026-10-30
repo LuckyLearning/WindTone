@@ -65,6 +65,7 @@ internal class LibrarySession(app: Application) {
         LibraryUiState(
             // 排序按视图各取一份（v1.1.4 排序下沉）：恢复的视图带着它自己那份排序回来
             sortOrder = prefs.sortOrder(initialView.name, initialView.defaultSort),
+            formatFilter = prefs.libraryFormatFilter,
             view = initialView,
             deepScan = repository.deepScanEnabled(),
             scanScope = prefs.scanScope,

@@ -27,6 +27,10 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Badge
+import com.luckylearning.windtone.data.LibraryFormatFilter
+import com.luckylearning.windtone.data.applyLibraryFormatFilter
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -128,6 +132,7 @@ internal fun LibraryHeader(
     onOpenDrawer: () -> Unit,
     onQuery: (String) -> Unit,
     onSort: (SortOrder) -> Unit,
+    onFormatFilter: (LibraryFormatFilter) -> Unit,
     onRequestPermission: () -> Unit,
     onImportFolder: () -> Unit,
     onRescan: () -> Unit,
@@ -143,6 +148,7 @@ internal fun LibraryHeader(
     var sortMenu by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
     var searchMode by remember { mutableStateOf(false) }
+    var filterSheet by remember { mutableStateOf(false) }
 
     // ------------------------------------------------------ 搜索框语音听写（2026-10-27）
     //
@@ -187,15 +193,18 @@ internal fun LibraryHeader(
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground,
             )
-            if (library.songs.isNotEmpty()) {
-                Spacer(Modifier.width(10.dp))
-                CountPill(
-                    pluralStringResource(
-                        R.plurals.lib_song_count,
-                        library.songs.size,
-                        library.songs.size,
+            run {
+                val shown = applyLibraryFormatFilter(library.songs, library.formatFilter)
+                if (shown.isNotEmpty() || library.songs.isNotEmpty()) {
+                    Spacer(Modifier.width(10.dp))
+                    CountPill(
+                        pluralStringResource(
+                            R.plurals.lib_song_count,
+                            shown.size,
+                            shown.size,
+                        )
                     )
-                )
+                }
             }
             Spacer(Modifier.weight(1f))
 
@@ -207,6 +216,23 @@ internal fun LibraryHeader(
                     ),
                     tint = MaterialTheme.colorScheme.onBackground,
                 )
+            }
+
+            IconButton(onClick = { filterSheet = true }) {
+                BadgedBox(
+                    badge = {
+                        if (library.formatFilter.isActive) {
+                            Badge()
+                        }
+                    },
+                ) {
+                    Icon(
+                        imageVector = AppIcons.Tune,
+                        contentDescription = stringResource(R.string.cd_format_filter),
+                        tint = if (library.formatFilter.isActive) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onBackground,
+                    )
+                }
             }
 
             Box {
@@ -442,6 +468,49 @@ internal fun LibraryHeader(
                 modifier = Modifier.weight(1f),
             )
         }
+
+        if (library.formatFilter.isActive) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(top = 6.dp),
+            ) {
+                if (library.formatFilter.losslessOnly) {
+                    AssistChip(
+                        onClick = {
+                            onFormatFilter(library.formatFilter.copy(losslessOnly = false))
+                        },
+                        label = { Text(stringResource(R.string.lib_format_filter_lossless), fontSize = 12.sp) },
+                    )
+                }
+                library.formatFilter.extensions.sorted().forEach { ext ->
+                    AssistChip(
+                        onClick = {
+                            onFormatFilter(
+                                library.formatFilter.copy(
+                                    extensions = library.formatFilter.extensions - ext,
+                                ),
+                            )
+                        },
+                        label = { Text(ext.uppercase(), fontSize = 12.sp) },
+                    )
+                }
+                TextButton(onClick = { onFormatFilter(LibraryFormatFilter.NONE) }) {
+                    Text(stringResource(R.string.lib_format_filter_clear), fontSize = 12.sp)
+                }
+            }
+        }
+    }
+
+    if (filterSheet) {
+        LibraryFormatFilterSheet(
+            filter = library.formatFilter,
+            onChange = onFormatFilter,
+            onDismiss = { filterSheet = false },
+        )
     }
 }
 

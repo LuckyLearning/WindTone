@@ -8,6 +8,7 @@ import com.luckylearning.windtone.data.DuplicateGroup
 import com.luckylearning.windtone.data.ListeningReport
 import com.luckylearning.windtone.data.ScanScope
 import com.luckylearning.windtone.data.SettingsDefaults
+import com.luckylearning.windtone.data.LibraryFormatFilter
 import com.luckylearning.windtone.data.SortOrder
 import com.luckylearning.windtone.data.UpdateInfo
 import com.luckylearning.windtone.data.buildListeningReport
@@ -153,6 +154,8 @@ data class LibraryUiState(
     val songs: List<Song> = emptyList(),
     val visible: List<Song> = emptyList(),
     val query: String = "",
+    /** 曲库格式筛选（H5）；落盘见 Prefs.libraryFormatFilter */
+    val formatFilter: LibraryFormatFilter = LibraryFormatFilter.NONE,
     val sortOrder: SortOrder = SortOrder.TITLE,
     val scanning: Boolean = false,
     val statusText: String = "",
@@ -453,10 +456,6 @@ data class PlayerUiState(
     val audioInfo: AudioInspector.Info? = null,
     val audioInfoLoading: Boolean = false,
     val skipSilence: Boolean = false,
-    /** H2：片头固定跳过秒数（0=关） */
-    val skipIntroSeconds: Int = SettingsDefaults.SKIP_INTRO_SECONDS,
-    /** H2：片尾固定跳过秒数（0=关） */
-    val skipOutroSeconds: Int = SettingsDefaults.SKIP_OUTRO_SECONDS,
     /**
      * A-B 循环点（C2，会话级，不落盘；切歌清除）。
      * null = 未设；两端都有且 B>A 时引擎在进度 ticker 里 seek 回 A。

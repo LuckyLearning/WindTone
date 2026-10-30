@@ -1,5 +1,6 @@
 package com.luckylearning.windtone.ui.library
 
+import com.luckylearning.windtone.data.LibraryFormatFilter
 import com.luckylearning.windtone.data.ScanScope
 import com.luckylearning.windtone.data.SortOrder
 import com.luckylearning.windtone.data.model.Song
@@ -30,6 +31,7 @@ interface LibraryActions {
     fun setMinSongDurationSec(sec: Int)
     fun scan(auto: Boolean = false)
     fun setQuery(q: String)
+    fun setFormatFilter(filter: LibraryFormatFilter)
     fun setSort(order: SortOrder)
     fun setView(view: LibraryView)
     fun openGroup(group: GroupInfo)

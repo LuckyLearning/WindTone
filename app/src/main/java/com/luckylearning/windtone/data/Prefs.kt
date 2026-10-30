@@ -6,7 +6,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import com.luckylearning.windtone.playback.ReplayGainMode
 
 /**
  * 歌曲排序方式。
@@ -81,11 +80,6 @@ object SettingsDefaults {
     const val PITCH_SEMITONES = 0
 
     const val SKIP_SILENCE = false
-
-    /** H2：片头固定跳过秒数；0 = 关闭。上限见 IntroOutroSkip.MAX_SECONDS */
-    const val SKIP_INTRO_SECONDS = 0
-    /** H2：片尾固定跳过秒数；0 = 关闭 */
-    const val SKIP_OUTRO_SECONDS = 0
 
     /**
      * 打开应用时是否从上次的进度接着播（v1.1.16）。
@@ -388,7 +382,6 @@ object SettingsDefaults {
 
     /** 曲间响度平衡：出厂关（需要后台分析音频，用户显式开启） */
     const val LOUDNESS_BALANCE = false
-    const val REPLAY_GAIN_MODE = "TRACK"
 
     /** 用户命名的均衡器预设（[com.luckylearning.windtone.playback.UserEqPresets] 编码）；空串 = 还没存过 */
     const val EQ_USER_PRESETS = ""
@@ -514,6 +507,39 @@ class Prefs private constructor(context: Context) {
     // ============================================================ 1. 音乐库与扫描
 
     /** 扫描范围：默认未选择，装机后不自动扫描 */
+
+    /**
+     * 曲库「仅无损 / 按扩展名」筛选（H5）。
+     * 扩展名落盘为逗号分隔小写串（空串 = 不限扩展名）；与 [LibraryFormatFilter] 同源，
+     * 重启后仍生效。
+     */
+    var libraryFormatFilter: LibraryFormatFilter
+        get() {
+            val lossless = sp.getBoolean(KEY_LIB_LOSSLESS_ONLY, false)
+            val raw = sp.getString(KEY_LIB_FORMAT_EXTS, "").orEmpty()
+            val exts = raw.split(',')
+                .map { normalizeAudioExtension(it.trim()) }
+                .filter { it.isNotEmpty() }
+                .toSet()
+            return LibraryFormatFilter(losslessOnly = lossless, extensions = exts)
+        }
+        set(value) {
+            val exts = value.extensions
+                .map { normalizeAudioExtension(it) }
+                .filter { it.isNotEmpty() }
+                .distinct()
+                .sorted()
+                .joinToString(",")
+            sp.edit()
+                .putBoolean(KEY_LIB_LOSSLESS_ONLY, value.losslessOnly)
+                .putString(KEY_LIB_FORMAT_EXTS, exts)
+                .apply()
+            ioScope.launch {
+                store.putBoolean(KEY_LIB_LOSSLESS_ONLY, value.losslessOnly)
+                store.putString(KEY_LIB_FORMAT_EXTS, exts)
+            }
+        }
+
     var scanScope: ScanScope
         get() = runCatching { ScanScope.valueOf(sp.getString(KEY_SCAN_SCOPE, ScanScope.UNSET.name)!!) }
             .getOrDefault(ScanScope.UNSET)
@@ -646,29 +672,6 @@ class Prefs private constructor(context: Context) {
         set(value) {
             sp.edit().putBoolean(KEY_SKIP_SILENCE, value).apply()
             ioScope.launch { store.putBoolean(KEY_SKIP_SILENCE, value) }
-        }
-
-    /**
-     * H2：每曲自动跳过片头的固定秒数（0 = 关闭，上限 120）。
-     * 与 [skipSilence] 无关——那是 ExoPlayer 静音检测；这里是固定秒 seek。
-     */
-    var skipIntroSeconds: Int
-        get() = sp.getInt(KEY_SKIP_INTRO_SECONDS, SettingsDefaults.SKIP_INTRO_SECONDS)
-            .coerceIn(0, 120)
-        set(value) {
-            val v = value.coerceIn(0, 120)
-            sp.edit().putInt(KEY_SKIP_INTRO_SECONDS, v).apply()
-            ioScope.launch { store.putInt(KEY_SKIP_INTRO_SECONDS, v) }
-        }
-
-    /** H2：距结束 ≤ 该秒数时切下一首（0 = 关闭，上限 120） */
-    var skipOutroSeconds: Int
-        get() = sp.getInt(KEY_SKIP_OUTRO_SECONDS, SettingsDefaults.SKIP_OUTRO_SECONDS)
-            .coerceIn(0, 120)
-        set(value) {
-            val v = value.coerceIn(0, 120)
-            sp.edit().putInt(KEY_SKIP_OUTRO_SECONDS, v).apply()
-            ioScope.launch { store.putInt(KEY_SKIP_OUTRO_SECONDS, v) }
         }
 
     /**
@@ -925,19 +928,6 @@ class Prefs private constructor(context: Context) {
         set(value) {
             sp.edit().putBoolean(KEY_LOUDNESS_BALANCE, value).apply()
             ioScope.launch { store.putBoolean(KEY_LOUDNESS_BALANCE, value) }
-
-    /**
-     * ReplayGain 曲目 / 专辑模式（N6）。音量平衡开启时生效；非法存量回落曲目。
-     */
-    var replayGainMode: ReplayGainMode
-        get() = ReplayGainMode.fromStored(
-            sp.getString(KEY_REPLAY_GAIN_MODE, SettingsDefaults.REPLAY_GAIN_MODE),
-        )
-        set(value) {
-            sp.edit().putString(KEY_REPLAY_GAIN_MODE, value.name).apply()
-            ioScope.launch { store.putString(KEY_REPLAY_GAIN_MODE, value.name) }
-        }
-
         }
 
     /**
@@ -1604,6 +1594,8 @@ class Prefs private constructor(context: Context) {
         }
 
         // ---- 1. 音乐库与扫描 ----
+        const val KEY_LIB_LOSSLESS_ONLY = "library_lossless_only"
+        const val KEY_LIB_FORMAT_EXTS = "library_format_exts"
         const val KEY_SCAN_SCOPE = "scan_scope"
         const val KEY_SCAN_SCOPE_CHOSEN = "scan_scope_chosen"
         const val KEY_LAST_SCAN_FP = "last_scan_fingerprint"
@@ -1621,8 +1613,6 @@ class Prefs private constructor(context: Context) {
         const val KEY_SPEED = "playback_speed"
         const val KEY_PITCH = "playback_pitch_semitones"
         const val KEY_SKIP_SILENCE = "skip_silence"
-        const val KEY_SKIP_INTRO_SECONDS = "skip_intro_seconds"
-        const val KEY_SKIP_OUTRO_SECONDS = "skip_outro_seconds"
         const val KEY_AUTO_RESUME = "auto_resume_playback"
         const val KEY_AUTO_PLAY_ON_BOOT = "auto_play_on_boot"
 
@@ -1656,7 +1646,6 @@ class Prefs private constructor(context: Context) {
         const val KEY_FADE_ENABLED = "fade_enabled"
         const val KEY_FADE_DURATION_MS = "fade_duration_ms"
         const val KEY_LOUDNESS_BALANCE = "loudness_balance"
-        const val KEY_REPLAY_GAIN_MODE = "replay_gain_mode"
         const val KEY_EQ_USER_PRESETS = "eq_user_presets"
         const val KEY_SCENE_ID = "scene_id"
         const val KEY_SCENE_STASH = "scene_stash"

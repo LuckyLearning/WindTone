@@ -67,6 +67,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.luckylearning.windtone.data.ScanScope
+import com.luckylearning.windtone.data.applyLibraryFormatFilter
 import com.luckylearning.windtone.data.LibrarySearch
 import com.luckylearning.windtone.data.buildLibraryStats
 import com.luckylearning.windtone.data.model.Song
@@ -338,9 +339,15 @@ fun MainScreen(
         AppShortcut.consumePending()
         if (library.songs.isEmpty()) snackbarHostState.showSnackbar("曲库里还没有歌曲，先选好扫描范围并等扫描完成")
         when (action) {
-            AppShortcut.PLAY_ALL -> playerVm.playQueue(library.songs, 0)
+            AppShortcut.PLAY_ALL -> {
+                val queue = applyLibraryFormatFilter(library.songs, library.formatFilter)
+                playerVm.playQueue(queue, 0)
+            }
 
-            AppShortcut.SHUFFLE -> playerVm.playShuffled(library.songs)
+            AppShortcut.SHUFFLE -> {
+                val queue = applyLibraryFormatFilter(library.songs, library.formatFilter)
+                playerVm.playShuffled(queue)
+            }
 
             AppShortcut.FAVORITES -> {
                 lib.setView(LibraryView.PLAYLIST)
@@ -608,6 +615,7 @@ fun MainScreen(
                         onOpenDrawer = { drawerOpen = true },
                         onQuery = lib::setQuery,
                         onSort = lib::setSort,
+                        onFormatFilter = lib::setFormatFilter,
                         onRequestPermission = { permissionLauncher.launch(arrayOf(audioPermission)) },
                         onImportFolder = importFolder,
                         onRescan = { lib.scan() },
@@ -803,8 +811,6 @@ fun MainScreen(
                     onSpeed = playerVm::setSpeed,
                     onPitch = playerVm::setPitchSemitones,
                     onSkipSilence = playerVm::setSkipSilence,
-                    onSkipIntroSeconds = playerVm::setSkipIntroSeconds,
-                    onSkipOutroSeconds = playerVm::setSkipOutroSeconds,
                     onAutoResume = playerVm::setAutoResume,
                     onAutoPlayOnBoot = playerVm::setAutoPlayOnBoot,
                     onClearStats = lib::clearPlayStats,

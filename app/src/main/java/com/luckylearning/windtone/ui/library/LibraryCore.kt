@@ -3,7 +3,9 @@ package com.luckylearning.windtone.ui.library
 import android.util.Log
 import androidx.room.withTransaction
 import com.luckylearning.windtone.data.CoverRepository
+import com.luckylearning.windtone.data.LibraryFormatFilter
 import com.luckylearning.windtone.data.LibrarySearch
+import com.luckylearning.windtone.data.applyLibraryFormatFilter
 import com.luckylearning.windtone.data.PinyinIndex
 import com.luckylearning.windtone.data.ScanScope
 import com.luckylearning.windtone.data.SongDeleter
@@ -385,12 +387,16 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
         // 重活全部在进入 update 之前算完：
         // update 的 lambda 走 CAS 重试，若在里面做全量搜索会被重复执行。
         val query = _library.value.query
-        val visible = withContext(Dispatchers.Default) { searchSongs(sorted, query) }
+        val filter = _library.value.formatFilter
+        val visible = withContext(Dispatchers.Default) {
+            searchSongs(applyLibraryFormatFilter(sorted, filter), query)
+        }
         val letters = withContext(Dispatchers.Default) { buildLetterIndex(visible) }
 
         _library.update {
             it.copy(
                 songs = sorted,
+                formatFilter = filter,
                 sortOrder = currentSort,
                 visible = visible,
                 letterIndex = letters,
@@ -413,6 +419,15 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
         session.playlists.refreshPlaylists()
     }
 
+
+    /** 当前格式筛选下的浏览列表（歌曲/分组共用）；搜索再叠在其上 */
+    private fun browseSongs(songs: List<Song> = _library.value.songs): List<Song> =
+        applyLibraryFormatFilter(songs, _library.value.formatFilter)
+
+    /** 搜索叠在格式筛选上：先格式、再关键字 */
+    private fun visibleOf(songs: List<Song>, query: String): List<Song> =
+        searchSongs(browseSongs(songs), query)
+
     internal fun searchSongs(songs: List<Song>, query: String): List<Song> =
         LibrarySearch.search(songs, query)
 
@@ -431,12 +446,31 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
         searchJob = scope.launch {
             delay(140L)
             val songs = _library.value.songs
+            val filter = _library.value.formatFilter
             val (visible, letters) = withContext(Dispatchers.Default) {
-                val v = searchSongs(songs, q)
+                val v = searchSongs(applyLibraryFormatFilter(songs, filter), q)
                 v to buildLetterIndex(v)
             }
             _library.update { it.copy(visible = visible, letterIndex = letters) }
         }
+    }
+
+
+    override fun setFormatFilter(filter: LibraryFormatFilter) {
+        prefs.libraryFormatFilter = filter
+        val songs = _library.value.songs
+        // 尚未写入 StateFlow，不能走 browseSongs（它读的是旧 filter）
+        val visible = searchSongs(applyLibraryFormatFilter(songs, filter), _library.value.query)
+        _library.update {
+            it.copy(
+                formatFilter = filter,
+                visible = visible,
+                letterIndex = buildLetterIndex(visible),
+                selectedGroup = null,
+                detailSongs = emptyList(),
+            )
+        }
+        refreshGroups()
     }
 
     override fun setSort(order: SortOrder) {
@@ -444,7 +478,7 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
         // 歌曲列表的「按标题」不受影响。
         prefs.setSortOrder(_library.value.view.name, order)
         val sorted = repository.sort(_library.value.songs, order)
-        val visible = searchSongs(sorted, _library.value.query)
+        val visible = visibleOf(sorted, _library.value.query)
         _library.update {
             it.copy(
                 sortOrder = order,
@@ -465,7 +499,7 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
         // 歌曲列表要按歌曲自己的排序重排，而不是留着专辑刚选的那个。
         val order = prefs.sortOrder(view.name, view.defaultSort)
         val sorted = repository.sort(_library.value.songs, order)
-        val visible = searchSongs(sorted, _library.value.query)
+        val visible = visibleOf(sorted, _library.value.query)
         _library.update {
             it.copy(
                 view = view,
@@ -487,7 +521,7 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
 
     internal fun refreshGroups() {
         val view = _library.value.view
-        val songs = _library.value.songs
+        val songs = browseSongs()
         if (songs.isEmpty()) {
             _library.update { if (it.groups.isEmpty()) it else it.copy(groups = emptyList()) }
             return
@@ -535,14 +569,15 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
     }
 
     override fun openGroup(group: GroupInfo) {
+        val pool = browseSongs()
         val songs = when (_library.value.view) {
-            LibraryView.ALBUM -> _library.value.songs
+            LibraryView.ALBUM -> pool
                 .filter { it.albumOrUnknown == group.key }
                 .sortedWith(compareBy({ it.trackNo }, { it.title.lowercase() }))
-            LibraryView.ARTIST -> _library.value.songs
+            LibraryView.ARTIST -> pool
                 .filter { it.artistOrUnknown == group.key }
                 .sortedWith(compareBy({ it.albumOrUnknown.lowercase() }, { it.trackNo }, { it.title.lowercase() }))
-            else -> _library.value.songs
+            else -> pool
                 .filter { it.folderLabel == group.key }
                 .sortedWith(compareBy { it.displayName.lowercase() })
         }
@@ -784,7 +819,7 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
         playback.onSongsRemoved(removed)
         val songs = _library.value.songs.filterNot { it.stableKey in keys }
         val query = _library.value.query
-        val visible = searchSongs(songs, query)
+        val visible = visibleOf(songs, query)
         _library.update {
             it.copy(
                 songs = songs,
