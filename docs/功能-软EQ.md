@@ -1,6 +1,6 @@
-# 功能：软 EQ（E3 曲线桥接）
+# 功能：软 EQ（E4 EqSheet 软路径文案）
 
-> 状态：**main 未发版 / E3**（占位版本可跟 v1.2.37，**未改 versionName**）  
+> 状态：**main 未发版 / E4**（占位版本可跟 v1.2.37，**未改 versionName**）  
 > 日期：2026-10-31（Asia/Shanghai）  
 > Spike 结论：`docs/spike-软EQ.md`（有条件 GO）  
 > 代码：`playback/softEq/`（`SoftEqCurve` / `SoftEqGate` / `SoftEqPath` / `SoftEqAudioProcessor` / …）
@@ -9,19 +9,19 @@
 
 把 Spike 里的 Media3 `AudioProcessor` 软 EQ **接到主播放路径**，在硬 EQ 报 `DEVICE_REJECTED` 时门控，并在 **SOFT_ACTIVE** 时按与硬 EQ **同一套曲线**滤波：
 
-| 项 | E1 | E2 | E3 |
-| --- | --- | --- | --- |
-| 挂进 `PlaybackService` → `DefaultAudioSink.setAudioProcessors` | ✅ | ✅ | ✅ |
-| 运行时 `SoftEqPath.setEnabled` 开/关 | ✅（默认关，直通） | ✅ | ✅ |
-| 硬 EQ `DEVICE_REJECTED` 挂钩 | ✅（只记原因） | ✅ + 门控 | ✅ |
-| 自动候选（REJECTED → candidate） | — | ✅ | ✅ |
-| 用户确认开关骨架（Prefs `softEqUserConfirm`） | — | ✅（默认关，不自动开听感） | ✅ |
-| 硬 EQ 恢复 → 强制关软路径（不双开） | — | ✅ `onHardEqAvailable` | ✅ |
-| `SoftEqSpike.ENABLED` 强开覆盖 | false | false（仅调试强开） | false |
-| 曲线桥接用户预设/自定义增益（E3） | — | — | ✅ `SoftEqCurve` + `SoftEqPath.syncCurve` |
-| 设置文案（E4） | — | — | — |
-| Prefs + 诊断全套（E5） | — | ✅（仅 confirm 键） | ✅（confirm + 曲线状态） |
-| 真机 A/B（E6） | — | — | — |
+| 项 | E1 | E2 | E3 | E4 |
+| --- | --- | --- | --- | --- |
+| 挂进 `PlaybackService` → `DefaultAudioSink.setAudioProcessors` | ✅ | ✅ | ✅ | ✅ |
+| 运行时 `SoftEqPath.setEnabled` 开/关 | ✅（默认关，直通） | ✅ | ✅ | ✅ |
+| 硬 EQ `DEVICE_REJECTED` 挂钩 | ✅（只记原因） | ✅ + 门控 | ✅ | ✅ |
+| 自动候选（REJECTED → candidate） | — | ✅ | ✅ | ✅ |
+| 用户确认开关骨架（Prefs `softEqUserConfirm`） | — | ✅（默认关，不自动开听感） | ✅ | ✅ + EqSheet 对接 Prefs |
+| 硬 EQ 恢复 → 强制关软路径（不双开） | — | ✅ `onHardEqAvailable` | ✅ | ✅ |
+| `SoftEqSpike.ENABLED` 强开覆盖 | false | false（仅调试强开） | false | false |
+| 曲线桥接用户预设/自定义增益（E3） | — | — | ✅ `SoftEqCurve` + `SoftEqPath.syncCurve` | ✅ |
+| 设置文案 / 确认入口（E4） | — | — | — | ✅ SoftEqCopy + EqSheet 确认开关 |
+| Prefs + 诊断全套（E5） | — | ✅（仅 confirm 键） | ✅（confirm + 曲线状态） | ✅（UI 已接 confirm；诊断包仍 E5） |
+| 真机 A/B（E6） | — | — | — | — |
 
 ## 门控策略（SoftEqGate）
 
@@ -45,6 +45,21 @@
 | CSV 段数不对且无硬布局 | **平直**（避免错形） |
 
 `AudioFx` 在 `bindEffects` / 改预设·频段·方案·恢复默认 / `pushValuesToEffects` 时调用 `SoftEqPath.syncCurve`（或 `onHardBandLayout`）；`onHardEqUnavailable` 也会从 Prefs 刷新曲线。曲线常驻 processor；仅 `SOFT_ACTIVE` 时真正滤波。
+
+
+## EqSheet 软路径文案（E4）
+
+硬 EQ DEVICE_REJECTED 且门控处于 CANDIDATE / SOFT_ACTIVE 时，EqSheet 显示「软件均衡（软 EQ）」块：
+
+| 状态 | 文案资源 | 行为 |
+| --- | --- | --- |
+| 候选 | soft_eq_status_candidate | 说明硬 EQ 不可用、可走软路径；**需确认**才开 |
+| 已启用 | soft_eq_status_active | 说明软路径在滤波，且与硬 EQ **不双开** |
+| 开关 | soft_eq_confirm_title / hint | 对接 SoftEqPath.setUserConfirmSoft → Prefs / SoftEqGate |
+
+硬可用（HARD_ACTIVE）或未拒绝（IDLE）时**不展示**该块，避免和正常硬 EQ 面板抢话。不可用态主文案仍走 eq_unavailable_device（明确硬效果器建不起来；淡入淡出 / 音量平衡 / 左右声道仍可用）——**勿谎称硬 EQ 仍可用**。
+
+代码：ui/SoftEqCopy.kt、ui/EqSheet.kt（SoftEqPathSection）；单测 SoftEqCopyTest。
 
 ## 怎么用（开发）
 

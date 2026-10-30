@@ -778,6 +778,13 @@
     <string name="eq_still_available_title">这些现在就能用</string>
     <string name="eq_stereo_balance_title">左右声道平衡</string>
     <string name="eq_stereo_balance_hint">同一首歌的左/右听感偏向，不是上面的「音量平衡」（曲间响度）。不依赖音效接口。</string>
+    <string name="soft_eq_section_title">软件均衡（软 EQ）</string>
+    <string name="soft_eq_status_candidate">系统硬均衡器不可用。可改用听风在播放器内的软件均衡；需你确认后才会开启，默认不会自动改听感。</string>
+    <string name="soft_eq_status_active">已启用软件均衡（软 EQ）。按你当前的预设/自定义曲线在播放器内滤波；与系统硬均衡器不会同时开启。</string>
+    <string name="soft_eq_status_hard">系统硬均衡器可用，优先走硬路径；软件均衡保持关闭。</string>
+    <string name="soft_eq_status_idle">软件均衡未启用。仅在系统硬均衡器被设备拒绝时才会出现候选。</string>
+    <string name="soft_eq_confirm_title">使用软件均衡</string>
+    <string name="soft_eq_confirm_hint">打开后，在硬均衡器不可用时用软路径滤波。硬均衡器恢复可用时会自动关掉软路径（此偏好会保留）。</string>
     <string name="eq_volume_balance_hint">有 ReplayGain 或 iTunes 音量标签时优先采用，没有标签再按整曲响度压低过响的歌。这不是上面的「响度增强」。</string>
 
     <string name="scene_section">场景</string>

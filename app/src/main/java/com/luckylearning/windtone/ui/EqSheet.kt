@@ -68,6 +68,7 @@ import com.luckylearning.windtone.playback.SoundSchemes
 import com.luckylearning.windtone.playback.ReplayGainMode
 import com.luckylearning.windtone.playback.StereoBalance
 import com.luckylearning.windtone.playback.StereoBalanceFx
+import com.luckylearning.windtone.playback.softEq.SoftEqPath
 import com.luckylearning.windtone.playback.TrackVolume
 import com.luckylearning.windtone.playback.UserEqPresets
 import com.luckylearning.windtone.ui.theme.glassContainerColor
@@ -100,6 +101,7 @@ fun EqSheet(onClose: () -> Unit) {
     val state by AudioFx.state.collectAsState()
     val trackVolume by TrackVolume.state.collectAsState()
     val stereoBalance by StereoBalanceFx.state.collectAsState()
+    val softEq by SoftEqPath.state.collectAsState()
     // 只有真的偏离出厂状态才画 ↺（与设置页同一条口径：默认状态下不摆按钮）。
     // 混响也在判据里：单开了混响同样是「动过」。
     val reverbPreset = ReverbPresets.byId(state.reverbId)
@@ -178,6 +180,11 @@ fun EqSheet(onClose: () -> Unit) {
             // 淡入淡出 / 音量平衡走的是播放器音量，与效果器可用性无关：
             // 车机上效果器建不出来时这两项照常能用，所以放在 available 判断之外。
             // 设备拒绝建效果器时把它们框出来，避免用户只看见「都建不起来」就关掉。
+            // E4: soft-EQ candidate / confirm (Prefs.softEqUserConfirm via SoftEqPath).
+            // Only when gate says candidate or soft-active — never pretend hard EQ still works.
+            if (SoftEqCopy.shouldShowConfirmEntry(softEq.phase)) {
+                SoftEqPathSection(softEq)
+            }
             if (state.unavailable == AudioFx.Unavailable.DEVICE_REJECTED) {
                 Surface(
                     color = MaterialTheme.colorScheme.primaryContainer,
@@ -1022,6 +1029,54 @@ private fun FxSlider(
 /** 增益 mB → 带符号的 dB（`0.0` / `+2.4` / `-3.0`），与效果图 ⑲ 的数值口径一致 */
 private fun formatGainDb(levelMb: Int): String =
     if (levelMb == 0) "0.0" else "%+.1f".format(levelMb / 100.0)
+
+
+@Composable
+private fun SoftEqPathSection(soft: SoftEqPath.State) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 4.dp),
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Text(
+                stringResource(R.string.soft_eq_section_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            Text(
+                stringResource(SoftEqCopy.statusRes(soft.phase)),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.padding(top = 6.dp, bottom = 8.dp),
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        stringResource(R.string.soft_eq_confirm_title),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                    Text(
+                        stringResource(R.string.soft_eq_confirm_hint),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                }
+                Switch(
+                    checked = soft.userConfirmSoft,
+                    onCheckedChange = SoftEqPath::setUserConfirmSoft,
+                )
+            }
+        }
+    }
+}
 
 /**
  * 音效不可用时该用哪句文案（v1.1.22，车机不可用态在此基础上点明淡入淡出和音量平衡）。

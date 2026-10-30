@@ -21,7 +21,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * - **E3 curve bridge**: [syncCurve] / [applyBuiltinPreset] / [applyResolved]
  *   push the same hard-EQ preset or custom gains into [processor] via
  *   [SoftEqCurve]. Soft filters that curve when [SOFT_ACTIVE].
- * - Settings copy / full diagnostics = E4-E5.
+ * - Settings copy / confirm entry = E4 (EqSheet SoftEqCopy); full diagnostics = E5.
  *
  * Wiring: PlaybackService -> DefaultRenderersFactory.buildAudioSink ->
  * DefaultAudioSink.setAudioProcessors (soft EQ before stereo balance).

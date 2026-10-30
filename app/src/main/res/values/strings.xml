@@ -809,6 +809,13 @@ Replace all: discard your current Mine list and use only the file (cannot undo).
     <string name="eq_still_available_title">Still available</string>
     <string name="eq_stereo_balance_title">Left / right balance</string>
     <string name="eq_stereo_balance_hint">Same track L/R lean — not the loudness volume balance above. Works without the effects API.</string>
+    <string name="soft_eq_section_title">Software EQ (soft path)</string>
+    <string name="soft_eq_status_candidate">The system hard equalizer is unavailable. You can use WindTone\'s in-player software EQ; it turns on only after you confirm (off by default).</string>
+    <string name="soft_eq_status_active">Software EQ (soft path) is on. It filters with your current preset/custom curve inside the player and never runs together with the system hard equalizer.</string>
+    <string name="soft_eq_status_hard">The system hard equalizer is available and preferred; the soft path stays off.</string>
+    <string name="soft_eq_status_idle">Software EQ is off. It is only offered when the device rejects the hard equalizer.</string>
+    <string name="soft_eq_confirm_title">Use software EQ</string>
+    <string name="soft_eq_confirm_hint">When on, soft-path filtering runs if the hard equalizer is unavailable. When hard EQ comes back, soft turns off automatically (this preference is kept).</string>
     <string name="eq_volume_balance_hint">Uses ReplayGain or iTunes volume tags when the file has them, and falls back to a loudness estimate otherwise. This is not Loudness Enhance.</string>
 
     <string name="scene_section">Scenes</string>
