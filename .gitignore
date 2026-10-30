@@ -98,3 +98,8 @@ _*.tmp
 # local release helper wrappers (never commit)
 _run_release.sh
 
+
+# local CI log dumps
+_ci_logs/
+_ci_logs.zip
+
