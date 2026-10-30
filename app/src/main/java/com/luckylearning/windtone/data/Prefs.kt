@@ -389,6 +389,9 @@ object SettingsDefaults {
     val FADE_DURATION_RANGE = 500..6000
 
     /** 曲间响度平衡：出厂关（需要后台分析音频，用户显式开启） */
+    /** 左右声道平衡（#9）：-100..100，0=居中；走 Media3 ChannelMixing，不依赖 AudioEffect */
+    const val STEREO_BALANCE = 0
+
     const val LOUDNESS_BALANCE = false
     const val REPLAY_GAIN_MODE = "TRACK"
     /** H2：片头固定跳过秒数；0 = 关闭。上限见 IntroOutroSkip.MAX_SECONDS */
@@ -936,6 +939,18 @@ class Prefs private constructor(context: Context) {
         }
 
     /** 曲间响度平衡（自动压低响度过大的歌，分析结果缓存在应用私有目录） */
+    /**
+     * 左右声道平衡（#9）：-100 = 全左，0 = 居中，+100 = 全右。
+     * 由 StereoBalanceFx 乘到 PCM，不经过 AudioFx 效果器。
+     */
+    var stereoBalance: Int
+        get() = sp.getInt(KEY_STEREO_BALANCE, SettingsDefaults.STEREO_BALANCE).coerceIn(-100, 100)
+        set(value) {
+            val v = value.coerceIn(-100, 100)
+            sp.edit().putInt(KEY_STEREO_BALANCE, v).apply()
+            ioScope.launch { store.putInt(KEY_STEREO_BALANCE, v) }
+        }
+
     var loudnessBalance: Boolean
         get() = sp.getBoolean(KEY_LOUDNESS_BALANCE, SettingsDefaults.LOUDNESS_BALANCE)
         set(value) {
@@ -1740,6 +1755,7 @@ class Prefs private constructor(context: Context) {
         const val KEY_SOUND_STASH = "sound_stash"
         const val KEY_FADE_ENABLED = "fade_enabled"
         const val KEY_FADE_DURATION_MS = "fade_duration_ms"
+        const val KEY_STEREO_BALANCE = "stereo_balance"
         const val KEY_LOUDNESS_BALANCE = "loudness_balance"
         const val KEY_SKIP_INTRO_SECONDS = "skip_intro_seconds"
         const val KEY_SKIP_OUTRO_SECONDS = "skip_outro_seconds"

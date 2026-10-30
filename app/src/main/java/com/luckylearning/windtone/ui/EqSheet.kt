@@ -1,6 +1,7 @@
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3Api::class,
     androidx.compose.foundation.layout.ExperimentalLayoutApi::class,
+    androidx.media3.common.util.UnstableApi::class,
 )
 
 package com.luckylearning.windtone.ui
@@ -65,6 +66,8 @@ import com.luckylearning.windtone.playback.EqTone
 import com.luckylearning.windtone.playback.ReverbPresets
 import com.luckylearning.windtone.playback.SoundSchemes
 import com.luckylearning.windtone.playback.ReplayGainMode
+import com.luckylearning.windtone.playback.StereoBalance
+import com.luckylearning.windtone.playback.StereoBalanceFx
 import com.luckylearning.windtone.playback.TrackVolume
 import com.luckylearning.windtone.playback.UserEqPresets
 import com.luckylearning.windtone.ui.theme.glassContainerColor
@@ -96,6 +99,7 @@ import com.luckylearning.windtone.ui.theme.glassContainerColor
 fun EqSheet(onClose: () -> Unit) {
     val state by AudioFx.state.collectAsState()
     val trackVolume by TrackVolume.state.collectAsState()
+    val stereoBalance by StereoBalanceFx.state.collectAsState()
     // 只有真的偏离出厂状态才画 ↺（与设置页同一条口径：默认状态下不摆按钮）。
     // 混响也在判据里：单开了混响同样是「动过」。
     val reverbPreset = ReverbPresets.byId(state.reverbId)
@@ -190,11 +194,11 @@ fun EqSheet(onClose: () -> Unit) {
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier.padding(top = 8.dp),
                         )
-                        PlaybackTransitionSection(trackVolume)
+                        PlaybackTransitionSection(trackVolume, stereoBalance)
                     }
                 }
             } else {
-                PlaybackTransitionSection(trackVolume)
+                PlaybackTransitionSection(trackVolume, stereoBalance)
             }
             Spacer(Modifier.height(24.dp))
         }
@@ -284,7 +288,10 @@ private fun AbCompareButton() {
  * 响度大的歌），分析在后台做、按曲目缓存，首次播放某首时还没结果属预期。
  */
 @Composable
-private fun PlaybackTransitionSection(tv: TrackVolume.State) {
+private fun PlaybackTransitionSection(
+    tv: TrackVolume.State,
+    balance: StereoBalanceFx.State,
+) {
     SectionLabel("播放过渡")
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
@@ -344,6 +351,15 @@ private fun PlaybackTransitionSection(tv: TrackVolume.State) {
             )
         }
     }
+    // #9 stereo balance
+    FxSlider(
+        title = stringResource(R.string.eq_stereo_balance_title),
+        valueText = StereoBalance.valueText(balance.balance),
+        value = balance.balance.toFloat(),
+        range = StereoBalance.MIN.toFloat()..StereoBalance.MAX.toFloat(),
+        onValueChange = { StereoBalanceFx.setBalance(it.toInt()) },
+        hint = stringResource(R.string.eq_stereo_balance_hint),
+    )
 }
 
 // ================================================================ ② 预设

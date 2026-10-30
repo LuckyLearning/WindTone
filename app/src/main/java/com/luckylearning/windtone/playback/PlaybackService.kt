@@ -96,7 +96,7 @@ class PlaybackService : MediaLibraryService() {
 
         // A7 无缝：单 ExoPlayer + 连续 MediaItem 队列；Media3 读分轨 encoder delay/padding。
         // 平台无关闭 API；设置页为只读说明（Prefs.gaplessPlayback 为 C1 死键）。
-        // E1 Soft EQ: Media3 AudioProcessor path skeleton (default off; SoftEqPath).
+        // E1 Soft EQ + #9 stereo balance: SoftEqPath then StereoBalanceFx.
         val renderersFactory = object : DefaultRenderersFactory(this) {
             override fun buildAudioSink(
                 context: android.content.Context,
@@ -106,7 +106,12 @@ class PlaybackService : MediaLibraryService() {
                 return DefaultAudioSink.Builder(context)
                     .setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                    .setAudioProcessors(arrayOf<AudioProcessor>(SoftEqPath.processor))
+                    .setAudioProcessors(
+                        arrayOf<AudioProcessor>(
+                            SoftEqPath.processor,
+                            StereoBalanceFx.processor, // #9
+                        ),
+                    )
                     .build()
             }
         }

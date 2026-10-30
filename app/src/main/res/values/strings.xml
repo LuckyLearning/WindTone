@@ -804,9 +804,11 @@ Replace all: discard your current Mine list and use only the file (cannot undo).
     <string name="eq_tone_hint">Bass drives bass boost. Treble sets every band at 4 kHz and above, the same curve as the sliders below.</string>
     <string name="eq_tone_down">Decrease</string>
     <string name="eq_tone_up">Increase</string>
-    <string name="eq_unavailable_device">This device\'s audio system does not expose an effects API to apps (common on car head units).\nThe equalizer, bass, and reverb cannot be created. Use the vehicle\'s own sound settings. Playback itself is unaffected.\nFade in/out and volume balance do not need the effects API and can be used below.</string>
+    <string name="eq_unavailable_device">This device\'s audio system does not expose an effects API to apps (common on car head units).\nThe equalizer, bass, and reverb cannot be created. Use the vehicle\'s own sound settings. Playback itself is unaffected.\nFade in/out, volume balance, and left/right balance do not need the effects API and can be used below.</string>
     <string name="eq_unavailable_pending">The player does not have an audio session yet.\nStart playing any song, then you can adjust these.</string>
     <string name="eq_still_available_title">Still available</string>
+    <string name="eq_stereo_balance_title">Left / right balance</string>
+    <string name="eq_stereo_balance_hint">Same track L/R lean — not the loudness volume balance above. Works without the effects API.</string>
     <string name="eq_volume_balance_hint">Uses ReplayGain or iTunes volume tags when the file has them, and falls back to a loudness estimate otherwise. This is not Loudness Enhance.</string>
 
     <string name="scene_section">Scenes</string>

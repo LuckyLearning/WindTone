@@ -37,6 +37,7 @@ class EqUnavailableCopyTest {
         assertTrue(copy, copy.contains("车辆自带的音效设置"))
         assertTrue(copy, copy.contains("淡入淡出"))
         assertTrue(copy, copy.contains("音量平衡"))
+        assertTrue(copy, copy.contains("左右声道平衡"))
         assertFalse("不能说成播放器没启动：#$copy", copy.contains("尚未启动"))
         assertFalse(copy, copy.contains("开始播放"))
     }
@@ -65,6 +66,7 @@ class EqUnavailableCopyTest {
         val copy = context.getString(R.string.eq_unavailable_device)
         assertTrue(copy, copy.contains("Fade"))
         assertTrue(copy, copy.contains("volume balance"))
+        assertTrue(copy, copy.contains("left/right balance"))
         assertFalse(copy, copy.contains("Start playing"))
     }
 }

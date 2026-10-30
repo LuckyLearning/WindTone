@@ -773,9 +773,11 @@
     <string name="eq_tone_hint">低音走低音增强；高音把 4 kHz 及以上的频段调到同一增益，和下面的频段滑块是同一条曲线。</string>
     <string name="eq_tone_down">减小</string>
     <string name="eq_tone_up">增大</string>
-    <string name="eq_unavailable_device">这台设备的音频系统没有向应用开放音效接口（车机上很常见）。\n均衡器 / 低音 / 混响都建不起来，请改用车辆自带的音效设置。播放本身不受影响。\n淡入淡出和音量平衡不依赖音效接口，下面可以直接用。</string>
+    <string name="eq_unavailable_device">这台设备的音频系统没有向应用开放音效接口（车机上很常见）。\n均衡器 / 低音 / 混响都建不起来，请改用车辆自带的音效设置。播放本身不受影响。\n淡入淡出、音量平衡和左右声道平衡不依赖音效接口，下面可以直接用。</string>
     <string name="eq_unavailable_pending">播放器还没准备好音频会话。\n开始播放任意一首歌曲后即可调节。</string>
     <string name="eq_still_available_title">这些现在就能用</string>
+    <string name="eq_stereo_balance_title">左右声道平衡</string>
+    <string name="eq_stereo_balance_hint">同一首歌的左/右听感偏向，不是上面的「音量平衡」（曲间响度）。不依赖音效接口。</string>
     <string name="eq_volume_balance_hint">有 ReplayGain 或 iTunes 音量标签时优先采用，没有标签再按整曲响度压低过响的歌。这不是上面的「响度增强」。</string>
 
     <string name="scene_section">场景</string>

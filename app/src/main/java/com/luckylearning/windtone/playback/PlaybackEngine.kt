@@ -345,6 +345,7 @@ class PlaybackEngine(
         // G7：按 Prefs 决定是否挂蓝牙音频设备监听（默认关，不耗电）
         btAutoCarMonitor.syncRegistration()
         TrackVolume.init(app)
+        StereoBalanceFx.init(app) // #9
         scope.launch {
             SleepTimer.remainingMs.collect { ms ->
                 _player.update { it.copy(sleepRemainingMs = ms) }
