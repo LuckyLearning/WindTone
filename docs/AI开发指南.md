@@ -2121,3 +2121,20 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 
 注意：`onClick` / `onFailure` 等非 @Composable 回调里用 `context.getString(...)`，UI 组合内用 `stringResource`；「N 首」走 `pluralStringResource(R.plurals.lib_song_count, …)`。源码字幕「填一个 … 直链」与 `online_add_subtitle` 中文对齐。无逻辑改动。
 
+### i18n 第 3 批（2026-10-31）
+
+范围：`PlayerScreen.kt`、`PlayerScreenParts.kt`（播放页用户可见文案 + contentDescription）。
+
+约定不变：`values/strings.xml` = 英文兜底，`values-zh/strings.xml` = 中文；「队列 N 首」用 `player_queue_size` plurals；`cancel` 复用已有键。本批前缀 `player_` / `cd_`（播放页 contentDescription）。
+
+本批键名：`cd_collapse_player`, `player_not_playing`, `cd_show_cover`, `cd_show_lyrics`, `cd_player_options`, `cd_favorite`, `cd_unfavorite`, `cd_previous`, `cd_play`, `cd_pause`, `cd_next`, `cd_queue`, `cd_a11y_on`, `cd_a11y_off`, `player_a11y_open_failed`, `player_a11y_no_page`, `player_lyric_offset_chip`, `player_sleep_remaining`, `player_queue_size` (plurals), `player_lyrics_filename_default`, `player_line_menu_title`, `player_line_menu_title_looping`, `player_line_menu_body`, `player_line_menu_body_looping`, `player_exit_line_loop`, `player_loop_this_line`, `player_calibrate_offset`, `player_calibrate_title`, `player_calibrate_body_align`, `player_calibrate_will_set`, `player_calibrate_will_set_with_current`, `player_calibrate_hint`, `player_calibrate_confirm`, `player_reset_offset_zero`, `player_cover_gesture_hint`
+
+涉及文件：
+
+- `PlayerScreen.kt` / `PlayerScreenParts.kt`
+- `values/strings.xml` + `values-zh/strings.xml`（本批新增键；`cancel` 复用已有）
+
+注意：`onClick` Toast / 导出默认名等非 @Composable 回调里用 `context.getString(...)`，UI 组合内用 `stringResource` / `pluralStringResource`。无业务逻辑改动。
+
+
+

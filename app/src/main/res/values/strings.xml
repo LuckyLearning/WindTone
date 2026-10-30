@@ -85,6 +85,12 @@
     <string name="cd_search">Search</string>
     <string name="cd_voice_search">Voice search</string>
     <string name="cd_sort">Sort</string>
+    <string name="cd_format_filter">Filter by format</string>
+    <string name="lib_format_filter_title">Format filter</string>
+    <string name="lib_format_filter_hint">Lossless and extension chips combine (intersection). Cleared = show all.</string>
+    <string name="lib_format_filter_lossless">Lossless only</string>
+    <string name="lib_format_filter_ext_section">By extension</string>
+    <string name="lib_format_filter_clear">Clear</string>
     <string name="cd_more">More</string>
 
     <string name="lib_scan_scope_unset">Scan scope: not set</string>
@@ -837,5 +843,45 @@ Tip: SomaFM (https://somafm.com/groovesalad.m3u), Radio Paradise, and self-hoste
 The list is fetched once on add — nothing is saved if the fetch fails.</string>
     <string name="online_add">Add</string>
     <string name="online_entry_count">%1$d entries</string>
+
+    <!-- i18n batch 3: PlayerScreen / PlayerScreenParts (2026-10-31) -->
+    <string name="cd_collapse_player">Collapse player</string>
+    <string name="player_not_playing">Not playing</string>
+    <string name="cd_show_cover">Show cover</string>
+    <string name="cd_show_lyrics">Show lyrics</string>
+    <string name="cd_player_options">Playback settings</string>
+    <string name="cd_favorite">Favorite</string>
+    <string name="cd_unfavorite">Remove favorite</string>
+    <string name="cd_previous">Previous</string>
+    <string name="cd_play">Play</string>
+    <string name="cd_pause">Pause</string>
+    <string name="cd_next">Next</string>
+    <string name="cd_queue">Play queue</string>
+    <string name="cd_a11y_on">Foreground detection: accessibility on</string>
+    <string name="cd_a11y_off">Foreground detection: accessibility off — tap to enable</string>
+    <string name="player_a11y_open_failed">Could not open Accessibility settings. Check Settings → About &amp; diagnostics → Foreground app log for the path.</string>
+    <string name="player_a11y_no_page">This device has no Accessibility settings page. Use Usage access instead.</string>
+    <string name="player_lyric_offset_chip">Offset %1$d ms</string>
+    <string name="player_sleep_remaining">Sleep %1$d:%2$02d</string>
+    <plurals name="player_queue_size">
+        <item quantity="one">Queue %1$d song</item>
+        <item quantity="other">Queue %1$d songs</item>
+    </plurals>
+    <string name="player_lyrics_filename_default">lyrics.lrc</string>
+    <string name="player_line_menu_title">This lyric line</string>
+    <string name="player_line_menu_title_looping">Looping this line</string>
+    <string name="player_line_menu_body">Loop this line, or calibrate lyric offset against the current playback position.</string>
+    <string name="player_line_menu_body_looping">Exit the line loop, or recalibrate lyric offset.</string>
+    <string name="player_exit_line_loop">Exit line loop</string>
+    <string name="player_loop_this_line">Loop this line</string>
+    <string name="player_calibrate_offset">Calibrate lyric offset</string>
+    <string name="player_calibrate_title">Calibrate lyric offset</string>
+    <string name="player_calibrate_body_align">Align the line that is singing right now. Current position %1$s; this line\'s timestamp %2$s.</string>
+    <string name="player_calibrate_will_set">This will set lyric offset for this song to %1$d ms.</string>
+    <string name="player_calibrate_will_set_with_current">This will set lyric offset for this song to %1$d ms (currently %2$d ms).</string>
+    <string name="player_calibrate_hint">Offset applies only to this song and is remembered per track. Long-press again to reset if it\'s off; fine-tune with ±100 ms in playback settings.</string>
+    <string name="player_calibrate_confirm">This is the line</string>
+    <string name="player_reset_offset_zero">Reset to 0</string>
+    <string name="player_cover_gesture_hint">Double-tap pause · swipe L/R to switch view · swipe U/D to change track</string>
 
 </resources>

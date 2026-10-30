@@ -70,6 +70,12 @@
     <string name="cd_search">搜索</string>
     <string name="cd_voice_search">语音搜索</string>
     <string name="cd_sort">排序</string>
+    <string name="cd_format_filter">按格式筛选</string>
+    <string name="lib_format_filter_title">格式筛选</string>
+    <string name="lib_format_filter_hint">「仅无损」与扩展名芯片可叠加（取交集）。清除后显示全部。</string>
+    <string name="lib_format_filter_lossless">仅无损</string>
+    <string name="lib_format_filter_ext_section">按扩展名</string>
+    <string name="lib_format_filter_clear">清除</string>
     <string name="cd_more">更多</string>
 
     <string name="lib_scan_scope_unset">扫描范围：未选择</string>
@@ -818,5 +824,44 @@
 添加时会先读取一次，读不到内容不会保存。</string>
     <string name="online_add">添加</string>
     <string name="online_entry_count">%1$d 条</string>
+
+    <!-- i18n batch 3: PlayerScreen / PlayerScreenParts (2026-10-31) -->
+    <string name="cd_collapse_player">收起播放页</string>
+    <string name="player_not_playing">未在播放</string>
+    <string name="cd_show_cover">切换为封面</string>
+    <string name="cd_show_lyrics">切换为歌词</string>
+    <string name="cd_player_options">播放设置</string>
+    <string name="cd_favorite">收藏</string>
+    <string name="cd_unfavorite">取消收藏</string>
+    <string name="cd_previous">上一首</string>
+    <string name="cd_play">播放</string>
+    <string name="cd_pause">暂停</string>
+    <string name="cd_next">下一首</string>
+    <string name="cd_queue">播放队列</string>
+    <string name="cd_a11y_on">前台识别：无障碍已开启</string>
+    <string name="cd_a11y_off">前台识别：无障碍已关闭，点此开启</string>
+    <string name="player_a11y_open_failed">打不开无障碍页，请到 设置 → 关于与诊断 → 前台应用记录 查看路径</string>
+    <string name="player_a11y_no_page">本机没有无障碍设置页，请改用「使用情况访问」</string>
+    <string name="player_lyric_offset_chip">偏移 %1$d ms</string>
+    <string name="player_sleep_remaining">睡眠 %1$d:%2$02d</string>
+    <plurals name="player_queue_size">
+        <item quantity="other">队列 %1$d 首</item>
+    </plurals>
+    <string name="player_lyrics_filename_default">歌词.lrc</string>
+    <string name="player_line_menu_title">这一句歌词</string>
+    <string name="player_line_menu_title_looping">正在循环这一句</string>
+    <string name="player_line_menu_body">可逐句循环，或按当前播放位置校准歌词偏移。</string>
+    <string name="player_line_menu_body_looping">可退出逐句循环，或重新校准歌词偏移。</string>
+    <string name="player_exit_line_loop">退出逐句循环</string>
+    <string name="player_loop_this_line">循环这一句</string>
+    <string name="player_calibrate_offset">校准歌词偏移</string>
+    <string name="player_calibrate_title">校准歌词偏移</string>
+    <string name="player_calibrate_body_align">把这一刻正在唱的这一句对准。当前播放位置 %1$s，该行时间戳 %2$s。</string>
+    <string name="player_calibrate_will_set">将把这首歌的歌词偏移设为 %1$d ms。</string>
+    <string name="player_calibrate_will_set_with_current">将把这首歌的歌词偏移设为 %1$d ms（当前 %2$d ms）。</string>
+    <string name="player_calibrate_hint">偏移只作用于这首歌，逐曲记住。没对准时再长按一次即可重设；想微调用播放设置里的 ±100ms。</string>
+    <string name="player_calibrate_confirm">就唱到这句</string>
+    <string name="player_reset_offset_zero">重置为 0</string>
+    <string name="player_cover_gesture_hint">双击暂停 · 左右滑切视图 · 上下滑切歌</string>
 
 </resources>

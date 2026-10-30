@@ -77,6 +77,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import com.luckylearning.windtone.overlay.ForegroundAppDetector
 import android.widget.Toast
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -428,7 +429,7 @@ fun PlayerScreen(
                         IconButton(onClick = { keepAwake(); onClose() }) {
                             Icon(
                                 Icons.Filled.KeyboardArrowDown,
-                                contentDescription = "收起播放页",
+                                contentDescription = stringResource(R.string.cd_collapse_player),
                                 tint = scheme.onSurface,
                             )
                         }
@@ -443,7 +444,7 @@ fun PlayerScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             Text(
-                                text = song?.title ?: "未在播放",
+                                text = song?.title ?: stringResource(R.string.player_not_playing),
                                 style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
@@ -470,7 +471,7 @@ fun PlayerScreen(
                         IconButton(onClick = { keepAwake(); onLyricsPaneVisible(!showLyrics) }) {
                             Icon(
                                 imageVector = if (showLyrics) AppIcons.Album else AppIcons.Lyrics,
-                                contentDescription = if (showLyrics) "切换为封面" else "切换为歌词",
+                                contentDescription = if (showLyrics) stringResource(R.string.cd_show_cover) else stringResource(R.string.cd_show_lyrics),
                                 tint = scheme.onSurface,
                             )
                         }
@@ -480,7 +481,7 @@ fun PlayerScreen(
                         IconButton(onClick = { keepAwake(); showOptions = true }) {
                             Icon(
                                 imageVector = AppIcons.Tune,
-                                contentDescription = "播放设置",
+                                contentDescription = stringResource(R.string.cd_player_options),
                                 tint = scheme.onSurface,
                             )
                         }
@@ -572,9 +573,9 @@ fun PlayerScreen(
                                         val msg = if (
                                             ForegroundAppDetector.canOpenAccessibilityPage(a11yContext)
                                         ) {
-                                            "打不开无障碍页，请到 设置 → 关于与诊断 → 前台应用记录 查看路径"
+                                            a11yContext.getString(R.string.player_a11y_open_failed)
                                         } else {
-                                            "本机没有无障碍设置页，请改用「使用情况访问」"
+                                            a11yContext.getString(R.string.player_a11y_no_page)
                                         }
                                         Toast.makeText(a11yContext, msg, Toast.LENGTH_LONG).show()
                                     }
@@ -672,7 +673,7 @@ fun PlayerScreen(
                     // 这里一并改回紧跟式：标题按内容收缩（超长省略），红心紧随其后。
                     Column(Modifier.weight(1f, fill = false)) {
                         Text(
-                            text = song?.title ?: "未在播放",
+                            text = song?.title ?: stringResource(R.string.player_not_playing),
                             // 车机：歌名 / 歌手各放大一档（22sp / 16sp），60~70cm 视距下读得清
                             style = if (state.carMode) {
                                 MaterialTheme.typography.headlineSmall.copy(fontSize = carM.titleSp)
@@ -700,7 +701,7 @@ fun PlayerScreen(
                             Icon(
                                 imageVector = if (isFavorite) AppIcons.Favorite
                                 else AppIcons.FavoriteBorder,
-                                contentDescription = if (isFavorite) "取消收藏" else "收藏",
+                                contentDescription = if (isFavorite) stringResource(R.string.cd_unfavorite) else stringResource(R.string.cd_favorite),
                                 tint = if (isFavorite) scheme.primary else scheme.onSurfaceVariant,
                             )
                         }
@@ -709,7 +710,7 @@ fun PlayerScreen(
                     // 手机：标题占满 + 红心贴右（效果图 ⑫）。
                     Column(Modifier.weight(1f)) {
                         Text(
-                            text = song?.title ?: "未在播放",
+                            text = song?.title ?: stringResource(R.string.player_not_playing),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
@@ -728,7 +729,7 @@ fun PlayerScreen(
                             Icon(
                                 imageVector = if (isFavorite) AppIcons.Favorite
                                 else AppIcons.FavoriteBorder,
-                                contentDescription = if (isFavorite) "取消收藏" else "收藏",
+                                contentDescription = if (isFavorite) stringResource(R.string.cd_unfavorite) else stringResource(R.string.cd_favorite),
                                 tint = if (isFavorite) scheme.primary else scheme.onSurfaceVariant,
                             )
                         }
@@ -819,7 +820,7 @@ fun PlayerScreen(
                         ) {
                             Icon(
                                 imageVector = AppIcons.SkipPrevious,
-                                contentDescription = "上一首",
+                                contentDescription = stringResource(R.string.cd_previous),
                                 tint = scheme.onSurface,
                                 modifier = Modifier.size(if (state.carMode) 36.dp else 34.dp),
                             )
@@ -835,7 +836,7 @@ fun PlayerScreen(
                         ) {
                             Icon(
                                 imageVector = if (state.isPlaying) AppIcons.Pause else Icons.Filled.PlayArrow,
-                                contentDescription = if (state.isPlaying) "暂停" else "播放",
+                                contentDescription = if (state.isPlaying) stringResource(R.string.cd_pause) else stringResource(R.string.cd_play),
                                 tint = Color.White,
                                 modifier = Modifier.size(if (state.carMode) 40.dp else 34.dp),
                             )
@@ -846,7 +847,7 @@ fun PlayerScreen(
                         ) {
                             Icon(
                                 imageVector = AppIcons.SkipNext,
-                                contentDescription = "下一首",
+                                contentDescription = stringResource(R.string.cd_next),
                                 tint = scheme.onSurface,
                                 modifier = Modifier.size(if (state.carMode) 36.dp else 34.dp),
                             )
@@ -861,7 +862,7 @@ fun PlayerScreen(
                             IconButton(onClick = { keepAwake(); onShowQueue() }) {
                                 Icon(
                                     imageVector = AppIcons.QueueMusic,
-                                    contentDescription = "播放队列",
+                                    contentDescription = stringResource(R.string.cd_queue),
                                     tint = scheme.onSurface,
                                 )
                             }
@@ -882,12 +883,13 @@ fun PlayerScreen(
                     LyricSourceChip(label = src.label)
                     if (state.lyricOffsetMs != 0) {
                         Spacer(Modifier.width(6.dp))
-                        LyricSourceChip(label = "偏移 ${state.lyricOffsetMs}ms")
+                        LyricSourceChip(label = stringResource(R.string.player_lyric_offset_chip, state.lyricOffsetMs))
                     }
                     if (state.sleepRemainingMs > 0) {
                         Spacer(Modifier.width(6.dp))
                         LyricSourceChip(
-                            label = "睡眠 %d:%02d".format(
+                            label = stringResource(
+                                R.string.player_sleep_remaining,
                                 state.sleepRemainingMs / 60000,
                                 (state.sleepRemainingMs % 60000) / 1000,
                             )
@@ -903,7 +905,11 @@ fun PlayerScreen(
                         Spacer(Modifier.width(10.dp))
                     }
                     Text(
-                        text = "队列 ${state.queueSize} 首",
+                        text = pluralStringResource(
+                            R.plurals.player_queue_size,
+                            state.queueSize,
+                            state.queueSize,
+                        ),
                         style = MaterialTheme.typography.labelSmall,
                         color = scheme.onSurfaceVariant,
                     )
@@ -956,7 +962,7 @@ fun PlayerScreen(
             onOpenSleep = { showOptions = false; showSleep = true },
             onExportLyrics = {
                 showOptions = false
-                lyricsExportLauncher.launch("${song?.baseName ?: "歌词"}.lrc")
+                lyricsExportLauncher.launch("${song?.baseName ?: appContext.getString(R.string.player_lyrics_filename_default)}.lrc")
             },
             onAudioInfo = { showOptions = false; onShowAudioInfo() },
             onShareCurrent = {
@@ -1019,13 +1025,13 @@ fun PlayerScreen(
             state.abLoopBMs == interval.second
         AlertDialog(
             onDismissRequest = { lyricLineMenu = null },
-            title = { Text(if (loopingThis) "逐句循环中" else "这一句") },
+            title = { Text(if (loopingThis) stringResource(R.string.player_line_menu_title_looping) else stringResource(R.string.player_line_menu_title)) },
             text = {
                 Text(
                     if (loopingThis) {
-                        "正在循环此句。可退出循环，或改去校准歌词偏移。"
+                        stringResource(R.string.player_line_menu_body_looping)
                     } else {
-                        "可循环播放这一句，或把播放位置对准这句来校准偏移。"
+                        stringResource(R.string.player_line_menu_body)
                     },
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -1037,7 +1043,7 @@ fun PlayerScreen(
                             onClearAbLoop()
                             lyricLineMenu = null
                         },
-                    ) { Text("退出循环") }
+                    ) { Text(stringResource(R.string.player_exit_line_loop)) }
                 } else {
                     TextButton(
                         onClick = {
@@ -1048,7 +1054,7 @@ fun PlayerScreen(
                             lyricLineMenu = null
                         },
                         enabled = interval != null,
-                    ) { Text("循环此句") }
+                    ) { Text(stringResource(R.string.player_loop_this_line)) }
                 }
             },
             dismissButton = {
@@ -1058,8 +1064,8 @@ fun PlayerScreen(
                             offsetCalibrate = lineMs to positionMs
                             lyricLineMenu = null
                         },
-                    ) { Text("校准偏移") }
-                    TextButton(onClick = { lyricLineMenu = null }) { Text("取消") }
+                    ) { Text(stringResource(R.string.player_calibrate_offset)) }
+                    TextButton(onClick = { lyricLineMenu = null }) { Text(stringResource(R.string.cancel)) }
                 }
             },
         )
@@ -1074,30 +1080,34 @@ fun PlayerScreen(
         val suggested = (lineMs - positionMs).coerceIn(-20_000L, 20_000L).toInt()
         AlertDialog(
             onDismissRequest = { offsetCalibrate = null },
-            title = { Text("校准歌词偏移") },
+            title = { Text(stringResource(R.string.player_calibrate_title)) },
             text = {
                 Column {
                     Text(
-                        "把这一刻正在唱的这一句对准。当前播放位置 " +
-                            "${formatDuration(positionMs)}，" +
-                            "该行时间戳 ${formatDuration(lineMs)}。",
+                        stringResource(
+                            R.string.player_calibrate_body_align,
+                            formatDuration(positionMs),
+                            formatDuration(lineMs),
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = scheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "将把这首歌的歌词偏移设为 ${suggested} ms" +
-                            if (state.lyricOffsetMs != 0) {
-                                "（当前 ${state.lyricOffsetMs} ms）"
-                            } else {
-                                ""
-                            } + "。",
+                        if (state.lyricOffsetMs != 0) {
+                            stringResource(
+                                R.string.player_calibrate_will_set_with_current,
+                                suggested,
+                                state.lyricOffsetMs,
+                            )
+                        } else {
+                            stringResource(R.string.player_calibrate_will_set, suggested)
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "偏移只作用于这首歌，逐曲记住。没对准时再长按一次即可重设；" +
-                            "想微调用播放设置里的 ±100ms。",
+                        stringResource(R.string.player_calibrate_hint),
                         style = MaterialTheme.typography.labelSmall,
                         color = scheme.onSurfaceVariant,
                     )
@@ -1109,7 +1119,7 @@ fun PlayerScreen(
                         onLyricOffsetAbsolute(suggested)
                         offsetCalibrate = null
                     },
-                ) { Text("就唱到这句") }
+                ) { Text(stringResource(R.string.player_calibrate_confirm)) }
             },
             dismissButton = {
                 Row {
@@ -1119,9 +1129,9 @@ fun PlayerScreen(
                                 onResetLyricOffset()
                                 offsetCalibrate = null
                             },
-                        ) { Text("重置为 0") }
+                        ) { Text(stringResource(R.string.player_reset_offset_zero)) }
                     }
-                    TextButton(onClick = { offsetCalibrate = null }) { Text("取消") }
+                    TextButton(onClick = { offsetCalibrate = null }) { Text(stringResource(R.string.cancel)) }
                 }
             },
         )
@@ -1198,14 +1208,14 @@ private fun CarSideActions(
     ) {
         CarSideAction(
             icon = if (isFavorite) AppIcons.Favorite else AppIcons.FavoriteBorder,
-            description = if (isFavorite) "取消收藏" else "收藏",
+            description = if (isFavorite) stringResource(R.string.cd_unfavorite) else stringResource(R.string.cd_favorite),
             highlighted = isFavorite,
             enabled = canFavorite,
             onClick = onFavorite,
         )
         CarSideAction(
             icon = AppIcons.QueueMusic,
-            description = "播放队列",
+            description = stringResource(R.string.cd_queue),
             onClick = onQueue,
         )
         // v1.1.92：无障碍状态按钮 —— 开着是主题色，关掉是错误色（一眼可辨）；
@@ -1213,14 +1223,14 @@ private fun CarSideActions(
         if (showA11y) {
             CarSideAction(
                 icon = AppIcons.Accessibility,
-                description = if (a11yEnabled) "前台识别：无障碍已开启" else "前台识别：无障碍已关闭，点此开启",
+                description = if (a11yEnabled) stringResource(R.string.cd_a11y_on) else stringResource(R.string.cd_a11y_off),
                 tint = if (a11yEnabled) scheme.primary else scheme.error,
                 onClick = onA11y,
             )
         }
         CarSideAction(
             icon = AppIcons.Tune,
-            description = "播放设置",
+            description = stringResource(R.string.cd_player_options),
             tint = scheme.onSurfaceVariant,
             onClick = onOptions,
         )

@@ -24,6 +24,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.res.stringResource
+import com.luckylearning.windtone.R
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
@@ -274,7 +276,7 @@ internal fun CoverPane(
             color = scheme.surfaceContainerHigh.copy(alpha = 0.9f),
         ) {
             Text(
-                text = "双击暂停 · 左右滑切视图 · 上下滑切歌",
+                text = stringResource(R.string.player_cover_gesture_hint),
                 fontSize = 10.sp,
                 color = scheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
