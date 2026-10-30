@@ -1,11 +1,22 @@
 name: Android CI
 
 # 主干与 PR 的快速校验：跑单测 + 出一个 debug 包，确保任何提交都能编译通过
+# 2026-10-31 CI 提速：paths-ignore 避免纯文档触发；一次 Gradle 跑完 test/lint/assemble
 on:
   push:
     branches: [ main, master ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.github/workflows/pages.yml'
+      - '.github/release-notes/**'
   pull_request:
     branches: [ main, master ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.github/workflows/pages.yml'
+      - '.github/release-notes/**'
   workflow_dispatch:
 
 concurrency:
@@ -46,16 +57,18 @@ jobs:
 
       - name: 配置 Gradle（含依赖缓存）
         uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-cleanup: on-success
 
-      - name: 单元测试
-        run: ./gradlew testDebugUnitTest --stacktrace
+      # 一次 Gradle 调用：共用配置与编译；随后仍按 lint XML 做 Error 门禁
+      - name: 单测 + Lint + Debug 包
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug --stacktrace
 
       # 注意：app/build.gradle.kts 里 lint { abortOnError = false }，所以
       # “构建成功 ≠ lint 干净”。这里显式解析 XML，把 Error 级作为合入门禁：
       # 本地保留不阻断（发版不受影响），CI 上不允许 Error 级新增。
       - name: Lint（Error 级门禁）
         run: |
-          ./gradlew lintDebug --stacktrace
           report=app/build/reports/lint-results-debug.xml
           if [ ! -f "$report" ]; then
             echo "::error::未生成 lint 报告：$report"
@@ -69,11 +82,8 @@ jobs:
             exit 1
           fi
 
-      - name: 编译 Debug 包
-        run: ./gradlew assembleDebug --stacktrace
-
       # ⚠️ 2026-10-30：账号 artifact 配额已满，上传会报 "Artifact storage quota has been hit"。
-      # 这三处产物都只是排障用（Debug 包 / 测试报告 / lint 报告），**不该让 CI 变红**，
+      # 这三处产物都只是排障用（Debug 包 / 测试报告 / lint 报告），**不该让 CI 变红**。
       # 因此统一 continue-on-error：有配额就传，没配额也不影响「代码是否通过」的判断。
       - name: 上传 Debug 包
         continue-on-error: true

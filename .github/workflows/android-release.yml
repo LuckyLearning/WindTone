@@ -54,6 +54,8 @@ jobs:
 
       - name: 配置 Gradle（含依赖缓存）
         uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-cleanup: on-success
 
       # ---------------------------------------------------------------- 版本号
       - name: 读取版本号
@@ -93,10 +95,8 @@ jobs:
           fi
 
       # ---------------------------------------------------------------- 构建
-      - name: 单元测试
-        run: ./gradlew testDebugUnitTest --stacktrace
-
-      - name: 构建 Release 包
+      # 一次 Gradle：单测 + Release 包（仍保留发版前单测门禁，只省二次配置）
+      - name: 单测 + 构建 Release 包
         env:
           WINDTONE_KEYSTORE: ${{ steps.ks.outputs.path }}
           WINDTONE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -107,7 +107,7 @@ jobs:
           BAIDU_APP_KEY: ${{ secrets.BAIDU_APP_KEY }}
           BAIDU_SECRET_KEY: ${{ secrets.BAIDU_SECRET_KEY }}
         # -PabiSplits=true：按 ABI 分包并额外产出 universal 包（本地开发默认关闭）
-        run: ./gradlew assembleRelease -PabiSplits=true --stacktrace
+        run: ./gradlew testDebugUnitTest assembleRelease -PabiSplits=true --stacktrace
 
       - name: 收集产物并计算校验值
         id: apk
