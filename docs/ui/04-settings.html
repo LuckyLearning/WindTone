@@ -43,7 +43,7 @@
   </div>
   <div class="board">
 <figure class="fig" id="scr-settings-1">
-  <div class="cap"><b>㉙ 设置页 · 主页面（二级分类）</b><em>SettingsScreen.kt · 分类入口卡：外观 / 播放 / 歌词 / 音乐库 / 关于与诊断 / 实验室（v1.1.80）</em></div>
+  <div class="cap"><b>㉙ 设置页 · 主页面（二级分类）</b><em>SettingsScreen.kt · 分类入口卡：外观 / 播放 / 歌词 / 曲库与存储 / 关于与更新 / 实验室（v1.1.80；2026-10-30 后两张改名并重划）</em></div>
   <div class="phone">
     <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
     <div class="app">
@@ -62,7 +62,7 @@
           <div class="cat-main"><div class="cat-t">歌词</div><div class="cat-s">字号 1.1x · 悬浮歌词</div></div>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
         <div class="cat-row"><span class="cat-ic"><svg class="ic"><use href="#i-library"/></svg></span>
-          <div class="cat-main"><div class="cat-t">音乐库</div><div class="cat-s">格式与容量 · 过滤 &lt; 60 秒</div></div>
+          <div class="cat-main"><div class="cat-t">曲库与存储</div><div class="cat-s">统计 · 清理 · 过滤 &lt; 60 秒</div></div>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
         <div class="cat-row"><span class="cat-ic"><svg class="ic"><use href="#i-tune"/></svg></span>
           <div class="cat-main"><div class="cat-t">实验室</div><div class="cat-s">在线播放 · 调整菜单顺序</div></div>
@@ -72,14 +72,14 @@
           <span style="font-size:11px;color:var(--primary)">v1.0.6</span>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
         <div class="cat-row"><span class="cat-ic"><svg class="ic"><use href="#i-info"/></svg></span>
-          <div class="cat-main"><div class="cat-t">关于与诊断</div><div class="cat-s">版本信息 · 播放统计 · 隐私说明</div></div>
+          <div class="cat-main"><div class="cat-t">关于与更新</div><div class="cat-s">版本信息 · 检查更新 · 隐私说明</div></div>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg></div>
       </div>
     </div>
   </div>
   <p class="note"><b>分层原则（v1.1.3 二次重构）</b>：主页面<b>只放二级分类入口卡</b>，一张卡一个分类——左侧<b>语义图标</b>（40dp 圆角 12 容器、secondaryContainer 底）+ 分类名 + 一行摘要 + 右箭头，<b>摘要把子页里最重要的状态前置</b>（「格式与容量 · 过滤 &lt; 60 秒」「v1.0.6」「速度 1.00x」），不进子页就能看到大概。<br>
   &nbsp;&nbsp;v1.0.7 曾把主页压到「外观 / 播放 / 歌词三组平铺 + 三个子页入口」（约 1.3 屏）；但悬浮歌词五个外观选项加入后，「歌词」一组独占两屏，主页又开始长回去——本次把 <b>外观 / 播放 / 歌词</b> 三组也各自下沉成子页，主页回到<b>一屏六张卡</b>，任何设置最多两层直达。<br>
-  &nbsp;&nbsp;分类归属：①<b>外观</b>——主题跟随封面取色、车载模式；②<b>播放</b>——默认播放速度、变调、<b>打开应用继续上次播放</b>、跳过静音、均衡器与音效；③<b>歌词</b>——歌词字号、桌面悬浮歌词及其外观选项；④<b>音乐库</b>——短音频过滤（一次性配置）；⑤<b>在线播放</b>——阿里云盘、在线歌单、缓存上限弹窗、在线收听报告（见 <a href="#scr-settings-online">㉚G</a>）；⑥<b>更新</b>——检查更新 / 自动检查 / 下载线路；⑦<b>关于与诊断</b>——播放统计、数据与存储、版本与隐私（<b>崩溃日志在「调试」分区里，默认不显示</b>，见 <a href="#scr-diagnostics-foreground-log">㉚F</a>）。<br>
+  &nbsp;&nbsp;分类归属（2026-10-30 重划）：①<b>外观</b>——主题模式、跟随封面取色、车载模式；②<b>播放</b>——速度与变调（<b>默认收起</b>）、继续上次播放、开机起播、跳过静音、无缝播放、均衡器与音效；③<b>歌词</b>——歌词字号、点击跳转、桌面悬浮歌词（下钻独立页）；④<b>曲库与存储</b>——<b>统计两入口（播放统计 / 曲库统计）</b>、短音频过滤、清理失效 / 恢复移除 / 查重 / 清封面缓存、三个不可撤销的清空（见 <a href="#scr-settings-library">㉚</a>）；⑤<b>实验室</b>——在线播放（在线歌单 / 缓存上限 / 在线收听报告，见 <a href="#scr-settings-online">㉚G</a>）与调整菜单顺序，<b>2026-10-30 用户拍板保留在实验室</b>，不提到一级；⑥<b>关于与更新</b>——版本卡、检查更新、隐私说明，末行进「诊断与排障」子页（<b>排障工具默认隐藏</b>，见 <a href="#scr-diagnostics-foreground-log">㉚F</a>）。<br>
   <b>设置页从底部滑入覆盖全屏</b>（不是新 Activity）；子页是同一个 <code>SettingsScreen</code> 内部的页面状态（<code>SettingsPage</code> 枚举），<b>不新建 Activity、不引入导航库</b>；子页里按系统返回键先回主页面，回主页后再按才关闭设置页。<br>
   <b>分类入口卡 = 图标 + 摘要 + 右箭头</b>：v1.0.7 起「全 App 不存在 chevron」的规范放宽为「只有 ActionRow 能带 chevron」；v1.1.3 起再放宽一档——<b>设置主页的二级分类入口卡（<code>CategoryRow</code>）也带 chevron 和左侧图标</b>（参考通用播放器设置主页的二级菜单结构），其余位置不变：<code>OptionRow</code>（弹层行）依旧左侧图标 + 选中 ✓、无箭头；子页内的 <code>ActionRow</code> 依旧左侧无图标、箭头只给「点开会进入另一个界面」的行（子页入口、打开弹层 / 弹窗的行），就地执行动作（「检查更新」）或就地展开（「查看日志」）的行不加。<br>
   <b>子页入口行与分类卡的区别</b>：子页里的 <code>ActionRow</code>（如「均衡器与音效」「过滤短音频」）是<b>某一类设置里的一条</b>，无图标；主页的 <code>CategoryRow</code> 是<b>一整类设置的门面</b>，带图标 + 摘要——两层信息密度不同，不会混淆。<br>
@@ -261,7 +261,7 @@
   <b>宽度滑块改完立刻给一次 6 秒预览</b>。<br>
   <b>v1.1.22 起全屏这一档在 App 内不画</b>：整屏浮层不再压在设置页上（含「调整位置」与改完配置的 6 秒预览），宽度 / 水平位置下方改为一块 16:9 缩略示意图 —— 面板宽度、左右位置、底部 Dock 让位都按当前值实时绘制，实际效果退到桌面看。<br>
   <b>v1.1.21 起整块按开关显隐</b>：上面的「桌面悬浮歌词」关着时，形态 / 宽度 / 位置 / 行数 / 字号 / 对齐 / 底板 / 暂停 / 颜色 / 歌名歌手 / 调整位置<b>一项都不显示</b>，只留开关与一行小字说明「打开后能调什么」。开着的功能不摆无效控件 —— 早先那种「关着也允许预设」的写法，用户调完退到桌面看不到变化，只会当成 bug。<br>
-  <b>v1.1.29 尾部新增「不显示悬浮窗的应用」</b>（颜色之后、调整位置之前）：ActionRow 进名单弹窗（㉙F），副标题实时显示「已设 N 个应用；点开可增删」，带 ↺（清回空名单）。<b>v1.1.31 起「前台应用记录」开关搬去「关于与诊断 → 调试」</b>（㉚F）——记录是排障手段，不该出现在歌词设置里；查包名 → 加名单的动线因此全在调试页完成。检测通道规范见 <code>docs/设计-悬浮窗按应用隐藏.md</code> 与 AI 开发指南 §11.15。<br>
+  <b>v1.1.29 尾部新增「不显示悬浮窗的应用」</b>（颜色之后、调整位置之前）：ActionRow 进名单弹窗（㉙F），副标题实时显示「已设 N 个应用；点开可增删」，带 ↺（清回空名单）。<b>v1.1.31 起「前台应用记录」开关搬去诊断页</b>（现路径：关于与更新 → 诊断与排障）（㉚F）——记录是排障手段，不该出现在歌词设置里；查包名 → 加名单的动线因此全在调试页完成。检测通道规范见 <code>docs/设计-悬浮窗按应用隐藏.md</code> 与 AI 开发指南 §11.15。<br>
   <b>v1.1.20 起「全屏高度」是独立的一套</b>：形态开关拨开后，这一段换成「全屏宽度 30–100%」+「水平位置（0 靠左 / 50 居中 / 100 靠右）」两个滑块，外加<b>靠左 / 居中 / 靠右三个 44dp 等宽按钮</b>；单条字幕的行数 / 宽度 / 自由拖动全部收进「全屏关」那一档。两套值分开落盘，互不污染。全屏这一档的桌面拖动<b>只跟横向</b>，双击浮层即锁定（全屏铺满整块屏，吃触摸时必须有桌面侧也能收工的手势）。<br>
   <b>宽度两端的两条口径</b>：①滑块范围就是 <b>1–100%</b>（用户要的语义），拖动时<b>逐帧</b>写回——宽度与屏宽是直接的比例关系，松手才变会让人以为「拖了半天没反应」，引擎每次都会重摆窗口，正好当实时预览用。②服务侧对像素宽度留了 <b>48dp 下限</b>（标准最小触控边长）：1% 在 1080p 屏上只有 10px，窗口会小到既看不见也拖不着。下限不能再往上抬——抬到 80dp 时，1080p / 3x 的机器上滑块 <b>1%~22% 全是同一个宽度</b>，低端那一整段等于失灵；48dp 把这段死区压到 13% 以内。</p>
 </figure>
@@ -353,32 +353,60 @@
 </figure>
 
 <figure class="fig" id="scr-settings-2">
-  <div class="cap"><b>㉚ 设置页 · 音乐库子页</b><em>SettingsScreen.kt · 本地曲库（短音频过滤）</em></div>
+  <div class="cap"><b>㉚ 设置页 · 曲库与存储子页</b><em>SettingsLibrarySections.kt · 统计两入口 / 本地曲库 / 数据与存储 / 危险操作（2026-10-30 由「音乐库」改名扩容；页面只做组合）</em></div>
   <div class="phone">
     <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
     <div class="app">
       <div class="detail-hd" style="padding:4px 10px 8px">
         <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
-        <div class="dh-main"><div class="detail-title">音乐库</div></div>
+        <div class="dh-main"><div class="detail-title">曲库与存储</div></div>
       </div>
       <div class="list" style="padding:0 18px 12px">
-        <div class="section-label" style="padding:0;margin:12px 0 4px">本地曲库</div>
+        <div class="section-label" style="padding:0;margin:12px 0 4px">统计</div>
         <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-bottom:8px">
-          <div style="flex:1"><div style="font-size:15px">格式与容量</div>
+          <div style="flex:1"><div style="font-size:15px">播放统计</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">播放过的歌曲 382 首 · 2,461 次</div></div>
+          <div style="font-size:11px;color:var(--primary)">37 小时 12 分钟</div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px">
+          <div style="flex:1"><div style="font-size:15px">曲库统计</div>
             <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">各格式的首数与占用、无损 / 有损占比（全部按本机文件大小统计）</div></div>
           <div style="font-size:11px;color:var(--primary)">812 首 · 7.4 GB</div>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
         </div>
+        <div class="section-label" style="padding:0;margin:14px 0 4px">本地曲库</div>
         <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px">
           <div style="flex:1"><div style="font-size:15px">过滤短音频（&lt; 60 秒）</div>
             <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">时长已知且低于阈值的音频不会进入曲库（滤掉提示音、转场音效等）。修改后自动重新扫描；填 0 关闭过滤</div></div>
           <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
         </div>
+        <div class="section-label" style="padding:0;margin:14px 0 4px">数据与存储</div>
+        <div class="stat-card">
+          <div class="sr"><span>曲库歌曲</span>500 首</div>
+          <div class="sr"><span>暂不可见</span>6 首</div>
+          <div class="sr"><span>已移出曲库</span>2 首</div>
+          <div class="sr"><span>封面缓存</span>18.4 MB</div>
+          <div class="sr"><span>数据库占用</span>2.1 MB</div>
+        </div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;margin-top:6px">
+          <div style="font-size:15px">清理失效歌曲</div>
+          <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">6 首歌曲的文件已不在本机，清理后其收藏与统计一并移除</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px">
+          <button class="txtbtn" style="align-self:flex-start">清空播放统计（保留收藏）</button>
+          <button class="txtbtn" style="align-self:flex-start">清空全部用户数据（保留曲库）</button>
+          <button class="txtbtn" style="align-self:flex-start">清空曲库与导入目录</button>
+        </div>
       </div>
     </div>
   </div>
-  <p class="note"><b>为什么单独成页</b>：短音频过滤是<b>一辈子配一次</b>的一次性配置，留在主设置页里等于用最贵的位置放一个几乎不用的表单。<br>
-  <b>危险操作二次确认</b>：「清空播放统计」「清空日志」两处会丢数据且不可撤销，统一弹 AlertDialog 确认（见 <a href="#scr-settings-diagnostics">㉚D</a>）。<br>
+  <p class="note"><b>2026-10-30 重新划分</b>（用户拍板）：这张卡原来叫「音乐库」，只有两行（格式与存储 / 短音频过滤）——撑不起一张分类卡；而<b>同属曲库的维护动作</b>（清理失效 / 恢复移除 / 查重 / 清封面缓存）却挂在「关于与诊断」里，曲库的「管」被劈成两半。现在维护动作搬回这里，页面按<b>「看 → 调 → 清」</b>排：<br>
+  &nbsp;&nbsp;· <b>统计</b>（两个入口<b>并排</b>，用户口径「按钮放一起，查看放 2 个页面」）——「播放统计」进收听报告页（含每日曲线 / 时段分布），「曲库统计」进格式与容量页（㉚H）。分开放会让人为了「库有多大 / 听了多久」来回翻两页；<br>
+  &nbsp;&nbsp;· <b>本地曲库</b>——只剩「过滤短音频」一条（原「格式与容量」行已升级为上面的「曲库统计」入口，名不符实的问题一并修掉）；<br>
+  &nbsp;&nbsp;· <b>数据与存储</b>——StatCard 报实时占用 + 四条 ActionRow（清理失效 / 恢复已移出 / 重复清理 / 清空封面缓存），进入本页时刷新一次自检；<br>
+  &nbsp;&nbsp;· <b>危险操作</b>——三个不可撤销的 TextButton 固定在<b>页尾</b>（清空播放统计 / 清空全部用户数据 / 清空曲库），各自二次确认，与上面可逆的项物理隔开。<br>
+  <b>为什么四段能塞进一页</b>：统计两行是<b>入口</b>不是数据本身（数据在两个全屏子页里），维护四行是低频动作，加起来不到一屏半；原来那种「统计卡片 + 七行占用 + 四条维护」全平铺的写法才真的长。<br>
   <b>安全边界</b>：云端曲目在本应用内<b>不可删除</b>——长按菜单的删除入口在 ViewModel 前置拦截，<code>SongDeleter</code> 再兜底一层，双保险避免误删服务器文件。</p>
 </figure>
 
@@ -476,77 +504,61 @@
 </figure>
 
 <figure class="fig" id="scr-settings-diagnostics">
-  <div class="cap"><b>㉚D 设置页 · 关于与诊断子页</b><em>SettingsScreen.kt · 播放统计 / 数据与存储 / 关于（「调试」分区默认隐藏，见 ㉚F）</em></div>
+  <div class="cap"><b>㉚D 设置页 · 关于与更新子页</b><em>SettingsAboutSections.kt · 版本卡（连点 5 次解锁调试）/ 检查更新 / 隐私说明 / 排障入口（2026-10-30 拆分；页面只做组合）</em></div>
   <div class="phone">
     <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
     <div class="app">
       <div class="detail-hd" style="padding:4px 10px 8px">
         <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
-        <div class="dh-main"><div class="detail-title">关于与诊断</div></div>
+        <div class="dh-main"><div class="detail-title">关于与更新</div></div>
       </div>
       <div class="list" style="padding:0 18px 12px">
-        <div class="section-label" style="padding:0;margin:12px 0 4px">播放统计</div>
-        <div class="stat-card">
-          <div class="sr"><span>歌曲总数</span>500 首</div>
-          <div class="sr"><span>播放过的歌曲</span>382 首</div>
-          <div class="sr"><span>累计播放次数</span>2,461 次</div>
-          <div class="sr"><span>累计收听时长</span>37 小时 12 分钟</div>
-          <div class="sr"><span>收藏</span>28 首</div>
-        </div>
-        <button class="txtbtn" style="align-self:flex-start;margin-top:6px">清空播放统计（保留收藏）</button>
-        <div class="section-label" style="padding:0;margin:14px 0 4px">数据与存储</div>
-        <div class="stat-card">
-          <div class="sr"><span>曲库歌曲</span>500 首</div>
-          <div class="sr"><span>暂不可见</span>6 首</div>
-          <div class="sr"><span>已移出曲库</span>2 首</div>
-          <div class="sr"><span>导入目录</span>3 个</div>
-          <div class="sr"><span>歌单</span>5 个</div>
-          <div class="sr"><span>封面缓存</span>18.4 MB</div>
-          <div class="sr"><span>数据库占用</span>2.1 MB</div>
-        </div>
-        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;margin-top:6px">
-          <div style="font-size:15px">清理失效歌曲</div>
-          <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">6 首歌曲的文件已不在本机，清理后其收藏与统计一并移除</div>
-        </div>
-        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-top:6px">
-          <div style="flex:1"><div style="font-size:15px">重复歌曲清理</div>
-            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">按「标题 + 歌手 + 时长」找重复，每组留一首，其余移出曲库（不删文件）</div></div>
-          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
-        </div>
-        <div class="section-label" style="padding:0;margin:14px 0 4px">关于</div>
+        <div class="section-label" style="padding:0;margin:12px 0 4px">关于</div>
         <div class="stat-card">
           <div class="sr"><span>应用</span>听风 WindTone</div>
-          <div class="sr"><span>版本</span>1.1.32</div>
+          <div class="sr"><span>版本</span>1.2.12</div>
           <div class="sr"><span>包名</span>com.luckylearning.windtone</div>
           <div class="sr"><span>最低系统</span>Android 7.0（API 24）</div>
           <div class="sr"><span>CPU 架构</span>arm64-v8a</div>
           <div class="sr"><span>更新来源</span>LuckyLearning/Release</div>
         </div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-top:6px">
+          <div style="flex:1"><div style="font-size:15px">检查更新</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">启动时自动检查更新</div></div>
+          <div style="font-size:11px;color:var(--primary)">有新版本</div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
         <div style="font-size:11px;line-height:1.65;color:var(--on-surface-variant);margin-top:8px">歌单、收藏、播放统计、歌词等全部数据都只保存在本机；歌词优先读取音频同目录的 .lrc / .krc / .yrc 文件，其次读取音频内嵌歌词。
 联网行为只有一处：「检查更新 / 下载新版本」访问 GitHub 上的公共分发仓库（LuckyLearning/Release；先直连官方地址，连不上时自动切换第三方加速镜像，也可在「下载线路」中手动指定）。不采集、不上传任何信息。</div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-top:10px">
+          <div style="flex:1"><div style="font-size:15px">诊断与排障</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">悬浮歌词自检 · 前台应用记录 · 崩溃日志 · 开机自启</div></div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
       </div>
     </div>
   </div>
-  <p class="note"><b>为什么独立成页</b>：这几块全是<b>只读信息 + 维护工具</b>，看一次就够，却原来和开关平铺在同一条滚动里 ——
-  用户想改「跳过静音」要滚过 5 行统计卡和维护项。<br>
-  <b>四段各自的职责</b>（本屏画前三段；「调试」默认不渲染）：<br>
-  &nbsp;&nbsp;· <b>播放统计</b>——StatCard（标签列宽 112dp）+「清空播放统计（保留收藏）」；点击弹二次确认「会清空播放次数、累计收听时长与「播放过的歌曲」；收藏与歌单保留。该操作不可撤销。」；<br>
-  &nbsp;&nbsp;· <b>数据与存储</b>——StatCard 报七项实时占用（曲库歌曲 / 暂不可见 / 已移出曲库 / 导入目录 / 歌单 / 封面缓存 / 数据库占用），下面「清理失效歌曲」「恢复已移出曲库的歌曲」「重复歌曲清理」「清空封面缓存」四条 ActionRow，末尾两条 TextButton 是不可撤销的整体操作（各自二次确认）。进入本页时刷新一次自检；读不到文件大小的歌只计首数、不计占用；<br>
-  &nbsp;&nbsp;· <b>调试</b>（<b>v1.1.31 起默认隐藏</b>，在「关于」卡上连点 5 次解锁）——前台应用记录 / 悬浮歌词自检 / <b>崩溃日志</b> / 开机自启，详见 <a href="#scr-diagnostics-foreground-log">㉚F</a>。崩溃日志已从本页主体搬进这个分区，普通用户看不到；<br>
-  &nbsp;&nbsp;· <b>关于</b>——应用 / 版本 / 包名 / 最低系统 / CPU 架构 / 更新来源 六行 + 隐私说明长文。隐私说明是产品信任核心，不要删。<br>
+  <p class="note"><b>2026-10-30：一页拆成两级</b>（用户拍板）。原「关于与诊断」把四类东西焊在一起 ——
+  播放统计（看数据）、数据与存储（维护动作）、调试（排障）、关于（版本与更新），用户找「版本号」和找「清缓存」要进同一页。
+  现在本页只留<b>关于 + 更新</b>，另外两块各有归处：<br>
+  &nbsp;&nbsp;· <b>播放统计 / 数据与存储</b> → 「曲库与存储」（见 <a href="#scr-settings-library">㉚</a>），因为那是曲库的「管」；<br>
+  &nbsp;&nbsp;· <b>调试</b> → 二级页「诊断与排障」（见 <a href="#scr-diagnostics-foreground-log">㉚F</a>），入口在本页最后一行。<br>
+  <b>版本卡（连点 5 次解锁调试，v1.1.31）保留不变</b>：计数只活在「本页连续点击」，退出即清零 —— 零散误触攒不够 5 次。
+  解锁后「诊断与排障」子页才会把排障工具摆出来，未解锁时该页只有一行说明。<br>
   <b>CPU 架构行（v1.0.7）</b>：展示本机主 ABI（<code>UpdateChecker.primaryAbiLabel()</code>），
-  与公共分发仓库里按 ABI 分包的资产名（<code>WindTone-v1.1.32-arm64-v8a.apk</code> 等）一一对应，方便用户对照下载。<br>
-  <b>更新来源行（v1.1.30 起）</b>：显示 <code>BuildConfig.RELEASE_OWNER/RELEASE_REPO</code> = <code>LuckyLearning/Release</code>——安装包与 <code>latest.json</code> 都在这个公共仓库，不再是源码仓库的 Releases。</p>
+  与公共分发仓库里按 ABI 分包的资产名（<code>WindTone-v1.2.12-arm64-v8a.apk</code> 等）一一对应，方便用户对照下载。<br>
+  <b>更新来源行（v1.1.30 起）</b>：显示 <code>BuildConfig.RELEASE_OWNER/RELEASE_REPO</code> = <code>LuckyLearning/Release</code>——安装包与 <code>latest.json</code> 都在这个公共仓库，不再是源码仓库的 Releases。<br>
+  <b>隐私说明是产品信任核心</b>，不要删：它写明「只有一处联网」以及具体是哪个仓库。</p>
 </figure>
 
 <figure class="fig" id="scr-diagnostics-foreground-log">
-  <div class="cap"><b>㉚F 关于与诊断 · 调试</b><em>SettingsSystemPages.kt · SettingsDiagnosticsPage 的「调试」分区（v1.1.29 起，v1.1.31 重排）</em></div>
+  <div class="cap"><b>㉚F 诊断与排障子页</b><em>SettingsSystemPages.kt · SettingsDiagnosisPage（原「调试」分区，2026-10-30 升为二级页）</em></div>
   <div class="phone">
     <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
     <div class="app">
       <div class="detail-hd" style="padding:4px 10px 8px">
         <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
-        <div class="dh-main"><div class="detail-title">关于与诊断</div></div>
+        <div class="dh-main"><div class="detail-title">诊断与排障</div></div>
       </div>
       <div class="list" style="padding:0 18px 12px">
         <div class="section-label" style="padding:0;margin:12px 0 4px">调试</div>
@@ -577,7 +589,7 @@
     </div>
   </div>
   <p class="note"><b>为什么要有历史</b>：实时「当前前台」对听风没用——它藏在后台时用户根本看不见；要定位「360 影像到底是哪个包名」，必须<b>多条、按时间倒序</b>地看切换历史。v1.1.31 起每条右侧直接给「加入名单」（已在名单的显示「已在名单」），<b>原地一键加进名单</b>，不再需要复制包名切页粘贴（车机上这套动作没人愿意做）。<br>
-  <b>v1.1.31 的分区重排</b>：关于与诊断页把排障工具集中成一个「调试」分区 —— 前台应用记录 / 悬浮歌词自检 / 崩溃日志 / 开机自启，用次级标题（`DebugLabel`，titleSmall）挂在同一个 `SectionTitle("调试")` 下；播放统计、数据与存储、关于仍是独立分区。<br>
+  <b>v1.1.31 的分区重排 → 2026-10-30 整段升为二级页</b>：排障工具（前台应用记录 / 悬浮歌词自检 / 崩溃日志 / 开机自启 / 诊断包 / 一键取证 / 电池优化白名单 / 开机自启证据）原先是「关于与诊断」里的一个 `SectionTitle("调试")` 分区，现在独立成页，入口在「关于与更新」最后一行。拆页之后播放统计与数据与存储已搬去「曲库与存储」，本页<b>只剩排障</b>。<br>
   <b>⚠️ 出厂状态这一区根本不存在</b>（v1.1.31）：默认 <code>SettingsDefaults.DEBUG_UNLOCKED = false</code>，整段被 <code>if (player.debugUnlocked)</code> 包着，界面上连「调试」两个字都看不到 —— 上图是<b>解锁后</b>的样子。解锁动线：在下方「关于」信息卡（应用 / 版本 / 包名那一块）上<b>连点 5 次</b>，第 5 次落下时出现一条「调试功能已显示」提示；分区顶部还有「显示调试功能」开关，关掉即整段消失。解锁状态落盘（<code>settings_debug_unlocked</code>），重启仍在；连点计数<b>不落盘</b>，退出本页重新数。<br>
   <b>三条口径</b>：①记录<b>默认关</b>（本区顶部的开关门控写入，<code>SettingsDefaults.FOREGROUND_LOG_ENABLED = false</code>，带 ↺）；②只存本机 <code>files/foreground_app_log.tsv</code>，滚动 300 条，坏了只丢日志不伤曲库（故意不进数据库）；③应用名解析不到时显示「（应用名解析不到）」并保留包名——launcher 一类无 label 包名的真实降级表现，真机验证过。<br>
   <b>区块结构</b>：开关 → 通道状态行（实时）→ 两颗系统设置跳转 + 「实测日志可读」（READ_LOGS 探针，纯信息、不影响功能）→ 当前前台 → 历史列表（LazyColumn，最新在上，每行「加入名单」）→ 复制全部 / 刷新 / 清空（清空二次确认）。</p>

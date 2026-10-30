@@ -152,14 +152,9 @@
 
     <!-- 设置域 -->
     <string name="playback_stats">Playback stats</string>
-    <string name="total_songs">Total songs</string>
     <string name="songs">%1$s songs</string>
     <string name="songs_played">Songs played</string>
-    <string name="total_plays">Total plays</string>
     <string name="plays">%1$s plays</string>
-    <string name="total_listening_time">Total listening time</string>
-    <string name="favorites">Favorites</string>
-    <string name="daily_curve_time_of_day">Daily curve · Time-of-day split · Most played / Longest listened (all from local records)</string>
     <string name="clear_playback_stats_keeps_favorites">Clear playback stats (keeps favorites)</string>
     <string name="data_storage">Data &amp; storage</string>
     <string name="library_songs">Library songs</string>
@@ -391,7 +386,6 @@
     <string name="restores_shape_size_position_font">Restores shape, size, position, font, background and behavior to factory values; the switch and hide list stay as they are</string>
     <string name="once_on_you_can_adjust">Once on, you can adjust the shape (single subtitle / full screen), size and position, font size, alignment, background color and opacity, and paused behavior.</string>
     <string name="running_go_to_the_home">Running: %1$s. Go to the home screen to see the lyric line</string>
-    <string name="see_about_diagnostics_crash_log">See About &amp; diagnostics → Crash log for details</string>
     <string name="overlay_not_running">Overlay not running</string>
     <string name="some_systems_also_require_display">Some systems also require Display pop-up windows while running in the background, otherwise the overlay stays hidden</string>
     <string name="otherwise_the_screen_may_stay">Otherwise the screen may stay black or lyrics may not show after granting</string>
@@ -479,10 +473,17 @@
     <string name="speed_x_pitch_skip_silence">Speed %1$sx · Pitch %2$s · Skip silence · Equalizer and effects</string>
     <string name="lyrics">Lyrics</string>
     <string name="text_size_x_bilingual_lyrics">Text size %1$sx · Lyrics · Floating lyrics</string>
-    <string name="formats_and_storage_filters_under">Formats and storage · Filters under %1$s s</string>
-    <string name="formats_and_storage_short_audio">Formats and storage · Short-audio filter off</string>
-    <string name="about_diagnostics">About &amp; diagnostics</string>
-    <string name="version_check_for_updates_playback">Version · Check for updates · Playback stats · Privacy</string>
+    <string name="library_and_storage">Library &amp; storage</string>
+    <string name="about_updates">About &amp; updates</string>
+    <string name="diagnostics_troubleshooting">Diagnostics &amp; troubleshooting</string>
+    <string name="self_checks_and_toolkit">Self-checks · foreground log · crash log · boot diagnostics</string>
+    <string name="debug_tools_hidden_hint">Debug tools are hidden. Tap the version card 5 times in About to show them.</string>
+    <string name="stats">Stats</string>
+    <string name="library_stats">Library stats</string>
+    <string name="danger_zone">Danger zone</string>
+    <string name="stats_cleanup_filters_under">Stats · cleanup · filters under %1$s s</string>
+    <string name="stats_cleanup_short_audio">Stats · cleanup · short-audio filter off</string>
+    <string name="version_check_for_updates_privacy">Version · Check for updates · Privacy</string>
     <string name="online_playback_reorder_menu_experimental">Online playback · Reorder menu (experimental, moves out once stable)</string>
     <string name="theme">Theme</string>
     <string name="theme_follows_cover_colors">Theme follows cover colors</string>
@@ -513,7 +514,6 @@
     <string name="equalizer_and_effects">Equalizer and effects</string>
     <string name="availability_depends_on_the_device">Availability depends on the device audio stack; some head units only support built-in effects</string>
     <string name="local_library">Local library</string>
-    <string name="formats_and_storage">Formats and storage</string>
     <string name="track_counts_and_size_per">Track counts and size per format, plus lossless/lossy ratios (measured from local files)</string>
     <string name="songs_2">%1$s songs · %2$s</string>
     <string name="short_audio_filter_s">Short-audio filter (&lt; %1$s s)</string>

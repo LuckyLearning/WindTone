@@ -40,4 +40,23 @@ class SettingsMenuOrderTest {
         val saved = SettingsMenuOrder.DEFAULT.filter { it != "LAB" }
         assertEquals(SettingsMenuOrder.DEFAULT, SettingsMenuOrder.merge(saved))
     }
+
+    /**
+     * 2026-10-30：「关于与诊断」拆成「关于与更新」（一级）+「诊断与排障」（二级），
+     * 一级卡的 id 从 `DIAGNOSTICS` 变成 `ABOUT`。
+     *
+     * 不迁移的后果很具体：老用户存档里那一项被当成未知 id 丢掉，卡片被塞回默认位置，
+     * 表现为「我自己排的顺序怎么自己变回去了」。这条测试锁住迁移与位置保持。
+     */
+    @Test
+    fun `老存档里的关于卡片迁移到新 id 且位置不变`() {
+        // 六张卡齐全、但「关于」还叫旧 id —— 迁移后应与默认顺序**逐位相同**，
+        // 不能被当成未知 id 丢掉再按默认位置补回（那样卡片会自己跳位）
+        val saved = listOf("APPEARANCE", "PLAYBACK", "LYRICS", "LIBRARY", "DIAGNOSTICS", "LAB")
+        val order = SettingsMenuOrder.merge(saved)
+
+        assertEquals(SettingsMenuOrder.DEFAULT, order)
+        assertFalse("旧 id 不该留在顺序里", order.contains("DIAGNOSTICS"))
+        assertEquals(4, order.indexOf("ABOUT"))
+    }
 }

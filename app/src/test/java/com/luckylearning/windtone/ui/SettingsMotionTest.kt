@@ -31,7 +31,7 @@ class SettingsMotionTest {
             SettingsPage.PLAYBACK,
             SettingsPage.LYRICS,
             SettingsPage.LIBRARY,
-            SettingsPage.DIAGNOSTICS,
+            SettingsPage.ABOUT,
             SettingsPage.LAB,
         )
         categories.forEach { page ->
@@ -45,6 +45,7 @@ class SettingsMotionTest {
         listOf(
             SettingsPage.OVERLAY,
             SettingsPage.UPDATE,
+            SettingsPage.DIAGNOSIS,
             SettingsPage.ONLINE_HUB,
             SettingsPage.MENU_ORDER,
         ).forEach { page ->

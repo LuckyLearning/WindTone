@@ -112,9 +112,22 @@ enum class SettingsPage(val title: String) {
     /** 桌面悬浮歌词 —— v1.1.52 独立成页 */
     OVERLAY(AppStrings.s(R.string.floating_lyrics)),
 
-    LIBRARY(AppStrings.s(R.string.drawer_group_library)),
+    /** 曲库与存储（2026-10-30 由「音乐库」改名：维护动作从关于页搬回这里） */
+    LIBRARY(AppStrings.s(R.string.library_and_storage)),
+
     UPDATE(AppStrings.s(R.string.update)),
-    DIAGNOSTICS(AppStrings.s(R.string.about_diagnostics)),
+
+    /**
+     * 关于与更新（2026-10-30 由「关于与诊断」拆出）。
+     *
+     * 原页把播放统计 / 数据与存储 / 调试 / 关于四类焊在一起，找版本号与找清缓存
+     * 要进同一页。现在这里只留版本与更新，统计与维护搬去「曲库与存储」，
+     * 排障工具降为子页 [DIAGNOSIS]。
+     */
+    ABOUT(AppStrings.s(R.string.about_updates)),
+
+    /** 诊断与排障 —— 二级页，入口在「关于与更新」里（原「调试」分区） */
+    DIAGNOSIS(AppStrings.s(R.string.diagnostics_troubleshooting)),
 
     /** 在线歌单（M3U / M3U8 / PLS）—— v1.1.37 */
     ONLINE(AppStrings.s(R.string.online_playlists)),
@@ -146,7 +159,8 @@ enum class SettingsPage(val title: String) {
  */
 internal fun SettingsPage.parent(): SettingsPage = when (this) {
     SettingsPage.OVERLAY -> SettingsPage.LYRICS
-    SettingsPage.UPDATE -> SettingsPage.DIAGNOSTICS
+    // 2026-10-30 结构调整：更新与诊断都挂在「关于与更新」下（原来更新挂在「关于与诊断」下）
+    SettingsPage.UPDATE, SettingsPage.DIAGNOSIS -> SettingsPage.ABOUT
     SettingsPage.ONLINE_HUB, SettingsPage.MENU_ORDER -> SettingsPage.LAB
     SettingsPage.ONLINE -> SettingsPage.ONLINE_HUB
     else -> SettingsPage.ROOT
@@ -539,7 +553,14 @@ fun SettingsScreen(
                             onOpenReport = onOpenReport,
                             onOpenDuplicates = onOpenDuplicates,
                             onOpenStats = onOpenStats,
-                                        library = library,
+                            library = library,
+                            maintenance = maintenance,
+                            onRefreshMaintenance = onRefreshMaintenance,
+                            onCleanupMissingSongs = onCleanupMissingSongs,
+                            onClearCoverCache = onClearCoverCache,
+                            onResetUserData = onResetUserData,
+                            onResetLibrary = onResetLibrary,
+                            onClearStats = onClearStats,
                         )
 
                         SettingsPage.ONLINE_HUB -> SettingsOnlinePage(
@@ -558,21 +579,22 @@ fun SettingsScreen(
                         SettingsPage.ONLINE -> OnlinePlaylistsPage(onPlay = onPlayQueue)
 
 
-                        SettingsPage.DIAGNOSTICS -> SettingsDiagnosticsPage(
+                        // 2026-10-30：「关于与诊断」拆成两级 ——
+                        // 一级只放版本与更新，排障工具降为 [SettingsPage.DIAGNOSIS] 子页。
+                        SettingsPage.ABOUT -> SettingsAboutPage(
+                            player = player,
+                            update = update,
+                            autoCheckUpdate = autoCheckUpdate,
+                            onDebugUnlocked = onDebugUnlocked,
+                            onOpenUpdate = { page = SettingsPage.UPDATE },
+                            onOpenDiagnostics = { page = SettingsPage.DIAGNOSIS },
+                        )
+
+                        SettingsPage.DIAGNOSIS -> SettingsDiagnosisPage(
                             player = player,
                             library = library,
-                            maintenance = maintenance,
                             crashLogCount = crashLogCount,
                             crashLogText = crashLogText,
-                            onRefreshMaintenance = onRefreshMaintenance,
-                            onCleanupMissingSongs = onCleanupMissingSongs,
-                            onClearCoverCache = onClearCoverCache,
-                            onResetUserData = onResetUserData,
-                            onResetLibrary = onResetLibrary,
-                            onClearStats = onClearStats,
-                            onRestoreExcluded = onRestoreExcluded,
-                            onOpenReport = onOpenReport,
-                            onOpenDuplicates = onOpenDuplicates,
                             onLoadCrashLog = onLoadCrashLog,
                             onExportCrashLog = onExportCrashLog,
                             onClearCrashLog = onClearCrashLog,
@@ -582,9 +604,6 @@ fun SettingsScreen(
                             onLyricOverlayHiddenApps = onLyricOverlayHiddenApps,
                             onTestBootPlayback = onTestBootPlayback,
                             onDebugUnlocked = onDebugUnlocked,
-                            update = update,
-                            autoCheckUpdate = autoCheckUpdate,
-                            onOpenUpdate = { page = SettingsPage.UPDATE },
                         )
 
                         // v1.1.80：实验室功能（在线播放 / 调整菜单顺序先收在这里）

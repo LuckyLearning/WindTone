@@ -81,6 +81,7 @@ class SettingsScreenTest {
         onDebugUnlocked: (Boolean) -> Unit = {},
         onAutoResume: (Boolean) -> Unit = {},
         onOpenStats: () -> Unit = {},
+        onOpenReport: () -> Unit = {},
         onOpenPlayer: () -> Unit = {},
     ) {
         compose.setContent {
@@ -152,7 +153,7 @@ class SettingsScreenTest {
                     onResetUserData = {},
                     onResetLibrary = {},
                     onRestoreExcluded = {},
-                    onOpenReport = {},
+                    onOpenReport = onOpenReport,
                     onOpenDuplicates = {},
                     onOpenStats = onOpenStats,
                     onOpenPlayer = onOpenPlayer,
@@ -229,11 +230,11 @@ class SettingsScreenTest {
         compose.onNodeWithText("主题模式 · 主题取色 · 车载模式").assertIsDisplayed()
     }
 
-    /** v1.1.80：更新从主页卡降级为「关于与诊断」里的一行，点进去仍是原来的更新页。 */
+    /** v1.1.80：更新从主页卡降级为「关于」里的一行；2026-10-30 卡片改名「关于与更新」。 */
     @Test
     fun aboutPageOpensUpdatePage() {
         render()
-        compose.onNodeWithText("关于与诊断").performScrollTo().performClick()
+        compose.onNodeWithText("关于与更新").performScrollTo().performClick()
         compose.waitForIdle()
         compose.onNodeWithText("检查更新").performScrollTo().performClick()
         compose.waitForIdle()
@@ -244,13 +245,13 @@ class SettingsScreenTest {
     @Test
     fun rootShowsSixCategoryCards() {
         render()
-        listOf("外观", "播放", "歌词", "音乐库", "关于与诊断", "实验室功能").forEach {
+        listOf("外观", "播放", "歌词", "曲库与存储", "关于与更新", "实验室功能").forEach {
             compose.onNodeWithText(it).performScrollTo().assertIsDisplayed()
         }
         // 分类卡与子页里的 ActionRow 的区别就在这一行摘要（连摘要一起断言，
         // 免得以后退回成没有摘要的普通 ActionRow 也照样"通过"）
         compose.onNodeWithText("主题模式 · 主题取色 · 车载模式").assertIsDisplayed()
-        compose.onNodeWithText("格式与容量 · 过滤 < 60 秒").assertIsDisplayed()
+        compose.onNodeWithText("统计 · 清理 · 过滤 < 60 秒").assertIsDisplayed()
         // 降级成入口行的三个分类不许再出现在主页
         listOf("悬浮歌词", "在线播放", "更新", "调整菜单顺序").forEach {
             compose.onNodeWithText(it).assertDoesNotExist()
@@ -265,7 +266,7 @@ class SettingsScreenTest {
         compose.waitForIdle()
         compose.onNodeWithText("主题跟随封面取色").assertIsDisplayed()
         compose.onNodeWithText("车载").assertIsDisplayed()
-        compose.onNodeWithText("关于与诊断").assertDoesNotExist()
+        compose.onNodeWithText("关于与更新").assertDoesNotExist()
     }
 
     /** 点「歌词」→ 进歌词子页；按返回键回到主页（六张卡回来） */
@@ -275,11 +276,11 @@ class SettingsScreenTest {
         compose.onNodeWithText("歌词").performClick()
         compose.waitForIdle()
         compose.onNodeWithText("播放页歌词").assertIsDisplayed()
-        compose.onNodeWithText("关于与诊断").assertDoesNotExist()
+        compose.onNodeWithText("关于与更新").assertDoesNotExist()
 
         compose.onNodeWithContentDescription("返回").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText("关于与诊断").assertIsDisplayed()
+        compose.onNodeWithText("关于与更新").assertIsDisplayed()
         compose.onNodeWithText("播放页歌词").assertDoesNotExist()
     }
 
@@ -601,22 +602,50 @@ class SettingsScreenTest {
     }
 
     /**
-     * 「音乐库」子页里有「格式与容量」入口，点它能把请求交出去。
+     * 「曲库与存储」子页里有「曲库统计」入口，点它能把请求交出去。
      *
      * 与上一条同理：统计页本身是个全屏子页，入口行丢了**不会编译失败也不会报错**，
      * 只会让这个功能从界面上消失。顺带钉住这一行确实存在（不是被折叠进别的行）。
+     *
+     * 2026-10-30：卡片由「音乐库」改名「曲库与存储」，原来的「格式与容量」行
+     * 改名「曲库统计」，并与「播放统计」并排放在同一组（用户口径：按钮放一起，
+     * 查看各进各的页面 —— 见下一条用例）。
      */
     @Test
     fun libraryPageExposesFormatStatsEntry() {
         var opened = false
         render(onOpenStats = { opened = true })
 
-        compose.onNodeWithText("音乐库").performClick()
+        compose.onNodeWithText("曲库与存储").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText("格式与容量").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("格式与容量").performClick()
+        compose.onNodeWithText("曲库统计").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("曲库统计").performClick()
         compose.waitForIdle()
-        assert(opened) { "点「格式与容量」应当打开统计页" }
+        assert(opened) { "点「曲库统计」应当打开统计页" }
+    }
+
+    /**
+     * 「播放统计」与「曲库统计」两个入口并排在同一页（2026-10-30 用户口径）。
+     *
+     * 分两个页面看是用户要的，但**入口必须挨着** —— 分开放的话，
+     * 「我这库有多大 / 我听了多久」这两个总要一起看的问题得来回翻两页。
+     */
+    @Test
+    fun playbackStatsAndLibraryStatsSitTogether() {
+        var report = false
+        var stats = false
+        render(onOpenReport = { report = true }, onOpenStats = { stats = true })
+
+        compose.onNodeWithText("曲库与存储").performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText("播放统计").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("曲库统计").performScrollTo().assertIsDisplayed()
+
+        compose.onNodeWithText("播放统计").performClick()
+        compose.waitForIdle()
+        assert(report) { "点「播放统计」应当打开收听报告页" }
+        assert(!stats) { "点「播放统计」不该顺带打开曲库统计" }
     }
 
     // ================================================================ v1.1.18 双语歌词
@@ -675,7 +704,10 @@ class SettingsScreenTest {
             onLyricOverlayHiddenApps = { hidden = it },
         )
 
-        compose.onNodeWithText("关于与诊断").performClick()
+        compose.onNodeWithText("关于与更新").performClick()
+        compose.waitForIdle()
+        // 2026-10-30：「调试」分区降为二级页，入口在「关于与更新」里
+        compose.onNodeWithText("诊断与排障").performScrollTo().performClick()
         compose.waitForIdle()
 
         compose.onNodeWithText("调试").performScrollTo().assertExists()
@@ -692,7 +724,7 @@ class SettingsScreenTest {
         // 仍可能落在窗口外 —— 而 Compose 的 performClick() 是**注入真实触摸**，
         // 落在窗口外会被静默丢弃（不抛异常、回调一次都不触发）。
         // 本用例要验的是「按钮接线到 onLyricOverlayHiddenApps」，不是命中区域；
-        // 真实点击在模拟器上验过（设置 → 关于与诊断 → 调试 → 加入名单）。
+        // 真实点击在模拟器上验过（设置 → 关于与更新 → 诊断与排障 → 加入名单）。
         compose.onNodeWithText("360 影像").assertExists()
         compose.onNodeWithText("加入名单").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitForIdle()
@@ -708,18 +740,25 @@ class SettingsScreenTest {
      *
      * 排障工具对普通用户是纯噪音：他们既不需要「前台应用记录」，也不该看到
      * 「崩溃日志 / 开机自启」这些字样。藏起来不是安全措施，是不打扰。
+     *
+     * 2026-10-30 起这批工具整体降为二级页「诊断与排障」，未解锁时整页只有一行提示。
      */
     @Test
     fun debugSectionIsHiddenByDefault() {
         render()
 
-        compose.onNodeWithText("关于与诊断").performClick()
+        compose.onNodeWithText("关于与更新").performClick()
+        compose.waitForIdle()
+        // 2026-10-30：「调试」分区降为二级页，入口在「关于与更新」里
+        compose.onNodeWithText("诊断与排障").performScrollTo().performClick()
         compose.waitForIdle()
 
-        compose.onNodeWithText("播放统计").assertExists()
-        compose.onNodeWithText("调试").assertDoesNotExist()
+        // 2026-10-30：播放统计与维护动作已搬去「曲库与存储」，关于页只剩版本与更新
+        compose.onNodeWithText("播放统计").assertDoesNotExist()
+        // 未解锁时只摆一行说明，一件排障工具都不出现
         compose.onNodeWithText("显示调试功能").assertDoesNotExist()
         compose.onNodeWithText("记录前台应用切换").assertDoesNotExist()
+        compose.onNodeWithText("诊断包（完整）").assertDoesNotExist()
     }
 
     /**
@@ -733,7 +772,7 @@ class SettingsScreenTest {
         var unlocked: Boolean? = null
         render(onDebugUnlocked = { unlocked = it })
 
-        compose.onNodeWithText("关于与诊断").performClick()
+        compose.onNodeWithText("关于与更新").performClick()
         compose.waitForIdle()
 
         repeat(4) {
@@ -760,7 +799,9 @@ class SettingsScreenTest {
             onDebugUnlocked = { unlocked = it },
         )
 
-        compose.onNodeWithText("关于与诊断").performClick()
+        compose.onNodeWithText("关于与更新").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("诊断与排障").performScrollTo().performClick()
         compose.waitForIdle()
 
         compose.onNodeWithText("调试").performScrollTo().assertExists()

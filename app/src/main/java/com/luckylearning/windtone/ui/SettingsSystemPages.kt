@@ -111,7 +111,7 @@ import kotlin.math.roundToInt
  * 5 次是经验值：足够挡住误触（没人会连点信息卡 5 下），又不至于让人点到怀疑人生。
  * 这是交互常量、不是设置项默认值，所以放在界面层而不是 `SettingsDefaults`。
  */
-private const val DEBUG_UNLOCK_TAPS = 5
+internal const val DEBUG_UNLOCK_TAPS = 5
 
 /**
  * 设置页六个子页的正文（v1.1.6 从 `SettingsScreen.kt` 拆出）。
@@ -128,144 +128,93 @@ private const val DEBUG_UNLOCK_TAPS = 5
  * （`SettingsScreenTest` 的六张卡导航用例仍会跑一遍入口）。
  */
 
+// ================================================================ 子页：关于与更新
 
-// ================================================================ 子页：关于与诊断 / 更新
-
-// ================================================================ 子页：关于与诊断
-
+/**
+ * 「关于与更新」（2026-10-30 由原「关于与诊断」拆出）。
+ *
+ * 拆分理由：原页把四类东西焊在一起 —— 播放统计（看数据）、数据与存储（维护动作）、
+ * 调试（排障）、关于（版本与更新），用户找「版本号」和找「清缓存」要进同一页。
+ *
+ * 现在这里只留**关于 + 更新**：版本卡、检查更新、隐私说明，末行进诊断与排障子页。
+ * 播放统计与维护动作已搬到「曲库与存储」。
+ *
+ * ⚠️ **本函数只做组合**：分区实现都在 `SettingsAboutSections.kt`，
+ * 加一条信息 / 调顺序都只改这里的一行（与曲库页同一口径）。
+ */
 @Composable
-internal fun SettingsDiagnosticsPage(
+internal fun SettingsAboutPage(
     player: PlayerUiState,
+    update: UpdateUiState,
+    autoCheckUpdate: Boolean,
+    onDebugUnlocked: (Boolean) -> Unit,
+    onOpenUpdate: () -> Unit,
+    onOpenDiagnostics: () -> Unit,
+) {
+    // 分区顺序表（自上而下）：
+    //   ① 版本信息卡 —— 连点 5 次解锁调试
+    //   ② 检查更新 —— 进更新子页
+    //   ③ 隐私说明 —— 只在本机 / 唯一联网点
+    //   ④ 诊断与排障 —— 排障工具入口，固定页尾
+    AboutVersionSection(
+        debugUnlocked = player.debugUnlocked,
+        onDebugUnlocked = onDebugUnlocked,
+    )
+    UpdateEntrySection(
+        update = update,
+        autoCheckUpdate = autoCheckUpdate,
+        onOpenUpdate = onOpenUpdate,
+    )
+    PrivacyNoticeSection()
+    DiagnosticsEntrySection(onOpenDiagnostics = onOpenDiagnostics)
+}
+
+// ================================================================ 子页：诊断与排障
+
+/**
+ * 「诊断与排障」（2026-10-30 从「关于与诊断」拆出，即原来的「调试」分区）。
+ *
+ * 内容与门禁都没变：仍由 `player.debugUnlocked` 控制（v1.1.31 用户拍板，
+ * 解锁方式仍是「关于」版本卡连点 5 次）。变化只有位置 —— 它不再和版本号同屏，
+ * 而是二级页；拆页之后普通用户根本不会逛到这里，这正是当初加门禁想要的效果。
+ *
+ * 未解锁时给一行明确提示而不是整页空白：新结构下入口在「关于」页，
+ * 用户从那里点进来看到空白只会以为坏了。
+ */
+@Composable
+internal fun SettingsDiagnosisPage(
+    player: PlayerUiState,
+    /** 诊断包要读曲库规模（曲数 / 分组数），与内存段一起构成排障快照 */
     library: LibraryUiState,
-    maintenance: DataMaintenance.Report?,
     crashLogCount: Int,
     crashLogText: String?,
-    onRefreshMaintenance: () -> Unit,
-    onCleanupMissingSongs: () -> Unit,
-    onClearCoverCache: () -> Unit,
-    onResetUserData: () -> Unit,
-    onResetLibrary: () -> Unit,
-    onClearStats: () -> Unit,
-    onRestoreExcluded: () -> Unit,
-    onOpenReport: () -> Unit,
-    onOpenDuplicates: () -> Unit,
     onLoadCrashLog: () -> Unit,
     onExportCrashLog: () -> Unit,
     onClearCrashLog: () -> Unit,
     onOverlayPreview: () -> Unit,
     onLyricOverlay: (Boolean) -> Unit,
-    /** 「前台应用记录」开关（v1.1.30 从歌词子页搬到这里） */
     onForegroundLogEnabled: (Boolean) -> Unit,
-    /** 整份「不显示悬浮窗的应用」名单（v1.1.30：记录里可以一键加入） */
     onLyricOverlayHiddenApps: (Set<String>) -> Unit,
-    /** 立刻走一次「开机后台起播」链路（v1.1.27，用于不重启也能验一遍） */
     onTestBootPlayback: () -> Unit,
-    /** 调试分区解锁开关（v1.1.31；关于连点 5 次打开，分区内开关可关回去） */
     onDebugUnlocked: (Boolean) -> Unit,
-    /** 打开「更新」子页（v1.1.80：更新不再是主页分类卡，降级为「关于」里的一行） */
-    update: UpdateUiState,
-    autoCheckUpdate: Boolean,
-    onOpenUpdate: () -> Unit,
 ) {
     val context = LocalContext.current
-    val version = remember {
-        runCatching {
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName
-        }.getOrNull() ?: "—"
-    }
-    // 三处不可撤销的操作统一走二次确认
-    var showClearStatsConfirm by remember { mutableStateOf(false) }
     var showClearCrashConfirm by remember { mutableStateOf(false) }
-    // 数据维护（诊断子页）：清理失效歌曲 / 清空全部用户数据
-    var showCleanupConfirm by remember { mutableStateOf(false) }
     // 悬浮歌词自检结果
     var showOverlayCheck by remember { mutableStateOf(false) }
     var overlayCheck by remember { mutableStateOf<OverlaySnapshot?>(null) }
-    var showResetDataConfirm by remember { mutableStateOf(false) }
-    // 清空曲库（与「清空全部用户数据」方向相反，同样不可撤销）
-    var showResetLibraryConfirm by remember { mutableStateOf(false) }
     // 开机自启的落盘证据（v1.1.27）：进页面读一次，随时可手动刷新
     var bootInfo by remember { mutableStateOf<BootStatus.Snapshot?>(null) }
     LaunchedEffect(Unit) { bootInfo = BootStatus.snapshot(context) }
 
-
-    // ------------------------------------------------ 播放统计
-    SectionTitle(stringResource(R.string.playback_stats))
-    val stats = library.playStats
-    StatCard(
-        rows = listOf(
-            stringResource(R.string.total_songs) to stringResource(R.string.songs, library.songs.size),
-            stringResource(R.string.songs_played) to stringResource(R.string.songs, stats.listenedSongs),
-            stringResource(R.string.total_plays) to stringResource(R.string.plays, stats.totalPlays),
-            stringResource(R.string.total_listening_time) to formatListened(stats.totalListenedMs),
-            stringResource(R.string.favorites) to stringResource(R.string.songs, stats.favorites),
+    if (!player.debugUnlocked) {
+        SectionTitle(stringResource(R.string.debug))
+        Text(
+            stringResource(R.string.debug_tools_hidden_hint),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(vertical = 8.dp),
         )
-    )
-    ActionRow(
-        title = stringResource(R.string.lib_listening_report),
-        subtitle = stringResource(R.string.daily_curve_time_of_day),
-        onClick = onOpenReport,
-        chevron = true,
-    )
-    Spacer(Modifier.height(8.dp))
-    // 不可撤销 → 二次确认
-    TextButton(onClick = { showClearStatsConfirm = true }) {
-        Text(stringResource(R.string.clear_playback_stats_keeps_favorites))
-    }
-
-    // ------------------------------------------------ 数据与存储
-    // 进入本页时刷新一次自检：曲库 / 目录 / 歌单 / 缓存的实时占用。
-    LaunchedEffect(Unit) { onRefreshMaintenance() }
-    SectionTitle(stringResource(R.string.data_storage))
-    StatCard(
-        rows = listOf(
-            stringResource(R.string.library_songs) to if (maintenance == null) "—" else stringResource(R.string.songs, maintenance.songs),
-            stringResource(R.string.not_accessible) to if (maintenance == null) "—" else stringResource(R.string.songs, maintenance.missing),
-            stringResource(R.string.removed_from_library) to if (maintenance == null) "—" else stringResource(R.string.songs, maintenance.excluded),
-            stringResource(R.string.imported_folders) to if (maintenance == null) "—" else stringResource(R.string.text, maintenance.folders),
-            stringResource(R.string.view_playlists) to if (maintenance == null) "—" else stringResource(R.string.text, maintenance.playlists),
-            stringResource(R.string.cover_cache) to (maintenance?.coverSizeText ?: "—"),
-            stringResource(R.string.database_size) to (maintenance?.dbSizeText ?: "—"),
-        )
-    )
-    ActionRow(
-        title = stringResource(R.string.clean_up_missing_songs),
-        subtitle = if ((maintenance?.missing ?: 0) > 0) {
-            stringResource(R.string.songs_are_no_longer_on, maintenance!!.missing)
-        } else {
-            stringResource(R.string.songs_whose_files_are_missing)
-        },
-        onClick = { showCleanupConfirm = true },
-    )
-    // 「移出曲库」是这个应用里唯一一个"歌还在、但被用户主动藏起来"的状态：
-    // 不给恢复入口的话，用户误点一次就再也找不回来（重扫也不会收）。
-    ActionRow(
-        title = stringResource(R.string.restore_songs_removed_from_library),
-        subtitle = if ((maintenance?.excluded ?: 0) > 0) {
-            stringResource(R.string.songs_were_removed_from_the, maintenance!!.excluded)
-        } else {
-            stringResource(R.string.no_songs_removed_from_the)
-        },
-        onClick = onRestoreExcluded,
-    )
-    ActionRow(
-        title = stringResource(R.string.duplicate_cleanup),
-        subtitle = stringResource(R.string.finds_duplicates_by_title_artist),
-        onClick = onOpenDuplicates,
-        chevron = true,
-    )
-    ActionRow(
-        title = stringResource(R.string.clear_cover_cache),
-        subtitle = stringResource(R.string.only_deletes_regenerable_cover_images),
-        onClick = onClearCoverCache,
-    )
-    Spacer(Modifier.height(8.dp))
-    // 不可撤销 → 二次确认
-    TextButton(onClick = { showResetDataConfirm = true }) {
-        Text(stringResource(R.string.clear_all_user_data_keeps))
-    }
-    TextButton(onClick = { showResetLibraryConfirm = true }) {
-        Text(stringResource(R.string.clear_library_and_imported_folders))
     }
 
     // ------------------------------------------------ 调试（默认隐藏，v1.1.31）
@@ -902,77 +851,6 @@ internal fun SettingsDiagnosticsPage(
         )
     }
 
-    // ------------------------------------------------ 关于
-    SectionTitle(stringResource(R.string.about))
-    // 连点 5 次解锁调试分区（v1.1.31）。
-    // 计数用 `remember` 而不是持久化：必须「连续」点 —— 退出本页再进来就重新数，
-    // 免得几下零散误触攒够 5 次把调试区翻出来。真正的「已解锁」状态才落盘。
-    var aboutTaps by remember { mutableStateOf(0) }
-    val onAboutTap: () -> Unit = {
-        aboutTaps += 1
-        if (aboutTaps >= DEBUG_UNLOCK_TAPS) {
-            aboutTaps = 0
-            onDebugUnlocked(true)
-            Toast.makeText(context, AppStrings.s(R.string.debug_tools_are_now_visible), Toast.LENGTH_SHORT).show()
-        }
-    }
-    StatCard(
-        onClick = if (player.debugUnlocked) null else onAboutTap,
-        rows = listOf(
-            stringResource(R.string.app) to stringResource(R.string.windtone),
-            stringResource(R.string.version) to version,
-            stringResource(R.string.package_label) to context.packageName,
-            stringResource(R.string.minimum_os) to "Android 7.0（API 24）",
-            // v1.0.7 起 Release 按 ABI 分包，这里显示本机架构，方便对照下载
-            stringResource(R.string.abis) to UpdateChecker.primaryAbiLabel().ifBlank { "—" },
-            stringResource(R.string.update_source) to "${BuildConfig.RELEASE_OWNER}/${BuildConfig.RELEASE_REPO}",
-        )
-    )
-    // v1.1.80：更新相关整体收进「关于」——版本号与「有没有新版本」本来就该在同一屏，
-    // 以前分成两张主页卡，用户先看版本再去找更新时间多一跳。
-    ActionRow(
-        title = stringResource(R.string.check_for_updates),
-        subtitle = when {
-            update.info != null -> stringResource(R.string.version_is_available, update.info.version)
-            autoCheckUpdate -> stringResource(R.string.check_for_updates_auto_check)
-            else -> stringResource(R.string.check_for_updates_auto_check_2)
-        },
-        onClick = onOpenUpdate,
-        trailing = if (update.info != null) stringResource(R.string.update_available) else "",
-        chevron = true,
-    )
-    Text(
-        stringResource(R.string.playlists_favorites_playback_stats_and),
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(vertical = 8.dp),
-    )
-
-    // 以下三处都会丢数据且不可撤销，统一走二次确认
-    if (showClearStatsConfirm) {
-        AlertDialog(
-            onDismissRequest = { showClearStatsConfirm = false },
-            title = { Text(stringResource(R.string.clear_playback_stats)) },
-            text = {
-                Text(
-                    stringResource(R.string.clears_play_counts_total_listening),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onClearStats()
-                        showClearStatsConfirm = false
-                    },
-                ) { Text(stringResource(R.string.common_clear)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showClearStatsConfirm = false }) { Text(stringResource(R.string.cancel)) }
-            },
-        )
-    }
-
     if (showClearCrashConfirm) {
         AlertDialog(
             onDismissRequest = { showClearCrashConfirm = false },
@@ -1040,81 +918,8 @@ internal fun SettingsDiagnosticsPage(
             },
         )
     }
-
-    if (showCleanupConfirm) {
-        AlertDialog(
-            onDismissRequest = { showCleanupConfirm = false },
-            title = { Text(stringResource(R.string.clean_up_missing_songs_2)) },
-            text = {
-                Text(
-                    stringResource(R.string.removes_records_of_songs_whose),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onCleanupMissingSongs()
-                        showCleanupConfirm = false
-                    },
-                ) { Text(stringResource(R.string.clean_up)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCleanupConfirm = false }) { Text(stringResource(R.string.cancel)) }
-            },
-        )
-    }
-
-    if (showResetDataConfirm) {
-        AlertDialog(
-            onDismissRequest = { showResetDataConfirm = false },
-            title = { Text(stringResource(R.string.clear_all_user_data)) },
-            text = {
-                Text(
-                    stringResource(R.string.clears_favorites_playback_stats_per),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onResetUserData()
-                        showResetDataConfirm = false
-                    },
-                ) { Text(stringResource(R.string.common_clear)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showResetDataConfirm = false }) { Text(stringResource(R.string.cancel)) }
-            },
-        )
-    }
-
-    // 清空曲库：与「清空全部用户数据」互为镜像 —— 一个清数据留曲库，一个清曲库留数据。
-    // 因为「留数据」这一半很容易被误解成"什么都没删"，文案必须写清双方各自保住了什么。
-    if (showResetLibraryConfirm) {
-        AlertDialog(
-            onDismissRequest = { showResetLibraryConfirm = false },
-            title = { Text(stringResource(R.string.clear_library_and_imported_folders_2)) },
-            text = {
-                Text(
-                    stringResource(R.string.removes_every_song_record_and),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onResetLibrary()
-                        showResetLibraryConfirm = false
-                    },
-                ) { Text(stringResource(R.string.clear_library)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showResetLibraryConfirm = false }) { Text(stringResource(R.string.cancel)) }
-            },
-        )
-    }
 }
+
 
 // ================================================================ 子页：更新
 

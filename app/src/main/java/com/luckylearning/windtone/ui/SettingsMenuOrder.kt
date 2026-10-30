@@ -17,13 +17,23 @@ internal object SettingsMenuOrder {
         "PLAYBACK",
         "LYRICS",
         "LIBRARY",
-        "DIAGNOSTICS",
+        "ABOUT",
         "LAB",
     )
 
+    /**
+     * 老存档里的分类 id → 现在的 id。
+     *
+     * 2026-10-30：「关于与诊断」拆成「关于与更新」（一级）+「诊断与排障」（二级），
+     * 一级卡的 id 由 `DIAGNOSTICS` 变成 `ABOUT`。不迁移的话，老用户自定义过的顺序里
+     * 那一项会被当成未知 id 丢掉，卡片被塞回默认位置 —— 表现为「我排的顺序自己变了」。
+     */
+    private val LEGACY_IDS = mapOf("DIAGNOSTICS" to "ABOUT")
+
     fun merge(saved: List<String>, defaultIds: List<String> = DEFAULT): List<String> {
         val known = defaultIds.toSet()
-        val out = saved.filter { it in known }.distinct().toMutableList()
+        val migrated = saved.map { LEGACY_IDS[it] ?: it }
+        val out = migrated.filter { it in known }.distinct().toMutableList()
         for (id in defaultIds) {
             if (id in out) continue
             val later = defaultIds.drop(defaultIds.indexOf(id) + 1).firstOrNull { it in out }

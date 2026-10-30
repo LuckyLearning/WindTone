@@ -133,14 +133,9 @@
 
     <!-- 设置域 -->
     <string name="playback_stats">播放统计</string>
-    <string name="total_songs">歌曲总数</string>
     <string name="songs">%1$s 首</string>
     <string name="songs_played">播放过的歌曲</string>
-    <string name="total_plays">累计播放次数</string>
     <string name="plays">%1$s 次</string>
-    <string name="total_listening_time">累计收听时长</string>
-    <string name="favorites">收藏</string>
-    <string name="daily_curve_time_of_day">按天曲线 · 时段分布 · 最常播放 / 最长收听榜（全部来自本地记录）</string>
     <string name="clear_playback_stats_keeps_favorites">清空播放统计（保留收藏）</string>
     <string name="data_storage">数据与存储</string>
     <string name="library_songs">曲库歌曲</string>
@@ -372,7 +367,6 @@
     <string name="restores_shape_size_position_font">把形态、尺寸、位置、字体、背景、行为全部恢复到出厂值；开关和隐藏名单保持不变</string>
     <string name="once_on_you_can_adjust">打开后可调形态（单条字幕 / 全屏歌词）、宽高与位置、字号、对齐、背景颜色与不透明度、暂停表现。</string>
     <string name="running_go_to_the_home">运行中：%1$s，退到桌面即可看到歌词行</string>
-    <string name="see_about_diagnostics_crash_log">详情见 关于与诊断 → 崩溃日志</string>
     <string name="overlay_not_running">悬浮窗未启动</string>
     <string name="some_systems_also_require_display">部分系统还需要同时允许「后台弹出界面」，否则授权后仍不显示。</string>
     <string name="otherwise_the_screen_may_stay">否则授权后界面可能黑屏或歌词不显示。</string>
@@ -460,10 +454,17 @@
     <string name="speed_x_pitch_skip_silence">速度 %1$sx · 变调 %2$s · 跳过静音 · 均衡器与音效</string>
     <string name="lyrics">歌词</string>
     <string name="text_size_x_bilingual_lyrics">字号 %1$sx · 双语歌词 · 桌面悬浮歌词</string>
-    <string name="formats_and_storage_filters_under">格式与容量 · 过滤 &lt; %1$s 秒</string>
-    <string name="formats_and_storage_short_audio">格式与容量 · 未开启短音频过滤</string>
-    <string name="about_diagnostics">关于与诊断</string>
-    <string name="version_check_for_updates_playback">版本信息 · 检查更新 · 播放统计 · 隐私说明</string>
+    <string name="library_and_storage">曲库与存储</string>
+    <string name="about_updates">关于与更新</string>
+    <string name="diagnostics_troubleshooting">诊断与排障</string>
+    <string name="self_checks_and_toolkit">悬浮歌词自检 · 前台应用记录 · 崩溃日志 · 开机自启</string>
+    <string name="debug_tools_hidden_hint">调试工具默认隐藏：到「关于」的版本卡上连点 5 次即可显示。</string>
+    <string name="stats">统计</string>
+    <string name="library_stats">曲库统计</string>
+    <string name="danger_zone">危险操作</string>
+    <string name="stats_cleanup_filters_under">统计 · 清理 · 过滤 &lt; %1$s 秒</string>
+    <string name="stats_cleanup_short_audio">统计 · 清理 · 短音频过滤</string>
+    <string name="version_check_for_updates_privacy">版本信息 · 检查更新 · 隐私说明</string>
     <string name="online_playback_reorder_menu_experimental">在线播放 · 调整菜单顺序（实验性功能，稳定后再移出）</string>
     <string name="theme">主题</string>
     <string name="theme_follows_cover_colors">主题跟随封面取色</string>
@@ -494,7 +495,6 @@
     <string name="equalizer_and_effects">均衡器与音效</string>
     <string name="availability_depends_on_the_device">可用性取决于本机音频系统，车机可能只支持车辆自带的音效设置</string>
     <string name="local_library">本地曲库</string>
-    <string name="formats_and_storage">格式与容量</string>
     <string name="track_counts_and_size_per">各格式的首数与占用、无损 / 有损占比（全部按本机文件大小统计）</string>
     <string name="songs_2">%1$s 首 · %2$s</string>
     <string name="short_audio_filter_s">过滤短音频（&lt; %1$s 秒）</string>
@@ -581,7 +581,7 @@
     <string name="continuously_adjustable_from_12_to">12–60sp 连续可调。手机 16–22sp 合适，车机离得远建议 24–32sp；改完立刻生效，行数选「自动」时会跟着重新排</string>
     <string name="brightness_kept_for_context_lines">非当前句保留的亮度：越小上下句越暗、当前句越突出；默认 42%% 与播放页一致（无底板时不低于 61%%，浅色画面上不糊）</string>
     <string name="nothing_configured_yet_floating_lyrics_2">还没有设置。选中的应用在前台时，悬浮歌词自动收起，退出后恢复；找不到应用就先去「关于与诊断 → 调试 → 前台应用记录」看包名</string>
-    <string name="start_failed_check_settings_apps">启动失败：%1$s。可到 设置 → 应用 → 显示悬浮窗（部分系统叫「后台弹出界面」）确认，详情见 关于与诊断 → 崩溃日志</string>
+    <string name="start_failed_check_settings_apps">启动失败：%1$s。可到 设置 → 应用 → 显示悬浮窗（部分系统叫「后台弹出界面」）确认，详情见 关于与更新 → 诊断与排障 → 崩溃日志</string>
     <string name="could_not_open_the_system">未能打开系统授权页（本机 ROM 未提供该入口）。\n请手动前往：设置 → 应用 → 听风 → 权限 → 「显示悬浮窗」或「出现在其他应用上层」→ 允许。\n部分系统还需要同时允许「后台弹出界面」，否则授权后仍不显示。</string>
     <string name="permission_path_settings_apps_permissions">授权路径：设置 → 应用 → 权限 → 出现在其他应用上 → 允许。\n部分比亚迪车机（DiLink）需要把本应用加入白名单，或先强停一次应用进程，否则授权后界面可能黑屏或歌词不显示。</string>
     <string name="diagram_width_and_the_grey">示意图：宽 %1$s%%、%2$s；底部灰色是车机 Dock（56dp 内不画歌词）。实际效果退到桌面查看 —— 全屏歌词不会盖住这一页，否则没法边调边看。</string>

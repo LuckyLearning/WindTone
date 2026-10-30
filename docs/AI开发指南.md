@@ -408,7 +408,11 @@ ui/                       ── 展示层 ──
   SheetsScanScope.kt       扫描范围（弹层 + 顶栏芯片）
   Common.kt                共享 UI 原语（封面 / 歌曲行 / 迷你播放条 / 弹层通用行组件……）
   EqSheet.kt              「均衡器与音效」弹层（方案网 / 预设网 / 曲线预览 / 频段 / 增强音效 / 播放过渡 / A/B 对比，见 §6.10）
-  SettingsScreen.kt       设置页（一主六子：外观 / 播放 / 歌词 / 音乐库 / 更新 / 关于与诊断）
+  SettingsScreen.kt       设置页外壳（枚举 / 下钻动效 / 页面分发 · 一主六子）
+  SettingsPages.kt        子页组合：主页卡 / 外观 / 播放 / 曲库与存储（**页面只组合分区**）
+  SettingsLibrarySections.kt  曲库页分区：统计 / 本地曲库 / 数据与存储 / 危险操作
+  SettingsAboutSections.kt    关于页分区：版本卡 / 检查更新 / 隐私说明 / 排障入口
+  SettingsSystemPages.kt  关于与更新页 + 诊断与排障页 + 更新页
   Common.kt               通用组件（封面、歌曲行、空态、骨架屏……）
   AppIcons.kt             图标封装
   theme/Theme.kt          Material 3 主题、色板生成
@@ -1305,13 +1309,17 @@ WindTone-v{版本}-universal.apk      # 拿不准架构时的兜底
 
 ### 11.1 加一个设置项
 
-**先决定它属于哪一层**（见 §10 第 13 条）：主页只有六张分类卡，所以要么挂进已有的某个子页（外观 / 播放 / 歌词 / 音乐库 / 更新 / 关于与诊断），要么新开一个子页并同步「枚举 + 卡片 + `pagePositions`」三处。
+**先决定它属于哪一层**（见 §10 第 13 条）：主页只有六张分类卡，所以要么挂进已有的某个子页（外观 / 播放 / 歌词 / **曲库与存储** / 实验室 / **关于与更新**），要么新开一个子页并同步「枚举 + 卡片 + `pagePositions`」三处。
 
 1. `data/Prefs.kt`：加 `var xxx: T` 属性 + `private companion object` 里加 `KEY_XXX` 常量。
 2. 对应的分域 `ui/*ViewModel.kt`：加读取方法（如 `fun xxxEnabled(): Boolean = prefs.xxx`）与写入方法（`fun setXxx(v: T) { prefs.xxx = v; … }`）。
    **按域选择 VM**：播放相关 → `PlayerViewModel`（多数情况下直接加到 `PlaybackEngine`，用接口委托转出）；
    曲库相关 → `LibraryViewModel`；维护 / 诊断 → `SettingsViewModel`；更新相关 → `UpdateViewModel`。
-3. `ui/SettingsScreen.kt`：在**对应页**（`page == SettingsPage.XXX`）的对应 `SectionTitle` 区块下加 `SwitchRow` / `SliderRow` / `ActionRow`，通过参数传入回调。
+3. **加在对应的「分区」里，不要加进页面函数**（2026-10-30 用户口径：*功能代码独立，页面组合是另外的代码*）：
+   - 分区 = 自带标题 / 行 / 弹窗状态的一个 composable，放在该页的 `Settings*Sections.kt` 里（已有 `SettingsLibrarySections.kt`、`SettingsAboutSections.kt`）；
+   - 页面函数（`SettingsLibraryPage` / `SettingsAboutPage`）**只保留一串按顺序的调用** + 顶部一张「分区顺序表」注释；
+   - 于是 **加功能 = 加一个 Section + 页面里加一行**，**调顺序 = 页面里挪一行**，改一区只读一个函数；
+   - 页内行仍用 `SwitchRow` / `SliderRow` / `ActionRow`，通过参数传入回调。
    - `SwitchRow` 的描述太长（超过约 30 字）时，副标题压成一行要点，详细说明挂到 `onInfo`（标题右侧的 `?` 图标 → 弹窗）。
    - 新增入口行用 `ActionRow(title, subtitle, onClick, trailing = 当前值摘要, chevron = true)`（chevron 仅给"进入另一个界面"的行，见 §10 第 14 条）。
    - **成组滑块默认收起**（2026-10-30 口径）：一整组「用得少 + 一碰就改值」的控件（当前只有「速度与变调」）用

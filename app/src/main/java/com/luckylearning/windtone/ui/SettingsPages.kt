@@ -135,22 +135,24 @@ internal fun SettingsRootPage(
                 icon = AppIcons.LyricsBubble,
                 onClick = { onNavigate(SettingsPage.LYRICS) },
             )
+            // 2026-10-30：音乐库 → 曲库与存储（维护动作从关于页搬回），摘要跟着换
             SettingsPage.LIBRARY -> CategoryRow(
-                title = stringResource(R.string.drawer_group_library),
+                title = stringResource(R.string.library_and_storage),
                 subtitle = if (minSongDurationSec > 0) {
-                    stringResource(R.string.formats_and_storage_filters_under, minSongDurationSec)
+                    stringResource(R.string.stats_cleanup_filters_under, minSongDurationSec)
                 } else {
-                    stringResource(R.string.formats_and_storage_short_audio)
+                    stringResource(R.string.stats_cleanup_short_audio)
                 },
                 icon = AppIcons.LibraryMusic,
                 onClick = { onNavigate(SettingsPage.LIBRARY) },
             )
             // v1.1.80：更新从独立分类卡降为「关于与诊断」里的入口行
-            SettingsPage.DIAGNOSTICS -> CategoryRow(
-                title = stringResource(R.string.about_diagnostics),
-                subtitle = stringResource(R.string.version_check_for_updates_playback),
+            // 2026-10-30：关于与诊断 → 关于与更新（统计与维护已搬去曲库，诊断降为子页）
+            SettingsPage.ABOUT -> CategoryRow(
+                title = stringResource(R.string.about_updates),
+                subtitle = stringResource(R.string.version_check_for_updates_privacy),
                 icon = AppIcons.Info,
-                onClick = { onNavigate(SettingsPage.DIAGNOSTICS) },
+                onClick = { onNavigate(SettingsPage.ABOUT) },
             )
             // v1.1.80：实验室功能 —— 实验性入口先放这里，确认稳定后再移出去
             SettingsPage.LAB -> CategoryRow(
@@ -361,8 +363,21 @@ internal fun SettingsPlaybackPage(
 }
 
 
-// ================================================================ 子页：音乐库
 
+// ================================================================ 子页：曲库与存储
+
+/**
+ * 「曲库与存储」（2026-10-30，由「音乐库」改名并扩容）。
+ *
+ * 改名的理由：原来这一页只有两行（格式与存储 / 短音频过滤），撑不起一张分类卡；
+ * 而**同属曲库的维护动作**（清理失效 / 恢复移除 / 查重 / 清封面缓存）却挂在
+ * 「关于与诊断」里 —— 曲库的「管」被劈成两半。
+ *
+ * ⚠️ **本函数只做组合**：每个分区是 `SettingsLibrarySections.kt` 里一个自包含的
+ * composable（自带标题、行与弹窗），这里只按顺序调用。所以
+ * **加功能 = 加一个 Section + 这里加一行**，**调顺序 = 这里挪一行**，
+ * 不用在几百行里找边界 —— 用户 2026-10-30 明确要求的口径。
+ */
 @Composable
 internal fun SettingsLibraryPage(
     minSongDurationSec: Int,
@@ -372,69 +387,40 @@ internal fun SettingsLibraryPage(
     onOpenDuplicates: () -> Unit,
     onOpenStats: () -> Unit,
     library: LibraryUiState,
+    maintenance: DataMaintenance.Report?,
+    onRefreshMaintenance: () -> Unit,
+    onCleanupMissingSongs: () -> Unit,
+    onClearCoverCache: () -> Unit,
+    onResetUserData: () -> Unit,
+    onResetLibrary: () -> Unit,
+    onClearStats: () -> Unit,
 ) {
-    var showMinDurationDialog by remember { mutableStateOf(false) }
-
-    // 摘要由纯函数算，且只跟着曲库变 —— 每次重组都重算一遍在几百首的量级上不痛，
-    // 但 `remember(songs)` 让这页在滚动 / 弹层开关时完全不碰统计。
-    val stats = remember(library.songs) { buildLibraryStats(library.songs) }
-
-
-    // ------------------------------------------------ 本地曲库
-    SectionTitle(stringResource(R.string.local_library))
-    ActionRow(
-        title = stringResource(R.string.formats_and_storage),
-        subtitle = stringResource(R.string.track_counts_and_size_per),
-        onClick = onOpenStats,
-        trailing = if (stats.totalSongs > 0) {
-            stringResource(R.string.songs_2, stats.totalSongs, formatByteSize(stats.totalBytes))
-        } else {
-            "—"
-        },
-        chevron = true,
+    // 分区顺序表（自上而下）：
+    //   ① 统计 —— 播放统计 / 曲库统计，两个入口并排
+    //   ② 本地曲库 —— 短音频过滤
+    //   ③ 数据与存储 —— 实时占用 + 四条维护动作
+    //   ④ 危险操作 —— 三个不可撤销的清空，固定页尾
+    LibraryStatsSection(
+        songs = library.songs,
+        playStats = library.playStats,
+        onOpenPlaybackStats = onOpenReport,
+        onOpenLibraryStats = onOpenStats,
     )
-    ActionRow(
-        title = if (minSongDurationSec > 0) stringResource(R.string.short_audio_filter_s, minSongDurationSec) else stringResource(R.string.short_audio_filter_off),
-        subtitle = stringResource(R.string.audio_with_a_known_duration),
-        onClick = { showMinDurationDialog = true },
-        chevron = true,
-        onReset = resetAction(minSongDurationSec != SettingsDefaults.MIN_DURATION_SEC) {
-            onMinSongDurationSec(SettingsDefaults.MIN_DURATION_SEC)
-        },
+    LocalLibrarySection(
+        minSongDurationSec = minSongDurationSec,
+        onMinSongDurationSec = onMinSongDurationSec,
     )
-
-    if (showMinDurationDialog) {
-        var input by remember { mutableStateOf(if (minSongDurationSec > 0) minSongDurationSec.toString() else "") }
-        AlertDialog(
-            onDismissRequest = { showMinDurationDialog = false },
-            title = { Text(stringResource(R.string.short_audio_filter)) },
-            text = {
-                Column {
-                    Text(
-                        stringResource(R.string.audio_shorter_than_this_many),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    OutlinedTextField(
-                        value = input,
-                        onValueChange = { input = it.filter(Char::isDigit).take(4) },
-                        label = { Text(stringResource(R.string.minimum_duration_s)) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onMinSongDurationSec(input.toIntOrNull()?.coerceIn(0, 3600) ?: 0)
-                        showMinDurationDialog = false
-                    },
-                ) { Text(stringResource(R.string.ok)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showMinDurationDialog = false }) { Text(stringResource(R.string.cancel)) }
-            },
-        )
-    }
+    DataStorageSection(
+        maintenance = maintenance,
+        onRefreshMaintenance = onRefreshMaintenance,
+        onCleanupMissingSongs = onCleanupMissingSongs,
+        onRestoreExcluded = onRestoreExcluded,
+        onOpenDuplicates = onOpenDuplicates,
+        onClearCoverCache = onClearCoverCache,
+    )
+    LibraryDangerZoneSection(
+        onClearStats = onClearStats,
+        onResetUserData = onResetUserData,
+        onResetLibrary = onResetLibrary,
+    )
 }
