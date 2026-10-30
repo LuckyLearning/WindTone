@@ -384,6 +384,10 @@ object SettingsDefaults {
     /** 曲间响度平衡：出厂关（需要后台分析音频，用户显式开启） */
     const val LOUDNESS_BALANCE = false
     const val REPLAY_GAIN_MODE = "TRACK"
+    /** H2：片头固定跳过秒数；0 = 关闭。上限见 IntroOutroSkip.MAX_SECONDS */
+    const val SKIP_INTRO_SECONDS = 0
+    /** H2：片尾固定跳过秒数；0 = 关闭 */
+    const val SKIP_OUTRO_SECONDS = 0
 
     /** 用户命名的均衡器预设（[com.luckylearning.windtone.playback.UserEqPresets] 编码）；空串 = 还没存过 */
     const val EQ_USER_PRESETS = ""
@@ -930,6 +934,30 @@ class Prefs private constructor(context: Context) {
         set(value) {
             sp.edit().putBoolean(KEY_LOUDNESS_BALANCE, value).apply()
             ioScope.launch { store.putBoolean(KEY_LOUDNESS_BALANCE, value) }
+        }
+
+
+    /**
+     * H2：每曲自动跳过片头的固定秒数（0 = 关闭，上限 120）。
+     * 与 [skipSilence] 无关——那是 ExoPlayer 静音检测；这里是固定秒 seek。
+     */
+    var skipIntroSeconds: Int
+        get() = sp.getInt(KEY_SKIP_INTRO_SECONDS, SettingsDefaults.SKIP_INTRO_SECONDS)
+            .coerceIn(0, 120)
+        set(value) {
+            val v = value.coerceIn(0, 120)
+            sp.edit().putInt(KEY_SKIP_INTRO_SECONDS, v).apply()
+            ioScope.launch { store.putInt(KEY_SKIP_INTRO_SECONDS, v) }
+        }
+
+    /** H2：距结束 ≤ 该秒数时切下一首（0 = 关闭，上限 120） */
+    var skipOutroSeconds: Int
+        get() = sp.getInt(KEY_SKIP_OUTRO_SECONDS, SettingsDefaults.SKIP_OUTRO_SECONDS)
+            .coerceIn(0, 120)
+        set(value) {
+            val v = value.coerceIn(0, 120)
+            sp.edit().putInt(KEY_SKIP_OUTRO_SECONDS, v).apply()
+            ioScope.launch { store.putInt(KEY_SKIP_OUTRO_SECONDS, v) }
         }
 
     /**
@@ -1661,6 +1689,8 @@ class Prefs private constructor(context: Context) {
         const val KEY_FADE_ENABLED = "fade_enabled"
         const val KEY_FADE_DURATION_MS = "fade_duration_ms"
         const val KEY_LOUDNESS_BALANCE = "loudness_balance"
+        const val KEY_SKIP_INTRO_SECONDS = "skip_intro_seconds"
+        const val KEY_SKIP_OUTRO_SECONDS = "skip_outro_seconds"
         const val KEY_REPLAY_GAIN_MODE = "replay_gain_mode"
         const val KEY_EQ_USER_PRESETS = "eq_user_presets"
         const val KEY_SCENE_ID = "scene_id"

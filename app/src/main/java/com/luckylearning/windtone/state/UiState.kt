@@ -456,6 +456,10 @@ data class PlayerUiState(
     val audioInfo: AudioInspector.Info? = null,
     val audioInfoLoading: Boolean = false,
     val skipSilence: Boolean = false,
+    /** H2：片头固定跳过秒数（0=关） */
+    val skipIntroSeconds: Int = SettingsDefaults.SKIP_INTRO_SECONDS,
+    /** H2：片尾固定跳过秒数（0=关） */
+    val skipOutroSeconds: Int = SettingsDefaults.SKIP_OUTRO_SECONDS,
     /**
      * A-B 循环点（C2，会话级，不落盘；切歌清除）。
      * null = 未设；两端都有且 B>A 时引擎在进度 ticker 里 seek 回 A。
