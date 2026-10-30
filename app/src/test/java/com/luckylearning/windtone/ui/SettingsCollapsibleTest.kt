@@ -61,6 +61,8 @@ class SettingsCollapsibleTest {
                         onSpeed = {},
                         onPitch = {},
                         onSkipSilence = {},
+            onSkipIntroSeconds = {},
+            onSkipOutroSeconds = {},
                         onAutoResume = {},
                         onAutoPlayOnBoot = {},
                     )
