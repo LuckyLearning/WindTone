@@ -94,7 +94,11 @@ object AudioFx {
     @Volatile private var bypassed = false
 
     fun init(context: android.content.Context) {
-        if (prefs == null) prefs = Prefs(context.applicationContext)
+        if (prefs == null) {
+            prefs = Prefs(context.applicationContext)
+            // E2: soft-EQ user-confirm skeleton from Prefs
+            SoftEqPath.bindPrefs(prefs!!)
+        }
         _state.value = _state.value.copy(userPresets = loadUserPresets())
     }
 
@@ -391,6 +395,7 @@ object AudioFx {
             schemeId = activeSchemeId(p),
             userPresets = users,
         )
+        SoftEqPath.onHardEqAvailable()
         apply(p.eqEnabled)
     }
 
@@ -407,7 +412,7 @@ object AudioFx {
             unavailableDetail = t?.let { it.javaClass.simpleName + ": " + (it.message ?: "") }.orEmpty(),
             userPresets = loadUserPresets(),
         )
-        // E1 soft-EQ candidate hook (default off; SoftEqSpike.ENABLED)
+        // E2 soft-EQ gate: DEVICE_REJECTED -> candidate; soft on only if user confirm / SoftEqSpike
         SoftEqPath.onHardEqUnavailable(Unavailable.DEVICE_REJECTED)
     }
 

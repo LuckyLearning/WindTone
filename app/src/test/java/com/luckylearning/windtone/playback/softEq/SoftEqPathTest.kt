@@ -8,7 +8,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/** E1：软 EQ 主路径门面可开关；DEVICE_REJECTED 挂钩不自动启用（Spike 闸关）。 */
+/** E1 facade + E2 gate wiring through SoftEqPath. */
 class SoftEqPathTest {
 
     @Before
@@ -22,14 +22,16 @@ class SoftEqPathTest {
     }
 
     @Test
-    fun `默认关闭`() {
+    fun defaultOff() {
         assertFalse(SoftEqPath.enabled)
         assertEquals(AudioFx.Unavailable.NONE, SoftEqPath.state.value.lastHardUnavailable)
         assertFalse(SoftEqSpike.ENABLED)
+        assertFalse(SoftEqPath.candidate)
+        assertEquals(SoftEqGate.Phase.IDLE, SoftEqPath.state.value.phase)
     }
 
     @Test
-    fun `setEnabled 可开可关`() {
+    fun setEnabledToggle() {
         SoftEqPath.setEnabled(true)
         assertTrue(SoftEqPath.enabled)
         SoftEqPath.setEnabled(false)
@@ -37,28 +39,60 @@ class SoftEqPathTest {
     }
 
     @Test
-    fun `DEVICE_REJECTED 挂钩记录原因但不自动启用`() {
+    fun deviceRejectedBecomesCandidateWithoutAutoEnable() {
         SoftEqPath.onHardEqUnavailable(AudioFx.Unavailable.DEVICE_REJECTED)
         assertEquals(
             AudioFx.Unavailable.DEVICE_REJECTED,
             SoftEqPath.state.value.lastHardUnavailable,
         )
-        // SoftEqSpike.ENABLED == false → E1 不自动开
+        assertTrue(SoftEqPath.candidate)
+        assertEquals(SoftEqGate.Phase.CANDIDATE, SoftEqPath.state.value.phase)
         assertFalse(SoftEqPath.enabled)
     }
 
     @Test
-    fun `SESSION_PENDING 挂钩不启用`() {
+    fun userConfirmThenRejectedEnablesSoft() {
+        SoftEqPath.setUserConfirmSoft(true)
+        SoftEqPath.onHardEqUnavailable(AudioFx.Unavailable.DEVICE_REJECTED)
+        assertTrue(SoftEqPath.enabled)
+        assertEquals(SoftEqGate.Phase.SOFT_ACTIVE, SoftEqPath.state.value.phase)
+    }
+
+    @Test
+    fun confirmWhileCandidateEnables() {
+        SoftEqPath.onHardEqUnavailable(AudioFx.Unavailable.DEVICE_REJECTED)
+        assertFalse(SoftEqPath.enabled)
+        SoftEqPath.setUserConfirmSoft(true)
+        assertTrue(SoftEqPath.enabled)
+        assertEquals(SoftEqGate.Phase.SOFT_ACTIVE, SoftEqPath.state.value.phase)
+    }
+
+    @Test
+    fun hardRecoverForcesSoftOff() {
+        SoftEqPath.setUserConfirmSoft(true)
+        SoftEqPath.onHardEqUnavailable(AudioFx.Unavailable.DEVICE_REJECTED)
+        assertTrue(SoftEqPath.enabled)
+        SoftEqPath.onHardEqAvailable()
+        assertFalse(SoftEqPath.enabled)
+        assertFalse(SoftEqPath.candidate)
+        assertEquals(SoftEqGate.Phase.HARD_ACTIVE, SoftEqPath.state.value.phase)
+        assertTrue(SoftEqPath.state.value.userConfirmSoft)
+    }
+
+    @Test
+    fun sessionPendingNotCandidate() {
+        SoftEqPath.setUserConfirmSoft(true)
         SoftEqPath.onHardEqUnavailable(AudioFx.Unavailable.SESSION_PENDING)
         assertEquals(
             AudioFx.Unavailable.SESSION_PENDING,
             SoftEqPath.state.value.lastHardUnavailable,
         )
         assertFalse(SoftEqPath.enabled)
+        assertFalse(SoftEqPath.candidate)
     }
 
     @Test
-    fun `processor 单例稳定`() {
+    fun processorSingleton() {
         val a = SoftEqPath.processor
         val b = SoftEqPath.processor
         assertTrue(a === b)

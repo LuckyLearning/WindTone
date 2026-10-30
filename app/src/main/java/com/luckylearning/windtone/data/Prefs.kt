@@ -388,10 +388,10 @@ object SettingsDefaults {
     /** 淡入淡出时长的合法区间（毫秒）：0.5 秒以下基本无感，6 秒以上像卡带 */
     val FADE_DURATION_RANGE = 500..6000
 
-    /** 曲间响度平衡：出厂关（需要后台分析音频，用户显式开启） */
     /** 左右声道平衡（#9）：-100..100，0=居中；走 Media3 ChannelMixing，不依赖 AudioEffect */
     const val STEREO_BALANCE = 0
 
+    /** 曲间响度平衡：出厂关（需要后台分析音频，用户显式开启） */
     const val LOUDNESS_BALANCE = false
     const val REPLAY_GAIN_MODE = "TRACK"
     /** H2：片头固定跳过秒数；0 = 关闭。上限见 IntroOutroSkip.MAX_SECONDS */
@@ -401,6 +401,9 @@ object SettingsDefaults {
 
     /** 用户命名的均衡器预设（[com.luckylearning.windtone.playback.UserEqPresets] 编码）；空串 = 还没存过 */
     const val EQ_USER_PRESETS = ""
+
+    /** E2 soft EQ: user confirm switch when hard EQ DEVICE_REJECTED (default off) */
+    const val SOFT_EQ_USER_CONFIRM = false
 
     /** Active scene profile id ([com.luckylearning.windtone.playback.SceneProfiles]); empty = off */
     const val SCENE_ID = ""
@@ -896,6 +899,22 @@ class Prefs private constructor(context: Context) {
      * 手机模式当前音效方案 = [com.luckylearning.windtone.playback.SoundSchemes] 的 id。
      * 空串 = 没选过方案 / 手动微调过（与 [eqPresetId] 的「空串 = 自定义」同一口径）。
      */
+
+    /**
+     * Soft EQ user confirm (E2 skeleton).
+     *
+     * When hard EQ reports DEVICE_REJECTED, SoftEqGate marks a candidate; soft
+     * PCM path enables only if this is true. Hard available again forces soft
+     * off (preference kept). Default false — auto-candidate only, no surprise
+     * enable. UI switch lands in E4.
+     */
+    var softEqUserConfirm: Boolean
+        get() = sp.getBoolean(KEY_SOFT_EQ_USER_CONFIRM, SettingsDefaults.SOFT_EQ_USER_CONFIRM)
+        set(value) {
+            sp.edit().putBoolean(KEY_SOFT_EQ_USER_CONFIRM, value).apply()
+            ioScope.launch { store.putBoolean(KEY_SOFT_EQ_USER_CONFIRM, value) }
+        }
+
     var soundSchemeId: String
         get() = sp.getString(KEY_SOUND_SCHEME_ID, SettingsDefaults.SOUND_SCHEME_ID).orEmpty()
         set(value) {
@@ -938,7 +957,6 @@ class Prefs private constructor(context: Context) {
             ioScope.launch { store.putInt(KEY_FADE_DURATION_MS, value) }
         }
 
-    /** 曲间响度平衡（自动压低响度过大的歌，分析结果缓存在应用私有目录） */
     /**
      * 左右声道平衡（#9）：-100 = 全左，0 = 居中，+100 = 全右。
      * 由 StereoBalanceFx 乘到 PCM，不经过 AudioFx 效果器。
@@ -951,6 +969,7 @@ class Prefs private constructor(context: Context) {
             ioScope.launch { store.putInt(KEY_STEREO_BALANCE, v) }
         }
 
+    /** 曲间响度平衡（自动压低响度过大的歌，分析结果缓存在应用私有目录） */
     var loudnessBalance: Boolean
         get() = sp.getBoolean(KEY_LOUDNESS_BALANCE, SettingsDefaults.LOUDNESS_BALANCE)
         set(value) {
@@ -1750,6 +1769,7 @@ class Prefs private constructor(context: Context) {
         const val KEY_EQ_VIRTUAL = "eq_virtual"
         const val KEY_EQ_LOUDNESS = "eq_loudness"
         const val KEY_EQ_REVERB_ID = "eq_reverb_id"
+        const val KEY_SOFT_EQ_USER_CONFIRM = "soft_eq_user_confirm"
         const val KEY_SOUND_SCHEME_ID = "sound_scheme_id"
         const val KEY_CAR_SCHEME_ID = "car_scheme_id"
         const val KEY_SOUND_STASH = "sound_stash"

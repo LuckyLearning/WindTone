@@ -116,10 +116,11 @@ class SettingsDefaultsTest {
         check("soundStash", prefs.soundStash, SettingsDefaults.SOUND_STASH)
         check("fadeEnabled", prefs.fadeEnabled, SettingsDefaults.FADE_ENABLED)
         check("fadeDurationMs", prefs.fadeDurationMs, SettingsDefaults.FADE_DURATION_MS)
-        check("stereoBalance", prefs.stereoBalance, SettingsDefaults.STEREO_BALANCE)
         check("loudnessBalance", prefs.loudnessBalance, SettingsDefaults.LOUDNESS_BALANCE)
         check("replayGainMode", prefs.replayGainMode.name, SettingsDefaults.REPLAY_GAIN_MODE)
         check("eqUserPresets", prefs.eqUserPresets, SettingsDefaults.EQ_USER_PRESETS)
+        check("softEqUserConfirm", prefs.softEqUserConfirm, SettingsDefaults.SOFT_EQ_USER_CONFIRM)
+        check("stereoBalance", prefs.stereoBalance, SettingsDefaults.STEREO_BALANCE)
 
         assertTrue(
             "出厂默认值出现了两处定义（Prefs getter 与 SettingsDefaults 不一致）：\n" +
