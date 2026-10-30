@@ -128,32 +128,22 @@ internal fun SongsList(
 
     if (library.visible.isEmpty()) {
         val emptyLibrary = library.songs.isEmpty()
-        val folderScope = library.scanScope == ScanScope.FOLDERS
-        EmptyHint(
-            title = if (emptyLibrary) {
-                if (folderScope) stringResource(R.string.lib_lists_empty_folder_title) else stringResource(R.string.lib_lists_empty_full_title)
-            } else {
-                stringResource(R.string.lib_lists_empty_search_title)
-            },
-            subtitle = if (emptyLibrary) {
-                when {
-                    folderScope -> stringResource(R.string.lib_lists_empty_folder_body)
-                    !granted -> stringResource(R.string.lib_lists_empty_full_need_perm_body)
-                    else -> stringResource(R.string.lib_lists_empty_full_body)
-                }
-            } else {
-                stringResource(R.string.lib_lists_empty_search_body)
-            },
-            actionLabel = if (emptyLibrary) {
-                if (folderScope) stringResource(R.string.lib_lists_action_change_folder) else if (!granted) stringResource(R.string.lib_lists_action_grant_scan) else stringResource(R.string.lib_lists_action_rescan_full)
-            } else null,
-            onAction = if (emptyLibrary) {
-                if (folderScope) onImportFolder else onFullScan
-            } else null,
-            secondaryActionLabel = if (emptyLibrary) stringResource(R.string.lib_lists_action_scan_scope) else null,
-            onSecondaryAction = if (emptyLibrary) onOpenScanScope else null,
-            modifier = Modifier.fillMaxSize(),
-        )
+        if (emptyLibrary) {
+            LibraryEmptyHint(
+                scanScope = library.scanScope,
+                granted = granted,
+                onImportFolder = onImportFolder,
+                onFullScan = onFullScan,
+                onOpenScanScope = onOpenScanScope,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            EmptyHint(
+                title = stringResource(R.string.lib_lists_empty_search_title),
+                subtitle = stringResource(R.string.lib_lists_empty_search_body),
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         return
     }
 
@@ -320,9 +310,28 @@ internal fun GroupListView(
     onRemove: (GroupInfo) -> Unit = {},
     /** 车载模式：分组行同样放大（封面 64dp、标题 22sp、触控目标 56dp） */
     carMode: Boolean = false,
+    granted: Boolean = true,
+    onImportFolder: () -> Unit = {},
+    onFullScan: () -> Unit = {},
+    onOpenScanScope: () -> Unit = {},
 ) {
     if (library.groups.isEmpty()) {
-        EmptyHint(stringResource(R.string.lib_lists_group_empty_title), stringResource(R.string.lib_lists_group_empty_body), modifier = Modifier.fillMaxSize())
+        if (library.songs.isEmpty()) {
+            LibraryEmptyHint(
+                scanScope = library.scanScope,
+                granted = granted,
+                onImportFolder = onImportFolder,
+                onFullScan = onFullScan,
+                onOpenScanScope = onOpenScanScope,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            EmptyHint(
+                stringResource(R.string.lib_lists_group_empty_title),
+                stringResource(R.string.lib_lists_group_empty_body),
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         return
     }
     LazyColumn(
@@ -448,7 +457,23 @@ internal fun PlaylistListView(
     lib: LibraryViewModel,
     library: LibraryUiState,
     onImportM3U: () -> Unit,
+    granted: Boolean = true,
+    onImportFolder: () -> Unit = {},
+    onFullScan: () -> Unit = {},
+    onOpenScanScope: () -> Unit = {},
 ) {
+    // 空库：整页主 CTA，不展示 0 首的虚拟歌单壳子
+    if (library.songs.isEmpty()) {
+        LibraryEmptyHint(
+            scanScope = library.scanScope,
+            granted = granted,
+            onImportFolder = onImportFolder,
+            onFullScan = onFullScan,
+            onOpenScanScope = onOpenScanScope,
+            modifier = Modifier.fillMaxSize(),
+        )
+        return
+    }
     LazyColumn(
         contentPadding = PaddingValues(top = 4.dp, bottom = 16.dp),
         modifier = Modifier.fillMaxSize(),

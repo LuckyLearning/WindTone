@@ -529,6 +529,10 @@ fun MainScreen(
                             onImportM3U = {
                                 m3uImportLauncher.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "text/plain", "*/*"))
                             },
+                            granted = granted,
+                            onImportFolder = importFolder,
+                            onFullScan = requestFullScan,
+                            onOpenScanScope = { showScanScope = true },
                         )
 
                         else -> GroupListView(
@@ -537,6 +541,10 @@ fun MainScreen(
                             canRemove = library.view == LibraryView.FOLDER,
                             onRemove = { folderRemoveConfirmGroup = it },
                             carMode = carMode,
+                            granted = granted,
+                            onImportFolder = importFolder,
+                            onFullScan = requestFullScan,
+                            onOpenScanScope = { showScanScope = true },
                         )
                     }
                 }
