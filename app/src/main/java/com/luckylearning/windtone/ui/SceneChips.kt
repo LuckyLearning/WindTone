@@ -51,11 +51,13 @@ fun SceneChipsRow(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            listOf(
-                SceneProfiles.DRIVE.id to R.string.scene_drive,
-                SceneProfiles.COMMUTE.id to R.string.scene_commute,
-                SceneProfiles.SLEEP.id to R.string.scene_sleep,
-            ).forEach { (id, labelRes) ->
+            SceneProfiles.chipIds().forEach { id ->
+                val labelRes = when (id) {
+                    SceneProfiles.DRIVE.id -> R.string.scene_drive
+                    SceneProfiles.COMMUTE.id -> R.string.scene_commute
+                    SceneProfiles.SLEEP.id -> R.string.scene_sleep
+                    else -> return@forEach
+                }
                 FilterChip(
                     selected = activeId == id,
                     onClick = { SceneMode.select(id) },

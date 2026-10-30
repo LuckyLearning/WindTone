@@ -327,6 +327,8 @@ class PlaybackEngine(
                 sleepRemainingMs = { SleepTimer.remainingMs.value },
             ),
         )
+        // 杀进程再开：sceneId 已落盘则按档重套听感（不重拍 stash）
+        SceneMode.restoreOnColdStart()
         TrackVolume.init(app)
         scope.launch {
             SleepTimer.remainingMs.collect { ms ->

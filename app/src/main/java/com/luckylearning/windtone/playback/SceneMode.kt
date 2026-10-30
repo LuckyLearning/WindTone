@@ -7,13 +7,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * 场景化模式编排：套用 / 还原 / 手改离开。
+ * 场景化模式编排：套用 / 还原 / 手改离开 / 冷启动重套。
  *
  * 音效走 [AudioFx]；变速变调与睡眠通过 [Hooks] 接到 [PlaybackEngine]，
  * 避免本对象直接依赖引擎（也方便以后换实现）。
  *
  * 进入第一档前拍快照；档与档之间切换不重拍；手改 EQ 清空场景并丢弃快照
  * （当前值成为新常态，与离开音效方案同一口径）。
+ * 杀进程再开：若 [Prefs.sceneId] 仍有效，[restoreOnColdStart] 按档重套听感，
+ * **不重拍** stash（沿用进档前快照，退出仍还原到进场景前）。
  */
 object SceneMode {
 
@@ -59,11 +61,42 @@ object SceneMode {
         }
     }
 
-    fun apply(id: String) {
+    /**
+     * 冷启动恢复：杀进程后再开，按已落盘的 sceneId 重套听感。
+     *
+     * 必须在 [setHooks] 之后调用，否则变速/睡眠挂不上。
+     * 重套时不捕获 stash（[apply] 的 captureBaseline=false），避免把「已是场景听感」
+     * 误存成退出基线。
+     */
+    fun restoreOnColdStart() {
+        val p = prefs ?: return
+        when (val plan = SceneProfiles.planColdStart(p.sceneId)) {
+            is SceneProfiles.ColdStart.None -> {
+                _activeId.value = ""
+            }
+            is SceneProfiles.ColdStart.ClearInvalid -> {
+                if (p.sceneStash.isNotEmpty()) {
+                    exit()
+                } else {
+                    p.sceneId = SettingsDefaults.SCENE_ID
+                    _activeId.value = ""
+                }
+            }
+            is SceneProfiles.ColdStart.Reapply -> {
+                apply(plan.id, captureBaseline = false)
+            }
+        }
+    }
+
+    /**
+     * @param captureBaseline 为 true 且尚无 stash 时拍进档前快照（用户点选进档）。
+     *   冷启动重套传 false，沿用已落盘 stash。
+     */
+    fun apply(id: String, captureBaseline: Boolean = true) {
         val profile = SceneProfiles.byId(id) ?: return
         val p = prefs ?: return
         val h = hooks
-        if (p.sceneStash.isEmpty()) {
+        if (SceneProfiles.shouldCaptureBaseline(captureBaseline, p.sceneStash)) {
             p.sceneStash = SceneStash.encode(capture(p, h))
         }
         applying = true

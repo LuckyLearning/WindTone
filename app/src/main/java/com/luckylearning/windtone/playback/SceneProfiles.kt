@@ -77,6 +77,9 @@ object SceneProfiles {
 
     fun byId(id: String): Profile? = ALL.firstOrNull { it.id == id }
 
+    /** UI 芯片顺序（与 [com.luckylearning.windtone.ui.SceneChipsRow] 一致）。 */
+    fun chipIds(): List<String> = ALL.map { it.id }
+
     /** 手改 EQ / 另选方案 = 离开场景（清空 active id）。纯函数便于单测。 */
     fun activeIdAfterManualEdit(activeId: String): String = ""
 
@@ -88,5 +91,31 @@ object SceneProfiles {
         if (tappedId.isEmpty()) return ""
         if (tappedId == currentId) return ""
         return tappedId
+    }
+
+    /**
+     * 冷启动：已落盘的 [sceneId] 如何处理。
+     *
+     * - [None]：无场景
+     * - [Reapply]：按档重套听感（不重拍 stash；与进档后杀进程再开的语义一致）
+     * - [ClearInvalid]：未知 id，应清标记；有 stash 时走 exit 还原
+     */
+    sealed class ColdStart {
+        data object None : ColdStart()
+        data class Reapply(val id: String) : ColdStart()
+        data object ClearInvalid : ColdStart()
+    }
+
+    /**
+     * 进档时是否需要拍 stash。
+     * 冷启动重套传 captureBaseline=false，即使 stash 空也不拍（避免把场景听感写成退出基线）。
+     */
+    fun shouldCaptureBaseline(captureBaseline: Boolean, existingStashRaw: String): Boolean =
+        captureBaseline && existingStashRaw.isEmpty()
+
+    fun planColdStart(persistedSceneId: String): ColdStart {
+        if (persistedSceneId.isEmpty()) return ColdStart.None
+        if (byId(persistedSceneId) == null) return ColdStart.ClearInvalid
+        return ColdStart.Reapply(persistedSceneId)
     }
 }

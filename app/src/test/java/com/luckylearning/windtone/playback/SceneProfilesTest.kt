@@ -1,6 +1,7 @@
 package com.luckylearning.windtone.playback
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -77,4 +78,47 @@ class SceneProfilesTest {
         assertEquals("sleep", SceneProfiles.nextSelection("drive", "sleep"))
         assertEquals("commute", SceneProfiles.nextSelection("", "commute"))
     }
+
+    @Test
+    fun `chipIds 与 UI 芯片同序`() {
+        assertEquals(listOf("drive", "commute", "sleep"), SceneProfiles.chipIds())
+        assertEquals(SceneProfiles.ALL.map { it.id }, SceneProfiles.chipIds())
+    }
+
+    @Test
+    fun `选择语义 空到空与跨档`() {
+        assertEquals("", SceneProfiles.nextSelection("", ""))
+        assertEquals("drive", SceneProfiles.nextSelection("", "drive"))
+        assertEquals("drive", SceneProfiles.nextSelection("sleep", "drive"))
+        assertEquals("", SceneProfiles.nextSelection("commute", "commute"))
+    }
+
+    @Test
+    fun `冷启动 无 id 不动`() {
+        assertEquals(SceneProfiles.ColdStart.None, SceneProfiles.planColdStart(""))
+    }
+
+    @Test
+    fun `冷启动 有效 id 重套`() {
+        val plan = SceneProfiles.planColdStart("sleep")
+        assertTrue(plan is SceneProfiles.ColdStart.Reapply)
+        assertEquals("sleep", (plan as SceneProfiles.ColdStart.Reapply).id)
+        assertEquals("drive", (SceneProfiles.planColdStart("drive") as SceneProfiles.ColdStart.Reapply).id)
+        assertEquals("commute", (SceneProfiles.planColdStart("commute") as SceneProfiles.ColdStart.Reapply).id)
+    }
+
+    @Test
+    fun `冷启动 未知 id 清标记`() {
+        assertEquals(SceneProfiles.ColdStart.ClearInvalid, SceneProfiles.planColdStart("nope"))
+        assertEquals(SceneProfiles.ColdStart.ClearInvalid, SceneProfiles.planColdStart("DRIVE"))
+    }
+
+    @Test
+    fun `冷启动重套不拍 stash 即使用户 stash 空`() {
+        assertFalse(SceneProfiles.shouldCaptureBaseline(captureBaseline = false, existingStashRaw = ""))
+        assertFalse(SceneProfiles.shouldCaptureBaseline(captureBaseline = false, existingStashRaw = "v1"))
+        assertTrue(SceneProfiles.shouldCaptureBaseline(captureBaseline = true, existingStashRaw = ""))
+        assertFalse(SceneProfiles.shouldCaptureBaseline(captureBaseline = true, existingStashRaw = "already"))
+    }
 }
+
