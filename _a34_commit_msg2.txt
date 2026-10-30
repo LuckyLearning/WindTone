@@ -1,3 +1,0 @@
-feat(queue): QueueSheet 补齐清空/打乱按钮 UI（接上 A3/A4）
-
-前一提交已含 QueueManager/Policies/接线；本提交补抽屉操作行与功能说明。
