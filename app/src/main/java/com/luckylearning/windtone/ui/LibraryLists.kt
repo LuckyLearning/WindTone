@@ -481,6 +481,12 @@ internal fun PlaylistListView(
         }
         item {
             PlaylistRowPlay(
+                info = virtualPlaylistInfo(VirtualPlaylist.RECENTLY_ADDED, library),
+                onOpen = lib::openPlaylist,
+            )
+        }
+        item {
+            PlaylistRowPlay(
                 info = virtualPlaylistInfo(VirtualPlaylist.MOST_PLAYED, library),
                 onOpen = lib::openPlaylist,
             )

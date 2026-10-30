@@ -48,7 +48,7 @@ data class GroupInfo(
     val sample: Song?,
 )
 
-/** 歌单条目（含三个固定的虚拟歌单：最近播放 / 最常播放 / 我的收藏） */
+/** 歌单条目（含四个固定的虚拟歌单：最近播放 / 最近添加 / 最常播放 / 我的收藏） */
 @Immutable
 data class PlaylistInfo(
     val id: Long,
@@ -83,10 +83,27 @@ object VirtualPlaylist {
     const val RECENT = -1L
     const val MOST_PLAYED = -2L
     const val FAVORITES = -3L
+    /** 「最近添加」——按歌曲 dateAdded 倒序（扫描入库 / MediaStore DATE_ADDED） */
+    const val RECENTLY_ADDED = -4L
 }
 
 /**
- * 三个虚拟歌单的展示条目（名称 / 曲目数 / 封面取自曲库状态）。
+ * 从曲库歌曲列表抽出「最近添加」虚拟列表。
+ *
+ * 只保留 `dateAdded > 0` 的行（0 表示未知入库时间，沉底无意义）；
+ * 上限与其它虚拟歌单一致（默认 100）。纯函数，方便单测与 PlaylistStore 共用。
+ */
+fun recentlyAddedSongs(songs: List<Song>, limit: Int = 100): List<Song> {
+    if (limit <= 0 || songs.isEmpty()) return emptyList()
+    return songs.asSequence()
+        .filter { it.dateAdded > 0L }
+        .sortedByDescending { it.dateAdded }
+        .take(limit)
+        .toList()
+}
+
+/**
+ * 四个虚拟歌单的展示条目（名称 / 曲目数 / 封面取自曲库状态）。
  *
  * 为什么需要这个函数、而不是去 `LibraryUiState.playlists` 里找：那个列表里
  * **只有用户自建歌单**（直接来自 playlist 表），虚拟歌单从来没进去过 ——
@@ -101,6 +118,12 @@ fun virtualPlaylistInfo(id: Long, library: LibraryUiState): PlaylistInfo = when 
 
     VirtualPlaylist.RECENT ->
         PlaylistInfo(id, "最近播放", library.extraRecent.size, playlistCoverSongs(library.extraRecent), virtual = true)
+
+    VirtualPlaylist.RECENTLY_ADDED ->
+        PlaylistInfo(
+            id, "最近添加", library.extraRecentlyAdded.size,
+            playlistCoverSongs(library.extraRecentlyAdded), virtual = true,
+        )
 
     VirtualPlaylist.MOST_PLAYED ->
         PlaylistInfo(id, "最常播放", library.extraMostPlayed.size, playlistCoverSongs(library.extraMostPlayed), virtual = true)
@@ -151,7 +174,7 @@ data class LibraryUiState(
      */
     val libraryLoaded: Boolean = false,
     /**
-     * 歌单（含三个虚拟歌单的曲目）是否已经算过至少一次（v1.1.13 新增）。
+     * 歌单（含虚拟歌单的曲目）是否已经算过至少一次（v1.1.13 新增）。
      *
      * [extraFavorites] 这些字段由 `PlaylistStore.refreshPlaylistsNow()` 填，
      * 与曲库装载是两条并行任务。所以「曲库就绪」不等于「收藏列表就绪」——
@@ -178,6 +201,8 @@ data class LibraryUiState(
     val extraRecent: List<Song> = emptyList(),
     val extraMostPlayed: List<Song> = emptyList(),
     val extraFavorites: List<Song> = emptyList(),
+    /** 「最近添加」：按 Song.dateAdded 倒序，最多 100 首 */
+    val extraRecentlyAdded: List<Song> = emptyList(),
     val letterIndex: Map<Char, Int> = emptyMap(),
     val searchHistory: List<String> = emptyList(),
     val playStats: PlayStats = PlayStats(),

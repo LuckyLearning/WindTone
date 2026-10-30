@@ -69,6 +69,7 @@ class LibraryBrowserTest {
         assertNull(BrowseIds.playlistIdOf(BrowseIds.FAVORITES))
         assertNull(BrowseIds.playlistIdOf(BrowseIds.RECENT))
         assertNull(BrowseIds.playlistIdOf(BrowseIds.MOST_PLAYED))
+        assertNull(BrowseIds.playlistIdOf(BrowseIds.RECENTLY_ADDED))
         // 歌曲节点（URI）解析不出歌单主键
         assertNull(BrowseIds.playlistIdOf("content://media/external/audio/media/9"))
 
@@ -122,7 +123,7 @@ class LibraryBrowserTest {
     // ------------------------------------------------------------ ③ 真实取数
 
     @Test
-    fun rootListsThreeVirtualPlaylistsBeforeUserPlaylists() = runBlocking {
+    fun rootListsFourVirtualPlaylistsBeforeUserPlaylists() = runBlocking {
         val a = newSong("u/a", "a")
         val b = newSong("u/b", "b")
         val c = newSong("u/c", "c")
@@ -135,14 +136,14 @@ class LibraryBrowserTest {
         db.playlistDao().insertSong(PlaylistSongEntity(p2, c, 0, 1L))
 
         val nodes = browser.childrenOf(BrowseIds.ROOT, 0, Int.MAX_VALUE)
-        // 三个虚拟歌单固定在最前，用户歌单按 createdAt 倒序（与 App 内歌单列表一致）
+        // 四个虚拟歌单固定在最前，用户歌单按 createdAt 倒序（与 App 内歌单列表一致）
         assertEquals(
-            listOf("我的收藏", "最近播放", "最常播放", "睡前", "通勤"),
+            listOf("我的收藏", "最近播放", "最近添加", "最常播放", "睡前", "通勤"),
             nodes.map { it.mediaMetadata.title },
         )
-        // 虚拟歌单要显示真实数量，用户歌单显示关联行数
+        // 虚拟歌单要显示真实数量；本用例 newSong 未写 dateAdded →「最近添加」0 首
         assertEquals(
-            listOf("1 首", "0 首", "0 首", "1 首", "2 首"),
+            listOf("1 首", "0 首", "0 首", "0 首", "1 首", "2 首"),
             nodes.map { it.mediaMetadata.subtitle },
         )
     }
@@ -198,6 +199,19 @@ class LibraryBrowserTest {
     }
 
     @Test
+    @Test
+    fun recentlyAddedOrdersByDateAddedDescending() = runBlocking {
+        newSong("u/old", "旧入库", dateAdded = 100L)
+        newSong("u/mid", "中入库", dateAdded = 200L)
+        newSong("u/fresh", "新入库", dateAdded = 300L)
+        newSong("u/zero", "未知时间", dateAdded = 0L)
+        assertEquals(
+            listOf("新入库", "中入库", "旧入库"),
+            browser.childrenOf(BrowseIds.RECENTLY_ADDED, 0, Int.MAX_VALUE).map { it.mediaMetadata.title },
+        )
+        assertEquals("最近添加", browser.itemOf(BrowseIds.RECENTLY_ADDED)?.mediaMetadata?.title)
+    }
+
     fun missingAndExcludedSongsStayOutOfTheTree() = runBlocking {
         val ok = newSong("u/ok", "正常")
         val gone = newSong("u/gone", "文件没了")
@@ -299,7 +313,13 @@ class LibraryBrowserTest {
 
     // ------------------------------------------------------------ 造数
 
-    private suspend fun newSong(uri: String, title: String, artist: String? = null, durationMs: Long = 0L): Long =
+    private suspend fun newSong(
+        uri: String,
+        title: String,
+        artist: String? = null,
+        durationMs: Long = 0L,
+        dateAdded: Long = 0L,
+    ): Long =
         db.songDao().insert(
             SongEntity(
                 uri = uri,
@@ -308,6 +328,7 @@ class LibraryBrowserTest {
                 artist = artist,
                 durationMs = durationMs,
                 displayName = "$title.mp3",
+                dateAdded = dateAdded,
             ),
         )
 

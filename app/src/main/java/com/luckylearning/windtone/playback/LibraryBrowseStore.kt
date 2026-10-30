@@ -29,6 +29,9 @@ internal class LibraryBrowseStore(private val db: MusicDb) {
     /** 「最常播放」：按播放次数倒序 */
     suspend fun mostPlayedIds(limit: Int): List<Long> = db.songStateDao().mostPlayedIds(limit)
 
+    /** 「最近添加」：按 songs.dateAdded 倒序 */
+    suspend fun recentlyAddedIds(limit: Int): List<Long> = db.songDao().recentlyAddedIds(limit)
+
     // ---------------------------------------------------------------- 用户歌单
 
     suspend fun playlist(id: Long): PlaylistEntity? = db.playlistDao().byId(id)

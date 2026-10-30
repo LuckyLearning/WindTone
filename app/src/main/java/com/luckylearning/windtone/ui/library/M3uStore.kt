@@ -84,6 +84,7 @@ internal class M3uStore(private val session: LibrarySession) : M3uActions {
         scope.launch {
             val songs: List<Song> = when {
                 playlist.virtual && playlist.id == VirtualPlaylist.RECENT -> _library.value.extraRecent
+                playlist.virtual && playlist.id == VirtualPlaylist.RECENTLY_ADDED -> _library.value.extraRecentlyAdded
                 playlist.virtual && playlist.id == VirtualPlaylist.MOST_PLAYED -> _library.value.extraMostPlayed
                 else -> {
                     val rows = withContext(Dispatchers.IO) { db.playlistDao().songsOf(playlist.id) }

@@ -44,6 +44,9 @@ object BrowseIds {
     /** 「最常播放」——按 `song_state.playCount` 倒序 */
     const val MOST_PLAYED = "wt:vpl:most"
 
+    /** 「最近添加」——按 `songs.dateAdded` 倒序 */
+    const val RECENTLY_ADDED = "wt:vpl:added"
+
     private const val LIBRARY_PREFIX = "wt:"
     private const val PLAYLIST_PREFIX = "wt:pl:"
 
@@ -61,7 +64,7 @@ object BrowseIds {
         ?.toLongOrNull()
 }
 
-/** 虚拟歌单（收藏 / 最近 / 最常）在车机上最多列出多少首，与 App 内的口径一致 */
+/** 虚拟歌单（收藏 / 最近播放 / 最近添加 / 最常）在车机上最多列出多少首，与 App 内的口径一致 */
 private const val VIRTUAL_LIMIT = 100
 
 /** 浏览树根节点：只可下钻，不可直接播放 */
@@ -153,6 +156,8 @@ internal class LibraryBrowser(
                     songNodes(store.favoriteIdsByRecent())
                 parentId == BrowseIds.RECENT ->
                     songNodes(store.recentIds(VIRTUAL_LIMIT))
+                parentId == BrowseIds.RECENTLY_ADDED ->
+                    songNodes(store.recentlyAddedIds(VIRTUAL_LIMIT))
                 parentId == BrowseIds.MOST_PLAYED ->
                     songNodes(store.mostPlayedIds(VIRTUAL_LIMIT))
                 else -> BrowseIds.playlistIdOf(parentId)
@@ -181,6 +186,9 @@ internal class LibraryBrowser(
             )
             mediaId == BrowseIds.RECENT -> browseFolderItem(
                 mediaId, "最近播放", store.recentIds(VIRTUAL_LIMIT).size,
+            )
+            mediaId == BrowseIds.RECENTLY_ADDED -> browseFolderItem(
+                mediaId, "最近添加", store.recentlyAddedIds(VIRTUAL_LIMIT).size,
             )
             mediaId == BrowseIds.MOST_PLAYED -> browseFolderItem(
                 mediaId, "最常播放", store.mostPlayedIds(VIRTUAL_LIMIT).size,
@@ -275,9 +283,9 @@ internal class LibraryBrowser(
         }
 
     /**
-     * 根节点的子节点：三个虚拟歌单在前，用户歌单按创建时间倒序在后。
+     * 根节点的子节点：四个虚拟歌单在前，用户歌单按创建时间倒序在后。
      *
-     * 三个虚拟歌单要多跑三条 COUNT 性质的查询来显示「N 首」。
+     * 虚拟歌单要多跑几条 COUNT 性质的查询来显示「N 首」。
      * 这是冷路径（掀开车机面板才发生一次），换来的是界面上不出现「我的收藏（？）」。
      */
     private suspend fun rootNodes(): List<MediaItem> {
@@ -288,6 +296,9 @@ internal class LibraryBrowser(
             ),
             browseFolderItem(
                 BrowseIds.RECENT, "最近播放", store.recentIds(VIRTUAL_LIMIT).size,
+            ),
+            browseFolderItem(
+                BrowseIds.RECENTLY_ADDED, "最近添加", store.recentlyAddedIds(VIRTUAL_LIMIT).size,
             ),
             browseFolderItem(
                 BrowseIds.MOST_PLAYED, "最常播放", store.mostPlayedIds(VIRTUAL_LIMIT).size,

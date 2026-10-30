@@ -58,6 +58,16 @@ interface SongDao {
     @Query("SELECT * FROM songs WHERE id IN (:ids) AND missingSince = 0 AND excluded = 0")
     suspend fun byIds(ids: List<Long>): List<SongEntity>
 
+    /**
+     * 「最近添加」虚拟歌单：按入库时间倒序。
+     * `dateAdded = 0` 视为未知，不进列表（与 App 内 recentlyAddedSongs 口径一致）。
+     */
+    @Query(
+        "SELECT id FROM songs WHERE missingSince = 0 AND excluded = 0 AND dateAdded > 0 " +
+            "ORDER BY dateAdded DESC LIMIT :limit",
+    )
+    suspend fun recentlyAddedIds(limit: Int): List<Long>
+
     @Insert
     suspend fun insert(row: SongEntity): Long
 

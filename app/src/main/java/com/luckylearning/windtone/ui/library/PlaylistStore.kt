@@ -7,13 +7,14 @@ import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.state.PlaylistInfo
 import com.luckylearning.windtone.state.VirtualPlaylist
 import com.luckylearning.windtone.state.playlistCoverSongs
+import com.luckylearning.windtone.state.recentlyAddedSongs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * 歌单域的**实现**（含三个虚拟歌单：最近播放 / 最常播放 / 我的收藏）。
+ * 歌单域的**实现**（含四个虚拟歌单：最近播放 / 最近添加 / 最常播放 / 我的收藏）。
  *
  * 依赖与共享状态从 [LibrarySession] 取；刷新歌单后顺手刷一次统计与内存索引，
  * 与拆分前一致。
@@ -67,12 +68,15 @@ internal class PlaylistStore(private val session: LibrarySession) : PlaylistActi
             .sortedByDescending { it.lastPlayedAt }
             .mapNotNull { songsById[it.songId] }
             .toList()
+        // 「最近添加」：按歌曲自身 dateAdded（扫描入库时间），不查 song_state
+        val recentlyAdded = recentlyAddedSongs(_library.value.songs)
         _library.update {
             it.copy(
                 playlists = infos,
                 extraRecent = recent,
                 extraMostPlayed = most,
                 extraFavorites = favorites,
+                extraRecentlyAdded = recentlyAdded,
                 // 虚拟歌单的曲目已经算出来了：「打开我的收藏」这类入口等的就是这一步
                 // （它和曲库装载是两条并行任务，不算完就打开会看到一个空收藏夹）
                 playlistsLoaded = true,
@@ -85,6 +89,7 @@ internal class PlaylistStore(private val session: LibrarySession) : PlaylistActi
         scope.launch {
             val songs: List<Song> = when {
                 playlist.virtual && playlist.id == VirtualPlaylist.RECENT -> _library.value.extraRecent
+                playlist.virtual && playlist.id == VirtualPlaylist.RECENTLY_ADDED -> _library.value.extraRecentlyAdded
                 playlist.virtual && playlist.id == VirtualPlaylist.MOST_PLAYED -> _library.value.extraMostPlayed
                 playlist.virtual && playlist.id == VirtualPlaylist.FAVORITES -> _library.value.extraFavorites
                 else -> {

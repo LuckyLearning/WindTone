@@ -11,13 +11,13 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * 三个虚拟歌单的展示条目（v1.1.13 新增 [virtualPlaylistInfo]）。
+ * 四个虚拟歌单的展示条目（v1.1.13 新增 [virtualPlaylistInfo]；A5 加「最近添加」）。
  *
  * ## 为什么把这条抽出来单测
  *
  * 用户真机上报：快捷方式「打开我的收藏」打开的是**歌单列表页**。
  * 根因是它去 `LibraryUiState.playlists` 里按 id 找虚拟歌单 —— 而那个列表里
- * **只有用户自建歌单**（直接来自 playlist 表），三个虚拟歌单从来没进去过，
+ * **只有用户自建歌单**（直接来自 playlist 表），虚拟歌单从来没进去过，
  * 于是查找永远返回 null，代码就"只切了视图"。
  *
  * 修法是把虚拟歌单的构造收到 [virtualPlaylistInfo] 一处，列表页与快捷方式共用；
@@ -41,11 +41,13 @@ class VirtualPlaylistInfoTest {
     private val favorite = song(1, "收藏的歌")
     private val recent = song(2, "最近听的")
     private val mostPlayed = song(3, "听得最多的")
+    private val recentlyAdded = song(4, "刚入库的")
 
     private val library = LibraryUiState(
         extraFavorites = listOf(favorite),
         extraRecent = listOf(recent),
         extraMostPlayed = listOf(mostPlayed),
+        extraRecentlyAdded = listOf(recentlyAdded),
     )
 
     @Test
@@ -65,6 +67,11 @@ class VirtualPlaylistInfoTest {
         assertEquals(VirtualPlaylist.RECENT, r.id)
         assertEquals("最近播放", r.name)
         assertEquals(recent, r.coverSong)
+
+        val a = virtualPlaylistInfo(VirtualPlaylist.RECENTLY_ADDED, library)
+        assertEquals(VirtualPlaylist.RECENTLY_ADDED, a.id)
+        assertEquals("最近添加", a.name)
+        assertEquals(recentlyAdded, a.coverSong)
 
         val m = virtualPlaylistInfo(VirtualPlaylist.MOST_PLAYED, library)
         assertEquals(VirtualPlaylist.MOST_PLAYED, m.id)
