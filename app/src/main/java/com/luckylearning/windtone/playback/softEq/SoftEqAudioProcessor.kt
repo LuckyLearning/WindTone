@@ -37,7 +37,7 @@ class SoftEqAudioProcessor : BaseAudioProcessor() {
         engine.configure(configuredSampleRate, configuredChannels, centersHz, gainsMb)
         return inputAudioFormat
     }
-    override fun isActive(): Boolean = enabled && engine.isActive
+    override fun isActive(): Boolean = super.isActive() && enabled && engine.isActive
     override fun queueInput(inputBuffer: ByteBuffer) {
         if (!isActive) {
             val out = replaceOutputBuffer(inputBuffer.remaining()); out.put(inputBuffer); out.flip(); return
