@@ -148,6 +148,20 @@ LibraryViewModel   PlayerViewModel    UpdateViewModel    SettingsViewModel
 
 `.github-token` 已在 `.gitignore`，**绝不要改名后提交**。
 
+### 0.3 Actions 额度耗尽时的发版策略（2026-10-31）
+
+> **现象**：GitHub Actions 分钟 / 消费额度用尽时，打 `v*` tag 会立刻触发 workflow 并**秒失败**，白白烧额度、也出不了 APK。
+
+#### 额度耗尽时（只推代码）
+
+1. **只推代码到 `main`**：`bash scripts/push.sh origin main`（铁律 5 / §0.2：一律 `.github-token`，**禁止** GCM / Vault / `gh auth` 弹窗）。
+2. **禁止** `bash scripts/release.sh …`、禁止 `git tag` / 推 `v*`、禁止改 `appVersionName` / `appVersionCode` 冲发版。
+3. 功能继续合入 main；把「已合入、未出包」记进 [`待发版积压.md`](待发版积压.md)，真机勾选见 [`真机验证清单.md`](真机验证清单.md) **§5**。
+
+#### 额度恢复后
+
+按 [`待发版积压.md`](待发版积压.md) 的顺序操作：先核已有 tag 的 Release 资产（无包则 **Re-run**，勿改号），再对新合入走标准 `release.sh`（§8.3）。构建对照 [`可复现构建.md`](可复现构建.md)；CI 省时见 [`spike-CI提速.md`](spike-CI提速.md)。
+
 ## 1. 产品概览
 
 ### 1.1 定位
@@ -1039,6 +1053,8 @@ export JAVA_HOME="/c/Users/stu_l/.jdks/openjdk-21.0.2"
 口令全缺时 **Release 不签名但构建仍成功**（产出未签名包，装不上）。看到"构建成功但装不上"先查这一条。
 
 ### 8.3 发版流程（标准动作）
+
+> ⚠️ **先查 Actions 额度**。耗尽时**不要**跑本节命令（会打 tag、烧空额度且无 APK）——只 `push.sh` 推代码，恢复后按 [`待发版积压.md`](待发版积压.md) 补发。细则见 **§0.3**。
 
 ```bash
 # 方式 A：用脚本一把梭（推荐）
