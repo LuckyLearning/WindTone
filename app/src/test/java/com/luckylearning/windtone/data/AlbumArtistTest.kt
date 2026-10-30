@@ -74,4 +74,66 @@ class AlbumArtistTest {
         assertTrue(groups.any { it.key == "Solo" && it.count == 1 })
         assertTrue(groups.any { it.key == UNKNOWN_ALBUM_ARTIST_LABEL && it.count == 1 })
     }
+
+    @Test
+    fun buildAlbumArtistGroups_emptyLibrary_isEmpty() {
+        assertTrue(buildAlbumArtistGroups(emptyList()).isEmpty())
+    }
+
+    @Test
+    fun effectiveAlbumArtist_bothPlaceholdersBecomeUnknown() {
+        val s = song(1L, "T", artist = "<unknown>", albumArtist = "未知歌手")
+        assertNull(s.effectiveAlbumArtist())
+        assertEquals(UNKNOWN_ALBUM_ARTIST_LABEL, s.albumArtistOrUnknown())
+    }
+
+    @Test
+    fun effectiveAlbumArtist_blankAlbumArtistFallsBackToArtist() {
+        val s = song(1L, "T", artist = "Jay", albumArtist = "   ")
+        assertEquals("Jay", s.effectiveAlbumArtist())
+    }
+
+    @Test
+    fun buildAlbumArtistGroups_keepsCompilationLabelsDistinct() {
+        // 文档口径：Various Artists / 合辑 / 群星 保留原标签，不做别名合并
+        val songs = listOf(
+            song(1L, "a", artist = "G1", albumArtist = "Various Artists"),
+            song(2L, "b", artist = "G2", albumArtist = "合辑"),
+            song(3L, "c", artist = "G3", albumArtist = "群星"),
+        )
+        val groups = buildAlbumArtistGroups(songs)
+        assertEquals(3, groups.size)
+        assertTrue(groups.any { it.key == "Various Artists" && it.count == 1 })
+        assertTrue(groups.any { it.key == "合辑" && it.count == 1 })
+        assertTrue(groups.any { it.key == "群星" && it.count == 1 })
+    }
+
+    @Test
+    fun buildAlbumArtistGroups_compilationMergesGuestsUnderSameAlbumArtist() {
+        val songs = listOf(
+            song(1L, "track1", artist = "Guest A", albumArtist = "Various Artists"),
+            song(2L, "track2", artist = "Guest B", albumArtist = "Various Artists"),
+            song(3L, "track3", artist = "Guest C", albumArtist = "Various Artists"),
+            song(4L, "solo", artist = "Solo Act", albumArtist = null),
+        )
+        val groups = buildAlbumArtistGroups(songs)
+        assertEquals(2, groups.size)
+        val va = groups.single { it.key == "Various Artists" }
+        assertEquals(3, va.count)
+        assertTrue(groups.any { it.key == "Solo Act" && it.count == 1 })
+    }
+
+    @Test
+    fun buildAlbumArtistGroups_artistAsVariousWithoutAlbumArtistStillGroups() {
+        // 无 albumArtist 时回退 artist：歌手字段本身写 Various Artists 也归合辑组
+        val songs = listOf(
+            song(1L, "a", artist = "Various Artists", albumArtist = null),
+            song(2L, "b", artist = "Various Artists", albumArtist = ""),
+        )
+        val groups = buildAlbumArtistGroups(songs)
+        assertEquals(1, groups.size)
+        assertEquals("Various Artists", groups.single().key)
+        assertEquals(2, groups.single().count)
+    }
+
 }

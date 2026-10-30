@@ -24,6 +24,11 @@ fun parseDiscNumber(raw: String?): Int? {
     if (raw.isNullOrBlank()) return null
     val t = raw.trim()
     val m = DISC_IN_TEXT.find(t) ?: return null
+    // 「100」会被 \d{1,2} 截成 10；匹配后若仍有多余数字则整段无效
+    val after = t.substring(m.range.last + 1)
+    if (after.isNotEmpty() && after[0].isDigit()) return null
+    val beforeIdx = m.range.first - 1
+    if (beforeIdx >= 0 && t[beforeIdx].isDigit()) return null
     return m.groupValues[1].toIntOrNull()?.takeIf { it in 1..99 }
 }
 

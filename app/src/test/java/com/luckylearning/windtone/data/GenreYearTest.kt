@@ -74,4 +74,77 @@ class GenreYearTest {
         val years = sortYearGroups(buildYearGroups(listOf(a, b, c)))
         assertEquals(listOf("2001", "1990", UNKNOWN_YEAR_LABEL), years.map { it.key })
     }
+
+    @Test
+    fun buildGroups_emptyLibrary_isEmpty() {
+        assertTrue(buildGenreGroups(emptyList()).isEmpty())
+        assertTrue(buildYearGroups(emptyList()).isEmpty())
+        assertTrue(sortYearGroups(emptyList()).isEmpty())
+    }
+
+    @Test
+    fun buildGenreGroups_placeholderTagsLandInUnknownBucket() {
+        val songs = listOf(
+            song(1L, "a", genre = "<unknown>"),
+            song(2L, "b", genre = "unknown"),
+            song(3L, "c", genre = "未知"),
+            song(4L, "d", genre = "未知流派"),
+            song(5L, "e", genre = "  "),
+            song(6L, "f", genre = null),
+        )
+        val groups = buildGenreGroups(songs)
+        assertEquals(1, groups.size)
+        assertEquals(UNKNOWN_GENRE_LABEL, groups.single().key)
+        assertEquals(6, groups.single().count)
+    }
+
+    @Test
+    fun buildGenreGroups_trimmedSameLabelMerges() {
+        val songs = listOf(
+            song(1L, "a", genre = "  Jazz  "),
+            song(2L, "b", genre = "Jazz"),
+        )
+        val groups = buildGenreGroups(songs)
+        assertEquals(1, groups.size)
+        assertEquals("Jazz", groups.single().key)
+        assertEquals(2, groups.single().count)
+    }
+
+    @Test
+    fun yearOrUnknown_outOfRangeBecomesUnknown() {
+        val base = song(1L, "T")
+        assertEquals(UNKNOWN_YEAR_LABEL, base.copy(year = 999).yearOrUnknown())
+        assertEquals(UNKNOWN_YEAR_LABEL, base.copy(year = 2101).yearOrUnknown())
+        assertEquals("1000", base.copy(year = 1000).yearOrUnknown())
+        assertEquals("2100", base.copy(year = 2100).yearOrUnknown())
+    }
+
+    @Test
+    fun parseYearInt_boundaries() {
+        assertEquals(1000, parseYearInt(1000))
+        assertEquals(2100, parseYearInt(2100))
+        assertNull(parseYearInt(0))
+        assertNull(parseYearInt(-1))
+    }
+
+    @Test
+    fun sortYearGroups_onlyUnknownStays() {
+        val years = sortYearGroups(buildYearGroups(listOf(song(1L, "a"), song(2L, "b"))))
+        assertEquals(listOf(UNKNOWN_YEAR_LABEL), years.map { it.key })
+        assertEquals(2, years.single().count)
+    }
+
+    @Test
+    fun sortYearGroups_unknownAlwaysLastAmongNumeric() {
+        val songs = listOf(
+            song(1L, "a", year = 1980),
+            song(2L, "b", year = null),
+            song(3L, "c", year = 2020),
+            song(4L, "d", year = 999), // out of range → unknown
+        )
+        val years = sortYearGroups(buildYearGroups(songs))
+        assertEquals(listOf("2020", "1980", UNKNOWN_YEAR_LABEL), years.map { it.key })
+        assertEquals(2, years.last().count)
+    }
+
 }
