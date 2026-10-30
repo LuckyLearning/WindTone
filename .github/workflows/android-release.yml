@@ -152,7 +152,14 @@ jobs:
             exit 1
           fi
 
-      - name: 上传构建产物
+      # ⚠️ 这一步只是「归档」，**Release 不依赖它**（下面同一个 job 直接用 dist/*.apk 发布）。
+      # 2026-10-30 事故：账号的 artifact 存储配额被历史产物占满（100+ 个、约 540MB），
+      # upload-artifact 报 "Artifact storage quota has been hit" 直接把这个 job 拖红，
+      # 于是后面的 Release 与公共分发仓库更新一步都没跑 —— 版本号进了 main，却没出包。
+      # 所以改成 continue-on-error：配额正常时照常归档，配额满了也不挡发版。
+      # 保留期同时从 90 天收到 7 天，少占配额（Release 资产本身就是长期归档）。
+      - name: 上传构建产物（归档，失败不阻塞发版）
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: WindTone-v${{ steps.ver.outputs.name }}
@@ -160,7 +167,7 @@ jobs:
             dist/*.apk
             dist/mapping-v*.txt
           if-no-files-found: error
-          retention-days: 90
+          retention-days: 7
 
       # ---------------------------------------------------------------- 发布说明
       # 正文来自**固定模板** `.github/release-notes/template.md`，

@@ -72,7 +72,11 @@ jobs:
       - name: 编译 Debug 包
         run: ./gradlew assembleDebug --stacktrace
 
+      # ⚠️ 2026-10-30：账号 artifact 配额已满，上传会报 "Artifact storage quota has been hit"。
+      # 这三处产物都只是排障用（Debug 包 / 测试报告 / lint 报告），**不该让 CI 变红**，
+      # 因此统一 continue-on-error：有配额就传，没配额也不影响「代码是否通过」的判断。
       - name: 上传 Debug 包
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: WindTone-debug
@@ -82,6 +86,7 @@ jobs:
 
       - name: 汇总测试结果
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
@@ -91,6 +96,7 @@ jobs:
 
       - name: 上传 lint 报告
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: lint-report
