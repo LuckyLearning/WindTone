@@ -1007,4 +1007,28 @@
     <string name="bm_list_count">本曲书签（%1$d）</string>
     <string name="bm_jump">跳转</string>
     <string name="bm_close">关闭</string>
+
+    <!-- i18n batch 6: ListenCalendarScreen (2026-10-31) -->
+    <string name="cal_title">听歌日历</string>
+    <string name="cal_cd_prev_month">上个月</string>
+    <string name="cal_cd_next_month">下个月</string>
+    <string name="cal_loading">正在统计…</string>
+    <string name="cal_hint">色块深浅表示当日收听时长；数据来自本机听歌小时桶，不上传。</string>
+    <string name="cal_month_total">本月合计</string>
+    <string name="cal_active_days">有听的日子</string>
+    <string name="cal_active_days_value">%1$d 天</string>
+    <string name="cal_max_day">单日最多</string>
+    <string name="cal_em_dash">—</string>
+    <string name="cal_pick_day">点选某一天查看摘要</string>
+    <string name="cal_day_listened">收听 %1$s</string>
+    <string name="cal_day_empty">这一天还没有收听记录</string>
+    <string-array name="cal_week_labels">
+        <item>一</item>
+        <item>二</item>
+        <item>三</item>
+        <item>四</item>
+        <item>五</item>
+        <item>六</item>
+        <item>日</item>
+    </string-array>
 </resources>

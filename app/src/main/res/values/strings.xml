@@ -1041,4 +1041,28 @@ The list is fetched once on add — nothing is saved if the fetch fails.</string
     <string name="bm_list_count">Bookmarks (%1$d)</string>
     <string name="bm_jump">Jump</string>
     <string name="bm_close">Close</string>
+
+    <!-- i18n batch 6: ListenCalendarScreen (2026-10-31) -->
+    <string name="cal_title">Listening calendar</string>
+    <string name="cal_cd_prev_month">Previous month</string>
+    <string name="cal_cd_next_month">Next month</string>
+    <string name="cal_loading">Summarizing…</string>
+    <string name="cal_hint">Color depth shows listening time that day; data comes from on-device hourly listening buckets and is never uploaded.</string>
+    <string name="cal_month_total">Month total</string>
+    <string name="cal_active_days">Days with listening</string>
+    <string name="cal_active_days_value">%1$d days</string>
+    <string name="cal_max_day">Busiest day</string>
+    <string name="cal_em_dash">—</string>
+    <string name="cal_pick_day">Tap a day for a summary</string>
+    <string name="cal_day_listened">Listened %1$s</string>
+    <string name="cal_day_empty">No listening recorded this day</string>
+    <string-array name="cal_week_labels">
+        <item>Mon</item>
+        <item>Tue</item>
+        <item>Wed</item>
+        <item>Thu</item>
+        <item>Fri</item>
+        <item>Sat</item>
+        <item>Sun</item>
+    </string-array>
 </resources>

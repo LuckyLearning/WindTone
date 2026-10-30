@@ -39,10 +39,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringArrayResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.CalendarDayCell
 import com.luckylearning.windtone.data.ListenCalendarMonth
 import com.luckylearning.windtone.data.formatCalendarDayTitle
@@ -52,8 +55,6 @@ import com.luckylearning.windtone.state.CalendarUiState
 import com.luckylearning.windtone.ui.theme.windShadow
 import java.util.Calendar
 import java.util.TimeZone
-
-private val WEEK_LABELS = listOf("一", "二", "三", "四", "五", "六", "日")
 
 /**
  * 听歌日历热力页（H7）。
@@ -110,12 +111,12 @@ fun ListenCalendarScreen(
                 IconButton(onClick = onClose) {
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "返回",
+                        contentDescription = stringResource(R.string.cd_back),
                         tint = MaterialTheme.colorScheme.onBackground,
                     )
                 }
                 Text(
-                    "听歌日历",
+                    stringResource(R.string.cal_title),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                 )
@@ -136,7 +137,7 @@ fun ListenCalendarScreen(
                     IconButton(onClick = { shiftMonth(-1) }) {
                         Icon(
                             Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                            contentDescription = "上个月",
+                            contentDescription = stringResource(R.string.cal_cd_prev_month),
                         )
                     }
                     Text(
@@ -151,7 +152,7 @@ fun ListenCalendarScreen(
                     IconButton(onClick = { shiftMonth(1) }, enabled = !atCurrent) {
                         Icon(
                             Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = "下个月",
+                            contentDescription = stringResource(R.string.cal_cd_next_month),
                         )
                     }
                 }
@@ -159,7 +160,7 @@ fun ListenCalendarScreen(
 
                 if (state?.loading == true || monthData == null) {
                     Text(
-                        "正在统计…",
+                        stringResource(R.string.cal_loading),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -171,7 +172,7 @@ fun ListenCalendarScreen(
                 Spacer(Modifier.height(14.dp))
 
                 Row(Modifier.fillMaxWidth()) {
-                    WEEK_LABELS.forEach { w ->
+                    stringArrayResource(R.array.cal_week_labels).forEach { w ->
                         Text(
                             w,
                             style = MaterialTheme.typography.labelSmall,
@@ -195,7 +196,7 @@ fun ListenCalendarScreen(
                 Spacer(Modifier.height(24.dp))
 
                 Text(
-                    "色块深浅表示当日收听时长；数据来自本机听歌小时桶，不上传。",
+                    stringResource(R.string.cal_hint),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -216,11 +217,18 @@ private fun MonthSummary(month: ListenCalendarMonth) {
             Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            SummaryCell("本月合计", formatListenDuration(month.totalMs))
-            SummaryCell("有听的日子", "${month.activeDays} 天")
+            SummaryCell(stringResource(R.string.cal_month_total), formatListenDuration(month.totalMs))
             SummaryCell(
-                "单日最多",
-                if (month.maxDayMs > 0L) formatListenDuration(month.maxDayMs) else "—",
+                stringResource(R.string.cal_active_days),
+                stringResource(R.string.cal_active_days_value, month.activeDays),
+            )
+            SummaryCell(
+                stringResource(R.string.cal_max_day),
+                if (month.maxDayMs > 0L) {
+                    formatListenDuration(month.maxDayMs)
+                } else {
+                    stringResource(R.string.cal_em_dash)
+                },
             )
         }
     }
@@ -313,7 +321,7 @@ private fun DayDetail(selected: CalendarDayCell?, zone: TimeZone) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
             if (selected == null) {
                 Text(
-                    "点选某一天查看摘要",
+                    stringResource(R.string.cal_pick_day),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -325,8 +333,14 @@ private fun DayDetail(selected: CalendarDayCell?, zone: TimeZone) {
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    if (selected.ms > 0L) "收听 ${formatListenDuration(selected.ms)}"
-                    else "这一天还没有收听记录",
+                    if (selected.ms > 0L) {
+                        stringResource(
+                            R.string.cal_day_listened,
+                            formatListenDuration(selected.ms),
+                        )
+                    } else {
+                        stringResource(R.string.cal_day_empty)
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }

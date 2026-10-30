@@ -2183,6 +2183,23 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 
 注意：无业务逻辑改动。未改 SoftEq / EqSheet / ListenCalendar / versionName。
 
+### i18n 第 6 批（2026-10-31）
+
+范围：`ListenCalendarScreen.kt`（听歌日历热力页；报告入口标题同键）。
+
+约定不变：`values/strings.xml` = 英文兜底，`values-zh/strings.xml` = 中文。返回复用 `cd_back`。本批前缀 `cal_`；周标签用 `string-array` `cal_week_labels`。
+
+本批键名：`cal_title`, `cal_cd_prev_month`, `cal_cd_next_month`, `cal_loading`, `cal_hint`, `cal_month_total`, `cal_active_days`, `cal_active_days_value`, `cal_max_day`, `cal_em_dash`, `cal_pick_day`, `cal_day_listened`, `cal_day_empty`, `cal_week_labels`（另复用 `cd_back`）
+
+涉及文件：
+
+- `ListenCalendarScreen.kt`
+- `ListeningReportScreen.kt`（入口 `label` 改用 `cal_title`）
+- `values/strings.xml` + `values-zh/strings.xml`（本批新增 `cal_*` 键与周标签数组）
+
+注意：无业务逻辑改动。未改 SoftEq / EqSheet / 数据层 `formatListenDuration` 等 / versionName。
+
+
 
 
 
