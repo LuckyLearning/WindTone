@@ -90,6 +90,7 @@ aliyunClientSecret
 # local agent scratch (never commit)
 # 根目录临时脚本 / 日志 / 隔离构建 / park 工作区 —— 一律不入库
 _a2_*.py
+_a11y_*
 _bal9_*
 _g3_*
 _g8_*
