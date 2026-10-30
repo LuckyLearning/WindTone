@@ -16,15 +16,42 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.luckylearning.windtone.R
 import com.luckylearning.windtone.playback.SceneMode
 import com.luckylearning.windtone.playback.SceneProfiles
 
 /**
+ * 场景芯片的 string 资源映射（纯函数，便于单测；与 [SceneChipsRow] 一致）。
+ *
+ * 标签 / 说明均走 values + values-zh；id 与 [SceneProfiles] 对齐。
+ */
+object SceneChipLabels {
+    data class Chip(
+        val id: String,
+        val labelRes: Int,
+        val descRes: Int,
+    )
+
+    /** 三档顺序与 [SceneProfiles.chipIds] 一致。 */
+    fun chips(): List<Chip> = listOf(
+        Chip(SceneProfiles.DRIVE.id, R.string.scene_drive, R.string.scene_drive_desc),
+        Chip(SceneProfiles.COMMUTE.id, R.string.scene_commute, R.string.scene_commute_desc),
+        Chip(SceneProfiles.SLEEP.id, R.string.scene_sleep, R.string.scene_sleep_desc),
+    )
+
+    fun labelResOf(id: String): Int? = chips().firstOrNull { it.id == id }?.labelRes
+
+    fun descResOf(id: String): Int? = chips().firstOrNull { it.id == id }?.descRes
+}
+
+/**
  * 场景化模式芯片行：驾车 / 通勤 / 助眠 + 关闭。
  *
  * [large] 给车机用：更高触控目标（约 56dp）。
+ * 说明文案挂在 contentDescription（读屏）；可见 hint 仍用 [R.string.scene_hint]。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -51,25 +78,29 @@ fun SceneChipsRow(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            SceneProfiles.chipIds().forEach { id ->
-                val labelRes = when (id) {
-                    SceneProfiles.DRIVE.id -> R.string.scene_drive
-                    SceneProfiles.COMMUTE.id -> R.string.scene_commute
-                    SceneProfiles.SLEEP.id -> R.string.scene_sleep
-                    else -> return@forEach
-                }
+            SceneChipLabels.chips().forEach { chip ->
+                val label = stringResource(chip.labelRes)
+                val desc = stringResource(chip.descRes)
+                val a11y = stringResource(R.string.scene_chip_a11y, label, desc)
                 FilterChip(
-                    selected = activeId == id,
-                    onClick = { SceneMode.select(id) },
-                    label = { Text(stringResource(labelRes), style = textStyle) },
-                    modifier = Modifier.heightIn(min = chipHeight),
+                    selected = activeId == chip.id,
+                    onClick = { SceneMode.select(chip.id) },
+                    label = { Text(label, style = textStyle) },
+                    modifier = Modifier
+                        .heightIn(min = chipHeight)
+                        .semantics { contentDescription = a11y },
                 )
             }
+            val offLabel = stringResource(R.string.scene_off)
+            val offDesc = stringResource(R.string.scene_off_desc)
+            val offA11y = stringResource(R.string.scene_chip_a11y, offLabel, offDesc)
             FilterChip(
                 selected = activeId.isEmpty(),
                 onClick = { SceneMode.select("") },
-                label = { Text(stringResource(R.string.scene_off), style = textStyle) },
-                modifier = Modifier.heightIn(min = chipHeight),
+                label = { Text(offLabel, style = textStyle) },
+                modifier = Modifier
+                    .heightIn(min = chipHeight)
+                    .semantics { contentDescription = offA11y },
             )
         }
     }

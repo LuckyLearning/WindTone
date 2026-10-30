@@ -818,6 +818,7 @@ Replace all: discard your current Mine list and use only the file (cannot undo).
     <string name="soft_eq_confirm_hint">When on, soft-path filtering runs if the hard equalizer is unavailable. When hard EQ comes back, soft turns off automatically (this preference is kept).</string>
     <string name="eq_volume_balance_hint">Uses ReplayGain or iTunes volume tags when the file has them, and falls back to a loudness estimate otherwise. This is not Loudness Enhance.</string>
 
+    <!-- i18n batch 8 (2026-10-31): SceneChips / scene section in player options -->
     <string name="scene_section">Scenes</string>
     <string name="scene_off">Off</string>
     <string name="scene_drive">Drive</string>
@@ -827,6 +828,8 @@ Replace all: discard your current Mine list and use only the file (cannot undo).
     <string name="scene_drive_desc">Car-drive sound profile; sleep timer off</string>
     <string name="scene_commute_desc">Clear vocals for podcasts and pop on the go</string>
     <string name="scene_sleep_desc">Soft surround with a 45-minute sleep timer</string>
+    <string name="scene_off_desc">Leave the scene and restore what you had before entering</string>
+    <string name="scene_chip_a11y">%1$s. %2$s</string>
 
 
     <!-- ================================================================

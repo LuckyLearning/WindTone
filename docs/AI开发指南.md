@@ -2220,3 +2220,20 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 
 注意：无业务逻辑改动。未改 SoftEq / EqSheet / SceneChips / OverlayCollapseHelper 引擎 / versionName。
 
+### i18n 第 8 批（2026-10-31）
+
+范围：`SceneChips.kt` 场景芯片 + 播放设置「场景」分区入口文案；读屏说明挂 `scene_*_desc`。
+
+约定不变：`values/strings.xml` = 英文兜底，`values-zh/strings.xml` = 中文。映射集中在 `SceneChipLabels`（与 `SceneProfiles.chipIds` 对齐）。
+
+本批键名：`scene_section`, `scene_off`, `scene_drive`, `scene_commute`, `scene_sleep`, `scene_hint`, `scene_drive_desc`, `scene_commute_desc`, `scene_sleep_desc`, `scene_off_desc`（本批新增）, `scene_chip_a11y`（本批新增）
+
+涉及文件：
+
+- `SceneChips.kt`（含 `SceneChipLabels`）
+- `SheetsPlayback.kt` / `PlayerScreen.kt`（已用 `scene_section` / `SceneChipsRow`，本批未改调用点）
+- `values/strings.xml` + `values-zh/strings.xml`
+- 单测 `SceneChipLabelsTest`
+
+注意：无业务逻辑改动。未改 SoftEq / EqSheet / SceneMode 引擎 / versionName。诊断包 `[场景]` 段仍中文。
+

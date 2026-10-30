@@ -787,6 +787,7 @@
     <string name="soft_eq_confirm_hint">打开后，在硬均衡器不可用时用软路径滤波。硬均衡器恢复可用时会自动关掉软路径（此偏好会保留）。</string>
     <string name="eq_volume_balance_hint">有 ReplayGain 或 iTunes 音量标签时优先采用，没有标签再按整曲响度压低过响的歌。这不是上面的「响度增强」。</string>
 
+    <!-- i18n batch 8 (2026-10-31): SceneChips / 播放设置「场景」分区 -->
     <string name="scene_section">场景</string>
     <string name="scene_off">关闭</string>
     <string name="scene_drive">驾车</string>
@@ -796,6 +797,8 @@
     <string name="scene_drive_desc">车载驾驶音效，关掉睡眠定时</string>
     <string name="scene_commute_desc">清澈人声，适合路上听播客与流行</string>
     <string name="scene_sleep_desc">柔和环绕，并打开 45 分钟睡眠定时</string>
+    <string name="scene_off_desc">离开场景并还原进入前的听感、速度与睡眠定时</string>
+    <string name="scene_chip_a11y">%1$s。%2$s</string>
 
 
     <!-- ================================================================
