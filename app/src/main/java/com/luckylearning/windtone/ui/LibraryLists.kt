@@ -61,6 +61,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luckylearning.windtone.data.ScanScope
 import com.luckylearning.windtone.data.model.Song
+import com.luckylearning.windtone.data.discForGrouping
+import com.luckylearning.windtone.data.shouldShowDiscHeaders
 import com.luckylearning.windtone.state.GroupInfo
 import com.luckylearning.windtone.state.LibraryUiState
 import com.luckylearning.windtone.state.PlayerUiState
@@ -427,26 +429,74 @@ internal fun GroupDetail(
             onBack = onBack,
             onPlayAll = { playerVm.playQueue(library.detailSongs, 0) },
         )
+        val detail = library.detailSongs
+        val showDiscs = shouldShowDiscHeaders(detail)
         LazyColumn(
             contentPadding = PaddingValues(top = 2.dp, bottom = 16.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
-            itemsIndexed(
-                library.detailSongs,
-                key = { _, s -> s.stableKey },
-                contentType = { _, _ -> "song" },
-            ) { index, song ->
-                SongRow(
-                    song = song,
-                    isCurrent = player.current?.stableKey == song.stableKey,
-                    isPlaying = player.isPlaying,
-                    large = carMode,
-                    onClick = { playerVm.playQueue(library.detailSongs, index) },
-                    onLongClick = { onSongLongPress(song) },
-                    onMore = { onSongLongPress(song) },
-                )
+            if (!showDiscs) {
+                itemsIndexed(
+                    detail,
+                    key = { _, s -> s.stableKey },
+                    contentType = { _, _ -> "song" },
+                ) { index, song ->
+                    SongRow(
+                        song = song,
+                        isCurrent = player.current?.stableKey == song.stableKey,
+                        isPlaying = player.isPlaying,
+                        large = carMode,
+                        onClick = { playerVm.playQueue(detail, index) },
+                        onLongClick = { onSongLongPress(song) },
+                        onMore = { onSongLongPress(song) },
+                    )
+                }
+            } else {
+                // 多碟：按碟分区；播放索引仍对完整 detail 列表
+                val byDisc = detail.groupBy { it.discForGrouping() }.toSortedMap()
+                byDisc.forEach { (disc, songs) ->
+                    item(key = "disc-$disc", contentType = "disc-header") {
+                        DiscSectionHeader(disc = disc, carMode = carMode)
+                    }
+                    itemsIndexed(
+                        songs,
+                        key = { _, s -> s.stableKey },
+                        contentType = { _, _ -> "song" },
+                    ) { _, song ->
+                        val index = detail.indexOfFirst { it.stableKey == song.stableKey }
+                            .coerceAtLeast(0)
+                        SongRow(
+                            song = song,
+                            isCurrent = player.current?.stableKey == song.stableKey,
+                            isPlaying = player.isPlaying,
+                            large = carMode,
+                            onClick = { playerVm.playQueue(detail, index) },
+                            onLongClick = { onSongLongPress(song) },
+                            onMore = { onSongLongPress(song) },
+                        )
+                    }
+                }
             }
         }
+    }
+}
+
+
+
+@Composable
+private fun DiscSectionHeader(disc: Int, carMode: Boolean) {
+    val padV = if (carMode) 10.dp else 6.dp
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(
+            text = stringResource(R.string.lib_disc_n, disc),
+            style = if (carMode) MaterialTheme.typography.titleMedium else MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = padV),
+        )
     }
 }
 

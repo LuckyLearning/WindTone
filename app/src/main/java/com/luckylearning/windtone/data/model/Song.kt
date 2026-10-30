@@ -51,6 +51,12 @@ data class Song(
      * 浏览时优先本字段，空则回退 [artist]（见 effectiveAlbumArtist）。
      */
     val albumArtist: String? = null,
+    /**
+     * 碟号（多碟专辑；MediaStore TRACK 高 16 位 / MMR DISC_NUMBER；无则 null）。
+     * **不入 Room**——见 [com.luckylearning.windtone.data.DiscNumberCache]。
+     * 亦可从 [trackNo] 的 MediaStore 编码即时解码（见 effectiveDiscNumber）。
+     */
+    val discNumber: Int? = null,
     val dateAdded: Long = 0L,
     /**
      * 曲库主键（Room `songs.id`）。

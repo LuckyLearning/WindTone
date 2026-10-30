@@ -5,6 +5,8 @@ import androidx.room.withTransaction
 import com.luckylearning.windtone.data.CoverRepository
 import com.luckylearning.windtone.data.albumArtistOrUnknown
 import com.luckylearning.windtone.data.buildAlbumArtistGroups
+import com.luckylearning.windtone.data.sortAlbumSongs
+import com.luckylearning.windtone.data.sortArtistAlbumSongs
 import com.luckylearning.windtone.data.buildGenreGroups
 import com.luckylearning.windtone.data.buildYearGroups
 import com.luckylearning.windtone.data.genreOrUnknown
@@ -374,8 +376,11 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
         withContext(Dispatchers.IO) {
             session.genreYears.putFromSongs(raw)
             session.albumArtists.putFromSongs(raw)
+            session.discNumbers.putFromSongs(raw)
         }
-        val overlaid = session.albumArtists.overlay(session.genreYears.overlay(raw))
+        val overlaid = session.discNumbers.overlay(
+            session.albumArtists.overlay(session.genreYears.overlay(raw)),
+        )
         val songs = overlaid.map { song ->
             val st = index.stateOf(song.dbId) ?: return@map song
             song.copy(
@@ -592,15 +597,15 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
     override fun openGroup(group: GroupInfo) {
         val pool = browseSongs()
         val songs = when (_library.value.view) {
-            LibraryView.ALBUM -> pool
-                .filter { it.albumOrUnknown == group.key }
-                .sortedWith(compareBy({ it.trackNo }, { it.title.lowercase() }))
-            LibraryView.ARTIST -> pool
-                .filter { it.artistOrUnknown == group.key }
-                .sortedWith(compareBy({ it.albumOrUnknown.lowercase() }, { it.trackNo }, { it.title.lowercase() }))
-            LibraryView.ALBUM_ARTIST -> pool
-                .filter { it.albumArtistOrUnknown() == group.key }
-                .sortedWith(compareBy({ it.albumOrUnknown.lowercase() }, { it.trackNo }, { it.title.lowercase() }))
+            LibraryView.ALBUM -> sortAlbumSongs(
+                pool.filter { it.albumOrUnknown == group.key },
+            )
+            LibraryView.ARTIST -> sortArtistAlbumSongs(
+                pool.filter { it.artistOrUnknown == group.key },
+            )
+            LibraryView.ALBUM_ARTIST -> sortArtistAlbumSongs(
+                pool.filter { it.albumArtistOrUnknown() == group.key },
+            )
             LibraryView.GENRE -> pool
                 .filter { it.genreOrUnknown() == group.key }
                 .sortedWith(compareBy({ it.artistOrUnknown.lowercase() }, { it.title.lowercase() }))

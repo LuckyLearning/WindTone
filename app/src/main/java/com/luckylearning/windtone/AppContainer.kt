@@ -15,6 +15,7 @@ import com.luckylearning.windtone.data.db.MusicDb
 import com.luckylearning.windtone.playback.PlaybackEngine
 import com.luckylearning.windtone.playback.PlaybackStore
 import com.luckylearning.windtone.data.AlbumArtistCache
+import com.luckylearning.windtone.data.DiscNumberCache
 import com.luckylearning.windtone.data.GenreYearCache
 
 /**
@@ -61,6 +62,7 @@ class AppContainer(private val app: Application) {
     /** G1 流派/年代 Prefs 缓存（不入 Room） */
     val genreYears: GenreYearCache by lazy { GenreYearCache(app) }
     val albumArtists: AlbumArtistCache by lazy { AlbumArtistCache(app) }
+    val discNumbers: DiscNumberCache by lazy { DiscNumberCache(app) }
 
     val favorites: FavoriteToggle by lazy { FavoriteToggle(app, db, songIndex, messages) }
 

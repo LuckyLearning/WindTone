@@ -19,6 +19,8 @@ object MetadataReader {
         val genre: String? = null,
         val year: Int? = null,
         val albumArtist: String? = null,
+        val discNumber: Int? = null,
+        val trackNumber: Int? = null,
     )
 
     fun read(context: Context, uri: Uri): Info? {
@@ -26,9 +28,13 @@ object MetadataReader {
         return try {
             mmr.setDataSource(context, uri)
             val genreRaw = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_GENRE)
-            val albumArtistRaw = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST)
             val yearRaw = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_YEAR)
                 ?: mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DATE)
+            val albumArtistRaw = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST)
+            val discRaw = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DISC_NUMBER)
+            } else null
+            val trackRaw = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER)
             Info(
                 title = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE),
                 artist = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST),
@@ -36,8 +42,10 @@ object MetadataReader {
                 durationMs = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
                     ?.toLongOrNull() ?: 0L,
                 genre = normalizeGenre(genreRaw),
-                albumArtist = normalizeAlbumArtist(albumArtistRaw),
                 year = parseYearLabel(yearRaw),
+                albumArtist = normalizeAlbumArtist(albumArtistRaw),
+                discNumber = parseDiscNumber(discRaw),
+                trackNumber = parseDiscNumber(trackRaw), // 复用「首段数字」解析曲序
             )
         } catch (t: Throwable) {
             Log.w(TAG, "读取元数据失败: $uri", t)

@@ -137,13 +137,23 @@ class MusicRepository(
             SortOrder.ARTIST -> Comparator { a, b ->
                 var r = text(a.artistOrUnknown).compareTo(text(b.artistOrUnknown))
                 if (r == 0) r = text(a.albumOrUnknown).compareTo(text(b.albumOrUnknown))
-                if (r == 0) r = a.trackNo.compareTo(b.trackNo)
+                if (r == 0) {
+                    val da = a.effectiveDiscNumber() ?: 0
+                    val db = b.effectiveDiscNumber() ?: 0
+                    r = da.compareTo(db)
+                }
+                if (r == 0) r = a.effectiveTrackNumber().compareTo(b.effectiveTrackNumber())
                 if (r == 0) r = text(a.title).compareTo(text(b.title))
                 r
             }
             SortOrder.ALBUM -> Comparator { a, b ->
                 var r = text(a.albumOrUnknown).compareTo(text(b.albumOrUnknown))
-                if (r == 0) r = a.trackNo.compareTo(b.trackNo)
+                if (r == 0) {
+                    val da = a.effectiveDiscNumber() ?: 0
+                    val db = b.effectiveDiscNumber() ?: 0
+                    r = da.compareTo(db)
+                }
+                if (r == 0) r = a.effectiveTrackNumber().compareTo(b.effectiveTrackNumber())
                 if (r == 0) r = text(a.title).compareTo(text(b.title))
                 r
             }
@@ -259,8 +269,8 @@ class MusicRepository(
                     artist = exists.artist?.takeIf { it.isNotBlank() } ?: song.artist,
                     album = exists.album?.takeIf { it.isNotBlank() } ?: song.album,
                     genre = normalizeGenre(exists.genre) ?: song.genre,
-                    albumArtist = normalizeAlbumArtist(exists.albumArtist) ?: song.albumArtist,
                     year = exists.year?.let { parseYearInt(it) } ?: song.year,
+                    albumArtist = normalizeAlbumArtist(exists.albumArtist) ?: song.albumArtist,
                 )
             }
         }

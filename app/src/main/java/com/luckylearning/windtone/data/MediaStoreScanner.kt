@@ -72,11 +72,11 @@ class MediaStoreScanner(private val context: Context) {
             val iTrack = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
             val iDate = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
             val iYear = c.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
-            val iAlbumArtist = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                c.getColumnIndex(MediaStore.Audio.Media.ALBUM_ARTIST)
-            } else -1
             val iGenre = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 c.getColumnIndex(MediaStore.Audio.Media.GENRE)
+            } else -1
+            val iAlbumArtist = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                c.getColumnIndex(MediaStore.Audio.Media.ALBUM_ARTIST)
             } else -1
             val iData = c.getColumnIndex(MediaStore.Audio.Media.DATA)
 
@@ -123,8 +123,9 @@ class MediaStoreScanner(private val context: Context) {
                         lrcUri = lrcUri,
                         dateAdded = c.getLong(iDate) * 1000L,
                         genre = if (iGenre >= 0) normalizeGenre(c.getString(iGenre)) else null,
-                        albumArtist = if (iAlbumArtist >= 0) normalizeAlbumArtist(c.getString(iAlbumArtist)) else null,
                         year = parseYearInt(c.getInt(iYear)),
+                        albumArtist = if (iAlbumArtist >= 0) normalizeAlbumArtist(c.getString(iAlbumArtist)) else null,
+                        discNumber = decodeMediaStoreTrack(c.getInt(iTrack)).first,
                     )
                 )
             }
