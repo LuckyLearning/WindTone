@@ -153,4 +153,157 @@ class UserEqPresetsTest {
         val again = UserEqPresets.fromExportJson(UserEqPresets.toExportJson(listOf(p)))!!
         assertEquals("引\"号\\斜", again[0].name)
     }
+
+    @Test
+    fun `坏输入 JSON 一律拒收或跳过坏条`() {
+        assertNull(UserEqPresets.fromExportJson("""{"format":"windtone.user_eq_presets","presets":["""))
+        assertNull(UserEqPresets.fromExportJson("[]"))
+        assertNull(UserEqPresets.fromExportJson("null"))
+        assertNull(UserEqPresets.fromExportJson("\"windtone.user_eq_presets\""))
+        assertNull(UserEqPresets.fromExportJson("""{"format":"windtone.user_eq_presets"}"""))
+        assertNull(
+            UserEqPresets.fromExportJson(
+                """{"format":"WindTone.user_eq_presets","presets":[]}""",
+            ),
+        )
+        assertEquals(
+            emptyList<UserEqPresets.Preset>(),
+            UserEqPresets.fromExportJson(
+                """{"format":"windtone.user_eq_presets","presets":[{"id":"u_1_1","name":"缺","bass":0,"virtualizer":0,"loudness":0,"reverbId":""}]}""",
+            ),
+        )
+        assertEquals(
+            emptyList<UserEqPresets.Preset>(),
+            UserEqPresets.fromExportJson(
+                """{"format":"windtone.user_eq_presets","presets":[{"id":"u_1_1","name":"坏","bands":"abc","bass":0,"virtualizer":0,"loudness":0,"reverbId":""}]}""",
+            ),
+        )
+        assertEquals(
+            emptyList<UserEqPresets.Preset>(),
+            UserEqPresets.fromExportJson(
+                """{"format":"windtone.user_eq_presets","presets":[{"id":"u_1_1","name":"坏","bands":"0","bass":"x","virtualizer":0,"loudness":0,"reverbId":""}]}""",
+            ),
+        )
+        assertEquals(
+            emptyList<UserEqPresets.Preset>(),
+            UserEqPresets.fromExportJson(
+                """{"format":"windtone.user_eq_presets","presets":[{"id":"builtin","name":"假","bands":"0","bass":0,"virtualizer":0,"loudness":0,"reverbId":""}]}""",
+            ),
+        )
+    }
+
+    @Test
+    fun `空曲线可建档且 JSON Prefs 往返仍空`() {
+        val p = UserEqPresets.create(
+            "空", "", 0, 0, 0, "off", nowMillis = 2L, salt = 1,
+        )!!
+        assertEquals("", p.bandsCsv)
+        assertEquals(listOf(p), UserEqPresets.decode(UserEqPresets.encode(listOf(p))))
+        assertEquals(listOf(p), UserEqPresets.fromExportJson(UserEqPresets.toExportJson(listOf(p)))!!)
+
+        val spaced = UserEqPresets.create(
+            "空白", "  ", 0, 0, 0, "", nowMillis = 3L, salt = 2,
+        )!!
+        assertEquals("", spaced.bandsCsv)
+
+        val parsed = UserEqPresets.fromExportJson(
+            """{"format":"windtone.user_eq_presets","presets":[{"id":"u_abc_1","name":"空","bands":"","bass":0,"virtualizer":0,"loudness":0,"reverbId":"off"}]}""",
+        )!!
+        assertEquals(1, parsed.size)
+        assertEquals("", parsed[0].bandsCsv)
+        assertEquals("u_abc_1", parsed[0].id)
+    }
+
+    @Test
+    fun `越界增益在创建解码导入时钳制`() {
+        val over = UserEqPresets.create(
+            "过", "0,0", bass = 9999, virtualizer = -50, loudness = 99999,
+            reverbId = "off", nowMillis = 4L, salt = 3,
+        )!!
+        assertEquals(1000, over.bass)
+        assertEquals(0, over.virtualizer)
+        assertEquals(1500, over.loudness)
+
+        val raw = listOf(
+            "u_z_1", "钳", "10,-10", "2000", "-1", "3000", "hall",
+        ).joinToString("\u001f")
+        val decoded = UserEqPresets.decode(raw)
+        assertEquals(1, decoded.size)
+        assertEquals(1000, decoded[0].bass)
+        assertEquals(0, decoded[0].virtualizer)
+        assertEquals(1500, decoded[0].loudness)
+
+        val fromJson = UserEqPresets.fromExportJson(
+            """{"format":"windtone.user_eq_presets","presets":[{"id":"u_z_2","name":"钳","bands":"0","bass":5000,"virtualizer":-9,"loudness":9999,"reverbId":"x"}]}""",
+        )!![0]
+        assertEquals(1000, fromJson.bass)
+        assertEquals(0, fromJson.virtualizer)
+        assertEquals(1500, fromJson.loudness)
+
+        val list = listOf(sample())
+        val rewritten = UserEqPresets.rewrite(
+            list, list[0].id, "1,2", 5000, -1, 9999, "off",
+        )!!
+        assertEquals(1000, rewritten[0].bass)
+        assertEquals(0, rewritten[0].virtualizer)
+        assertEquals(1500, rewritten[0].loudness)
+    }
+
+    @Test
+    fun `JSON 与 Prefs 双重往返及边界增益一致`() {
+        val edges = listOf(
+            UserEqPresets.create("零", "", 0, 0, 0, "", nowMillis = 10L, salt = 1)!!,
+            UserEqPresets.create(
+                "满", "1500,-1500,0", 1000, 1000, 1500, "hall_medium",
+                nowMillis = 11L, salt = 2,
+            )!!,
+            UserEqPresets.create(
+                "负频", "-300,-100,50", 1, 2, 3, "off",
+                nowMillis = 12L, salt = 3,
+            )!!,
+        )
+        assertEquals(edges, UserEqPresets.decode(UserEqPresets.encode(edges)))
+        val viaJson = UserEqPresets.fromExportJson(
+            UserEqPresets.toExportJson(edges, exportedAtMillis = 99L),
+        )!!
+        assertEquals(edges, viaJson)
+        val hop = UserEqPresets.fromExportJson(
+            UserEqPresets.toExportJson(
+                UserEqPresets.decode(UserEqPresets.encode(viaJson)),
+            ),
+        )!!
+        assertEquals(edges, hop)
+    }
+
+    @Test
+    fun `导入坏条计入 skipped 且 JSON 重复 id 保留先到`() {
+        val good = sample("好", 5)
+        val badBands = good.copy(id = "u_bad_1", name = "坏段", bandsCsv = "nope!")
+        val badId = good.copy(id = "builtin", name = "假")
+        val outcome = UserEqPresets.importPresets(
+            emptyList(),
+            listOf(good, badBands, badId),
+            UserEqPresets.ImportMode.MERGE,
+        )
+        assertEquals(1, outcome.added)
+        assertEquals(2, outcome.skipped)
+        assertEquals(listOf(good), outcome.presets)
+
+        val dups = UserEqPresets.fromExportJson(
+            """{"format":"windtone.user_eq_presets","presets":[{"id":"u_dup_1","name":"先","bands":"1","bass":1,"virtualizer":0,"loudness":0,"reverbId":""},{"id":"u_dup_1","name":"后","bands":"2","bass":2,"virtualizer":0,"loudness":0,"reverbId":""}]}""",
+        )!!
+        assertEquals(1, dups.size)
+        assertEquals("先", dups[0].name)
+        assertEquals("1", dups[0].bandsCsv)
+    }
+
+    @Test
+    fun `非法 bands 字符 create 与 rewrite 拒绝`() {
+        assertNull(UserEqPresets.create("x", "1;2", 0, 0, 0, ""))
+        assertNull(UserEqPresets.create("x", "1.5,0", 0, 0, 0, ""))
+        assertNull(UserEqPresets.rewrite(listOf(sample()), sample().id, "a,b", 0, 0, 0, ""))
+        assertTrue(UserEqPresets.validBands(""))
+        assertTrue(UserEqPresets.validBands("0, -1, 2"))
+        assertFalse(UserEqPresets.validBands("0+1"))
+    }
 }
