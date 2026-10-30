@@ -161,6 +161,49 @@ class QueueManager(
         }
     }
 
+
+    /** A3：清空播放队列。空队列只提示。不改播放模式。 */
+    fun clearQueue() = act { c ->
+        if (c.mediaItemCount == 0) {
+            host.postMessage("播放队列是空的")
+            return@act
+        }
+        c.setMediaItems(emptyList(), 0, 0L)
+        host.setCurrentQueue(emptyList())
+        host.notifyQueueSize(0)
+        host.persistQueue()
+        refreshQueue()
+        host.postMessage("已清空播放队列")
+    }
+
+    /**
+     * A4：打乱队列物理顺序（Fisher–Yates），不打开 shuffleModeEnabled。
+     * 当前曲跟到新下标并保留进度；原在播则继续播。
+     */
+    fun shuffleQueueOrder(random: kotlin.random.Random = kotlin.random.Random.Default) = act { c ->
+        val n = c.mediaItemCount
+        if (n == 0) {
+            host.postMessage("播放队列是空的")
+            return@act
+        }
+        if (n == 1) {
+            host.postMessage("队列只有一首，无需打乱")
+            return@act
+        }
+        val items = (0 until n).map { c.getMediaItemAt(it) }
+        val (order, newIndex) = QueuePolicies.shuffleOrderIndices(n, c.currentMediaItemIndex, random)
+        val newItems = order.map { items[it] }
+        val pos = c.currentPosition.coerceAtLeast(0L)
+        val wasPlaying = c.isPlaying
+        c.setMediaItems(newItems, newIndex, pos)
+        c.prepare()
+        if (wasPlaying) c.play()
+        host.persistQueue()
+        refreshQueue()
+        host.postMessage("已打乱队列顺序")
+    }
+
+
     /** 引擎侧必须实现的窄回调：本类不持有任何界面 / 落库状态 */
     interface QueueHost {
         fun setCurrentQueue(queue: List<Song>)

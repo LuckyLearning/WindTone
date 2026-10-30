@@ -27,6 +27,10 @@ interface PlayerActions : OverlayActions {
     fun jumpToQueue(index: Int)
     fun removeQueueItem(index: Int)
     fun moveQueueItem(from: Int, to: Int)
+    /** A3：清空播放队列 */
+    fun clearQueue()
+    /** A4：打乱队列物理顺序（非随机播放模式） */
+    fun shuffleQueueOrder()
     fun setSpeed(speed: Float)
 
     /** 变调：半音（-12..+12，0 = 原调），见 `playback/Pitch` */

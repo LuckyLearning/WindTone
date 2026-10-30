@@ -1101,6 +1101,8 @@ fun MainScreen(
                         showQueue = false
                         saveQueueAsPlaylist = true
                     },
+                    onClear = { playerVm.clearQueue() },
+                    onShuffleOrder = { playerVm.shuffleQueueOrder() },
                 )
             }
         }

@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -322,6 +323,66 @@ class QueueManagerTest {
         assertFalse(p.events.any { it.startsWith("move") })
         assertEquals(0, p.host.persistCount)
     }
+
+
+    @Test
+    fun `clearQueue 清空并提示且落库`() {
+        val (m, p) = fixture(listOf(song("A"), song("B"), song("C")))
+        p.isPlaying = true
+        m.clearQueue()
+        assertEquals(0, p.items.size)
+        assertEquals(0, p.mediaItemCount)
+        assertEquals(0, p.host.queueSize)
+        assertTrue(p.host.currentQueue.isEmpty())
+        assertEquals(1, p.host.persistCount)
+        assertEquals("已清空播放队列", p.host.messages.last())
+        assertTrue(p.events.any { it.startsWith("setMediaItems(0,") })
+        assertFalse(p.events.any { it.startsWith("shuffle=") })
+    }
+
+    @Test
+    fun `clearQueue 空队列只提示不落库`() {
+        val (m, p) = fixture()
+        m.clearQueue()
+        assertEquals(0, p.host.persistCount)
+        assertEquals("播放队列是空的", p.host.messages.last())
+    }
+
+    @Test
+    fun `shuffleQueueOrder 打乱物理序且不开关随机模式`() {
+        val songs = listOf(song("A"), song("B"), song("C"), song("D"))
+        val (m, p) = fixture(songs)
+        p.currentMediaItemIndex = 1
+        p.currentPosition = 1234L
+        p.isPlaying = true
+        p.shuffleModeEnabled = false
+        p.events.clear()
+        val beforeIds = p.items.map { it.mediaId }
+        val alwaysZero = object : kotlin.random.Random() {
+            override fun nextBits(bitCount: Int): Int = 0
+        }
+        m.shuffleQueueOrder(alwaysZero)
+        val afterIds = p.items.map { it.mediaId }
+        assertEquals(4, afterIds.size)
+        assertEquals(beforeIds.toSet(), afterIds.toSet())
+        assertNotEquals(beforeIds, afterIds)
+        assertEquals(song("B").stableKey, p.items[p.currentMediaItemIndex].mediaId)
+        assertTrue(p.events.contains("prepare"))
+        assertTrue(p.events.contains("play"))
+        assertEquals(1, p.host.persistCount)
+        assertEquals("已打乱队列顺序", p.host.messages.last())
+        assertFalse(p.events.any { it.startsWith("shuffle=") })
+        assertFalse(p.shuffleModeEnabled)
+    }
+
+    @Test
+    fun `shuffleQueueOrder 单曲只提示`() {
+        val (m, p) = fixture(listOf(song("A")))
+        m.shuffleQueueOrder(kotlin.random.Random(1))
+        assertEquals(0, p.host.persistCount)
+        assertEquals("队列只有一首，无需打乱", p.host.messages.last())
+    }
+
 
     // ================================================================ 替身
 

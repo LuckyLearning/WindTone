@@ -1040,6 +1040,8 @@ class PlaybackEngine(
     override fun jumpToQueue(index: Int) = queueManager.jumpToQueue(index)
     override fun removeQueueItem(index: Int) = queueManager.removeQueueItem(index)
     override fun moveQueueItem(from: Int, to: Int) = queueManager.moveQueueItem(from, to)
+    override fun clearQueue() = queueManager.clearQueue()
+    override fun shuffleQueueOrder() = queueManager.shuffleQueueOrder()
 
     // ---------------------------------------------------------------- 速度 / 定时 / 音效
 

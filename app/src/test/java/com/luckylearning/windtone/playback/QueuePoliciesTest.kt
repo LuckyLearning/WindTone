@@ -3,6 +3,9 @@ package com.luckylearning.windtone.playback
 import android.net.Uri
 import com.luckylearning.windtone.data.model.Song
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
+import kotlin.random.Random
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -59,5 +62,37 @@ class QueuePoliciesTest {
     fun `enqueue 去重：全部已存在则为空`() {
         val a = song("a")
         assertEquals(emptyList<Song>(), QueuePolicies.enqueueNewSongs(listOf(a), setOf("x:a")))
+    }
+
+    @Test
+    fun `shuffleOrderIndices 空表`() {
+        val (order, cur) = QueuePolicies.shuffleOrderIndices(0, 0, Random(1))
+        assertEquals(emptyList<Int>(), order)
+        assertEquals(0, cur)
+    }
+
+    @Test
+    fun `shuffleOrderIndices 单曲原样`() {
+        val (order, cur) = QueuePolicies.shuffleOrderIndices(1, 0, Random(1))
+        assertEquals(listOf(0), order)
+        assertEquals(0, cur)
+    }
+
+    @Test
+    fun `shuffleOrderIndices 是原下标的置换且能找回当前曲`() {
+        val random = Random(42)
+        val (order, cur) = QueuePolicies.shuffleOrderIndices(5, 2, random)
+        assertEquals(5, order.size)
+        assertEquals((0..4).toSet(), order.toSet())
+        assertEquals(2, order[cur])
+        assertNotEquals(listOf(0, 1, 2, 3, 4), order)
+    }
+
+    @Test
+    fun `shuffleOrderIndices 当前下标越界夹到合法`() {
+        val (order, cur) = QueuePolicies.shuffleOrderIndices(3, 99, Random(7))
+        assertEquals(3, order.size)
+        assertTrue(cur in 0..2)
+        assertEquals(2, order[cur])
     }
 }
