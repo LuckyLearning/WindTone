@@ -1,5 +1,6 @@
 package com.luckylearning.windtone.ui.library
 
+import com.luckylearning.windtone.data.UserFacingCopy
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -283,7 +284,10 @@ internal class FolderController(private val session: LibrarySession) : FolderAct
 
     /** 用户拒绝音频读取权限时的提示（不影响「指定目录」方式） */
     override fun notifyScanPermissionDenied() {
-        pushMessage("没有读取音频的权限。可以改为「选择音乐目录」，用文件选择器授权指定文件夹。")
+        pushMessage(UserFacingCopy.withNext(
+            "没有读取音频的权限",
+            "点「选择音乐目录」用文件选择器授权指定文件夹，或到系统设置授予音频权限",
+        ))
     }
 
     override fun updateDeepScanFlag() {

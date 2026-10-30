@@ -1,5 +1,7 @@
 package com.luckylearning.windtone.playback
 
+import com.luckylearning.windtone.data.UserFacingCopy
+
 /**
  * 播放失败之后「跳下一首」还是「停下」的判断（v1.1.45）。
  *
@@ -32,10 +34,16 @@ object ErrorSkipPolicy {
      * [reason] 通常已是 [PlaybackErrorMessages.describe] 的结果（含「下一步」）；
      * 这里再补一层「已暂停 / 怎么处理队列」的上下文，避免只剩技术原因。
      */
-    fun stopMessage(consecutiveErrors: Int, reason: String): String =
-        if (consecutiveErrors >= MAX_CONSECUTIVE) {
+    fun stopMessage(consecutiveErrors: Int, reason: String): String {
+        val body = if (consecutiveErrors >= MAX_CONSECUTIVE) {
             "连续 $consecutiveErrors 首播放失败，已暂停（$reason）"
         } else {
             "播放失败（$reason）"
         }
+        // reason 通常已含「下一步」；若调用方传入裸原因，这里补一条队列级路径
+        return UserFacingCopy.ensureNext(
+            body,
+            "检查网络或文件；云盘歌到设置 → 在线服务重新授权，或到关于与诊断复制诊断包",
+        )
+    }
 }

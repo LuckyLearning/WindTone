@@ -1,5 +1,6 @@
 package com.luckylearning.windtone.ui.library
 
+import com.luckylearning.windtone.data.UserFacingCopy
 import android.net.Uri
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.state.PlaylistInfo
@@ -98,7 +99,10 @@ internal class M3uStore(private val session: LibrarySession) : M3uActions {
                     it.write(text.toByteArray(Charsets.UTF_8))
                 }
                 pushMessage("已导出「${playlist.name}」（${songs.size} 首）")
-            }.onFailure { pushMessage("导出失败：${it.message}") }
+            }.onFailure { pushMessage(UserFacingCopy.withNext(
+                "导出失败：${it.message}",
+                "换一个可写位置再试，或检查存储权限",
+            )) }
         }
     }
 
@@ -110,7 +114,10 @@ internal class M3uStore(private val session: LibrarySession) : M3uActions {
                 }
             }.getOrNull()
             if (text.isNullOrBlank()) {
-                pushMessage("无法读取 M3U 文件")
+                pushMessage(UserFacingCopy.withNext(
+                    "无法读取 M3U 文件",
+                    "换一份 UTF-8 的 .m3u/.m3u8，或确认文件未被占用",
+                ))
                 return@launch
             }
             val library = _library.value.songs
@@ -138,7 +145,10 @@ internal class M3uStore(private val session: LibrarySession) : M3uActions {
                 pendingTitle = null
             }
             if (matched.isEmpty()) {
-                pushMessage("M3U 中没有匹配到本地歌曲")
+                pushMessage(UserFacingCopy.withNext(
+                    "M3U 中没有匹配到本地歌曲",
+                    "先扫描曲库导入对应文件，或检查清单路径是否为本机路径",
+                ))
                 return@launch
             }
             val name = "导入 " + (target.lastPathSegment?.substringBeforeLast('.')?.takeLast(20) ?: "歌单")

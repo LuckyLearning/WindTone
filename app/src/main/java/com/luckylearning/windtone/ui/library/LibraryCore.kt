@@ -1,5 +1,6 @@
 package com.luckylearning.windtone.ui.library
 
+import com.luckylearning.windtone.data.UserFacingCopy
 import android.util.Log
 import androidx.room.withTransaction
 import com.luckylearning.windtone.data.CoverRepository
@@ -223,7 +224,10 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
             if (result == null) {
                 _library.update { it.copy(scanning = false, statusText = "", libraryLoaded = true) }
                 // 自动扫描失败不打扰用户（等同于原来的空串提示），手动扫描才弹 Snackbar
-                if (!auto) pushMessage("扫描失败，请检查权限后重试")
+                if (!auto) pushMessage(UserFacingCopy.withNext(
+                    "扫描失败",
+                    "检查存储/音频权限后重试，或到扫描范围改「导入指定音乐目录」",
+                ))
                 return@launch
             }
 
@@ -247,7 +251,10 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
             if (!auto && result.songs.isEmpty()) {
                 pushMessage(
                     when (scopeNow) {
-                        ScanScope.FOLDERS -> "所选目录里没有找到音频文件"
+                        ScanScope.FOLDERS -> UserFacingCopy.withNext(
+                            "所选目录里没有找到音频文件",
+                            "换一个有歌曲的文件夹，或到扫描范围改「扫描全盘」",
+                        )
                         else -> "没有找到可播放的音频。下一步：授予「所有文件访问权限」后重试，或到扫描范围改导入指定音乐目录"
                     }
                 )
@@ -733,7 +740,10 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
             session.selection.exitSelection()
             pushMessage(
                 when {
-                    deleted.isEmpty() -> "删除失败：存储拒绝了该操作"
+                    deleted.isEmpty() -> UserFacingCopy.withNext(
+                        "删除失败：存储拒绝了该操作",
+                        "用系统文件管理删除，或确认本应用对该目录有写权限",
+                    )
                     deleted.size < attempted.size ->
                         "已删除 ${deleted.size} 个文件，${attempted.size - deleted.size} 个被存储拒绝"
                     else -> "已删除 ${deleted.size} 个文件"
@@ -745,7 +755,10 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
     /** 文件已删（或删除失败）后：清播放队列、清缓存与统计联动、更新界面 */
     private fun afterDelete(song: Song, ok: Boolean) {
         if (!ok) {
-            pushMessage("删除「${song.title}」失败：存储拒绝了该操作")
+            pushMessage(UserFacingCopy.withNext(
+                "删除「${song.title}」失败：存储拒绝了该操作",
+                "用系统文件管理删除，或确认本应用对该目录有写权限",
+            ))
             return
         }
         scope.launch {

@@ -217,26 +217,33 @@ class OnlinePlaylistRulesTest {
     @Test
     fun `网络异常转成用户能懂的话`() {
         // 直接把异常 message 抛给界面会出现「connection closed」这种用户读不懂的英文
-        assertEquals(
-            "解析不到这个域名（网络不可用，或地址写错了）",
+        // A4：原因 + 下一步
+        fun assertA4(msg: String, vararg needles: String) {
+            for (n in needles) assertTrue(msg.contains(n))
+            assertTrue(msg.contains("下一步"))
+        }
+        assertA4(
             OnlinePlaylistRules.friendly(UnknownHostException("x")),
+            "解析不到这个域名",
         )
-        assertEquals(
-            "连接超时：对方没有响应，或当前网络太慢",
+        assertA4(
             OnlinePlaylistRules.friendly(SocketTimeoutException()),
+            "连接超时",
         )
-        assertEquals(
-            "HTTPS 握手失败：对方的证书不受信任",
+        assertA4(
             OnlinePlaylistRules.friendly(SSLException("boom")),
+            "HTTPS 握手失败",
         )
-        assertEquals(
-            "连不上这个地址（connection closed）",
+        assertA4(
             OnlinePlaylistRules.friendly(IOException("connection closed")),
+            "连不上这个地址",
+            "connection closed",
         )
         // message 为 null 时退化成类名，不能把 "null" 显示给用户
-        assertEquals(
-            "连不上这个地址（IOException）",
+        assertA4(
             OnlinePlaylistRules.friendly(IOException()),
+            "连不上这个地址",
+            "IOException",
         )
     }
 

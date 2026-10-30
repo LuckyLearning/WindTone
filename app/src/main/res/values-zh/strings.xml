@@ -670,7 +670,7 @@
 
     <!-- AliyunPanPage remaining UI (debt pass) -->
     <string name="aliyun_account_default">阿里云盘账号</string>
-    <string name="aliyun_account_read_failed">账号信息读取失败</string>
+    <string name="aliyun_account_read_failed">账号信息读取失败。下一步：点重试，或重新扫码授权</string>
     <string name="aliyun_cd_enter_named">进入 %1$s</string>
     <string name="aliyun_cd_load_more">清空搜索</string>
     <string name="aliyun_cd_play_named">播放 %1$s</string>
@@ -685,11 +685,11 @@
     <string name="aliyun_empty_folder">这个目录里没有内容。</string>
     <string name="aliyun_error_account_detail">读取账号信息失败：%1$s</string>
     <string name="aliyun_error_list_dir">列目录失败</string>
-    <string name="aliyun_error_no_drive_id">还没读到账号信息（盘 id 为空），等账号信息加载完再播放</string>
-    <string name="aliyun_error_no_playable_url">没有取到可播放的地址（文件可能已被删除、移入回收站或被屏蔽）</string>
-    <string name="aliyun_error_read_account">读取账号信息失败</string>
+    <string name="aliyun_error_no_drive_id">还没读到账号信息（盘 id 为空）。下一步：等账号加载完，或点重试 / 重新扫码授权</string>
+    <string name="aliyun_error_no_playable_url">没有取到可播放的地址（文件可能已删除、进回收站或被屏蔽）。下一步：回云盘目录确认文件还在，或重新授权</string>
+    <string name="aliyun_error_read_account">读取账号信息失败。下一步：点重试，或重新扫码授权</string>
     <string name="aliyun_error_scan_empty_hint">这个目录里没有音频文件，先进入一个有歌的目录再自检</string>
-    <string name="aliyun_error_scan_failed">扫描失败</string>
+    <string name="aliyun_error_scan_failed">扫描失败。下一步：检查网络后重试，或重新扫码授权</string>
     <string name="aliyun_folder">文件夹</string>
     <string name="aliyun_format_unsupported"> · 格式暂不支持播放</string>
     <string name="aliyun_load_more">加载更多</string>

@@ -1,5 +1,6 @@
 package com.luckylearning.windtone.playback
 
+import com.luckylearning.windtone.data.UserFacingCopy
 import android.app.Application
 import android.os.SystemClock
 import android.util.Log
@@ -361,7 +362,10 @@ class PlaybackEngine(
             LyricOverlayBridge.health.collect { h ->
                 if (h.status == LyricOverlayBus.Status.FAILED) {
                     if (prefs.lyricOverlay) setLyricOverlay(false)
-                    messages.post("桌面悬浮歌词启动失败：${h.detail}")
+                    messages.post(UserFacingCopy.ensureNext(
+                        "桌面悬浮歌词启动失败：${h.detail}",
+                        "到系统设置开启「显示在其他应用上层」，或到设置 → 歌词关闭后再开",
+                    ))
                 }
             }
         }
@@ -552,7 +556,12 @@ class PlaybackEngine(
             // 反而看不到真正的原因（v1.1.45）
             if (ErrorSkipPolicy.shouldSkip(count, consecutiveErrors)) {
                 skippingAfterError = true
-                messages.post("播放失败：$name（$reason），已跳到下一首")
+                messages.post(
+                    UserFacingCopy.ensureNext(
+                        "播放失败：$name（$reason），已跳到下一首",
+                        "若连续失败会暂停；云盘歌可到设置 → 在线服务重新授权",
+                    ),
+                )
                 c?.seekToNextMediaItem()
                 c?.play()
             } else {

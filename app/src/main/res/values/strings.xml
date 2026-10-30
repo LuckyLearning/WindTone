@@ -701,7 +701,7 @@ The app cannot stop the OEM clearing third-party accessibility on boot; tap the 
 
     <!-- AliyunPanPage remaining UI (debt pass) -->
     <string name="aliyun_account_default">Aliyun Drive account</string>
-    <string name="aliyun_account_read_failed">Failed to read account</string>
+    <string name="aliyun_account_read_failed">Failed to read account. Next: tap Retry, or scan to re-authorize</string>
     <string name="aliyun_cd_enter_named">Open %1$s</string>
     <string name="aliyun_cd_load_more">Load more</string>
     <string name="aliyun_cd_play_named">Play %1$s</string>
@@ -716,11 +716,11 @@ App is read-only; it will not upload, change, or delete files.</string>
     <string name="aliyun_empty_folder">This folder is empty.</string>
     <string name="aliyun_error_account_detail">Failed to read account: %1$s</string>
     <string name="aliyun_error_list_dir">Failed to list folder</string>
-    <string name="aliyun_error_no_drive_id">No account info yet (empty drive id). Refresh account, then try again</string>
-    <string name="aliyun_error_no_playable_url">No playable URL (file may be deleted, in recycle bin, or restricted)</string>
-    <string name="aliyun_error_read_account">Failed to read account</string>
+    <string name="aliyun_error_no_drive_id">Account info is not ready yet (empty drive id). Next: wait for load, or tap Retry / re-authorize</string>
+    <string name="aliyun_error_no_playable_url">No playable URL (file may be deleted, in recycle bin, or blocked). Next: confirm the file in cloud drive, or re-authorize</string>
+    <string name="aliyun_error_read_account">Failed to read account info. Next: tap Retry, or scan to re-authorize</string>
     <string name="aliyun_error_scan_empty_hint">No audio here. Open a folder that has songs, then try again</string>
-    <string name="aliyun_error_scan_failed">Scan failed</string>
+    <string name="aliyun_error_scan_failed">Scan failed. Next: check network and retry, or re-authorize</string>
     <string name="aliyun_folder">Folder</string>
     <string name="aliyun_format_unsupported"> · Format not supported for playback</string>
     <string name="aliyun_load_more">Load more</string>

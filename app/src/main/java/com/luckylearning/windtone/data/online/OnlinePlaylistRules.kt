@@ -1,5 +1,6 @@
 package com.luckylearning.windtone.data.online
 
+import com.luckylearning.windtone.data.UserFacingCopy
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
@@ -147,13 +148,25 @@ internal object OnlinePlaylistRules {
      */
     fun friendly(e: IOException): String = when (e) {
         is UnknownHostException ->
-            "解析不到这个域名（网络不可用，或地址写错了）"
+            UserFacingCopy.withNext(
+                "解析不到这个域名（网络不可用，或地址写错了）",
+                "检查网络后重试，或核对歌单地址是否写对",
+            )
         is SocketTimeoutException ->
-            "连接超时：对方没有响应，或当前网络太慢"
+            UserFacingCopy.withNext(
+                "连接超时：对方没有响应，或当前网络太慢",
+                "换网络后重试，或稍后再刷新该歌单",
+            )
         is SSLException ->
-            "HTTPS 握手失败：对方的证书不受信任"
+            UserFacingCopy.withNext(
+                "HTTPS 握手失败：对方的证书不受信任",
+                "核对系统时间是否准确，或换用可信证书的 HTTPS 地址",
+            )
         else ->
-            "连不上这个地址（${e.message ?: e.javaClass.simpleName}）"
+            UserFacingCopy.withNext(
+                "连不上这个地址（${e.message ?: e.javaClass.simpleName}）",
+                "检查网络后重试；确认地址可在浏览器打开",
+            )
     }
 
     /** 响应体上限：防「把整个 IPTV 频道表当音乐列表填进来」 */

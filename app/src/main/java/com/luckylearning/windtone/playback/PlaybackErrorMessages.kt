@@ -1,5 +1,6 @@
 package com.luckylearning.windtone.playback
 
+import com.luckylearning.windtone.data.UserFacingCopy
 import androidx.media3.common.PlaybackException
 import androidx.media3.datasource.HttpDataSource
 import java.io.EOFException
@@ -165,7 +166,7 @@ object PlaybackErrorMessages {
 
     /** A4：原因 + 一条可操作路径（句号衔接，便于 Snackbar 一次读完） */
     internal fun withNext(reason: String, nextStep: String): String =
-        if (nextStep.isBlank()) reason else "$reason。下一步：$nextStep"
+        UserFacingCopy.withNext(reason, nextStep)
 
     private fun parallelOrCacheHint(chain: List<Throwable>): String? {
         val joined = chain.mapNotNull { it.message }.joinToString(" ")
