@@ -99,6 +99,13 @@ object SleepTimer {
         return total
     }
 
+
+    /**
+     * 自定义分钟合法区间：1～720（12 小时）。
+     * UI 自定义输入与其它入口共用，避免 0 / 负数立刻触发、超大值误设成天级。
+     */
+    fun clampCustomMinutes(raw: Int): Int = raw.coerceIn(1, 720)
+
     fun cancel() {
         job?.cancel()
         job = null

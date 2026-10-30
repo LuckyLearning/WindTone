@@ -45,6 +45,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -82,7 +85,11 @@ fun QueueSheet(
     onRemove: (Int) -> Unit,
     onMove: (Int, Int) -> Unit,
     onSaveAsPlaylist: () -> Unit = {},
+    onClear: () -> Unit = {},
+    onShuffleOrder: () -> Unit = {},
 ) {
+    // A3 清空要二次确认，避免车机误触一把清空
+    var confirmClear by remember { mutableStateOf(false) }
     ModalBottomSheet(onDismissRequest = onClose, containerColor = glassContainerColor()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
             Row(
@@ -97,7 +104,39 @@ fun QueueSheet(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
-                // 队列是"临时排序"，用户攒出一份满意的队列后往往想存下来长期用
+            }
+            // A3/A4：清空 / 打乱顺序（改物理序，不是随机播放模式）+ 原有「存为歌单」
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.End,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp),
+            ) {
+                TextButton(
+                    onClick = {
+                        confirmClear = false
+                        onShuffleOrder()
+                    },
+                    enabled = queue.size > 1,
+                ) { Text("打乱顺序") }
+                if (confirmClear) {
+                    TextButton(onClick = { confirmClear = false }) { Text("取消") }
+                    TextButton(
+                        onClick = {
+                            confirmClear = false
+                            onClear()
+                        },
+                        enabled = queue.isNotEmpty(),
+                    ) {
+                        Text("确认清空", color = MaterialTheme.colorScheme.error)
+                    }
+                } else {
+                    TextButton(
+                        onClick = { confirmClear = true },
+                        enabled = queue.isNotEmpty(),
+                    ) { Text("清空队列") }
+                }
                 TextButton(
                     onClick = onSaveAsPlaylist,
                     enabled = queue.isNotEmpty(),
@@ -166,6 +205,7 @@ fun QueueSheet(
     }
 }
 
+
 // ================================================================ 睡眠定时
 
 @Composable
@@ -178,6 +218,9 @@ fun SleepSheet(
     onCancel: () -> Unit,
 ) {
     val remaining by SleepTimer.remainingMs.collectAsState()
+    // G5：自定义分钟输入状态（放 composable 顶层，避免跟 forEach 同层抖动）
+    var customMinutesText by remember { mutableStateOf("") }
+    var customMinutesError by remember { mutableStateOf(false) }
     ModalBottomSheet(onDismissRequest = onClose, containerColor = glassContainerColor()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
             Text("睡眠定时", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -202,6 +245,51 @@ fun SleepSheet(
                         .padding(vertical = 12.dp, horizontal = 8.dp),
                     style = MaterialTheme.typography.bodyLarge,
                 )
+            }
+            // G5：自定义分钟。预设之外任意 1～720；校验失败只标红，不关 Sheet。
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "自定义分钟",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedTextField(
+                    value = customMinutesText,
+                    onValueChange = { raw ->
+                        customMinutesText = raw.filter { it.isDigit() }.take(4)
+                        customMinutesError = false
+                    },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    label = { Text("1–720") },
+                    isError = customMinutesError,
+                    supportingText = if (customMinutesError) {
+                        { Text("请输入 1～720 的整数") }
+                    } else {
+                        null
+                    },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                Spacer(Modifier.width(8.dp))
+                TextButton(
+                    onClick = {
+                        val parsed = customMinutesText.toIntOrNull()
+                        if (parsed == null || parsed !in 1..720) {
+                            customMinutesError = true
+                        } else {
+                            onSet(SleepTimer.clampCustomMinutes(parsed))
+                        }
+                    },
+                ) {
+                    Text("确定")
+                }
             }
             Text(
                 "播完当前曲暂停",

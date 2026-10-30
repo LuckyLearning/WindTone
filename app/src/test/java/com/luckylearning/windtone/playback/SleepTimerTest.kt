@@ -156,4 +156,12 @@ class SleepTimerTest {
         val ms = SleepTimer.queueRemainingMs(queue, 0, positionMs = 0L, durationMs = 120_000L)
         assertEquals(210_000L, ms)
     }
+
+    @Test
+    fun `自定义分钟夹到 1～720`() {
+        assertEquals(1, SleepTimer.clampCustomMinutes(0))
+        assertEquals(1, SleepTimer.clampCustomMinutes(-5))
+        assertEquals(45, SleepTimer.clampCustomMinutes(45))
+        assertEquals(720, SleepTimer.clampCustomMinutes(9999))
+    }
 }

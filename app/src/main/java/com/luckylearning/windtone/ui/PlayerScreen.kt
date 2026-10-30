@@ -74,6 +74,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import com.luckylearning.windtone.overlay.ForegroundAppDetector
 import android.widget.Toast
 import androidx.compose.ui.res.stringResource
@@ -342,6 +343,14 @@ fun PlayerScreen(
     // 只有真正读它的进度条 / 时间文字 / 歌词面板会重组。
     val progressState = progressFlow.collectAsStateWithLifecycle()
 
+    // G6：看歌词时屏幕常亮。Compose foundation 的 Modifier.keepScreenOn 在本 BOM 下解析不到，
+    // 改挂 View.keepScreenOn；切回封面 / 离开组合时还原。
+    val keepScreenView = LocalView.current
+    DisposableEffect(showLyrics) {
+        val previous = keepScreenView.keepScreenOn
+        keepScreenView.keepScreenOn = showLyrics
+        onDispose { keepScreenView.keepScreenOn = previous }
+    }
     Box(Modifier.fillMaxSize()) {
         // 背景：封面主色 → 背景色的垂直渐变，营造氛围。
         // 注意必须用「不透明混色」而不是 copy(alpha=)：播放页是覆盖在主界面之上的，
