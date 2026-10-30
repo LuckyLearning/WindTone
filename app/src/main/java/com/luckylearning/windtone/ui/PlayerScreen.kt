@@ -148,6 +148,7 @@ fun PlayerScreen(
     onSleepEndOfSong: () -> Unit,
     onSleepEndOfAlbum: () -> Unit,
     onSleepEndOfQueue: () -> Unit,
+    onSleepAfterSongs: (Int) -> Unit,
     onCancelSleep: () -> Unit,
     onSpeed: (Float) -> Unit,
     /** 变调：半音（-12..+12，0 = 原调） */
@@ -988,6 +989,7 @@ fun PlayerScreen(
         onEndOfSong = { onSleepEndOfSong(); showSleep = false },
         onEndOfAlbum = { onSleepEndOfAlbum(); showSleep = false },
         onEndOfQueue = { onSleepEndOfQueue(); showSleep = false },
+        onAfterSongs = { onSleepAfterSongs(it); showSleep = false },
         onCancel = { onCancelSleep(); showSleep = false },
     )
 

@@ -43,6 +43,9 @@ interface PlayerActions : OverlayActions {
 
     /** 播完当前队列（当前曲剩余 + 队列里当前索引之后全部曲目） */
     fun sleepEndOfQueue()
+
+    /** 再播 N 首后暂停（当前正在播的算第 1 首；N 经 clampSongCount） */
+    fun sleepAfterSongs(count: Int)
     fun cancelSleep()
     fun setSkipSilence(enabled: Boolean)
 

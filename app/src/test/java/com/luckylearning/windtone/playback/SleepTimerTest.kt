@@ -164,4 +164,65 @@ class SleepTimerTest {
         assertEquals(45, SleepTimer.clampCustomMinutes(45))
         assertEquals(720, SleepTimer.clampCustomMinutes(9999))
     }
+
+    // ---------- H6：再播 N 首（当前曲算第 1）----------
+
+    @Test
+    fun `再播1首等于当前曲剩余`() {
+        val ms = SleepTimer.songsRemainingMs(albumQueue(), 0, positionMs = 60_000L, durationMs = 240_000L, count = 1)
+        assertEquals(180_000L, ms)
+    }
+
+    @Test
+    fun `再播3首等于当前剩余加随后两首`() {
+        // 剩 180 + 240 + 240 = 660；不含 b1
+        val ms = SleepTimer.songsRemainingMs(albumQueue(), 0, positionMs = 60_000L, durationMs = 240_000L, count = 3)
+        assertEquals(660_000L, ms)
+    }
+
+    @Test
+    fun `再播数超过队尾时只累加到队尾`() {
+        // 从 a3 起再播 5 首：剩 210 + b1 300 = 510（没有更多）
+        val ms = SleepTimer.songsRemainingMs(albumQueue(), 2, positionMs = 30_000L, durationMs = 240_000L, count = 5)
+        assertEquals(510_000L, ms)
+    }
+
+    @Test
+    fun `再播索引越界退化为当前曲剩余`() {
+        val ms = SleepTimer.songsRemainingMs(albumQueue(), index = 99, positionMs = 10_000L, durationMs = 100_000L, count = 3)
+        assertEquals(90_000L, ms)
+    }
+
+    @Test
+    fun `再播空队列退化为当前曲剩余`() {
+        val ms = SleepTimer.songsRemainingMs(emptyList(), index = 0, positionMs = 20_000L, durationMs = 100_000L, count = 2)
+        assertEquals(80_000L, ms)
+    }
+
+    @Test
+    fun `再播count夹到至少1`() {
+        // count<=0 时按 1 处理（与 clamp 入口一致的兜底）
+        val ms = SleepTimer.songsRemainingMs(albumQueue(), 0, positionMs = 0L, durationMs = 240_000L, count = 0)
+        assertEquals(240_000L, ms)
+    }
+
+    @Test
+    fun `再播后续时长为0只累加已知部分`() {
+        val queue = listOf(
+            song("a1", "A", 120_000L),
+            song("a2", "A", 0L),
+            song("a3", "B", 90_000L),
+        )
+        // N=3：120 + 0 + 90 = 210
+        val ms = SleepTimer.songsRemainingMs(queue, 0, positionMs = 0L, durationMs = 120_000L, count = 3)
+        assertEquals(210_000L, ms)
+    }
+
+    @Test
+    fun `再播曲数夹到1～100`() {
+        assertEquals(1, SleepTimer.clampSongCount(0))
+        assertEquals(1, SleepTimer.clampSongCount(-3))
+        assertEquals(7, SleepTimer.clampSongCount(7))
+        assertEquals(100, SleepTimer.clampSongCount(999))
+    }
 }

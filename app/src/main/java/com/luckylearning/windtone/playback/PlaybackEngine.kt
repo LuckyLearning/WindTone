@@ -1141,6 +1141,30 @@ class PlaybackEngine(
         )
     }
 
+    /**
+     * 「再播 N 首」：当前曲剩余 + 随后最多 N−1 首时长（当前曲算第 1）。
+     * 控制器或索引不可用时退化为「播完当前曲」。
+     */
+    override fun sleepAfterSongs(count: Int) {
+        val n = SleepTimer.clampSongCount(count)
+        val c = controller
+        val playlist = currentQueue
+        val idx = c?.currentMediaItemIndex ?: -1
+        if (c == null || idx < 0 || playlist.isEmpty()) {
+            sleepEndOfSong()
+            return
+        }
+        SleepTimer.start(
+            SleepTimer.songsRemainingMs(
+                playlist = playlist,
+                index = idx,
+                positionMs = c.currentPosition.coerceAtLeast(0L),
+                durationMs = c.duration.takeIf { it > 0 } ?: _progress.value.durationMs,
+                count = n,
+            ),
+        )
+    }
+
     override fun cancelSleep() = SleepTimer.cancel()
 
     override fun setSkipSilence(enabled: Boolean) {

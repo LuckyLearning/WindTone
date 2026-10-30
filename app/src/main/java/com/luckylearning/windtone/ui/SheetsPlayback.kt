@@ -215,12 +215,16 @@ fun SleepSheet(
     onEndOfSong: () -> Unit,
     onEndOfAlbum: () -> Unit,
     onEndOfQueue: () -> Unit,
+    onAfterSongs: (Int) -> Unit,
     onCancel: () -> Unit,
 ) {
     val remaining by SleepTimer.remainingMs.collectAsState()
     // G5：自定义分钟输入状态（放 composable 顶层，避免跟 forEach 同层抖动）
     var customMinutesText by remember { mutableStateOf("") }
     var customMinutesError by remember { mutableStateOf(false) }
+    // H6：再播 N 首自定义输入（与自定义分钟同形）
+    var customSongsText by remember { mutableStateOf("") }
+    var customSongsError by remember { mutableStateOf(false) }
     ModalBottomSheet(onDismissRequest = onClose, containerColor = glassContainerColor()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
             Text("睡眠定时", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -322,6 +326,62 @@ fun SleepSheet(
                     .padding(vertical = 12.dp, horizontal = 8.dp),
                 style = MaterialTheme.typography.bodyLarge,
             )
+            // H6：再播 N 首。当前正在播的算第 1；预设 1/3/5/10 + 自定义 1～100。
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "再播 N 首后暂停",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+            listOf(1, 3, 5, 10).forEach { n ->
+                Text(
+                    "再播 $n 首后暂停",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { onAfterSongs(n) }
+                        .padding(vertical = 12.dp, horizontal = 8.dp),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedTextField(
+                    value = customSongsText,
+                    onValueChange = { raw ->
+                        customSongsText = raw.filter { it.isDigit() }.take(3)
+                        customSongsError = false
+                    },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    label = { Text("自定义 1–100") },
+                    isError = customSongsError,
+                    supportingText = if (customSongsError) {
+                        { Text("请输入 1～100 的整数") }
+                    } else {
+                        null
+                    },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                Spacer(Modifier.width(8.dp))
+                TextButton(
+                    onClick = {
+                        val parsed = customSongsText.toIntOrNull()
+                        if (parsed == null || parsed !in 1..100) {
+                            customSongsError = true
+                        } else {
+                            onAfterSongs(SleepTimer.clampSongCount(parsed))
+                        }
+                    },
+                ) {
+                    Text("确定")
+                }
+            }
             if (remaining > 0) {
                 Text(
                     "取消定时",

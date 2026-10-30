@@ -87,6 +87,7 @@ internal fun PlayerPane(
             onSleepEndOfSong = playerVm::sleepEndOfSong,
             onSleepEndOfAlbum = playerVm::sleepEndOfAlbum,
             onSleepEndOfQueue = playerVm::sleepEndOfQueue,
+            onSleepAfterSongs = playerVm::sleepAfterSongs,
             onCancelSleep = playerVm::cancelSleep,
             onSpeed = playerVm::setSpeed,
             onPitch = playerVm::setPitchSemitones,

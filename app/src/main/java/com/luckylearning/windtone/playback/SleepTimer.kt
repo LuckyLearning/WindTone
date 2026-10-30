@@ -101,6 +101,42 @@ object SleepTimer {
 
 
     /**
+     * 「再播 N 首」要等多久：当前曲剩余 + 队列里随后最多 N−1 首的时长。
+     *
+     * 约定：**正在播的这一首算第 1 首**。因此 N=1 与「播完当前曲」同义；
+     * N=3 = 当前剩余 + 后续两首。队列不够 N 首时累加到队尾为止（与队列档
+     * 「只算一轮」同口径，不会因列表循环无限拖长）。
+     *
+     * 纯函数，便于 JVM 单测。索引越界 / 空队列：退化为「当前曲剩余」。
+     */
+    fun songsRemainingMs(
+        playlist: List<Song>,
+        index: Int,
+        positionMs: Long,
+        durationMs: Long,
+        count: Int,
+    ): Long {
+        val n = count.coerceAtLeast(1)
+        val current = (durationMs - positionMs).coerceAtLeast(0L)
+        if (index < 0 || index >= playlist.size) return current
+        var total = current
+        var left = n - 1
+        var i = index + 1
+        while (left > 0 && i < playlist.size) {
+            total += playlist[i].durationMs.coerceAtLeast(0L)
+            left--
+            i++
+        }
+        return total
+    }
+
+    /**
+     * 「再播 N 首」合法区间：1～100。
+     * 与自定义分钟同形：0 / 负数夹到 1，超大夹到 100，避免误设「天级歌单」。
+     */
+    fun clampSongCount(raw: Int): Int = raw.coerceIn(1, 100)
+
+    /**
      * 自定义分钟合法区间：1～720（12 小时）。
      * UI 自定义输入与其它入口共用，避免 0 / 负数立刻触发、超大值误设成天级。
      */
