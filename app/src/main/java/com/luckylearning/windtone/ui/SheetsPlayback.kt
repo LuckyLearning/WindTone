@@ -426,6 +426,8 @@ fun PlayerOptionsSheet(
     onOpenSleep: () -> Unit,
     onExportLyrics: () -> Unit,
     onAudioInfo: () -> Unit,
+    /** N1：分享当前曲（文本；本地可读时附带音频） */
+    onShareCurrent: () -> Unit = {},
     /** 悬浮歌词开关（右侧 ✓ 表示已开启） */
     lyricOverlay: Boolean,
     /** 是否已拿到「显示悬浮窗」授权；未授权时点击会去系统授权页 */
@@ -469,6 +471,12 @@ fun PlayerOptionsSheet(
                 title = "音频信息",
                 subtitle = "格式 / 编码 / 采样率 / 文件路径",
                 onClick = onAudioInfo,
+            )
+            OptionRow(
+                icon = AppIcons.Share,
+                title = "分享当前曲",
+                subtitle = "标题 / 艺人 / 专辑；本地可读时附带音频",
+                onClick = onShareCurrent,
             )
 
             SectionLabel("音效")

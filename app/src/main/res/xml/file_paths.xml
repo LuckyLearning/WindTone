@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  应用内更新下载的 APK 存放位置：cacheDir/updates/
-  只暴露这一个子目录，不对外暴露其他私有文件。
+  FileProvider 路径：
+  - updates/：应用内更新 APK（cache）
+  - share/：分享暂存（预留；当前本地音频优先直接授出）
+  - external-path：本地曲库绝对路径经 FileProvider 授出只读 URI（N1 分享）
+  不暴露其他应用私有目录。
 -->
 <paths>
     <cache-path
@@ -10,4 +13,10 @@
     <external-cache-path
         name="updates_external"
         path="updates/" />
+    <cache-path
+        name="share"
+        path="share/" />
+    <external-path
+        name="external"
+        path="." />
 </paths>

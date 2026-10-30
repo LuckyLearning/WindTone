@@ -25,6 +25,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -58,6 +59,7 @@ fun SongActionsSheet(
     onAudioInfo: () -> Unit,
     onDelete: () -> Unit = {},
 ) {
+    val shareContext = LocalContext.current
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
             Text(
@@ -74,6 +76,10 @@ fun SongActionsSheet(
             )
             Spacer(Modifier.height(6.dp))
             SheetAction(if (isFavorite) "取消收藏" else "收藏") { onToggleFavorite(); onDismiss() }
+            SheetAction("分享…") {
+                ShareCurrentSong.start(shareContext, song)
+                onDismiss()
+            }
             SheetAction("下一首播放") { onPlayNext(); onDismiss() }
             SheetAction("加入歌单…") { onAddToPlaylist(); onDismiss() }
             SheetAction("查看专辑") { onViewAlbum(); onDismiss() }

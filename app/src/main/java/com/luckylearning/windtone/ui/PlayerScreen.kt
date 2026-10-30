@@ -959,6 +959,10 @@ fun PlayerScreen(
                 lyricsExportLauncher.launch("${song?.baseName ?: "歌词"}.lrc")
             },
             onAudioInfo = { showOptions = false; onShowAudioInfo() },
+            onShareCurrent = {
+                showOptions = false
+                song?.let { ShareCurrentSong.start(appContext, it) }
+            },
             lyricOverlay = state.lyricOverlay,
             canDrawOverlay = canDrawOverlay,
             onToggleLyricOverlay = {
