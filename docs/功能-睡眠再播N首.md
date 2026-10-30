@@ -1,7 +1,7 @@
 # 睡眠定时：再播 N 首后停（H6）
 
 > 落地日：2026-10-31（Asia/Shanghai）
-> 版本：随下一 patch 发版（实现提交在前，versionCode 由 `scripts/release.sh` 抬）
+> 版本：随 **v1.2.22** 发版
 
 ## 干了什么
 
