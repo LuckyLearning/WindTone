@@ -2263,3 +2263,11 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 
 - SoftEq 诊断行、DiagnosticsReport/ForensicsScript/ForegroundProbe 正文本批不改
 - 文档：`docs/功能-i18n诊断导出.md`
+
+
+### i18n 第 12 批（2026-10-31）
+
+**DuplicateCleanupScreen 重复清理页**：规则说明、扫描/空态/结果、确认弹窗、保留/移出徽章与元信息行进 values / values-zh（`dup_*`；标题复用 `duplicate_cleanup`，返回 `cd_back`，取消 `cancel`）。Compose 用 `stringResource`。
+
+- SheetsSong / MainScreen / Aliyun / SoftEq 本批不改
+- 文档：`docs/功能-i18n重复清理页.md`

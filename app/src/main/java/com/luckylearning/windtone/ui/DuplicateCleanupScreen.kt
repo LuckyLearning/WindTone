@@ -41,10 +41,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.DuplicateGroup
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.state.LibraryUiState
@@ -81,12 +83,12 @@ fun DuplicateCleanupScreen(
                 IconButton(onClick = onClose) {
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "返回",
+                        contentDescription = stringResource(R.string.cd_back),
                         tint = MaterialTheme.colorScheme.onBackground,
                     )
                 }
                 Text(
-                    "重复歌曲清理",
+                    stringResource(R.string.duplicate_cleanup),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                 )
@@ -101,10 +103,7 @@ fun DuplicateCleanupScreen(
                     .padding(horizontal = 18.dp),
             ) {
                 Text(
-                    "判定口径：标题 + 歌手 + 时长（精确到秒）三者完全一致才算重复 —— " +
-                        "刻意保守，宁可漏判也不会把《加州旅馆》的现场版和录音室版当成同一首。\n" +
-                        "每组保留一首（优先文件更大、其次更早入库的那份），其余移出曲库。\n" +
-                        "移出曲库不会删除文件，也不会丢收藏与播放统计，可在「关于与诊断」里恢复。",
+                    stringResource(R.string.dup_rules),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 17.sp,
@@ -116,7 +115,7 @@ fun DuplicateCleanupScreen(
                         LinearProgressIndicator(Modifier.fillMaxWidth())
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "正在比对…",
+                            stringResource(R.string.dup_scanning),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -124,7 +123,7 @@ fun DuplicateCleanupScreen(
 
                     !state.duplicatesScanned -> {
                         Button(onClick = onScan, modifier = Modifier.fillMaxWidth()) {
-                            Text("开始扫描")
+                            Text(stringResource(R.string.dup_start_scan))
                         }
                     }
 
@@ -136,20 +135,20 @@ fun DuplicateCleanupScreen(
                                 .windShadow(level = 1, shape = RoundedCornerShape(12.dp)),
                         ) {
                             Text(
-                                "没有发现重复歌曲。",
+                                stringResource(R.string.dup_none),
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.padding(14.dp),
                             )
                         }
                         Spacer(Modifier.height(10.dp))
                         OutlinedButton(onClick = onScan, modifier = Modifier.fillMaxWidth()) {
-                            Text("重新扫描")
+                            Text(stringResource(R.string.dup_rescan))
                         }
                     }
 
                     else -> {
                         Text(
-                            "发现 ${groups.size} 组重复，可移出 $removable 首",
+                            stringResource(R.string.dup_found, groups.size, removable),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -165,12 +164,16 @@ fun DuplicateCleanupScreen(
                             onClick = { showConfirm = true },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("移出这 $removable 首重复歌曲")
+                            Text(stringResource(R.string.dup_remove_n, removable))
                         }
                         Spacer(Modifier.height(6.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            TextButton(onClick = onClear) { Text("清除扫描结果") }
-                            TextButton(onClick = onScan) { Text("重新扫描") }
+                            TextButton(onClick = onClear) {
+                                Text(stringResource(R.string.dup_clear_results))
+                            }
+                            TextButton(onClick = onScan) {
+                                Text(stringResource(R.string.dup_rescan))
+                            }
                         }
                     }
                 }
@@ -183,14 +186,10 @@ fun DuplicateCleanupScreen(
     if (showConfirm) {
         AlertDialog(
             onDismissRequest = { showConfirm = false },
-            title = { Text("移出 $removable 首重复歌曲？") },
+            title = { Text(stringResource(R.string.dup_confirm_title, removable)) },
             text = {
                 Text(
-                    "这 $removable 首会从曲库中移出（打上「已移出曲库」标记）：\n" +
-                        "· 音频文件不会被删除；\n" +
-                        "· 收藏、播放统计、歌单里的条目也会一并从曲库视图中隐藏，但数据保留；\n" +
-                        "· 重新扫描不会再收回来，直到你在「关于与诊断 → 恢复已移出曲库的歌曲」里恢复。\n\n" +
-                        "提交前请确认上面每一组「保留」的那首确实是你要留的。",
+                    stringResource(R.string.dup_confirm_body, removable),
                     style = MaterialTheme.typography.bodySmall,
                 )
             },
@@ -200,9 +199,13 @@ fun DuplicateCleanupScreen(
                         onClean()
                         showConfirm = false
                     },
-                ) { Text("移出") }
+                ) { Text(stringResource(R.string.dup_confirm_action)) }
             },
-            dismissButton = { TextButton(onClick = { showConfirm = false }) { Text("取消") } },
+            dismissButton = {
+                TextButton(onClick = { showConfirm = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
         )
     }
 }
@@ -248,7 +251,7 @@ private fun CopyRow(song: Song, keep: Boolean) {
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                if (keep) "保留" else "移出",
+                if (keep) stringResource(R.string.dup_keep) else stringResource(R.string.dup_remove),
                 fontSize = 10.sp,
                 color = if (keep) scheme.onPrimaryContainer else scheme.onErrorContainer,
                 modifier = Modifier.padding(vertical = 2.dp),
@@ -263,8 +266,12 @@ private fun CopyRow(song: Song, keep: Boolean) {
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                "${formatFileSize(song.sizeBytes)} · ${formatDuration(song.durationMs)} · " +
+                stringResource(
+                    R.string.dup_meta,
+                    formatFileSize(song.sizeBytes),
+                    formatDuration(song.durationMs),
                     com.luckylearning.windtone.data.MusicRepository.sourceLabel(song.source),
+                ),
                 style = MaterialTheme.typography.labelSmall,
                 color = scheme.onSurfaceVariant,
                 maxLines = 1,

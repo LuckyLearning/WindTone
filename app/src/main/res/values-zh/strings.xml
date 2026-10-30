@@ -1160,4 +1160,21 @@
     <string name="storage_unmount_stop">存储已卸下，已停止「%1$s」</string>
     <string name="storage_unmount_stop_hint">重新插入后先到曲库「扫描」，再播放</string>
 
+
+    <!-- i18n 第 12 批：DuplicateCleanupScreen 重复清理页 -->
+    <string name="dup_rules">判定口径：标题 + 歌手 + 时长（精确到秒）三者完全一致才算重复 —— 刻意保守，宁可漏判也不会把《加州旅馆》的现场版和录音室版当成同一首。\n每组保留一首（优先文件更大、其次更早入库的那份），其余移出曲库。\n移出曲库不会删除文件，也不会丢收藏与播放统计，可在「关于与诊断」里恢复。</string>
+    <string name="dup_scanning">正在比对…</string>
+    <string name="dup_start_scan">开始扫描</string>
+    <string name="dup_none">没有发现重复歌曲。</string>
+    <string name="dup_rescan">重新扫描</string>
+    <string name="dup_found">发现 %1$d 组重复，可移出 %2$d 首</string>
+    <string name="dup_remove_n">移出这 %1$d 首重复歌曲</string>
+    <string name="dup_clear_results">清除扫描结果</string>
+    <string name="dup_confirm_title">移出 %1$d 首重复歌曲？</string>
+    <string name="dup_confirm_body">这 %1$d 首会从曲库中移出（打上「已移出曲库」标记）：\n· 音频文件不会被删除；\n· 收藏、播放统计、歌单里的条目也会一并从曲库视图中隐藏，但数据保留；\n· 重新扫描不会再收回来，直到你在「关于与诊断 → 恢复已移出曲库的歌曲」里恢复。\n\n提交前请确认上面每一组「保留」的那首确实是你要留的。</string>
+    <string name="dup_confirm_action">移出</string>
+    <string name="dup_keep">保留</string>
+    <string name="dup_remove">移出</string>
+    <string name="dup_meta">%1$s · %2$s · %3$s</string>
+
 </resources>
