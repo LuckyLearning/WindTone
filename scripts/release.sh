@@ -73,12 +73,20 @@ echo "→ 先跑一遍单测确认没坏..."
 # GraalVM 的 jlink 在处理 android-35 的 core-for-system-modules.jar 时会报
 # JdkImageTransform 失败。
 #
-# ⚠️ 注意：「JAVA_HOME 非空」并不代表可用：本机 shell 的 JAVA_HOME 默认就指向
-#    C:\Users\stu_l\.jdks\graalvm-jdk-21.0.7，只判断空值会直接放行到 GraalVM
-#    （2026-10-14 实际踩中：单测阶段 BUILD FAILED）。所以路径里带 graal 的也要换掉。
-PREFERRED_JDK="C:/Users/stu_l/.jdks/openjdk-21.0.2"
+# 注意：「JAVA_HOME 非空」≠可用。GraalVM 会在 JdkImageTransform 失败。
+# 优先 WINDTONE_JDK；否则若当前 JAVA_HOME 空或含 graal，再尝试本机常见路径（存在才用）。
 CUR_JDK="${JAVA_HOME:-}"
-if [[ -d "$PREFERRED_JDK" ]] && { [[ -z "$CUR_JDK" ]] || [[ "$CUR_JDK" == *[Gg]raal* ]]; }; then
+PREFERRED_JDK="${WINDTONE_JDK:-}"
+if [[ -z "$PREFERRED_JDK" || ! -d "$PREFERRED_JDK" ]]; then
+  # 无空格路径优先；带空格的 Adoptium 路径请自行 export WINDTONE_JDK
+  for _p in \
+    "$HOME/.jdks/openjdk-21.0.2" \
+    "$HOME/.jdks/temurin-21" \
+    "/c/Users/stu_l/.jdks/openjdk-21.0.2"; do
+    if [[ -d "$_p" ]]; then PREFERRED_JDK="$_p"; break; fi
+  done
+fi
+if [[ -n "$PREFERRED_JDK" && -d "$PREFERRED_JDK" ]] && { [[ -z "$CUR_JDK" ]] || [[ "$CUR_JDK" == *[Gg]raal* ]]; }; then
   export JAVA_HOME="$PREFERRED_JDK"
   echo "  （原 JAVA_HOME=${CUR_JDK:-未设置} 不可用于 Android 构建，已改用 $JAVA_HOME）"
 fi

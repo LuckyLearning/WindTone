@@ -13,7 +13,7 @@ Android 原生本地音乐播放器 —— Kotlin + Jetpack Compose，**数据�
 
 ## 下载安装
 
-源码仓库是私有的，安装包单独放在公共分发仓库 **[LuckyLearning/Release](https://github.com/LuckyLearning/Release/tree/main/WindTone)**（按「软件 / 版本」分目录，只保留最近 5 个版本）。每个版本按 CPU 架构分成 4 个包（Release 签名包，R8 混淆 + 资源压缩，约 3 MB）：
+源码本仓库公开；安装包仍单独放在公共分发仓库 **[LuckyLearning/Release](https://github.com/LuckyLearning/Release/tree/main/WindTone)**（按「软件 / 版本」分目录，只保留最近 5 个版本）。每个版本按 CPU 架构分成 4 个包（Release 签名包，R8 混淆 + 资源压缩，约 3 MB）：
 
 | 文件 | 说明 |
 |---|---|
@@ -35,7 +35,7 @@ Android 原生本地音乐播放器 —— Kotlin + Jetpack Compose，**数据�
 | 文档 | 内容 |
 |---|---|
 | [功能说明](https://luckylearning.github.io/WindTone/功能说明.html) | 音乐库 / 格式支持 / 歌词 / 播放 / 桌面组件 / 设置页 |
-| [界面效果图](https://luckylearning.github.io/WindTone/ui/) | 57 屏设计基准（手机 + 车机，按章分文件），改动 UI 前必读 |
+| [界面效果图](https://luckylearning.github.io/WindTone/ui/) | 约 94 屏设计基准（手机 + 车机，按章分文件），改动 UI 前必读 |
 | [权限与更新](https://luckylearning.github.io/WindTone/权限与更新.html) | 权限清单、`.lrc` 获取条件、应用内更新机制、已知限制 |
 | [版本历史](https://luckylearning.github.io/WindTone/版本历史.html) | 每个版本改了什么 |
 | [AI 开发指南](https://luckylearning.github.io/WindTone/AI开发指南.html) | 项目约定、架构分层与踩坑记录 |
@@ -134,9 +134,17 @@ Windows 下首次可先跑 `scripts\sdk-setup.bat` 把 SDK 装到 `.toolchain\an
 `docs/` 目录同时是文档源与 GitHub Pages 发布目录，由 `.github/workflows/pages.yml` 在 `main` 分支推送时自动部署。
 本地预览装好 Jekyll 后 `cd docs && jekyll serve` 即可，无需构建步骤。
 
-> 签名密钥、CI Secrets 与发版流程等仓库维护细节**不在公开 README 中记录**（避免把密钥位置、口令来源与流水线细节暴露在公开仓库页面上），需要时请查看本地开发文档。
+> 签名密钥与 CI Secrets **只放在 GitHub Secrets / 本机 gitignore 文件**，从不入库。发版与 Secrets 名称见 [docs/版本号发版规则.md](docs/版本号发版规则.md) 与 [docs/转public检查清单.md](docs/转public检查清单.md)。
 
 ---
+
+## 贡献与公开协作
+
+- 协议：[Apache License 2.0](LICENSE)。
+- 约定与踩坑：[docs/AI开发指南.md](docs/AI开发指南.md)（含 git / 发版 / 测试铁律）。
+- 转 public 前检查项：[docs/转public检查清单.md](docs/转public检查清单.md)。
+- 推送本仓库请用 scripts/push.sh + 本地 .github-token（见 .github-token.example）；**不要**把 token 写进 remote URL 或提交。
+- Issue / PR 欢迎；改 UI 前请先对照 [界面效果图](https://luckylearning.github.io/WindTone/ui/)。
 
 ## License
 

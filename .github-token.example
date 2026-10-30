@@ -12,7 +12,7 @@
 # · 取 token 正确姿势（忽略注释行）：
 #       TOKEN="$(grep -oE '(ghp_|github_pat_)[A-Za-z0-9_]+' .github-token | head -1)"
 # · 推送请用：bash scripts/push.sh
-# · 更完整的规矩见本地 docs/AI开发指南.md §0.2（docs 目录 gitignore，仅本机）。
+# · 更完整的规矩见 docs/AI开发指南.md §0.2（docs/ 已入库并随 Pages 发布；本文件仍是本地模板）。
 #
 # ------------------------------------------------------------------
 # 1) 生成 Token

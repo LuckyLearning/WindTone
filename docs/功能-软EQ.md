@@ -92,7 +92,7 @@ SoftEqProbe.buildReport(context)      // E5 诊断短报
 ## 验证
 
 ```bat
-set JAVA_HOME=E:\workspace\jdk\jdk-17
+set JAVA_HOME=%WINDTONE_JDK%
 gradlew.bat :app:compileDebugKotlin
 gradlew.bat :app:testDebugUnitTest --tests com.luckylearning.windtone.playback.softEq.* --offline
 gradlew.bat :app:testDebugUnitTest --tests com.luckylearning.windtone.diag.SoftEqProbeTest --offline

@@ -124,3 +124,9 @@ _agent_tmp*/
 _g8_commit.py
 _run_i18n_release.sh
 _run_release.sh
+
+# 根目录一次性 agent 脚本（字母数字短前缀）
+_scan_*.sh
+_edit*.py
+_rd*.txt
+_rd*.sh

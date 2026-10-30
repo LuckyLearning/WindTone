@@ -39,7 +39,20 @@ fi
 export ANDROID_HOME="$SDK"
 export ANDROID_SDK_ROOT="$SDK"
 
-export JAVA_HOME="${JAVA_HOME_OVERRIDE:-C:/Users/stu_l/.jdks/openjdk-21.0.2}"
+# JAVA_HOME_OVERRIDE > WINDTONE_JDK > 已有 JAVA_HOME > 本机常见路径回退
+if [[ -n "${JAVA_HOME_OVERRIDE:-}" ]]; then
+  export JAVA_HOME="$JAVA_HOME_OVERRIDE"
+elif [[ -n "${WINDTONE_JDK:-}" && -d "${WINDTONE_JDK}" ]]; then
+  export JAVA_HOME="$WINDTONE_JDK"
+elif [[ -z "${JAVA_HOME:-}" || "${JAVA_HOME}" == *[Gg]raal* ]]; then
+  for _p in "$HOME/.jdks/openjdk-21.0.2" "/c/Users/stu_l/.jdks/openjdk-21.0.2"; do
+    if [[ -d "$_p" ]]; then export JAVA_HOME="$_p"; break; fi
+  done
+fi
+if [[ -z "${JAVA_HOME:-}" || ! -d "${JAVA_HOME}" ]]; then
+  echo "请设置 JAVA_HOME 或 WINDTONE_JDK 指向非 GraalVM 的 JDK 21" >&2
+  exit 1
+fi
 if [[ "$JAVA_HOME" == *graal* ]]; then
   echo "JAVA_HOME 指向 graalvm，AGP/sdkmanager 不可用：$JAVA_HOME" >&2
   exit 1

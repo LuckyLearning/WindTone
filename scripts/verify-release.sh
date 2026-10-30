@@ -60,7 +60,7 @@ json_field() { echo "$1" | grep -o "\"$2\": *\"[^\"]*\"" | head -1 | sed 's/.*: 
 pick_python() {
   local c
   for c in "${PYTHON_BIN:-}" python3 python py \
-           "/c/Users/stu_l/.workbuddy/binaries/python/versions/3.13.12/python.exe"; do
+           "${WINDTONE_PYTHON:-}"; do  # 可选：export WINDTONE_PYTHON=/path/to/python
     [[ -n "$c" ]] || continue
     if command -v "$c" >/dev/null 2>&1 || [[ -x "$c" ]]; then echo "$c"; return 0; fi
   done

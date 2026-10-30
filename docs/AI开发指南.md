@@ -148,11 +148,11 @@ LibraryViewModel   PlayerViewModel    UpdateViewModel    SettingsViewModel
 
 `.github-token` 已在 `.gitignore`，**绝不要改名后提交**。
 
-### 0.3 Actions 额度耗尽时的发版策略（2026-10-31）
+### 0.3 Actions 额度不足时的发版策略
 
 > **现象**：GitHub Actions 分钟 / 消费额度用尽时，打 `v*` tag 会立刻触发 workflow 并**秒失败**，白白烧额度、也出不了 APK。
 
-#### 额度耗尽时（只推代码）
+#### 额度不足时（只推代码）
 
 1. **只推代码到 `main`**：`bash scripts/push.sh origin main`（铁律 5 / §0.2：一律 `.github-token`，**禁止** GCM / Vault / `gh auth` 弹窗）。
 2. **禁止** `bash scripts/release.sh …`、禁止 `git tag` / 推 `v*`、禁止改 `appVersionName` / `appVersionCode` 冲发版。
@@ -698,11 +698,10 @@ install()
    → Intent(ACTION_VIEW, apkUri) + FLAG_GRANT_READ_URI_PERMISSION → 系统安装器
 ```
 
-> ⚠ **为什么不再直接读源码仓库的 Releases**（v1.1.30 改）：源码仓库已**私有**，匿名请求
-> `api.github.com` / `releases.atom` / Release 资产一律 404，更新链路会整体失效。
-> 现在安装包由发布流水线另发到**公共分发仓库** `LuckyLearning/Release`（`<软件>/<版本>/`，
-> 只保留最近 5 个版本），应用读它的 `latest.json`。顺带解决了 API 配额问题（未认证请求按
-> **出口 IP** 限 60 次/小时，手机常在运营商 NAT 后，配额会被别人耗尽）。
+> ⚠ **为什么不直接读源码仓库的 Releases**（v1.1.30 改，公开后仍适用）：匿名读
+> `api.github.com` / Atom 易撞 **出口 IP** 60 次/小时配额（手机常在运营商 NAT 后），且大文件资产不适合走 API。
+> 安装包由发布流水线另发到**公共分发仓库** `LuckyLearning/Release`（`<软件>/<版本>/`，只保留最近 5 个版本），
+> 应用只读其 `latest.json` + raw/CDN，无需鉴权。
 
 > ⚠ **`plainNotes()` 必须同时吃下 Markdown 与 HTML**：清单里的 `notes` 是模板渲染出的 **Markdown**，
 > 但历史上的 Release 正文曾是 **HTML**（Atom 的 `<content>`），且旧版本客户端仍会读老数据。
@@ -958,21 +957,21 @@ id 持久化后**不可改名**（改了用户已选方案丢失）。
 
 ## 7. 构建与开发环境
 
-### 7.1 本机环境（当前开发机）
+### 7.1 本机环境（维护者示例 · 勿提交绝对路径）
 
-| 项 | 路径 / 值 |
+| 项 | 建议 |
 |---|---|
-| JDK | `C:\Users\stu_l\.jdks\openjdk-21.0.2`（构建时 export `JAVA_HOME`） |
-| Android SDK | `C:\esendev\code\temp\WindTone\.toolchain\android-sdk`（由 `local.properties` 的 `sdk.dir` 指向） |
-| Gradle | Wrapper 8.9，**离线可用**（依赖已在 `~/.gradle` 缓存） |
+| JDK | **JDK 21**（Temurin / OpenJDK；**不要**用 GraalVM 跑 AGP——`JdkImageTransform` 会挂）。构建前 `export JAVA_HOME=...` |
+| Android SDK | `local.properties` 的 `sdk.dir`，或仓库内 `.toolchain/android-sdk`（`scripts/sdk-setup.bat` 可引导） |
+| Gradle | Wrapper 8.9，**离线可用**（依赖已在用户级 `~/.gradle` 缓存） |
 
 > Gradle 跑在 JDK 21 上没问题；编译目标是 Java 17（`compileOptions` / `jvmTarget`），别混。
-> `local.properties` 与 `.toolchain/` **都不入库**，换机器要重建（`scripts/sdk-setup.bat` 可引导）。
+> `local.properties` 与 `.toolchain/` **都不入库**，换机器要重建。脚本若残留某台机器的 JDK 绝对路径，仅作「存在则选用」回退；贡献者请设自己的 `JAVA_HOME` / `WINDTONE_JDK`。
 
 ### 7.2 常用命令
 
 ```bash
-export JAVA_HOME="/c/Users/stu_l/.jdks/openjdk-21.0.2"
+export JAVA_HOME="${WINDTONE_JDK:-$JAVA_HOME}"  # 需指向非 GraalVM 的 JDK 21
 
 # 配置自检（改完 build.gradle.kts / libs.versions.toml 先跑这个，比全量构建快得多）
 ./gradlew help --offline --console=plain
@@ -1003,7 +1002,7 @@ export JAVA_HOME="/c/Users/stu_l/.jdks/openjdk-21.0.2"
 cat app/build/outputs/apk/release/output-metadata.json
 
 # 2) 签名证书（确认是 windtone.jks 签的、v2 方案）
-export JAVA_HOME="/c/Users/stu_l/.jdks/openjdk-21.0.2"
+export JAVA_HOME="${WINDTONE_JDK:-$JAVA_HOME}"  # 需指向非 GraalVM 的 JDK 21
 .toolchain/android-sdk/build-tools/*/apksigner.bat verify --print-certs \
     app/build/outputs/apk/release/WindTone-v1.1.1.apk
 # 期望：CN=WindTone, OU=Mobile, O=LuckyLearning, C=CN

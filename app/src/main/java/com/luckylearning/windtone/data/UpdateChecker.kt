@@ -80,7 +80,7 @@ sealed interface UpdateCheckResult {
  *
  * ## 数据从哪来（v1.1.30 起）
  *
- * 源码仓库是**私有**的，匿名用户既读不到它的 Release 列表、也下不到资产，
+ * 更新链路读**公共分发仓库** LuckyLearning/Release 里的静态文件
  * 所以更新链路改为读**公共分发仓库** `LuckyLearning/Release` 里的静态文件：
  *
  * ```
