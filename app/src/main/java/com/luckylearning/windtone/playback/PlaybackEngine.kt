@@ -140,7 +140,6 @@ class PlaybackEngine(
             speed = prefs.playbackSpeed,
             pitchSemitones = prefs.playbackPitchSemitones,
             skipSilence = prefs.skipSilence,
-            gaplessPlayback = prefs.gaplessPlayback,
             autoResume = prefs.autoResume,
             autoPlayOnBoot = prefs.autoPlayOnBoot,
         )
@@ -1173,12 +1172,6 @@ class PlaybackEngine(
         _player.update { it.copy(skipSilence = enabled) }
         // 跳过静音是 ExoPlayer 专有开关，Player 接口上没有，走进程内句柄
         PlayerHandle.setSkipSilence(enabled)
-    }
-
-    override fun setGaplessPlayback(enabled: Boolean) {
-        settings.setGaplessPlayback(enabled)
-        _player.update { it.copy(gaplessPlayback = enabled) }
-        // Media3 无缝靠单实例 + 连续队列 + 分轨 encoder delay/padding；本开关只作显式声明与诊断可读点
     }
 
     override fun markAbLoopA() {

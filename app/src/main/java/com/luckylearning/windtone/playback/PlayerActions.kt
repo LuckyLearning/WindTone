@@ -55,9 +55,6 @@ interface PlayerActions : OverlayActions {
     fun cancelSleep()
     fun setSkipSilence(enabled: Boolean)
 
-    /** 无缝播放显式开关（C1，默认开；Media3 默认识别分轨 gapless 元数据） */
-    fun setGaplessPlayback(enabled: Boolean)
-
     /** 记 A-B 循环 A 点为当前进度（C2） */
     fun markAbLoopA()
 

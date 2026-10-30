@@ -526,22 +526,14 @@ fun MainScreen(
                         LibraryView.PLAYLIST -> PlaylistListView(
                             lib = lib,
                             library = library,
-                            granted = granted,
                             onImportM3U = {
                                 m3uImportLauncher.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "text/plain", "*/*"))
                             },
-                            onImportFolder = importFolder,
-                            onFullScan = requestFullScan,
-                            onOpenScanScope = { showScanScope = true },
                         )
 
                         else -> GroupListView(
                             library = library,
-                            granted = granted,
                             onOpen = lib::openGroup,
-                            onImportFolder = importFolder,
-                            onFullScan = requestFullScan,
-                            onOpenScanScope = { showScanScope = true },
                             canRemove = library.view == LibraryView.FOLDER,
                             onRemove = { folderRemoveConfirmGroup = it },
                             carMode = carMode,
