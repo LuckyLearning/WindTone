@@ -1,0 +1,29 @@
+﻿2026-10-30T16:30:54.5728469Z ##[group]Run actions/upload-artifact@v4
+2026-10-30T16:30:54.5728768Z with:
+2026-10-30T16:30:54.5728968Z   name: lint-report
+2026-10-30T16:30:54.5729236Z   path: app/build/reports/lint-results-debug.*
+2026-10-30T16:30:54.5729540Z   if-no-files-found: ignore
+2026-10-30T16:30:54.5729777Z   retention-days: 7
+2026-10-30T16:30:54.5729989Z   compression-level: 6
+2026-10-30T16:30:54.5730345Z   overwrite: false
+2026-10-30T16:30:54.5730607Z   include-hidden-files: false
+2026-10-30T16:30:54.5730848Z env:
+2026-10-30T16:30:54.5731128Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-10-30T16:30:54.5731557Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-10-30T16:30:54.5732122Z   ANDROID_HOME: /usr/local/lib/android/sdk
+2026-10-30T16:30:54.5732555Z   ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+2026-10-30T16:30:54.5733008Z   GRADLE_ACTION_ID: gradle/actions/setup-gradle
+2026-10-30T16:30:54.5733441Z   GRADLE_USER_HOME: /home/runner/.gradle
+2026-10-30T16:30:54.5733899Z   GRADLE_BUILD_ACTION_SETUP_COMPLETED: true
+2026-10-30T16:30:54.5734319Z   GRADLE_BUILD_ACTION_CACHE_RESTORED: true
+2026-10-30T16:30:54.5734905Z   DEVELOCITY_INJECTION_INIT_SCRIPT_NAME: gradle-actions.inject-develocity.init.gradle
+2026-10-30T16:30:54.5735345Z   DEVELOCITY_INJECTION_CUSTOM_VALUE: gradle-actions
+2026-10-30T16:30:54.5735637Z   GITHUB_DEPENDENCY_GRAPH_ENABLED: false
+2026-10-30T16:30:54.5735895Z ##[endgroup]
+2026-10-30T16:30:54.7470609Z (node:3693) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-30T16:30:54.7471951Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-30T16:30:54.7629563Z With the provided path, there will be 3 files uploaded
+2026-10-30T16:30:54.7667883Z Artifact name is valid!
+2026-10-30T16:30:54.7677618Z Root directory input is valid!
+2026-10-30T16:30:54.8285581Z ##[error]Failed to CreateArtifact: Artifact storage quota has been hit. Unable to upload any new artifacts. Usage is recalculated every 6-12 hours.
+More info on storage limits: https://docs.github.com/en/billing/managing-billing-for-github-actions/about-billing-for-github-actions#calculating-minute-and-storage-spending
