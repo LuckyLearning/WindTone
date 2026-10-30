@@ -1,6 +1,7 @@
 package com.luckylearning.windtone.playback
 
 import com.luckylearning.windtone.data.Prefs
+import com.luckylearning.windtone.diag.DiagLog
 import com.luckylearning.windtone.data.SettingsDefaults
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -73,8 +74,10 @@ object SceneMode {
         when (val plan = SceneProfiles.planColdStart(p.sceneId)) {
             is SceneProfiles.ColdStart.None -> {
                 _activeId.value = ""
+                DiagLog.log("SCENE", "冷启动：无场景")
             }
             is SceneProfiles.ColdStart.ClearInvalid -> {
+                DiagLog.log("SCENE", "冷启动：清无效 id=${p.sceneId}")
                 if (p.sceneStash.isNotEmpty()) {
                     exit()
                 } else {
@@ -83,6 +86,7 @@ object SceneMode {
                 }
             }
             is SceneProfiles.ColdStart.Reapply -> {
+                DiagLog.log("SCENE", "冷启动重套 ${plan.id}")
                 apply(plan.id, captureBaseline = false)
             }
         }
@@ -124,6 +128,8 @@ object SceneMode {
         }
         p.sceneId = profile.id
         _activeId.value = profile.id
+        val how = if (captureBaseline) "套用" else "重套"
+        DiagLog.log("SCENE", "$how ${profile.id}")
     }
 
     fun exit() {
@@ -132,6 +138,7 @@ object SceneMode {
         p.sceneStash = SettingsDefaults.SCENE_STASH
         p.sceneId = SettingsDefaults.SCENE_ID
         _activeId.value = ""
+        DiagLog.log("SCENE", if (raw.isEmpty()) "退出（无快照）" else "退出并还原")
         if (raw.isEmpty()) return
         val snap = SceneStash.decode(raw) ?: return
         restoringSound(snap)
@@ -162,6 +169,7 @@ object SceneMode {
         p.sceneId = SettingsDefaults.SCENE_ID
         p.sceneStash = SettingsDefaults.SCENE_STASH
         _activeId.value = SceneProfiles.activeIdAfterManualEdit(_activeId.value)
+        DiagLog.log("SCENE", "手改EQ离开")
     }
 
     private fun capture(p: Prefs, h: Hooks?): SceneStash.Snapshot {

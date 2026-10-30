@@ -104,6 +104,19 @@ class DiagnosticsReportTest {
      * 改名字等于让历史回传的包与新包无法对比。
      */
     @Test
+    fun `含场景段且字段齐全`() {
+        val text = report()
+        assertTrue("缺场景段", text.contains("[场景]"))
+        assertTrue("缺当前", text.contains("当前："))
+        assertTrue("缺冷启动计划", text.contains("冷启动计划："))
+        assertTrue("缺 Prefs.sceneId", text.contains("Prefs.sceneId："))
+        assertTrue("缺 Prefs.sceneStash", text.contains("Prefs.sceneStash："))
+        assertTrue("缺最近切换", text.contains("最近切换"))
+        assertTrue(text.indexOf("[播放]") < text.indexOf("[场景]"))
+        assertTrue(text.indexOf("[场景]") < text.indexOf("[悬浮窗]"))
+    }
+
+    @Test
     fun `含内存画像段且指标齐全`() {
         val text = report()
         assertTrue("缺内存段", text.contains("[内存]"))

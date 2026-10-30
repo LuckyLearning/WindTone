@@ -102,6 +102,8 @@ internal object DiagnosticsReport {
         val defaultMusicBlock: String = "",
         /** 内存画像（2026-10-29），见 MemoryProbe */
         val memoryBlock: String = "",
+        /** 场景化摘要（当前档 / 冷启动 / stash / 最近切换） */
+        val sceneBlock: String = "",
         val versionCode: Long = 0L,
     )
 
@@ -214,6 +216,7 @@ internal object DiagnosticsReport {
             }.trimEnd(),
             defaultMusicBlock = DefaultMusicProbe.buildReport(context),
             memoryBlock = MemoryProbe.buildReport(context, library.songs.size),
+            sceneBlock = SceneProbe.buildReport(context),
             versionCode = BuildConfig.VERSION_CODE.toLong(),
         )
     }
@@ -279,6 +282,11 @@ internal object DiagnosticsReport {
             "歌词：${f.lyricLines} 行   偏移：${f.lyricOffsetMs}ms   字号系数：${f.lyricScale}",
         )
         sb.appendLine()
+
+        if (f.sceneBlock.isNotBlank()) {
+            sb.appendLine(f.sceneBlock.trimEnd())
+            sb.appendLine()
+        }
 
         sb.appendLine("[悬浮窗]")
         sb.appendLine(
