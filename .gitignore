@@ -94,3 +94,7 @@ _gh_rel.json
 _fetch_rel.sh
 _*.tmp
 \
+
+# local release helper wrappers (never commit)
+_run_release.sh
+
