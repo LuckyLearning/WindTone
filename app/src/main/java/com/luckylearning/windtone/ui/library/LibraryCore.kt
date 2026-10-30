@@ -3,6 +3,8 @@ package com.luckylearning.windtone.ui.library
 import android.util.Log
 import androidx.room.withTransaction
 import com.luckylearning.windtone.data.CoverRepository
+import com.luckylearning.windtone.data.albumArtistOrUnknown
+import com.luckylearning.windtone.data.buildAlbumArtistGroups
 import com.luckylearning.windtone.data.buildGenreGroups
 import com.luckylearning.windtone.data.buildYearGroups
 import com.luckylearning.windtone.data.genreOrUnknown
@@ -368,11 +370,12 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
         // 每曲状态（收藏 / 标签覆盖 / 歌词偏移）一次读全，之后同步可用
         val states = withContext(Dispatchers.IO) { db.songStateDao().all() }
         index.replaceStates(states)
-        // G1：扫描带来的 genre/year 写入 Prefs；冷启动从 Prefs 盖回（Room 无此列）
+        // G1/G2：扫描带来的 genre/year/albumArtist 写入 Prefs；冷启动从 Prefs 盖回（Room 无此列）
         withContext(Dispatchers.IO) {
             session.genreYears.putFromSongs(raw)
+            session.albumArtists.putFromSongs(raw)
         }
-        val overlaid = session.genreYears.overlay(raw)
+        val overlaid = session.albumArtists.overlay(session.genreYears.overlay(raw))
         val songs = overlaid.map { song ->
             val st = index.stateOf(song.dbId) ?: return@map song
             song.copy(
@@ -523,7 +526,7 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
             )
         }
         playback.setLibrarySongs(sorted)
-        if (view == LibraryView.ALBUM || view == LibraryView.ARTIST || view == LibraryView.GENRE || view == LibraryView.YEAR || view == LibraryView.FOLDER) {
+        if (view == LibraryView.ALBUM || view == LibraryView.ARTIST || view == LibraryView.ALBUM_ARTIST || view == LibraryView.GENRE || view == LibraryView.YEAR || view == LibraryView.FOLDER) {
             refreshGroups()
         }
         if (view == LibraryView.PLAYLIST) session.playlists.refreshPlaylists()
@@ -543,6 +546,7 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
             LibraryView.ARTIST -> songs.groupBy { it.artistOrUnknown }.map { (k, list) ->
                 GroupInfo(k, k, "${list.size} 首", list.size, list.first())
             }
+            LibraryView.ALBUM_ARTIST -> buildAlbumArtistGroups(songs)
             LibraryView.GENRE -> buildGenreGroups(songs)
             LibraryView.YEAR -> buildYearGroups(songs)
             // 文件夹视图只列真实存在的目录：拿不到目录路径的歌曲（媒体库没给 path）
@@ -593,6 +597,9 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
                 .sortedWith(compareBy({ it.trackNo }, { it.title.lowercase() }))
             LibraryView.ARTIST -> pool
                 .filter { it.artistOrUnknown == group.key }
+                .sortedWith(compareBy({ it.albumOrUnknown.lowercase() }, { it.trackNo }, { it.title.lowercase() }))
+            LibraryView.ALBUM_ARTIST -> pool
+                .filter { it.albumArtistOrUnknown() == group.key }
                 .sortedWith(compareBy({ it.albumOrUnknown.lowercase() }, { it.trackNo }, { it.title.lowercase() }))
             LibraryView.GENRE -> pool
                 .filter { it.genreOrUnknown() == group.key }

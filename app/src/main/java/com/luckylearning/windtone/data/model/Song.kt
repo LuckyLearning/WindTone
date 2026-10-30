@@ -45,6 +45,12 @@ data class Song(
      * **不入 Room**——见 [com.luckylearning.windtone.data.GenreYearCache]。
      */
     val year: Int? = null,
+    /**
+     * 合辑艺人 / Album Artist（MediaStore ALBUM_ARTIST / MMR；无则 null）。
+     * **不入 Room**——见 [com.luckylearning.windtone.data.AlbumArtistCache]。
+     * 浏览时优先本字段，空则回退 [artist]（见 effectiveAlbumArtist）。
+     */
+    val albumArtist: String? = null,
     val dateAdded: Long = 0L,
     /**
      * 曲库主键（Room `songs.id`）。

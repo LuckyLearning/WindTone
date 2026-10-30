@@ -48,6 +48,7 @@
     <string name="view_songs">Songs</string>
     <string name="view_albums">Albums</string>
     <string name="view_artists">Artists</string>
+    <string name="view_album_artists">Album artists</string>
     <string name="view_genres">Genres</string>
     <string name="view_years">Years</string>
     <string name="view_folders">Folders</string>
@@ -68,6 +69,7 @@
     <string name="sort_folder_name">By folder name</string>
     <string name="sort_album_name">By album name</string>
     <string name="sort_artist_name">By artist name</string>
+    <string name="sort_album_artist_name">By album artist</string>
     <string name="sort_genre_name">Genre name</string>
     <string name="sort_year_name">Year</string>
 
@@ -138,6 +140,7 @@
     <!-- ================================================================
          复数字符串（英语区分单复数；中文只有 other）
          ================================================================ -->
+    <string name="lib_disc_n">Disc %d</string>
     <plurals name="lib_song_count">
         <item quantity="one">%d song</item>
         <item quantity="other">%d songs</item>
@@ -765,6 +768,23 @@ Direct link looks fine; the issue is in playback (host, cache, or file format).<
     <string name="eq_user_preset_delete_body">Delete \"%1$s\"? This cannot be undone.</string>
     <string name="eq_user_preset_applied">Your saved curve and enhancements. Editing a band leaves this preset.</string>
     <string name="eq_user_preset_custom_hint">Bands were edited by hand. Open Mine to save this as a preset.</string>
+    <string name="eq_user_preset_export">Export</string>
+    <string name="eq_user_preset_import">Import</string>
+    <string name="eq_user_preset_export_empty">Save at least one preset before exporting.</string>
+    <string name="eq_user_preset_export_ok">Exported %1$d presets</string>
+    <string name="eq_user_preset_export_fail">Could not write the file</string>
+    <string name="eq_user_preset_import_bad">Not a WindTone EQ preset file</string>
+    <string name="eq_user_preset_import_read_fail">Could not read the file</string>
+    <string name="eq_user_preset_import_title">Import presets</string>
+    <string name="eq_user_preset_import_body">This file has %1$d presets. You have %2$d saved (max %3$d).
+
+Merge: same id overwrites that preset; new ids are appended; extras past the limit are skipped.
+
+Replace all: discard your current Mine list and use only the file (cannot undo).</string>
+    <string name="eq_user_preset_import_merge">Merge</string>
+    <string name="eq_user_preset_import_replace">Replace all</string>
+    <string name="eq_user_preset_import_done">Imported: +%1$d new, %2$d updated, %3$d skipped</string>
+    <string name="eq_user_preset_import_done_replace">Replaced with %1$d presets (%2$d skipped)</string>
     <string name="eq_tone_bass">Bass</string>
     <string name="eq_tone_treble">Treble</string>
     <string name="eq_tone_hint">Bass drives bass boost. Treble sets every band at 4 kHz and above, the same curve as the sliders below.</string>

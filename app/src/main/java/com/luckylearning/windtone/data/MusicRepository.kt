@@ -259,6 +259,7 @@ class MusicRepository(
                     artist = exists.artist?.takeIf { it.isNotBlank() } ?: song.artist,
                     album = exists.album?.takeIf { it.isNotBlank() } ?: song.album,
                     genre = normalizeGenre(exists.genre) ?: song.genre,
+                    albumArtist = normalizeAlbumArtist(exists.albumArtist) ?: song.albumArtist,
                     year = exists.year?.let { parseYearInt(it) } ?: song.year,
                 )
             }

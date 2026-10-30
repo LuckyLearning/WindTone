@@ -34,6 +34,7 @@
     <string name="view_songs">歌曲</string>
     <string name="view_albums">专辑</string>
     <string name="view_artists">歌手</string>
+    <string name="view_album_artists">合辑艺人</string>
     <string name="view_genres">流派</string>
     <string name="view_years">年代</string>
     <string name="view_folders">文件夹</string>
@@ -53,6 +54,7 @@
     <string name="sort_folder_name">按文件夹名</string>
     <string name="sort_album_name">按专辑名</string>
     <string name="sort_artist_name">按歌手名</string>
+    <string name="sort_album_artist_name">按合辑艺人</string>
     <string name="sort_genre_name">流派名</string>
     <string name="sort_year_name">年代</string>
 
@@ -123,6 +125,7 @@
     <!-- ================================================================
          复数字符串（中文只有 other）
          ================================================================ -->
+    <string name="lib_disc_n">碟 %d</string>
     <plurals name="lib_song_count">
         <item quantity="other">%d 首</item>
     </plurals>
@@ -746,6 +749,23 @@
     <string name="eq_user_preset_delete_body">删除「%1$s」？删了就不能恢复。</string>
     <string name="eq_user_preset_applied">已套用你保存的曲线和增强。再拖频段就会离开这个预设。</string>
     <string name="eq_user_preset_custom_hint">手动调过频段。到「我的」里可以存成预设。</string>
+    <string name="eq_user_preset_export">导出</string>
+    <string name="eq_user_preset_import">导入</string>
+    <string name="eq_user_preset_export_empty">先存至少一个预设再导出。</string>
+    <string name="eq_user_preset_export_ok">已导出 %1$d 个预设</string>
+    <string name="eq_user_preset_export_fail">写文件失败</string>
+    <string name="eq_user_preset_import_bad">不是听风的 EQ 预设文件</string>
+    <string name="eq_user_preset_import_read_fail">读文件失败</string>
+    <string name="eq_user_preset_import_title">导入预设</string>
+    <string name="eq_user_preset_import_body">文件里有 %1$d 个预设；你本地已有 %2$d 个（最多 %3$d）。
+
+合并：同 id 覆盖那一条，新 id 追加；超过上限的跳过并如实提示。
+
+覆盖全部：丢掉当前「我的」列表，只留文件里的（不可撤销）。</string>
+    <string name="eq_user_preset_import_merge">合并</string>
+    <string name="eq_user_preset_import_replace">覆盖全部</string>
+    <string name="eq_user_preset_import_done">导入完成：新增 %1$d，更新 %2$d，跳过 %3$d</string>
+    <string name="eq_user_preset_import_done_replace">已覆盖为 %1$d 个预设（跳过 %2$d）</string>
     <string name="eq_tone_bass">低音</string>
     <string name="eq_tone_treble">高音</string>
     <string name="eq_tone_hint">低音走低音增强；高音把 4 kHz 及以上的频段调到同一增益，和下面的频段滑块是同一条曲线。</string>

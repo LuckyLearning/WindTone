@@ -26,11 +26,12 @@ import com.luckylearning.windtone.lyrics.Lyrics
 
 // ---------------------------------------------------------------- 曲库
 
-/** 库主视图：歌曲 / 专辑 / 歌手 / 文件夹 / 歌单 */
+/** 库主视图：歌曲 / 专辑 / 歌手 / 合辑艺人 / 流派 / 年代 / 文件夹 / 歌单 */
 enum class LibraryView(val label: String) {
     SONGS("歌曲"),
     ALBUM("专辑"),
     ARTIST("歌手"),
+    ALBUM_ARTIST("合辑艺人"),
     GENRE("流派"),
     YEAR("年代"),
     FOLDER("文件夹"),

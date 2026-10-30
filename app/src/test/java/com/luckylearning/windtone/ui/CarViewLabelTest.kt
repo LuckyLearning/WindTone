@@ -29,6 +29,7 @@ class CarViewLabelTest {
         assertEquals("全部歌曲", carViewLabel(LibraryView.SONGS))
         assertEquals("专辑", carViewLabel(LibraryView.ALBUM))
         assertEquals("歌手", carViewLabel(LibraryView.ARTIST))
+        assertEquals("合辑艺人", carViewLabel(LibraryView.ALBUM_ARTIST))
         assertEquals("流派", carViewLabel(LibraryView.GENRE))
         assertEquals("年代", carViewLabel(LibraryView.YEAR))
         assertEquals("文件夹", carViewLabel(LibraryView.FOLDER))

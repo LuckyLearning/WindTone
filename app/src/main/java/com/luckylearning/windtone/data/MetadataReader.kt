@@ -18,6 +18,7 @@ object MetadataReader {
         val durationMs: Long,
         val genre: String? = null,
         val year: Int? = null,
+        val albumArtist: String? = null,
     )
 
     fun read(context: Context, uri: Uri): Info? {
@@ -25,6 +26,7 @@ object MetadataReader {
         return try {
             mmr.setDataSource(context, uri)
             val genreRaw = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_GENRE)
+            val albumArtistRaw = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST)
             val yearRaw = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_YEAR)
                 ?: mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DATE)
             Info(
@@ -34,6 +36,7 @@ object MetadataReader {
                 durationMs = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
                     ?.toLongOrNull() ?: 0L,
                 genre = normalizeGenre(genreRaw),
+                albumArtist = normalizeAlbumArtist(albumArtistRaw),
                 year = parseYearLabel(yearRaw),
             )
         } catch (t: Throwable) {

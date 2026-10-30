@@ -222,6 +222,7 @@ class FolderScanner(private val context: Context) {
             lrcUri = lrcUri,
             dateAdded = lastModified,
             genre = info?.genre,
+            albumArtist = info?.albumArtist,
             year = info?.year,
         )
     }
@@ -327,6 +328,7 @@ class FileScanner(private val context: Context) {
                     lrcUri = lyric?.let { Uri.fromFile(it) },
                     dateAdded = audio.lastModified(),
                     genre = info?.genre,
+                    albumArtist = info?.albumArtist,
                     year = info?.year,
                 )
             )

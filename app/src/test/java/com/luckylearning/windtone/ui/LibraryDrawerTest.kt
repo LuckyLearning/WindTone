@@ -41,7 +41,7 @@ import org.robolectric.annotation.GraphicsMode
  *     （`Surface(shadowElevation=…)` 是 Material3 对话框 / 底部弹层的通用写法）。
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34], qualifiers = "zh-w360dp-h640dp-xhdpi")
+@Config(sdk = [34], qualifiers = "zh-w360dp-h900dp-xhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class LibraryDrawerTest {
 
@@ -106,7 +106,7 @@ class LibraryDrawerTest {
         compose.onNodeWithText("在线音乐").assertIsDisplayed()
         compose.onNodeWithText("更多").assertIsDisplayed()
         // 第一组 = 原底部导航的五个浏览视图
-        listOf("歌曲", "专辑", "歌手", "流派", "年代", "文件夹", "歌单").forEach {
+        listOf("歌曲", "专辑", "歌手", "合辑艺人", "流派", "年代", "文件夹", "歌单").forEach {
             compose.onNodeWithText(it).assertIsDisplayed()
         }
         // 第二组：云盘页升为一级入口（v1.1.75）
