@@ -110,4 +110,50 @@ class SleepTimerTest {
         val ms = SleepTimer.albumRemainingMs(queue, 0, positionMs = 0L, durationMs = 100_000L)
         assertEquals(100_000L, ms)
     }
+
+
+    // ---------- A2：播完当前队列 ----------
+
+    @Test
+    fun `队列第一首起播等于整队剩余`() {
+        // 剩 180s + 240 + 240 + 300 = 960s
+        val ms = SleepTimer.queueRemainingMs(albumQueue(), 0, positionMs = 60_000L, durationMs = 240_000L)
+        assertEquals(960_000L, ms)
+    }
+
+    @Test
+    fun `队列最后一首只等于本曲剩余`() {
+        val ms = SleepTimer.queueRemainingMs(albumQueue(), 3, positionMs = 50_000L, durationMs = 300_000L)
+        assertEquals(250_000L, ms)
+    }
+
+    @Test
+    fun `队列中段累加到队尾不按专辑截断`() {
+        // 当前 a2：剩 200s + a3 240 + b1 300 = 740s（专辑档只会到 a3）
+        val ms = SleepTimer.queueRemainingMs(albumQueue(), 1, positionMs = 40_000L, durationMs = 240_000L)
+        assertEquals(740_000L, ms)
+    }
+
+    @Test
+    fun `队列索引越界退化为当前曲剩余`() {
+        val ms = SleepTimer.queueRemainingMs(albumQueue(), index = 99, positionMs = 10_000L, durationMs = 100_000L)
+        assertEquals(90_000L, ms)
+    }
+
+    @Test
+    fun `空队列退化为当前曲剩余`() {
+        val ms = SleepTimer.queueRemainingMs(emptyList(), index = 0, positionMs = 20_000L, durationMs = 100_000L)
+        assertEquals(80_000L, ms)
+    }
+
+    @Test
+    fun `后续曲目时长为 0 时只累加已知部分`() {
+        val queue = listOf(
+            song("a1", "A", 120_000L),
+            song("a2", "A", 0L),
+            song("a3", "B", 90_000L),
+        )
+        val ms = SleepTimer.queueRemainingMs(queue, 0, positionMs = 0L, durationMs = 120_000L)
+        assertEquals(210_000L, ms)
+    }
 }

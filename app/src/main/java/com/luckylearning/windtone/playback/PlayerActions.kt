@@ -36,6 +36,9 @@ interface PlayerActions : OverlayActions {
 
     /** 播完当前专辑（当前曲剩余 + 队列里后续同专辑曲目） */
     fun sleepEndOfAlbum()
+
+    /** 播完当前队列（当前曲剩余 + 队列里当前索引之后全部曲目） */
+    fun sleepEndOfQueue()
     fun cancelSleep()
     fun setSkipSilence(enabled: Boolean)
 

@@ -1116,6 +1116,29 @@ class PlaybackEngine(
         )
     }
 
+    /**
+     * 「播完当前队列」：当前曲剩余 + 队列里**当前索引之后全部**曲目时长。
+     * 列表循环时也只算到队尾一次（与 SleepTimer.queueRemainingMs 注释一致）。
+     * 控制器或索引不可用时退化为「播完当前曲」。
+     */
+    override fun sleepEndOfQueue() {
+        val c = controller
+        val playlist = currentQueue
+        val idx = c?.currentMediaItemIndex ?: -1
+        if (c == null || idx < 0 || playlist.isEmpty()) {
+            sleepEndOfSong()
+            return
+        }
+        SleepTimer.start(
+            SleepTimer.queueRemainingMs(
+                playlist = playlist,
+                index = idx,
+                positionMs = c.currentPosition.coerceAtLeast(0L),
+                durationMs = c.duration.takeIf { it > 0 } ?: _progress.value.durationMs,
+            ),
+        )
+    }
+
     override fun cancelSleep() = SleepTimer.cancel()
 
     override fun setSkipSilence(enabled: Boolean) {

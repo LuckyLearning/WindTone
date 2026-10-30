@@ -79,6 +79,26 @@ object SleepTimer {
         return total
     }
 
+    /**
+     * 「播完当前队列」要等多久：当前曲剩余 + 队列里**当前索引之后全部**曲目的时长。
+     *
+     * 纯函数，便于 JVM 单测。与 [albumRemainingMs] 的差别：不按专辑截断，一直累加到队尾。
+     * 语义是「这一轮队列还剩多久」——列表循环时也只算到队尾一次，不会无限拖长。
+     *
+     * 索引越界 / 空队列：退化为「当前曲剩余」（与专辑档兜底一致）。
+     */
+    fun queueRemainingMs(playlist: List<Song>, index: Int, positionMs: Long, durationMs: Long): Long {
+        val current = (durationMs - positionMs).coerceAtLeast(0L)
+        if (index < 0 || index >= playlist.size) return current
+        var total = current
+        var i = index + 1
+        while (i < playlist.size) {
+            total += playlist[i].durationMs.coerceAtLeast(0L)
+            i++
+        }
+        return total
+    }
+
     fun cancel() {
         job?.cancel()
         job = null

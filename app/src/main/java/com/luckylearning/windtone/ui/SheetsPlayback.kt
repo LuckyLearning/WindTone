@@ -174,6 +174,7 @@ fun SleepSheet(
     onSet: (Int) -> Unit,
     onEndOfSong: () -> Unit,
     onEndOfAlbum: () -> Unit,
+    onEndOfQueue: () -> Unit,
     onCancel: () -> Unit,
 ) {
     val remaining by SleepTimer.remainingMs.collectAsState()
@@ -211,7 +212,7 @@ fun SleepSheet(
                     .padding(vertical = 12.dp, horizontal = 8.dp),
                 style = MaterialTheme.typography.bodyLarge,
             )
-            // 三期规划里承诺过三种模式，此前只落地了两种（倒计时 / 播完当前曲）。
+            // 倒计时 / 播完当前曲 / 播完当前专辑之外，再补「播完当前队列」。
             // 这一档适合「整张专辑听完」的场景：专辑里的曲目在队列里连排，等最后
             // 一首放完才停；没有专辑信息时按「播完当前曲」处理（见 PlaybackEngine）。
             Text(
@@ -220,6 +221,16 @@ fun SleepSheet(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
                     .clickable { onEndOfAlbum() }
+                    .padding(vertical = 12.dp, horizontal = 8.dp),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            // A2：整份队列听完再停。与「播完当前专辑」并列；时长按队列顺序累加到队尾一次。
+            Text(
+                "播完当前队列暂停",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { onEndOfQueue() }
                     .padding(vertical = 12.dp, horizontal = 8.dp),
                 style = MaterialTheme.typography.bodyLarge,
             )
