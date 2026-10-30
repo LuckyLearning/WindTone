@@ -97,7 +97,11 @@ gradlew.bat :app:compileDebugKotlin
 gradlew.bat :app:testDebugUnitTest --tests com.luckylearning.windtone.playback.softEq.* --offline
 gradlew.bat :app:testDebugUnitTest --tests com.luckylearning.windtone.diag.SoftEqProbeTest --offline
 gradlew.bat :app:testDebugUnitTest --tests com.luckylearning.windtone.diag.DiagnosticsReportTest --offline
-```
+gradlew.bat :app:testDebugUnitTest --tests com.luckylearning.windtone.playback.StereoBalanceTest --offline
+gradlew.bat :app:testDebugUnitTest --tests com.luckylearning.windtone.ui.SoftEqCopyTest --offline
+`
+
+边界单测（门控确认前后 / 硬恢复关软 / 平衡 ±1·0 / 空预设曲线）已覆盖于 SoftEqGateTest / SoftEqPathTest / SoftEqCurveTest / StereoBalanceTest。``
 
 ## E6 真机 A/B 清单（**未验车，勿勾选已完成**）
 

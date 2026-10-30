@@ -102,4 +102,24 @@ class SoftEqCurveTest {
         assertFalse(SoftEqCurve.isAudible(intArrayOf(0, 5, -5, 0, 0)))
         assertTrue(SoftEqCurve.isAudible(intArrayOf(0, 10, 0, 0, 0)))
     }
+    @Test
+    fun resolveEmptyPresetEmptyCsvIsFlat() {
+        val r = SoftEqCurve.resolve(presetId = "", bandsCsv = "")
+        assertEquals(SoftEqCurve.Source.FLAT, r.source)
+        assertEquals("", r.presetId)
+        assertEquals(5, r.gainsMb.size)
+        assertTrue(r.gainsMb.all { it == 0 })
+        assertFalse(SoftEqCurve.isAudible(r.gainsMb))
+    }
+    @Test
+    fun remapEmptySourceYieldsZeros() {
+        val remapped = SoftEqCurve.remapGains(
+            sourceCentersHz = intArrayOf(),
+            sourceGainsMb = intArrayOf(),
+            targetCentersHz = softCenters,
+        )
+        assertEquals(5, remapped.size)
+        assertTrue(remapped.all { it == 0 })
+        assertFalse(SoftEqCurve.isAudible(remapped))
+    }
 }

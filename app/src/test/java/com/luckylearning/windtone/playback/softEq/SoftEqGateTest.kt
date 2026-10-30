@@ -102,4 +102,25 @@ class SoftEqGateTest {
         assertFalse(s.softShouldEnable)
         assertFalse(s.candidate)
     }
+    @Test
+    fun noneUnavailableNotCandidateEvenWithConfirm() {
+        SoftEqGate.onHardUnavailable(AudioFx.Unavailable.DEVICE_REJECTED, userConfirmSoft = true)
+        assertTrue(SoftEqGate.snapshot().softShouldEnable)
+        val s = SoftEqGate.onHardUnavailable(AudioFx.Unavailable.NONE, userConfirmSoft = true)
+        assertEquals(SoftEqGate.Phase.IDLE, s.phase)
+        assertFalse(s.candidate)
+        assertFalse(s.softShouldEnable)
+        assertTrue(s.userConfirmSoft)
+        assertEquals(AudioFx.Unavailable.NONE, s.lastHard)
+    }
+    @Test
+    fun revokeConfirmAfterHardRecoverKeepsHardAndSoftOff() {
+        SoftEqGate.onHardUnavailable(AudioFx.Unavailable.DEVICE_REJECTED, userConfirmSoft = true)
+        SoftEqGate.onHardAvailable(userConfirmSoft = true)
+        val s = SoftEqGate.setUserConfirmSoft(false)
+        assertEquals(SoftEqGate.Phase.HARD_ACTIVE, s.phase)
+        assertFalse(s.userConfirmSoft)
+        assertFalse(s.softShouldEnable)
+        assertFalse(s.candidate)
+    }
 }

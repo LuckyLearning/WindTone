@@ -53,4 +53,29 @@ class StereoBalanceTest {
         val c = StereoBalance.mixingCoefficients(40)
         assertArrayEquals(floatArrayOf(0.6f, 0f, 0f, 1f), c, 1e-5f)
     }
+    @Test
+    fun `近中心正负1与0`() {
+        assertEquals(0.99f, StereoBalance.leftGain(1), 1e-5f)
+        assertEquals(1f, StereoBalance.rightGain(1), 1e-5f)
+        assertEquals(1f, StereoBalance.leftGain(-1), 1e-5f)
+        assertEquals(0.99f, StereoBalance.rightGain(-1), 1e-5f)
+        assertFalse(StereoBalance.isCentered(1))
+        assertFalse(StereoBalance.isCentered(-1))
+        assertTrue(StereoBalance.isCentered(0))
+        assertEquals("偏右 1", StereoBalance.valueText(1))
+        assertEquals("偏左 1", StereoBalance.valueText(-1))
+        assertEquals("居中", StereoBalance.valueText(0))
+    }
+
+    @Test
+    fun `混音系数居中与正负极限`() {
+        assertArrayEquals(floatArrayOf(1f, 0f, 0f, 1f), StereoBalance.mixingCoefficients(0), 0f)
+        assertArrayEquals(floatArrayOf(1f, 0f, 0f, 0f), StereoBalance.mixingCoefficients(-100), 0f)
+        assertArrayEquals(floatArrayOf(0f, 0f, 0f, 1f), StereoBalance.mixingCoefficients(100), 0f)
+        assertArrayEquals(
+            floatArrayOf(0.99f, 0f, 0f, 1f),
+            StereoBalance.mixingCoefficients(1),
+            1e-5f,
+        )
+    }
 }

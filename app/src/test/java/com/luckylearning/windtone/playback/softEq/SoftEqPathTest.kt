@@ -168,4 +168,24 @@ class SoftEqPathTest {
     fun unknownBuiltinIdReturnsNull() {
         assertTrue(SoftEqPath.applyBuiltinPreset("no_such_preset") == null)
     }
+    @Test
+    fun syncCurveEmptyPresetAndEmptyCsvIsFlat() {
+        val r = SoftEqPath.syncCurve(presetId = "", bandsCsv = "")
+        assertEquals(SoftEqCurve.Source.FLAT, r.source)
+        assertEquals(SoftEqCurve.Source.FLAT, SoftEqPath.state.value.curveSource)
+        assertEquals("", SoftEqPath.state.value.curvePresetId)
+        assertTrue(SoftEqPath.currentGainsMb().all { it == 0 })
+    }
+
+    @Test
+    fun revokeConfirmWhileSoftActiveReturnsCandidate() {
+        SoftEqPath.setUserConfirmSoft(true)
+        SoftEqPath.onHardEqUnavailable(AudioFx.Unavailable.DEVICE_REJECTED)
+        assertTrue(SoftEqPath.enabled)
+        SoftEqPath.setUserConfirmSoft(false)
+        assertFalse(SoftEqPath.enabled)
+        assertTrue(SoftEqPath.candidate)
+        assertEquals(SoftEqGate.Phase.CANDIDATE, SoftEqPath.state.value.phase)
+        assertFalse(SoftEqPath.state.value.userConfirmSoft)
+    }
 }
