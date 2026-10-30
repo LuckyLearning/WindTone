@@ -103,3 +103,8 @@ _run_release.sh
 _ci_logs/
 _ci_logs.zip
 
+# local agent scratch (never commit)
+_a2_*.py
+_run_i18n_release.sh
+_rel_snip.txt
+_run_*.sh
