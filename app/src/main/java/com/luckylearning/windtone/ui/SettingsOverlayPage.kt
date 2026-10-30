@@ -87,10 +87,11 @@ private const val OVERLAY_FULL_EDIT_LEAVE_PERCENT = 92
 
 
 /** 设置页侧钮顺序列表的显示名（与单颗显隐开关文案对齐）。 */
+@Composable
 private fun overlayHandleOrderTitle(kind: OverlayCollapseHelper.OverlayHandleKind): String = when (kind) {
-    OverlayCollapseHelper.OverlayHandleKind.COLLAPSE -> "「收起 / 展开」"
-    OverlayCollapseHelper.OverlayHandleKind.PLAY_PAUSE -> "「播放 / 暂停」"
-    OverlayCollapseHelper.OverlayHandleKind.PLAYER -> "「打开播放页」"
+    OverlayCollapseHelper.OverlayHandleKind.COLLAPSE -> stringResource(R.string.oh_name_collapse)
+    OverlayCollapseHelper.OverlayHandleKind.PLAY_PAUSE -> stringResource(R.string.oh_name_play_pause)
+    OverlayCollapseHelper.OverlayHandleKind.PLAYER -> stringResource(R.string.oh_name_player)
 }
 
 
@@ -214,11 +215,11 @@ internal fun SettingsOverlayPage(
         // v1.2.0：左侧三颗侧钮（收起 / 播放暂停 / 打开播放页）的显示开关。
         // 只在车载模式下才真正挂出来 —— 手机上那三颗钮纯属遮挡。
         SwitchRow(
-            title = "显示悬浮窗侧钮（仅车载模式）",
+            title = stringResource(R.string.oh_show_handles),
             subtitle = if (player.overlayHandles) {
-                "歌词窗左侧三颗钮：收起 / 播放暂停 / 打开播放页"
+                stringResource(R.string.oh_show_handles_on)
             } else {
-                "已隐藏；收起与按应用隐藏仍照常工作，只是屏幕上不再显示这三颗钮"
+                stringResource(R.string.oh_show_handles_off)
             },
             checked = player.overlayHandles,
             onCheckedChange = onOverlayHandles,
@@ -230,20 +231,20 @@ internal fun SettingsOverlayPage(
         // "已经决定显示侧钮"的前提下才有意义，否则就是三行点了没反应的死人开关。
         if (player.overlayHandles) {
             SwitchRow(
-                title = "　显示「收起 / 展开」钮",
-                subtitle = "关掉后只能从通知栏「收起 / 展开」操作悬浮歌词",
+                title = stringResource(R.string.oh_show_collapse),
+                subtitle = stringResource(R.string.oh_show_collapse_sub),
                 checked = player.overlayHandleCollapse,
                 onCheckedChange = { onOverlayHandle(0, it) },
             )
             SwitchRow(
-                title = "　显示「播放 / 暂停」钮",
-                subtitle = "关掉后仍可用播放页、通知栏或方向盘控制",
+                title = stringResource(R.string.oh_show_play_pause),
+                subtitle = stringResource(R.string.oh_show_play_pause_sub),
                 checked = player.overlayHandlePlayPause,
                 onCheckedChange = { onOverlayHandle(1, it) },
             )
             SwitchRow(
-                title = "　显示「打开播放页」钮",
-                subtitle = "关掉后可从桌面图标或通知栏进入播放页",
+                title = stringResource(R.string.oh_show_player),
+                subtitle = stringResource(R.string.oh_show_player_sub),
                 checked = player.overlayHandlePlayer,
                 onCheckedChange = { onOverlayHandle(2, it) },
             )
@@ -253,13 +254,13 @@ internal fun SettingsOverlayPage(
             // 交互对齐「分类顺序」页：上移 / 下移（车机大触控友好；三颗固定项
             // 不必上 LazyColumn 长按拖，避免与设置页滚动冲突）。
             Text(
-                "侧钮上下顺序",
+                stringResource(R.string.oh_order_title),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 2.dp),
             )
             Text(
-                "从上到下对应屏幕上三颗钮的位置；默认：收起 → 播放暂停 → 打开播放页",
+                stringResource(R.string.oh_order_hint),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 4.dp),
@@ -275,7 +276,7 @@ internal fun SettingsOverlayPage(
                         .padding(horizontal = 8.dp),
                 ) {
                     Text(
-                        text = "${index + 1}. ${overlayHandleOrderTitle(kind)}",
+                        text = stringResource(R.string.oh_order_item, index + 1, overlayHandleOrderTitle(kind)),
                         modifier = Modifier
                             .weight(1f)
                             .padding(start = 8.dp, top = 4.dp, bottom = 4.dp),
@@ -316,7 +317,7 @@ internal fun SettingsOverlayPage(
                     onClick = { onOverlayHandleOrder(SettingsDefaults.OVERLAY_HANDLE_ORDER) },
                     modifier = Modifier.padding(horizontal = 8.dp),
                 ) {
-                    Text("恢复默认顺序")
+                    Text(stringResource(R.string.oh_restore_order))
                 }
             }
         }

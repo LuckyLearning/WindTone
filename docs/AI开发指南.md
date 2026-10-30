@@ -2205,3 +2205,18 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 
 
 
+### i18n 第 7 批（2026-10-31）
+
+范围：`SettingsOverlayPage.kt` 侧钮显隐 + 上下顺序（功能-侧钮顺序设置相关 UI）。
+
+约定不变：`values/strings.xml` = 英文兜底，`values-zh/strings.xml` = 中文。上移/下移复用 `move_up` / `move_down`。本批前缀 `oh_`。
+
+本批键名：`oh_show_handles`, `oh_show_handles_on`, `oh_show_handles_off`, `oh_show_collapse`, `oh_show_collapse_sub`, `oh_show_play_pause`, `oh_show_play_pause_sub`, `oh_show_player`, `oh_show_player_sub`, `oh_order_title`, `oh_order_hint`, `oh_name_collapse`, `oh_name_play_pause`, `oh_name_player`, `oh_order_item`, `oh_restore_order`（另复用 `move_up` / `move_down`）
+
+涉及文件：
+
+- `SettingsOverlayPage.kt`
+- `values/strings.xml` + `values-zh/strings.xml`（本批新增 `oh_*`）
+
+注意：无业务逻辑改动。未改 SoftEq / EqSheet / SceneChips / OverlayCollapseHelper 引擎 / versionName。
+

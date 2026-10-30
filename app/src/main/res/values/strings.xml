@@ -1065,4 +1065,23 @@ The list is fetched once on add — nothing is saved if the fetch fails.</string
         <item>Sat</item>
         <item>Sun</item>
     </string-array>
+
+    <!-- i18n batch 7: SettingsOverlayPage side buttons / order (2026-10-31) -->
+    <string name="oh_show_handles">Show floating side buttons (car mode only)</string>
+    <string name="oh_show_handles_on">Three buttons left of the lyric panel: collapse / play-pause / open player</string>
+    <string name="oh_show_handles_off">Hidden; collapse and hide-by-app still work — the three buttons just are not shown</string>
+    <string name="oh_show_collapse">Show Collapse / Expand</string>
+    <string name="oh_show_collapse_sub">When off, use the notification action to collapse / expand floating lyrics</string>
+    <string name="oh_show_play_pause">Show Play / Pause</string>
+    <string name="oh_show_play_pause_sub">When off, still control from the player, notification, or steering-wheel controls</string>
+    <string name="oh_show_player">Show Open player</string>
+    <string name="oh_show_player_sub">When off, open the player from the app icon or notification</string>
+    <string name="oh_order_title">Side button order</string>
+    <string name="oh_order_hint">Top to bottom matches on-screen order; default: collapse → play-pause → open player</string>
+    <string name="oh_name_collapse">Collapse / Expand</string>
+    <string name="oh_name_play_pause">Play / Pause</string>
+    <string name="oh_name_player">Open player</string>
+    <string name="oh_order_item">%1$d. %2$s</string>
+    <string name="oh_restore_order">Restore default order</string>
+
 </resources>
