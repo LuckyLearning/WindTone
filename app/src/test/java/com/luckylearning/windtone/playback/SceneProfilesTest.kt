@@ -120,5 +120,124 @@ class SceneProfilesTest {
         assertTrue(SceneProfiles.shouldCaptureBaseline(captureBaseline = true, existingStashRaw = ""))
         assertFalse(SceneProfiles.shouldCaptureBaseline(captureBaseline = true, existingStashRaw = "already"))
     }
-}
 
+    // ---- 边界：切档 stash / 未知档回落 / 冷启动重套幂等 ----
+
+    @Test
+    fun `切档沿用进场景前基线不重拍 stash`() {
+        // 用户点选进第一档：需拍基线
+        assertTrue(
+            SceneProfiles.shouldCaptureBaseline(
+                captureBaseline = true,
+                existingStashRaw = "",
+            ),
+        )
+        // 档与档之间切换：调用方仍传 captureBaseline=true，但已有 stash → 不重拍
+        val baseline = "v1\u001fstashed"
+        assertFalse(
+            SceneProfiles.shouldCaptureBaseline(
+                captureBaseline = true,
+                existingStashRaw = baseline,
+            ),
+        )
+        // 切档选择语义：drive → commute → sleep，始终返回目标 id（非退出）
+        assertEquals("commute", SceneProfiles.nextSelection("drive", "commute"))
+        assertEquals("sleep", SceneProfiles.nextSelection("commute", "sleep"))
+        assertEquals("drive", SceneProfiles.nextSelection("sleep", "drive"))
+        // 再点当前档才退出（还原那份进场景前基线）
+        assertEquals("", SceneProfiles.nextSelection("sleep", "sleep"))
+    }
+
+    @Test
+    fun `切档环路后退出语义仍是空串`() {
+        var current = ""
+        current = SceneProfiles.nextSelection(current, "drive")
+        assertEquals("drive", current)
+        current = SceneProfiles.nextSelection(current, "commute")
+        assertEquals("commute", current)
+        current = SceneProfiles.nextSelection(current, "sleep")
+        assertEquals("sleep", current)
+        // 关闭芯片 / 再点当前档 → exit
+        assertEquals("", SceneProfiles.nextSelection(current, ""))
+        assertEquals("", SceneProfiles.nextSelection(current, current))
+    }
+
+    @Test
+    fun `未知档回落 byId 与冷启动一致`() {
+        val unknowns = listOf(
+            "nope",
+            "DRIVE",
+            "Drive",
+            " drive",
+            "drive ",
+            "drive\n",
+            "custom",
+            "null",
+            "0",
+            "驾车",
+        )
+        for (id in unknowns) {
+            assertNull("byId($id) 应未知", SceneProfiles.byId(id))
+            assertEquals(
+                "planColdStart($id) 应 ClearInvalid",
+                SceneProfiles.ColdStart.ClearInvalid,
+                SceneProfiles.planColdStart(id),
+            )
+        }
+        // 已知档不回落
+        for (id in SceneProfiles.chipIds()) {
+            assertNotNull(SceneProfiles.byId(id))
+            val plan = SceneProfiles.planColdStart(id)
+            assertTrue(plan is SceneProfiles.ColdStart.Reapply)
+            assertEquals(id, (plan as SceneProfiles.ColdStart.Reapply).id)
+        }
+    }
+
+    @Test
+    fun `冷启动重套幂等 多次 plan 同结果`() {
+        repeat(3) {
+            assertEquals(SceneProfiles.ColdStart.None, SceneProfiles.planColdStart(""))
+            val re = SceneProfiles.planColdStart("drive")
+            assertTrue(re is SceneProfiles.ColdStart.Reapply)
+            assertEquals("drive", (re as SceneProfiles.ColdStart.Reapply).id)
+            assertEquals(SceneProfiles.ColdStart.ClearInvalid, SceneProfiles.planColdStart("ghost"))
+        }
+    }
+
+    @Test
+    fun `冷启动重套幂等 反复 shouldCaptureBaseline false 永不拍`() {
+        // 杀进程再开：captureBaseline=false；即便 stash 空也不拍，避免把场景听感写成退出基线
+        repeat(5) {
+            assertFalse(
+                SceneProfiles.shouldCaptureBaseline(
+                    captureBaseline = false,
+                    existingStashRaw = "",
+                ),
+            )
+            assertFalse(
+                SceneProfiles.shouldCaptureBaseline(
+                    captureBaseline = false,
+                    existingStashRaw = "v1\u001fanything",
+                ),
+            )
+        }
+        // 与「用户点选进档」对照：仅第一次（无 stash）才拍
+        assertTrue(SceneProfiles.shouldCaptureBaseline(true, ""))
+        assertFalse(SceneProfiles.shouldCaptureBaseline(true, "kept-baseline"))
+        assertFalse(SceneProfiles.shouldCaptureBaseline(true, "kept-baseline"))
+    }
+
+    @Test
+    fun `三档听感与速度变调契约钉死`() {
+        assertEquals(SoundSchemes.VOCAL.id, SceneProfiles.COMMUTE.eqRefId)
+        assertEquals(0, SceneProfiles.COMMUTE.sleepMinutes)
+        assertEquals(SoundSchemes.SPACE.id, SceneProfiles.SLEEP.eqRefId)
+        assertEquals(45, SceneProfiles.SLEEP.sleepMinutes)
+        for (p in SceneProfiles.ALL) {
+            assertEquals(1.0f, p.speed)
+            assertEquals(0, p.pitchSemitones)
+            assertEquals(SceneProfiles.EqSource.SCHEME, p.eqSource)
+            assertNotNull(p.sleepMinutes) // MVP 都明确写睡眠（0=取消 / >0=启动）
+        }
+    }
+}
