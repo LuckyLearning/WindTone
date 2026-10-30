@@ -1,0 +1,2 @@
+﻿?? _G7_RELEASE_LOCK.txt
+?? _g1_st.txt
