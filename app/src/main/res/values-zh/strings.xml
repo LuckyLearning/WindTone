@@ -1125,4 +1125,32 @@
     <string name="boot_diag_clip_label">WindTone 诊断</string>
     <string name="boot_diag_copied">已复制，可以直接粘贴发回</string>
 
+    <!-- i18n 第 11 批：SettingsDiagnosisPage 诊断导出 chrome -->
+    <string name="diag_a11y_no_page_tip">本机没有「无障碍」设置页（车机常见）。点下面的按钮会给出路径向导；也可以改用「使用情况访问」，识别延迟约 1.5 秒，同样能按应用隐藏悬浮窗。</string>
+    <string name="diag_a11y_settings_no_page">无障碍设置（本机无此页）</string>
+    <string name="diag_battery_title">后台保活（电池优化白名单）</string>
+    <string name="diag_battery_on">已加入白名单：息屏后轮询继续跑，按应用隐藏不会半夜失效</string>
+    <string name="diag_battery_off">未加入：车机息屏后可能冻结后台，按应用隐藏会失效；点这里去申请（无需 adb）</string>
+    <string name="diag_battery_joined">已加入</string>
+    <string name="diag_battery_go_settings">去设置</string>
+    <string name="diag_pack_title">诊断包（完整）</string>
+    <string name="diag_pack_subtitle">环境 · 权限 · 播放 · 场景 · 软EQ · 悬浮窗 · 曲库 · 前台识别 · 事件日志；可复制或落盘</string>
+    <string name="diag_pack_dialog_title">诊断包</string>
+    <string name="diag_pack_copied">诊断包已复制</string>
+    <string name="diag_forensics_title">一键取证（复制 adb 脚本）</string>
+    <string name="diag_forensics_subtitle">把 logcat / dumpsys 命令与当前包名、版本拼好，粘到电脑即可跑</string>
+    <string name="diag_forensics_dialog_title">一键取证脚本</string>
+    <string name="diag_forensics_copied">取证脚本已复制</string>
+    <string name="diag_forensics_copy_again">再复制一次</string>
+    <string name="diag_close">关闭</string>
+    <string name="diag_probe_title">车机排障报告（前台识别）</string>
+    <string name="diag_probe_subtitle">采集：无障碍页是否存在 · 服务是否在案 · 使用情况授权 · 每个候选页能否解析（可复制 / 落盘）</string>
+    <string name="diag_probe_dialog_title">前台识别排障报告</string>
+    <string name="diag_probe_saved">\n已保存到：%1$s</string>
+    <string name="diag_probe_copied">报告已复制</string>
+    <string name="diag_unofficial_hint">这个安装包不是官方发布版本，应用内更新已停用；播放与歌词功能不受影响。</string>
+    <string name="diag_label_paren">（%1$s）</string>
+    <string name="diag_recent_apps">最近切过的应用（点「加入」即生效）</string>
+    <string name="diag_added">已加入：%1$s</string>
+
 </resources>

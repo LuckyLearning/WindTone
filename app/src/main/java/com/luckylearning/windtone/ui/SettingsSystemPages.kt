@@ -303,8 +303,7 @@ internal fun SettingsDiagnosisPage(
         }
         if (!accessibilityPageAvailable && !detector.usageStats) {
             Text(
-                text = "本机没有「无障碍」设置页（车机常见）。点下面的按钮会给出路径向导；" +
-                    "也可以改用「使用情况访问」，识别延迟约 1.5 秒，同样能按应用隐藏悬浮窗。",
+                text = stringResource(R.string.diag_a11y_no_page_tip),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(top = 2.dp),
@@ -347,7 +346,7 @@ internal fun SettingsDiagnosisPage(
                             stringResource(R.string.accessibility_settings)
                         } else {
                             // 如实说明：不是没找到，是这台车机没有这一页
-                            "无障碍设置（本机无此页）"
+                            stringResource(R.string.diag_a11y_settings_no_page)
                         },
                     )
                 }
@@ -428,18 +427,22 @@ internal fun SettingsDiagnosisPage(
         // 在车上失效的第二个原因（第一个是没有无障碍页）。白名单申请不需要 adb。
         val ignoringBattery = ForegroundAppDetector.ignoringBatteryOptimizations(context)
         ActionRow(
-            title = "后台保活（电池优化白名单）",
+            title = stringResource(R.string.diag_battery_title),
             subtitle = if (ignoringBattery) {
-                "已加入白名单：息屏后轮询继续跑，按应用隐藏不会半夜失效"
+                stringResource(R.string.diag_battery_on)
             } else {
-                "未加入：车机息屏后可能冻结后台，按应用隐藏会失效；点这里去申请（无需 adb）"
+                stringResource(R.string.diag_battery_off)
             },
             onClick = {
                 if (!ForegroundAppDetector.requestIgnoreBatteryOptimizations(context)) {
                     showBatteryHelp = true
                 }
             },
-            trailing = if (ignoringBattery) "已加入" else "去设置",
+            trailing = if (ignoringBattery) {
+                stringResource(R.string.diag_battery_joined)
+            } else {
+                stringResource(R.string.diag_battery_go_settings)
+            },
             chevron = true,
         )
         // E5：诊断页直接可读 SoftEq 相位 / 确认 / 曲线（点开复制短报）
@@ -461,8 +464,8 @@ internal fun SettingsDiagnosisPage(
         // v1.1.88：诊断包。用户问「为什么这样」时，最省事的是贴一段文本，
         // 而不是来回问「你什么机型 / 开没开权限 / 放的是哪首歌」。
         ActionRow(
-            title = "诊断包（完整）",
-            subtitle = "环境 · 权限 · 播放 · 场景 · 软EQ · 悬浮窗 · 曲库 · 前台识别 · 事件日志；可复制或落盘",
+            title = stringResource(R.string.diag_pack_title),
+            subtitle = stringResource(R.string.diag_pack_subtitle),
             onClick = {
                 val report = DiagnosticsReport.build(
                     DiagnosticsReport.collect(context, player, library),
@@ -476,8 +479,8 @@ internal fun SettingsDiagnosisPage(
         // A1：一键取证 —— 只复制 adb 脚本，不改任何设置
         var forensicsText by remember { mutableStateOf<String?>(null) }
         ActionRow(
-            title = "一键取证（复制 adb 脚本）",
-            subtitle = "把 logcat / dumpsys 命令与当前包名、版本拼好，粘到电脑即可跑",
+            title = stringResource(R.string.diag_forensics_title),
+            subtitle = stringResource(R.string.diag_forensics_subtitle),
             onClick = {
                 val script = ForensicsScript.build(
                     packageName = context.packageName,
@@ -486,7 +489,7 @@ internal fun SettingsDiagnosisPage(
                 )
                 clipboard.setText(AnnotatedString(script))
                 forensicsText = script
-                Toast.makeText(context, "取证脚本已复制", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, AppStrings.s(R.string.diag_forensics_copied), Toast.LENGTH_SHORT).show()
             },
             chevron = true,
         )
@@ -494,7 +497,7 @@ internal fun SettingsDiagnosisPage(
             val script = forensicsText!!
             AlertDialog(
                 onDismissRequest = { forensicsText = null },
-                title = { Text("一键取证脚本") },
+                title = { Text(stringResource(R.string.diag_forensics_dialog_title)) },
                 text = {
                     Column(
                         Modifier
@@ -512,11 +515,11 @@ internal fun SettingsDiagnosisPage(
                 confirmButton = {
                     TextButton(onClick = {
                         clipboard.setText(AnnotatedString(script))
-                        Toast.makeText(context, "取证脚本已复制", Toast.LENGTH_SHORT).show()
-                    }) { Text("再复制一次") }
+                        Toast.makeText(context, AppStrings.s(R.string.diag_forensics_copied), Toast.LENGTH_SHORT).show()
+                    }) { Text(stringResource(R.string.diag_forensics_copy_again)) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { forensicsText = null }) { Text("关闭") }
+                    TextButton(onClick = { forensicsText = null }) { Text(stringResource(R.string.diag_close)) }
                 },
             )
         }
@@ -524,7 +527,7 @@ internal fun SettingsDiagnosisPage(
             val report = diagReport!!
             AlertDialog(
                 onDismissRequest = { diagReport = null },
-                title = { Text("诊断包") },
+                title = { Text(stringResource(R.string.diag_pack_dialog_title)) },
                 text = {
                     Column(
                         Modifier
@@ -542,11 +545,11 @@ internal fun SettingsDiagnosisPage(
                 confirmButton = {
                     TextButton(onClick = {
                         clipboard.setText(AnnotatedString(report))
-                        Toast.makeText(context, "诊断包已复制", Toast.LENGTH_SHORT).show()
-                    }) { Text("复制全部") }
+                        Toast.makeText(context, AppStrings.s(R.string.diag_pack_copied), Toast.LENGTH_SHORT).show()
+                    }) { Text(stringResource(R.string.copy_all)) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { diagReport = null }) { Text("关闭") }
+                    TextButton(onClick = { diagReport = null }) { Text(stringResource(R.string.diag_close)) }
                 },
             )
         }
@@ -554,8 +557,8 @@ internal fun SettingsDiagnosisPage(
         // v1.1.82：车机排障报告。远程看不到车机里有什么，把现场证据一次性取出来，
         // 用户复制或落盘带回来即可判断「是无障碍被裁、还是授权没给、还是服务被杀」。
         ActionRow(
-            title = "车机排障报告（前台识别）",
-            subtitle = "采集：无障碍页是否存在 · 服务是否在案 · 使用情况授权 · 每个候选页能否解析（可复制 / 落盘）",
+            title = stringResource(R.string.diag_probe_title),
+            subtitle = stringResource(R.string.diag_probe_subtitle),
             onClick = {
                 val facts = ForegroundProbe.collect(context)
                 val report = ForegroundProbe.buildReport(facts)
@@ -602,7 +605,7 @@ internal fun SettingsDiagnosisPage(
             val report = probeReport!!
             AlertDialog(
                 onDismissRequest = { probeReport = null },
-                title = { Text("前台识别排障报告") },
+                title = { Text(stringResource(R.string.diag_probe_dialog_title)) },
                 text = {
                     Column(
                         Modifier
@@ -615,9 +618,9 @@ internal fun SettingsDiagnosisPage(
                                 fontFamily = FontFamily.Monospace,
                             ),
                         )
-                        probePath?.let {
+                        probePath?.let { saved ->
                             Text(
-                                "\n已保存到：$it",
+                                stringResource(R.string.diag_probe_saved, saved),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -627,11 +630,11 @@ internal fun SettingsDiagnosisPage(
                 confirmButton = {
                     TextButton(onClick = {
                         clipboard.setText(AnnotatedString(report))
-                        Toast.makeText(context, "报告已复制", Toast.LENGTH_SHORT).show()
-                    }) { Text("复制全部") }
+                        Toast.makeText(context, AppStrings.s(R.string.diag_probe_copied), Toast.LENGTH_SHORT).show()
+                    }) { Text(stringResource(R.string.copy_all)) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { probeReport = null }) { Text("关闭") }
+                    TextButton(onClick = { probeReport = null }) { Text(stringResource(R.string.diag_close)) }
                 },
             )
         }
@@ -645,7 +648,7 @@ internal fun SettingsDiagnosisPage(
                 color = MaterialTheme.colorScheme.error,
             )
             Text(
-                "这个安装包不是官方发布版本，应用内更新已停用；播放与歌词功能不受影响。",
+                stringResource(R.string.diag_unofficial_hint),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -654,7 +657,9 @@ internal fun SettingsDiagnosisPage(
 
         Text(
             text = stringResource(R.string.in_foreground, (currentPkg ?: stringResource(R.string.unknown))) +
-                (currentPkg?.let { ForegroundAppLog.labelOf(context, it) }?.let { "（$it）" } ?: ""),
+                (currentPkg?.let { ForegroundAppLog.labelOf(context, it) }?.let {
+                    context.getString(R.string.diag_label_paren, it)
+                } ?: ""),
             style = MaterialTheme.typography.labelMedium,
         )
         // v1.1.90：最近切换的应用（内存环形，**不需要**打开「前台应用记录」开关）。
@@ -664,7 +669,7 @@ internal fun SettingsDiagnosisPage(
         val recentUnique = recentSwitches.asReversed().distinctBy { it.pkg }.take(8)
         if (recentUnique.isNotEmpty()) {
             Text(
-                "最近切过的应用（点「加入」即生效）",
+                stringResource(R.string.diag_recent_apps),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -694,9 +699,9 @@ internal fun SettingsDiagnosisPage(
                         enabled = !inList,
                         onClick = {
                             onLyricOverlayHiddenApps(player.lyricOverlayHiddenApps + entry.pkg)
-                            Toast.makeText(context, "已加入：$label", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, AppStrings.s(R.string.diag_added, label), Toast.LENGTH_SHORT).show()
                         },
-                    ) { Text(if (inList) "已在名单" else "加入") }
+                    ) { Text(if (inList) stringResource(R.string.in_list) else stringResource(R.string.add_to_list)) }
                 }
             }
             Spacer(Modifier.height(6.dp))

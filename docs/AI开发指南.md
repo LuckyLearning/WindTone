@@ -2255,3 +2255,11 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 - 设置诊断导出 chrome、DiagnosticsReport 正文留给后续
 - 文档：docs/功能-i18n启动诊断页.md
 
+
+
+### i18n 第 11 批（2026-10-31）
+
+**SettingsDiagnosisPage 诊断导出 chrome**：无障碍缺失提示、后台保活、完整诊断包、一键取证、车机排障报告、非官方提示、最近应用等进 values / values-zh（`diag_*`）。Compose 用 `stringResource`，Toast 用 `AppStrings.s`。
+
+- SoftEq 诊断行、DiagnosticsReport/ForensicsScript/ForegroundProbe 正文本批不改
+- 文档：`docs/功能-i18n诊断导出.md`

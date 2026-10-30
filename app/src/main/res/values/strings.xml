@@ -1159,4 +1159,32 @@ The list is fetched once on add — nothing is saved if the fetch fails.</string
     <string name="boot_diag_clip_label">WindTone diagnostics</string>
     <string name="boot_diag_copied">Copied — you can paste it back to us</string>
 
+    <!-- i18n batch 11: SettingsDiagnosisPage diagnostics-export chrome -->
+    <string name="diag_a11y_no_page_tip">This device has no Accessibility settings page (common on car head units). The buttons below open a path guide; you can also use Usage access (~1.5s delay) to hide the floating window by app.</string>
+    <string name="diag_a11y_settings_no_page">Accessibility settings (not on this device)</string>
+    <string name="diag_battery_title">Keep alive in background (battery whitelist)</string>
+    <string name="diag_battery_on">Whitelisted: polling keeps running when the screen is off, so hide-by-app won\'t die overnight</string>
+    <string name="diag_battery_off">Not whitelisted: the head unit may freeze the background when the screen is off and hide-by-app will stop; tap to request (no adb needed)</string>
+    <string name="diag_battery_joined">Joined</string>
+    <string name="diag_battery_go_settings">Open settings</string>
+    <string name="diag_pack_title">Diagnostics pack (full)</string>
+    <string name="diag_pack_subtitle">Environment · permissions · playback · scenes · soft EQ · overlay · library · foreground detection · event log; copy or save to disk</string>
+    <string name="diag_pack_dialog_title">Diagnostics pack</string>
+    <string name="diag_pack_copied">Diagnostics pack copied</string>
+    <string name="diag_forensics_title">One-tap forensics (copy adb script)</string>
+    <string name="diag_forensics_subtitle">Builds logcat / dumpsys commands with this package name and version — paste on a PC and run</string>
+    <string name="diag_forensics_dialog_title">Forensics script</string>
+    <string name="diag_forensics_copied">Forensics script copied</string>
+    <string name="diag_forensics_copy_again">Copy again</string>
+    <string name="diag_close">Close</string>
+    <string name="diag_probe_title">Head-unit troubleshooting report (foreground detection)</string>
+    <string name="diag_probe_subtitle">Collects: accessibility page present · service registered · usage access · whether each candidate page resolves (copy / save)</string>
+    <string name="diag_probe_dialog_title">Foreground-detection troubleshooting report</string>
+    <string name="diag_probe_saved">\nSaved to: %1$s</string>
+    <string name="diag_probe_copied">Report copied</string>
+    <string name="diag_unofficial_hint">This install is not an official release; in-app updates are disabled. Playback and lyrics still work.</string>
+    <string name="diag_label_paren">(%1$s)</string>
+    <string name="diag_recent_apps">Recently switched apps (tap Add to apply)</string>
+    <string name="diag_added">Added: %1$s</string>
+
 </resources>
