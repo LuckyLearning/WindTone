@@ -498,7 +498,6 @@ private fun PlaylistRowPlay(
     info: PlaylistInfo,
     onOpen: (PlaylistInfo) -> Unit,
 ) {
-    val song = info.coverSong
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         shape = MaterialTheme.shapes.medium,
@@ -509,23 +508,7 @@ private fun PlaylistRowPlay(
             .clickable { onOpen(info) },
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(10.dp)) {
-            if (song != null) {
-                CoverArt(song = song, size = 52.dp, cornerRadius = 12.dp)
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(52.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        AppIcons.QueueMusic,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                }
-            }
+            PlaylistCoverArt(songs = info.coverSongs, size = 52.dp, cornerRadius = 12.dp)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(

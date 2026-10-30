@@ -55,6 +55,7 @@ class VirtualPlaylistInfoTest {
         assertEquals("我的收藏", info.name)
         assertEquals(1, info.songCount)
         assertEquals(favorite, info.coverSong)
+        assertEquals(listOf(favorite), info.coverSongs)
         assertTrue("虚拟歌单必须带 virtual 标记，界面据此隐藏「重命名 / 删除」", info.virtual)
     }
 
@@ -77,6 +78,7 @@ class VirtualPlaylistInfoTest {
         val info = virtualPlaylistInfo(VirtualPlaylist.FAVORITES, LibraryUiState())
         assertEquals(0, info.songCount)
         assertNull(info.coverSong)
+        assertTrue(info.coverSongs.isEmpty())
     }
 
     /** 传进来的必须是虚拟歌单 id：传自建歌单的 id 属于调用方写错，直接响 */
@@ -85,5 +87,16 @@ class VirtualPlaylistInfoTest {
         assertThrows(IllegalStateException::class.java) {
             virtualPlaylistInfo(42L, library)
         }
+    }
+
+    @Test
+    fun coverSongsTakesAtMostFour() {
+        val many = (1L..6L).map { song(it, "歌$it") }
+        val lib = LibraryUiState(extraFavorites = many)
+        val info = virtualPlaylistInfo(VirtualPlaylist.FAVORITES, lib)
+        assertEquals(6, info.songCount)
+        assertEquals(4, info.coverSongs.size)
+        assertEquals(many.take(4), info.coverSongs)
+        assertEquals(many.first(), info.coverSong)
     }
 }

@@ -54,9 +54,29 @@ data class PlaylistInfo(
     val id: Long,
     val name: String,
     val songCount: Int,
-    val coverSong: Song?,
+    /**
+     * 列表封面用的前几首（最多 4 首，按歌单顺序）。
+     * 0 首 → 占位图标；1 首 → 单图；2~4 首 → 2×2 拼图。
+     */
+    val coverSongs: List<Song> = emptyList(),
     val virtual: Boolean = false,
-)
+) {
+    /** 兼容旧调用：拼图第一格 / 单图封面 */
+    val coverSong: Song? get() = coverSongs.firstOrNull()
+}
+
+/** 歌单列表封面取前 [limit] 首，供 2×2 拼图。 */
+fun playlistCoverSongs(songs: List<Song>, limit: Int = 4): List<Song> =
+    if (limit <= 0) emptyList() else songs.take(limit)
+
+/** 封面区布局：空歌单图标 / 单曲整图 / 2×2 拼图（不足 4 格留空格）。 */
+enum class PlaylistCoverMode { ICON, SINGLE, GRID }
+
+fun playlistCoverMode(coverCount: Int): PlaylistCoverMode = when {
+    coverCount <= 0 -> PlaylistCoverMode.ICON
+    coverCount == 1 -> PlaylistCoverMode.SINGLE
+    else -> PlaylistCoverMode.GRID
+}
 
 /** 虚拟歌单的主键（负数，不会与自增歌单撞号） */
 object VirtualPlaylist {
@@ -77,13 +97,13 @@ object VirtualPlaylist {
  */
 fun virtualPlaylistInfo(id: Long, library: LibraryUiState): PlaylistInfo = when (id) {
     VirtualPlaylist.FAVORITES ->
-        PlaylistInfo(id, "我的收藏", library.extraFavorites.size, library.extraFavorites.firstOrNull(), virtual = true)
+        PlaylistInfo(id, "我的收藏", library.extraFavorites.size, playlistCoverSongs(library.extraFavorites), virtual = true)
 
     VirtualPlaylist.RECENT ->
-        PlaylistInfo(id, "最近播放", library.extraRecent.size, library.extraRecent.firstOrNull(), virtual = true)
+        PlaylistInfo(id, "最近播放", library.extraRecent.size, playlistCoverSongs(library.extraRecent), virtual = true)
 
     VirtualPlaylist.MOST_PLAYED ->
-        PlaylistInfo(id, "最常播放", library.extraMostPlayed.size, library.extraMostPlayed.firstOrNull(), virtual = true)
+        PlaylistInfo(id, "最常播放", library.extraMostPlayed.size, playlistCoverSongs(library.extraMostPlayed), virtual = true)
 
     else -> error("不是虚拟歌单：$id")
 }

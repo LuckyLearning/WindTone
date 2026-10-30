@@ -6,6 +6,7 @@ import com.luckylearning.windtone.data.findDuplicateGroups
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.state.PlaylistInfo
 import com.luckylearning.windtone.state.VirtualPlaylist
+import com.luckylearning.windtone.state.playlistCoverSongs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -45,7 +46,7 @@ internal class PlaylistStore(private val session: LibrarySession) : PlaylistActi
 
         val infos = entities.map { p ->
             val songs = byPlaylist[p.id].orEmpty().mapNotNull { songsById[it.songId] }
-            PlaylistInfo(p.id, p.name, songs.size, songs.firstOrNull())
+            PlaylistInfo(p.id, p.name, songs.size, playlistCoverSongs(songs))
         }
         // 统计直接用内存里的每曲状态，不再为了"最近播放/最常播放"再查一次库
         val recent = index.allStates().asSequence()
