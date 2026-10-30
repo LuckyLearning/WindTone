@@ -34,9 +34,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.luckylearning.windtone.MusicApp
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.BookmarkRepository
 import com.luckylearning.windtone.data.PlaybackBookmark
 import com.luckylearning.windtone.data.model.Song
@@ -72,14 +74,18 @@ fun BookmarkSheet(
                 .padding(horizontal = 20.dp),
         ) {
             Text(
-                "播放书签",
+                stringResource(R.string.po_bookmarks),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
                 text = when {
-                    song == null -> "没有正在播放的曲目"
-                    else -> "${song.title} · 当前位置 ${BookmarkRepository.formatClock(positionMs)}"
+                    song == null -> stringResource(R.string.bm_no_song)
+                    else -> stringResource(
+                        R.string.bm_current_position,
+                        song.title,
+                        BookmarkRepository.formatClock(positionMs),
+                    )
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -100,12 +106,21 @@ fun BookmarkSheet(
             ) {
                 Icon(AppIcons.Bookmark, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text("在此记书签（${BookmarkRepository.formatClock(positionMs)})")
+                Text(
+                    stringResource(
+                        R.string.bm_add_here,
+                        BookmarkRepository.formatClock(positionMs),
+                    ),
+                )
             }
 
             Spacer(Modifier.height(12.dp))
             Text(
-                if (rows.isEmpty()) "本曲暂无书签" else "本曲书签（${rows.size})",
+                if (rows.isEmpty()) {
+                    stringResource(R.string.bm_empty)
+                } else {
+                    stringResource(R.string.bm_list_count, rows.size)
+                },
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
             )
@@ -136,7 +151,7 @@ fun BookmarkSheet(
 
             Spacer(Modifier.height(8.dp))
             TextButton(onClick = onClose, modifier = Modifier.align(Alignment.End)) {
-                Text("关闭")
+                Text(stringResource(R.string.bm_close))
             }
             Spacer(Modifier.height(20.dp))
         }
@@ -162,7 +177,11 @@ private fun BookmarkRow(
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        OutlinedButton(onClick = onJump, shape = RoundedCornerShape(10.dp)) { Text("跳转") }
-        TextButton(onClick = onDelete) { Text("删除", color = MaterialTheme.colorScheme.error) }
+        OutlinedButton(onClick = onJump, shape = RoundedCornerShape(10.dp)) {
+            Text(stringResource(R.string.bm_jump))
+        }
+        TextButton(onClick = onDelete) {
+            Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
+        }
     }
 }

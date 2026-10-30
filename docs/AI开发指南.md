@@ -2168,6 +2168,23 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 
 注意：默认预设名先在 `@Composable` 作用域取 `po_default_preset`，再传入 `ifBlank`，避免在非组合 lambda 里调 `stringResource`。无业务逻辑改动。未改 SoftEq / EqSheet / versionName。
 
+### i18n 第 5 批（2026-10-31）
+
+范围：`BookmarkSheet.kt`（播放书签面板）。
+
+约定不变：`values/strings.xml` = 英文兜底，`values-zh/strings.xml` = 中文。标题复用 `po_bookmarks`；删除复用 `delete`。本批前缀 `bm_`。
+
+本批键名：`bm_no_song`, `bm_current_position`, `bm_add_here`, `bm_empty`, `bm_list_count`, `bm_jump`, `bm_close`（另复用 `po_bookmarks` / `delete`）
+
+涉及文件：
+
+- `BookmarkSheet.kt`
+- `values/strings.xml` + `values-zh/strings.xml`（本批新增 `bm_*` 键）
+
+注意：无业务逻辑改动。未改 SoftEq / EqSheet / ListenCalendar / versionName。
+
+
+
 
 
 

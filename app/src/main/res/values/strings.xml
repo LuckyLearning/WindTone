@@ -1032,4 +1032,13 @@ The list is fetched once on add — nothing is saved if the fetch fails.</string
         <item quantity="one">Pause after %1$d more song</item>
         <item quantity="other">Pause after %1$d more songs</item>
     </plurals>
+
+    <!-- i18n batch 5: BookmarkSheet (2026-10-31) -->
+    <string name="bm_no_song">No track playing</string>
+    <string name="bm_current_position">%1$s · current position %2$s</string>
+    <string name="bm_add_here">Bookmark here (%1$s)</string>
+    <string name="bm_empty">No bookmarks for this track</string>
+    <string name="bm_list_count">Bookmarks (%1$d)</string>
+    <string name="bm_jump">Jump</string>
+    <string name="bm_close">Close</string>
 </resources>

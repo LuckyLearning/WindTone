@@ -998,4 +998,13 @@
     <plurals name="sleep_after_n_songs">
         <item quantity="other">再播 %1$d 首后暂停</item>
     </plurals>
+
+    <!-- i18n batch 5: BookmarkSheet (2026-10-31) -->
+    <string name="bm_no_song">没有正在播放的曲目</string>
+    <string name="bm_current_position">%1$s · 当前位置 %2$s</string>
+    <string name="bm_add_here">在此记书签（%1$s）</string>
+    <string name="bm_empty">本曲暂无书签</string>
+    <string name="bm_list_count">本曲书签（%1$d）</string>
+    <string name="bm_jump">跳转</string>
+    <string name="bm_close">关闭</string>
 </resources>
