@@ -25,7 +25,22 @@ object ReplayGainTags {
         val itunesDb: Double? = null,
         val r128TrackDb: Double? = null,
     ) {
-        fun preferredDb(): Double? = trackDb ?: itunesDb ?: albumDb ?: r128TrackDb
+        /**
+         * 按模式选出最终采用的增益（dB）。
+         *
+         * **曲目模式（默认，与 v1.2.14 起行为一致）**：
+         * TRACK_GAIN → iTunes Sound Check → ALBUM_GAIN → Opus R128_TRACK_GAIN
+         *
+         * **专辑模式**：
+         * ALBUM_GAIN → TRACK_GAIN → iTunes Sound Check → Opus R128_TRACK_GAIN
+         *
+         * 回退说明：某一侧标签缺失时用另一侧（或按曲等价标签），避免「开了专辑模式却完全不调」。
+         * 整份 [Gains] 都空时返回 null，调用方再回落 RMS 估算（见 [TrackVolume]）。
+         */
+        fun preferredDb(mode: ReplayGainMode = ReplayGainMode.TRACK): Double? = when (mode) {
+            ReplayGainMode.TRACK -> trackDb ?: itunesDb ?: albumDb ?: r128TrackDb
+            ReplayGainMode.ALBUM -> albumDb ?: trackDb ?: itunesDb ?: r128TrackDb
+        }
 
         fun isEmpty(): Boolean =
             trackDb == null && albumDb == null && itunesDb == null && r128TrackDb == null

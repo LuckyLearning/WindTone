@@ -59,6 +59,7 @@ import com.luckylearning.windtone.playback.EqPresets
 import com.luckylearning.windtone.playback.EqTone
 import com.luckylearning.windtone.playback.ReverbPresets
 import com.luckylearning.windtone.playback.SoundSchemes
+import com.luckylearning.windtone.playback.ReplayGainMode
 import com.luckylearning.windtone.playback.TrackVolume
 import com.luckylearning.windtone.playback.UserEqPresets
 import com.luckylearning.windtone.ui.theme.glassContainerColor
@@ -73,8 +74,8 @@ import com.luckylearning.windtone.ui.theme.glassContainerColor
  *  ② 预设——均衡器曲线（[EqPresets]）和用户自己存的「我的」（[UserEqPresets]）；
  *  ③ 频段——先把当前曲线画出来（折线预览），再给频段滑块；
  *  ④ 增强音效——顶部低音 / 高音快捷键（车机大触控），下面才是低音 / 环绕 / 响度 / 混响；
- *  ⑤ 播放过渡——淡入淡出与曲间音量平衡（[TrackVolume]），不依赖效果器可用性，
- *     所以放在 `available` 判断之外（v1.1.52）。
+ *  ⑤ 播放过渡——淡入淡出、曲间音量平衡与 ReplayGain 曲目/专辑模式（[TrackVolume]），
+ *     不依赖效果器可用性，所以放在 `available` 判断之外（v1.1.52；N6 模式切换）。
  *
  * 另有「按住对比原声」按钮：按住期间全部效果器临时旁路（[AudioFx.setBypassed]），
  * 供 A/B 对比 —— 音效好不好，当下听一耳朵比看曲线直观得多。
@@ -84,7 +85,7 @@ import com.luckylearning.windtone.ui.theme.glassContainerColor
  *  - 手动拖频段滑块 / 任一增强滑块 = 离开预设与方案，进入「自定义」（id 清空）；
  *  - 标题行的 ↺ 只在偏离出厂状态时出现，点它 = 关掉均衡器 + 频段全平 + 全部增强归零
  *    + 方案与进车快照一并回厂；
- *  - 播放过渡两项不受「设备不支持」影响（走的是播放器音量，不是音频效果器）。
+ *  - 播放过渡（淡入淡出 / 音量平衡 / ReplayGain 模式）不受「设备不支持」影响（走的是播放器音量，不是音频效果器）。
  */
 @Composable
 fun EqSheet(onClose: () -> Unit) {
@@ -310,6 +311,33 @@ private fun PlaybackTransitionSection(tv: TrackVolume.State) {
             )
         }
         Switch(checked = tv.loudnessBalance, onCheckedChange = TrackVolume::setLoudnessBalance)
+    }
+    if (tv.loudnessBalance) {
+        Text(
+            stringResource(R.string.eq_replaygain_mode_label),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(top = 10.dp),
+        )
+        Text(
+            stringResource(R.string.eq_replaygain_mode_hint),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(top = 6.dp),
+        ) {
+            FilterChip(
+                selected = tv.replayGainMode == ReplayGainMode.TRACK,
+                onClick = { TrackVolume.setReplayGainMode(ReplayGainMode.TRACK) },
+                label = { Text(stringResource(R.string.eq_replaygain_mode_track)) },
+            )
+            FilterChip(
+                selected = tv.replayGainMode == ReplayGainMode.ALBUM,
+                onClick = { TrackVolume.setReplayGainMode(ReplayGainMode.ALBUM) },
+                label = { Text(stringResource(R.string.eq_replaygain_mode_album)) },
+            )
+        }
     }
 }
 

@@ -6,6 +6,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import com.luckylearning.windtone.playback.ReplayGainMode
 
 /**
  * 歌曲排序方式。
@@ -382,6 +383,7 @@ object SettingsDefaults {
 
     /** 曲间响度平衡：出厂关（需要后台分析音频，用户显式开启） */
     const val LOUDNESS_BALANCE = false
+    const val REPLAY_GAIN_MODE = "TRACK"
 
     /** 用户命名的均衡器预设（[com.luckylearning.windtone.playback.UserEqPresets] 编码）；空串 = 还没存过 */
     const val EQ_USER_PRESETS = ""
@@ -929,6 +931,19 @@ class Prefs private constructor(context: Context) {
             sp.edit().putBoolean(KEY_LOUDNESS_BALANCE, value).apply()
             ioScope.launch { store.putBoolean(KEY_LOUDNESS_BALANCE, value) }
         }
+
+    /**
+     * ReplayGain 曲目 / 专辑模式（N6）。音量平衡开启时生效；非法存量回落曲目。
+     */
+    var replayGainMode: ReplayGainMode
+        get() = ReplayGainMode.fromStored(
+            sp.getString(KEY_REPLAY_GAIN_MODE, SettingsDefaults.REPLAY_GAIN_MODE),
+        )
+        set(value) {
+            sp.edit().putString(KEY_REPLAY_GAIN_MODE, value.name).apply()
+            ioScope.launch { store.putString(KEY_REPLAY_GAIN_MODE, value.name) }
+        }
+
 
     /**
      * 用户自己保存的均衡器预设。
@@ -1646,6 +1661,7 @@ class Prefs private constructor(context: Context) {
         const val KEY_FADE_ENABLED = "fade_enabled"
         const val KEY_FADE_DURATION_MS = "fade_duration_ms"
         const val KEY_LOUDNESS_BALANCE = "loudness_balance"
+        const val KEY_REPLAY_GAIN_MODE = "replay_gain_mode"
         const val KEY_EQ_USER_PRESETS = "eq_user_presets"
         const val KEY_SCENE_ID = "scene_id"
         const val KEY_SCENE_STASH = "scene_stash"

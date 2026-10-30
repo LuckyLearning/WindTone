@@ -18,15 +18,25 @@ object ReplayGainReader {
     const val HEAD_BYTES = 256 * 1024
     const val TAIL_BYTES = 64 * 1024
 
-    fun read(context: Context, uri: Uri): Int? = runCatching {
+    /** 读出文件里全部可识别的增益标签；没有则 null。 */
+    fun readGains(context: Context, uri: Uri): ReplayGainTags.Gains? = runCatching {
         val (head, tail) = readParts(context, uri) ?: return null
-        val gains = ReplayGainTags.merge(
+        ReplayGainTags.merge(
             ReplayGainTags.parse(head),
             tail?.let { ReplayGainTags.parse(it) },
-        )
-        val db = gains?.preferredDb() ?: return null
-        ReplayGainTags.toGainMb(db)
+        )?.takeUnless { it.isEmpty() }
     }.getOrNull()
+
+    /**
+     * 按 [mode] 解析出最终增益（mB）。
+     * 兼容旧调用；新代码应优先 [readGains] + [ReplayGainTags.Gains.preferredDb]，
+     * 以便一次读取同时填曲目 / 专辑两份缓存。
+     */
+    fun read(context: Context, uri: Uri, mode: ReplayGainMode = ReplayGainMode.TRACK): Int? {
+        val gains = readGains(context, uri) ?: return null
+        val db = gains.preferredDb(mode) ?: return null
+        return ReplayGainTags.toGainMb(db)
+    }
 
     private fun readParts(context: Context, uri: Uri): Pair<ByteArray, ByteArray?>? {
         val pfd = runCatching { context.contentResolver.openFileDescriptor(uri, "r") }.getOrNull()

@@ -43,6 +43,7 @@ object TrackVolume {
         val fadeEnabled: Boolean = false,
         val fadeDurationMs: Int = SettingsDefaults.FADE_DURATION_MS,
         val loudnessBalance: Boolean = false,
+        val replayGainMode: ReplayGainMode = ReplayGainMode.TRACK,
         /** 是否有曲目正在后台做响度分析（界面可不展示；保留给诊断） */
         val analyzing: Boolean = false,
     )
@@ -58,8 +59,10 @@ object TrackVolume {
 
     private var prefs: Prefs? = null
     private var cache: LoudnessCache? = null
-    /** 标签增益缓存。值为 [TAG_ABSENT] 表示查过、文件里没有标签。 */
-    private var tagCache: LoudnessCache? = null
+    /** 曲目模式标签缓存。值为 [TAG_ABSENT] 表示查过、该模式无可用标签。 */
+    private var trackTagCache: LoudnessCache? = null
+    /** 专辑模式标签缓存（与曲目缓存同一次读标签写入，切模式不重读文件）。 */
+    private var albumTagCache: LoudnessCache? = null
     private var appContext: Context? = null
     private var player: Player? = null
 
@@ -129,7 +132,9 @@ object TrackVolume {
         appContext = app
         prefs = Prefs(app)
         cache = LoudnessCache(File(app.filesDir, "loudness_cache.txt"))
-        tagCache = LoudnessCache(File(app.filesDir, "replaygain_cache.txt"))
+        // N6：分模式两份缓存。旧单文件 replaygain_cache.txt 不再读（会自然过期被忽略）。
+        trackTagCache = LoudnessCache(File(app.filesDir, "replaygain_track_cache.txt"))
+        albumTagCache = LoudnessCache(File(app.filesDir, "replaygain_album_cache.txt"))
         refreshState()
     }
 
@@ -178,6 +183,13 @@ object TrackVolume {
         if (enabled) maybeAnalyzeCurrent()
     }
 
+    fun setReplayGainMode(mode: ReplayGainMode) {
+        prefs?.replayGainMode = mode
+        refreshState()
+        applyLoudnessFor(player?.currentMediaItem?.mediaId)
+        if (!fadingOut && fadeJob == null) setVolumeNow(loudnessFactor)
+    }
+
     // ------------------------------------------------------------ 内部实现
 
     private fun refreshState() {
@@ -187,6 +199,7 @@ object TrackVolume {
                 fadeEnabled = p.fadeEnabled,
                 fadeDurationMs = p.fadeDurationMs,
                 loudnessBalance = p.loudnessBalance,
+                replayGainMode = p.replayGainMode,
             )
         }
     }
@@ -204,14 +217,18 @@ object TrackVolume {
             loudnessFactor = 1f
             return
         }
-        val storedTag = tagCache?.gainMb(stableKey)
+        val mode = p.replayGainMode
+        val modeCache = if (mode == ReplayGainMode.ALBUM) albumTagCache else trackTagCache
+        // 用曲目缓存是否已写入作为「是否读过标签」的哨兵（两侧同次写入）。
+        val readSentinel = trackTagCache?.gainMb(stableKey)
+        val storedTag = modeCache?.gainMb(stableKey)
         val rms = cache?.gainMb(stableKey)
-        when (storedTag) {
-            null -> {
+        when {
+            readSentinel == null -> {
                 loudnessFactor = if (rms != null) LoudnessScan.attenuationFactorMb(rms) else 1f
                 requestTagRead(stableKey)
             }
-            TAG_ABSENT -> {
+            storedTag == null || storedTag == TAG_ABSENT -> {
                 val gain = ReplayGainTags.resolveGainMb(null, rms)
                 loudnessFactor = if (gain != null) LoudnessScan.attenuationFactorMb(gain) else 1f
                 if (rms == null) requestAnalyze(stableKey)
@@ -229,19 +246,30 @@ object TrackVolume {
 
     /** 读当前曲的音量标签。URI 在主线程取好；读完若还停在这首上，立刻重算音量。 */
     private fun requestTagRead(stableKey: String) {
-        if (tagCache?.gainMb(stableKey) != null) return
+        if (trackTagCache?.gainMb(stableKey) != null) return
         if (!tagPending.add(stableKey)) return
         val uri = player?.currentMediaItem?.localConfiguration?.uri
         val context = appContext
         if (uri == null || context == null) {
             tagPending.remove(stableKey)
-            if (uri == null) tagCache?.put(stableKey, TAG_ABSENT)
+            if (uri == null) {
+                trackTagCache?.put(stableKey, TAG_ABSENT)
+                albumTagCache?.put(stableKey, TAG_ABSENT)
+            }
             if (uri == null && cache?.gainMb(stableKey) == null) requestAnalyze(stableKey)
             return
         }
         analyzeScope.launch {
-            val mb = ReplayGainReader.read(context, uri)
-            tagCache?.put(stableKey, mb ?: TAG_ABSENT)
+            val gains = ReplayGainReader.readGains(context, uri)
+            if (gains == null || gains.isEmpty()) {
+                trackTagCache?.put(stableKey, TAG_ABSENT)
+                albumTagCache?.put(stableKey, TAG_ABSENT)
+            } else {
+                val trackMb = gains.preferredDb(ReplayGainMode.TRACK)?.let(ReplayGainTags::toGainMb)
+                val albumMb = gains.preferredDb(ReplayGainMode.ALBUM)?.let(ReplayGainTags::toGainMb)
+                trackTagCache?.put(stableKey, trackMb ?: TAG_ABSENT)
+                albumTagCache?.put(stableKey, albumMb ?: TAG_ABSENT)
+            }
             tagPending.remove(stableKey)
             scope.launch {
                 if (player?.currentMediaItem?.mediaId == stableKey && !fadingOut) {

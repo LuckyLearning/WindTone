@@ -44,6 +44,29 @@ class ReplayGainTagsTest {
     }
 
     @Test
+    fun `曲目模式优先曲目增益，专辑模式优先专辑增益`() {
+        val all = ReplayGainTags.Gains(trackDb = -3.0, albumDb = -8.0, itunesDb = -1.0, r128TrackDb = 2.0)
+        assertEquals(-3.0, all.preferredDb(ReplayGainMode.TRACK)!!, 1e-9)
+        assertEquals(-8.0, all.preferredDb(ReplayGainMode.ALBUM)!!, 1e-9)
+        val noTrack = ReplayGainTags.Gains(albumDb = -8.0, itunesDb = -1.0)
+        assertEquals(-1.0, noTrack.preferredDb(ReplayGainMode.TRACK)!!, 1e-9)
+        assertEquals(-8.0, noTrack.preferredDb(ReplayGainMode.ALBUM)!!, 1e-9)
+        assertEquals(-8.0, ReplayGainTags.Gains(albumDb = -8.0).preferredDb(ReplayGainMode.TRACK)!!, 1e-9)
+        assertEquals(-4.0, ReplayGainTags.Gains(trackDb = -4.0).preferredDb(ReplayGainMode.ALBUM)!!, 1e-9)
+        assertNull(ReplayGainTags.Gains().preferredDb(ReplayGainMode.TRACK))
+        assertNull(ReplayGainTags.Gains().preferredDb(ReplayGainMode.ALBUM))
+    }
+
+    @Test
+    fun `ReplayGainMode 非法存量回落曲目`() {
+        assertEquals(ReplayGainMode.TRACK, ReplayGainMode.fromStored(null))
+        assertEquals(ReplayGainMode.TRACK, ReplayGainMode.fromStored(""))
+        assertEquals(ReplayGainMode.TRACK, ReplayGainMode.fromStored("nope"))
+        assertEquals(ReplayGainMode.ALBUM, ReplayGainMode.fromStored("album"))
+        assertEquals(ReplayGainMode.TRACK, ReplayGainMode.fromStored("TRACK"))
+    }
+
+    @Test
     fun `有标签就不用 RMS，0 dB 也算有标签`() {
         assertEquals(-650, ReplayGainTags.resolveGainMb(-650, -200))
         assertEquals(0, ReplayGainTags.resolveGainMb(0, -500))
