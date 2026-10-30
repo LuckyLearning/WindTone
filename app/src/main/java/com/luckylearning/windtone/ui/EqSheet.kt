@@ -21,15 +21,19 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -39,18 +43,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.playback.AudioFx
 import com.luckylearning.windtone.playback.EqPresets
+import com.luckylearning.windtone.playback.EqTone
 import com.luckylearning.windtone.playback.ReverbPresets
 import com.luckylearning.windtone.playback.SoundSchemes
 import com.luckylearning.windtone.playback.TrackVolume
+import com.luckylearning.windtone.playback.UserEqPresets
 import com.luckylearning.windtone.ui.theme.glassContainerColor
 
 /**
@@ -60,9 +70,9 @@ import com.luckylearning.windtone.ui.theme.glassContainerColor
  * 预设只能横向翻着找、四组可调项挤在一起看不出层次。现在按**决策顺序**分四段：
  *  ① 方案——一键应用一组完整听感（[SoundSchemes]：曲线 + 低音 + 环绕 + 响度 + 混响打包），
  *     选的是「想要什么感觉」，不想调参数的用户到这一层就能走（v1.1.52）；
- *  ② 预设——均衡器曲线（[EqPresets]），方案之上的单维选择；
+ *  ② 预设——均衡器曲线（[EqPresets]）和用户自己存的「我的」（[UserEqPresets]）；
  *  ③ 频段——先把当前曲线画出来（折线预览），再给频段滑块；
- *  ④ 增强音效——低音 / 环绕 / 响度 / 混响，每项一行「标题 + 右侧当前值」；
+ *  ④ 增强音效——顶部低音 / 高音快捷键（车机大触控），下面才是低音 / 环绕 / 响度 / 混响；
  *  ⑤ 播放过渡——淡入淡出与曲间音量平衡（[TrackVolume]），不依赖效果器可用性，
  *     所以放在 `available` 判断之外（v1.1.52）。
  *
@@ -133,12 +143,12 @@ fun EqSheet(onClose: () -> Unit) {
             if (!state.available) {
                 // 2026-10-18 真机反馈：车机上明明在放歌，这里却弹「播放器尚未启动」。
                 // 原因是只有 available=false 一个信号，界面只能猜。现在按原因分开说
-                // （文案见 [eqUnavailableCopy]，纯函数、有单测锁住）。
+                // （文案见 [eqUnavailableRes]，单测锁住中英文）。
                 Text(
-                    eqUnavailableCopy(state),
+                    stringResource(eqUnavailableRes(state)),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = 24.dp),
+                    modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
                 )
                 if (state.unavailableDetail.isNotBlank()) {
                     Text(
@@ -156,8 +166,30 @@ fun EqSheet(onClose: () -> Unit) {
                 if (state.enabled) AbCompareButton()
             }
             // 淡入淡出 / 音量平衡走的是播放器音量，与效果器可用性无关：
-            // 车机上效果器建不出来时这两项照常能用，所以放在 available 判断之外
-            PlaybackTransitionSection(trackVolume)
+            // 车机上效果器建不出来时这两项照常能用，所以放在 available 判断之外。
+            // 设备拒绝建效果器时把它们框出来，避免用户只看见「都建不起来」就关掉。
+            if (state.unavailable == AudioFx.Unavailable.DEVICE_REJECTED) {
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                ) {
+                    Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                        Text(
+                            stringResource(R.string.eq_still_available_title),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                        PlaybackTransitionSection(trackVolume)
+                    }
+                }
+            } else {
+                PlaybackTransitionSection(trackVolume)
+            }
             Spacer(Modifier.height(24.dp))
         }
     }
@@ -272,7 +304,7 @@ private fun PlaybackTransitionSection(tv: TrackVolume.State) {
         Column(Modifier.weight(1f)) {
             Text("音量平衡", style = MaterialTheme.typography.bodyMedium)
             Text(
-                "自动压低响度过大的歌，切歌不再忽大忽小；首次播放某首时后台分析，稍后生效",
+                stringResource(R.string.eq_volume_balance_hint),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -289,43 +321,139 @@ private fun PlaybackTransitionSection(tv: TrackVolume.State) {
  * 为什么从横向滚动换成换行网：一组 8 个片，横向滚动时最后两个永远在屏幕外，
  * 「有没有我想要的」这件事本身就得靠滑一下才知道；换行之后整组一屏看全。
  */
+private enum class PresetTab { FEEL, GENRE, MINE }
+
+private sealed class PresetEditor {
+    data object Create : PresetEditor()
+    data class Rename(val id: String, val initial: String) : PresetEditor()
+    data class ConfirmDelete(val id: String, val name: String) : PresetEditor()
+}
+
 @Composable
 private fun PresetSection(state: AudioFx.EqState) {
-    val current = EqPresets.byId(state.presetId)
-    // 初始组 = **当前预设所在的那一组**（自定义则落在「听感」）。
-    // 不留 key：弹层每次打开都是一次新的组合，这里只决定「打开时先显示哪一组」，
-    // 之后用户切 tab 就归用户管 —— 否则选了流派预设再打开会停在「听感」，
-    // 选中态那一枚藏在另一组里，看着像「没选上」。
-    var group by remember { mutableStateOf(current?.group ?: EqPresets.Group.FEEL) }
+    val builtin = EqPresets.byId(state.presetId)
+    val user = state.userPresets.firstOrNull { it.id == state.presetId }
+    // 只决定打开时落在哪一组。之后拖滑块会清空 presetId，不能因此把 tab 拽走。
+    var tab by remember {
+        mutableStateOf(
+            when {
+                UserEqPresets.isUserId(state.presetId) -> PresetTab.MINE
+                builtin?.group == EqPresets.Group.GENRE -> PresetTab.GENRE
+                else -> PresetTab.FEEL
+            },
+        )
+    }
+    var editor by remember { mutableStateOf<PresetEditor?>(null) }
+    var libraryFull by remember { mutableStateOf(false) }
 
     SectionLabel("预设")
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        EqPresets.Group.entries.forEach { g ->
-            FilterChip(
-                selected = group == g,
-                onClick = { group = g },
-                label = { Text(g.label) },
-            )
-        }
+        FilterChip(
+            selected = tab == PresetTab.FEEL,
+            onClick = { tab = PresetTab.FEEL },
+            label = { Text(EqPresets.Group.FEEL.label) },
+        )
+        FilterChip(
+            selected = tab == PresetTab.GENRE,
+            onClick = { tab = PresetTab.GENRE },
+            label = { Text(EqPresets.Group.GENRE.label) },
+        )
+        FilterChip(
+            selected = tab == PresetTab.MINE,
+            onClick = { tab = PresetTab.MINE },
+            label = { Text(stringResource(R.string.eq_user_presets)) },
+        )
     }
     Text(
-        group.hint,
+        when (tab) {
+            PresetTab.FEEL -> EqPresets.Group.FEEL.hint
+            PresetTab.GENRE -> EqPresets.Group.GENRE.hint
+            PresetTab.MINE -> stringResource(R.string.eq_user_preset_hint)
+        },
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 2.dp),
     )
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp),
-    ) {
-        EqPresets.group(group).forEach { p ->
-            FilterChip(
-                selected = state.presetId == p.id,
-                onClick = { AudioFx.setPreset(p.id) },
-                label = { Text(p.name) },
+
+    if (tab == PresetTab.MINE) {
+        if (state.userPresets.isEmpty()) {
+            Text(
+                stringResource(R.string.eq_user_preset_empty),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
             )
+        } else {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+            ) {
+                state.userPresets.forEach { p ->
+                    FilterChip(
+                        selected = state.presetId == p.id,
+                        onClick = { AudioFx.applyUserPreset(p.id) },
+                        label = { Text(p.name) },
+                    )
+                }
+            }
+        }
+        if (libraryFull) {
+            Text(
+                stringResource(R.string.eq_user_preset_full),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+        ) {
+            TextButton(
+                onClick = {
+                    if (state.userPresets.size >= UserEqPresets.MAX_PRESETS) {
+                        libraryFull = true
+                    } else {
+                        libraryFull = false
+                        editor = PresetEditor.Create
+                    }
+                },
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) { Text(stringResource(R.string.eq_user_preset_save)) }
+            if (user != null) {
+                TextButton(
+                    onClick = { editor = PresetEditor.Rename(user.id, user.name) },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) { Text(stringResource(R.string.eq_user_preset_rename)) }
+                TextButton(
+                    onClick = { AudioFx.updateUserPreset(user.id) },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) { Text(stringResource(R.string.eq_user_preset_update)) }
+                TextButton(
+                    onClick = { editor = PresetEditor.ConfirmDelete(user.id, user.name) },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) { Text(stringResource(R.string.eq_user_preset_delete)) }
+            }
+        }
+    } else {
+        val group = if (tab == PresetTab.GENRE) EqPresets.Group.GENRE else EqPresets.Group.FEEL
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+        ) {
+            EqPresets.group(group).forEach { p ->
+                FilterChip(
+                    selected = state.presetId == p.id,
+                    onClick = { AudioFx.setPreset(p.id) },
+                    label = { Text(p.name) },
+                )
+            }
         }
     }
 
@@ -339,18 +467,86 @@ private fun PresetSection(state: AudioFx.EqState) {
     ) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
             Text(
-                current?.name ?: "自定义",
+                user?.name ?: builtin?.name ?: "自定义",
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
             Text(
-                current?.desc ?: "手动拖过频段滑块。再选一个预设可回到内置曲线。",
+                when {
+                    user != null -> stringResource(R.string.eq_user_preset_applied)
+                    builtin != null -> builtin.desc
+                    else -> stringResource(R.string.eq_user_preset_custom_hint)
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
         }
     }
+
+    when (val current = editor) {
+        null -> Unit
+        is PresetEditor.ConfirmDelete -> AlertDialog(
+            onDismissRequest = { editor = null },
+            title = { Text(stringResource(R.string.eq_user_preset_delete)) },
+            text = { Text(stringResource(R.string.eq_user_preset_delete_body, current.name)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    AudioFx.deleteUserPreset(current.id)
+                    editor = null
+                }) { Text(stringResource(R.string.eq_user_preset_delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { editor = null }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+        is PresetEditor.Create, is PresetEditor.Rename -> PresetNameDialog(
+            initial = if (current is PresetEditor.Rename) current.initial else "",
+            onDismiss = { editor = null },
+            onConfirm = { name ->
+                val ok = when (current) {
+                    is PresetEditor.Create -> AudioFx.saveUserPreset(name) != null
+                    is PresetEditor.Rename -> AudioFx.renameUserPreset(current.id, name)
+                    else -> false
+                }
+                if (ok) {
+                    tab = PresetTab.MINE
+                    editor = null
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun PresetNameDialog(
+    initial: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var name by remember { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.eq_user_preset_name)) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it.take(UserEqPresets.MAX_NAME_LENGTH) },
+                singleLine = true,
+                label = { Text(stringResource(R.string.eq_user_preset_name)) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(name) },
+                enabled = UserEqPresets.sanitizeName(name) != null,
+            ) { Text(stringResource(R.string.ok)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
 }
 
 // ================================================================ ③ 频段与曲线
@@ -459,6 +655,7 @@ private fun EqCurvePreview(
 @Composable
 private fun EnhancementSection(state: AudioFx.EqState, reverbPreset: ReverbPresets.Preset?) {
     SectionLabel("增强音效")
+    TonePads(state)
     FxSlider(
         title = "低音增强",
         valueText = if (state.bassStrength > 0) "${state.bassStrength / 10}%" else "关闭",
@@ -524,6 +721,100 @@ private fun EnhancementSection(state: AudioFx.EqState, reverbPreset: ReverbPrese
 }
 
 /**
+ * 低音 / 高音快捷键。触控目标做大，给车机用。
+ *
+ * 低音和下面的「低音增强」滑块写同一个 [AudioFx.EqState.bassStrength]。
+ * 高音把 4 kHz 及以上的频段收成搁架，频段滑块和曲线预览跟着变。
+ */
+@Composable
+private fun TonePads(state: AudioFx.EqState) {
+    val treble = EqTone.readTrebleMb(state.bandLevels, state.bandCenterHz)
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp),
+    ) {
+        val down = stringResource(R.string.eq_tone_down)
+        val up = stringResource(R.string.eq_tone_up)
+        TonePad(
+            title = stringResource(R.string.eq_tone_bass),
+            valueText = if (state.bassStrength > 0) "${state.bassStrength / 10}%" else "关闭",
+            downDescription = down,
+            upDescription = up,
+            onDown = {
+                AudioFx.setBassStrength(EqTone.stepBass(state.bassStrength, -EqTone.BASS_STEP, state.bassMax))
+            },
+            onUp = {
+                AudioFx.setBassStrength(EqTone.stepBass(state.bassStrength, EqTone.BASS_STEP, state.bassMax))
+            },
+            modifier = Modifier.weight(1f),
+        )
+        TonePad(
+            title = stringResource(R.string.eq_tone_treble),
+            valueText = formatGainDb(treble),
+            downDescription = down,
+            upDescription = up,
+            onDown = {
+                AudioFx.setTrebleGainMb(
+                    EqTone.stepTreble(treble, -EqTone.TREBLE_STEP_MB, state.bandMinMb, state.bandMaxMb),
+                )
+            },
+            onUp = {
+                AudioFx.setTrebleGainMb(
+                    EqTone.stepTreble(treble, EqTone.TREBLE_STEP_MB, state.bandMinMb, state.bandMaxMb),
+                )
+            },
+            modifier = Modifier.weight(1f),
+        )
+    }
+    Text(
+        stringResource(R.string.eq_tone_hint),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 4.dp),
+    )
+}
+
+@Composable
+private fun TonePad(
+    title: String,
+    valueText: String,
+    downDescription: String,
+    upDescription: String,
+    onDown: () -> Unit,
+    onUp: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            Text(
+                valueText,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilledTonalButton(
+                onClick = onDown,
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 64.dp)
+                    .semantics { contentDescription = "$title $downDescription" },
+            ) { Text("−", fontSize = 28.sp) }
+            FilledTonalButton(
+                onClick = onUp,
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 64.dp)
+                    .semantics { contentDescription = "$title $upDescription" },
+            ) { Text("+", fontSize = 28.sp) }
+        }
+    }
+}
+
+/**
  * 一行连续量：标题 + 右侧当前值 + 滑块（+ 可选备注）。
  *
  * 右边的值必须画出来 —— 原先滑块下面没有任何数字，「拖到哪儿算大」只能靠猜。
@@ -562,17 +853,13 @@ private fun formatGainDb(levelMb: Int): String =
     if (levelMb == 0) "0.0" else "%+.1f".format(levelMb / 100.0)
 
 /**
- * 音效不可用时给用户看的那句话（v1.1.22）。
+ * 音效不可用时该用哪句文案（v1.1.22，车机不可用态在此基础上点明淡入淡出和音量平衡）。
  *
- * 抽成纯函数是为了能上单测：这句话此前把「设备不给效果器」也说成
- * 「播放器尚未启动」，在真车机上误导性极强 —— 用户明明在放歌，
- * 却被指去点播放键。两种原因必须说成两件事。
+ * 返回资源 id 而不是写死中文：中英文都在 `values` / `values-zh`，单测按语言把句子锁住。
+ * 设备拒绝和「还没会话」必须是两句，不能把正在放歌的车机说成「尚未启动」。
  */
-internal fun eqUnavailableCopy(state: AudioFx.EqState): String =
+internal fun eqUnavailableRes(state: AudioFx.EqState): Int =
     when (state.unavailable) {
-        AudioFx.Unavailable.DEVICE_REJECTED ->
-            "这台设备的音频系统没有向应用开放音效接口（车机上很常见）。\n" +
-                "均衡器 / 低音 / 混响都建不起来，请改用车辆自带的音效设置。播放本身不受影响。"
-        else ->
-            "播放器还没准备好音频会话。\n开始播放任意一首歌曲后即可调节。"
+        AudioFx.Unavailable.DEVICE_REJECTED -> R.string.eq_unavailable_device
+        else -> R.string.eq_unavailable_pending
     }

@@ -714,4 +714,26 @@ Direct link looks fine; the issue is in playback (host, cache, or file format).<
     <string name="aliyun_unknown_reason">Unknown reason</string>
     <string name="aliyun_up">Up</string>
     <string name="aliyun_view_folder">Browse folder</string>
+
+    <string name="eq_user_presets">Mine</string>
+    <string name="eq_user_preset_hint">Save the current curve plus bass, surround, loudness, and reverb. Tap one to apply it.</string>
+    <string name="eq_user_preset_empty">No presets yet. Shape the curve, then tap Save as new preset.</string>
+    <string name="eq_user_preset_save">Save as new preset</string>
+    <string name="eq_user_preset_rename">Rename</string>
+    <string name="eq_user_preset_update">Update this preset</string>
+    <string name="eq_user_preset_delete">Delete</string>
+    <string name="eq_user_preset_name">Preset name</string>
+    <string name="eq_user_preset_full">You can save up to 24 presets. Delete one to save another.</string>
+    <string name="eq_user_preset_delete_body">Delete \"%1$s\"? This cannot be undone.</string>
+    <string name="eq_user_preset_applied">Your saved curve and enhancements. Editing a band leaves this preset.</string>
+    <string name="eq_user_preset_custom_hint">Bands were edited by hand. Open Mine to save this as a preset.</string>
+    <string name="eq_tone_bass">Bass</string>
+    <string name="eq_tone_treble">Treble</string>
+    <string name="eq_tone_hint">Bass drives bass boost. Treble sets every band at 4 kHz and above, the same curve as the sliders below.</string>
+    <string name="eq_tone_down">Decrease</string>
+    <string name="eq_tone_up">Increase</string>
+    <string name="eq_unavailable_device">This device\'s audio system does not expose an effects API to apps (common on car head units).\nThe equalizer, bass, and reverb cannot be created. Use the vehicle\'s own sound settings. Playback itself is unaffected.\nFade in/out and volume balance do not need the effects API and can be used below.</string>
+    <string name="eq_unavailable_pending">The player does not have an audio session yet.\nStart playing any song, then you can adjust these.</string>
+    <string name="eq_still_available_title">Still available</string>
+    <string name="eq_volume_balance_hint">Uses ReplayGain or iTunes volume tags when the file has them, and falls back to a loudness estimate otherwise. This is not Loudness Enhance.</string>
 </resources>

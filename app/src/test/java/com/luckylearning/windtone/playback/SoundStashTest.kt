@@ -49,6 +49,16 @@ class SoundStashTest {
     }
 
     @Test
+    fun `用户预设 id 能进车快照再原样回来`() {
+        val id = "u_m5k_7"
+        val stash = SoundStash.encode(true, id, "100,0,-50", 400, 0, 0, "off")
+        val snap = SoundStash.decode(stash)!!
+        assertEquals(id, snap.presetId)
+        assertEquals("100,0,-50", snap.bandsCsv)
+        assertEquals(400, snap.bass)
+    }
+
+    @Test
     fun `字段数不对返回 null`() {
         assertNull(SoundStash.decode(""))
         assertNull(SoundStash.decode("1|flat"))

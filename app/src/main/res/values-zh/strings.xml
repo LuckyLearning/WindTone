@@ -695,4 +695,26 @@
     <string name="aliyun_unknown_reason">未知原因</string>
     <string name="aliyun_up">上级</string>
     <string name="aliyun_view_folder">曲目管理</string>
+
+    <string name="eq_user_presets">我的</string>
+    <string name="eq_user_preset_hint">把当前曲线，以及低音、环绕、响度、混响存下来。点一下即套用。</string>
+    <string name="eq_user_preset_empty">还没有自己的预设。调好曲线后，点「存为新预设」就能下次一键用上。</string>
+    <string name="eq_user_preset_save">存为新预设</string>
+    <string name="eq_user_preset_rename">重命名</string>
+    <string name="eq_user_preset_update">更新此预设</string>
+    <string name="eq_user_preset_delete">删除</string>
+    <string name="eq_user_preset_name">预设名称</string>
+    <string name="eq_user_preset_full">最多保存 24 个。删掉一个后再存。</string>
+    <string name="eq_user_preset_delete_body">删除「%1$s」？删了就不能恢复。</string>
+    <string name="eq_user_preset_applied">已套用你保存的曲线和增强。再拖频段就会离开这个预设。</string>
+    <string name="eq_user_preset_custom_hint">手动调过频段。到「我的」里可以存成预设。</string>
+    <string name="eq_tone_bass">低音</string>
+    <string name="eq_tone_treble">高音</string>
+    <string name="eq_tone_hint">低音走低音增强；高音把 4 kHz 及以上的频段调到同一增益，和下面的频段滑块是同一条曲线。</string>
+    <string name="eq_tone_down">减小</string>
+    <string name="eq_tone_up">增大</string>
+    <string name="eq_unavailable_device">这台设备的音频系统没有向应用开放音效接口（车机上很常见）。\n均衡器 / 低音 / 混响都建不起来，请改用车辆自带的音效设置。播放本身不受影响。\n淡入淡出和音量平衡不依赖音效接口，下面可以直接用。</string>
+    <string name="eq_unavailable_pending">播放器还没准备好音频会话。\n开始播放任意一首歌曲后即可调节。</string>
+    <string name="eq_still_available_title">这些现在就能用</string>
+    <string name="eq_volume_balance_hint">有 ReplayGain 或 iTunes 音量标签时优先采用，没有标签再按整曲响度压低过响的歌。这不是上面的「响度增强」。</string>
 </resources>

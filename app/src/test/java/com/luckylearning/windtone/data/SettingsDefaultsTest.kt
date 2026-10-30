@@ -111,6 +111,7 @@ class SettingsDefaultsTest {
         check("fadeEnabled", prefs.fadeEnabled, SettingsDefaults.FADE_ENABLED)
         check("fadeDurationMs", prefs.fadeDurationMs, SettingsDefaults.FADE_DURATION_MS)
         check("loudnessBalance", prefs.loudnessBalance, SettingsDefaults.LOUDNESS_BALANCE)
+        check("eqUserPresets", prefs.eqUserPresets, SettingsDefaults.EQ_USER_PRESETS)
 
         assertTrue(
             "出厂默认值出现了两处定义（Prefs getter 与 SettingsDefaults 不一致）：\n" +

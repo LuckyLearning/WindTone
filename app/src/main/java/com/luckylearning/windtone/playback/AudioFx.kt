@@ -69,6 +69,8 @@ object AudioFx {
         val globalEffects: Boolean = false,
         /** 当前音效方案（[SoundSchemes] 的 id）；空串 = 没选过方案 / 手动微调过（v1.1.52） */
         val schemeId: String = "",
+        /** 用户命名预设（[UserEqPresets]）。和当前有没有选中它无关，列表本身要活过杀进程。 */
+        val userPresets: List<UserEqPresets.Preset> = emptyList(),
     ) {
         override fun equals(other: Any?): Boolean = this === other
         override fun hashCode(): Int = System.identityHashCode(this)
@@ -92,6 +94,23 @@ object AudioFx {
 
     fun init(context: android.content.Context) {
         if (prefs == null) prefs = Prefs(context.applicationContext)
+        _state.value = _state.value.copy(userPresets = loadUserPresets())
+    }
+
+    private fun loadUserPresets(): List<UserEqPresets.Preset> =
+        UserEqPresets.decode(prefs?.eqUserPresets.orEmpty())
+
+    private fun storeUserPresets(list: List<UserEqPresets.Preset>) {
+        prefs?.eqUserPresets = UserEqPresets.encode(list)
+        _state.value = _state.value.copy(userPresets = list)
+    }
+
+    /** 只动增强、曲线没变：用户预设离开，内置曲线预设留着。方案一律离开。 */
+    private fun leaveEnhancementEdit() {
+        clearActiveSchemeId()
+        val nextPreset = UserEqPresets.presetIdAfterManualEnhancement(_state.value.presetId)
+        if (nextPreset != _state.value.presetId) prefs?.eqPresetId = nextPreset
+        _state.value = _state.value.copy(presetId = nextPreset, schemeId = "")
     }
 
     // ------------------------------------------------------- 音效方案（v1.1.52）
@@ -245,7 +264,11 @@ object AudioFx {
         if (audioSessionId != 0) sessionId = audioSessionId
         if (sessionId == 0) {
             // 还没有会话：明确标成「等播放器」，别让界面把它说成「设备不支持」
-            _state.value = EqState(available = false, unavailable = Unavailable.SESSION_PENDING)
+            _state.value = EqState(
+                available = false,
+                unavailable = Unavailable.SESSION_PENDING,
+                userPresets = loadUserPresets(),
+            )
             return
         }
         releaseEffects()
@@ -284,10 +307,13 @@ object AudioFx {
         }
         val centerHz = (0 until bandCount).map { i -> eq.getCenterFreq(i.toShort()) / 100 }
 
-        // 选中了内置预设 → 直接把曲线写到频段上；否则用用户自定义值
-        val preset = EqPresets.byId(p.eqPresetId)
-        val bands = if (preset != null) {
-            EqPresets.curveFor(preset, centerHz)
+        // 内置预设按设备频段重算曲线；用户预设 / 手调曲线用存下来的频段
+        val builtin = EqPresets.byId(p.eqPresetId)
+        val users = loadUserPresets()
+        val user = users.firstOrNull { it.id == p.eqPresetId }
+        if (UserEqPresets.isUserId(p.eqPresetId) && user == null) p.eqPresetId = ""
+        val bands = if (builtin != null) {
+            EqPresets.curveFor(builtin, centerHz)
         } else {
             decodeBands(p.eqBands, bandCount, min, max)
         }
@@ -316,7 +342,7 @@ object AudioFx {
             bandLevels = bands,
             centerFreqs = centers,
             bandCenterHz = centerHz,
-            presetId = preset?.id.orEmpty(),
+            presetId = builtin?.id ?: user?.id.orEmpty(),
             bassStrength = p.eqBassBoost,
             virtualStrength = p.eqVirtualizer,
             bassMax = 1000,
@@ -325,6 +351,7 @@ object AudioFx {
             reverbAvailable = rev != null,
             globalEffects = global,
             schemeId = activeSchemeId(p),
+            userPresets = users,
         )
         apply(p.eqEnabled)
     }
@@ -340,6 +367,7 @@ object AudioFx {
             available = false,
             unavailable = Unavailable.DEVICE_REJECTED,
             unavailableDetail = t?.let { it.javaClass.simpleName + ": " + (it.message ?: "") }.orEmpty(),
+            userPresets = loadUserPresets(),
         )
     }
 
@@ -358,10 +386,108 @@ object AudioFx {
         attach(sessionId)
     }
 
+    // ------------------------------------------------------- 用户预设
+
+    /** 选中一条用户预设：曲线和增强一起套上，并打开总开关。方案选中态清掉。 */
+    fun applyUserPreset(id: String) {
+        val p = prefs ?: return
+        val preset = loadUserPresets().firstOrNull { it.id == id } ?: return
+        p.eqEnabled = true
+        p.eqPresetId = preset.id
+        p.eqBands = preset.bandsCsv
+        p.eqBassBoost = preset.bass
+        p.eqVirtualizer = preset.virtualizer
+        p.eqLoudness = preset.loudness
+        p.eqReverbId = preset.reverbId
+        clearActiveSchemeId()
+        pushValuesToEffects(
+            true, preset.id, preset.bandsCsv,
+            preset.bass, preset.virtualizer, preset.loudness, preset.reverbId, "",
+        )
+        apply(true)
+    }
+
+    /**
+     * 把当前曲线和增强存成一条新的用户预设，并选中它。
+     * 名字为空、或已经存满时返回 null，调用方给一句说明即可。
+     */
+    fun saveUserPreset(name: String): UserEqPresets.Preset? {
+        val p = prefs ?: return null
+        val s = _state.value
+        val bands = if (s.bandLevels.isNotEmpty()) encodeBands(s.bandLevels) else p.eqBands
+        val created = UserEqPresets.create(
+            name, bands, s.bassStrength, s.virtualStrength, s.loudnessGain, s.reverbId,
+        ) ?: return null
+        val list = UserEqPresets.add(loadUserPresets(), created) ?: return null
+        p.eqPresetId = created.id
+        p.eqBands = bands
+        p.eqBassBoost = created.bass
+        p.eqVirtualizer = created.virtualizer
+        p.eqLoudness = created.loudness
+        p.eqReverbId = created.reverbId
+        clearActiveSchemeId()
+        storeUserPresets(list)
+        _state.value = _state.value.copy(presetId = created.id, schemeId = "", userPresets = list)
+        return created
+    }
+
+    fun renameUserPreset(id: String, name: String): Boolean {
+        val list = UserEqPresets.rename(loadUserPresets(), id, name) ?: return false
+        storeUserPresets(list)
+        return true
+    }
+
+    /** 用当前曲线和增强覆盖这条用户预设，名字和 id 不动，选中态留着。 */
+    fun updateUserPreset(id: String): Boolean {
+        val p = prefs ?: return false
+        val s = _state.value
+        val bands = if (s.bandLevels.isNotEmpty()) encodeBands(s.bandLevels) else p.eqBands
+        val list = UserEqPresets.rewrite(
+            loadUserPresets(), id, bands,
+            s.bassStrength, s.virtualStrength, s.loudnessGain, s.reverbId,
+        ) ?: return false
+        p.eqPresetId = id
+        p.eqBands = bands
+        clearActiveSchemeId()
+        storeUserPresets(list)
+        _state.value = _state.value.copy(presetId = id, schemeId = "", userPresets = list)
+        return true
+    }
+
+    /** 删掉一条。正在用它时回到「自定义」，当前声音保留，不把曲线清掉。 */
+    fun deleteUserPreset(id: String) {
+        val list = UserEqPresets.remove(loadUserPresets(), id)
+        storeUserPresets(list)
+        if (_state.value.presetId == id) {
+            prefs?.eqPresetId = ""
+            _state.value = _state.value.copy(presetId = "", userPresets = list)
+        }
+    }
+
+    /**
+     * 高音快捷旋钮：把 4 kHz 及以上的频段收成同一增益。
+     * 曲线变了，内置预设和用户预设、方案一并离开。
+     */
+    fun setTrebleGainMb(gainMb: Int) {
+        val eq = equalizer ?: return
+        val s = _state.value
+        if (s.bandCount <= 0) return
+        val levels = EqTone.applyTreble(s.bandLevels, s.bandCenterHz, gainMb, s.bandMinMb, s.bandMaxMb)
+        applyBands(eq, levels)
+        prefs?.eqPresetId = ""
+        prefs?.eqBands = encodeBands(levels)
+        clearActiveSchemeId()
+        _state.value = s.copy(bandLevels = levels, presetId = "", schemeId = "")
+    }
+
     fun release() {
         releaseEffects()
         sessionId = 0
-        _state.value = EqState(available = false, unavailable = Unavailable.SESSION_PENDING)
+        _state.value = EqState(
+            available = false,
+            unavailable = Unavailable.SESSION_PENDING,
+            userPresets = loadUserPresets(),
+        )
     }
 
     private fun releaseEffects() {
@@ -418,16 +544,16 @@ object AudioFx {
         val v = strength.coerceIn(0, 1000)
         prefs?.eqBassBoost = v
         bass?.setStrength(v.toShort())
-        clearActiveSchemeId()
-        _state.value = _state.value.copy(bassStrength = v, schemeId = "")
+        leaveEnhancementEdit()
+        _state.value = _state.value.copy(bassStrength = v)
     }
 
     fun setVirtualStrength(strength: Int) {
         val v = strength.coerceIn(0, 1000)
         prefs?.eqVirtualizer = v
         virtualizer?.setStrength(v.toShort())
-        clearActiveSchemeId()
-        _state.value = _state.value.copy(virtualStrength = v, schemeId = "")
+        leaveEnhancementEdit()
+        _state.value = _state.value.copy(virtualStrength = v)
     }
 
     /** 响度增强：0 = 关闭，单位 mB（毫贝） */
@@ -435,8 +561,8 @@ object AudioFx {
         val v = gainMb.coerceIn(0, 1500)
         prefs?.eqLoudness = v
         runCatching { loudness?.setTargetGain(v) }
-        clearActiveSchemeId()
-        _state.value = _state.value.copy(loudnessGain = v, schemeId = "")
+        leaveEnhancementEdit()
+        _state.value = _state.value.copy(loudnessGain = v)
         apply(_state.value.enabled)
     }
 
@@ -451,8 +577,8 @@ object AudioFx {
         val preset = ReverbPresets.byId(id) ?: ReverbPresets.OFF
         prefs?.eqReverbId = preset.id
         runCatching { reverb?.setPreset(preset.platform) }
-        clearActiveSchemeId()
-        _state.value = _state.value.copy(reverbId = preset.id, schemeId = "")
+        leaveEnhancementEdit()
+        _state.value = _state.value.copy(reverbId = preset.id)
         apply(_state.value.enabled)
     }
 
@@ -490,6 +616,7 @@ object AudioFx {
                 available = false,
                 unavailable = s.unavailable,
                 unavailableDetail = s.unavailableDetail,
+                userPresets = loadUserPresets(),
             )
             return
         }
@@ -509,6 +636,8 @@ object AudioFx {
             virtualStrength = 0,
             loudnessGain = 0,
             reverbId = "",
+            schemeId = "",
+            userPresets = loadUserPresets(),
         )
         // 必须放在状态更新**之后**：apply 会读 `_state.value` 里的三处强度
         // 决定要不要启用对应 effect。

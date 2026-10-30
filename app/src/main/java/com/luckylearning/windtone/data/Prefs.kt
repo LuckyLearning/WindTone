@@ -382,6 +382,9 @@ object SettingsDefaults {
 
     /** 曲间响度平衡：出厂关（需要后台分析音频，用户显式开启） */
     const val LOUDNESS_BALANCE = false
+
+    /** 用户命名的均衡器预设（[com.luckylearning.windtone.playback.UserEqPresets] 编码）；空串 = 还没存过 */
+    const val EQ_USER_PRESETS = ""
 }
 
 /**
@@ -882,6 +885,20 @@ class Prefs private constructor(context: Context) {
         set(value) {
             sp.edit().putBoolean(KEY_LOUDNESS_BALANCE, value).apply()
             ioScope.launch { store.putBoolean(KEY_LOUDNESS_BALANCE, value) }
+        }
+
+    /**
+     * 用户自己保存的均衡器预设。
+     *
+     * 编码见 [com.luckylearning.windtone.playback.UserEqPresets]。
+     * 和 [eqPresetId] 分开存：后者只记「当前选中哪一条」（内置 id、用户 id 或空），
+     * 这里是整本预设册，杀进程还在。恢复默认音效不会清这本册子。
+     */
+    var eqUserPresets: String
+        get() = sp.getString(KEY_EQ_USER_PRESETS, SettingsDefaults.EQ_USER_PRESETS).orEmpty()
+        set(value) {
+            sp.edit().putString(KEY_EQ_USER_PRESETS, value).apply()
+            ioScope.launch { store.putString(KEY_EQ_USER_PRESETS, value) }
         }
 
     // ============================================================ 5. 桌面悬浮歌词
@@ -1565,6 +1582,7 @@ class Prefs private constructor(context: Context) {
         const val KEY_FADE_ENABLED = "fade_enabled"
         const val KEY_FADE_DURATION_MS = "fade_duration_ms"
         const val KEY_LOUDNESS_BALANCE = "loudness_balance"
+        const val KEY_EQ_USER_PRESETS = "eq_user_presets"
 
         // ---- 5. 桌面悬浮歌词 ----
         const val KEY_LYRIC_OVERLAY = "lyric_overlay"

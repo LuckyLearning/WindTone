@@ -24,9 +24,11 @@ import java.io.File
  * **播放器音量**（`player.volume`）而不是音频效果器：
  *  - **淡入淡出**：自动切歌时旧曲结尾线性淡出、新曲开头线性淡入（曲线见 [FadeRamp]）；
  *    手动操作（暂停 / 拖动进度 / 关开关）立即恢复基线音量，不跟用户抢手感。
- *  - **响度平衡**：按曲目 RMS 分析结果把过响的歌压到统一响度（衰减制，
- *    数学见 [LoudnessScan]；分析见 [TrackLoudnessAnalyzer]，缓存见 [LoudnessCache]）。
- *    没分析过的曲目先按原音量播，后台分析完下一遍生效。
+ *  - **响度平衡**：开着的时候**先读曲目标签**（ReplayGain / iTunes Sound Check，
+ *    见 [ReplayGainTags]），有标签就用标签；没有才按 RMS 把过响的歌压到统一响度
+ *    （衰减制，数学见 [LoudnessScan]；分析见 [TrackLoudnessAnalyzer]，缓存见 [LoudnessCache]）。
+ *    这和均衡器的「响度增强」（`eqLoudness` / `LoudnessEnhancer`）不是一回事，
+ *    这里只乘 `player.volume`，不去动那条效果链。
  *
  * 两者的合成点只有一处：`volume = 响度因子 × 淡入淡出因子`。
  * 因子都落在 0..1，相乘不会有「抢音量」的问题。
@@ -51,8 +53,13 @@ object TrackVolume {
     private const val TICK_MS = 100L
     private const val RAMP_STEP_MS = 40L
 
+    /** 标签缓存里的「查过了，没有」。0 是合法的 0 dB 标签，不能拿来当缺失。 */
+    private const val TAG_ABSENT = Int.MIN_VALUE
+
     private var prefs: Prefs? = null
     private var cache: LoudnessCache? = null
+    /** 标签增益缓存。值为 [TAG_ABSENT] 表示查过、文件里没有标签。 */
+    private var tagCache: LoudnessCache? = null
     private var appContext: Context? = null
     private var player: Player? = null
 
@@ -68,6 +75,8 @@ object TrackVolume {
 
     /** 正在执行淡出（曲尾斜坡中）；用于挡住 tick 的重复触发 */
     @Volatile private var fadingOut = false
+
+    private val tagPending = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
     private val listener = object : Player.Listener {
 
@@ -120,6 +129,7 @@ object TrackVolume {
         appContext = app
         prefs = Prefs(app)
         cache = LoudnessCache(File(app.filesDir, "loudness_cache.txt"))
+        tagCache = LoudnessCache(File(app.filesDir, "replaygain_cache.txt"))
         refreshState()
     }
 
@@ -181,28 +191,65 @@ object TrackVolume {
         }
     }
 
-    /** 按当前曲目的分析缓存重算响度因子；没分析过则排队分析 */
+    /**
+     * 按当前曲目重算响度因子。
+     *
+     * 标签优先：缓存里已有标签就用标签，不再看 RMS。还没查过标签时，先临时用
+     * RMS（有的话），同时去读标签；确认没有标签之后才排队做 RMS 分析。
+     * 不读 `eqLoudness`。
+     */
     private fun applyLoudnessFor(stableKey: String?) {
         val p = prefs ?: run { loudnessFactor = 1f; return }
         if (!p.loudnessBalance || stableKey.isNullOrEmpty()) {
             loudnessFactor = 1f
             return
         }
-        val gain = cache?.gainMb(stableKey)
-        if (gain != null) {
-            loudnessFactor = LoudnessScan.attenuationFactorMb(gain)
-        } else {
-            loudnessFactor = 1f
-            requestAnalyze(stableKey)
+        val storedTag = tagCache?.gainMb(stableKey)
+        val rms = cache?.gainMb(stableKey)
+        when (storedTag) {
+            null -> {
+                loudnessFactor = if (rms != null) LoudnessScan.attenuationFactorMb(rms) else 1f
+                requestTagRead(stableKey)
+            }
+            TAG_ABSENT -> {
+                val gain = ReplayGainTags.resolveGainMb(null, rms)
+                loudnessFactor = if (gain != null) LoudnessScan.attenuationFactorMb(gain) else 1f
+                if (rms == null) requestAnalyze(stableKey)
+            }
+            else -> {
+                val gain = ReplayGainTags.resolveGainMb(storedTag, rms)
+                loudnessFactor = if (gain != null) LoudnessScan.attenuationFactorMb(gain) else 1f
+            }
         }
     }
 
     private fun maybeAnalyzeCurrent() {
-        val p = prefs ?: return
-        if (!p.loudnessBalance) return
-        val key = player?.currentMediaItem?.mediaId ?: return
-        if (cache?.gainMb(key) != null) return
-        requestAnalyze(key)
+        applyLoudnessFor(player?.currentMediaItem?.mediaId)
+    }
+
+    /** 读当前曲的音量标签。URI 在主线程取好；读完若还停在这首上，立刻重算音量。 */
+    private fun requestTagRead(stableKey: String) {
+        if (tagCache?.gainMb(stableKey) != null) return
+        if (!tagPending.add(stableKey)) return
+        val uri = player?.currentMediaItem?.localConfiguration?.uri
+        val context = appContext
+        if (uri == null || context == null) {
+            tagPending.remove(stableKey)
+            if (uri == null) tagCache?.put(stableKey, TAG_ABSENT)
+            if (uri == null && cache?.gainMb(stableKey) == null) requestAnalyze(stableKey)
+            return
+        }
+        analyzeScope.launch {
+            val mb = ReplayGainReader.read(context, uri)
+            tagCache?.put(stableKey, mb ?: TAG_ABSENT)
+            tagPending.remove(stableKey)
+            scope.launch {
+                if (player?.currentMediaItem?.mediaId == stableKey && !fadingOut) {
+                    applyLoudnessFor(stableKey)
+                    if (fadeJob == null) setVolumeNow(loudnessFactor)
+                }
+            }
+        }
     }
 
     /**
