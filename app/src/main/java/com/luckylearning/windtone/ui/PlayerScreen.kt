@@ -119,6 +119,8 @@ fun PlayerScreen(
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     onSeekTo: (Long) -> Unit,
+    /** N2：相对快进 / 快退（毫秒，可负）；播放页 ±10 / ±15 按钮 */
+    onSeekBy: (Long) -> Unit = {},
     onCyclePlayMode: () -> Unit,
     onLyricOffset: (Int) -> Unit,
     onResetLyricOffset: () -> Unit,
@@ -752,6 +754,15 @@ fun PlayerScreen(
                 TimeLabel(progressState, durationFallback, showPosition = false)
             }
 
+            // N2：±10s / ±15s 快进快退。车机走系统通知/方控 seek，这里不重复占位。
+            // 沉浸态整块控制收起，按钮一并隐藏。
+            if (!immersive && !state.carMode) {
+                SeekJumpButtons(
+                    onSeekBy = { delta -> onSeekBy(delta); keepAwake() },
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+
             // 与下方控制行的间隔只在完整态需要；沉浸态控制行不渲染，
             // 这 4dp 会变成时间行与 Dock 之间的悬空感（同上条反馈），一并去掉。
             if (!immersive) Spacer(Modifier.height(4.dp))
@@ -948,6 +959,10 @@ fun PlayerScreen(
                 lyricsExportLauncher.launch("${song?.baseName ?: "歌词"}.lrc")
             },
             onAudioInfo = { showOptions = false; onShowAudioInfo() },
+            onShareCurrent = {
+                showOptions = false
+                song?.let { ShareCurrentSong.start(appContext, it) }
+            },
             lyricOverlay = state.lyricOverlay,
             canDrawOverlay = canDrawOverlay,
             onToggleLyricOverlay = {

@@ -1033,6 +1033,7 @@ class PlaybackEngine(
     override fun next() = queueManager.next()
     override fun previous() = queueManager.previous()
     override fun seekTo(ms: Long) = queueManager.seekTo(ms)
+    override fun seekBy(deltaMs: Long) = queueManager.seekBy(deltaMs)
     override fun cyclePlayMode() = queueManager.cyclePlayMode()
     override fun playNext(song: Song) = queueManager.playNext(song)
     override fun enqueue(songs: List<Song>) = queueManager.enqueue(songs)

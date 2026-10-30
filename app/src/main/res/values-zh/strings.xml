@@ -496,6 +496,10 @@
     <string name="when_off_boot_does_nothing">关闭时开机不做任何播放入口动作；打开后上车通电即续播，且不弹界面</string>
     <string name="skip_silence">跳过静音</string>
     <string name="skips_leading_silence_in_recordings">自动跳过录音开头的空白段（对整轨 / 现场录音有效）</string>
+    <string name="gapless_playback">无缝播放</string>
+    <string name="gapless_playback_subtitle">Media3 单播放器连续队列始终提供；分轨含 encoder delay/padding 时无断点</string>
+    <string name="gapless_playback_always_on">始终开启</string>
+    <string name="gapless_playback_info">听风使用单个 ExoPlayer（Media3）+ 连续 MediaItem 队列。Media3 会读取分轨的 encoder delay/padding，有元数据时专辑分轨之间听不出断点。\n\nMedia3 没有「关闭无缝」的 API。若要人为造出间隙，只能在曲与曲之间插入静音——我们刻意不做。\n\n旧版偏好开关只改存储标志、从不改播放内核，属于假开关，已在 A7 移除。设置里这一行仅作能力说明。</string>
     <string name="equalizer_and_effects">均衡器与音效</string>
     <string name="availability_depends_on_the_device">可用性取决于本机音频系统，车机可能只支持车辆自带的音效设置</string>
     <string name="local_library">本地曲库</string>
@@ -775,6 +779,8 @@
     <string name="lib_lists_empty_full_body">全盘未找到音频。下一步：授予「所有文件访问权限」再扫，或改为只导入指定音乐目录。</string>
     <string name="lib_lists_empty_search_body">换个关键词试试，支持歌名、歌手、专辑、文件名，也支持拼音首字母（如 zjl）</string>
     <string name="lib_lists_action_change_folder">更换目录</string>
+    <string name="lib_lists_action_add_folder">添加文件夹</string>
+    <string name="lib_lists_action_scan_music">扫描音乐</string>
     <string name="lib_lists_action_grant_scan">授予权限并扫描全盘</string>
     <string name="lib_lists_action_rescan_full">重新扫描全盘</string>
     <string name="lib_lists_action_scan_scope">扫描范围设置</string>

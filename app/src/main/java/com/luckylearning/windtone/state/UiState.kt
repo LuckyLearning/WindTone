@@ -453,8 +453,6 @@ data class PlayerUiState(
     val audioInfo: AudioInspector.Info? = null,
     val audioInfoLoading: Boolean = false,
     val skipSilence: Boolean = false,
-    /** 无缝播放显式开关（C1，默认开） */
-    val gaplessPlayback: Boolean = SettingsDefaults.GAPLESS_PLAYBACK,
     /**
      * A-B 循环点（C2，会话级，不落盘；切歌清除）。
      * null = 未设；两端都有且 B>A 时引擎在进度 ticker 里 seek 回 A。

@@ -88,8 +88,8 @@ class PlaybackService : MediaLibraryService() {
     override fun onCreate() {
         super.onCreate()
 
-        // C1 无缝：单 ExoPlayer + 连续 MediaItem 队列；Media3 会读分轨
-        // encoder delay/padding。Prefs.gaplessPlayback 是显式声明与诊断可读点（默认开）。
+        // A7 无缝：单 ExoPlayer + 连续 MediaItem 队列；Media3 读分轨 encoder delay/padding。
+        // 平台无关闭 API；设置页为只读说明（Prefs.gaplessPlayback 为 C1 死键）。
         val player = ExoPlayer.Builder(this)
             // 在线音频的磁盘缓存（v1.1.38）：http(s) 走 CacheDataSource，本地文件不受影响。
             // 放在这里而不是 PlaybackEngine，是因为 ExoPlayer 只在这个服务里创建 ——

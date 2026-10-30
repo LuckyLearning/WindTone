@@ -169,6 +169,6 @@ object PlaybackQualityProbe : AnalyticsListener {
         )
         appendLine("缓冲欠载次数：${underruns.get()}（本进程累计）")
         appendLine("最近音频错误：${lastAudioError ?: "无"}")
-        // gapless 行由 DiagnosticsReport 根据 Prefs 追加，避免本对象依赖 Context
+        // gapless 行由 DiagnosticsReport 追加（A7：平台默认开启说明 + 历史死键），避免本对象依赖 Context
     }.trimEnd()
 }

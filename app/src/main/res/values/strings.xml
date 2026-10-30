@@ -515,6 +515,10 @@
     <string name="when_off_boot_does_nothing">When off, boot does nothing; when on, playback resumes as soon as the car powers up, with no UI</string>
     <string name="skip_silence">Skip silence</string>
     <string name="skips_leading_silence_in_recordings">Skips leading silence in recordings (works for full albums and live recordings)</string>
+    <string name="gapless_playback">Gapless playback</string>
+    <string name="gapless_playback_subtitle">Always on via Media3 single-player continuous queue; tracks with encoder delay/padding play without gaps</string>
+    <string name="gapless_playback_always_on">Always on</string>
+    <string name="gapless_playback_info">WindTone uses one ExoPlayer (Media3) with a continuous MediaItem queue. Media3 reads per-track encoder delay/padding and joins album splits without an audible gap when metadata is present.\n\nThere is no Media3 API to turn this off. Forcing gaps would mean inserting silence between tracks, which we deliberately do not do.\n\nThe old preference toggle only changed a stored flag and never affected the engine — it was removed in A7. The settings row is informational only.</string>
     <string name="equalizer_and_effects">Equalizer and effects</string>
     <string name="availability_depends_on_the_device">Availability depends on the device audio stack; some head units only support built-in effects</string>
     <string name="local_library">Local library</string>
@@ -794,6 +798,8 @@ Direct link looks fine; the issue is in playback (host, cache, or file format).<
     <string name="lib_lists_empty_full_body">No audio found. Next: grant All files access and scan again, or import specific music folders.</string>
     <string name="lib_lists_empty_search_body">Try another keyword — title, artist, album, file name, or pinyin initials (e.g. zjl)</string>
     <string name="lib_lists_action_change_folder">Change folder</string>
+    <string name="lib_lists_action_add_folder">Add folder</string>
+    <string name="lib_lists_action_scan_music">Scan music</string>
     <string name="lib_lists_action_grant_scan">Grant permission and scan all</string>
     <string name="lib_lists_action_rescan_full">Rescan all storage</string>
     <string name="lib_lists_action_scan_scope">Scan scope settings</string>

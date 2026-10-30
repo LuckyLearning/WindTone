@@ -206,7 +206,7 @@ internal object DiagnosticsReport {
                 appendLine(PlaybackQualityProbe.report())
                 val prefs = Prefs(context)
                 appendLine(
-                    "无缝播放：${if (prefs.gaplessPlayback) "开（偏好；Media3 单实例队列 + 分轨 encoder delay/padding）" else "关（偏好声明；播放仍为单 ExoPlayer 实例）"}",
+                    "无缝播放：平台默认开启（Media3 单实例连续队列 + 分轨 encoder delay/padding；无关闭 API，设置页仅说明；历史偏好死键=" + (if (prefs.gaplessPlayback) "开" else "关") + ")",
                 )
                 appendLine("跳过静音：${if (prefs.skipSilence) "开" else "关"}")
             }.trimEnd(),

@@ -50,6 +50,10 @@ import androidx.compose.ui.unit.sp
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.ui.theme.AppVisual
 import com.luckylearning.windtone.ui.theme.windShadow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.ColorScheme
 
 /**
  * 播放页的自绘零件（PlayerScreen.kt 的拆出文件，2026-10-21）。
@@ -286,3 +290,50 @@ internal val PlayMode.icon: ImageVector
         PlayMode.REPEAT_ONE -> AppIcons.RepeatOne
         PlayMode.SHUFFLE -> AppIcons.Shuffle
     }
+
+
+/**
+ * N2：进度条下方的 ±10s / ±15s 快进快退双按钮行。
+ *
+ * 车机 / 通知栏已有系统 seek，这里只给手机完整态用（由调用方决定是否渲染）。
+ */
+@Composable
+internal fun SeekJumpButtons(
+    onSeekBy: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            SeekJumpChip(label = "−15", onClick = { onSeekBy(-15_000L) }, scheme = scheme)
+            SeekJumpChip(label = "−10", onClick = { onSeekBy(-10_000L) }, scheme = scheme)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            SeekJumpChip(label = "+10", onClick = { onSeekBy(+10_000L) }, scheme = scheme)
+            SeekJumpChip(label = "+15", onClick = { onSeekBy(+15_000L) }, scheme = scheme)
+        }
+    }
+}
+
+@Composable
+private fun SeekJumpChip(
+    label: String,
+    onClick: () -> Unit,
+    scheme: ColorScheme,
+) {
+    TextButton(
+        onClick = onClick,
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = scheme.onSurfaceVariant,
+        )
+    }
+}

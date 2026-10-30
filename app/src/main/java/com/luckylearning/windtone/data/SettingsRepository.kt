@@ -98,10 +98,6 @@ class SettingsRepository(val prefs: Prefs) {
         prefs.overlayHandleOrder = OverlayCollapseHelper.handleOrderCsv(merged)
     }
 
-    fun setGaplessPlayback(enabled: Boolean) {
-        prefs.gaplessPlayback = enabled
-    }
-
     fun setLyricTapSeeks(enabled: Boolean) {
         prefs.lyricTapSeeks = enabled
     }

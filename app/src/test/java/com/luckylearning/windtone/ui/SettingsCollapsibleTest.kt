@@ -61,7 +61,6 @@ class SettingsCollapsibleTest {
                         onSpeed = {},
                         onPitch = {},
                         onSkipSilence = {},
-                        onGaplessPlayback = {},
                         onAutoResume = {},
                         onAutoPlayOnBoot = {},
                     )
@@ -107,5 +106,17 @@ class SettingsCollapsibleTest {
         compose.onNodeWithText(expected).assertIsDisplayed()
         // 摘要里必须同时有两个值，缺一个就等于「看不出变调被动过」
         assertEquals("1.25x · +2 半音", expected)
+    }
+
+    /** A7：假开关已移除，设置页只留「始终开启」说明行 */
+    @Test
+    fun `无缝播放诚实化_只读说明无开关`() {
+        renderPlayback()
+        compose.onNodeWithText(ctx.getString(R.string.gapless_playback)).assertIsDisplayed()
+        compose.onNodeWithText(ctx.getString(R.string.gapless_playback_always_on)).assertIsDisplayed()
+        compose.onNodeWithText(ctx.getString(R.string.gapless_playback_subtitle)).assertIsDisplayed()
+        // 点开说明弹窗；用弹窗独有短句（副标题没有「假开关」）
+        compose.onNodeWithText(ctx.getString(R.string.gapless_playback)).performClick()
+        compose.onNodeWithText("假开关", substring = true).assertIsDisplayed()
     }
 }

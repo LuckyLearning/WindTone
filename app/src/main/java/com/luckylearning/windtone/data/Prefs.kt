@@ -123,8 +123,8 @@ object SettingsDefaults {
     const val OVERLAY_HANDLE_ORDER = "collapse,play_pause,player"
 
     /**
-     * 无缝播放（C1）：Media3 单实例 + 连续 MediaItems 默认识别分轨 encoder delay/padding。
-     * 本开关默认开，供设置 / 诊断显式声明；关闭不主动插入间隙。
+     * 无缝播放（C1→A7）：Media3 单实例 + 连续 MediaItems 默认识别分轨 encoder delay/padding。
+     * A7 起设置页改为只读说明（平台无关闭 API）；此常量仅保留给死键默认值，不再驱动 UI 开关。
      */
     const val GAPLESS_PLAYBACK = true
     /** 开机后台自启播放：默认关（要用户明确打开，避免一上车就突然出声） */
@@ -728,7 +728,11 @@ class Prefs private constructor(context: Context) {
             ioScope.launch { store.putString(KEY_OVERLAY_HANDLE_ORDER, normalized) }
         }
 
-    /** 无缝播放显式开关（C1，默认开；Media3 侧默认即无缝） */
+    /**
+     * 无缝播放偏好死键（C1 写入；A7 起 UI 不再读写）。
+     * 保留 getter 供诊断包注明「历史偏好」；setter 仍可用但不接播放内核。
+     * Media3 无缝始终由单 ExoPlayer + 连续队列提供，与本键无关。
+     */
     var gaplessPlayback: Boolean
         get() = sp.getBoolean(KEY_GAPLESS_PLAYBACK, SettingsDefaults.GAPLESS_PLAYBACK)
         set(value) {

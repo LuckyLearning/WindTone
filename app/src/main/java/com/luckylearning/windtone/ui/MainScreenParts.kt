@@ -77,6 +77,7 @@ internal fun PlayerPane(
             onNext = playerVm::next,
             onPrevious = playerVm::previous,
             onSeekTo = playerVm::seekTo,
+            onSeekBy = playerVm::seekBy,
             onCyclePlayMode = playerVm::cyclePlayMode,
             onLyricOffset = playerVm::setLyricOffset,
             onResetLyricOffset = playerVm::resetLyricOffset,

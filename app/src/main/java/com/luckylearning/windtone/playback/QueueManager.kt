@@ -84,6 +84,17 @@ class QueueManager(
         host.updateProgress(target)
     }
 
+    /** N2：相对快进 / 快退；边界由 [SeekJump.target] 夹紧。 */
+    fun seekBy(deltaMs: Long) = act { c ->
+        val target = SeekJump.target(
+            positionMs = c.currentPosition,
+            durationMs = c.duration,
+            deltaMs = deltaMs,
+        )
+        c.seekTo(target)
+        host.updateProgress(target)
+    }
+
     // ---------------------------------------------------------------- 模式
 
     /**

@@ -20,6 +20,12 @@ interface PlayerActions : OverlayActions {
     fun next()
     fun previous()
     fun seekTo(ms: Long)
+
+    /**
+     * N2：相对当前位置快进 / 快退（毫秒，可负）。
+     * 边界夹到 0～duration，走与 [seekTo] 同一路径。
+     */
+    fun seekBy(deltaMs: Long)
     fun cyclePlayMode()
     fun playNext(song: Song)
     fun enqueue(songs: List<Song>)

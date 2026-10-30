@@ -250,13 +250,12 @@ internal fun SettingsPlaybackPage(
     onSpeed: (Float) -> Unit,
     onPitch: (Int) -> Unit,
     onSkipSilence: (Boolean) -> Unit,
-    onGaplessPlayback: (Boolean) -> Unit = {},
     onAutoResume: (Boolean) -> Unit,
     /** 开机后台起播（v1.1.24） */
     onAutoPlayOnBoot: (Boolean) -> Unit,
 ) {
     var showEq by remember { mutableStateOf(false) }
-
+    var showGaplessInfo by remember { mutableStateOf(false) }
 
     // ------------------------------------------------ 速度与变调
     // 两者在播放器里是同一个 `PlaybackParameters`（见 PlaybackEngine
@@ -336,19 +335,31 @@ internal fun SettingsPlaybackPage(
             onSkipSilence(SettingsDefaults.SKIP_SILENCE)
         },
     )
-    SwitchRow(
-        title = "无缝播放",
-        subtitle = if (player.gaplessPlayback) {
-            "已开：单播放器连续队列；分轨 FLAC/专辑靠 encoder delay/padding 无断点（C1）"
-        } else {
-            "已关（仅偏好声明；内核仍是单 ExoPlayer，不插入静音）"
-        },
-        checked = player.gaplessPlayback,
-        onCheckedChange = onGaplessPlayback,
-        onReset = resetAction(player.gaplessPlayback != SettingsDefaults.GAPLESS_PLAYBACK) {
-            onGaplessPlayback(SettingsDefaults.GAPLESS_PLAYBACK)
-        },
+    // A7：无缝播放诚实化 —— Media3/ExoPlayer 无关闭 API；单实例 + 连续队列
+    // 即平台默认无缝。假开关（Prefs 开/关行为相同）已移除，改为只读说明行。
+    ActionRow(
+        title = stringResource(R.string.gapless_playback),
+        subtitle = stringResource(R.string.gapless_playback_subtitle),
+        trailing = stringResource(R.string.gapless_playback_always_on),
+        onClick = { showGaplessInfo = true },
     )
+    if (showGaplessInfo) {
+        AlertDialog(
+            onDismissRequest = { showGaplessInfo = false },
+            title = { Text(stringResource(R.string.gapless_playback)) },
+            text = {
+                Text(
+                    stringResource(R.string.gapless_playback_info),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showGaplessInfo = false }) {
+                    Text(stringResource(R.string.got_it))
+                }
+            },
+        )
+    }
     ActionRow(
         title = stringResource(R.string.equalizer_and_effects),
         // 「（需先开始播放）」太绝对：有些车机即使正在播放也建不出效果器，
