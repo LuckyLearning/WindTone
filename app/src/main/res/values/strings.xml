@@ -210,13 +210,27 @@
     <string name="a11y_watch_channel">Foreground detection check</string>
     <string name="a11y_watch_channel_desc">Reminds you when the accessibility service gets turned off, one tap to re-enable</string>
     <string name="a11y_watch_title">Accessibility was turned off by the system</string>
-    <string name="a11y_watch_text">This head unit disables WindTone\'s accessibility service after a restart. Tap here to open the accessibility page and turn it back on. If this device has no such page, use usage access instead (About &amp; diagnostics → Foreground app history).</string>
+    <string name="a11y_watch_banner_sub">Tap to re-enable; or use Usage access as the stable channel (recommended on Song L / DiLink)</string>
+    <string name="a11y_watch_reopen">Enable</string>
+    <string name="a11y_watch_text">Song L DM-i / DiLink turns WindTone accessibility off after reboot. Tap to reopen it. More stable: also grant Usage access (usually survives reboot) so hide-by-app keeps working.</string>
     <string name="battery_help_title">Allow background running</string>
     <string name="battery_help_body">This head unit has no battery optimisation page (common on BYD DiLink). Try any of these paths://n//n1) Settings → Apps → WindTone → Power management → Allow background activity\n2) Settings → Battery → App power management → WindTone → Unrestricted\n3) Settings → Apps → WindTone → Battery → Not optimised / Allow background\n\nIf none exists it still works: as long as the accessibility service stays on, app switches are reported instantly. The allow-list only protects against being frozen after a long standby.</string>
     <string name="battery_help_copy">Copy steps</string>
     <string name="battery_help_copied">Steps copied</string>
     <string name="fg_help_title">Finding the accessibility page</string>
-    <string name="fg_help_body">This head unit may not have a standalone Accessibility page (common on BYD DiLink). Try any of these paths://n//n1) Settings → System → Accessibility → Downloaded services → WindTone\n2) Settings → Apps → Special app access → Accessibility\n3) Settings → Accessibility (some models put it at the very bottom of the list, scroll down)\n4) BYD DiLink: Vehicle settings → System settings → Accessibility (the app tries this entry first)\n\nIf none of them exists, use Usage access instead: it recognises the foreground app with about a 1.5 s delay, which is enough for the per-app hiding list.</string>
+    <string name="fg_help_body">On Song L DM-i (incl. 2026 / DiLink 100) accessibility is often under vehicle settings. Try:
+
+1) Vehicle settings → System → Accessibility → Downloaded / Installed services → WindTone (on)
+2) Settings → System → Accessibility → Downloaded services → WindTone
+3) Settings → Apps → Special app access → Accessibility
+4) Settings → Accessibility (sometimes at the bottom)
+
+To keep it usable:
+· Also enable Usage access (About &amp; diagnostics → Foreground app log) — DiLink usually keeps this across reboot
+· App info → WindTone → allow autostart / background if present
+· Battery unrestricted whitelist so polling survives screen-off
+
+The app cannot stop the OEM clearing third-party accessibility on boot; tap the boot notification to reopen.</string>
     <string name="fg_help_copy">Copy steps</string>
     <string name="fg_help_copied">Steps copied</string>
     <string name="fg_help_open_settings">Open system settings</string>

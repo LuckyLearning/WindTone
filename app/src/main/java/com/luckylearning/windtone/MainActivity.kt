@@ -14,6 +14,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.luckylearning.windtone.data.BootTrace
 import com.luckylearning.windtone.data.CrashLog
 import com.luckylearning.windtone.data.Prefs
+import com.luckylearning.windtone.overlay.AccessibilityWatchdog
 import com.luckylearning.windtone.data.ThemeMode
 import com.luckylearning.windtone.ui.AppShortcut
 import com.luckylearning.windtone.ui.BootDiagView
@@ -94,6 +95,12 @@ class MainActivity : ComponentActivity() {
         }
 
         enterApp()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 车机重启后无障碍常被抹掉；回到前台再检一次（通知可能被划掉）
+        runCatching { AccessibilityWatchdog.checkAndNotify(applicationContext) }
     }
 
     /**

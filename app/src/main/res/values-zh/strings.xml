@@ -191,13 +191,15 @@
     <string name="a11y_watch_channel">前台识别自检</string>
     <string name="a11y_watch_channel_desc">无障碍服务被系统关掉时提醒，点一下即可重新开启</string>
     <string name="a11y_watch_title">辅助功能被系统关闭了</string>
-    <string name="a11y_watch_text">重启后车机会关掉听风的辅助功能，点这里回到「无障碍」页重新打开即可恢复「按应用隐藏」。若这台机器没有该页面，改在「关于与诊断 → 前台应用记录」里用「使用情况访问」代替。</string>
+    <string name="a11y_watch_banner_sub">点此重新打开；也可改用「使用情况访问」作稳定通道（宋 L / DiLink 推荐）</string>
+    <string name="a11y_watch_reopen">去开启</string>
+    <string name="a11y_watch_text">宋 L DM-i / DiLink 重启后会关掉听风的辅助功能。点这里打开「无障碍」页重新打开即可。更稳的做法：同时开「使用情况访问」（车机一般不会清掉），按应用隐藏就不会整晚失效。</string>
     <string name="battery_help_title">允许后台运行</string>
     <string name="battery_help_body">这台车机没有「电池优化」设置页（比亚迪 DiLink 常见）。可以按下面任一路径把听风设为不受限：\n\n1）设置 → 应用管理 → 听风 → 耗电管理 → 允许后台活动\n2）设置 → 电池 → 应用耗电管理 → 听风 → 不受限制\n3）设置 → 应用 → 听风 → 电池 → 不优化 / 允许后台运行\n\n找不到也没关系：只要「无障碍服务」还开着，应用切换事件就是即时的；白名单主要防的是「息屏很久之后被系统冻结」。</string>
     <string name="battery_help_copy">复制说明</string>
     <string name="battery_help_copied">说明已复制</string>
     <string name="fg_help_title">找到「无障碍」这一页</string>
-    <string name="fg_help_body">这台车机可能没有独立的「无障碍」页（比亚迪 DiLink 常见）。按下面任一路径找：\n\n1）设置 → 系统 → 无障碍 → 已下载的服务 → 听风\n2）设置 → 应用 → 特殊应用权限 → 无障碍\n3）设置 → 辅助功能（部分车型在列表最底部，需要往下滑）\n4）比亚迪 DiLink：车辆设置 → 系统设置 → 无障碍（App 会优先尝试这个入口）\n\n三条都没有也没关系：用「使用情况访问」同样能识别前台应用，延迟约 1.5 秒，够「按应用隐藏悬浮窗」用。</string>
+    <string name="fg_help_body">宋 L DM-i（含 2026 款 / DiLink 100）等车机，无障碍入口常在车辆设置里。按下面任一路径找：\n\n1）车辆设置 → 系统设置 → 无障碍 → 已下载的服务 / 已安装的服务 → 听风（打开）\n2）设置 → 系统 → 无障碍 → 已下载的服务 → 听风\n3）设置 → 应用 → 特殊应用权限 → 无障碍\n4）设置 → 辅助功能（部分固件在列表最底部）\n\n钉住建议：\n· 同时打开「使用情况访问」（关于与诊断 → 前台应用记录）—— DiLink 重启一般不会清这项，比无障碍更稳\n· 应用管理 → 听风 → 允许自启动 / 允许后台活动（有则打开）\n· 加入电池 / 耗电白名单，避免息屏后轮询被冻\n\n应用无法阻止系统在开机时关掉第三方无障碍；开机通知点一下即可重新打开。</string>
     <string name="fg_help_copy">复制说明</string>
     <string name="fg_help_copied">说明已复制</string>
     <string name="fg_help_open_settings">打开系统设置</string>

@@ -12,6 +12,7 @@ import com.luckylearning.windtone.data.DataMaintenance
 import com.luckylearning.windtone.data.DownloadRoute
 import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.data.UpdateChecker
+import com.luckylearning.windtone.overlay.AccessibilityWatchdog
 import com.luckylearning.windtone.overlay.ForegroundAppDetector
 import com.luckylearning.windtone.overlay.ForegroundProbe
 import com.luckylearning.windtone.diag.DiagnosticsReport
@@ -309,6 +310,24 @@ internal fun SettingsDiagnosisPage(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        // v1.2.36：曾经开过、现在关了 → 诊断区置顶恢复条（通知可能被划掉或没通知权限）
+        if (AccessibilityWatchdog.shouldPromptRecovery(
+                AccessibilityWatchdog.seenOn(context),
+                detector.accessibility,
+            )
+        ) {
+            ActionRow(
+                title = stringResource(R.string.a11y_watch_title),
+                subtitle = stringResource(R.string.a11y_watch_banner_sub),
+                onClick = {
+                    if (!ForegroundAppDetector.openAccessibilitySettings(context)) {
+                        showForegroundHelp = true
+                    }
+                },
+                trailing = stringResource(R.string.a11y_watch_reopen),
+                chevron = true,
+            )
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             // v1.1.81：车机（比亚迪 DiLink 等）常常没有「无障碍」这一页，
             // 旧实现只会弹一句 toast，用户面前没有出口。现在跳转失败就打开路径向导。
