@@ -29,6 +29,7 @@ object SettingsSearchCatalog {
         SettingsSearchEntry(R.string.theme_mode, SettingsPage.APPEARANCE, sectionRes = R.string.theme, keywords = "明暗 深色 浅色 跟随系统 dark light"),
         SettingsSearchEntry(R.string.theme_follows_cover_colors, SettingsPage.APPEARANCE, sectionRes = R.string.theme, keywords = "取色 封面 动态色 dynamic"),
         SettingsSearchEntry(R.string.car_mode, SettingsPage.APPEARANCE, sectionRes = R.string.car, keywords = "车载 车机 car driving"),
+        SettingsSearchEntry(R.string.bt_auto_car_enabled, SettingsPage.APPEARANCE, sectionRes = R.string.car, keywords = "蓝牙 自动 车机 bluetooth auto car a2dp"),
 
         SettingsSearchEntry(R.string.speed_and_pitch, SettingsPage.PLAYBACK, sectionRes = R.string.speed_and_pitch, keywords = "速度 变调 pitch tempo 倍速"),
         SettingsSearchEntry(R.string.resume_last_playback_on_launch, SettingsPage.PLAYBACK, sectionRes = R.string.playback_behavior, keywords = "续播 恢复 上次 auto resume"),

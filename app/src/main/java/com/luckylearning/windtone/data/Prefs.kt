@@ -66,6 +66,13 @@ object SettingsDefaults {
     const val DYNAMIC_THEME = true
     const val CAR_MODE = false
 
+    /** G7: bluetooth auto car layout (default off) */
+    const val BT_AUTO_CAR_ENABLED = false
+    /** true=any BT audio; false=remembered only */
+    const val BT_AUTO_CAR_ANY_DEVICE = true
+    const val BT_AUTO_CAR_DEVICES = ""
+    const val BT_AUTO_CAR_RESTORE = true
+
     const val SPEED = 1.0f
 
     /**
@@ -1545,6 +1552,51 @@ class Prefs private constructor(context: Context) {
             ioScope.launch { store.putBoolean(KEY_CAR_MODE, value) }
         }
 
+    /** G7: bluetooth auto enter car layout */
+    var btAutoCarEnabled: Boolean
+        get() = sp.getBoolean(KEY_BT_AUTO_CAR_ENABLED, SettingsDefaults.BT_AUTO_CAR_ENABLED)
+        set(value) {
+            sp.edit().putBoolean(KEY_BT_AUTO_CAR_ENABLED, value).apply()
+            ioScope.launch { store.putBoolean(KEY_BT_AUTO_CAR_ENABLED, value) }
+        }
+
+    var btAutoCarAnyDevice: Boolean
+        get() = sp.getBoolean(KEY_BT_AUTO_CAR_ANY_DEVICE, SettingsDefaults.BT_AUTO_CAR_ANY_DEVICE)
+        set(value) {
+            sp.edit().putBoolean(KEY_BT_AUTO_CAR_ANY_DEVICE, value).apply()
+            ioScope.launch { store.putBoolean(KEY_BT_AUTO_CAR_ANY_DEVICE, value) }
+        }
+
+    var btAutoCarDevices: String
+        get() = sp.getString(KEY_BT_AUTO_CAR_DEVICES, SettingsDefaults.BT_AUTO_CAR_DEVICES).orEmpty()
+        set(value) {
+            sp.edit().putString(KEY_BT_AUTO_CAR_DEVICES, value).apply()
+            ioScope.launch { store.putString(KEY_BT_AUTO_CAR_DEVICES, value) }
+        }
+
+    var btAutoCarRestore: Boolean
+        get() = sp.getBoolean(KEY_BT_AUTO_CAR_RESTORE, SettingsDefaults.BT_AUTO_CAR_RESTORE)
+        set(value) {
+            sp.edit().putBoolean(KEY_BT_AUTO_CAR_RESTORE, value).apply()
+            ioScope.launch { store.putBoolean(KEY_BT_AUTO_CAR_RESTORE, value) }
+        }
+
+    /** G7 session flag (runtime; not in SettingsDefaultsTest). */
+    var btAutoCarSessionActive: Boolean
+        get() = sp.getBoolean(KEY_BT_AUTO_CAR_SESSION, false)
+        set(value) {
+            sp.edit().putBoolean(KEY_BT_AUTO_CAR_SESSION, value).apply()
+            ioScope.launch { store.putBoolean(KEY_BT_AUTO_CAR_SESSION, value) }
+        }
+
+    /** Stash prior carMode: "" none / "0" off / "1" on */
+    var btAutoCarStashCarMode: String
+        get() = sp.getString(KEY_BT_AUTO_CAR_STASH, "").orEmpty()
+        set(value) {
+            sp.edit().putString(KEY_BT_AUTO_CAR_STASH, value).apply()
+            ioScope.launch { store.putString(KEY_BT_AUTO_CAR_STASH, value) }
+        }
+
     // ============================================================ 8. 应用内更新
 
     /**
@@ -1753,6 +1805,12 @@ class Prefs private constructor(context: Context) {
         const val KEY_THEME_MODE = "theme_mode"
         const val KEY_DYNAMIC_THEME = "dynamic_theme"
         const val KEY_CAR_MODE = "car_mode"
+        const val KEY_BT_AUTO_CAR_ENABLED = "bt_auto_car_enabled"
+        const val KEY_BT_AUTO_CAR_ANY_DEVICE = "bt_auto_car_any_device"
+        const val KEY_BT_AUTO_CAR_DEVICES = "bt_auto_car_devices"
+        const val KEY_BT_AUTO_CAR_RESTORE = "bt_auto_car_restore"
+        const val KEY_BT_AUTO_CAR_SESSION = "bt_auto_car_session"
+        const val KEY_BT_AUTO_CAR_STASH = "bt_auto_car_stash"
 
         // ---- 8. 应用内更新 ----
         const val KEY_AUTO_UPDATE = "auto_check_update"

@@ -80,6 +80,13 @@ class PlaybackEngine(
     private val messages: MessageBus,
 ) : PlayerActions {
 
+    private val btAutoCarMonitor = BtAutoCarMonitor(
+        app = app,
+        prefs = prefs,
+        onEnterCar = { setCarMode(true) },
+        onExitCar = { setCarMode(false) },
+    )
+
     private val connection = PlaybackConnection(app)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -335,6 +342,8 @@ class PlaybackEngine(
         )
         // 杀进程再开：sceneId 已落盘则按档重套听感（不重拍 stash）
         SceneMode.restoreOnColdStart()
+        // G7：按 Prefs 决定是否挂蓝牙音频设备监听（默认关，不耗电）
+        btAutoCarMonitor.syncRegistration()
         TrackVolume.init(app)
         scope.launch {
             SleepTimer.remainingMs.collect { ms ->
@@ -1407,6 +1416,47 @@ class PlaybackEngine(
             )
         }
     }
+
+    // ---------------------------------------------------------------- G7 蓝牙自动车机
+
+    fun setBtAutoCarEnabled(enabled: Boolean) {
+        prefs.btAutoCarEnabled = enabled
+        btAutoCarMonitor.syncRegistration()
+    }
+
+    fun setBtAutoCarAnyDevice(anyDevice: Boolean) {
+        prefs.btAutoCarAnyDevice = anyDevice
+        btAutoCarMonitor.syncRegistration()
+    }
+
+    fun setBtAutoCarRestore(restore: Boolean) {
+        prefs.btAutoCarRestore = restore
+    }
+
+    fun setBtAutoCarDevicesRaw(raw: String) {
+        prefs.btAutoCarDevices = raw
+        btAutoCarMonitor.syncRegistration()
+    }
+
+    fun addConnectedBtDevicesToRemembered() {
+        val cur = BtAutoCarPolicy.decodeDevices(prefs.btAutoCarDevices).toMutableList()
+        val have = cur.map { it.id }.toHashSet()
+        for (d in btAutoCarMonitor.connectedBluetoothRefs()) {
+            if (d.id !in have) {
+                cur.add(d)
+                have.add(d.id)
+            }
+        }
+        prefs.btAutoCarDevices = BtAutoCarPolicy.encodeDevices(cur)
+        btAutoCarMonitor.syncRegistration()
+    }
+
+    fun removeBtAutoCarDevice(id: String) {
+        val next = BtAutoCarPolicy.decodeDevices(prefs.btAutoCarDevices).filter { it.id != id }
+        prefs.btAutoCarDevices = BtAutoCarPolicy.encodeDevices(next)
+        btAutoCarMonitor.syncRegistration()
+    }
+
 
     // ---------------------------------------------------------------- 悬浮窗设置（转发）
     //

@@ -291,6 +291,8 @@ internal fun SettingsAppearancePage(
         },
     )
 
+    // G7 蓝牙自动车机
+    BtAutoCarSettingsSection()
 
     // 车载模式的长说明：副标题只留一行摘要（原来 180 字把一条设置项撑成大半屏）
     if (showCarModeInfo) {

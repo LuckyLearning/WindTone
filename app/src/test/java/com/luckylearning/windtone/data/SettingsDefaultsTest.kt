@@ -60,6 +60,10 @@ class SettingsDefaultsTest {
         check("themeMode", prefs.themeMode, SettingsDefaults.THEME_MODE)
         check("dynamicTheme", prefs.dynamicTheme, SettingsDefaults.DYNAMIC_THEME)
         check("carMode", prefs.carMode, SettingsDefaults.CAR_MODE)
+        check("btAutoCarEnabled", prefs.btAutoCarEnabled, SettingsDefaults.BT_AUTO_CAR_ENABLED)
+        check("btAutoCarAnyDevice", prefs.btAutoCarAnyDevice, SettingsDefaults.BT_AUTO_CAR_ANY_DEVICE)
+        check("btAutoCarDevices", prefs.btAutoCarDevices, SettingsDefaults.BT_AUTO_CAR_DEVICES)
+        check("btAutoCarRestore", prefs.btAutoCarRestore, SettingsDefaults.BT_AUTO_CAR_RESTORE)
 
         // 播放
         check("playbackSpeed", prefs.playbackSpeed, SettingsDefaults.SPEED)
