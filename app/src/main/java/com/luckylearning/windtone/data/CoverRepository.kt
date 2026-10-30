@@ -24,7 +24,7 @@ import kotlin.math.roundToInt
  *  1. **内存位图**（按像素计量，堆的 1/8）—— 滚动时零成本；
  *  2. **磁盘缓存** `cacheDir/covers/<歌曲id>-<边长>.jpg` —— 进程重启后仍在，冷启动后
  *     长列表滚动不再逐首解码，这是列表流畅度的关键（旧实现只有内存一级）；
- *  3. 原始文件解码 —— 只在都没命中时发生。
+ *  3. 原始来源解码 —— 内嵌图优先，缺失时回退同目录 folder.jpg / cover.jpg / AlbumArt.jpg（见 [FolderCover]）。
  *
  * 磁盘缓存是**派生数据**：可随时整体删除，不影响任何用户数据。
  * 用 `cacheDir` 而不是 `filesDir`：系统在存储紧张时可以自行回收。
@@ -181,13 +181,19 @@ object CoverRepository {
         return bmp
     }
 
-    /** 原始封面字节（通知栏 / 主题取色用），带内存缓存 */
+    /**
+     * 原始封面字节（通知栏 / 主题取色用），带内存缓存。
+     *
+     * 顺序：**内嵌图 → 同目录 folder/cover/AlbumArt.jpg（[FolderCover]）→ 空**。
+     * 空结果也会进内存缓存（负缓存），避免同一首歌反复打开 MediaMetadataRetriever / 扫目录。
+     */
     suspend fun loadRaw(context: Context, song: Song): ByteArray? = withContext(Dispatchers.IO) {
         val key = song.stableKey
         cache.get(key)?.let { return@withContext it.takeIf { b -> b.isNotEmpty() } }
         val bytes = runCatching {
             MetadataReader.embeddedPicture(context, song.uri)
                 ?.takeIf { it.size in 1..(8 * 1024 * 1024) }
+                ?: FolderCover.readBytes(song)
                 ?: empty
         }.getOrDefault(empty)
         cache.put(key, bytes)
