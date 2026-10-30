@@ -1,0 +1,5 @@
+feat(queue): A3 清空队列 + A4 打乱顺序（物理序，非随机模式）
+
+- QueueSheet：打乱顺序 / 清空（二次确认）/ 存为歌单
+- QueuePolicies.shuffleOrderIndices + QueueManager.clearQueue/shuffleQueueOrder
+- 不改 shuffleModeEnabled；单测覆盖；docs/设计-队列清空与打乱.md
