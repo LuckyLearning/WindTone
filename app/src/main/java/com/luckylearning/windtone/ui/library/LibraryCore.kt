@@ -823,6 +823,7 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
                 detailSongs = it.detailSongs.filterNot { s -> s.stableKey in keys },
                 playlistSongs = it.playlistSongs.filterNot { s -> s.stableKey in keys },
                 extraRecent = it.extraRecent.filterNot { s -> s.stableKey in keys },
+                extraRecentlyAdded = it.extraRecentlyAdded.filterNot { s -> s.stableKey in keys },
                 extraMostPlayed = it.extraMostPlayed.filterNot { s -> s.stableKey in keys },
                 extraFavorites = it.extraFavorites.filterNot { s -> s.stableKey in keys },
                 selection = SelectionMath.drop(it.selection, keys),
