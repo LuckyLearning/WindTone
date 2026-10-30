@@ -38,6 +38,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.ui.theme.glassContainerColor
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
+import com.luckylearning.windtone.R
 
 /**
  * 歌单相关的弹层与弹窗：加入歌单、新建歌单、歌单详情菜单。
@@ -66,7 +69,8 @@ fun AddToPlaylistSheet(
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
             Text(
-                song?.let { "把「${it.title}」加入歌单" } ?: "把所选的 $count 首加入歌单",
+                song?.let { stringResource(R.string.pl_add_song_title, it.title) }
+                    ?: stringResource(R.string.pl_add_selected_title, count),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(horizontal = 8.dp),
@@ -80,7 +84,7 @@ fun AddToPlaylistSheet(
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
-                        placeholder = { Text("新歌单名称") },
+                        placeholder = { Text(stringResource(R.string.pl_new_name_hint)) },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )
@@ -93,7 +97,7 @@ fun AddToPlaylistSheet(
                             }
                         },
                         enabled = name.isNotBlank(),
-                    ) { Text("创建") }
+                    ) { Text(stringResource(R.string.create)) }
                 }
             } else {
                 Row(
@@ -106,7 +110,7 @@ fun AddToPlaylistSheet(
                 ) {
                     Icon(Icons.Filled.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(8.dp))
-                    Text("新建歌单…", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyLarge)
+                    Text(stringResource(R.string.pl_new_ellipsis), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyLarge)
                 }
                 LazyColumn(Modifier.height(300.dp)) {
                     items(playlists, key = { it.id }) { p ->
@@ -119,7 +123,7 @@ fun AddToPlaylistSheet(
                                 .padding(vertical = 10.dp, horizontal = 8.dp),
                         ) {
                             Text(p.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text("${p.songCount} 首", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(pluralStringResource(R.plurals.lib_song_count, p.songCount, p.songCount), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -139,16 +143,16 @@ fun NewPlaylistDialog(
     var name by remember { mutableStateOf("") }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("新建歌单") },
+        title = { Text(stringResource(R.string.pl_new_title)) },
         text = {
-            OutlinedTextField(value = name, onValueChange = { name = it }, placeholder = { Text("歌单名称") }, singleLine = true)
+            OutlinedTextField(value = name, onValueChange = { name = it }, placeholder = { Text(stringResource(R.string.pl_name_hint)) }, singleLine = true)
         },
         confirmButton = {
             TextButton(onClick = { if (name.isNotBlank()) { onCreate(name.trim()); onDismiss() } }, enabled = name.isNotBlank()) {
-                Text("创建")
+                Text(stringResource(R.string.create))
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
@@ -164,12 +168,12 @@ fun PlaylistActionsMenu(
     onDedupe: () -> Unit = {},
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
-        DropdownMenuItem(text = { Text("重命名…") }, onClick = { onDismiss(); onRename() })
+        DropdownMenuItem(text = { Text(stringResource(R.string.pl_rename_ellipsis)) }, onClick = { onDismiss(); onRename() })
         DropdownMenuItem(
-            text = { Text("移除重复歌曲") },
+            text = { Text(stringResource(R.string.pl_remove_duplicates)) },
             onClick = { onDismiss(); onDedupe() },
         )
-        DropdownMenuItem(text = { Text("导出为 M3U…") }, onClick = { onDismiss(); onExport() })
-        DropdownMenuItem(text = { Text("删除歌单") }, onClick = { onDismiss(); onDelete() })
+        DropdownMenuItem(text = { Text(stringResource(R.string.pl_export_m3u_ellipsis)) }, onClick = { onDismiss(); onExport() })
+        DropdownMenuItem(text = { Text(stringResource(R.string.pl_delete_playlist)) }, onClick = { onDismiss(); onDelete() })
     }
 }

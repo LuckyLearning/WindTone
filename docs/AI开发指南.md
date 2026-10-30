@@ -2105,3 +2105,19 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 ---
 
 *本文档位于 `docs/`（2026-10-16 起随仓库入库，并发布到 GitHub Pages）。*
+
+### i18n 第 2 批（2026-10-31）
+
+范围：`SheetsPlaylist.kt`、`LibraryLists.kt`（含「N 首」与空态）、`OnlinePlaylistsPage.kt`。
+
+约定不变：`values/strings.xml` = 英文兜底，`values-zh/strings.xml` = 中文；「N 首」复用 `lib_song_count` plurals；本批新增前缀 `pl_` / `lib_lists_` / `online_`，以及通用键 `create` / `save` / `delete` / `rename` / `play_all` / `refresh` / `collapse` / `cd_back` 等。
+
+本批键名：`create`, `save`, `delete`, `rename`, `play_all`, `refresh`, `collapse`, `cd_back`, `cd_more_actions`, `cd_drag_reorder`, `pl_add_song_title`, `pl_add_selected_title`, `pl_new_name_hint`, `pl_name_hint`, `pl_new_ellipsis`, `pl_new_title`, `pl_rename_ellipsis`, `pl_remove_duplicates`, `pl_export_m3u_ellipsis`, `pl_delete_playlist`, `pl_rename_title`, `pl_confirm`, `pl_my_playlists`, `pl_import_m3u`, `pl_empty_title`, `pl_empty_body`, `pl_detail_reorder_hint`, `pl_empty_virtual_title`, `pl_empty_virtual_body`, `pl_empty_user_title`, `pl_empty_user_body`, `pl_cd_playlist_actions`, `lib_lists_empty_folder_title`, `lib_lists_empty_full_title`, `lib_lists_empty_search_title`, `lib_lists_empty_folder_body`, `lib_lists_empty_full_need_perm_body`, `lib_lists_empty_full_body`, `lib_lists_empty_search_body`, `lib_lists_action_change_folder`, `lib_lists_action_grant_scan`, `lib_lists_action_rescan_full`, `lib_lists_action_scan_scope`, `lib_lists_loading_more`, `lib_lists_jump_current`, `lib_lists_group_empty_title`, `lib_lists_group_empty_body`, `lib_lists_remove_folder`, `online_section_title`, `online_section_body`, `online_add_title`, `online_add_subtitle`, `online_empty`, `online_hls_live`, `online_updated_at`, `online_no_entries`, `online_play`, `online_refreshing`, `online_refresh_failed`, `online_view_entries`, `online_preview_capped`, `online_tap_to_start`, `online_reading`, `online_add_failed`, `online_rename_title`, `online_name_label`, `online_delete_title`, `online_delete_body`, `online_error_title`, `online_url_label`, `online_name_optional`, `online_add_hint`, `online_add`, `online_entry_count`
+
+
+落盘文件：
+- `SheetsPlaylist.kt` / `LibraryLists.kt` / `OnlinePlaylistsPage.kt`
+- `values/strings.xml` + `values-zh/strings.xml`（本批新增键；`refresh`/`collapse`/`cancel` 复用已有）
+
+注意：`onClick` / `onFailure` 等非 @Composable 回调里用 `context.getString(...)`，UI 组合内用 `stringResource`；「N 首」走 `pluralStringResource(R.plurals.lib_song_count, …)`。源码字幕「填一个 … 直链」与 `online_add_subtitle` 中文对齐。无逻辑改动。
+

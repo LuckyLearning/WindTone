@@ -69,6 +69,9 @@ import com.luckylearning.windtone.state.VirtualPlaylist
 import com.luckylearning.windtone.state.virtualPlaylistInfo
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
+import com.luckylearning.windtone.R
 
 /**
  * 曲库与歌单的**列表区**（原来长在 `MainScreen.kt` 里）。
@@ -128,26 +131,26 @@ internal fun SongsList(
         val folderScope = library.scanScope == ScanScope.FOLDERS
         EmptyHint(
             title = if (emptyLibrary) {
-                if (folderScope) "所选目录里没有音频" else "全盘扫描没找到音频"
+                if (folderScope) stringResource(R.string.lib_lists_empty_folder_title) else stringResource(R.string.lib_lists_empty_full_title)
             } else {
-                "没有匹配的结果"
+                stringResource(R.string.lib_lists_empty_search_title)
             },
             subtitle = if (emptyLibrary) {
                 when {
-                    folderScope -> "确认目录里有 mp3 / flac 等音频，或换一个目录。\n同目录的 .lrc 歌词会被自动识别。"
-                    !granted -> "全盘扫描缺少读取权限。下一步：点下方授予权限，或改为只导入某个音乐目录。"
-                    else -> "全盘未找到音频。下一步：授予「所有文件访问权限」再扫，或改为只导入指定音乐目录。"
+                    folderScope -> stringResource(R.string.lib_lists_empty_folder_body)
+                    !granted -> stringResource(R.string.lib_lists_empty_full_need_perm_body)
+                    else -> stringResource(R.string.lib_lists_empty_full_body)
                 }
             } else {
-                "换个关键词试试，支持歌名、歌手、专辑、文件名，也支持拼音首字母（如 zjl）"
+                stringResource(R.string.lib_lists_empty_search_body)
             },
             actionLabel = if (emptyLibrary) {
-                if (folderScope) "更换目录" else if (!granted) "授予权限并扫描全盘" else "重新扫描全盘"
+                if (folderScope) stringResource(R.string.lib_lists_action_change_folder) else if (!granted) stringResource(R.string.lib_lists_action_grant_scan) else stringResource(R.string.lib_lists_action_rescan_full)
             } else null,
             onAction = if (emptyLibrary) {
                 if (folderScope) onImportFolder else onFullScan
             } else null,
-            secondaryActionLabel = if (emptyLibrary) "扫描范围设置" else null,
+            secondaryActionLabel = if (emptyLibrary) stringResource(R.string.lib_lists_action_scan_scope) else null,
             onSecondaryAction = if (emptyLibrary) onOpenScanScope else null,
             modifier = Modifier.fillMaxSize(),
         )
@@ -213,7 +216,7 @@ internal fun SongsList(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            "正在加载更多…",
+                            stringResource(R.string.lib_lists_loading_more),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -294,7 +297,7 @@ internal fun SongsList(
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        "回到当前播放",
+                        stringResource(R.string.lib_lists_jump_current),
                         color = MaterialTheme.colorScheme.onPrimary,
                         style = MaterialTheme.typography.labelMedium,
                     )
@@ -319,7 +322,7 @@ internal fun GroupListView(
     carMode: Boolean = false,
 ) {
     if (library.groups.isEmpty()) {
-        EmptyHint("暂无分组", "扫描完成后即可按此维度浏览", modifier = Modifier.fillMaxSize())
+        EmptyHint(stringResource(R.string.lib_lists_group_empty_title), stringResource(R.string.lib_lists_group_empty_body), modifier = Modifier.fillMaxSize())
         return
     }
     LazyColumn(
@@ -357,7 +360,7 @@ internal fun GroupListView(
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
-                            group.subtitle.ifBlank { "${group.count} 首" },
+                            group.subtitle.ifBlank { pluralStringResource(R.plurals.lib_song_count, group.count, group.count) },
                             style = if (carMode) MaterialTheme.typography.bodyLarge
                             else MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -372,7 +375,7 @@ internal fun GroupListView(
                             IconButton(onClick = { showMenu = true }) {
                                 Icon(
                                     imageVector = Icons.Default.MoreVert,
-                                    contentDescription = "更多操作",
+                                    contentDescription = stringResource(R.string.cd_more_actions),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
@@ -381,7 +384,7 @@ internal fun GroupListView(
                                 onDismissRequest = { showMenu = false },
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text("移除目录及扫描结果") },
+                                    text = { Text(stringResource(R.string.lib_lists_remove_folder)) },
                                     onClick = {
                                         showMenu = false
                                         onRemove(group)
@@ -411,7 +414,7 @@ internal fun GroupDetail(
     Column(Modifier.fillMaxSize()) {
         DetailHeader(
             title = library.selectedGroup?.title.orEmpty(),
-            subtitle = "${library.detailSongs.size} 首",
+            subtitle = pluralStringResource(R.plurals.lib_song_count, library.detailSongs.size, library.detailSongs.size),
             onBack = onBack,
             onPlayAll = { playerVm.playQueue(library.detailSongs, 0) },
         )
@@ -456,12 +459,12 @@ internal fun PlaylistListView(
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
             ) {
                 Text(
-                    "我的歌单",
+                    stringResource(R.string.pl_my_playlists),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = onImportM3U) { Text("导入 M3U") }
+                TextButton(onClick = onImportM3U) { Text(stringResource(R.string.pl_import_m3u)) }
             }
         }
         item {
@@ -484,7 +487,7 @@ internal fun PlaylistListView(
         }
         if (library.playlists.isEmpty()) {
             item {
-                EmptyHint("还没有自建歌单", "在歌曲列表点行尾「⋮」即可加入或新建歌单", modifier = Modifier.padding(vertical = 30.dp))
+                EmptyHint(stringResource(R.string.pl_empty_title), stringResource(R.string.pl_empty_body), modifier = Modifier.padding(vertical = 30.dp))
             }
         }
         items(library.playlists, key = { it.id }, contentType = { "playlist" }) { pl ->
@@ -519,7 +522,7 @@ private fun PlaylistRowPlay(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    "${info.songCount} 首",
+                    pluralStringResource(R.plurals.lib_song_count, info.songCount, info.songCount),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -551,7 +554,7 @@ internal fun PlaylistDetail(
             IconButton(onClick = { menuOpen = true }) {
                 Icon(
                     Icons.Filled.MoreVert,
-                    contentDescription = "歌单操作",
+                    contentDescription = stringResource(R.string.pl_cd_playlist_actions),
                     tint = MaterialTheme.colorScheme.onSurface,
                 )
             }
@@ -570,9 +573,9 @@ internal fun PlaylistDetail(
         DetailHeader(
             title = info.name,
             subtitle = if (info.virtual) {
-                "${library.playlistSongs.size} 首"
+                pluralStringResource(R.plurals.lib_song_count, library.playlistSongs.size, library.playlistSongs.size)
             } else {
-                "${library.playlistSongs.size} 首 · 长按行拖动排序"
+                stringResource(R.string.pl_detail_reorder_hint, library.playlistSongs.size)
             },
             onBack = onBack,
             onPlayAll = { playerVm.playQueue(library.playlistSongs, 0) },
@@ -582,9 +585,9 @@ internal fun PlaylistDetail(
 
         if (library.playlistSongs.isEmpty()) {
             EmptyHint(
-                if (info.virtual) "这个列表还是空的" else "歌单是空的",
-                if (info.virtual) "多听几首歌，这里就会自动出现内容（或用启动器的「我的收藏」快捷方式）"
-                else "回到歌曲列表点行尾「⋮」即可加入",
+                if (info.virtual) stringResource(R.string.pl_empty_virtual_title) else stringResource(R.string.pl_empty_user_title),
+                if (info.virtual) stringResource(R.string.pl_empty_virtual_body)
+                else stringResource(R.string.pl_empty_user_body),
                 modifier = Modifier.fillMaxSize(),
             )
         } else if (info.virtual) {
@@ -621,12 +624,12 @@ internal fun PlaylistDetail(
     if (renameDialog) {
         AlertDialog(
             onDismissRequest = { renameDialog = false },
-            title = { Text("重命名歌单") },
+            title = { Text(stringResource(R.string.pl_rename_title)) },
             text = {
                 OutlinedTextField(
                     value = renameText,
                     onValueChange = { renameText = it },
-                    placeholder = { Text("歌单名称") },
+                    placeholder = { Text(stringResource(R.string.pl_name_hint)) },
                     singleLine = true,
                 )
             },
@@ -637,9 +640,9 @@ internal fun PlaylistDetail(
                         renameDialog = false
                     },
                     enabled = renameText.isNotBlank(),
-                ) { Text("确定") }
+                ) { Text(stringResource(R.string.pl_confirm)) }
             },
-            dismissButton = { TextButton(onClick = { renameDialog = false }) { Text("取消") } },
+            dismissButton = { TextButton(onClick = { renameDialog = false }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 }
@@ -759,7 +762,7 @@ private fun ReorderablePlaylist(
                 }
                 Icon(
                     imageVector = AppIcons.DragHandle,
-                    contentDescription = "拖动排序",
+                    contentDescription = stringResource(R.string.cd_drag_reorder),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
                         .padding(end = 6.dp)
@@ -787,7 +790,7 @@ internal fun DetailHeader(
         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
     ) {
         IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = MaterialTheme.colorScheme.onSurface)
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back), tint = MaterialTheme.colorScheme.onSurface)
         }
         Column(Modifier.weight(1f)) {
             Text(
@@ -803,7 +806,7 @@ internal fun DetailHeader(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        TextButton(onClick = onPlayAll, enabled = playAllEnabled) { Text("播放全部") }
+        TextButton(onClick = onPlayAll, enabled = playAllEnabled) { Text(stringResource(R.string.play_all)) }
         trailing?.invoke()
     }
 }

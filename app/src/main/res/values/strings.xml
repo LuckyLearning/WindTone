@@ -747,4 +747,85 @@ Direct link looks fine; the issue is in playback (host, cache, or file format).<
     <string name="scene_commute_desc">Clear vocals for podcasts and pop on the go</string>
     <string name="scene_sleep_desc">Soft surround with a 45-minute sleep timer</string>
 
+
+    <!-- ================================================================
+         i18n batch 2 (2026-10-31): SheetsPlaylist / LibraryLists / OnlinePlaylistsPage
+         ================================================================ -->
+    <string name="create">Create</string>
+    <string name="save">Save</string>
+    <string name="delete">Delete</string>
+    <string name="rename">Rename</string>
+    <string name="play_all">Play all</string>
+    <string name="cd_back">Back</string>
+    <string name="cd_more_actions">More actions</string>
+    <string name="cd_drag_reorder">Drag to reorder</string>
+    <string name="pl_add_song_title">Add "%1$s" to a playlist</string>
+    <string name="pl_add_selected_title">Add %1$d selected songs to a playlist</string>
+    <string name="pl_new_name_hint">New playlist name</string>
+    <string name="pl_name_hint">Playlist name</string>
+    <string name="pl_new_ellipsis">New playlist…</string>
+    <string name="pl_new_title">New playlist</string>
+    <string name="pl_rename_ellipsis">Rename…</string>
+    <string name="pl_remove_duplicates">Remove duplicate songs</string>
+    <string name="pl_export_m3u_ellipsis">Export as M3U…</string>
+    <string name="pl_delete_playlist">Delete playlist</string>
+    <string name="pl_rename_title">Rename playlist</string>
+    <string name="pl_confirm">OK</string>
+    <string name="pl_my_playlists">My playlists</string>
+    <string name="pl_import_m3u">Import M3U</string>
+    <string name="pl_empty_title">No playlists yet</string>
+    <string name="pl_empty_body">Open the ⋮ menu on a song to add it or create a playlist</string>
+    <string name="pl_detail_reorder_hint">%1$d songs · Long-press a row to reorder</string>
+    <string name="pl_empty_virtual_title">This list is still empty</string>
+    <string name="pl_empty_virtual_body">Keep listening and tracks will show up here (or use the Favorites launcher shortcut)</string>
+    <string name="pl_empty_user_title">Playlist is empty</string>
+    <string name="pl_empty_user_body">Go back to Songs and tap ⋮ on a row to add tracks</string>
+    <string name="pl_cd_playlist_actions">Playlist actions</string>
+    <string name="lib_lists_empty_folder_title">No audio in the selected folders</string>
+    <string name="lib_lists_empty_full_title">Full-disk scan found no audio</string>
+    <string name="lib_lists_empty_search_title">No matching results</string>
+    <string name="lib_lists_empty_folder_body">Make sure the folder has mp3 / flac files, or pick another.
+.lrc lyrics next to the audio are detected automatically.</string>
+    <string name="lib_lists_empty_full_need_perm_body">Full-disk scan needs read permission. Next: grant permission below, or import a single music folder instead.</string>
+    <string name="lib_lists_empty_full_body">No audio found. Next: grant All files access and scan again, or import specific music folders.</string>
+    <string name="lib_lists_empty_search_body">Try another keyword — title, artist, album, file name, or pinyin initials (e.g. zjl)</string>
+    <string name="lib_lists_action_change_folder">Change folder</string>
+    <string name="lib_lists_action_grant_scan">Grant permission and scan all</string>
+    <string name="lib_lists_action_rescan_full">Rescan all storage</string>
+    <string name="lib_lists_action_scan_scope">Scan scope settings</string>
+    <string name="lib_lists_loading_more">Loading more…</string>
+    <string name="lib_lists_jump_current">Jump to now playing</string>
+    <string name="lib_lists_group_empty_title">No groups yet</string>
+    <string name="lib_lists_group_empty_body">Groups appear here after a scan finishes</string>
+    <string name="lib_lists_remove_folder">Remove folder and its scan results</string>
+    <string name="online_section_title">Online playlists</string>
+    <string name="online_section_body">Supports m3u / m3u8 / pls links. Playback uses the system media stack — no download.
+Online entries have no local files, so they are not scanned, favorited, or counted in stats.</string>
+    <string name="online_add_title">Add online playlist</string>
+    <string name="online_add_subtitle">Paste a playlist URL (m3u / m3u8 / pls), or a single http(s) audio link</string>
+    <string name="online_empty">No online playlists yet.
+Tip: SomaFM (https://somafm.com/groovesalad.m3u), Radio Paradise, and self-hosted station m3u files work directly; HLS (.m3u8) plays as a single live stream item.</string>
+    <string name="online_hls_live">HLS live stream</string>
+    <string name="online_updated_at"> · Updated </string>
+    <string name="online_no_entries">This list has no playable entries</string>
+    <string name="online_play">Play</string>
+    <string name="online_refreshing">Refreshing "%1$s"…</string>
+    <string name="online_refresh_failed">Refresh failed</string>
+    <string name="online_view_entries">View entries</string>
+    <string name="online_preview_capped">Showing the first %1$d of %2$d entries — playback is unaffected</string>
+    <string name="online_tap_to_start">Tap any row to start from there</string>
+    <string name="online_reading">Reading the playlist…</string>
+    <string name="online_add_failed">Could not add</string>
+    <string name="online_rename_title">Rename online playlist</string>
+    <string name="online_name_label">Name</string>
+    <string name="online_delete_title">Delete "%1$s"?</string>
+    <string name="online_delete_body">Removes this URL and its cached entries from this device only. The online content itself is unchanged.</string>
+    <string name="online_error_title">Something went wrong</string>
+    <string name="online_url_label">Playlist URL</string>
+    <string name="online_name_optional">Name (optional)</string>
+    <string name="online_add_hint">Supports m3u / m3u8 / pls; also accepts a single http(s) audio link.
+The list is fetched once on add — nothing is saved if the fetch fails.</string>
+    <string name="online_add">Add</string>
+    <string name="online_entry_count">%1$d entries</string>
+
 </resources>

@@ -728,4 +728,85 @@
     <string name="scene_commute_desc">清澈人声，适合路上听播客与流行</string>
     <string name="scene_sleep_desc">柔和环绕，并打开 45 分钟睡眠定时</string>
 
+
+    <!-- ================================================================
+         i18n batch 2 (2026-10-31): SheetsPlaylist / LibraryLists / OnlinePlaylistsPage
+         ================================================================ -->
+    <string name="create">创建</string>
+    <string name="save">保存</string>
+    <string name="delete">删除</string>
+    <string name="rename">重命名</string>
+    <string name="play_all">播放全部</string>
+    <string name="cd_back">返回</string>
+    <string name="cd_more_actions">更多操作</string>
+    <string name="cd_drag_reorder">拖动排序</string>
+    <string name="pl_add_song_title">把「%1$s」加入歌单</string>
+    <string name="pl_add_selected_title">把所选的 %1$d 首加入歌单</string>
+    <string name="pl_new_name_hint">新歌单名称</string>
+    <string name="pl_name_hint">歌单名称</string>
+    <string name="pl_new_ellipsis">新建歌单…</string>
+    <string name="pl_new_title">新建歌单</string>
+    <string name="pl_rename_ellipsis">重命名…</string>
+    <string name="pl_remove_duplicates">移除重复歌曲</string>
+    <string name="pl_export_m3u_ellipsis">导出为 M3U…</string>
+    <string name="pl_delete_playlist">删除歌单</string>
+    <string name="pl_rename_title">重命名歌单</string>
+    <string name="pl_confirm">确定</string>
+    <string name="pl_my_playlists">我的歌单</string>
+    <string name="pl_import_m3u">导入 M3U</string>
+    <string name="pl_empty_title">还没有自建歌单</string>
+    <string name="pl_empty_body">在歌曲列表点行尾「⋮」即可加入或新建歌单</string>
+    <string name="pl_detail_reorder_hint">%1$d 首 · 长按行拖动排序</string>
+    <string name="pl_empty_virtual_title">这个列表还是空的</string>
+    <string name="pl_empty_virtual_body">多听几首歌，这里就会自动出现内容（或用启动器的「我的收藏」快捷方式）</string>
+    <string name="pl_empty_user_title">歌单是空的</string>
+    <string name="pl_empty_user_body">回到歌曲列表点行尾「⋮」即可加入</string>
+    <string name="pl_cd_playlist_actions">歌单操作</string>
+    <string name="lib_lists_empty_folder_title">所选目录里没有音频</string>
+    <string name="lib_lists_empty_full_title">全盘扫描没找到音频</string>
+    <string name="lib_lists_empty_search_title">没有匹配的结果</string>
+    <string name="lib_lists_empty_folder_body">确认目录里有 mp3 / flac 等音频，或换一个目录。
+同目录的 .lrc 歌词会被自动识别。</string>
+    <string name="lib_lists_empty_full_need_perm_body">全盘扫描缺少读取权限。下一步：点下方授予权限，或改为只导入某个音乐目录。</string>
+    <string name="lib_lists_empty_full_body">全盘未找到音频。下一步：授予「所有文件访问权限」再扫，或改为只导入指定音乐目录。</string>
+    <string name="lib_lists_empty_search_body">换个关键词试试，支持歌名、歌手、专辑、文件名，也支持拼音首字母（如 zjl）</string>
+    <string name="lib_lists_action_change_folder">更换目录</string>
+    <string name="lib_lists_action_grant_scan">授予权限并扫描全盘</string>
+    <string name="lib_lists_action_rescan_full">重新扫描全盘</string>
+    <string name="lib_lists_action_scan_scope">扫描范围设置</string>
+    <string name="lib_lists_loading_more">正在加载更多…</string>
+    <string name="lib_lists_jump_current">回到当前播放</string>
+    <string name="lib_lists_group_empty_title">暂无分组</string>
+    <string name="lib_lists_group_empty_body">扫描完成后即可按此维度浏览</string>
+    <string name="lib_lists_remove_folder">移除目录及扫描结果</string>
+    <string name="online_section_title">在线歌单</string>
+    <string name="online_section_body">支持 m3u / m3u8 / pls 直链。播放走系统播放内核，不需要下载；
+在线条目没有本地文件，因此不参与扫描、收藏与播放统计。</string>
+    <string name="online_add_title">添加在线歌单</string>
+    <string name="online_add_subtitle">填播放列表地址（m3u / m3u8 / pls），也可以直接填一个 http(s) 音频直链</string>
+    <string name="online_empty">还没有添加过在线歌单。
+提示：SomaFM（https://somafm.com/groovesalad.m3u）、Radio Paradise、各类自建电台的 m3u 都能直接用；HLS（.m3u8）需要整条流作为一项播放。</string>
+    <string name="online_hls_live">HLS 直播流</string>
+    <string name="online_updated_at"> · 更新于 </string>
+    <string name="online_no_entries">这份列表里没有可播放的条目</string>
+    <string name="online_play">播放</string>
+    <string name="online_refreshing">正在刷新「%1$s」…</string>
+    <string name="online_refresh_failed">刷新失败</string>
+    <string name="online_view_entries">查看条目</string>
+    <string name="online_preview_capped">仅列出前 %1$d 条（共 %2$d 条），播放不受影响</string>
+    <string name="online_tap_to_start">点任意一条从那里开始播放</string>
+    <string name="online_reading">正在读取播放列表…</string>
+    <string name="online_add_failed">添加失败</string>
+    <string name="online_rename_title">重命名在线歌单</string>
+    <string name="online_name_label">名称</string>
+    <string name="online_delete_title">删除「%1$s」？</string>
+    <string name="online_delete_body">只从本机移除这条地址与已解析的条目，不影响在线内容本身。</string>
+    <string name="online_error_title">没能完成</string>
+    <string name="online_url_label">播放列表地址</string>
+    <string name="online_name_optional">名称（可留空）</string>
+    <string name="online_add_hint">支持 m3u / m3u8 / pls；也接受单个 http(s) 音频直链。
+添加时会先读取一次，读不到内容不会保存。</string>
+    <string name="online_add">添加</string>
+    <string name="online_entry_count">%1$d 条</string>
+
 </resources>

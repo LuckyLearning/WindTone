@@ -37,6 +37,9 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
+import com.luckylearning.windtone.R
 
 /**
  * 在线歌单（M3U / M3U8 / PLS）—— v1.1.37。
@@ -69,17 +72,16 @@ internal fun OnlinePlaylistsPage(
         items = repo.all()
     }
 
-    SectionTitle("在线歌单")
+    SectionTitle(stringResource(R.string.online_section_title))
     Text(
-        text = "支持 m3u / m3u8 / pls 直链。播放走系统播放内核，不需要下载；" +
-            "在线条目没有本地文件，因此不参与扫描、收藏与播放统计。",
+        text = stringResource(R.string.online_section_body),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(bottom = 8.dp),
     )
     ActionRow(
-        title = "添加在线歌单",
-        subtitle = "填播放列表地址（m3u / m3u8 / pls），也可以直接填一个 http(s) 音频直链",
+        title = stringResource(R.string.online_add_title),
+        subtitle = stringResource(R.string.online_add_subtitle),
         onClick = { showAdd = true },
         chevron = true,
     )
@@ -97,9 +99,7 @@ internal fun OnlinePlaylistsPage(
 
     if (items.isEmpty()) {
         Text(
-            text = "还没有添加过在线歌单。\n" +
-                "提示：SomaFM（https://somafm.com/groovesalad.m3u）、Radio Paradise、" +
-                "各类自建电台的 m3u 都能直接用；HLS（.m3u8）需要整条流作为一项播放。",
+            text = stringResource(R.string.online_empty),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(vertical = 10.dp),
@@ -128,9 +128,9 @@ internal fun OnlinePlaylistsPage(
                         )
                         Text(
                             buildString {
-                                append(if (p.isStream) "HLS 直播流" else "${p.entries.size} 条")
+                                append(if (p.isStream) stringResource(R.string.online_hls_live) else stringResource(R.string.online_entry_count, p.entries.size))
                                 if (p.note.isNotBlank()) append(" · ").append(p.note)
-                                append(" · 更新于 ").append(formatTime(p.updatedAt))
+                                append(stringResource(R.string.online_updated_at)).append(formatTime(p.updatedAt))
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -151,40 +151,40 @@ internal fun OnlinePlaylistsPage(
                         onClick = {
                             val songs = repo.toSongs(p)
                             if (songs.isEmpty()) {
-                                error = "这份列表里没有可播放的条目"
+                                error = context.getString(R.string.online_no_entries)
                             } else {
                                 onPlay(songs, 0)
                             }
                         },
-                    ) { Text(if (p.isStream) "播放" else "播放全部") }
+                    ) { Text(if (p.isStream) stringResource(R.string.online_play) else stringResource(R.string.play_all)) }
                     TextButton(
                         enabled = busy.isBlank(),
                         onClick = {
-                            busy = "正在刷新「${p.name}」…"
+                            busy = context.getString(R.string.online_refreshing, p.name)
                             scope.launch {
                                 repo.refresh(p.id)
                                     .onSuccess { reload() }
-                                    .onFailure { error = it.message ?: "刷新失败" }
+                                    .onFailure { error = it.message ?: context.getString(R.string.online_refresh_failed) }
                                 busy = ""
                             }
                         },
-                    ) { Text("刷新") }
-                    TextButton(onClick = { renaming = p }) { Text("重命名") }
+                    ) { Text(stringResource(R.string.refresh)) }
+                    TextButton(onClick = { renaming = p }) { Text(stringResource(R.string.rename)) }
                     Spacer(Modifier.weight(1f))
                     if (!p.isStream && p.entries.isNotEmpty()) {
                         TextButton(onClick = { expanded = if (isExpanded) null else p.id }) {
-                            Text(if (isExpanded) "收起" else "查看条目")
+                            Text(if (isExpanded) stringResource(R.string.collapse) else stringResource(R.string.online_view_entries))
                         }
                     }
-                    TextButton(onClick = { deleting = p }) { Text("删除") }
+                    TextButton(onClick = { deleting = p }) { Text(stringResource(R.string.delete)) }
                 }
                 if (isExpanded) {
                     val songs = remember(p) { repo.toSongs(p) }
                     Text(
                         text = if (p.entries.size > PREVIEW_LIMIT) {
-                            "仅列出前 $PREVIEW_LIMIT 条（共 ${p.entries.size} 条），播放不受影响"
+                            stringResource(R.string.online_preview_capped, PREVIEW_LIMIT, p.entries.size)
                         } else {
-                            "点任意一条从那里开始播放"
+                            stringResource(R.string.online_tap_to_start)
                         },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -219,7 +219,7 @@ internal fun OnlinePlaylistsPage(
                                     )
                                 }
                             }
-                            TextButton(onClick = { onPlay(songs, index) }) { Text("播放") }
+                            TextButton(onClick = { onPlay(songs, index) }) { Text(stringResource(R.string.online_play)) }
                         }
                     }
                 }
@@ -232,11 +232,11 @@ internal fun OnlinePlaylistsPage(
             onDismiss = { showAdd = false },
             onConfirm = { name, url ->
                 showAdd = false
-                busy = "正在读取播放列表…"
+                busy = context.getString(R.string.online_reading)
                 scope.launch {
                     repo.add(name, url)
                         .onSuccess { reload() }
-                        .onFailure { error = it.message ?: "添加失败" }
+                        .onFailure { error = it.message ?: context.getString(R.string.online_add_failed) }
                     busy = ""
                 }
             },
@@ -245,8 +245,8 @@ internal fun OnlinePlaylistsPage(
 
     renaming?.let { target ->
         TextInputDialog(
-            title = "重命名在线歌单",
-            label = "名称",
+            title = stringResource(R.string.online_rename_title),
+            label = stringResource(R.string.online_name_label),
             initial = target.name,
             onDismiss = { renaming = null },
             onConfirm = { value ->
@@ -260,17 +260,17 @@ internal fun OnlinePlaylistsPage(
     deleting?.let { target ->
         AlertDialog(
             onDismissRequest = { deleting = null },
-            title = { Text("删除「${target.name}」？") },
-            text = { Text("只从本机移除这条地址与已解析的条目，不影响在线内容本身。") },
+            title = { Text(stringResource(R.string.online_delete_title, target.name)) },
+            text = { Text(stringResource(R.string.online_delete_body)) },
             confirmButton = {
                 TextButton(onClick = {
                     repo.remove(target.id)
                     deleting = null
                     reload()
-                }) { Text("删除") }
+                }) { Text(stringResource(R.string.delete)) }
             },
             dismissButton = {
-                TextButton(onClick = { deleting = null }) { Text("取消") }
+                TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -278,9 +278,9 @@ internal fun OnlinePlaylistsPage(
     error?.let { msg ->
         AlertDialog(
             onDismissRequest = { error = null },
-            title = { Text("没能完成") },
+            title = { Text(stringResource(R.string.online_error_title)) },
             text = { Text(msg) },
-            confirmButton = { TextButton(onClick = { error = null }) { Text("好") } },
+            confirmButton = { TextButton(onClick = { error = null }) { Text(stringResource(R.string.ok)) } },
         )
     }
 }
@@ -300,13 +300,13 @@ private fun OnlinePlaylistAddDialog(
     var url by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("添加在线歌单") },
+        title = { Text(stringResource(R.string.online_add_title)) },
         text = {
             Column {
                 OutlinedTextField(
                     value = url,
                     onValueChange = { url = it },
-                    label = { Text("播放列表地址") },
+                    label = { Text(stringResource(R.string.online_url_label)) },
                     placeholder = { Text("https://example.com/list.m3u") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -315,14 +315,13 @@ private fun OnlinePlaylistAddDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("名称（可留空）") },
+                    label = { Text(stringResource(R.string.online_name_optional)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "支持 m3u / m3u8 / pls；也接受单个 http(s) 音频直链。" +
-                        "添加时会先读取一次，读不到内容不会保存。",
+                    stringResource(R.string.online_add_hint),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -332,9 +331,9 @@ private fun OnlinePlaylistAddDialog(
             TextButton(
                 enabled = url.isNotBlank(),
                 onClick = { onConfirm(name, url) },
-            ) { Text("添加") }
+            ) { Text(stringResource(R.string.online_add)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
@@ -361,9 +360,9 @@ private fun TextInputDialog(
             )
         },
         confirmButton = {
-            TextButton(enabled = value.isNotBlank(), onClick = { onConfirm(value) }) { Text("保存") }
+            TextButton(enabled = value.isNotBlank(), onClick = { onConfirm(value) }) { Text(stringResource(R.string.save)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
