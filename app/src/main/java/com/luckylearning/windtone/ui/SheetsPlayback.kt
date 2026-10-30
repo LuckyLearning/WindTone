@@ -59,6 +59,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -99,7 +100,7 @@ fun QueueSheet(
                 Icon(AppIcons.QueueMusic, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    "播放队列 · ${queue.size} 首",
+                    pluralStringResource(R.plurals.queue_sheet_title, queue.size, queue.size),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
@@ -119,9 +120,9 @@ fun QueueSheet(
                         onShuffleOrder()
                     },
                     enabled = queue.size > 1,
-                ) { Text("打乱顺序") }
+                ) { Text(stringResource(R.string.queue_shuffle_order)) }
                 if (confirmClear) {
-                    TextButton(onClick = { confirmClear = false }) { Text("取消") }
+                    TextButton(onClick = { confirmClear = false }) { Text(stringResource(R.string.cancel)) }
                     TextButton(
                         onClick = {
                             confirmClear = false
@@ -129,18 +130,18 @@ fun QueueSheet(
                         },
                         enabled = queue.isNotEmpty(),
                     ) {
-                        Text("确认清空", color = MaterialTheme.colorScheme.error)
+                        Text(stringResource(R.string.queue_confirm_clear), color = MaterialTheme.colorScheme.error)
                     }
                 } else {
                     TextButton(
                         onClick = { confirmClear = true },
                         enabled = queue.isNotEmpty(),
-                    ) { Text("清空队列") }
+                    ) { Text(stringResource(R.string.queue_clear)) }
                 }
                 TextButton(
                     onClick = onSaveAsPlaylist,
                     enabled = queue.isNotEmpty(),
-                ) { Text("存为歌单") }
+                ) { Text(stringResource(R.string.queue_save_as_playlist)) }
             }
             Spacer(Modifier.height(8.dp))
             // 固定 420dp 在矮屏（平板横屏 / 车机）会连标题一起越过屏高 70%，
@@ -181,19 +182,19 @@ fun QueueSheet(
                         }
                         IconButton(onClick = { onMove(entry.index, entry.index - 1) }, enabled = entry.index > 0) {
                             Icon(
-                                Icons.Filled.KeyboardArrowUp, contentDescription = "上移",
+                                Icons.Filled.KeyboardArrowUp, contentDescription = stringResource(R.string.move_up),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         IconButton(onClick = { onMove(entry.index, entry.index + 1) }, enabled = entry.index < queue.size - 1) {
                             Icon(
-                                Icons.Filled.KeyboardArrowDown, contentDescription = "下移",
+                                Icons.Filled.KeyboardArrowDown, contentDescription = stringResource(R.string.move_down),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         IconButton(onClick = { onRemove(entry.index) }) {
                             Icon(
-                                Icons.Filled.Close, contentDescription = "移除",
+                                Icons.Filled.Close, contentDescription = stringResource(R.string.cd_remove),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
@@ -227,12 +228,12 @@ fun SleepSheet(
     var customSongsError by remember { mutableStateOf(false) }
     ModalBottomSheet(onDismissRequest = onClose, containerColor = glassContainerColor()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
-            Text("睡眠定时", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.sleep_timer_title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             if (remaining > 0) {
                 val mins = remaining / 60000
                 val secs = (remaining % 60000) / 1000
                 Text(
-                    "剩余 %d:%02d 后暂停".format(mins, secs),
+                    stringResource(R.string.sleep_remaining_pause, mins, secs),
                     color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(top = 6.dp),
@@ -241,7 +242,7 @@ fun SleepSheet(
             Spacer(Modifier.height(12.dp))
             listOf(15, 30, 60, 90).forEach { m ->
                 Text(
-                    "$m 分钟后暂停",
+                    stringResource(R.string.sleep_minutes_pause, m),
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
@@ -253,7 +254,7 @@ fun SleepSheet(
             // G5：自定义分钟。预设之外任意 1～720；校验失败只标红，不关 Sheet。
             Spacer(Modifier.height(4.dp))
             Text(
-                "自定义分钟",
+                stringResource(R.string.sleep_custom_minutes),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -272,10 +273,10 @@ fun SleepSheet(
                     },
                     modifier = Modifier.weight(1f),
                     singleLine = true,
-                    label = { Text("1–720") },
+                    label = { Text(stringResource(R.string.sleep_minutes_hint)) },
                     isError = customMinutesError,
                     supportingText = if (customMinutesError) {
-                        { Text("请输入 1～720 的整数") }
+                        { Text(stringResource(R.string.sleep_minutes_error)) }
                     } else {
                         null
                     },
@@ -292,11 +293,11 @@ fun SleepSheet(
                         }
                     },
                 ) {
-                    Text("确定")
+                    Text(stringResource(R.string.ok))
                 }
             }
             Text(
-                "播完当前曲暂停",
+                stringResource(R.string.sleep_end_of_song),
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
@@ -308,7 +309,7 @@ fun SleepSheet(
             // 这一档适合「整张专辑听完」的场景：专辑里的曲目在队列里连排，等最后
             // 一首放完才停；没有专辑信息时按「播完当前曲」处理（见 PlaybackEngine）。
             Text(
-                "播完当前专辑暂停",
+                stringResource(R.string.sleep_end_of_album),
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
@@ -318,7 +319,7 @@ fun SleepSheet(
             )
             // A2：整份队列听完再停。与「播完当前专辑」并列；时长按队列顺序累加到队尾一次。
             Text(
-                "播完当前队列暂停",
+                stringResource(R.string.sleep_end_of_queue),
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
@@ -329,14 +330,14 @@ fun SleepSheet(
             // H6：再播 N 首。当前正在播的算第 1；预设 1/3/5/10 + 自定义 1～100。
             Spacer(Modifier.height(4.dp))
             Text(
-                "再播 N 首后暂停",
+                stringResource(R.string.sleep_after_n_songs_label),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             )
             listOf(1, 3, 5, 10).forEach { n ->
                 Text(
-                    "再播 $n 首后暂停",
+                    pluralStringResource(R.plurals.sleep_after_n_songs, n, n),
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
@@ -359,10 +360,10 @@ fun SleepSheet(
                     },
                     modifier = Modifier.weight(1f),
                     singleLine = true,
-                    label = { Text("自定义 1–100") },
+                    label = { Text(stringResource(R.string.sleep_songs_hint)) },
                     isError = customSongsError,
                     supportingText = if (customSongsError) {
-                        { Text("请输入 1～100 的整数") }
+                        { Text(stringResource(R.string.sleep_songs_error)) }
                     } else {
                         null
                     },
@@ -379,12 +380,12 @@ fun SleepSheet(
                         }
                     },
                 ) {
-                    Text("确定")
+                    Text(stringResource(R.string.ok))
                 }
             }
             if (remaining > 0) {
                 Text(
-                    "取消定时",
+                    stringResource(R.string.sleep_cancel_timer),
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -464,33 +465,33 @@ fun PlayerOptionsSheet(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
         ) {
-            Text("播放设置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.cd_player_options), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
 
-            SectionLabel("当前歌曲")
+            SectionLabel(stringResource(R.string.po_section_current_song))
             OptionRow(
                 icon = AppIcons.Info,
-                title = "音频信息",
-                subtitle = "格式 / 编码 / 采样率 / 文件路径",
+                title = stringResource(R.string.po_audio_info),
+                subtitle = stringResource(R.string.po_audio_info_sub),
                 onClick = onAudioInfo,
             )
             OptionRow(
                 icon = AppIcons.Share,
-                title = "分享当前曲",
-                subtitle = "标题 / 艺人 / 专辑；本地可读时附带音频",
+                title = stringResource(R.string.po_share_current),
+                subtitle = stringResource(R.string.po_share_current_sub),
                 onClick = onShareCurrent,
             )
             OptionRow(
                 icon = AppIcons.Bookmark,
-                title = "播放书签",
-                subtitle = "长曲记位置 / 列表跳转",
+                title = stringResource(R.string.po_bookmarks),
+                subtitle = stringResource(R.string.po_bookmarks_sub),
                 onClick = onOpenBookmarks,
             )
 
-            SectionLabel("音效")
+            SectionLabel(stringResource(R.string.po_section_effects))
             OptionRow(
                 icon = AppIcons.Tune,
-                title = "均衡器与音效",
-                subtitle = "预设 / 频段曲线 / 低音增强 / 环绕声 / 响度增强 / 混响",
+                title = stringResource(R.string.po_eq_effects),
+                subtitle = stringResource(R.string.po_eq_effects_sub),
                 onClick = onOpenEq,
             )
 
@@ -498,14 +499,18 @@ fun PlayerOptionsSheet(
             SceneChipsRow(large = carMode, showHint = true)
             Spacer(Modifier.height(8.dp))
 
-            SectionLabel("睡眠定时")
+            SectionLabel(stringResource(R.string.sleep_timer_title))
             OptionRow(
                 icon = AppIcons.Bedtime,
-                title = "定时停止播放",
+                title = stringResource(R.string.po_stop_playback_timer),
                 subtitle = if (sleepRemainingMs > 0) {
-                    "剩余 %d:%02d".format(sleepRemainingMs / 60000, (sleepRemainingMs % 60000) / 1000)
+                    stringResource(
+                        R.string.po_sleep_remaining,
+                        sleepRemainingMs / 60000,
+                        (sleepRemainingMs % 60000) / 1000,
+                    )
                 } else {
-                    "未开启"
+                    stringResource(R.string.po_sleep_off)
                 },
                 onClick = onOpenSleep,
             )
@@ -528,22 +533,24 @@ fun PlayerOptionsSheet(
                 PitchControl(semitones = pitchSemitones, onPitch = onPitch)
             }
 
-            SectionLabel("A-B 循环")
+            SectionLabel(stringResource(R.string.po_section_ab_loop))
             Text(
                 text = when {
                     abLoopFromLyric && abLoopAMs != null && abLoopBMs != null ->
-                        "逐句循环中 %s–%s".format(
+                        stringResource(
+                            R.string.po_ab_line_looping,
                             formatAbClock(abLoopAMs),
                             formatAbClock(abLoopBMs),
                         )
                     abLoopAMs != null && abLoopBMs != null ->
-                        "区间 %s → %s（到 B 回 A；与变速兼容）".format(
+                        stringResource(
+                            R.string.po_ab_range,
                             formatAbClock(abLoopAMs),
                             formatAbClock(abLoopBMs),
                         )
                     abLoopAMs != null ->
-                        "已设 A %s，再设 B 开始循环".format(formatAbClock(abLoopAMs))
-                    else -> "练唱：先设 A，再设 B；切歌自动清除"
+                        stringResource(R.string.po_ab_a_set, formatAbClock(abLoopAMs))
+                    else -> stringResource(R.string.po_ab_hint)
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -554,28 +561,34 @@ fun PlayerOptionsSheet(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 OutlinedButton(onClick = onMarkAbLoopA, modifier = Modifier.weight(1f)) {
-                    Text(if (abLoopAMs != null) "重设 A" else "设 A")
+                    Text(if (abLoopAMs != null) stringResource(R.string.po_ab_reset_a) else stringResource(R.string.po_ab_set_a))
                 }
                 OutlinedButton(onClick = onMarkAbLoopB, modifier = Modifier.weight(1f)) {
-                    Text(if (abLoopBMs != null) "重设 B" else "设 B")
+                    Text(if (abLoopBMs != null) stringResource(R.string.po_ab_reset_b) else stringResource(R.string.po_ab_set_b))
                 }
                 if (abLoopAMs != null || abLoopBMs != null) {
                     TextButton(onClick = onClearAbLoop) {
-                        Text(if (abLoopFromLyric) "退出逐句" else "清除")
+                        Text(if (abLoopFromLyric) stringResource(R.string.po_ab_exit_line) else stringResource(R.string.po_ab_clear))
                     }
                 }
             }
 
-            SectionLabel("歌词")
+            SectionLabel(stringResource(R.string.po_section_lyrics))
             // 悬浮歌词放在「歌词」分组第一位：它是这首歌「往哪儿显示」最常用的一个选择，
             // 比导出歌词高频得多。右侧 ✓ 即"已开启"，与 OptionRow 的规范一致（不带箭头）。
             OptionRow(
                 icon = AppIcons.Lyrics,
-                title = "桌面悬浮歌词",
-                subtitle = when {
-                    lyricOverlay -> "已开启 · 当前：${overlayPresetLabel.ifBlank { "默认预设" }}"
-                    !canDrawOverlay -> "需要系统「显示悬浮窗」授权，点击后自动跳转"
-                    else -> "在桌面最上层显示当前歌词行（App 内自动隐藏）"
+                title = stringResource(R.string.po_desktop_lyrics),
+                subtitle = run {
+                    val defaultPreset = stringResource(R.string.po_default_preset)
+                    when {
+                        lyricOverlay -> stringResource(
+                            R.string.po_desktop_lyrics_on,
+                            overlayPresetLabel.ifBlank { defaultPreset },
+                        )
+                        !canDrawOverlay -> stringResource(R.string.po_desktop_lyrics_need_perm)
+                        else -> stringResource(R.string.po_desktop_lyrics_off)
+                    }
                 },
                 selected = lyricOverlay,
                 onClick = onToggleLyricOverlay,
@@ -584,8 +597,14 @@ fun PlayerOptionsSheet(
             // 换样式走下一行的速选面板——播放中完成「开关 / 换样式」不用退出播放页。
             OptionRow(
                 icon = AppIcons.Palette,
-                title = "悬浮窗样式",
-                subtitle = "${overlayPresetLabel.ifBlank { "默认预设" }} · 内置外观方案一键套用",
+                title = stringResource(R.string.po_overlay_style),
+                subtitle = run {
+                    val defaultPreset = stringResource(R.string.po_default_preset)
+                    stringResource(
+                        R.string.po_overlay_style_sub,
+                        overlayPresetLabel.ifBlank { defaultPreset },
+                    )
+                },
                 onClick = onOpenOverlayStyle,
             )
             LyricScaleControl(scale = lyricScale, onScale = onLyricScale)
@@ -596,8 +615,8 @@ fun PlayerOptionsSheet(
             )
             OptionRow(
                 icon = AppIcons.Lyrics,
-                title = "导出歌词为 LRC",
-                subtitle = "保存到本地文件",
+                title = stringResource(R.string.po_export_lrc),
+                subtitle = stringResource(R.string.po_export_lrc_sub),
                 onClick = onExportLyrics,
             )
 
@@ -620,7 +639,7 @@ private fun SpeedControl(speed: Float, onSpeed: (Float) -> Unit) {
     var local by remember(speed) { mutableFloatStateOf(speed) }
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("速度", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Text(stringResource(R.string.po_speed), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
             Text(
                 "%.2fx".format(local),
                 style = MaterialTheme.typography.labelMedium,
@@ -660,7 +679,7 @@ private fun PitchControl(semitones: Int, onPitch: (Int) -> Unit) {
     var local by remember(semitones) { mutableFloatStateOf(semitones.toFloat()) }
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("变调", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Text(stringResource(R.string.po_pitch), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
             Text(
                 Pitch.labelOf(local.roundToInt()),
                 style = MaterialTheme.typography.labelMedium,
@@ -683,7 +702,7 @@ private fun PitchControl(semitones: Int, onPitch: (Int) -> Unit) {
                     label = {
                         Text(
                             when {
-                                n == 0 -> "原调"
+                                n == 0 -> stringResource(R.string.po_original_key)
                                 n > 0 -> "+$n"
                                 else -> "$n"
                             },
@@ -701,7 +720,7 @@ private fun LyricScaleControl(scale: Float, onScale: (Float) -> Unit) {
     var local by remember(scale) { mutableFloatStateOf(scale) }
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("歌词字号", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Text(stringResource(R.string.po_lyric_size), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
             Text(
                 "%.0f%%".format(local * 100),
                 style = MaterialTheme.typography.labelMedium,
@@ -726,16 +745,16 @@ private fun LyricOffsetControl(offsetMs: Int, onOffset: (Int) -> Unit, onReset: 
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
     ) {
         Column(Modifier.weight(1f)) {
-            Text("歌词时间轴偏移", style = MaterialTheme.typography.bodyLarge)
+            Text(stringResource(R.string.po_lyric_offset), style = MaterialTheme.typography.bodyLarge)
             Text(
-                "当前 ${offsetMs}ms（仅对本曲生效）",
+                stringResource(R.string.po_lyric_offset_sub, offsetMs),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         TextButton(onClick = { onOffset(-500) }) { Text("-0.5s") }
         TextButton(onClick = { onOffset(500) }) { Text("+0.5s") }
-        TextButton(onClick = onReset, enabled = offsetMs != 0) { Text("重置") }
+        TextButton(onClick = onReset, enabled = offsetMs != 0) { Text(stringResource(R.string.po_reset)) }
     }
 }
 
@@ -785,9 +804,9 @@ fun OverlayStyleSheet(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp),
         ) {
-            Text("悬浮窗样式", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.ov_style_title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
-                "点按即套用，悬浮窗立即换样式；可到设置页微调细节",
+                stringResource(R.string.ov_style_hint),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 2.dp),
@@ -837,7 +856,7 @@ fun OverlayStyleSheet(
             if (modified) {
                 OverlayPresetTracker.lastAppliedId?.let { OverlayPreset.byId(it) }?.let { last ->
                     Text(
-                        "参数已被手动修改。恢复「${last.displayName}」原样",
+                        stringResource(R.string.ov_style_modified, last.displayName),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier
@@ -852,7 +871,7 @@ fun OverlayStyleSheet(
                 }
             }
             Text(
-                "更多设置…",
+                stringResource(R.string.ov_more_settings),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier

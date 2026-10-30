@@ -2137,5 +2137,21 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 
 注意：`onClick` Toast / 导出默认名等非 @Composable 回调里用 `context.getString(...)`，UI 组合内用 `stringResource` / `pluralStringResource`。无业务逻辑改动。
 
+### i18n 第 4 批（2026-10-31）
+
+范围：`SheetsPlayback.kt`（播放队列 / 睡眠定时 / 播放设置 / 悬浮窗样式速选）。
+
+约定不变：`values/strings.xml` = 英文兜底，`values-zh/strings.xml` = 中文；「播放队列 · N 首」「再播 N 首后暂停」用 plurals；`cancel` / `ok` / `move_up` / `move_down` / `cd_player_options` 复用已有键。本批前缀 `queue_` / `sleep_` / `po_` / `ov_` / `cd_remove`。
+
+本批键名：`queue_sheet_title` (plurals), `queue_shuffle_order`, `queue_confirm_clear`, `queue_clear`, `queue_save_as_playlist`, `cd_remove`, `sleep_timer_title`, `sleep_remaining_pause`, `sleep_minutes_pause`, `sleep_custom_minutes`, `sleep_minutes_hint`, `sleep_minutes_error`, `sleep_end_of_song`, `sleep_end_of_album`, `sleep_end_of_queue`, `sleep_after_n_songs_label`, `sleep_after_n_songs` (plurals), `sleep_songs_hint`, `sleep_songs_error`, `sleep_cancel_timer`, `po_section_current_song`, `po_audio_info`, `po_audio_info_sub`, `po_share_current`, `po_share_current_sub`, `po_bookmarks`, `po_bookmarks_sub`, `po_section_effects`, `po_eq_effects`, `po_eq_effects_sub`, `po_stop_playback_timer`, `po_sleep_remaining`, `po_sleep_off`, `po_section_ab_loop`, `po_ab_line_looping`, `po_ab_range`, `po_ab_a_set`, `po_ab_hint`, `po_ab_set_a`, `po_ab_reset_a`, `po_ab_set_b`, `po_ab_reset_b`, `po_ab_exit_line`, `po_ab_clear`, `po_section_lyrics`, `po_desktop_lyrics`, `po_desktop_lyrics_on`, `po_desktop_lyrics_need_perm`, `po_desktop_lyrics_off`, `po_default_preset`, `po_overlay_style`, `po_overlay_style_sub`, `po_export_lrc`, `po_export_lrc_sub`, `po_speed`, `po_pitch`, `po_original_key`, `po_lyric_size`, `po_lyric_offset`, `po_lyric_offset_sub`, `po_reset`, `ov_style_title`, `ov_style_hint`, `ov_style_modified`, `ov_more_settings`
+
+涉及文件：
+
+- `SheetsPlayback.kt`
+- `values/strings.xml` + `values-zh/strings.xml`（本批新增键；`cancel`/`ok`/`move_up`/`move_down`/`cd_player_options` 复用已有）
+
+注意：默认预设名先在 `@Composable` 作用域取 `po_default_preset`，再传入 `ifBlank`，避免在非组合 lambda 里调 `stringResource`。无业务逻辑改动。未改 SoftEq / EqSheet / versionName。
+
+
 
 
