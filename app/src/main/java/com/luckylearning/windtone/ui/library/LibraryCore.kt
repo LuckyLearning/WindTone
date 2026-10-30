@@ -3,6 +3,11 @@ package com.luckylearning.windtone.ui.library
 import android.util.Log
 import androidx.room.withTransaction
 import com.luckylearning.windtone.data.CoverRepository
+import com.luckylearning.windtone.data.buildGenreGroups
+import com.luckylearning.windtone.data.buildYearGroups
+import com.luckylearning.windtone.data.genreOrUnknown
+import com.luckylearning.windtone.data.sortYearGroups
+import com.luckylearning.windtone.data.yearOrUnknown
 import com.luckylearning.windtone.data.LibraryFormatFilter
 import com.luckylearning.windtone.data.LibrarySearch
 import com.luckylearning.windtone.data.applyLibraryFormatFilter
@@ -363,7 +368,12 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
         // 每曲状态（收藏 / 标签覆盖 / 歌词偏移）一次读全，之后同步可用
         val states = withContext(Dispatchers.IO) { db.songStateDao().all() }
         index.replaceStates(states)
-        val songs = raw.map { song ->
+        // G1：扫描带来的 genre/year 写入 Prefs；冷启动从 Prefs 盖回（Room 无此列）
+        withContext(Dispatchers.IO) {
+            session.genreYears.putFromSongs(raw)
+        }
+        val overlaid = session.genreYears.overlay(raw)
+        val songs = overlaid.map { song ->
             val st = index.stateOf(song.dbId) ?: return@map song
             song.copy(
                 title = st.overrideTitle?.takeIf { it.isNotBlank() } ?: song.title,
@@ -513,7 +523,7 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
             )
         }
         playback.setLibrarySongs(sorted)
-        if (view == LibraryView.ALBUM || view == LibraryView.ARTIST || view == LibraryView.FOLDER) {
+        if (view == LibraryView.ALBUM || view == LibraryView.ARTIST || view == LibraryView.GENRE || view == LibraryView.YEAR || view == LibraryView.FOLDER) {
             refreshGroups()
         }
         if (view == LibraryView.PLAYLIST) session.playlists.refreshPlaylists()
@@ -533,6 +543,8 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
             LibraryView.ARTIST -> songs.groupBy { it.artistOrUnknown }.map { (k, list) ->
                 GroupInfo(k, k, "${list.size} 首", list.size, list.first())
             }
+            LibraryView.GENRE -> buildGenreGroups(songs)
+            LibraryView.YEAR -> buildYearGroups(songs)
             // 文件夹视图只列真实存在的目录：拿不到目录路径的歌曲（媒体库没给 path）
             // 会被归到「未知目录」，这类分组没有可操作的对象，直接不展示。
             // 分组键用完整路径（两个同名目录不会被合并），标题只显示**最后一个文件夹名字**
@@ -558,12 +570,17 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
         // 文件夹名 / 专辑名 / 歌手名，统一走拼音首字母序 —— 也正是原来的固定行为，
         // 所以默认值下这里与重构前完全一致。
         val order = prefs.sortOrder(view.name, view.defaultSort)
-        val ordered = when (order) {
+        val ordered = when {
+            // 年代默认按年份数字降序（未知垫底）；其它排序仍跟通用分支
+            view == LibraryView.YEAR && order != SortOrder.DATE_ADDED -> sortYearGroups(groups)
+            else -> when (order) {
             // 文件夹视图：按完整路径排（同名目录靠它才稳定）
             SortOrder.FOLDER_PATH -> groups.sortedBy { it.key.lowercase() }
             // 以组内代表曲目的添加时间为准（组内最新一首大致反映这个分组的“新”度）
             SortOrder.DATE_ADDED -> groups.sortedByDescending { it.sample?.dateAdded ?: 0L }
             else -> groups.sortedWith(compareBy({ PinyinIndex.initialOf(it.title) }, { it.title.lowercase() }))
+        
+            }
         }
         _library.update { if (it.groups == ordered) it else it.copy(groups = ordered) }
     }
@@ -577,6 +594,12 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
             LibraryView.ARTIST -> pool
                 .filter { it.artistOrUnknown == group.key }
                 .sortedWith(compareBy({ it.albumOrUnknown.lowercase() }, { it.trackNo }, { it.title.lowercase() }))
+            LibraryView.GENRE -> pool
+                .filter { it.genreOrUnknown() == group.key }
+                .sortedWith(compareBy({ it.artistOrUnknown.lowercase() }, { it.title.lowercase() }))
+            LibraryView.YEAR -> pool
+                .filter { it.yearOrUnknown() == group.key }
+                .sortedWith(compareBy({ it.artistOrUnknown.lowercase() }, { it.albumOrUnknown.lowercase() }, { it.title.lowercase() }))
             else -> pool
                 .filter { it.folderLabel == group.key }
                 .sortedWith(compareBy { it.displayName.lowercase() })

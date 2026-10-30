@@ -87,6 +87,8 @@ internal fun carViewLabel(view: LibraryView): String = when (view) {
     LibraryView.SONGS -> "全部歌曲"
     LibraryView.ALBUM -> "专辑"
     LibraryView.ARTIST -> "歌手"
+    LibraryView.GENRE -> "流派"
+    LibraryView.YEAR -> "年代"
     LibraryView.FOLDER -> "文件夹"
     LibraryView.PLAYLIST -> "歌单"
 }
@@ -271,6 +273,8 @@ private fun carViewAccent(view: LibraryView): Color = when (view) {
     LibraryView.SONGS -> AppVisual.Accent.Songs
     LibraryView.ALBUM -> AppVisual.Accent.Album
     LibraryView.ARTIST -> AppVisual.Accent.Artist
+    LibraryView.GENRE -> AppVisual.Accent.Genre
+    LibraryView.YEAR -> AppVisual.Accent.Year
     LibraryView.FOLDER -> AppVisual.Accent.Folder
     LibraryView.PLAYLIST -> AppVisual.Accent.Playlist
 }

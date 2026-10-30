@@ -31,6 +31,8 @@ enum class LibraryView(val label: String) {
     SONGS("歌曲"),
     ALBUM("专辑"),
     ARTIST("歌手"),
+    GENRE("流派"),
+    YEAR("年代"),
     FOLDER("文件夹"),
     PLAYLIST("歌单");
 

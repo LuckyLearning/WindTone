@@ -128,6 +128,22 @@ object AppIcons {
         )
     }
 
+    /** 流派浏览（G1） */
+    val Genre: ImageVector by lazy {
+        build(
+            "Genre",
+            "M12 2l2.4 7.2H22l-6 4.4 2.3 7.2L12 16.8 5.7 20.8 8 13.6 2 9.2h7.6z",
+        )
+    }
+
+    /** 年代浏览（G1） */
+    val Year: ImageVector by lazy {
+        build(
+            "Year",
+            "M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z",
+        )
+    }
+
     val LibraryMusic: ImageVector by lazy {
         build(
             "LibraryMusic",

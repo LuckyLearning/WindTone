@@ -33,8 +33,12 @@ class MediaStoreScanner(private val context: Context) {
             add(MediaStore.Audio.Media.TRACK)
             add(MediaStore.Audio.Media.DATE_ADDED)
             add(MediaStore.Audio.Media.DATA)
+            add(MediaStore.Audio.Media.YEAR)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 add(MediaStore.Audio.Media.RELATIVE_PATH)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                add(MediaStore.Audio.Media.GENRE)
             }
         }.toTypedArray()
 
@@ -66,6 +70,10 @@ class MediaStoreScanner(private val context: Context) {
             val iName = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
             val iTrack = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
             val iDate = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
+            val iYear = c.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
+            val iGenre = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                c.getColumnIndex(MediaStore.Audio.Media.GENRE)
+            } else -1
             val iData = c.getColumnIndex(MediaStore.Audio.Media.DATA)
 
             while (c.moveToNext()) {
@@ -110,6 +118,8 @@ class MediaStoreScanner(private val context: Context) {
                         trackNo = c.getInt(iTrack),
                         lrcUri = lrcUri,
                         dateAdded = c.getLong(iDate) * 1000L,
+                        genre = if (iGenre >= 0) normalizeGenre(c.getString(iGenre)) else null,
+                        year = parseYearInt(c.getInt(iYear)),
                     )
                 )
             }

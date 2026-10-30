@@ -258,6 +258,8 @@ class MusicRepository(
                     durationMs = if (exists.durationMs > 0L) exists.durationMs else song.durationMs,
                     artist = exists.artist?.takeIf { it.isNotBlank() } ?: song.artist,
                     album = exists.album?.takeIf { it.isNotBlank() } ?: song.album,
+                    genre = normalizeGenre(exists.genre) ?: song.genre,
+                    year = exists.year?.let { parseYearInt(it) } ?: song.year,
                 )
             }
         }

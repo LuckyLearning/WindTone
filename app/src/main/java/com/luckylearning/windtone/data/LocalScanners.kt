@@ -221,6 +221,8 @@ class FolderScanner(private val context: Context) {
             source = source,
             lrcUri = lrcUri,
             dateAdded = lastModified,
+            genre = info?.genre,
+            year = info?.year,
         )
     }
 
@@ -324,6 +326,8 @@ class FileScanner(private val context: Context) {
                     source = SongSource.FILE,
                     lrcUri = lyric?.let { Uri.fromFile(it) },
                     dateAdded = audio.lastModified(),
+                    genre = info?.genre,
+                    year = info?.year,
                 )
             )
             if (out.size % 10 == 0) onProgress(out.size)

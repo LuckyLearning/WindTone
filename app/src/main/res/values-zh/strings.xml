@@ -34,6 +34,8 @@
     <string name="view_songs">歌曲</string>
     <string name="view_albums">专辑</string>
     <string name="view_artists">歌手</string>
+    <string name="view_genres">流派</string>
+    <string name="view_years">年代</string>
     <string name="view_folders">文件夹</string>
     <string name="view_playlists">歌单</string>
 
@@ -51,6 +53,8 @@
     <string name="sort_folder_name">按文件夹名</string>
     <string name="sort_album_name">按专辑名</string>
     <string name="sort_artist_name">按歌手名</string>
+    <string name="sort_genre_name">流派名</string>
+    <string name="sort_year_name">年代</string>
 
     <!-- ================================================================
          播放模式

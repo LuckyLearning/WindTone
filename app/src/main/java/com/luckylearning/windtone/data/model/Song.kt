@@ -35,6 +35,16 @@ data class Song(
     val trackNo: Int = 0,
     /** 已定位到的同名 .lrc / .txt 歌词文件（若有） */
     val lrcUri: Uri? = null,
+    /**
+     * 流派标签（MediaStore GENRE / MMR；无则 null）。
+     * **不入 Room**——见 [com.luckylearning.windtone.data.GenreYearCache]。
+     */
+    val genre: String? = null,
+    /**
+     * 发行年（四位；MediaStore YEAR / MMR DATE·YEAR；无则 null）。
+     * **不入 Room**——见 [com.luckylearning.windtone.data.GenreYearCache]。
+     */
+    val year: Int? = null,
     val dateAdded: Long = 0L,
     /**
      * 曲库主键（Room `songs.id`）。

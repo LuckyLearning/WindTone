@@ -72,6 +72,8 @@ object AppVisual {
         val Songs = Color(0xFF5B4BE0)
         val Album = Color(0xFFE8793B)
         val Artist = Color(0xFF7C6BF0)
+        val Genre = Color(0xFFC45B8A)
+        val Year = Color(0xFF5BA88A)
         val Folder = Color(0xFF3B82C4)
         val Playlist = Color(0xFF17A398)
     }

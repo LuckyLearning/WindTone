@@ -16,18 +16,25 @@ object MetadataReader {
         val artist: String?,
         val album: String?,
         val durationMs: Long,
+        val genre: String? = null,
+        val year: Int? = null,
     )
 
     fun read(context: Context, uri: Uri): Info? {
         val mmr = MediaMetadataRetriever()
         return try {
             mmr.setDataSource(context, uri)
+            val genreRaw = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_GENRE)
+            val yearRaw = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_YEAR)
+                ?: mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DATE)
             Info(
                 title = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE),
                 artist = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST),
                 album = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM),
                 durationMs = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
                     ?.toLongOrNull() ?: 0L,
+                genre = normalizeGenre(genreRaw),
+                year = parseYearLabel(yearRaw),
             )
         } catch (t: Throwable) {
             Log.w(TAG, "读取元数据失败: $uri", t)

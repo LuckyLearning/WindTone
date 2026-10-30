@@ -45,6 +45,7 @@ internal class LibrarySession(app: Application) {
     internal val db = container.db
     internal val lyricsLoader = container.lyricsLoader
     internal val index = container.songIndex
+    internal val genreYears = container.genreYears
     internal val bus = container.messages
     internal val playback = container.playback
 

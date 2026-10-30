@@ -79,6 +79,8 @@ internal val LibraryView.icon: ImageVector
         LibraryView.SONGS -> AppIcons.MusicNote
         LibraryView.ALBUM -> AppIcons.Album
         LibraryView.ARTIST -> AppIcons.Artist
+        LibraryView.GENRE -> AppIcons.Genre
+        LibraryView.YEAR -> AppIcons.Year
         LibraryView.FOLDER -> AppIcons.Folder
         LibraryView.PLAYLIST -> AppIcons.LibraryMusic
     }
@@ -95,6 +97,8 @@ internal val LibraryView.defaultSort: SortOrder
         LibraryView.SONGS -> SortOrder.TITLE
         LibraryView.ALBUM -> SortOrder.ALBUM
         LibraryView.ARTIST -> SortOrder.ARTIST
+        LibraryView.GENRE -> SortOrder.TITLE
+        LibraryView.YEAR -> SortOrder.TITLE
         LibraryView.FOLDER -> SortOrder.TITLE
         LibraryView.PLAYLIST -> SortOrder.PLAYLIST_ORDER
     }
@@ -117,6 +121,8 @@ internal val LibraryView.sortOptions: List<SortOrder>
         )
         LibraryView.ALBUM -> listOf(SortOrder.ALBUM, SortOrder.ARTIST, SortOrder.DATE_ADDED)
         LibraryView.ARTIST -> listOf(SortOrder.ARTIST, SortOrder.DATE_ADDED)
+        LibraryView.GENRE -> listOf(SortOrder.TITLE, SortOrder.DATE_ADDED)
+        LibraryView.YEAR -> listOf(SortOrder.TITLE, SortOrder.DATE_ADDED)
         LibraryView.FOLDER -> listOf(SortOrder.TITLE, SortOrder.FOLDER_PATH, SortOrder.DATE_ADDED)
         LibraryView.PLAYLIST -> listOf(SortOrder.PLAYLIST_ORDER, SortOrder.TITLE, SortOrder.DATE_ADDED)
     }

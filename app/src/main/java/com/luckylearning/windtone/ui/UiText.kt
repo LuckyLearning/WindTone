@@ -23,6 +23,8 @@ internal fun LibraryView.labelRes(): Int = when (this) {
     LibraryView.SONGS -> R.string.view_songs
     LibraryView.ALBUM -> R.string.view_albums
     LibraryView.ARTIST -> R.string.view_artists
+    LibraryView.GENRE -> R.string.view_genres
+    LibraryView.YEAR -> R.string.view_years
     LibraryView.FOLDER -> R.string.view_folders
     LibraryView.PLAYLIST -> R.string.view_playlists
 }
@@ -35,6 +37,8 @@ internal fun SortOrder.labelRes(view: LibraryView): Int = when {
     view == LibraryView.FOLDER && this == SortOrder.TITLE -> R.string.sort_folder_name
     view == LibraryView.ALBUM && this == SortOrder.ALBUM -> R.string.sort_album_name
     view == LibraryView.ARTIST && this == SortOrder.ARTIST -> R.string.sort_artist_name
+    view == LibraryView.GENRE && this == SortOrder.TITLE -> R.string.sort_genre_name
+    view == LibraryView.YEAR && this == SortOrder.TITLE -> R.string.sort_year_name
     else -> when (this) {
         SortOrder.TITLE -> R.string.sort_title
         SortOrder.ARTIST -> R.string.sort_artist

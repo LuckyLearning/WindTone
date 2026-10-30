@@ -106,7 +106,7 @@ class LibraryDrawerTest {
         compose.onNodeWithText("在线音乐").assertIsDisplayed()
         compose.onNodeWithText("更多").assertIsDisplayed()
         // 第一组 = 原底部导航的五个浏览视图
-        listOf("歌曲", "专辑", "歌手", "文件夹", "歌单").forEach {
+        listOf("歌曲", "专辑", "歌手", "流派", "年代", "文件夹", "歌单").forEach {
             compose.onNodeWithText(it).assertIsDisplayed()
         }
         // 第二组：云盘页升为一级入口（v1.1.75）
@@ -139,7 +139,7 @@ class LibraryDrawerTest {
         assertTrue("点视图后抽屉必须收起", rec.closed)
     }
 
-    /** 五个视图逐个点一遍，回调拿到的都是被点的那一个（顺序/映射别错位） */
+    /** 全部浏览视图逐个点一遍，回调拿到的都是被点的那一个（顺序/映射别错位） */
     @Test
     fun everyViewItemReportsItsOwnView() {
         val rec = renderOpen()
@@ -180,7 +180,7 @@ class LibraryDrawerTest {
         assertNull("云盘入口不该被当成视图切换", rec.selected)
     }
 
-    /** 五个视图依次被标成「当前」时，选中项都要正常渲染（高亮只是视觉，但布局不能崩） */
+    /** 全部浏览视图依次被标成「当前」时，选中项都要正常渲染（高亮只是视觉，但布局不能崩） */
     @Test
     fun everyViewRendersWhenItIsTheCurrentOne() {
         val current = mutableStateOf(LibraryView.SONGS)
