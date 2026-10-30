@@ -16,6 +16,10 @@
     <string name="tile_empty">Library is empty</string>
     <string name="tile_playing">Playing</string>
     <string name="tile_paused">Paused</string>
+    <string name="tile_favorite">Favorite</string>
+    <string name="tile_favorite_on">Favorited</string>
+    <string name="tile_favorite_off">Not favorited</string>
+    <string name="tile_favorite_unavailable">Cannot favorite</string>
 
     <!-- 桌面长按图标的静态快捷方式。短标签 ≤ 10 字、长标签 ≤ 25 字（系统会截断） -->
     <string name="shortcut_play_all_short">Play all</string>

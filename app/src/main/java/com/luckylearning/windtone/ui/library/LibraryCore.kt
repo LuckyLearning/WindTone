@@ -16,7 +16,6 @@ import com.luckylearning.windtone.data.folderParentHint
 import com.luckylearning.windtone.data.aliyun.AliyunTrackStore
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.data.model.SongSource
-import com.luckylearning.windtone.data.model.TrackFragment
 import com.luckylearning.windtone.state.GroupInfo
 import com.luckylearning.windtone.state.LibraryView
 import com.luckylearning.windtone.state.PlayStats
@@ -701,38 +700,10 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
     // ---------------------------------------------------------- 收藏
 
     override fun toggleFavorite(song: Song) {
-        val cloud = TrackFragment.parse(song.uri.fragment)
-        if (cloud != null) {
-            scope.launch {
-                val newFav = withContext(Dispatchers.IO) {
-                    AliyunTrackStore(app).toggleFavorite(cloud.first, cloud.second)
-                }
-                _library.update {
-                    val next = if (newFav) it.favoriteUris + song.stableKey else it.favoriteUris - song.stableKey
-                    it.copy(favoriteUris = next)
-                }
-                pushMessage(if (newFav) "已收藏「${song.title}」" else "已取消收藏")
-            }
-            return
-        }
+        // 落盘 / 索引 / Snackbar / 变更广播统一走 FavoriteToggle；
+        // favoriteUris 与「我的收藏」列表由 LibraryViewModel 订阅 changes 对齐。
         scope.launch {
-            val songId = idOf(song) ?: return@launch
-            val newFav = withContext(Dispatchers.IO) {
-                val dao = db.songStateDao()
-                val now = System.currentTimeMillis()
-                dao.ensure(songId, now)
-                val fav = !(dao.favoriteOf(songId) ?: false)
-                dao.setFavorite(songId, fav, now)
-                fav
-            }
-            // 本地状态同步，避免为一次点击重查整张状态表
-            index.bump(songId) { it.copy(favorite = newFav) }
-            // 一次 update 完成增删，避免先加后减造成两次重组
-            _library.update {
-                val next = if (newFav) it.favoriteUris + song.stableKey else it.favoriteUris - song.stableKey
-                it.copy(favoriteUris = next)
-            }
-            pushMessage(if (newFav) "已收藏「${song.title}」" else "已取消收藏")
+            (app as com.luckylearning.windtone.MusicApp).container.favorites.toggleSong(song)
         }
     }
 

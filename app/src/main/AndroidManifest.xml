@@ -283,6 +283,21 @@
         </service>
 
         <!--
+          「收藏当前曲」磁贴（H1）。与播放/暂停、下一首同理：一颗磁贴一个动作。
+          无当前曲或无法识别身份时置灰；已收藏为 ACTIVE。落盘见 FavoriteToggle。
+        -->
+        <service
+            android:name=".tile.FavoriteTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_widget_favorite"
+            android:label="@string/tile_favorite"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <!--
           前台应用检测（v1.1.29「悬浮窗按应用隐藏」，设计见 docs/设计-悬浮窗按应用隐藏.md）。
 
           用户在系统设置 → 辅助功能里手动开启后，本服务才知道「当前前台是哪个应用」，

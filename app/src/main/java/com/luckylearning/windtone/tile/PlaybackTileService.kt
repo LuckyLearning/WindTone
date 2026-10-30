@@ -25,9 +25,8 @@ import kotlinx.coroutines.withTimeoutOrNull
  * 标签显示歌名、副标题显示歌手（而不是固定写"正在播放/已暂停"）——
  * 磁贴是"瞥一眼"的场景，副标题用来重复状态词还不如用来告诉用户放的是哪首。
  *
- * ⚠️ 一个 `TileService` 只能有一个点击动作，装不下「下一首」和「收藏当前曲」。
- * 「下一首」拆成了独立的 [NextTrackTileService]（用户想加就加）；「收藏」没有做，
- * 原因见那个文件头部。
+ * ⚠️ 一个 `TileService` 只能有一个点击动作，装不下「下一首」和「收藏」。
+ * 「下一首」→ [NextTrackTileService]；「收藏当前曲」→ [FavoriteTileService]（H1）。
  */
 class PlaybackTileService : TileService() {
 

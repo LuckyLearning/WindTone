@@ -9,6 +9,10 @@
     <string name="tile_empty">曲库为空</string>
     <string name="tile_playing">正在播放</string>
     <string name="tile_paused">已暂停</string>
+    <string name="tile_favorite">收藏</string>
+    <string name="tile_favorite_on">已收藏</string>
+    <string name="tile_favorite_off">未收藏</string>
+    <string name="tile_favorite_unavailable">无法收藏</string>
 
     <string name="shortcut_play_all_short">播放全部</string>
     <string name="shortcut_play_all_long">播放全部歌曲</string>

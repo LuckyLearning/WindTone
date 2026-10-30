@@ -15,6 +15,8 @@ import com.luckylearning.windtone.ui.library.ReportActions
 import com.luckylearning.windtone.ui.library.SelectionActions
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 /**
  * 曲库域 ViewModel：界面与 [LibrarySession] 之间的那一层。
@@ -50,6 +52,22 @@ class LibraryViewModel private constructor(
         // 行为类统一挂到本 ViewModel 的 viewModelScope 上：作用域与调度器
         // （以及「随 ViewModel 一起取消」的语义）与拆分前的 `viewModelScope.launch` 完全一致。
         session.scope = viewModelScope
+        // 磁贴与播放页共用 FavoriteToggle：这里订阅变更，让 favoriteUris / 虚拟歌单对齐。
+        viewModelScope.launch {
+            val favorites = (getApplication<Application>() as com.luckylearning.windtone.MusicApp)
+                .container.favorites
+            favorites.changes.collect { change ->
+                session._library.update {
+                    val next = if (change.favorite) {
+                        it.favoriteUris + change.stableKey
+                    } else {
+                        it.favoriteUris - change.stableKey
+                    }
+                    it.copy(favoriteUris = next)
+                }
+                session.playlists.refreshPlaylists()
+            }
+        }
         reloadAll()
     }
 
