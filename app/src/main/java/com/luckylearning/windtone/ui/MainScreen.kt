@@ -213,6 +213,7 @@ fun MainScreen(
     // v1.1.80：设置页打开时落在哪一页。默认主页；播放页「更多设置…」深链到悬浮歌词。
     var settingsEntryPage by remember { mutableStateOf(SettingsPage.ROOT) }
     var showReport by remember { mutableStateOf(false) }
+    var showCalendar by remember { mutableStateOf(false) }
     var showDuplicates by remember { mutableStateOf(false) }
     // 曲库格式与容量（v1.1.17）：纯本地统计，进入时现算，不落库
     var showLibraryStats by remember { mutableStateOf(false) }
@@ -423,6 +424,7 @@ fun MainScreen(
         crashLogText = null
     }
     BackHandler(enabled = showReport) { showReport = false }
+    BackHandler(enabled = showCalendar) { showCalendar = false }
     BackHandler(enabled = showDuplicates) { showDuplicates = false }
     BackHandler(enabled = showLibraryStats) { showLibraryStats = false }
     // 云盘页先于抽屉注册：抽屉开着时返回键只收抽屉（抽屉的 BackHandler 在后面，优先级更高）。
@@ -879,6 +881,25 @@ fun MainScreen(
                     onClose = { showReport = false },
                     onSetDays = lib::setReportDays,
                     onPlayTop = { songs -> if (songs.isNotEmpty()) playerVm.playQueue(songs, 0) },
+                    onOpenCalendar = {
+                        showCalendar = true
+                        val z = java.util.Calendar.getInstance()
+                        lib.loadCalendar(z.get(java.util.Calendar.YEAR), z.get(java.util.Calendar.MONTH) + 1)
+                    },
+                )
+            }
+
+
+            AnimatedVisibility(
+                visible = showCalendar,
+                enter = slideInVertically { it },
+                exit = slideOutVertically { it },
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                ListenCalendarScreen(
+                    state = library.report?.calendar,
+                    onClose = { showCalendar = false },
+                    onLoadMonth = lib::loadCalendar,
                 )
             }
 

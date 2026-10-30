@@ -9,4 +9,6 @@ package com.luckylearning.windtone.ui.library
  */
 interface ReportActions {
     fun setReportDays(days: Int)
+    /** 载入听歌日历指定年月（H7） */
+    fun loadCalendar(year: Int, month: Int)
 }

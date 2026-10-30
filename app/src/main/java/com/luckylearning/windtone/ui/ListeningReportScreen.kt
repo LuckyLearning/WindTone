@@ -65,6 +65,7 @@ fun ListeningReportScreen(
     onClose: () -> Unit,
     onSetDays: (Int) -> Unit,
     onPlayTop: (List<Song>) -> Unit,
+    onOpenCalendar: (() -> Unit)? = null,
 ) {
     BackHandler { onClose() }
 
@@ -108,6 +109,16 @@ fun ListeningReportScreen(
                             label = "近 $span 天",
                             selected = span == days,
                             onClick = { if (span != days) onSetDays(span) },
+                        )
+                    }
+                }
+                if (onOpenCalendar != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Row {
+                        SpanChip(
+                            label = "听歌日历",
+                            selected = false,
+                            onClick = onOpenCalendar,
                         )
                     }
                 }

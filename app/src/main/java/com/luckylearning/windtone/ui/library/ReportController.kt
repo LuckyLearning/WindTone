@@ -2,7 +2,9 @@ package com.luckylearning.windtone.ui.library
 
 import com.luckylearning.windtone.data.HOUR_MS
 import com.luckylearning.windtone.data.ListenBucket
+import com.luckylearning.windtone.data.buildListenCalendarMonth
 import com.luckylearning.windtone.data.buildListeningReport
+import com.luckylearning.windtone.state.CalendarUiState
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.state.ReportUiState
 import com.luckylearning.windtone.state.TopSong
@@ -28,6 +30,55 @@ internal class ReportController(private val session: LibrarySession) : ReportAct
     private val scope get() = session.scope
 
     override fun setReportDays(days: Int) = loadReport(days)
+
+    override fun loadCalendar(year: Int, month: Int) {
+        val y = year
+        val m = month.coerceIn(1, 12)
+        _library.update {
+            val base = it.report ?: ReportUiState()
+            it.copy(
+                report = base.copy(
+                    calendar = CalendarUiState(year = y, month = m, loading = true),
+                ),
+            )
+        }
+        scope.launch {
+            val zone = java.util.TimeZone.getDefault()
+            val cal = java.util.Calendar.getInstance(zone)
+            cal.clear()
+            cal.set(java.util.Calendar.YEAR, y)
+            cal.set(java.util.Calendar.MONTH, m - 1)
+            cal.set(java.util.Calendar.DAY_OF_MONTH, 1)
+            cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+            cal.set(java.util.Calendar.MINUTE, 0)
+            cal.set(java.util.Calendar.SECOND, 0)
+            cal.set(java.util.Calendar.MILLISECOND, 0)
+            // 向前多取一周，覆盖月初补齐的邻月格
+            cal.add(java.util.Calendar.DAY_OF_MONTH, -7)
+            val fromHour = cal.timeInMillis / HOUR_MS
+            val buckets = withContext(Dispatchers.IO) {
+                runCatching {
+                    db.listenLogDao().since(fromHour).map { ListenBucket(it.hourEpoch, it.ms) }
+                }.getOrDefault(emptyList())
+            }
+            val monthData = withContext(Dispatchers.Default) {
+                buildListenCalendarMonth(buckets, y, m, zone)
+            }
+            _library.update {
+                val base = it.report ?: ReportUiState()
+                it.copy(
+                    report = base.copy(
+                        calendar = CalendarUiState(
+                            year = y,
+                            month = m,
+                            monthData = monthData,
+                            loading = false,
+                        ),
+                    ),
+                )
+            }
+        }
+    }
 
     /** 当前报告天数（省略 [loadReport] 的 days 时沿用） */
     internal fun currentDays(): Int = _library.value.report?.days ?: DEFAULT_REPORT_DAYS

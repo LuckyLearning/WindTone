@@ -144,3 +144,143 @@ fun formatListenDuration(ms: Long): String {
         else -> "$h 小时 $m 分"
     }
 }
+
+
+// ================================================================ 听歌日历（H7）
+
+/**
+ * 月历格子：`inMonth=false` 时是月初/月末补齐的邻月灰格（时长仍可有值，但 UI 通常淡化）。
+ * `dayOfMonth` 为日历上的日号（1..31）；补齐格也填邻月真实日号方便调试。
+ */
+data class CalendarDayCell(
+    val dayStartMs: Long,
+    val dayOfMonth: Int,
+    val ms: Long,
+    val inMonth: Boolean,
+)
+
+/**
+ * 一个月的听歌热力数据。
+ *
+ * [cells] 按周一→周日排成完整周（通常 35 或 42 格）；空听的日子 `ms=0` 仍占位，
+ * 这样色块网格不会缺洞。[maxDayMs] 只看本月（`inMonth`）格子，避免邻月峰值把本月压扁。
+ */
+data class ListenCalendarMonth(
+    val year: Int,
+    val month: Int,
+    val cells: List<CalendarDayCell>,
+    val totalMs: Long,
+    val activeDays: Int,
+    val maxDayMs: Long,
+)
+
+/**
+ * 把小时桶聚合成「某年某月」的听歌日历。
+ *
+ * 复用与 [buildListeningReport] 相同的小时桶口径与本地午夜日边界；**不另建统计管线**。
+ * 周起始固定为周一（国内月历常见写法；与 `Calendar.MONDAY` 一致）。
+ */
+fun buildListenCalendarMonth(
+    buckets: List<ListenBucket>,
+    year: Int,
+    month: Int,
+    zone: TimeZone = TimeZone.getDefault(),
+): ListenCalendarMonth {
+    require(month in 1..12) { "month must be 1..12, got $month" }
+    val cal = Calendar.getInstance(zone)
+    cal.clear()
+    cal.set(Calendar.YEAR, year)
+    cal.set(Calendar.MONTH, month - 1)
+    cal.set(Calendar.DAY_OF_MONTH, 1)
+    cal.set(Calendar.HOUR_OF_DAY, 0)
+    cal.set(Calendar.MINUTE, 0)
+    cal.set(Calendar.SECOND, 0)
+    cal.set(Calendar.MILLISECOND, 0)
+    val monthStart = cal.timeInMillis
+    // 本月第一天是周几：Calendar.SUNDAY=1 … SATURDAY=7 → 转成「距周一的偏移」0..6
+    val dow = cal.get(Calendar.DAY_OF_WEEK) // 1=Sun .. 7=Sat
+    val offsetFromMonday = (dow + 5) % 7     // Mon=0 … Sun=6
+    cal.add(Calendar.DAY_OF_MONTH, -offsetFromMonday)
+    val gridStart = cal.timeInMillis
+
+    // 月末：下月 1 号
+    val endCal = Calendar.getInstance(zone)
+    endCal.timeInMillis = monthStart
+    endCal.add(Calendar.MONTH, 1)
+    val monthEnd = endCal.timeInMillis
+
+    // 格子数：覆盖到至少本月最后一天，再凑满整周
+    var cellsNeeded = offsetFromMonday
+    val probe = Calendar.getInstance(zone).apply { timeInMillis = monthStart }
+    cellsNeeded += probe.getActualMaximum(Calendar.DAY_OF_MONTH)
+    val rem = cellsNeeded % 7
+    if (rem != 0) cellsNeeded += 7 - rem
+
+    val dayStarts = LongArray(cellsNeeded)
+    cal.timeInMillis = gridStart
+    for (i in 0 until cellsNeeded) {
+        dayStarts[i] = cal.timeInMillis
+        cal.add(Calendar.DAY_OF_MONTH, 1)
+    }
+    val gridEnd = cal.timeInMillis
+
+    val perDay = LongArray(cellsNeeded)
+    for (b in buckets) {
+        if (b.ms <= 0L) continue
+        val at = b.hourEpoch * HOUR_MS
+        if (at < gridStart || at >= gridEnd) continue
+        val idx = dayStarts.indexOfLast { it <= at }
+        if (idx >= 0) perDay[idx] += b.ms
+    }
+
+    var total = 0L
+    var active = 0
+    var maxInMonth = 0L
+    val cells = ArrayList<CalendarDayCell>(cellsNeeded)
+    val labelCal = Calendar.getInstance(zone)
+    for (i in 0 until cellsNeeded) {
+        val start = dayStarts[i]
+        val ms = perDay[i]
+        val inMonth = start >= monthStart && start < monthEnd
+        if (inMonth) {
+            total += ms
+            if (ms > 0L) active++
+            if (ms > maxInMonth) maxInMonth = ms
+        }
+        labelCal.timeInMillis = start
+        cells.add(
+            CalendarDayCell(
+                dayStartMs = start,
+                dayOfMonth = labelCal.get(Calendar.DAY_OF_MONTH),
+                ms = ms,
+                inMonth = inMonth,
+            ),
+        )
+    }
+    return ListenCalendarMonth(
+        year = year,
+        month = month,
+        cells = cells,
+        totalMs = total,
+        activeDays = active,
+        maxDayMs = maxInMonth,
+    )
+}
+
+/** 「2026年10月」——日历顶栏用；避免 UI 层碰 Calendar。 */
+fun formatYearMonth(year: Int, month: Int): String = "${year}年${month}月"
+
+/** 「10月15日 周三」——点选日摘要用。 */
+fun formatCalendarDayTitle(dayStartMs: Long, zone: TimeZone = TimeZone.getDefault()): String {
+    val cal = Calendar.getInstance(zone).apply { timeInMillis = dayStartMs }
+    val week = when (cal.get(Calendar.DAY_OF_WEEK)) {
+        Calendar.MONDAY -> "周一"
+        Calendar.TUESDAY -> "周二"
+        Calendar.WEDNESDAY -> "周三"
+        Calendar.THURSDAY -> "周四"
+        Calendar.FRIDAY -> "周五"
+        Calendar.SATURDAY -> "周六"
+        else -> "周日"
+    }
+    return "${cal.get(Calendar.MONTH) + 1}月${cal.get(Calendar.DAY_OF_MONTH)}日 $week"
+}

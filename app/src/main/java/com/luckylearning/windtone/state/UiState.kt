@@ -5,6 +5,7 @@ import androidx.media3.common.Player
 import com.luckylearning.windtone.data.AudioInspector
 import com.luckylearning.windtone.data.DownloadRoute
 import com.luckylearning.windtone.data.DuplicateGroup
+import com.luckylearning.windtone.data.ListenCalendarMonth
 import com.luckylearning.windtone.data.ListeningReport
 import com.luckylearning.windtone.data.ScanScope
 import com.luckylearning.windtone.data.SettingsDefaults
@@ -263,6 +264,16 @@ data class ReportUiState(
     val report: ListeningReport = EMPTY_REPORT,
     val topPlayed: List<TopSong> = emptyList(),
     val topListened: List<TopSong> = emptyList(),
+    val loading: Boolean = false,
+    /** 听歌日历（H7）；与报告共用同一小时桶数据源 */
+    val calendar: CalendarUiState? = null,
+)
+
+/** 听歌日历某一月的 UI 状态 */
+data class CalendarUiState(
+    val year: Int,
+    val month: Int,
+    val monthData: ListenCalendarMonth? = null,
     val loading: Boolean = false,
 )
 
