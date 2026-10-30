@@ -111,14 +111,10 @@
           <div class="row-action"><svg class="ic" style="color:var(--primary)"><use href="#i-bed"/></svg>
             <div class="ra-main"><div class="ra-title">定时停止播放</div><div class="ra-sub">剩余 28:14</div></div>
 </div>
-          <div class="section-label">速度与变调</div>
-          <div class="row-action" style="display:block"><div style="display:flex;align-items:center"><span class="ra-title" style="flex:1">速度</span><b style="color:var(--primary)">1.25x</b></div>
-            <div class="slider"><span class="fill" style="width:50%"></span><span class="knob" style="left:50%"></span></div>
-            <div class="chips"><span class="fchip">0.75x</span><span class="fchip">1.0x</span><span class="fchip on">1.25x</span><span class="fchip">1.5x</span><span class="fchip">2.0x</span></div>
-          </div>
-          <div class="row-action" style="display:block"><div style="display:flex;align-items:center"><span class="ra-title" style="flex:1">变调</span><b style="color:var(--primary)">+2 半音</b></div>
-            <div class="slider"><span class="fill" style="width:58%"></span><span class="knob" style="left:58%"></span></div>
-            <div class="chips"><span class="fchip">-12</span><span class="fchip">-6</span><span class="fchip">原调</span><span class="fchip on">+6</span><span class="fchip">+12</span></div>
+          <div class="row-action" style="display:flex;align-items:center;gap:6px">
+            <div class="ra-main"><div class="ra-title" style="color:var(--primary)">速度与变调</div></div>
+            <b style="font-size:11px;color:var(--on-surface-variant)">1.25x · +2 半音</b>
+            <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
           </div>
           <div class="section-label">歌词</div>
           <div class="row-action"><svg class="ic" style="color:var(--primary)"><use href="#i-lyrics"/></svg>
@@ -153,6 +149,10 @@
   <code>playback/Pitch</code> 换成倍率——<code>0.89x</code> 没人看得懂，「降两个半音」一看就明白；
   歌词偏移逐曲保存（key = 歌曲），「重置」在偏移为 0 时禁用；导出默认文件名「{歌名}.lrc」；「当前歌曲 → 音频信息」与长按菜单打开同一个
   <code>SongInfoSheet</code>（见 ㉒）。<br>
+  <b>2026-10-30：「速度与变调」这一组默认收起</b>（与设置页同一条理由，见 ㉙C）——本层入口是「播放设置」，
+  多数人来这里调的是音效 / 睡眠定时，两块「一碰就改值」的滑块常驻在最上面只会带来误触。收起后标题行右侧显示
+  <code>1.25x · +2 半音</code> 这类摘要（展开箭头随之转 90°），点一下才出现两条滑块与档位片；
+  组件与设置页共用 <code>CollapsibleSectionTitle</code>，弹层里传 <code>compact = true</code> 用轻一档的标题。<br>
   <b>「歌词」分组第一项是「桌面悬浮歌词」</b>：播放页顺手就能开关，不必钻进「设置 → 歌词」子页（功能再好，找不到就等于没有）。
   它是 <code>OptionRow</code>——左侧有图标、右侧只有选中 ✓（✓ = 已开启），未授权时点击会跳到系统「显示悬浮窗」授权页，
   授权返回后由 <code>MainActivity.onResume</code> 对账并自动打开开关。<br><b>行组件规范（防画错）</b>：底部弹层里的可点行是 <code>OptionRow</code>（Sheets*.kt）——<b>左侧有语义图标、右侧没有箭头</b>，唯一右侧元素是选中态的 ✓；设置页的可点行是 <code>ActionRow</code>（SettingsScreen.kt）——左侧没有图标（纯文字卡），<b>右侧可以有「当前值摘要」和右箭头</b>：摘要把状态前置（如「过滤 < 60 秒」），箭头只给<b>点开会进入另一个界面</b>的行（子页入口、打开弹层 / 弹窗的行），就地执行动作（「检查更新」）或就地展开（「查看日志」）的行不加。<b>v1.0.7 起「全 App 不存在 chevron」的规范放宽为「只有 ActionRow 能带 chevron」</b>，<code>OptionRow</code> 与其它地方仍然不画。</p>

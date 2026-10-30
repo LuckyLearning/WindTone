@@ -479,6 +479,7 @@
     <string name="when_on_the_app_starts">开启后，设备开机时应用会自动拉起（车载场景）。</string>
     <string name="got_it">知道了</string>
     <string name="speed_and_pitch">速度与变调</string>
+    <string name="speed_and_pitch_summary">%1$sx · %2$s</string>
     <string name="default_speed_x">默认播放速度 %1$sx</string>
     <string name="pitch">变调 %1$s</string>
     <string name="pitch_changes_do_not_affect">升降调不改速度（±12 半音 = 一个八度）</string>

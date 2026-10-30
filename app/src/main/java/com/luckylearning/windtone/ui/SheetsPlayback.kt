@@ -5,6 +5,7 @@
 
 package com.luckylearning.windtone.ui
 
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.OverlayPreset
 import com.luckylearning.windtone.data.OverlayPresetParams
 import com.luckylearning.windtone.data.OverlayPresetTracker
@@ -54,6 +55,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -284,6 +286,10 @@ fun PlayerOptionsSheet(
     onClearAbLoop: () -> Unit = {},
     onDismiss: () -> Unit,
 ) {
+    // 2026-10-30：速度与变调默认收起。与设置页同一条理由 —— 两块滑块「一碰就改值」，
+    // 而这一层的入口是「播放设置」，多数人来这里调的是音效 / 睡眠定时，不是变速。
+    var showSpeedPitch by remember { mutableStateOf(false) }
+
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
         Column(
             Modifier
@@ -326,9 +332,21 @@ fun PlayerOptionsSheet(
 
             // v1.1.6：变调并入本组。两者在播放器里是同一个 `PlaybackParameters`，
             // 界面上分开摆反而会让人以为它们互不影响（实际会互相覆盖，见 PlaybackEngine）。
-            SectionLabel("速度与变调")
-            SpeedControl(speed = speed, onSpeed = onSpeed)
-            PitchControl(semitones = pitchSemitones, onPitch = onPitch)
+            CollapsibleSectionTitle(
+                title = stringResource(R.string.speed_and_pitch),
+                summary = stringResource(
+                    R.string.speed_and_pitch_summary,
+                    "%.2f".format(speed),
+                    Pitch.labelOf(pitchSemitones),
+                ),
+                expanded = showSpeedPitch,
+                onToggle = { showSpeedPitch = !showSpeedPitch },
+                compact = true,
+            )
+            if (showSpeedPitch) {
+                SpeedControl(speed = speed, onSpeed = onSpeed)
+                PitchControl(semitones = pitchSemitones, onPitch = onPitch)
+            }
 
             SectionLabel("A-B 循环")
             Text(

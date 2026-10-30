@@ -498,6 +498,7 @@
     <string name="when_on_the_app_starts">When on, the app starts automatically when the device boots (for car use).</string>
     <string name="got_it">Got it</string>
     <string name="speed_and_pitch">Speed and pitch</string>
+    <string name="speed_and_pitch_summary">%1$sx · %2$s</string>
     <string name="default_speed_x">Default speed %1$sx</string>
     <string name="pitch">Pitch %1$s</string>
     <string name="pitch_changes_do_not_affect">Pitch changes do not affect speed (±12 semitones = one octave)</string>

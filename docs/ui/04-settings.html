@@ -128,12 +128,11 @@
         <div class="dh-main"><div class="detail-title">播放</div></div>
       </div>
       <div class="list" style="padding:4px 18px 12px">
-        <div class="section-label" style="padding:0;margin:12px 0 4px">速度与变调</div>
-        <div class="sw-row" style="display:block"><div style="font-size:15px">默认播放速度 1.00x</div>
-          <div class="slider" style="margin:12px 0 4px"><span class="fill" style="width:20%"></span><span class="knob" style="left:20%"></span></div></div>
-        <div class="sw-row" style="display:block"><div style="font-size:15px">变调 原调</div>
-          <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">升降调不改速度（±12 半音 = 一个八度）</div>
-          <div class="slider" style="margin:12px 0 4px"><span class="fill" style="width:50%"></span><span class="knob" style="left:50%"></span></div></div>
+        <div class="sw-row" style="display:flex;align-items:center;gap:8px;margin:12px 0 4px">
+          <div style="flex:1;font-size:15px;font-weight:600;color:var(--primary)">速度与变调</div>
+          <div style="font-size:11px;color:var(--on-surface-variant)">1.00x · 原调</div>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
         <div class="section-label" style="padding:0;margin:14px 0 4px">播放行为</div>
         <div class="sw-row"><div class="sw-main"><div class="sw-t">打开应用继续上次播放</div>
           <div class="sw-s">从上次的进度接着播；关闭后只恢复队列与进度，停在暂停态</div></div><span class="switch"><i></i></span></div>
@@ -153,7 +152,12 @@
   分开摆会让人以为互不影响（实际 <code>setPlaybackSpeed</code> 会把变调打回原调）。单位是半音（±12 = 一个八度）。<br>
   <b>v1.1.4：本页每项都带 ↺</b>（速度 / 变调 / 跳过静音 / 继续上次播放），均衡器那行例外——它的值在弹层里，↺ 跟着弹层走（见 ⑲）。<br>
   <b>v1.1.16：「打开应用继续上次播放」</b>排在「跳过静音」前面，默认<b>开</b> —— 恢复队列却停在暂停态，
-  在车机上等于没恢复（还要探手去点播放键）。关掉它的语义是「只恢复不自动播」，队列与进度照旧摆好。</p>
+  在车机上等于没恢复（还要探手去点播放键）。关掉它的语义是「只恢复不自动播」，队列与进度照旧摆好。<br>
+  <b>2026-10-30：「速度与变调」改为默认收起</b>（用户要求「用的很少，一不小心就点到了」）。标题行变成
+  <code>CollapsibleSectionTitle</code>：标题 + 当前值摘要（<code>1.00x · 原调</code>）+ 展开箭头，点一下才出现两个滑块。
+  三条口径：① <b>收起状态不持久化</b> —— 每次进页面都是收起的，正是要压掉误触面（这类参数一年改一两次，记住展开
+  等于把误触面积永久留在页面上）；② <b>摘要必须同时带两个值</b>，缺一个就看不出变调被动过；③ 收起态不搬走 ↺，
+  它仍在展开后每一行的行尾，与其它设置项一致。同一套标题组件也用在播放页「播放设置」弹层（见 ⑱）。</p>
 </figure>
 
 <figure class="fig" id="scr-settings-lyrics">

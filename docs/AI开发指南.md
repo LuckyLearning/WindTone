@@ -1314,6 +1314,10 @@ WindTone-v{版本}-universal.apk      # 拿不准架构时的兜底
 3. `ui/SettingsScreen.kt`：在**对应页**（`page == SettingsPage.XXX`）的对应 `SectionTitle` 区块下加 `SwitchRow` / `SliderRow` / `ActionRow`，通过参数传入回调。
    - `SwitchRow` 的描述太长（超过约 30 字）时，副标题压成一行要点，详细说明挂到 `onInfo`（标题右侧的 `?` 图标 → 弹窗）。
    - 新增入口行用 `ActionRow(title, subtitle, onClick, trailing = 当前值摘要, chevron = true)`（chevron 仅给"进入另一个界面"的行，见 §10 第 14 条）。
+   - **成组滑块默认收起**（2026-10-30 口径）：一整组「用得少 + 一碰就改值」的控件（当前只有「速度与变调」）用
+     `CollapsibleSectionTitle(title, summary, expanded, onToggle, compact = 弹层里传 true)` 代替 `SectionTitle`，**收起状态不持久化**
+     ——每次进页面都收起，正是为了压掉误触面；`summary` 必须带上所有关键当前值（`1.00x · 原调`），否则收起后看不出被动过。
+     ⚠️ 收起态**不搬走** ↺：它仍在展开后各行的行尾（见 §11.14-①）。
    - **新文案一律落资源**：标题 / 副标题 / 弹窗说明同时写进 `res/values/strings.xml`（英文）与 `res/values-zh/strings.xml`（中文），
      行里用 `stringResource(R.string.xxx)`。**不要**为省事直接写中文字面量（见 §10 第 17 条）。
 4. 若 `SettingsScreen` 参数变了，同步改 `MainScreen.kt` 里的调用点。

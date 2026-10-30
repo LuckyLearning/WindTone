@@ -4,6 +4,8 @@ import androidx.compose.ui.res.stringResource
 import com.luckylearning.windtone.R
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -61,6 +63,7 @@ import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
@@ -78,6 +81,7 @@ import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.data.UpdateChecker
 import com.luckylearning.windtone.playback.Pitch
 import com.luckylearning.windtone.ui.theme.windShadow
+import com.luckylearning.windtone.ui.theme.AppVisual
 import kotlin.math.abs
 
 @Composable
@@ -89,6 +93,72 @@ internal fun SectionTitle(text: String) {
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier.padding(top = 18.dp, bottom = 6.dp),
     )
+}
+
+/**
+ * 可折叠的分区标题（2026-10-30）。
+ *
+ * 存在的理由：用得很少、又处在页面顶部的成组滑块（典型是「速度与变调」）常驻展开，
+ * 等于把两块「一碰就改值」的区域永久摆在最容易被误触的位置。收起后标题行变成
+ * 「标题 + 当前值摘要 + 展开箭头」，要看要改再点开。
+ *
+ * 为什么不做「记住上次展开状态」：这类参数一年改一两次，记住展开等于把误触面积
+ * 永久留在页面上；而摘要行已经能回答「现在是多少」，不展开也知道值。
+ *
+ * 收起态**不移动**恢复默认（↺）按钮 —— 它仍在展开后的每一行行尾，与其它设置项一致。
+ */
+@Composable
+internal fun CollapsibleSectionTitle(
+    title: String,
+    summary: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    /** 弹层里用一档更轻的标题（与 `SectionLabel` 同规格），设置页用默认值 */
+    compact: Boolean = false,
+) {
+    val rotation by animateFloatAsState(
+        targetValue = if (expanded) 90f else 0f,
+        animationSpec = tween(AppVisual.Motion.FastMs),
+        label = "collapseChevron",
+    )
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onToggle)
+            .padding(
+                top = if (compact) 16.dp else 18.dp,
+                bottom = if (compact) 2.dp else 6.dp,
+            ),
+    ) {
+        Text(
+            title,
+            style = if (compact) {
+                MaterialTheme.typography.labelMedium
+            } else {
+                MaterialTheme.typography.labelLarge
+            },
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.weight(1f))
+        Text(
+            summary,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
+        Spacer(Modifier.width(4.dp))
+        Icon(
+            AppIcons.ChevronRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .size(18.dp)
+                .graphicsLayer { rotationZ = rotation },
+        )
+    }
 }
 
 /**

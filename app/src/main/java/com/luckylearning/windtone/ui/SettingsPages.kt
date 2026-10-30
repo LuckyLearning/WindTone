@@ -259,26 +259,43 @@ internal fun SettingsPlaybackPage(
     // ------------------------------------------------ 速度与变调
     // 两者在播放器里是同一个 `PlaybackParameters`（见 PlaybackEngine
     // 的 applyPlaybackParams），界面上也放在同一组里。
-    SectionTitle(stringResource(R.string.speed_and_pitch))
-    SliderRow(
-        title = stringResource(R.string.default_speed_x, "%.2f".format(player.speed)),
-        value = player.speed,
-        range = 0.75f..2.0f,
-        onValueChange = onSpeed,
-        onReset = resetAction(abs(player.speed - SettingsDefaults.SPEED) > 0.001f) {
-            onSpeed(SettingsDefaults.SPEED)
-        },
+    //
+    // 2026-10-30 用户要求「默认不要展开，用的很少，一不小心就点到了」：
+    // 两个滑块原本常驻在页面最上方，滚动时手指一蹭就改值，而改完不会立刻听出区别
+    // （要等下首歌/下次播放才明显）。改成标题行折叠：摘要显示「1.00x · 原调」，
+    // 点开才出现滑块。收起不持久化 —— 每次进页面都是收起的，正是要压掉误触面。
+    var showSpeedPitch by remember { mutableStateOf(false) }
+    CollapsibleSectionTitle(
+        title = stringResource(R.string.speed_and_pitch),
+        summary = stringResource(
+            R.string.speed_and_pitch_summary,
+            "%.2f".format(player.speed),
+            Pitch.labelOf(player.pitchSemitones),
+        ),
+        expanded = showSpeedPitch,
+        onToggle = { showSpeedPitch = !showSpeedPitch },
     )
-    SliderRow(
-        title = stringResource(R.string.pitch, Pitch.labelOf(player.pitchSemitones)),
-        subtitle = stringResource(R.string.pitch_changes_do_not_affect),
-        value = player.pitchSemitones.toFloat(),
-        range = Pitch.MIN_SEMITONES.toFloat()..Pitch.MAX_SEMITONES.toFloat(),
-        onValueChange = { onPitch(it.roundToInt()) },
-        onReset = resetAction(!Pitch.isDefault(player.pitchSemitones)) {
-            onPitch(SettingsDefaults.PITCH_SEMITONES)
-        },
-    )
+    if (showSpeedPitch) {
+        SliderRow(
+            title = stringResource(R.string.default_speed_x, "%.2f".format(player.speed)),
+            value = player.speed,
+            range = 0.75f..2.0f,
+            onValueChange = onSpeed,
+            onReset = resetAction(abs(player.speed - SettingsDefaults.SPEED) > 0.001f) {
+                onSpeed(SettingsDefaults.SPEED)
+            },
+        )
+        SliderRow(
+            title = stringResource(R.string.pitch, Pitch.labelOf(player.pitchSemitones)),
+            subtitle = stringResource(R.string.pitch_changes_do_not_affect),
+            value = player.pitchSemitones.toFloat(),
+            range = Pitch.MIN_SEMITONES.toFloat()..Pitch.MAX_SEMITONES.toFloat(),
+            onValueChange = { onPitch(it.roundToInt()) },
+            onReset = resetAction(!Pitch.isDefault(player.pitchSemitones)) {
+                onPitch(SettingsDefaults.PITCH_SEMITONES)
+            },
+        )
+    }
 
     // ------------------------------------------------ 播放行为
     SectionTitle(stringResource(R.string.playback_behavior))
