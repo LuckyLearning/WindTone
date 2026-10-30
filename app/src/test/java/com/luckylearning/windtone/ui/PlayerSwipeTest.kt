@@ -9,6 +9,8 @@ import org.junit.Test
  *
  * 这几条是「手势会不会误切歌」的唯一防线：判错方向就是划右跳下一首，
  * 阈值判松就会误切。歌词中段滚动靠 nestedScroll 边缘策略，不在本纯函数里。
+ *
+ * E2 补齐：resolvePane 的甩速 / 冲突 / 非法宽度（与 resolve 对称，此前只测了位移阈值）。
  */
 class PlayerSwipeTest {
 
@@ -64,7 +66,6 @@ class PlayerSwipeTest {
         assertTrue(PlayerSwipe.resisted(80f, width) > 0f)
     }
 
-
     @Test
     fun `向左越过阈值切到封面`() {
         assertEquals(SwipePane.SHOW_COVER, PlayerSwipe.resolvePane(-150f, width, 0f))
@@ -78,6 +79,24 @@ class PlayerSwipeTest {
     @Test
     fun `横向位移不够且速度慢时不切面板`() {
         assertEquals(SwipePane.NONE, PlayerSwipe.resolvePane(-60f, width, 200f))
+    }
+
+    @Test
+    fun `横向位移不够但甩得够快也切面板`() {
+        assertEquals(SwipePane.SHOW_COVER, PlayerSwipe.resolvePane(-40f, width, -1200f))
+        assertEquals(SwipePane.SHOW_LYRICS, PlayerSwipe.resolvePane(40f, width, 1200f))
+    }
+
+    @Test
+    fun `面板位移与速度冲突时以位移为准`() {
+        assertEquals(SwipePane.SHOW_COVER, PlayerSwipe.resolvePane(-200f, width, 2000f))
+        assertEquals(SwipePane.SHOW_LYRICS, PlayerSwipe.resolvePane(200f, width, -2000f))
+    }
+
+    @Test
+    fun `面板宽度非法时不动`() {
+        assertEquals(SwipePane.NONE, PlayerSwipe.resolvePane(-500f, 0f, 5000f))
+        assertEquals(SwipePane.NONE, PlayerSwipe.resolvePane(-500f, -1f, 5000f))
     }
 
     @Test

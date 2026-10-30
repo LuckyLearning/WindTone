@@ -12,6 +12,7 @@ import org.junit.Test
  * 播放条 112dp 就占掉 17% 的纵向空间，整屏又挤又"按钮特别大"。
  *
  * 这里锁三件事：档位判定、紧凑档全面更小、以及"紧凑不等于缩到不可点"。
+ * E2 补：760dp / 1400dp 阈值本身。
  */
 class CarMetricsTest {
 
@@ -53,5 +54,18 @@ class CarMetricsTest {
         assertEquals("侧键不小于 48dp", true, c.sideTile.value >= 48f)
         assertEquals("主键不小于 60dp", true, c.mainButton.value >= 60f)
         assertEquals("设置行不小于 60dp", true, c.rowMinHeight.value >= 60f)
+    }
+
+    /** E2：阈值本身——760dp 高 / 1400dp 宽是「刚好不进紧凑」的分界。 */
+    @Test
+    fun `760dp 边界与 1400dp 宽度分界`() {
+        // 高恰好 760 且够宽 → 常规档（条件是 height < 760）
+        assertFalse(carMetricsFor(1920f, 760f).compact)
+        // 高 759 → 紧凑
+        assertTrue(carMetricsFor(1920f, 759f).compact)
+        // 宽恰好 1400 且够高 → 常规（条件是 width < 1400）
+        assertFalse(carMetricsFor(1400f, 900f).compact)
+        // 宽 1399 → 紧凑
+        assertTrue(carMetricsFor(1399f, 900f).compact)
     }
 }
