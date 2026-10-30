@@ -901,12 +901,12 @@ class Prefs private constructor(context: Context) {
      */
 
     /**
-     * Soft EQ user confirm (E2 skeleton).
+     * Soft EQ user confirm (E5 Prefs key `soft_eq_user_confirm`).
      *
      * When hard EQ reports DEVICE_REJECTED, SoftEqGate marks a candidate; soft
      * PCM path enables only if this is true. Hard available again forces soft
      * off (preference kept). Default false — auto-candidate only, no surprise
-     * enable. UI switch lands in E4.
+     * enable. EqSheet switch (E4) + diagnostics SoftEqProbe (E5).
      */
     var softEqUserConfirm: Boolean
         get() = sp.getBoolean(KEY_SOFT_EQ_USER_CONFIRM, SettingsDefaults.SOFT_EQ_USER_CONFIRM)

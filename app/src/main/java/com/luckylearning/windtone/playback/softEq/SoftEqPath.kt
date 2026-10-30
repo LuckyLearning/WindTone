@@ -21,7 +21,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * - **E3 curve bridge**: [syncCurve] / [applyBuiltinPreset] / [applyResolved]
  *   push the same hard-EQ preset or custom gains into [processor] via
  *   [SoftEqCurve]. Soft filters that curve when [SOFT_ACTIVE].
- * - Settings copy / confirm entry = E4 (EqSheet SoftEqCopy); full diagnostics = E5.
+ * - Settings copy / confirm entry = E4 (EqSheet SoftEqCopy); diagnostics SoftEqProbe = E5.
  *
  * Wiring: PlaybackService -> DefaultRenderersFactory.buildAudioSink ->
  * DefaultAudioSink.setAudioProcessors (soft EQ before stereo balance).
@@ -34,7 +34,7 @@ object SoftEqPath {
     data class State(
         /** Runtime master switch applied to [processor]. */
         val enabled: Boolean = false,
-        /** Last hard-EQ unavailable reason (diagnostics; E5 pack later). */
+        /** Last hard-EQ unavailable reason (diagnostics SoftEqProbe / pack). */
         val lastHardUnavailable: AudioFx.Unavailable = AudioFx.Unavailable.NONE,
         /** Gate phase from [SoftEqGate]. */
         val phase: SoftEqGate.Phase = SoftEqGate.Phase.IDLE,

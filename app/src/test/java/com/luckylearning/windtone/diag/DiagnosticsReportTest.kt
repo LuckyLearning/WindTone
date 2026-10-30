@@ -130,4 +130,19 @@ class DiagnosticsReportTest {
         assertTrue(text.indexOf("[内存]") < text.indexOf("[权限]"))
     }
 
+
+    @Test
+    fun `含软EQ段且字段齐全`() {
+        val text = report()
+        assertTrue("缺软EQ段", text.contains("[软EQ]"))
+        assertTrue("缺相位", text.contains("相位："))
+        assertTrue("缺 Prefs.softEqUserConfirm", text.contains("Prefs.softEqUserConfirm："))
+        assertTrue("缺曲线", text.contains("曲线："))
+        assertTrue("缺 SoftEqSpike", text.contains("SoftEqSpike.ENABLED："))
+        assertTrue("缺 soft_eq_user_confirm 键名", text.contains("soft_eq_user_confirm"))
+        // 段位：场景之后、悬浮窗之前（E5）
+        assertTrue(text.indexOf("[场景]") < text.indexOf("[软EQ]"))
+        assertTrue(text.indexOf("[软EQ]") < text.indexOf("[悬浮窗]"))
+    }
+
 }

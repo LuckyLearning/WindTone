@@ -618,6 +618,7 @@ SharedPreferences 文件 `music_player_prefs`（**勿改名**）。v4 之后只�
 | `dynamic_theme` | Bool | **true** | 封面主色动态主题 |
 | `playback_speed` | Float | 1.0 | 播放速度 |
 | `eq_enabled` / `eq_preset_id` / `eq_bands` / `eq_bass` / `eq_virtual` / `eq_loudness` / `eq_reverb_id` | — | — | 音效状态（`eq_preset_id` = 内置预设 id，空串 = 自定义；`eq_reverb_id` = 混响 id，空串 = 从未选过 = 关闭。见 §6.10） |
+| `soft_eq_user_confirm` | Bool | **false** | 软 EQ 用户确认（E5）：硬 EQ `DEVICE_REJECTED` 时仅候选；为 true 才 `SOFT_ACTIVE`。硬恢复强制关软、偏好保留。见 `docs/功能-软EQ.md` |
 | `auto_check_update` | Bool | **true** | 启动自动检查更新（唯一联网开关） |
 | `last_update_check_at` | Long | 0 | 自动检查限频时间戳 |
 | `update_download_route` | String | `AUTO` | 下载线路（自动/直连/镜像） |

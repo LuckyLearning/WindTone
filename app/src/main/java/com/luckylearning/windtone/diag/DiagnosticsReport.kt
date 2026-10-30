@@ -104,6 +104,8 @@ internal object DiagnosticsReport {
         val memoryBlock: String = "",
         /** 场景化摘要（当前档 / 冷启动 / stash / 最近切换） */
         val sceneBlock: String = "",
+        /** Soft EQ phase / confirm Prefs / curve digest (E5) */
+        val softEqBlock: String = "",
         val versionCode: Long = 0L,
     )
 
@@ -217,6 +219,7 @@ internal object DiagnosticsReport {
             defaultMusicBlock = DefaultMusicProbe.buildReport(context),
             memoryBlock = MemoryProbe.buildReport(context, library.songs.size),
             sceneBlock = SceneProbe.buildReport(context),
+            softEqBlock = SoftEqProbe.buildReport(context),
             versionCode = BuildConfig.VERSION_CODE.toLong(),
         )
     }
@@ -285,6 +288,12 @@ internal object DiagnosticsReport {
 
         if (f.sceneBlock.isNotBlank()) {
             sb.appendLine(f.sceneBlock.trimEnd())
+            sb.appendLine()
+        }
+
+        // E5: soft EQ phase / confirm / curve — car HU has no adb for A/B
+        if (f.softEqBlock.isNotBlank()) {
+            sb.appendLine(f.softEqBlock.trimEnd())
             sb.appendLine()
         }
 

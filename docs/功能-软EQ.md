@@ -1,78 +1,93 @@
-# 功能：软 EQ（E4 EqSheet 软路径文案）
+# 功能：软 EQ（E5 Prefs + 诊断收口）
 
-> 状态：**main 未发版 / E4**（占位版本可跟 v1.2.37，**未改 versionName**）  
+> 状态：**main 未发版 / E5**（占位版本可跟 v1.2.38，**未改 versionName**）  
 > 日期：2026-10-31（Asia/Shanghai）  
 > Spike 结论：`docs/spike-软EQ.md`（有条件 GO）  
-> 代码：`playback/softEq/`（`SoftEqCurve` / `SoftEqGate` / `SoftEqPath` / `SoftEqAudioProcessor` / …）
+> 代码：`playback/softEq/` + `diag/SoftEqProbe.kt`  
+> `SoftEqSpike.ENABLED`：**false**（禁止默认强开）
 
 ## 做什么
 
-把 Spike 里的 Media3 `AudioProcessor` 软 EQ **接到主播放路径**，在硬 EQ 报 `DEVICE_REJECTED` 时门控，并在 **SOFT_ACTIVE** 时按与硬 EQ **同一套曲线**滤波：
+把 Spike 里的 Media3 `AudioProcessor` 软 EQ **接到主播放路径**，在硬 EQ 报 `DEVICE_REJECTED` 时门控，并在 **SOFT_ACTIVE** 时按与硬 EQ **同一套曲线**滤波；E5 补齐 **Prefs 键文档**、**诊断包 / 诊断页可读相位与曲线摘要**。
 
-| 项 | E1 | E2 | E3 | E4 |
+| 项 | E1 | E2 | E3 | E4 | E5 |
+| --- | --- | --- | --- | --- | --- |
+| 挂进 `PlaybackService` → `DefaultAudioSink.setAudioProcessors` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 运行时 `SoftEqPath.setEnabled` 开/关 | ✅（默认关，直通） | ✅ | ✅ | ✅ | ✅ |
+| 硬 EQ `DEVICE_REJECTED` 挂钩 | ✅（只记原因） | ✅ + 门控 | ✅ | ✅ | ✅ |
+| 自动候选（REJECTED → candidate） | — | ✅ | ✅ | ✅ | ✅ |
+| 用户确认开关（Prefs `soft_eq_user_confirm`） | — | ✅ 骨架 | ✅ | ✅ EqSheet | ✅ + 诊断可读 |
+| 硬 EQ 恢复 → 强制关软路径（不双开） | — | ✅ | ✅ | ✅ | ✅ |
+| `SoftEqSpike.ENABLED` 强开覆盖 | false | false | false | false | false |
+| 曲线桥接（E3） | — | — | ✅ SoftEqCurve | ✅ | ✅ |
+| 设置文案 / 确认入口（E4） | — | — | — | ✅ SoftEqCopy | ✅ |
+| Prefs 键表 + SoftEqProbe 诊断（E5） | — | — | — | — | ✅ |
+| 真机 A/B（E6） | — | — | — | — | 清单见下（**未验车**） |
+
+## Prefs 键
+
+| 键 | 类型 | 默认 | 属性 | 说明 |
 | --- | --- | --- | --- | --- |
-| 挂进 `PlaybackService` → `DefaultAudioSink.setAudioProcessors` | ✅ | ✅ | ✅ | ✅ |
-| 运行时 `SoftEqPath.setEnabled` 开/关 | ✅（默认关，直通） | ✅ | ✅ | ✅ |
-| 硬 EQ `DEVICE_REJECTED` 挂钩 | ✅（只记原因） | ✅ + 门控 | ✅ | ✅ |
-| 自动候选（REJECTED → candidate） | — | ✅ | ✅ | ✅ |
-| 用户确认开关骨架（Prefs `softEqUserConfirm`） | — | ✅（默认关，不自动开听感） | ✅ | ✅ + EqSheet 对接 Prefs |
-| 硬 EQ 恢复 → 强制关软路径（不双开） | — | ✅ `onHardEqAvailable` | ✅ | ✅ |
-| `SoftEqSpike.ENABLED` 强开覆盖 | false | false（仅调试强开） | false | false |
-| 曲线桥接用户预设/自定义增益（E3） | — | — | ✅ `SoftEqCurve` + `SoftEqPath.syncCurve` | ✅ |
-| 设置文案 / 确认入口（E4） | — | — | — | ✅ SoftEqCopy + EqSheet 确认开关 |
-| Prefs + 诊断全套（E5） | — | ✅（仅 confirm 键） | ✅（confirm + 曲线状态） | ✅（UI 已接 confirm；诊断包仍 E5） |
-| 真机 A/B（E6） | — | — | — | — |
+| `soft_eq_user_confirm` | Bool | **false** | `Prefs.softEqUserConfirm` | 用户确认走软路径。仅 `DEVICE_REJECTED` 候选时为 true 才 `SOFT_ACTIVE`；硬恢复关软、**偏好保留** |
+
+写入路径：EqSheet 确认开关 → `SoftEqPath.setUserConfirmSoft` → Prefs + `SoftEqGate`。  
+`AudioFx.init` → `SoftEqPath.bindPrefs` 读回。键表亦见 `docs/AI开发指南.md` §5.2。
 
 ## 门控策略（SoftEqGate）
 
-1. **硬优先**：硬 EQ 可用（`bindEffects` 成功）→ `HARD_ACTIVE`，软路径强制关。  
-2. **REJECTED → 候选**：`DEVICE_REJECTED` → `CANDIDATE`；界面可提示「可走软 EQ」（文案 E4）。  
-3. **用户确认才开软**：`softEqUserConfirm=true` 且处于候选 → `SOFT_ACTIVE`，`processor` 启用。默认 **false**（只候选、不改听感）。  
-4. **不双开**：硬恢复时关软；`userConfirmSoft` 保留，下次再 REJECTED 可直接重回 `SOFT_ACTIVE`。  
-5. `SESSION_PENDING` / `NONE`：不成候选，软保持关。
+1. **硬优先**：硬 EQ 可用 → `HARD_ACTIVE`，软路径强制关。  
+2. **REJECTED → 候选**：`DEVICE_REJECTED` → `CANDIDATE`。  
+3. **用户确认才开软**：`softEqUserConfirm=true` 且候选 → `SOFT_ACTIVE`。默认 **false**。  
+4. **不双开**：硬恢复关软；`userConfirmSoft` 保留。  
+5. `SESSION_PENDING` / `NONE`：不成候选。
 
-相位：`IDLE` → `CANDIDATE` / `SOFT_ACTIVE` ⇄ `HARD_ACTIVE`。
+相位：`IDLE` → `CANDIDATE` / `SOFT_ACTIVE` ↔ `HARD_ACTIVE`。
 
 ## 曲线桥接（SoftEqCurve / SoftEqPath）
 
-软路径中心频率固定为 `SoftEqEngine.DEFAULT_CENTERS_HZ`（60 / 230 / 910 / 3600 / 14000），与 `EqPresets` 锚点一致。
+软中心：`SoftEqEngine.DEFAULT_CENTERS_HZ`（60 / 230 / 910 / 3600 / 14000）。
 
 | 输入 | 行为 |
 | --- | --- |
-| 内置预设 id（`EqPresets.byId`） | `EqPresets.curveFor` 落到软中心（精确） |
-| 自定义 / 用户 `eqBands` CSV，段数 = 5 | 直接夹取写入 |
-| CSV 段数 ≠ 5，且记得硬 EQ 频段布局 | log 频率轴插值 remap 到软中心 |
-| CSV 段数不对且无硬布局 | **平直**（避免错形） |
+| 内置预设 id | `EqPresets.curveFor` 落到软中心 |
+| CSV 段数 = 5 | 夹取写入 |
+| CSV 段数 ≠ 5 + 记得硬布局 | log 频率 remap |
+| 否则 | **平直** |
 
-`AudioFx` 在 `bindEffects` / 改预设·频段·方案·恢复默认 / `pushValuesToEffects` 时调用 `SoftEqPath.syncCurve`（或 `onHardBandLayout`）；`onHardEqUnavailable` 也会从 Prefs 刷新曲线。曲线常驻 processor；仅 `SOFT_ACTIVE` 时真正滤波。
-
+曲线常驻 processor；仅 `SOFT_ACTIVE` 时真正滤波。
 
 ## EqSheet 软路径文案（E4）
 
-硬 EQ DEVICE_REJECTED 且门控处于 CANDIDATE / SOFT_ACTIVE 时，EqSheet 显示「软件均衡（软 EQ）」块：
+硬拒绝且 `CANDIDATE` / `SOFT_ACTIVE` 时显示「软件均衡（软 EQ）」块（`SoftEqCopy` + 确认开关）。  
+`HARD_ACTIVE` / `IDLE` **不展示**。不可用主文案仍走 `eq_unavailable_device`——**勿谎称硬 EQ 仍可用**。
 
-| 状态 | 文案资源 | 行为 |
-| --- | --- | --- |
-| 候选 | soft_eq_status_candidate | 说明硬 EQ 不可用、可走软路径；**需确认**才开 |
-| 已启用 | soft_eq_status_active | 说明软路径在滤波，且与硬 EQ **不双开** |
-| 开关 | soft_eq_confirm_title / hint | 对接 SoftEqPath.setUserConfirmSoft → Prefs / SoftEqGate |
+## 诊断（E5）
 
-硬可用（HARD_ACTIVE）或未拒绝（IDLE）时**不展示**该块，避免和正常硬 EQ 面板抢话。不可用态主文案仍走 eq_unavailable_device（明确硬效果器建不起来；淡入淡出 / 音量平衡 / 左右声道仍可用）——**勿谎称硬 EQ 仍可用**。
+### 诊断包 `[软EQ]` 段
 
-代码：ui/SoftEqCopy.kt、ui/EqSheet.kt（SoftEqPathSection）；单测 SoftEqCopyTest。
+导出「诊断包（完整）」时追加只读摘要（`diag/SoftEqProbe.kt` → `DiagnosticsReport.Facts.softEqBlock`）：
+
+- **相位**：`IDLE` / `CANDIDATE` / `SOFT_ACTIVE` / `HARD_ACTIVE`（附中文）
+- **Prefs.softEqUserConfirm** 与内存确认（不一致会标明）
+- **处理器启用 / 候选**、`SoftEqSpike.ENABLED`
+- **硬不可用原因**
+- **曲线摘要**：`Source` + preset id + 五段增益 mB + 可听否 + 中心 Hz
+
+### 诊断页
+
+「关于与诊断」→ **软 EQ 状态** 行：实时相位 · 确认 · 曲线源；点开复制短报并弹窗。完整包副标题亦列出「软EQ」。
+
+不含凭据；不打印 URL/token。
 
 ## 怎么用（开发）
 
 ```kotlin
-SoftEqPath.setUserConfirmSoft(true)   // Prefs 骨架；候选时才会真正开软
-SoftEqPath.onHardEqUnavailable(DEVICE_REJECTED)  // AudioFx.reportFailure 已接
-SoftEqPath.onHardEqAvailable()        // AudioFx.bindEffects 成功已接
-SoftEqPath.syncCurve(presetId, bandsCsv)  // E3：硬曲线 → 软 processor
-SoftEqPath.applyBuiltinPreset("rock")     // 或直接套内置
-SoftEqPath.setEnabled(true)           // 仍可用的直控（测试/开发）；产品路径走 confirm
+SoftEqPath.setUserConfirmSoft(true)   // Prefs；候选时才真正开软
+SoftEqPath.onHardEqUnavailable(DEVICE_REJECTED)
+SoftEqPath.onHardEqAvailable()
+SoftEqPath.syncCurve(presetId, bandsCsv)
+SoftEqProbe.buildReport(context)      // E5 诊断短报
 ```
-
-`AudioFx.init` 会 `SoftEqPath.bindPrefs`，读出 `Prefs.softEqUserConfirm` 并同步曲线。
 
 ## 验证
 
@@ -80,8 +95,28 @@ SoftEqPath.setEnabled(true)           // 仍可用的直控（测试/开发）�
 set JAVA_HOME=E:\workspace\jdk\jdk-17
 gradlew.bat :app:compileDebugKotlin
 gradlew.bat :app:testDebugUnitTest --tests com.luckylearning.windtone.playback.softEq.* --offline
+gradlew.bat :app:testDebugUnitTest --tests com.luckylearning.windtone.diag.SoftEqProbeTest --offline
+gradlew.bat :app:testDebugUnitTest --tests com.luckylearning.windtone.diag.DiagnosticsReportTest --offline
 ```
+
+## E6 真机 A/B 清单（**未验车，勿勾选已完成**）
+
+目标：在 `DEVICE_REJECTED` 车机上确认软路径可听、且不与硬 EQ 双开。
+
+| # | 步骤 | 期望 | 结果 |
+| --- | --- | --- | --- |
+| 1 | 装当前 main 包；确认 `SoftEqSpike.ENABLED=false`、未改 versionName | 安装成功 | ☐ |
+| 2 | 打开均衡器；若硬 EQ 可用 → 相位应 HARD_ACTIVE，诊断页无「软路径启用」 | 软块不抢硬面板 | ☐ |
+| 3 | 在硬拒绝车机（或模拟 DEVICE_REJECTED）看 EqSheet「软件均衡」块 | 文案为候选、确认默认关 | ☐ |
+| 4 | 开确认开关 → 放熟悉曲目；诊断包相位 = SOFT_ACTIVE、处理器启用=开 | 听感相对平直有差 | ☐ |
+| 5 | 改预设 / 自定义频段 → 软路径听感跟随；诊断曲线摘要更新 | 与硬预设同向 | ☐ |
+| 6 | 关确认 → 回 CANDIDATE、听感回平直；Prefs 仍为关 | 不残留滤波 | ☐ |
+| 7 | 硬 EQ 恢复可用 → HARD_ACTIVE、软强制关；Prefs 确认若曾开则保留 | 不双开 | ☐ |
+| 8 | 杀进程重开：确认偏好仍在；再 REJECTED 可直接 SOFT_ACTIVE | Prefs 持久 | ☐ |
+| 9 | 复制诊断包 / 软 EQ 短报回传 | 含相位·confirm·曲线，无 token | ☐ |
+
+**通过标准**：4–7 听感与诊断一致，且无硬+软双开。失败则保持 ENABLED=false，记现象到本表「结果」列，再开修复，不假装已验。
 
 ## 发版
 
-代码合入 main，**不打 tag**（GitHub Actions 额度满）。恢复额度后再发版。占位版本可记 v1.2.37，**未改 `versionName`**。
+代码合入 main，**不打 tag**（GitHub Actions 额度满）。恢复额度后再发版。占位可记 v1.2.38，**未改 `versionName`**。

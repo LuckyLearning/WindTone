@@ -17,7 +17,11 @@ import com.luckylearning.windtone.overlay.ForegroundAppDetector
 import com.luckylearning.windtone.overlay.ForegroundProbe
 import com.luckylearning.windtone.diag.DiagnosticsReport
 import com.luckylearning.windtone.diag.ForensicsScript
+import com.luckylearning.windtone.diag.SoftEqProbe
+import com.luckylearning.windtone.playback.softEq.SoftEqPath
 import com.luckylearning.windtone.BuildConfig
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import com.luckylearning.windtone.data.AppIntegrity
 import com.luckylearning.windtone.overlay.ForegroundAppLog
 import com.luckylearning.windtone.overlay.ForegroundAppState
@@ -183,6 +187,7 @@ internal fun SettingsAboutPage(
  * 用户从那里点进来看到空白只会以为坏了。
  */
 @Composable
+@OptIn(UnstableApi::class)
 internal fun SettingsDiagnosisPage(
     player: PlayerUiState,
     /** 诊断包要读曲库规模（曲数 / 分组数），与内存段一起构成排障快照 */
@@ -437,11 +442,27 @@ internal fun SettingsDiagnosisPage(
             trailing = if (ignoringBattery) "已加入" else "去设置",
             chevron = true,
         )
+        // E5：诊断页直接可读 SoftEq 相位 / 确认 / 曲线（点开复制短报）
+        val softEq by SoftEqPath.state.collectAsStateWithLifecycle()
+        ActionRow(
+            title = "软 EQ 状态",
+            subtitle = SoftEqProbe.describePhase(softEq.phase) +
+                " · 确认=" + (if (softEq.userConfirmSoft) "开" else "关") +
+                " · " + softEq.curveSource.name +
+                (if (softEq.curvePresetId.isEmpty()) "" else "/" + softEq.curvePresetId),
+            onClick = {
+                val report = SoftEqProbe.buildReport(context)
+                clipboard.setText(AnnotatedString(report))
+                diagReport = report
+                Toast.makeText(context, "软 EQ 摘要已复制", Toast.LENGTH_SHORT).show()
+            },
+            chevron = true,
+        )
         // v1.1.88：诊断包。用户问「为什么这样」时，最省事的是贴一段文本，
         // 而不是来回问「你什么机型 / 开没开权限 / 放的是哪首歌」。
         ActionRow(
             title = "诊断包（完整）",
-            subtitle = "环境 · 权限 · 播放 · 悬浮窗 · 曲库 · 前台识别 · 最近事件日志；可复制或落盘",
+            subtitle = "环境 · 权限 · 播放 · 场景 · 软EQ · 悬浮窗 · 曲库 · 前台识别 · 事件日志；可复制或落盘",
             onClick = {
                 val report = DiagnosticsReport.build(
                     DiagnosticsReport.collect(context, player, library),
