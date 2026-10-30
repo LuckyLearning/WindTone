@@ -43,11 +43,15 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -79,6 +83,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -115,6 +120,69 @@ internal fun SettingsRootPage(
     pages: List<SettingsPage>,
     onNavigate: (SettingsPage) -> Unit,
 ) {
+    val context = LocalContext.current
+    var query by rememberSaveable { mutableStateOf("") }
+    val catalog = remember { SettingsSearchCatalog.entries() }
+    val hits = remember(query, catalog) {
+        SettingsSearch.filter(catalog, query) { id ->
+            SettingsSearch.resolveTitle(context, id)
+        }
+    }
+
+    OutlinedTextField(
+        value = query,
+        onValueChange = { query = it },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 4.dp),
+        singleLine = true,
+        placeholder = { Text(stringResource(R.string.set_search_hint)) },
+        leadingIcon = {
+            Icon(
+                Icons.Filled.Search,
+                contentDescription = stringResource(R.string.set_search_cd),
+            )
+        },
+        trailingIcon = {
+            if (query.isNotEmpty()) {
+                IconButton(onClick = { query = "" }) {
+                    Icon(
+                        Icons.Filled.Clear,
+                        contentDescription = stringResource(R.string.cd_close_search),
+                    )
+                }
+            }
+        },
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = { /* 即时过滤，无需提交 */ }),
+    )
+
+    if (query.trim().isNotEmpty()) {
+        if (hits.isEmpty()) {
+            Text(
+                text = stringResource(R.string.set_search_empty),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 32.dp),
+                textAlign = TextAlign.Center,
+            )
+        } else {
+            hits.forEach { entry ->
+                val sectionLabel = entry.sectionRes?.let { stringResource(it) }
+                    ?: entry.page.title
+                ActionRow(
+                    title = SettingsSearch.resolveTitle(context, entry.titleRes),
+                    subtitle = sectionLabel,
+                    onClick = { onNavigate(entry.page) },
+                    chevron = true,
+                )
+            }
+        }
+        return
+    }
+
     pages.forEach { page ->
         when (page) {
             SettingsPage.APPEARANCE -> CategoryRow(

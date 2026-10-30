@@ -872,4 +872,8 @@
     <string name="eq_replaygain_mode_hint">曲目模式逐曲拉平响度；专辑模式保留专辑内动态。缺标签先回退另一侧，再回落 RMS。</string>
     <string name="eq_replaygain_mode_track">曲目</string>
     <string name="eq_replaygain_mode_album">专辑</string>
+
+    <string name="set_search_hint">搜索设置项</string>
+    <string name="set_search_empty">没有匹配的设置项</string>
+    <string name="set_search_cd">搜索设置项</string>
 </resources>

@@ -892,4 +892,8 @@ The list is fetched once on add — nothing is saved if the fetch fails.</string
     <string name="eq_replaygain_mode_hint">Track keeps per-song loudness; Album keeps album dynamics. Missing tags fall back to the other side, then RMS.</string>
     <string name="eq_replaygain_mode_track">Track</string>
     <string name="eq_replaygain_mode_album">Album</string>
+
+    <string name="set_search_hint">Search settings</string>
+    <string name="set_search_empty">No matching settings</string>
+    <string name="set_search_cd">Search settings</string>
 </resources>
