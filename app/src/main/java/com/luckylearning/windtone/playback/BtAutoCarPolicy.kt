@@ -83,10 +83,11 @@ object BtAutoCarPolicy {
     fun decodeDevices(raw: String): List<DeviceRef> {
         if (raw.isBlank()) return emptyList()
         val sep = '\u001f'
+        // 注意：不要对整行 trim()——Java/Kotlin 会把 UNIT SEPARATOR(\u001f) 当空白吃掉，
+        // 导致「空 id + 名」行被误解析成 id=名。
         return raw.lineSequence().mapNotNull { line ->
-            val t = line.trim()
-            if (t.isEmpty()) return@mapNotNull null
-            val parts = t.split(sep, limit = 2)
+            if (line.isBlank()) return@mapNotNull null
+            val parts = line.split(sep, limit = 2)
             val id = parts[0].trim()
             if (id.isEmpty()) return@mapNotNull null
             val name = parts.getOrNull(1)?.trim().orEmpty().ifEmpty { id.removePrefix("n:") }
