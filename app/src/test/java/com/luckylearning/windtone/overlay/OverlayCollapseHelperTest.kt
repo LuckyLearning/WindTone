@@ -183,4 +183,25 @@ class OverlayCollapseHelperTest {
             visible,
         )
     }
+
+    @Test
+    fun `上移下移等价于 CSV 重排并可 roundtrip`() {
+        // 模拟设置页「把第 3 颗上移」：player 提到第二位
+        val start = OverlayCollapseHelper.mergeHandleOrder(listOf("collapse", "play_pause", "player"))
+        val ids = start.map { it.id }.toMutableList()
+        val moved = ids.removeAt(2)
+        ids.add(1, moved)
+        val csv = ids.joinToString(",")
+        val again = OverlayCollapseHelper.mergeHandleOrder(csv.split(','))
+        assertEquals(
+            listOf(
+                OverlayCollapseHelper.OverlayHandleKind.COLLAPSE,
+                OverlayCollapseHelper.OverlayHandleKind.PLAYER,
+                OverlayCollapseHelper.OverlayHandleKind.PLAY_PAUSE,
+            ),
+            again,
+        )
+        assertEquals(csv, OverlayCollapseHelper.handleOrderCsv(again))
+    }
 }
+

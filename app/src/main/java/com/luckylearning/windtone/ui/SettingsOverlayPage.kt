@@ -85,6 +85,15 @@ import com.luckylearning.windtone.overlay.OverlayCollapseHelper
  */
 private const val OVERLAY_FULL_EDIT_LEAVE_PERCENT = 92
 
+
+/** 设置页侧钮顺序列表的显示名（与单颗显隐开关文案对齐）。 */
+private fun overlayHandleOrderTitle(kind: OverlayCollapseHelper.OverlayHandleKind): String = when (kind) {
+    OverlayCollapseHelper.OverlayHandleKind.COLLAPSE -> "「收起 / 展开」"
+    OverlayCollapseHelper.OverlayHandleKind.PLAY_PAUSE -> "「播放 / 暂停」"
+    OverlayCollapseHelper.OverlayHandleKind.PLAYER -> "「打开播放页」"
+}
+
+
 @Composable
 internal fun SettingsOverlayPage(
     player: PlayerUiState,
@@ -238,6 +247,78 @@ internal fun SettingsOverlayPage(
                 checked = player.overlayHandlePlayer,
                 onCheckedChange = { onOverlayHandle(2, it) },
             )
+            // 侧钮上下顺序 UI（今晚 A1：补齐 B1 缺的设置页控件）。
+            // Prefs / mergeHandleOrder / LyricOverlayService 引擎早已就绪；此前只挂了
+            // onOverlayHandleOrder 回调与箭头 import，设置页只有显隐没有排序。
+            // 交互对齐「分类顺序」页：上移 / 下移（车机大触控友好；三颗固定项
+            // 不必上 LazyColumn 长按拖，避免与设置页滚动冲突）。
+            Text(
+                "侧钮上下顺序",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 2.dp),
+            )
+            Text(
+                "从上到下对应屏幕上三颗钮的位置；默认：收起 → 播放暂停 → 打开播放页",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 4.dp),
+            )
+            val handleOrder = OverlayCollapseHelper.mergeHandleOrder(
+                player.overlayHandleOrder.split(',').map { it.trim() }.filter { it.isNotEmpty() },
+            )
+            handleOrder.forEachIndexed { index, kind ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp),
+                ) {
+                    Text(
+                        text = "${index + 1}. ${overlayHandleOrderTitle(kind)}",
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 8.dp, top = 4.dp, bottom = 4.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    IconButton(
+                        enabled = index > 0,
+                        onClick = {
+                            val ids = handleOrder.map { it.id }.toMutableList()
+                            val moved = ids.removeAt(index)
+                            ids.add(index - 1, moved)
+                            onOverlayHandleOrder(ids.joinToString(","))
+                        },
+                    ) {
+                        Icon(
+                            Icons.Filled.KeyboardArrowUp,
+                            contentDescription = stringResource(R.string.move_up),
+                        )
+                    }
+                    IconButton(
+                        enabled = index < handleOrder.lastIndex,
+                        onClick = {
+                            val ids = handleOrder.map { it.id }.toMutableList()
+                            val moved = ids.removeAt(index)
+                            ids.add(index + 1, moved)
+                            onOverlayHandleOrder(ids.joinToString(","))
+                        },
+                    ) {
+                        Icon(
+                            Icons.Filled.KeyboardArrowDown,
+                            contentDescription = stringResource(R.string.move_down),
+                        )
+                    }
+                }
+            }
+            if (OverlayCollapseHelper.handleOrderCsv(handleOrder) != SettingsDefaults.OVERLAY_HANDLE_ORDER) {
+                TextButton(
+                    onClick = { onOverlayHandleOrder(SettingsDefaults.OVERLAY_HANDLE_ORDER) },
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                ) {
+                    Text("恢复默认顺序")
+                }
+            }
         }
         SwitchRow(
             title = stringResource(R.string.full_screen_height),
