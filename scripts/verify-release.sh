@@ -50,6 +50,11 @@ HEAD_SHA="${ARGS[3]:-}"
 [[ -n "$HEAD_SHA" ]] || HEAD_SHA="$(git -C "$ROOT" rev-parse "${TAG}^{commit}" 2>/dev/null || echo '')"
 
 PUBLIC_REPO="LuckyLearning/Release"   # 安装包公共分发仓库（匿名可访问）
+# 发布工作流的文件名。② 必须**只在这个工作流里**找 run：
+# 同一个 head_sha 上还有别的 workflow（pages.yml 等），它们启动更快、结束更快，
+# 用 `runs?head_sha=…&per_page=1` 抓第一个会抓到它们 —— v1.2.39 发版实际踩中：
+# ② 报「Pages 成功」、③ 资产 0 个、④ 下载 404，看起来像构建失败，其实 APK 还在构建。
+RELEASE_WORKFLOW="android-release.yml"
 TOKEN="$(grep -oE '(ghp_|github_pat_)[A-Za-z0-9_]+' "$ROOT/.github-token" 2>/dev/null | head -1)"
 [[ -n "$TOKEN" ]] || { echo "读不到 .github-token，无法查 REST" >&2; exit 1; }
 
@@ -82,8 +87,14 @@ if (( SKIP_CI )); then
 else
   RUN_ID=""
   for i in $(seq 1 20); do
+    # 优先走「工作流维度」的接口：只返回 android-release.yml 的 run，不会串到别的 workflow。
     RUN_JSON="$(curl -s -H "Authorization: Bearer $TOKEN" \
-      "https://api.github.com/repos/$REPO_SLUG/actions/runs?head_sha=$HEAD_SHA&per_page=1")"
+      "https://api.github.com/repos/$REPO_SLUG/actions/workflows/$RELEASE_WORKFLOW/runs?head_sha=$HEAD_SHA&per_page=1")"
+    if echo "$RUN_JSON" | grep -q '"Not Found"'; then
+      # 工作流文件被改名 / 删除时退回原接口，宁可少一层过滤也别整段失效
+      RUN_JSON="$(curl -s -H "Authorization: Bearer $TOKEN" \
+        "https://api.github.com/repos/$REPO_SLUG/actions/runs?head_sha=$HEAD_SHA&per_page=1")"
+    fi
     RUN_ID="$(echo "$RUN_JSON" | grep -o '"id": *[0-9]\+' | head -1 | grep -o '[0-9]\+' || true)"
     [[ -n "$RUN_ID" ]] && break
     sleep 15
