@@ -27,8 +27,10 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.aliyun.AliyunAuth
 import com.luckylearning.windtone.data.aliyun.AliyunEndpoints
 import com.luckylearning.windtone.data.aliyun.AliyunQrCode
@@ -102,7 +104,7 @@ internal fun AliyunQrLoginDialog(
             pollFailures = 0
             pollError = null
         } catch (e: AliyunQrLogin.QrLoginException) {
-            failed = e.message ?: "生成二维码失败"
+            failed = e.message ?: context.getString(R.string.aqr_gen_failed)
         } finally {
             ticker.cancel()
         }
@@ -151,7 +153,7 @@ internal fun AliyunQrLoginDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("扫码登录阿里云盘") },
+        title = { Text(stringResource(R.string.aqr_title)) },
         text = {
             QrLoginContent(
                 session = session,
@@ -173,16 +175,16 @@ internal fun AliyunQrLoginDialog(
         },
         confirmButton = {
             when {
-                failed != null -> TextButton(onClick = { attempt++ }) { Text("重试") }
+                failed != null -> TextButton(onClick = { attempt++ }) { Text(stringResource(R.string.aqr_retry)) }
                 // 扫不上 / 怀疑这张码已经死了：手动换一张（正常过期也会自动换）
-                session != null -> TextButton(onClick = { attempt++ }) { Text("换一张") }
+                session != null -> TextButton(onClick = { attempt++ }) { Text(stringResource(R.string.aqr_new_code)) }
             }
         },
         dismissButton = {
             if (session != null || failed != null) {
-                TextButton(onClick = onDismiss) { Text("关闭") }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.aqr_close)) }
             } else {
-                TextButton(onClick = onDismiss) { Text("取消") }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
             }
         },
     )
@@ -207,29 +209,28 @@ private fun QrLoginContent(
             failed != null -> {
                 Text(failed, textAlign = TextAlign.Center)
                 Text(
-                    "连不上阿里云盘时可以：① 换 Wi-Fi / 流量再点「重试」；② 点下面「网页获取令牌」用浏览器扫码，" +
-                        "拿到的刷新令牌回上一页「手动粘贴令牌」。",
+                    stringResource(R.string.aqr_fail_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = 8.dp),
                 )
-                TextButton(onClick = onOpenWebTool) { Text("网页获取令牌") }
+                TextButton(onClick = onOpenWebTool) { Text(stringResource(R.string.aqr_web_token)) }
             }
             saving -> {
                 CircularProgressIndicator(Modifier.size(48.dp))
-                Text("授权成功，正在保存…", modifier = Modifier.padding(top = 12.dp))
+                Text(stringResource(R.string.aqr_saving), modifier = Modifier.padding(top = 12.dp))
             }
             session == null -> {
                 CircularProgressIndicator(Modifier.size(48.dp))
                 Text(
-                    if (waitedSeconds > 3) "正在生成二维码…（已等待 ${waitedSeconds} 秒）"
-                    else "正在生成二维码…",
+                    if (waitedSeconds > 3) stringResource(R.string.aqr_generating_waited, waitedSeconds)
+                    else stringResource(R.string.aqr_generating),
                     modifier = Modifier.padding(top = 12.dp),
                 )
                 if (waitedSeconds > 10) {
                     Text(
-                        "网络较慢时会多等一会；若一直停在这里，关掉重试或改用「网页获取令牌」",
+                        stringResource(R.string.aqr_generating_slow),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
@@ -241,16 +242,16 @@ private fun QrLoginContent(
                 QrCodeImage(session.qrContent, modifier = Modifier.padding(vertical = 4.dp))
                 Text(
                     when (status) {
-                        ScanStatus.SCANED -> "已扫码：请在手机上确认授权"
-                        else -> "用阿里云盘 App 扫这个二维码"
+                        ScanStatus.SCANED -> stringResource(R.string.aqr_status_scanned)
+                        else -> stringResource(R.string.aqr_status_scan)
                     },
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = 12.dp),
                 )
                 if (pollFailures > 1) {
                     Text(
-                        "连接不稳，正在自动重试（第 $pollFailures 次）" +
-                            (pollError?.let { "：$it" } ?: ""),
+                        if (pollError != null) stringResource(R.string.aqr_poll_retry_detail, pollFailures, pollError!!)
+                        else stringResource(R.string.aqr_poll_retry, pollFailures),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                         textAlign = TextAlign.Center,
@@ -258,8 +259,7 @@ private fun QrLoginContent(
                     )
                 }
                 Text(
-                    "识别不到时：①调高屏幕亮度、离 20~30cm 再扫；②或截屏后用阿里云盘「扫一扫」选「相册」识别这张截图（截图是全分辨率，最稳）；③点「换一张」再试。\n" +
-                        "二维码过期会自动换新码；应用对网盘只读，不会上传、修改或删除任何文件",
+                    stringResource(R.string.aqr_scan_tips),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -304,7 +304,7 @@ private fun QrCodeImage(content: String, modifier: Modifier = Modifier) {
         }
         Image(
             bitmap = bitmap.asImageBitmap(),
-            contentDescription = "阿里云盘扫码授权二维码",
+            contentDescription = stringResource(R.string.aqr_cd_qr),
             // 视图尺寸 = 位图尺寸：1:1，没有任何缩放
             modifier = Modifier.size(with(density) { bitmap.width.toDp() }),
             contentScale = ContentScale.Fit,

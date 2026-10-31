@@ -78,7 +78,7 @@ internal fun PasteTokenDialog(
                 OutlinedTextField(
                     value = input,
                     onValueChange = { input = it.trim() },
-                    label = { Text("refresh_token") },
+                    label = { Text(stringResource(R.string.aliyun_refresh_token_field)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
                 )

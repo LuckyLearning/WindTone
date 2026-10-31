@@ -1337,4 +1337,26 @@ The list is fetched once on add — nothing is saved if the fetch fails.</string
     <string name="olr_empty_plays">No Aliyun Drive plays in this period</string>
     <string name="olr_empty_listen">No Aliyun Drive listening recorded in this period</string>
 
+
+    <!-- i18n batch 19: Aliyun QR login shell (AliyunQrLoginDialog) -->
+    <string name="aqr_title">Sign in to Aliyun Drive</string>
+    <string name="aqr_retry">Retry</string>
+    <string name="aqr_new_code">New code</string>
+    <string name="aqr_close">Close</string>
+    <string name="aqr_gen_failed">Failed to generate QR code</string>
+    <string name="aqr_fail_hint">If Aliyun Drive will not connect: ① switch Wi‑Fi / mobile data and tap Retry; ② tap Get token on the web below, scan in the browser, then paste the refresh token on the previous screen under Paste token manually.</string>
+    <string name="aqr_web_token">Get token on the web</string>
+    <string name="aqr_saving">Authorized — saving…</string>
+    <string name="aqr_generating">Generating QR code…</string>
+    <string name="aqr_generating_waited">Generating QR code… (%1$d s)</string>
+    <string name="aqr_generating_slow">Slow network — hang on a bit. If this never finishes, dismiss and retry, or use Get token on the web.</string>
+    <string name="aqr_status_scanned">Scanned — confirm authorization on your phone</string>
+    <string name="aqr_status_scan">Scan this code with the Aliyun Drive app</string>
+    <string name="aqr_poll_retry">Unstable connection — auto-retrying (%1$d)</string>
+    <string name="aqr_poll_retry_detail">Unstable connection — auto-retrying (%1$d): %2$s</string>
+    <string name="aqr_scan_tips">Hard to scan? ① Raise brightness and hold 20–30 cm away; ② or screenshot and open Aliyun Drive → Scan → Album (full-res screenshot is most reliable); ③ tap New code.
+Expired codes refresh automatically. This app is read-only — it never uploads, changes, or deletes your files.</string>
+    <string name="aqr_cd_qr">Aliyun Drive authorization QR code</string>
+    <string name="aliyun_refresh_token_field">Refresh Token</string>
+
 </resources>

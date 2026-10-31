@@ -1303,4 +1303,26 @@
     <string name="olr_empty_plays">这段时间还没有云盘播放记录</string>
     <string name="olr_empty_listen">这段时间还没有云盘收听记录</string>
 
+
+    <!-- i18n 第 19 批：Aliyun 扫码登录壳（AliyunQrLoginDialog） -->
+    <string name="aqr_title">扫码登录阿里云盘</string>
+    <string name="aqr_retry">重试</string>
+    <string name="aqr_new_code">换一张</string>
+    <string name="aqr_close">关闭</string>
+    <string name="aqr_gen_failed">生成二维码失败</string>
+    <string name="aqr_fail_hint">连不上阿里云盘时可以：① 换 Wi-Fi / 流量再点「重试」；② 点下面「网页获取令牌」用浏览器扫码，拿到的刷新令牌回上一页「手动粘贴令牌」。</string>
+    <string name="aqr_web_token">网页获取令牌</string>
+    <string name="aqr_saving">授权成功，正在保存…</string>
+    <string name="aqr_generating">正在生成二维码…</string>
+    <string name="aqr_generating_waited">正在生成二维码…（已等待 %1$d 秒）</string>
+    <string name="aqr_generating_slow">网络较慢时会多等一会；若一直停在这里，关掉重试或改用「网页获取令牌」</string>
+    <string name="aqr_status_scanned">已扫码：请在手机上确认授权</string>
+    <string name="aqr_status_scan">用阿里云盘 App 扫这个二维码</string>
+    <string name="aqr_poll_retry">连接不稳，正在自动重试（第 %1$d 次）</string>
+    <string name="aqr_poll_retry_detail">连接不稳，正在自动重试（第 %1$d 次）：%2$s</string>
+    <string name="aqr_scan_tips">识别不到时：①调高屏幕亮度、离 20~30cm 再扫；②或截屏后用阿里云盘「扫一扫」选「相册」识别这张截图（截图是全分辨率，最稳）；③点「换一张」再试。
+二维码过期会自动换新码；应用对网盘只读，不会上传、修改或删除任何文件</string>
+    <string name="aqr_cd_qr">阿里云盘扫码授权二维码</string>
+    <string name="aliyun_refresh_token_field">Refresh Token</string>
+
 </resources>

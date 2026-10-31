@@ -2334,3 +2334,12 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 - SoftEq / 播放内核 / Aliyun 其它壳本批不改
 - 文档：`docs/功能-i18n在线听歌报告.md`
 
+### i18n 第 19 批（2026-10-31）
+
+**Aliyun 登录壳**：`AliyunQrLoginDialog` 用户可见硬编码进 `aqr_*`；粘贴令牌字段标签 `aliyun_refresh_token_field`。`AliyunPanPage` 主体此前已是 `aliyun_*`。
+
+- 本批键名：`aqr_title`, `aqr_retry`, `aqr_new_code`, `aqr_close`, `aqr_gen_failed`, `aqr_fail_hint`, `aqr_web_token`, `aqr_saving`, `aqr_generating`, `aqr_generating_waited`, `aqr_generating_slow`, `aqr_status_scanned`, `aqr_status_scan`, `aqr_poll_retry`, `aqr_poll_retry_detail`, `aqr_scan_tips`, `aqr_cd_qr`, `aliyun_refresh_token_field`
+- SoftEq / 播放内核 / 云盘协议逻辑本批不改
+- 文档：`docs/功能-i18n阿里云盘壳.md`
+
+
