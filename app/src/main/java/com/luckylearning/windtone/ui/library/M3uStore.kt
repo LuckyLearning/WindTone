@@ -109,13 +109,38 @@ internal class M3uStore(private val session: LibrarySession) : M3uActions {
     }
 
     override fun importM3U(target: Uri) {
+        // 按需触发；读盘 + 匹配一律 IO，不挡播放热路径。有字节/行/命中硬上限。
         scope.launch {
-            val text = runCatching {
-                app.contentResolver.openInputStream(target)?.use {
-                    it.readBytes().toString(Charsets.UTF_8)
+            val library = _library.value.songs
+            val loaded = withContext(Dispatchers.IO) {
+                runCatching {
+                    app.contentResolver.openInputStream(target)?.use { input ->
+                        val (bytes, oversize) = M3uLocalImport.readCapped(input)
+                        if (oversize) throw Oversize
+                        M3uLocalImport.decodeUtf8Capped(bytes) ?: throw Oversize
+                    } ?: error("empty")
                 }
-            }.getOrNull()
-            if (text.isNullOrBlank()) {
+            }
+            val text = loaded.getOrElse { err ->
+                if (err === Oversize) {
+                    val mb = M3uLocalImport.MAX_BYTES / (1024 * 1024)
+                    pushMessage(UserFacingCopy.withNext(
+                        AppStrings.s(R.string.m3u_too_large, mb).ifEmpty { "M3U 文件过大（上限约 ${mb} MB）" },
+                        AppStrings.s(R.string.m3u_too_large_next).ifEmpty {
+                            "拆成更短的清单，或只导出需要的一段后再导入"
+                        },
+                    ))
+                } else {
+                    pushMessage(UserFacingCopy.withNext(
+                        AppStrings.s(R.string.m3u_read_fail).ifEmpty { "无法读取 M3U 文件" },
+                        AppStrings.s(R.string.m3u_read_fail_next).ifEmpty {
+                            "换一份 UTF-8 的 .m3u/.m3u8，或确认文件未被占用"
+                        },
+                    ))
+                }
+                return@launch
+            }
+            if (text.isBlank()) {
                 pushMessage(UserFacingCopy.withNext(
                     AppStrings.s(R.string.m3u_read_fail).ifEmpty { "无法读取 M3U 文件" },
                     AppStrings.s(R.string.m3u_read_fail_next).ifEmpty {
@@ -124,31 +149,8 @@ internal class M3uStore(private val session: LibrarySession) : M3uActions {
                 ))
                 return@launch
             }
-            val library = _library.value.songs
-            val byPath = library.filter { it.path != null }.associateBy { it.path!! }
-            val byUri = library.associateBy { it.stableKey.substringAfterLast('/') }
-            val matched = ArrayList<Song>()
-            var pendingTitle: String? = null
-            for (line in text.lines()) {
-                val l = line.trim()
-                if (l.isEmpty()) continue
-                if (l.startsWith("#EXTINF")) {
-                    pendingTitle = l.substringAfter(':', "").trim()
-                    continue
-                }
-                if (l.startsWith("#")) continue
-                val clean = l.substringAfterLast("file://")
-                val song = byPath[clean]
-                    ?: library.firstOrNull { it.path != null && it.path.endsWith(clean, ignoreCase = true) }
-                    ?: byUri[clean.substringAfterLast('/')]
-                    ?: pendingTitle?.let { t ->
-                        val name = t.substringAfter(" - ")
-                        library.firstOrNull { it.title.equals(name, ignoreCase = true) }
-                    }
-                if (song != null) matched.add(song)
-                pendingTitle = null
-            }
-            if (matched.isEmpty()) {
+            val outcome = withContext(Dispatchers.IO) { M3uLocalImport.match(text, library) }
+            if (outcome.matched.isEmpty()) {
                 pushMessage(UserFacingCopy.withNext(
                     AppStrings.s(R.string.m3u_no_match).ifEmpty { "M3U 中没有匹配到本地歌曲" },
                     AppStrings.s(R.string.m3u_no_match_next).ifEmpty {
@@ -160,9 +162,19 @@ internal class M3uStore(private val session: LibrarySession) : M3uActions {
             val fallback = AppStrings.s(R.string.m3u_import_fallback).ifEmpty { "歌单" }
             val base = target.lastPathSegment?.substringBeforeLast('.')?.takeLast(20) ?: fallback
             val name = AppStrings.s(R.string.m3u_import_name, base).ifEmpty { "导入 $base" }
-            session.playlists.createPlaylist(name, matched, {})
+            if (outcome.truncated) {
+                // 截断提示先发；createPlaylist 仍会推「已创建歌单」
+                pushMessage(
+                    AppStrings.s(R.string.m3u_import_truncated, name, outcome.matched.size)
+                        .ifEmpty { "已导入「$name」（${outcome.matched.size} 首；清单已按上限截断）" },
+                )
+            }
+            session.playlists.createPlaylist(name, outcome.matched, {})
         }
     }
+
+    /** 读盘超 [M3uLocalImport.MAX_BYTES] 的哨兵 */
+    private object Oversize : Throwable("m3u oversize")
 
     private fun buildM3U(name: String, songs: List<Song>): String = buildString {
         appendLine("#EXTM3U")

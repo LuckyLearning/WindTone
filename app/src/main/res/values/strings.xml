@@ -2031,4 +2031,9 @@ Expired codes refresh automatically. This app is read-only — it never uploads,
     <string name="lob_ap_pause_fade"> / pause: fade</string>
     <string name="lob_ap_preset"> / preset: %1$s</string>
     <string name="lob_ap_touch"> / touch: pass-through (locked = zero interference)</string>
+
+    <!-- M3U local import caps (perf) -->
+    <string name="m3u_too_large">M3U file is too large (limit %1$d MB)</string>
+    <string name="m3u_too_large_next">Split the playlist or export a shorter list, then import again</string>
+    <string name="m3u_import_truncated">Imported «%1$s» (%2$d tracks; list truncated to the limit)</string>
 </resources>

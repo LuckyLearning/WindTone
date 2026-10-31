@@ -1997,4 +1997,9 @@
     <string name="lob_ap_pause_fade"> / 暂停淡出</string>
     <string name="lob_ap_preset"> / 预设：%1$s</string>
     <string name="lob_ap_touch"> / 触摸：穿透（锁定态零干扰）</string>
+
+    <!-- M3U 本地导入上限（性能） -->
+    <string name="m3u_too_large">M3U 文件过大（上限约 %1$d MB）</string>
+    <string name="m3u_too_large_next">拆成更短的清单，或只导出需要的一段后再导入</string>
+    <string name="m3u_import_truncated">已导入「%1$s」（%2$d 首；清单已按上限截断）</string>
 </resources>

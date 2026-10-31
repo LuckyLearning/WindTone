@@ -415,7 +415,7 @@ ui/                       ── 展示层 ──
     LibrarySession.kt      共享状态宿主（唯一的 `StateFlow<LibraryUiState>` / messages / scope）+ 装配
     LibraryActions.kt / LibraryCore.kt(778)        扫描 / 视图 / 排序 / 搜索 / 收藏 / 删文件 / 统计 / 搜索历史
     FolderActions.kt / FolderController.kt(365)    导入目录 / SAF / 歌词刷新 / 权限 / 移除扫描结果
-    M3uActions.kt / M3uStore.kt(158)               M3U 导入导出 / 歌曲信息编辑（song_overrides）
+    M3uActions.kt / M3uStore.kt + M3uLocalImport    M3U 导入导出（IO+上限）/ 歌曲信息编辑（song_overrides）
     PlaylistActions.kt / PlaylistStore.kt(234)     歌单
     SelectionActions.kt / SelectionController.kt(167) 批量多选
     ReportActions.kt / ReportController.kt(107)    收听报告
@@ -2447,5 +2447,6 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 - 性能：仅自检冷路径；无大缓存
 - 验证：`compileDebugKotlin` + `OverlayPositionerTest`
 - 文档：`docs/功能-i18n扫尾扫仓.md`
-- 下一项建议：**歌单 m3u 导入**（本机产品；规划曲库缺口；仍勿把 E6/长稳开车当实现任务）
+- D2 歌单 M3U 导入收口：`M3uLocalImport` IO+上限；见 `功能-歌单M3U导入.md`
+- 下一项建议：**内容库名可选 i18n**（本机 P3；仍勿把 E6/长稳开车当实现任务）
 
