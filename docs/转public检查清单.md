@@ -1,6 +1,9 @@
 ---
 layout: default
-title: 转 public 检查清单
+title: 转 public 清单
+nav_exclude: false
+nav_order: 15
+parent: 开发文档
 ---
 
 # 转 public 检查清单
@@ -102,3 +105,18 @@ title: 转 public 检查清单
 ## Actions 触发（公开后同样适用）
 
 见 [`spike-CI提速.md`](spike-CI提速.md) §9：Android CI **仅手动**；发版 `v*` **自动**（含单测门禁）；Pages 随 `docs/**` **自动**。
+
+
+---
+
+## 文档站 GitHub Pages（2026-10-31 续）
+
+| 项 | 说明 |
+|---|---|
+| 主题 | `remote_theme: just-the-docs/just-the-docs@v0.10.1`（侧栏 + 搜索 + 浅/深色切换） |
+| 旧布局 | 原内联 CSS 布局已挪到 `docs/archive/legacy-default-layout.html` |
+| 触发 | 仅 `docs/**` 或 `pages.yml` 变更自动部署；也可手动 Run |
+| **你必须开一次** | Settings → Pages → Build and deployment → **Source = GitHub Actions**。未开时 `configure-pages` 会 404。本机 PAT（fine-grained）缺 Pages 权限时 API 亦 403，agent 无法代开。 |
+| 站点 URL | https://luckylearning.github.io/WindTone/ |
+
+开好 Source 后，再推一笔 `docs/**` 或 Actions 里手动跑 **Deploy docs to GitHub Pages** 即可上线。

@@ -1,6 +1,9 @@
 ---
 layout: default
-title: 数据库设计 MusicDb
+title: 数据库设计
+nav_exclude: false
+nav_order: 12
+parent: 开发文档
 ---
 
 # WindTone 数据库开发文档（MusicDb · v5）

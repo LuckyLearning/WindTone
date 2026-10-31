@@ -1,6 +1,9 @@
 ---
 layout: default
 title: AI 开发指南
+nav_exclude: false
+nav_order: 11
+parent: 开发文档
 ---
 
 # 听风 WindTone · AI 开发指南
