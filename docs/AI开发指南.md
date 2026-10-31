@@ -2415,6 +2415,7 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 核对：`ReplayGainReader` + `ReplayGainTags`（ID3 / FLAC / Ogg / MP4 iTunNORM / APEv2 / R128）已由 **v1.2.14** 接入 `TrackVolume`（标签优先，无标签回落 RMS）；**v1.2.29** N6 曲目/专辑模式。本轮：**规划文档对齐** + `ReplayGainTagsTest` 补 APEv2 用例。性能铁律：音量平衡可关；标签解析只走既有 IO `analyzeScope`，不堵切歌热路径；无新常驻线程、无大缓存；无标签回落与现网一致。不改 SoftEq / 播放内核行为。
 
 - 文档：`docs/功能-ReplayGain模式.md`、`docs/规划-下一步.md`
+- **2026-11-01 规划盘点**：本机可审写码队列已空；下一项以真机 §5 / E6 为主（仅上车）；详见 `功能-规划盘点收口.md`。
 - 下一项产品建议：**i18n 可选残余**（OnlinePlaylistRules / BootStatus / AppShortcut）
 
 ### i18n 第 28 批（2026-11-01）
