@@ -2,30 +2,28 @@ package com.luckylearning.windtone.diag
 
 import android.content.Context
 import androidx.media3.common.util.UnstableApi
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.playback.AudioFx
 import com.luckylearning.windtone.playback.softEq.SoftEqCurve
 import com.luckylearning.windtone.playback.softEq.SoftEqGate
 import com.luckylearning.windtone.playback.softEq.SoftEqPath
 import com.luckylearning.windtone.playback.softEq.SoftEqSpike
+import com.luckylearning.windtone.ui.AppStrings
 
 /**
- * Soft-EQ summary for the diagnostics pack (`[软EQ]` section, E5).
+ * Soft-EQ summary for the diagnostics pack (`[软EQ]` / `[Soft EQ]` section, E5).
  *
  * Car HU troubleshooting for "why is EQ flat / why soft path not on" needs
  * phase, user-confirm Prefs, and a short curve digest in one paste — no adb.
  * Read-only; no secrets. Curve gains are the five soft centers (mB), short enough
  * to print. Docs: docs/功能-软EQ.md.
+ *
+ * i18n 第 24 批：仅用户可见说明进 `sep_*`；Prefs 键名 / 枚举名 / SoftEqSpike 等机器可读字段保持原样。
+ * **不改** SoftEq 门控与滤波行为。
  */
 @UnstableApi
 internal object SoftEqProbe {
-
-    private val PHASE_ZH = mapOf(
-        SoftEqGate.Phase.IDLE to "空闲",
-        SoftEqGate.Phase.CANDIDATE to "候选未启用",
-        SoftEqGate.Phase.SOFT_ACTIVE to "软路径启用中",
-        SoftEqGate.Phase.HARD_ACTIVE to "硬 EQ 优先",
-    )
 
     fun buildReport(context: Context): String {
         val prefs = Prefs(context)
@@ -59,33 +57,39 @@ internal object SoftEqProbe {
         curveGainsMb: List<Int>,
         centersHz: List<Int>,
     ): String = buildString {
-        appendLine("[软EQ]")
-        appendLine("相位：${describePhase(phase)}")
-        appendLine("Prefs.softEqUserConfirm：${yn(prefsConfirm)}")
+        appendLine(AppStrings.s(R.string.sep_sec))
+        appendLine(AppStrings.s(R.string.sep_phase, describePhase(phase)))
+        appendLine(AppStrings.s(R.string.sep_prefs_confirm, yn(prefsConfirm)))
         appendLine(
-            "内存确认：${yn(memoryConfirm)}" +
-                if (prefsConfirm != memoryConfirm) "（与 Prefs 不一致）" else "",
+            AppStrings.s(
+                R.string.sep_mem_confirm,
+                yn(memoryConfirm),
+                if (prefsConfirm != memoryConfirm) AppStrings.s(R.string.sep_prefs_mismatch) else "",
+            ),
         )
-        appendLine("处理器启用：${yn(enabled)}   候选：${yn(candidate)}")
-        appendLine("SoftEqSpike.ENABLED：$spikeEnabled")
-        appendLine("硬不可用原因：${describeHard(lastHard)}")
-        appendLine("曲线：${describeCurve(curveSource, curvePresetId, curveGainsMb)}")
-        appendLine("中心Hz：${centersHz.joinToString("/")}")
-        appendLine(
-            "说明：只读摘要；Prefs 键 soft_eq_user_confirm；" +
-                "SOFT_ACTIVE 才真正滤波；硬恢复强制关软（不双开）。",
-        )
+        appendLine(AppStrings.s(R.string.sep_processor, yn(enabled), yn(candidate)))
+        appendLine(AppStrings.s(R.string.sep_spike, spikeEnabled.toString()))
+        appendLine(AppStrings.s(R.string.sep_hard, describeHard(lastHard)))
+        appendLine(AppStrings.s(R.string.sep_curve, describeCurve(curveSource, curvePresetId, curveGainsMb)))
+        appendLine(AppStrings.s(R.string.sep_centers, centersHz.joinToString("/")))
+        appendLine(AppStrings.s(R.string.sep_note))
     }.trimEnd()
 
     fun describePhase(phase: SoftEqGate.Phase): String {
-        val zh = PHASE_ZH[phase] ?: "未知"
-        return "${phase.name}（$zh）"
+        val gloss = when (phase) {
+            SoftEqGate.Phase.IDLE -> AppStrings.s(R.string.sep_phase_idle)
+            SoftEqGate.Phase.CANDIDATE -> AppStrings.s(R.string.sep_phase_candidate)
+            SoftEqGate.Phase.SOFT_ACTIVE -> AppStrings.s(R.string.sep_phase_soft)
+            SoftEqGate.Phase.HARD_ACTIVE -> AppStrings.s(R.string.sep_phase_hard)
+        }.ifEmpty { AppStrings.s(R.string.sep_phase_unknown) }
+        val joined = AppStrings.s(R.string.sep_phase_fmt, phase.name, gloss)
+        return joined.ifEmpty { "${phase.name}（$gloss）" }
     }
 
     fun describeHard(reason: AudioFx.Unavailable): String = when (reason) {
-        AudioFx.Unavailable.NONE -> "NONE（无）"
-        AudioFx.Unavailable.SESSION_PENDING -> "SESSION_PENDING（等会话）"
-        AudioFx.Unavailable.DEVICE_REJECTED -> "DEVICE_REJECTED（设备拒绝）"
+        AudioFx.Unavailable.NONE -> AppStrings.s(R.string.sep_hard_none)
+        AudioFx.Unavailable.SESSION_PENDING -> AppStrings.s(R.string.sep_hard_session)
+        AudioFx.Unavailable.DEVICE_REJECTED -> AppStrings.s(R.string.sep_hard_device)
     }
 
     fun describeCurve(
@@ -93,11 +97,16 @@ internal object SoftEqProbe {
         presetId: String,
         gainsMb: List<Int>,
     ): String {
-        val preset = if (presetId.isEmpty()) "（无预设 id）" else "preset=$presetId"
-        val gains = if (gainsMb.isEmpty()) "（空）" else gainsMb.joinToString(",")
+        val preset = if (presetId.isEmpty()) {
+            AppStrings.s(R.string.sep_no_preset)
+        } else {
+            AppStrings.s(R.string.sep_preset, presetId)
+        }
+        val gains = if (gainsMb.isEmpty()) AppStrings.s(R.string.sep_empty) else gainsMb.joinToString(",")
         val audible = SoftEqCurve.isAudible(gainsMb.toIntArray())
-        return "$source $preset 增益mB=[$gains] 可听=${yn(audible)}"
+        return AppStrings.s(R.string.sep_curve_fmt, source.toString(), preset, gains, yn(audible))
     }
 
-    private fun yn(v: Boolean) = if (v) "开" else "关"
+    private fun yn(v: Boolean) =
+        AppStrings.s(if (v) R.string.sep_on else R.string.sep_off)
 }

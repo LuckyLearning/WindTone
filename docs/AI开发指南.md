@@ -2375,5 +2375,11 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 - `SettingsSearchTest` / `ForegroundProbeTest` → Robolectric `zh-rCN` + `AppStrings.init`
 - 文档：`docs/功能-i18n设置搜索与排障报告.md`
 
+### i18n 第 24 批（2026-11-01）
 
+**DiagnosticsReport 诊断包外壳 + SoftEqProbe + DefaultMusicProbe**：`dr_*` 外壳分段与行标签；`sep_*` 软 EQ 诊断说明（枚举/Prefs 键保持原样）；`dmp_*` 默认音乐候选资格。
+
+- SoftEq / 播放内核行为本批不改；Memory / Scene / PlaybackQuality / PerfMarks / ForensicsScript 正文留后续
+- `SoftEqProbeTest` / `DiagnosticsReportTest` → Robolectric `zh-rCN` + `AppStrings.init`
+- 文档：`docs/功能-i18n诊断包外壳与Probe.md`
 

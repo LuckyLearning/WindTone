@@ -20,6 +20,7 @@ Prefs 键：`soft_eq_user_confirm`。不含凭据与 URL。
 
 - `diag/SoftEqProbe.kt` → `DiagnosticsReport.Facts.softEqBlock`
 - 诊断页 `SettingsDiagnosisPage`「软 EQ 状态」行
+- i18n 第 24 批：用户可见说明走 `sep_*`（Prefs 键 / 枚举名 / Spike 字面量保持机器可读）
 
 ## 状态
 

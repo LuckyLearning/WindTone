@@ -7,6 +7,7 @@ import android.os.StatFs
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import com.luckylearning.windtone.BuildConfig
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.CrashLog
 import com.luckylearning.windtone.data.Prefs
 import androidx.media3.common.util.UnstableApi
@@ -18,6 +19,7 @@ import com.luckylearning.windtone.overlay.ForegroundAppDetector
 import com.luckylearning.windtone.overlay.ForegroundProbe
 import com.luckylearning.windtone.state.LibraryUiState
 import com.luckylearning.windtone.state.PlayerUiState
+import com.luckylearning.windtone.ui.AppStrings
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -35,6 +37,10 @@ import java.util.Locale
  * 两条纪律：
  *  - **不打印用户数据**：只给曲名 / 歌手这种「本来就在屏幕上」的信息；
  *  - **不打印凭证**：云盘 token、cookie 一律不读，只报「已登录 / 未登录」这类布尔量。
+ *
+ * i18n 第 24 批：用户可见外壳进 `dr_*`；嵌套 Probe（Foreground / SoftEq / DefaultMusic）各自 i18n。
+ * Memory / Scene / PlaybackQuality / PerfMarks / ForensicsScript 正文留待后续批次。
+ * **不改** SoftEq / 播放内核行为；机器可读字段名保持稳定。
  */
 internal object DiagnosticsReport {
 
@@ -187,7 +193,7 @@ internal object DiagnosticsReport {
             accessibilityOn = ForegroundAppDetector.accessibilityEnabled(context),
             usageStatsOn = ForegroundAppDetector.usageStatsGranted(context),
             watchdogSeenOn = AccessibilityWatchdog.seenOn(context),
-            songTitle = song?.title ?: "（无）",
+            songTitle = song?.title ?: AppStrings.s(R.string.dr_none).ifEmpty { "（无）" },
             songArtist = song?.artist ?: "",
             songSource = describeSource(song?.uri?.toString()),
             playing = player.isPlaying,
@@ -215,11 +221,14 @@ internal object DiagnosticsReport {
                 appendLine(PlaybackQualityProbe.report())
                 val prefs = Prefs(context)
                 appendLine(
-                    "无缝播放：平台默认开启（Media3 单实例连续队列 + 分轨 encoder delay/padding；无关闭 API，设置页仅说明；历史偏好死键=" + (if (prefs.gaplessPlayback) "开" else "关") + ")",
+                    AppStrings.s(
+                        R.string.dr_gapless,
+                        if (prefs.gaplessPlayback) onOff(true) else onOff(false),
+                    ),
                 )
-                appendLine("跳过静音：${if (prefs.skipSilence) "开" else "关"}")
-                appendLine("片头跳过：${prefs.skipIntroSeconds} 秒（0=关）")
-                appendLine("片尾跳过：${prefs.skipOutroSeconds} 秒（0=关）")
+                appendLine(AppStrings.s(R.string.dr_skip_silence, onOff(prefs.skipSilence)))
+                appendLine(AppStrings.s(R.string.dr_skip_intro, prefs.skipIntroSeconds))
+                appendLine(AppStrings.s(R.string.dr_skip_outro, prefs.skipOutroSeconds))
             }.trimEnd(),
             defaultMusicBlock = DefaultMusicProbe.buildReport(context),
             memoryBlock = MemoryProbe.buildReport(context, library.songs.size),
@@ -232,12 +241,16 @@ internal object DiagnosticsReport {
 
     /** 音源只报 scheme / 来源类型，绝不打印完整 URL（可能带签名） */
     private fun describeSource(uri: String?): String {
-        if (uri.isNullOrBlank()) return "（无）"
+        val none = AppStrings.s(R.string.dr_none).ifEmpty { "（无）" }
+        if (uri.isNullOrBlank()) return none
         val scheme = uri.substringBefore(':', missingDelimiterValue = "")
         return when {
-            scheme == "file" || scheme == "content" -> "$scheme（本地）"
-            scheme == "http" || scheme == "https" -> "$scheme（在线）"
-            else -> "$scheme（未知）"
+            scheme == "file" || scheme == "content" ->
+                AppStrings.s(R.string.dr_src_local, scheme).ifEmpty { "$scheme（本地）" }
+            scheme == "http" || scheme == "https" ->
+                AppStrings.s(R.string.dr_src_online, scheme).ifEmpty { "$scheme（在线）" }
+            else ->
+                AppStrings.s(R.string.dr_src_unknown, scheme).ifEmpty { "$scheme（未知）" }
         }
     }
 
@@ -246,20 +259,40 @@ internal object DiagnosticsReport {
         val time = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date(f.collectedAt))
         val sb = StringBuilder()
 
-        sb.appendLine("=== 听风 · 诊断包 ===")
-        sb.appendLine("采集时间：$time")
+        sb.appendLine(AppStrings.s(R.string.dr_title))
+        sb.appendLine(AppStrings.s(R.string.dr_collected_at, time))
         sb.appendLine()
 
-        sb.appendLine("[环境]")
-        sb.appendLine("应用：v${f.appVersion}（${f.buildType}）  ${f.packageName}")
-        sb.appendLine("mapping：${CrashLog.mappingAssetName()}（与 Release 资产同名）")
-        sb.appendLine("versionCode：${f.versionCode}")
-        sb.appendLine("安装包签名：${f.integrity}")
-        sb.appendLine("系统：Android ${f.androidRelease}（API ${f.sdkInt}）  ${f.manufacturer} ${f.model}（${f.device}）")
-        sb.appendLine("ABI：${f.abi}   语言：${f.locale}   时区：${f.timeZone}")
-        sb.appendLine("屏幕：${f.screenPx}   ${f.density}")
-        sb.appendLine("可用内存：${f.availMemMb} MB${if (f.lowMemory) "（系统处于低内存）" else ""}")
-        sb.appendLine("可用存储：${if (f.freeStorageMb >= 0) "${f.freeStorageMb} MB" else "查询失败"}")
+        sb.appendLine(AppStrings.s(R.string.dr_sec_env))
+        sb.appendLine(AppStrings.s(R.string.dr_app_line, f.appVersion, f.buildType, f.packageName))
+        sb.appendLine(AppStrings.s(R.string.dr_mapping, CrashLog.mappingAssetName()))
+        sb.appendLine(AppStrings.s(R.string.dr_version_code, f.versionCode))
+        sb.appendLine(AppStrings.s(R.string.dr_integrity, f.integrity))
+        sb.appendLine(
+            AppStrings.s(
+                R.string.dr_system,
+                f.androidRelease,
+                f.sdkInt,
+                f.manufacturer,
+                f.model,
+                f.device,
+            ),
+        )
+        sb.appendLine(AppStrings.s(R.string.dr_abi_locale, f.abi, f.locale, f.timeZone))
+        sb.appendLine(AppStrings.s(R.string.dr_screen, f.screenPx, f.density))
+        sb.appendLine(
+            AppStrings.s(
+                R.string.dr_avail_mem,
+                f.availMemMb,
+                if (f.lowMemory) AppStrings.s(R.string.dr_low_mem) else "",
+            ),
+        )
+        val storage = if (f.freeStorageMb >= 0) {
+            AppStrings.s(R.string.dr_storage_mb, f.freeStorageMb)
+        } else {
+            AppStrings.s(R.string.dr_query_failed)
+        }
+        sb.appendLine(AppStrings.s(R.string.dr_avail_storage, storage))
         sb.appendLine()
 
         // 应用侧内存画像（v1.2.12）：车机上唯一能拿到的量化入口，不要挪到文末
@@ -267,13 +300,21 @@ internal object DiagnosticsReport {
             sb.appendLine(f.memoryBlock.trimEnd())
             sb.appendLine()
         }
-        sb.appendLine("[权限]")
-        sb.appendLine("通知：${yn(f.notificationAllowed)}   悬浮窗：${yn(f.canDrawOverlay)}")
-        sb.appendLine("电池优化白名单：${yn(f.ignoringBattery)}")
-        sb.appendLine("读取音频：${yn(f.mediaAudioGranted)}   安装未知应用：${yn(f.installUnknownAllowed)}")
+        sb.appendLine(AppStrings.s(R.string.dr_sec_perm))
         sb.appendLine(
-            "无障碍服务：${yn(f.accessibilityOn)}（曾开启过：${yn(f.watchdogSeenOn)}）   " +
-                "使用情况访问：${yn(f.usageStatsOn)}",
+            AppStrings.s(R.string.dr_notif_overlay, yn(f.notificationAllowed), yn(f.canDrawOverlay)),
+        )
+        sb.appendLine(AppStrings.s(R.string.dr_battery_wl, yn(f.ignoringBattery)))
+        sb.appendLine(
+            AppStrings.s(R.string.dr_media_install, yn(f.mediaAudioGranted), yn(f.installUnknownAllowed)),
+        )
+        sb.appendLine(
+            AppStrings.s(
+                R.string.dr_a11y_usage,
+                yn(f.accessibilityOn),
+                yn(f.watchdogSeenOn),
+                yn(f.usageStatsOn),
+            ),
         )
         sb.appendLine()
 
@@ -283,12 +324,26 @@ internal object DiagnosticsReport {
             sb.appendLine()
         }
 
-        sb.appendLine("[播放]")
-        sb.appendLine("曲目：${f.songTitle}${if (f.songArtist.isBlank()) "" else " - ${f.songArtist}"}")
-        sb.appendLine("状态：${if (f.playing) "播放中" else "暂停"}   时长：${f.durationMs / 1000}s")
-        sb.appendLine("模式：repeat=${f.repeatMode} shuffle=${f.shuffle}   音源：${f.songSource}")
+        sb.appendLine(AppStrings.s(R.string.dr_sec_play))
         sb.appendLine(
-            "歌词：${f.lyricLines} 行   偏移：${f.lyricOffsetMs}ms   字号系数：${f.lyricScale}",
+            if (f.songArtist.isBlank()) {
+                AppStrings.s(R.string.dr_track, f.songTitle)
+            } else {
+                AppStrings.s(R.string.dr_track_artist, f.songTitle, f.songArtist)
+            },
+        )
+        sb.appendLine(
+            AppStrings.s(
+                R.string.dr_play_state,
+                if (f.playing) AppStrings.s(R.string.dr_playing) else AppStrings.s(R.string.dr_paused),
+                f.durationMs / 1000,
+            ),
+        )
+        sb.appendLine(
+            AppStrings.s(R.string.dr_play_mode, f.repeatMode, f.shuffle, f.songSource),
+        )
+        sb.appendLine(
+            AppStrings.s(R.string.dr_lyrics, f.lyricLines, f.lyricOffsetMs, f.lyricScale.toString()),
         )
         sb.appendLine()
 
@@ -303,22 +358,43 @@ internal object DiagnosticsReport {
             sb.appendLine()
         }
 
-        sb.appendLine("[悬浮窗]")
+        sb.appendLine(AppStrings.s(R.string.dr_sec_overlay))
         sb.appendLine(
-            "开关：${yn(f.overlayOn)}   全屏高度：${yn(f.overlayFullHeight)}   行数：${f.overlayLines}",
+            AppStrings.s(
+                R.string.dr_overlay_flags,
+                yn(f.overlayOn),
+                yn(f.overlayFullHeight),
+                f.overlayLines,
+            ),
         )
         sb.appendLine(
-            "正文字号：${f.overlayTextSp}sp   暂停表现：${if (f.overlayPauseMode == 1) "隐藏" else "淡出"}   " +
-                "隐藏名单：${f.hiddenAppsCount} 个",
+            AppStrings.s(
+                R.string.dr_overlay_style,
+                f.overlayTextSp,
+                if (f.overlayPauseMode == 1) {
+                    AppStrings.s(R.string.dr_overlay_hide)
+                } else {
+                    AppStrings.s(R.string.dr_overlay_fade)
+                },
+                f.hiddenAppsCount,
+            ),
         )
         if (f.overlayCostBlock.isNotBlank()) sb.appendLine(f.overlayCostBlock.trimEnd())
         sb.appendLine()
 
-        sb.appendLine("[曲库]")
+        sb.appendLine(AppStrings.s(R.string.dr_sec_library))
         sb.appendLine(
-            "歌曲：${f.librarySongs}   当前视图可见：${f.libraryVisible}   跳过不支持：${f.librarySkipped}",
+            AppStrings.s(
+                R.string.dr_library_counts,
+                f.librarySongs,
+                f.libraryVisible,
+                f.librarySkipped,
+            ),
         )
-        sb.appendLine("扫描中：${yn(f.libraryScanning)}   状态：${f.libraryStatus.ifBlank { "（空）" }}")
+        val libStatus = f.libraryStatus.ifBlank {
+            AppStrings.s(R.string.dr_empty).ifEmpty { "（空）" }
+        }
+        sb.appendLine(AppStrings.s(R.string.dr_library_scan, yn(f.libraryScanning), libStatus))
         sb.appendLine()
 
         if (f.performanceBlock.isNotBlank()) {
@@ -332,16 +408,16 @@ internal object DiagnosticsReport {
         sb.appendLine(f.foregroundReport.trimEnd())
         sb.appendLine()
 
-        sb.appendLine("[事件日志（最近 ${f.logLines.size} 条，旧→新）]")
+        sb.appendLine(AppStrings.s(R.string.dr_sec_events, f.logLines.size))
         if (f.logLines.isEmpty()) {
-            sb.appendLine("（空：进程刚启动，或服务尚未发生任何切换）")
+            sb.appendLine(AppStrings.s(R.string.dr_events_empty))
         } else {
             f.logLines.forEach { sb.appendLine(it) }
         }
         sb.appendLine()
-        sb.appendLine("[一键取证]")
+        sb.appendLine(AppStrings.s(R.string.dr_sec_forensics))
         sb.appendLine(ForensicsScript.shortHint(f.packageName, f.appVersion))
-        sb.appendLine("--- 完整脚本（复制到电脑执行）---")
+        sb.appendLine(AppStrings.s(R.string.dr_forensics_script))
         sb.appendLine(
             ForensicsScript.build(
                 packageName = f.packageName,
@@ -351,11 +427,15 @@ internal object DiagnosticsReport {
         )
         sb.appendLine()
         sb.appendLine()
-        sb.appendLine("=== 诊断包结束 ===")
+        sb.appendLine(AppStrings.s(R.string.dr_end))
         return sb.toString()
     }
 
-    private fun yn(v: Boolean) = if (v) "是" else "否"
+    private fun yn(v: Boolean) =
+        AppStrings.s(if (v) R.string.dr_yes else R.string.dr_no).ifEmpty { if (v) "是" else "否" }
+
+    private fun onOff(v: Boolean) =
+        AppStrings.s(if (v) R.string.dr_on else R.string.dr_off).ifEmpty { if (v) "开" else "关" }
 
     /** 诊断包保留份数。单份含完整 smaps，可达数 MB，不清理会一直堆在用户存储里 */
     private const val KEEP_FILES = 3

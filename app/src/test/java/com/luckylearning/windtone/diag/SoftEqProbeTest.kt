@@ -1,18 +1,33 @@
 package com.luckylearning.windtone.diag
 
+import android.app.Application
+import androidx.test.core.app.ApplicationProvider
 import com.luckylearning.windtone.playback.AudioFx
 import com.luckylearning.windtone.playback.softEq.SoftEqCurve
 import com.luckylearning.windtone.playback.softEq.SoftEqGate
+import com.luckylearning.windtone.ui.AppStrings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
  * Soft-EQ diagnostics lines (E5): phase labels, curve digest, confirm flags.
- * Pure JVM — no Robolectric.
+ * i18n 第 24 批后正文走 `sep_*`；Robolectric zh-rCN 对齐中文断言。
+ * **不测** SoftEq 门控行为，只锁用户可见说明。
  */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], application = Application::class, qualifiers = "zh-rCN")
 class SoftEqProbeTest {
+
+    @Before
+    fun setUp() {
+        AppStrings.init(ApplicationProvider.getApplicationContext())
+    }
 
     @Test
     fun `describePhase 四态`() {

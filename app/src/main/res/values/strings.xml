@@ -1605,4 +1605,102 @@ Expired codes refresh automatically. This app is read-only — it never uploads,
     <string name="fp_label_settings_home">System settings home</string>
     <string name="fp_query_failed">query failed: %1$s</string>
     <string name="fp_save_failed">Failed to save report</string>
+
+    <!-- i18n batch 24: DiagnosticsReport shell (dr_*) -->
+    <string name="dr_yes">yes</string>
+    <string name="dr_no">no</string>
+    <string name="dr_on">on</string>
+    <string name="dr_off">off</string>
+    <string name="dr_none">(none)</string>
+    <string name="dr_empty">(empty)</string>
+    <string name="dr_title">=== WindTone · Diagnostics pack ===</string>
+    <string name="dr_end">=== End of diagnostics pack ===</string>
+    <string name="dr_collected_at">Collected at: %1$s</string>
+    <string name="dr_sec_env">[Environment]</string>
+    <string name="dr_app_line">App: v%1$s (%2$s)  %3$s</string>
+    <string name="dr_mapping">mapping: %1$s (same name as Release asset)</string>
+    <string name="dr_version_code">versionCode: %1$d</string>
+    <string name="dr_integrity">Package signature: %1$s</string>
+    <string name="dr_system">System: Android %1$s (API %2$d)  %3$s %4$s (%5$s)</string>
+    <string name="dr_abi_locale">ABI: %1$s   Language: %2$s   Time zone: %3$s</string>
+    <string name="dr_screen">Screen: %1$s   %2$s</string>
+    <string name="dr_avail_mem">Available memory: %1$d MB%2$s</string>
+    <string name="dr_low_mem"> (system low-memory)</string>
+    <string name="dr_avail_storage">Available storage: %1$s</string>
+    <string name="dr_storage_mb">%1$d MB</string>
+    <string name="dr_query_failed">query failed</string>
+    <string name="dr_sec_perm">[Permissions]</string>
+    <string name="dr_notif_overlay">Notifications: %1$s   Overlay: %2$s</string>
+    <string name="dr_battery_wl">Battery optimization whitelist: %1$s</string>
+    <string name="dr_media_install">Read audio: %1$s   Install unknown apps: %2$s</string>
+    <string name="dr_a11y_usage">Accessibility service: %1$s (seen on before: %2$s)   Usage access: %3$s</string>
+    <string name="dr_sec_play">[Playback]</string>
+    <string name="dr_track">Track: %1$s</string>
+    <string name="dr_track_artist">Track: %1$s - %2$s</string>
+    <string name="dr_play_state">State: %1$s   Duration: %2$ds</string>
+    <string name="dr_playing">playing</string>
+    <string name="dr_paused">paused</string>
+    <string name="dr_play_mode">Mode: repeat=%1$d shuffle=%2$s   Source: %3$s</string>
+    <string name="dr_lyrics">Lyrics: %1$d lines   Offset: %2$dms   Scale: %3$s</string>
+    <string name="dr_sec_overlay">[Floating lyrics]</string>
+    <string name="dr_overlay_flags">On: %1$s   Full height: %2$s   Lines: %3$d</string>
+    <string name="dr_overlay_style">Text size: %1$dsp   When paused: %2$s   Hide list: %3$d apps</string>
+    <string name="dr_overlay_hide">hide</string>
+    <string name="dr_overlay_fade">fade</string>
+    <string name="dr_sec_library">[Library]</string>
+    <string name="dr_library_counts">Songs: %1$d   Visible in view: %2$d   Skipped unsupported: %3$d</string>
+    <string name="dr_library_scan">Scanning: %1$s   Status: %2$s</string>
+    <string name="dr_sec_events">[Event log (last %1$d, oldest→newest)]</string>
+    <string name="dr_events_empty">(empty: process just started, or service has not switched yet)</string>
+    <string name="dr_sec_forensics">[One-tap forensics]</string>
+    <string name="dr_forensics_script">--- Full script (copy to a computer) ---</string>
+    <string name="dr_src_local">%1$s (local)</string>
+    <string name="dr_src_online">%1$s (online)</string>
+    <string name="dr_src_unknown">%1$s (unknown)</string>
+    <string name="dr_gapless">Gapless: platform default on (Media3 single-instance continuous queue + per-track encoder delay/padding; no off API, settings page explains only; legacy dead pref=%1$s)</string>
+    <string name="dr_skip_silence">Skip silence: %1$s</string>
+    <string name="dr_skip_intro">Skip intro: %1$d s (0=off)</string>
+    <string name="dr_skip_outro">Skip outro: %1$d s (0=off)</string>
+
+    <!-- i18n batch 24: SoftEqProbe copy only (sep_*) — no SoftEq behavior change -->
+    <string name="sep_sec">[Soft EQ]</string>
+    <string name="sep_phase">Phase: %1$s</string>
+    <string name="sep_prefs_confirm">Prefs.softEqUserConfirm: %1$s</string>
+    <string name="sep_mem_confirm">In-memory confirm: %1$s%2$s</string>
+    <string name="sep_prefs_mismatch"> (differs from Prefs)</string>
+    <string name="sep_processor">Processor enabled: %1$s   Candidate: %2$s</string>
+    <string name="sep_spike">SoftEqSpike.ENABLED: %1$s</string>
+    <string name="sep_hard">Hard unavailable reason: %1$s</string>
+    <string name="sep_curve">Curve: %1$s</string>
+    <string name="sep_centers">Centers Hz: %1$s</string>
+    <string name="sep_note">Note: read-only summary; Prefs key soft_eq_user_confirm; only SOFT_ACTIVE actually filters; hard recovery forces soft off (never both).</string>
+    <string name="sep_phase_idle">idle</string>
+    <string name="sep_phase_candidate">candidate not enabled</string>
+    <string name="sep_phase_soft">soft path active</string>
+    <string name="sep_phase_hard">hard EQ preferred</string>
+    <string name="sep_phase_unknown">unknown</string>
+    <string name="sep_phase_fmt">%1$s (%2$s)</string>
+    <string name="sep_hard_none">NONE (none)</string>
+    <string name="sep_hard_session">SESSION_PENDING (awaiting session)</string>
+    <string name="sep_hard_device">DEVICE_REJECTED (device rejected)</string>
+    <string name="sep_curve_fmt">%1$s %2$s gains_mB=[%3$s] audible=%4$s</string>
+    <string name="sep_no_preset">(no preset id)</string>
+    <string name="sep_preset">preset=%1$s</string>
+    <string name="sep_on">on</string>
+    <string name="sep_off">off</string>
+    <string name="sep_empty">(empty)</string>
+
+    <!-- i18n batch 24: DefaultMusicProbe (dmp_*) -->
+    <string name="dmp_sec">[Default music candidacy]</string>
+    <string name="dmp_cat_music">① Music category (CATEGORY_APP_MUSIC): %1$s</string>
+    <string name="dmp_view_audio">② Open audio (VIEW audio/*): %1$s</string>
+    <string name="dmp_media_button">③ Media button (MEDIA_BUTTON): %1$s</string>
+    <string name="dmp_voice">④ Voice play (MEDIA_PLAY_FROM_SEARCH): %1$s</string>
+    <string name="dmp_hit">declared (system resolves this app)</string>
+    <string name="dmp_miss">not hit (this device does not resolve this app for this filter)</string>
+    <string name="dmp_fail">query failed (%1$s)</string>
+    <string name="dmp_unknown">unknown</string>
+    <string name="dmp_note1">Note: this section only proves candidacy as a music app. Whether it is the system default is set in the car UI;</string>
+    <string name="dmp_note2">      there is no standard query API. If the first three are “declared” but this app is still missing from the list,</string>
+    <string name="dmp_note3">      the car likely uses a private whitelist (see docs/竞品调研-车机音乐应用.md).</string>
 </resources>

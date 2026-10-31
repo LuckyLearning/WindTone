@@ -3,16 +3,18 @@ package com.luckylearning.windtone.diag
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.luckylearning.windtone.state.LibraryUiState
+import com.luckylearning.windtone.ui.AppStrings
 import com.luckylearning.windtone.state.PlayerUiState
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * 诊断包的版式与内容（v1.1.88）。
+ * 诊断包的版式与内容（v1.1.88；i18n 第 24 批外壳走 `dr_*`）。
  *
  * 这份文本是**唯一**的回传载体：用户在车机上问「为什么」，我们只能靠它判断。
  * 所以这里锁三件事：
@@ -21,10 +23,15 @@ import org.robolectric.annotation.Config
  *  3. 不能把 URL / token 这类东西带出去（只报音源类型）。
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+@Config(sdk = [34], application = Application::class, qualifiers = "zh-rCN")
 class DiagnosticsReportTest {
 
     private val context: Application = ApplicationProvider.getApplicationContext()
+
+    @Before
+    fun setUp() {
+        AppStrings.init(context)
+    }
 
     private fun report(): String = DiagnosticsReport.build(
         DiagnosticsReport.collect(

@@ -3,6 +3,8 @@ package com.luckylearning.windtone.diag
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import com.luckylearning.windtone.R
+import com.luckylearning.windtone.ui.AppStrings
 
 /**
  * 「默认音乐候选资格」自检（2026-10-27）。
@@ -22,6 +24,8 @@ import android.content.pm.PackageManager
  *
  * 另附 `MEDIA_PLAY_FROM_SEARCH`（语音点歌）的解析结果。**是否已是系统默认音乐
  * 没有标准 API 可查** —— 那一步只能去车机设置里看，这里只证明「我们是合格的候选」。
+ *
+ * i18n 第 24 批：用户可见句进 `dmp_*`。
  */
 object DefaultMusicProbe {
 
@@ -30,31 +34,27 @@ object DefaultMusicProbe {
         val pm = context.packageManager
         val self = context.packageName
         val sb = StringBuilder()
-        sb.appendLine("[默认音乐候选资格]")
+        sb.appendLine(AppStrings.s(R.string.dmp_sec))
 
-        // ① 音乐分类（启动器）
         val appMusic = Intent(Intent.ACTION_MAIN)
             .addCategory(Intent.CATEGORY_APP_MUSIC)
-        sb.appendLine("① 音乐分类（CATEGORY_APP_MUSIC）：${resolveSelf(pm, appMusic, self)}")
+        sb.appendLine(AppStrings.s(R.string.dmp_cat_music, resolveSelf(pm, appMusic, self)))
 
-        // ② 文件管理器点歌（audio/*）
         val viewAudio = Intent(Intent.ACTION_VIEW).apply {
             type = "audio/*"
             addCategory(Intent.CATEGORY_DEFAULT)
         }
-        sb.appendLine("② 打开音频（VIEW audio/*）：${resolveSelf(pm, viewAudio, self)}")
+        sb.appendLine(AppStrings.s(R.string.dmp_view_audio, resolveSelf(pm, viewAudio, self)))
 
-        // ③ 媒体按键（方控 / 耳机键）
         val mediaButton = Intent(Intent.ACTION_MEDIA_BUTTON)
-        sb.appendLine("③ 媒体按键（MEDIA_BUTTON）：${resolveSelf(pm, mediaButton, self)}")
+        sb.appendLine(AppStrings.s(R.string.dmp_media_button, resolveSelf(pm, mediaButton, self)))
 
-        // ④ 语音点歌
         val voiceSearch = Intent("android.media.action.MEDIA_PLAY_FROM_SEARCH")
-        sb.appendLine("④ 语音点歌（MEDIA_PLAY_FROM_SEARCH）：${resolveSelf(pm, voiceSearch, self)}")
+        sb.appendLine(AppStrings.s(R.string.dmp_voice, resolveSelf(pm, voiceSearch, self)))
 
-        sb.appendLine("说明：本段只证明「有资格被列为音乐应用」。是否已被设为默认音乐由车机设置决定，")
-        sb.appendLine("      没有可查询的标准接口；若前三项都是「已声明」，列表里仍看不到本应用，")
-        sb.appendLine("      说明该车机用的是自带白名单（见 docs/竞品调研-车机音乐应用.md）。")
+        sb.appendLine(AppStrings.s(R.string.dmp_note1))
+        sb.appendLine(AppStrings.s(R.string.dmp_note2))
+        sb.appendLine(AppStrings.s(R.string.dmp_note3))
         return sb.toString().trimEnd()
     }
 
@@ -77,9 +77,13 @@ object DefaultMusicProbe {
             }
         }
         return when {
-            result.isSuccess && result.getOrNull() == true -> "已声明（系统可解析到本应用）"
-            result.isSuccess -> "未命中（本条依据本机解析不到本应用）"
-            else -> "查询失败（${result.exceptionOrNull()?.javaClass?.simpleName ?: "未知"}）"
+            result.isSuccess && result.getOrNull() == true -> AppStrings.s(R.string.dmp_hit)
+            result.isSuccess -> AppStrings.s(R.string.dmp_miss)
+            else -> AppStrings.s(
+                R.string.dmp_fail,
+                result.exceptionOrNull()?.javaClass?.simpleName
+                    ?: AppStrings.s(R.string.dmp_unknown),
+            )
         }
     }
 }
