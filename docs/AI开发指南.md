@@ -169,7 +169,7 @@ LibraryViewModel   PlayerViewModel    UpdateViewModel    SettingsViewModel
 
 1. **只推代码到 `main`**：`bash scripts/push.sh origin main`（铁律 5 / §0.2：一律 `.github-token`，**禁止** GCM / Vault / `gh auth` 弹窗）。
 2. **禁止** `bash scripts/release.sh …`、禁止 `git tag` / 推 `v*`、禁止改 `appVersionName` / `appVersionCode` 冲发版。
-3. 功能继续合入 main；把「已合入、未出包」记进 [`待发版积压.md`](待发版积压.md)，真机勾选见 [`真机验证清单.md`](真机验证清单.md) **§5**。
+3. 功能继续合入 main；验证推 main 即可（不强制每项立刻发版）。若有「已合入、未出包」记进 [`待发版积压.md`](待发版积压.md)；真机勾选见 [`真机验证清单.md`](真机验证清单.md) **§5**。
 
 #### 额度恢复后
 

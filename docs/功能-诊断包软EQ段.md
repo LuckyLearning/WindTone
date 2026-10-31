@@ -23,4 +23,4 @@ Prefs 键：`soft_eq_user_confirm`。不含凭据与 URL。
 
 ## 状态
 
-代码已上 main；**发版等 GitHub Actions 额度**（禁止打 tag）。E6 真机 A/B 见 `docs/功能-软EQ.md`（未验车）。
+代码已随 **≥ v1.2.37** 出包。E6 真机 A/B 见 `docs/功能-软EQ.md`（未验车）。

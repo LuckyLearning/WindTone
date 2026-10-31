@@ -1,6 +1,6 @@
 # 功能：软 EQ（E5 Prefs + 诊断收口）
 
-> 状态：**main 未发版 / E5**（占位版本可跟 v1.2.38，**未改 versionName**）  
+> 状态：**已随 ≥ v1.2.37 出包 / E5 收口**（默认关；**E6 真机未勾**；`SoftEqSpike.ENABLED=false`）  
 > 日期：2026-10-31（Asia/Shanghai）  
 > Spike 结论：`docs/spike-软EQ.md`（有条件 GO）  
 > 代码：`playback/softEq/` + `diag/SoftEqProbe.kt`  
@@ -123,4 +123,4 @@ gradlew.bat :app:testDebugUnitTest --tests com.luckylearning.windtone.ui.SoftEqC
 
 ## 发版
 
-代码合入 main，**不打 tag**（GitHub Actions 额度满）。恢复额度后再发版。占位可记 v1.2.38，**未改 `versionName`**。
+代码已合入并随 **≥ v1.2.37** 用户包出；默认关。**E6 真机 A/B** 见 `真机验证清单.md` §5 R-03～R-05；通过前不对外承诺默认开启。

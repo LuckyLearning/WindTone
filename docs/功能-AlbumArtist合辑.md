@@ -42,4 +42,4 @@ title: 功能 · Album Artist 合辑浏览
 
 ## 版本
 
-代码已合入 **main**；**发版待 GitHub Actions 额度恢复**（本功能对应版本历史「main 未发版」条目，不打 tag）。
+代码已合入并随 **≥ v1.2.37** 出包。
