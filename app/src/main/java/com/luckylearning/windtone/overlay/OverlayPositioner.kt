@@ -2,6 +2,8 @@ package com.luckylearning.windtone.overlay
 
 import android.view.Gravity
 import kotlin.math.roundToInt
+import com.luckylearning.windtone.R
+import com.luckylearning.windtone.ui.AppStrings
 
 /**
  * 悬浮歌词窗口的摆放计算 —— 纯函数，不碰 `WindowManager` / `Prefs`。
@@ -82,11 +84,11 @@ object OverlayPositioner {
     fun offsetLabel(offsetPercent: Int): String {
         val v = offsetPercent.coerceIn(0, 100)
         return when {
-            v <= 2 -> "靠左"
-            v >= 98 -> "靠右"
-            kotlin.math.abs(v - 50) <= 2 -> "居中"
-            v < 50 -> "偏左 ${v}%"
-            else -> "偏右 ${v}%"
+            v <= 2 -> AppStrings.s(R.string.ovp_left).ifEmpty { "靠左" }
+            v >= 98 -> AppStrings.s(R.string.ovp_right).ifEmpty { "靠右" }
+            kotlin.math.abs(v - 50) <= 2 -> AppStrings.s(R.string.ovp_center).ifEmpty { "居中" }
+            v < 50 -> AppStrings.s(R.string.ovp_left_pct, v).ifEmpty { "偏左 ${v}%" }
+            else -> AppStrings.s(R.string.ovp_right_pct, v).ifEmpty { "偏右 ${v}%" }
         }
     }
 

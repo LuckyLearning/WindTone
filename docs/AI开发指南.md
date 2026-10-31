@@ -2391,3 +2391,12 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 - 相关单测 → Robolectric `zh-rCN` + `AppStrings.init`
 - 文档：`docs/功能-i18n诊断Probe扫尾.md`
 
+### i18n 第 26 批（2026-11-01）
+
+**全仓扫尾扫仓**：枚举旁路 label（`SortOrder`/`ScanScope`/`DownloadRoute`/`LibraryView`/`PlayMode`）+ 虚拟歌单/`LibraryBrowser` + Toast 簇（队列/歌单/多选/收藏/书签）+ 悬浮歌词通知/位置/提示（`ovn_*`/`ovp_*`/`ovs_*`）。`OverlayStateBinder` 的 HINT_* 改为运行时函数，避免早于 `AppStrings.init`。
+
+- SoftEq / 播放内核 / ProcStats 归类键本批不改
+- 相关单测：`VirtualPlaylistInfoTest`/`LibraryBrowserTest` 加 `@Config(qualifiers="zh")`；其余靠 `ifEmpty` 中文回落
+- 文档：`docs/功能-i18n扫尾扫仓.md`
+- **主路径近尾**；下一项产品建议：**长稳资源回归**
+

@@ -15,6 +15,8 @@ import com.luckylearning.windtone.data.UpdateInfo
 import com.luckylearning.windtone.data.buildListeningReport
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.lyrics.Lyrics
+import com.luckylearning.windtone.R
+import com.luckylearning.windtone.ui.AppStrings
 
 /**
  * 界面状态的**全部类型定义**。
@@ -27,15 +29,44 @@ import com.luckylearning.windtone.lyrics.Lyrics
 // ---------------------------------------------------------------- 曲库
 
 /** 库主视图：歌曲 / 专辑 / 歌手 / 合辑艺人 / 流派 / 年代 / 文件夹 / 歌单 */
-enum class LibraryView(val label: String) {
-    SONGS("歌曲"),
-    ALBUM("专辑"),
-    ARTIST("歌手"),
-    ALBUM_ARTIST("合辑艺人"),
-    GENRE("流派"),
-    YEAR("年代"),
-    FOLDER("文件夹"),
-    PLAYLIST("歌单");
+enum class LibraryView {
+    SONGS,
+    ALBUM,
+    ARTIST,
+    ALBUM_ARTIST,
+    GENRE,
+    YEAR,
+    FOLDER,
+    PLAYLIST,
+    ;
+
+    /** 非 Compose 兜底；主路径走 UiText.displayName / labelRes。 */
+    val label: String
+        get() {
+            val id = when (this) {
+                SONGS -> R.string.view_songs
+                ALBUM -> R.string.view_albums
+                ARTIST -> R.string.view_artists
+                ALBUM_ARTIST -> R.string.view_album_artists
+                GENRE -> R.string.view_genres
+                YEAR -> R.string.view_years
+                FOLDER -> R.string.view_folders
+                PLAYLIST -> R.string.view_playlists
+            }
+            val s = AppStrings.s(id)
+            return s.ifEmpty {
+                when (this) {
+                    SONGS -> "歌曲"
+                    ALBUM -> "专辑"
+                    ARTIST -> "歌手"
+                    ALBUM_ARTIST -> "合辑艺人"
+                    GENRE -> "流派"
+                    YEAR -> "年代"
+                    FOLDER -> "文件夹"
+                    PLAYLIST -> "歌单"
+                }
+            }
+        }
 
     companion object {
         /** 从持久化的名字还原，非法值回落到「歌曲」 */
@@ -119,21 +150,42 @@ fun recentlyAddedSongs(songs: List<Song>, limit: Int = 100): List<Song> {
  */
 fun virtualPlaylistInfo(id: Long, library: LibraryUiState): PlaylistInfo = when (id) {
     VirtualPlaylist.FAVORITES ->
-        PlaylistInfo(id, "我的收藏", library.extraFavorites.size, playlistCoverSongs(library.extraFavorites), virtual = true)
+        PlaylistInfo(
+            id,
+            AppStrings.s(R.string.vp_favorites).ifEmpty { "我的收藏" },
+            library.extraFavorites.size,
+            playlistCoverSongs(library.extraFavorites),
+            virtual = true,
+        )
 
     VirtualPlaylist.RECENT ->
-        PlaylistInfo(id, "最近播放", library.extraRecent.size, playlistCoverSongs(library.extraRecent), virtual = true)
+        PlaylistInfo(
+            id,
+            AppStrings.s(R.string.vp_recent).ifEmpty { "最近播放" },
+            library.extraRecent.size,
+            playlistCoverSongs(library.extraRecent),
+            virtual = true,
+        )
 
     VirtualPlaylist.RECENTLY_ADDED ->
         PlaylistInfo(
-            id, "最近添加", library.extraRecentlyAdded.size,
-            playlistCoverSongs(library.extraRecentlyAdded), virtual = true,
+            id,
+            AppStrings.s(R.string.vp_recently_added).ifEmpty { "最近添加" },
+            library.extraRecentlyAdded.size,
+            playlistCoverSongs(library.extraRecentlyAdded),
+            virtual = true,
         )
 
     VirtualPlaylist.MOST_PLAYED ->
-        PlaylistInfo(id, "最常播放", library.extraMostPlayed.size, playlistCoverSongs(library.extraMostPlayed), virtual = true)
+        PlaylistInfo(
+            id,
+            AppStrings.s(R.string.vp_most_played).ifEmpty { "最常播放" },
+            library.extraMostPlayed.size,
+            playlistCoverSongs(library.extraMostPlayed),
+            virtual = true,
+        )
 
-    else -> error("不是虚拟歌单：$id")
+    else -> error(AppStrings.s(R.string.vp_not_virtual, id).ifEmpty { "不是虚拟歌单：$id" })
 }
 
 /**
@@ -332,11 +384,22 @@ enum class PlayMode {
 
     /** 展示名，同时用作切换后的浮动提示文案 */
     val label: String
-        get() = when (this) {
-            SEQUENTIAL -> "顺序播放"
-            REPEAT_ALL -> "列表循环"
-            REPEAT_ONE -> "单曲循环"
-            SHUFFLE -> "随机播放"
+        get() {
+            val id = when (this) {
+                SEQUENTIAL -> R.string.play_mode_sequential
+                REPEAT_ALL -> R.string.play_mode_repeat_all
+                REPEAT_ONE -> R.string.play_mode_repeat_one
+                SHUFFLE -> R.string.play_mode_shuffle
+            }
+            val s = AppStrings.s(id)
+            return s.ifEmpty {
+                when (this) {
+                    SEQUENTIAL -> "顺序播放"
+                    REPEAT_ALL -> "列表循环"
+                    REPEAT_ONE -> "单曲循环"
+                    SHUFFLE -> "随机播放"
+                }
+            }
         }
 
     /**

@@ -12,6 +12,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.luckylearning.windtone.R
+import com.luckylearning.windtone.ui.AppStrings
 
 /**
  * 歌单域的**实现**（含四个虚拟歌单：最近播放 / 最近添加 / 最常播放 / 我的收藏）。
@@ -115,7 +117,7 @@ internal class PlaylistStore(private val session: LibrarySession) : PlaylistActi
                 pid
             }
             refreshPlaylists()
-            pushMessage("已创建歌单「$name」")
+            pushMessage(AppStrings.s(R.string.pls_created, name).ifEmpty { "已创建歌单「$name」" })
             onCreated(id)
         }
     }
@@ -135,7 +137,7 @@ internal class PlaylistStore(private val session: LibrarySession) : PlaylistActi
             withContext(Dispatchers.IO) { db.playlistDao().deletePlaylist(id) }
             closePlaylist()
             refreshPlaylists()
-            pushMessage("已删除歌单")
+            pushMessage(AppStrings.s(R.string.pls_deleted).ifEmpty { "已删除歌单" })
         }
     }
 
@@ -148,7 +150,7 @@ internal class PlaylistStore(private val session: LibrarySession) : PlaylistActi
             }
             refreshPlaylists()
             _library.value.selectedPlaylist?.takeIf { it.id == playlistId }?.let { openPlaylist(it) }
-            pushMessage("已加入歌单")
+            pushMessage(AppStrings.s(R.string.pls_added).ifEmpty { "已加入歌单" })
         }
     }
 
@@ -192,12 +194,12 @@ internal class PlaylistStore(private val session: LibrarySession) : PlaylistActi
         scope.launch {
             val current = _library.value.playlistSongs
             if (current.size < 2) {
-                pushMessage("歌单里没有重复歌曲")
+                pushMessage(AppStrings.s(R.string.pls_no_dupes).ifEmpty { "歌单里没有重复歌曲" })
                 return@launch
             }
             val remove = findDuplicateGroups(current).flatMap { it.duplicates }
             if (remove.isEmpty()) {
-                pushMessage("歌单里没有重复歌曲")
+                pushMessage(AppStrings.s(R.string.pls_no_dupes).ifEmpty { "歌单里没有重复歌曲" })
                 return@launch
             }
             val ids = remove.mapNotNull { idOf(it) }
@@ -209,7 +211,7 @@ internal class PlaylistStore(private val session: LibrarySession) : PlaylistActi
                 it.copy(playlistSongs = it.playlistSongs.filterNot { s -> s.stableKey in removedKeys })
             }
             refreshPlaylists()
-            pushMessage("已从歌单移除 ${remove.size} 首重复歌曲")
+            pushMessage(AppStrings.s(R.string.pls_removed_dupes, remove.size).ifEmpty { "已从歌单移除 ${remove.size} 首重复歌曲" })
         }
     }
 
@@ -222,18 +224,18 @@ internal class PlaylistStore(private val session: LibrarySession) : PlaylistActi
      */
     override fun createPlaylistFromQueue(name: String, queueKeys: List<String>) {
         if (queueKeys.isEmpty()) {
-            pushMessage("播放队列是空的")
+            pushMessage(AppStrings.s(R.string.pls_queue_empty).ifEmpty { "播放队列是空的" })
             return
         }
         val byKey = _library.value.songs.associateBy { it.stableKey }
         val songs = queueKeys.mapNotNull { byKey[it] }
         if (songs.isEmpty()) {
-            pushMessage("队列里的歌曲已不在曲库中")
+            pushMessage(AppStrings.s(R.string.pls_queue_gone).ifEmpty { "队列里的歌曲已不在曲库中" })
             return
         }
         createPlaylist(name, songs, {})
         val skipped = queueKeys.size - songs.size
-        if (skipped > 0) pushMessage("（已跳过 $skipped 首不在曲库中的条目）")
+        if (skipped > 0) pushMessage(AppStrings.s(R.string.pls_queue_skipped, skipped).ifEmpty { "（已跳过 $skipped 首不在曲库中的条目）" })
     }
 
     private fun pushMessage(text: String) = session.pushMessage(text)

@@ -7,6 +7,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import com.luckylearning.windtone.playback.ReplayGainMode
+import com.luckylearning.windtone.R
+import com.luckylearning.windtone.ui.AppStrings
 
 /**
  * 歌曲排序方式。
@@ -15,19 +17,51 @@ import com.luckylearning.windtone.playback.ReplayGainMode
  * `LibraryView.sortOptions` 裁剪（v1.1.4 起排序下沉到各视图，
  * 专辑列表不该出现「按时长」这种对它没意义的选项）。
  */
-enum class SortOrder(val label: String) {
-    TITLE("按标题"),
-    ARTIST("按歌手"),
-    ALBUM("按专辑"),
-    DURATION("按时长"),
-    DATE_ADDED("按添加时间"),
-    FILE_NAME("按文件名"),
+enum class SortOrder {
+    TITLE,
+    ARTIST,
+    ALBUM,
+    DURATION,
+    DATE_ADDED,
+    FILE_NAME,
 
     /** 文件夹视图专用：按目录完整路径排（同名目录靠它才能稳定区分） */
-    FOLDER_PATH("按路径"),
+    FOLDER_PATH,
 
     /** 歌单视图专用：保持 M3U 里写死的顺序（用户自己拖出来的那个顺序） */
-    PLAYLIST_ORDER("按歌单内顺序"),
+    PLAYLIST_ORDER,
+    ;
+
+    /**
+     * 非 Compose 兜底文案（Toast / 旁路）。界面主路径走 UiText.labelRes。
+     * AppStrings 未就绪时回落中文，避免进程早期空串。
+     */
+    val label: String
+        get() {
+            val id = when (this) {
+                TITLE -> R.string.sort_title
+                ARTIST -> R.string.sort_artist
+                ALBUM -> R.string.sort_album
+                DURATION -> R.string.sort_duration
+                DATE_ADDED -> R.string.sort_date_added
+                FILE_NAME -> R.string.sort_file_name
+                FOLDER_PATH -> R.string.sort_folder_path
+                PLAYLIST_ORDER -> R.string.sort_playlist_order
+            }
+            val s = AppStrings.s(id)
+            return s.ifEmpty {
+                when (this) {
+                    TITLE -> "按标题"
+                    ARTIST -> "按歌手"
+                    ALBUM -> "按专辑"
+                    DURATION -> "按时长"
+                    DATE_ADDED -> "按添加时间"
+                    FILE_NAME -> "按文件名"
+                    FOLDER_PATH -> "按路径"
+                    PLAYLIST_ORDER -> "按歌单内顺序"
+                }
+            }
+        }
 }
 
 /**
@@ -429,10 +463,28 @@ object SettingsDefaults {
  *  - [FULL]：扫描全盘（系统媒体库 + 已授权时附带深度文件扫描）
  *  - [FOLDERS]：只扫描用户导入的目录（SAF）
  */
-enum class ScanScope(val label: String) {
-    UNSET("未选择"),
-    FULL("全盘扫描"),
-    FOLDERS("指定目录"),
+enum class ScanScope {
+    UNSET,
+    FULL,
+    FOLDERS,
+    ;
+
+    val label: String
+        get() {
+            val id = when (this) {
+                UNSET -> R.string.scope_unset
+                FULL -> R.string.scope_full
+                FOLDERS -> R.string.scope_folders
+            }
+            val s = AppStrings.s(id)
+            return s.ifEmpty {
+                when (this) {
+                    UNSET -> "未选择"
+                    FULL -> "全盘扫描"
+                    FOLDERS -> "指定目录"
+                }
+            }
+        }
 }
 
 /**
@@ -449,21 +501,64 @@ enum class ScanScope(val label: String) {
  * [prefix] 为 `null` 表示「自动」（直链 + 全部镜像）；空串表示只走直链；
  * 其余为镜像前缀（给原始 github.com 地址拼前缀即生效）。
  */
-enum class DownloadRoute(val label: String, val hint: String, val prefix: String?) {
+enum class DownloadRoute(val prefix: String?) {
     /**
      * 自动：国内优先（jsDelivr Fastly/Gcore → gh-proxy → ghproxy → 官方直连兜底）。
      * [prefix] = null。
      */
-    AUTO("自动", "国内优先 CDN/镜像，失败再试官方", null),
+    AUTO(null),
     /** 只用 raw.githubusercontent.com；国内常慢或超时。prefix 空串。 */
-    DIRECT("直连 GitHub", "只用官方地址，最及时；国内可能较慢", ""),
+    DIRECT(""),
     /**
      * jsDelivr CDN（fastly 节点）。prefix 以 `jsdelivr:` 开头，不是 URL 前缀拼接。
      * 本机 2026-10 实测国内可达性明显好于 raw / 部分 ghproxy。
      */
-    JSDELIVR("jsDelivr CDN", "国内节点较快，偶有缓存延迟", "jsdelivr:fastly"),
-    GH_PROXY_COM("gh-proxy.com", "公共加速镜像", "https://gh-proxy.com/"),
-    GHPROXY_NET("ghproxy.net", "公共加速镜像，备用", "https://ghproxy.net/"),
+    JSDELIVR("jsdelivr:fastly"),
+    GH_PROXY_COM("https://gh-proxy.com/"),
+    GHPROXY_NET("https://ghproxy.net/"),
+    ;
+
+    val label: String
+        get() {
+            val id = when (this) {
+                AUTO -> R.string.drt_auto
+                DIRECT -> R.string.drt_direct
+                JSDELIVR -> R.string.drt_jsdelivr
+                GH_PROXY_COM -> R.string.drt_gh_proxy_com
+                GHPROXY_NET -> R.string.drt_ghproxy_net
+            }
+            val s = AppStrings.s(id)
+            return s.ifEmpty {
+                when (this) {
+                    AUTO -> "自动"
+                    DIRECT -> "直连 GitHub"
+                    JSDELIVR -> "jsDelivr CDN"
+                    GH_PROXY_COM -> "gh-proxy.com"
+                    GHPROXY_NET -> "ghproxy.net"
+                }
+            }
+        }
+
+    val hint: String
+        get() {
+            val id = when (this) {
+                AUTO -> R.string.drt_auto_hint
+                DIRECT -> R.string.drt_direct_hint
+                JSDELIVR -> R.string.drt_jsdelivr_hint
+                GH_PROXY_COM -> R.string.drt_gh_proxy_com_hint
+                GHPROXY_NET -> R.string.drt_ghproxy_net_hint
+            }
+            val s = AppStrings.s(id)
+            return s.ifEmpty {
+                when (this) {
+                    AUTO -> "国内优先 CDN/镜像，失败再试官方"
+                    DIRECT -> "只用官方地址，最及时；国内可能较慢"
+                    JSDELIVR -> "国内节点较快，偶有缓存延迟"
+                    GH_PROXY_COM -> "公共加速镜像"
+                    GHPROXY_NET -> "公共加速镜像，备用"
+                }
+            }
+        }
 }
 
 /**

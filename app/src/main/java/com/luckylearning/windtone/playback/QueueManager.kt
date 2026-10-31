@@ -7,6 +7,8 @@ import com.luckylearning.windtone.state.QueueEntry
 import com.luckylearning.windtone.state.playModeOf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import com.luckylearning.windtone.R
+import com.luckylearning.windtone.ui.AppStrings
 
 /**
  * 播放队列的所有增删 / 跳转 / 乱序 / 模式操作。
@@ -124,7 +126,7 @@ class QueueManager(
         }
         host.notifyQueueSize(c.mediaItemCount)
         host.persistQueue()
-        host.postMessage("已加入播放队列：${song.title}")
+        host.postMessage(AppStrings.s(R.string.qm_added_play_next, song.title).ifEmpty { "已加入播放队列：${song.title}" })
     }
 
     /**
@@ -137,7 +139,7 @@ class QueueManager(
             val existing = (0 until c.mediaItemCount).map { c.getMediaItemAt(it).mediaId }.toSet()
             val fresh = QueuePolicies.enqueueNewSongs(songs, existing)
             if (fresh.isEmpty()) {
-                host.postMessage("所选歌曲都在播放队列里了")
+                host.postMessage(AppStrings.s(R.string.qm_all_already_in_queue).ifEmpty { "所选歌曲都在播放队列里了" })
                 return@act
             }
             c.addMediaItems(fresh.map { toMediaItem(it) })
@@ -176,7 +178,7 @@ class QueueManager(
     /** A3：清空播放队列。空队列只提示。不改播放模式。 */
     fun clearQueue() = act { c ->
         if (c.mediaItemCount == 0) {
-            host.postMessage("播放队列是空的")
+            host.postMessage(AppStrings.s(R.string.qm_queue_empty).ifEmpty { "播放队列是空的" })
             return@act
         }
         c.setMediaItems(emptyList(), 0, 0L)
@@ -184,7 +186,7 @@ class QueueManager(
         host.notifyQueueSize(0)
         host.persistQueue()
         refreshQueue()
-        host.postMessage("已清空播放队列")
+        host.postMessage(AppStrings.s(R.string.qm_queue_cleared).ifEmpty { "已清空播放队列" })
     }
 
     /**
@@ -194,11 +196,11 @@ class QueueManager(
     fun shuffleQueueOrder(random: kotlin.random.Random = kotlin.random.Random.Default) = act { c ->
         val n = c.mediaItemCount
         if (n == 0) {
-            host.postMessage("播放队列是空的")
+            host.postMessage(AppStrings.s(R.string.qm_queue_empty).ifEmpty { "播放队列是空的" })
             return@act
         }
         if (n == 1) {
-            host.postMessage("队列只有一首，无需打乱")
+            host.postMessage(AppStrings.s(R.string.qm_queue_one_no_shuffle).ifEmpty { "队列只有一首，无需打乱" })
             return@act
         }
         val items = (0 until n).map { c.getMediaItemAt(it) }
@@ -211,7 +213,7 @@ class QueueManager(
         if (wasPlaying) c.play()
         host.persistQueue()
         refreshQueue()
-        host.postMessage("已打乱队列顺序")
+        host.postMessage(AppStrings.s(R.string.qm_queue_shuffled).ifEmpty { "已打乱队列顺序" })
     }
 
 

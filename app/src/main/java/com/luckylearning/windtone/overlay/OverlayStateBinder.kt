@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.launch
+import com.luckylearning.windtone.R
+import com.luckylearning.windtone.ui.AppStrings
 
 /**
  * 悬浮窗「状态接线」：把引擎的各路 StateFlow（内容 / 编辑态 / 前台态 / 预览态 / 外观版本 /
@@ -49,13 +51,19 @@ class OverlayStateBinder(
      */
     private val MAX_FULL_LINES_CAP = 80
 
-    /** 调整态 / 预览态在无歌词时显示的提示行 */
-    private val HINT_EDITING =
-        OverlayTextComposer.StyledLine("拖动到合适位置，松手即保存", OverlayTextComposer.Role.CONTEXT)
-    private val HINT_EDITING_FULL =
-        OverlayTextComposer.StyledLine("左右拖动调整位置，双击锁定", OverlayTextComposer.Role.CONTEXT)
-    private val HINT_PREVIEW =
-        OverlayTextComposer.StyledLine("悬浮歌词已开启，退到桌面后持续显示", OverlayTextComposer.Role.CONTEXT)
+    /** 调整态 / 预览态在无歌词时显示的提示行（运行时取串，避免早于 AppStrings.init） */
+    private fun hintEditing() = OverlayTextComposer.StyledLine(
+        AppStrings.s(R.string.ovs_hint_edit).ifEmpty { "拖动到合适位置，松手即保存" },
+        OverlayTextComposer.Role.CONTEXT,
+    )
+    private fun hintEditingFull() = OverlayTextComposer.StyledLine(
+        AppStrings.s(R.string.ovs_hint_edit_full).ifEmpty { "左右拖动调整位置，双击锁定" },
+        OverlayTextComposer.Role.CONTEXT,
+    )
+    private fun hintPreview() = OverlayTextComposer.StyledLine(
+        AppStrings.s(R.string.ovs_hint_preview).ifEmpty { "悬浮歌词已开启，退到桌面后持续显示" },
+        OverlayTextComposer.Role.CONTEXT,
+    )
 
     /** 订阅各路状态并逐帧重算窗口外观 / 可见性；重复调用会先取消上一次订阅 */
     fun observe() {
@@ -171,8 +179,8 @@ class OverlayStateBinder(
                         // 而不是排版选择——能拿到双语歌词的用户本来就想要它。
                         showTranslation = true,
                     )
-                    isEditing -> listOf(if (full) HINT_EDITING_FULL else HINT_EDITING)
-                    else -> listOf(HINT_PREVIEW)
+                    isEditing -> listOf(if (full) hintEditingFull() else hintEditing())
+                    else -> listOf(hintPreview())
                 }
                 // 行数上限按实际要画的行数放宽（每行都可能折成两行）；
                 // 全屏模式窗口更窄时可能折三行，额度按 3 倍给。

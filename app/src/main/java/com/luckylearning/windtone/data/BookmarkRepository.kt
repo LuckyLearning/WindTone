@@ -8,6 +8,8 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.atomic.AtomicLong
+import com.luckylearning.windtone.R
+import com.luckylearning.windtone.ui.AppStrings
 
 /**
  * 长曲播放书签一条记录（H3）。
@@ -57,7 +59,7 @@ class BookmarkRepository(
     ): PlaybackBookmark? {
         val key = song.stableKey.trim()
         if (key.isEmpty()) {
-            if (announce) messages.post("无法记书签")
+            if (announce) messages.post(AppStrings.s(R.string.bmk_fail).ifEmpty { "无法记书签" })
             return null
         }
         val pos = positionMs.coerceAtLeast(0L)
@@ -75,7 +77,7 @@ class BookmarkRepository(
             all[key] = list
             save(all)
         }
-        if (announce) messages.post("已记书签 · ${formatClock(pos)}")
+        if (announce) messages.post(AppStrings.s(R.string.bmk_saved, formatClock(pos)).ifEmpty { "已记书签 · ${formatClock(pos)}" })
         return row
     }
 
@@ -92,7 +94,7 @@ class BookmarkRepository(
             }
             if (changed) save(all)
         }
-        if (announce) messages.post("已删除书签")
+        if (announce) messages.post(AppStrings.s(R.string.bmk_deleted).ifEmpty { "已删除书签" })
     }
 
     /** 测试 / 诊断：清空全部书签 */

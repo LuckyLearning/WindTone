@@ -9,6 +9,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
  * 四个虚拟歌单的展示条目（v1.1.13 新增 [virtualPlaylistInfo]；A5 加「最近添加」）。
@@ -27,6 +28,7 @@ import org.robolectric.RobolectricTestRunner
  * 用 Robolectric 是因为 [Song] 的 `uri` 是 `android.net.Uri`（纯 JVM 下没法构造）。
  */
 @RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], qualifiers = "zh")
 class VirtualPlaylistInfoTest {
 
     private fun song(id: Long, title: String) = Song(

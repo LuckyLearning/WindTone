@@ -1820,4 +1820,76 @@ Expired codes refresh automatically. This app is read-only — it never uploads,
     <string name="fs_done">echo &quot;Forensics done: $OUT&quot;</string>
     <string name="fs_retrace"># Retrace (place Release mapping-v%1$s.txt in cwd first):</string>
     <string name="fs_hint">Settings → About &amp; diagnostics → \"One-tap forensics\" copies the full adb script (package %1$s, mapping-v%2$s).</string>
+
+    <!-- i18n batch 26: sweep — enum labels / virtual playlists / toasts / overlay -->
+    <string name="scope_unset">Not set</string>
+    <string name="scope_full">Entire device</string>
+    <string name="scope_folders">Selected folders</string>
+
+    <string name="drt_auto">Auto</string>
+    <string name="drt_auto_hint">Prefer CDN/mirrors in China; fall back to GitHub</string>
+    <string name="drt_direct">GitHub direct</string>
+    <string name="drt_direct_hint">Official only; freshest; may be slow in China</string>
+    <string name="drt_jsdelivr">jsDelivr CDN</string>
+    <string name="drt_jsdelivr_hint">Faster in China; occasional cache lag</string>
+    <string name="drt_gh_proxy_com">gh-proxy.com</string>
+    <string name="drt_gh_proxy_com_hint">Public mirror</string>
+    <string name="drt_ghproxy_net">ghproxy.net</string>
+    <string name="drt_ghproxy_net_hint">Public mirror (backup)</string>
+
+    <string name="vp_favorites">Favorites</string>
+    <string name="vp_recent">Recently played</string>
+    <string name="vp_recently_added">Recently added</string>
+    <string name="vp_most_played">Most played</string>
+    <string name="vp_not_virtual">Not a virtual playlist: %1$d</string>
+    <string name="vp_app_root">WindTone</string>
+    <string name="vp_song_count">%1$d songs</string>
+
+    <string name="qm_added_play_next">Added to queue: %1$s</string>
+    <string name="qm_all_already_in_queue">All selected songs are already in the queue</string>
+    <string name="qm_queue_empty">The play queue is empty</string>
+    <string name="qm_queue_cleared">Play queue cleared</string>
+    <string name="qm_queue_one_no_shuffle">Only one song in the queue — nothing to shuffle</string>
+    <string name="qm_queue_shuffled">Queue order shuffled</string>
+
+    <string name="pls_created">Playlist created: %1$s</string>
+    <string name="pls_deleted">Playlist deleted</string>
+    <string name="pls_added">Added to playlist</string>
+    <string name="pls_no_dupes">No duplicate songs in this playlist</string>
+    <string name="pls_removed_dupes">Removed %1$d duplicate songs from the playlist</string>
+    <string name="pls_queue_empty">The play queue is empty</string>
+    <string name="pls_queue_gone">Songs in the queue are no longer in the library</string>
+    <string name="pls_queue_skipped">(%1$d queue entries not in the library were skipped)</string>
+
+    <string name="sel_added_to_playlist">Added %1$d songs to “%2$s”</string>
+    <string name="sel_favorited_n">Favorited %1$d songs</string>
+    <string name="sel_unfavorited_n">Removed %1$d songs from favorites</string>
+    <string name="sel_added_to_queue">Added %1$d songs to the play queue</string>
+    <string name="sel_removed_from_library">Removed %1$d songs from the library (files and favorites kept; restore in Settings)</string>
+    <string name="sel_none_excluded">No songs were removed from the library</string>
+    <string name="sel_restored_rescanning">Restored %1$d songs; rescanning…</string>
+
+    <string name="fav_on_titled">Favorited “%1$s”</string>
+    <string name="fav_on">Favorited</string>
+    <string name="fav_off">Removed from favorites</string>
+
+    <string name="bmk_fail">Could not save bookmark</string>
+    <string name="bmk_saved">Bookmark saved · %1$s</string>
+    <string name="bmk_deleted">Bookmark deleted</string>
+
+    <string name="ovn_channel">Floating lyrics</string>
+    <string name="ovn_channel_desc">Show the current lyric line above other apps</string>
+    <string name="ovn_title">Floating lyrics on</string>
+    <string name="ovn_text">Shows the current lyric line on the home screen</string>
+    <string name="ovn_toggle">Collapse / expand</string>
+
+    <string name="ovp_left">Left</string>
+    <string name="ovp_right">Right</string>
+    <string name="ovp_center">Center</string>
+    <string name="ovp_left_pct">%1$d%% left of center</string>
+    <string name="ovp_right_pct">%1$d%% right of center</string>
+
+    <string name="ovs_hint_edit">Drag to position; release to save</string>
+    <string name="ovs_hint_edit_full">Drag sideways to move; double-tap to lock</string>
+    <string name="ovs_hint_preview">Floating lyrics on — stays visible on the home screen</string>
 </resources>

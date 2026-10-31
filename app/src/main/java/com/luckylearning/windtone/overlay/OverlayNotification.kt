@@ -30,8 +30,12 @@ internal object OverlayNotification {
             nm?.getNotificationChannel(CHANNEL_ID) == null
         ) {
             nm?.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "悬浮歌词", NotificationManager.IMPORTANCE_MIN).apply {
-                    description = "在桌面最上层显示当前歌词行"
+                NotificationChannel(
+                    CHANNEL_ID,
+                    context.getString(R.string.ovn_channel),
+                    NotificationManager.IMPORTANCE_MIN,
+                ).apply {
+                    description = context.getString(R.string.ovn_channel_desc)
                     setShowBadge(false)
                 },
             )
@@ -58,11 +62,11 @@ internal object OverlayNotification {
 
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_widget_music)
-            .setContentTitle("悬浮歌词已开启")
-            .setContentText("退到桌面后显示当前歌词行")
+            .setContentTitle(context.getString(R.string.ovn_title))
+            .setContentText(context.getString(R.string.ovn_text))
             .setContentIntent(openApp)
             .setOngoing(true)
-            .addAction(0, "收起 / 展开", toggle)
+            .addAction(0, context.getString(R.string.ovn_toggle), toggle)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .build()

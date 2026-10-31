@@ -7,6 +7,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.luckylearning.windtone.R
+import com.luckylearning.windtone.ui.AppStrings
 
 /**
  * 批量多选域的**实现**（多选态、全选 / 反选、以及底部操作栏的批量动作）。
@@ -77,7 +79,7 @@ internal class SelectionController(private val session: LibrarySession) : Select
             }
             session.playlists.refreshPlaylists()
             _library.value.selectedPlaylist?.takeIf { it.id == playlistId }?.let { session.playlists.openPlaylist(it) }
-            pushMessage("已把 ${songs.size} 首加入「$playlistName」")
+            pushMessage(AppStrings.s(R.string.sel_added_to_playlist, songs.size, playlistName).ifEmpty { "已把 ${songs.size} 首加入「$playlistName」" })
             exitSelection()
         }
     }
@@ -108,7 +110,7 @@ internal class SelectionController(private val session: LibrarySession) : Select
                 )
             }
             session.playlists.refreshPlaylists()
-            pushMessage(if (favorite) "已收藏 ${songs.size} 首" else "已取消收藏 ${songs.size} 首")
+            pushMessage(if (favorite) AppStrings.s(R.string.sel_favorited_n, songs.size).ifEmpty { "已收藏 ${songs.size} 首" } else AppStrings.s(R.string.sel_unfavorited_n, songs.size).ifEmpty { "已取消收藏 ${songs.size} 首" })
             exitSelection()
         }
     }
@@ -118,7 +120,7 @@ internal class SelectionController(private val session: LibrarySession) : Select
         val songs = selectedSongs()
         if (songs.isEmpty()) return
         playback.enqueue(songs)
-        pushMessage("已把 ${songs.size} 首加入播放队列")
+        pushMessage(AppStrings.s(R.string.sel_added_to_queue, songs.size).ifEmpty { "已把 ${songs.size} 首加入播放队列" })
         exitSelection()
     }
 
@@ -138,7 +140,7 @@ internal class SelectionController(private val session: LibrarySession) : Select
             }
             playback.removeFromQueue(songs)
             session.core.applyRemovedFromMemory(songs)
-            pushMessage("已把 ${songs.size} 首移出曲库（文件与收藏都还在，可在设置里恢复）")
+            pushMessage(AppStrings.s(R.string.sel_removed_from_library, songs.size).ifEmpty { "已把 ${songs.size} 首移出曲库（文件与收藏都还在，可在设置里恢复）" })
             exitSelection()
         }
     }
@@ -155,10 +157,10 @@ internal class SelectionController(private val session: LibrarySession) : Select
                 }
             }
             if (n == 0) {
-                pushMessage("没有被移出曲库的歌曲")
+                pushMessage(AppStrings.s(R.string.sel_none_excluded).ifEmpty { "没有被移出曲库的歌曲" })
                 return@launch
             }
-            pushMessage("已恢复 $n 首，正在重新扫描…")
+            pushMessage(AppStrings.s(R.string.sel_restored_rescanning, n).ifEmpty { "已恢复 $n 首，正在重新扫描…" })
             session.core.scan(false)
         }
     }

@@ -1786,4 +1786,76 @@
     <string name="fs_done">echo &quot;取证完成：$OUT&quot;</string>
     <string name="fs_retrace"># 还原混淆栈（把 Release 上的 mapping-v%1$s.txt 放到当前目录后）：</string>
     <string name="fs_hint">设置 → 关于与诊断 →「一键取证」可复制完整 adb 脚本（包名 %1$s，mapping-v%2$s）。</string>
+
+    <!-- i18n 第 26 批：扫尾 — 枚举残标 / 虚拟歌单 / Toast / 悬浮通知 -->
+    <string name="scope_unset">未选择</string>
+    <string name="scope_full">全盘扫描</string>
+    <string name="scope_folders">指定目录</string>
+
+    <string name="drt_auto">自动</string>
+    <string name="drt_auto_hint">国内优先 CDN/镜像，失败再试官方</string>
+    <string name="drt_direct">直连 GitHub</string>
+    <string name="drt_direct_hint">只用官方地址，最及时；国内可能较慢</string>
+    <string name="drt_jsdelivr">jsDelivr CDN</string>
+    <string name="drt_jsdelivr_hint">国内节点较快，偶有缓存延迟</string>
+    <string name="drt_gh_proxy_com">gh-proxy.com</string>
+    <string name="drt_gh_proxy_com_hint">公共加速镜像</string>
+    <string name="drt_ghproxy_net">ghproxy.net</string>
+    <string name="drt_ghproxy_net_hint">公共加速镜像，备用</string>
+
+    <string name="vp_favorites">我的收藏</string>
+    <string name="vp_recent">最近播放</string>
+    <string name="vp_recently_added">最近添加</string>
+    <string name="vp_most_played">最常播放</string>
+    <string name="vp_not_virtual">不是虚拟歌单：%1$d</string>
+    <string name="vp_app_root">听风</string>
+    <string name="vp_song_count">%1$d 首</string>
+
+    <string name="qm_added_play_next">已加入播放队列：%1$s</string>
+    <string name="qm_all_already_in_queue">所选歌曲都在播放队列里了</string>
+    <string name="qm_queue_empty">播放队列是空的</string>
+    <string name="qm_queue_cleared">已清空播放队列</string>
+    <string name="qm_queue_one_no_shuffle">队列只有一首，无需打乱</string>
+    <string name="qm_queue_shuffled">已打乱队列顺序</string>
+
+    <string name="pls_created">已创建歌单「%1$s」</string>
+    <string name="pls_deleted">已删除歌单</string>
+    <string name="pls_added">已加入歌单</string>
+    <string name="pls_no_dupes">歌单里没有重复歌曲</string>
+    <string name="pls_removed_dupes">已从歌单移除 %1$d 首重复歌曲</string>
+    <string name="pls_queue_empty">播放队列是空的</string>
+    <string name="pls_queue_gone">队列里的歌曲已不在曲库中</string>
+    <string name="pls_queue_skipped">（已跳过 %1$d 首不在曲库中的条目）</string>
+
+    <string name="sel_added_to_playlist">已把 %1$d 首加入「%2$s」</string>
+    <string name="sel_favorited_n">已收藏 %1$d 首</string>
+    <string name="sel_unfavorited_n">已取消收藏 %1$d 首</string>
+    <string name="sel_added_to_queue">已把 %1$d 首加入播放队列</string>
+    <string name="sel_removed_from_library">已把 %1$d 首移出曲库（文件与收藏都还在，可在设置里恢复）</string>
+    <string name="sel_none_excluded">没有被移出曲库的歌曲</string>
+    <string name="sel_restored_rescanning">已恢复 %1$d 首，正在重新扫描…</string>
+
+    <string name="fav_on_titled">已收藏「%1$s」</string>
+    <string name="fav_on">已收藏</string>
+    <string name="fav_off">已取消收藏</string>
+
+    <string name="bmk_fail">无法记书签</string>
+    <string name="bmk_saved">已记书签 · %1$s</string>
+    <string name="bmk_deleted">已删除书签</string>
+
+    <string name="ovn_channel">悬浮歌词</string>
+    <string name="ovn_channel_desc">在桌面最上层显示当前歌词行</string>
+    <string name="ovn_title">悬浮歌词已开启</string>
+    <string name="ovn_text">退到桌面后显示当前歌词行</string>
+    <string name="ovn_toggle">收起 / 展开</string>
+
+    <string name="ovp_left">靠左</string>
+    <string name="ovp_right">靠右</string>
+    <string name="ovp_center">居中</string>
+    <string name="ovp_left_pct">偏左 %1$d%%</string>
+    <string name="ovp_right_pct">偏右 %1$d%%</string>
+
+    <string name="ovs_hint_edit">拖动到合适位置，松手即保存</string>
+    <string name="ovs_hint_edit_full">左右拖动调整位置，双击锁定</string>
+    <string name="ovs_hint_preview">悬浮歌词已开启，退到桌面后持续显示</string>
 </resources>

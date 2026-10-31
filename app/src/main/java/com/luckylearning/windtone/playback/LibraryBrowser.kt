@@ -9,6 +9,8 @@ import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.data.model.TrackFragment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.luckylearning.windtone.R
+import com.luckylearning.windtone.ui.AppStrings
 
 /**
  * 车机 / 外部媒体浏览器（Android Auto、车机自带媒体面板）的**浏览树**。
@@ -72,7 +74,7 @@ internal fun browseRootItem(): MediaItem = MediaItem.Builder()
     .setMediaId(BrowseIds.ROOT)
     .setMediaMetadata(
         MediaMetadata.Builder()
-            .setTitle("听风")
+            .setTitle(AppStrings.s(R.string.vp_app_root).ifEmpty { "听风" })
             .setIsBrowsable(true)
             .setIsPlayable(false)
             .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
@@ -92,7 +94,7 @@ internal fun browseFolderItem(mediaId: String, title: String, songCount: Int): M
         .setMediaMetadata(
             MediaMetadata.Builder()
                 .setTitle(title)
-                .setSubtitle("$songCount 首")
+                .setSubtitle(AppStrings.s(R.string.vp_song_count, songCount).ifEmpty { "$songCount 首" })
                 .setIsBrowsable(true)
                 .setIsPlayable(true)
                 .setMediaType(MediaMetadata.MEDIA_TYPE_PLAYLIST)
@@ -182,16 +184,16 @@ internal class LibraryBrowser(
         when {
             mediaId == BrowseIds.ROOT -> browseRootItem()
             mediaId == BrowseIds.FAVORITES -> browseFolderItem(
-                mediaId, "我的收藏", store.favoriteIdsByRecent().size,
+                mediaId, AppStrings.s(R.string.vp_favorites).ifEmpty { "我的收藏" }, store.favoriteIdsByRecent().size,
             )
             mediaId == BrowseIds.RECENT -> browseFolderItem(
-                mediaId, "最近播放", store.recentIds(VIRTUAL_LIMIT).size,
+                mediaId, AppStrings.s(R.string.vp_recent).ifEmpty { "最近播放" }, store.recentIds(VIRTUAL_LIMIT).size,
             )
             mediaId == BrowseIds.RECENTLY_ADDED -> browseFolderItem(
-                mediaId, "最近添加", store.recentlyAddedIds(VIRTUAL_LIMIT).size,
+                mediaId, AppStrings.s(R.string.vp_recently_added).ifEmpty { "最近添加" }, store.recentlyAddedIds(VIRTUAL_LIMIT).size,
             )
             mediaId == BrowseIds.MOST_PLAYED -> browseFolderItem(
-                mediaId, "最常播放", store.mostPlayedIds(VIRTUAL_LIMIT).size,
+                mediaId, AppStrings.s(R.string.vp_most_played).ifEmpty { "最常播放" }, store.mostPlayedIds(VIRTUAL_LIMIT).size,
             )
             else -> BrowseIds.playlistIdOf(mediaId)?.let { id ->
                 store.playlist(id)?.let {
@@ -292,16 +294,16 @@ internal class LibraryBrowser(
         val linkCounts = store.playlistLinkCounts()
         val virtual = listOf(
             browseFolderItem(
-                BrowseIds.FAVORITES, "我的收藏", store.favoriteIdsByRecent().size,
+                BrowseIds.FAVORITES, AppStrings.s(R.string.vp_favorites).ifEmpty { "我的收藏" }, store.favoriteIdsByRecent().size,
             ),
             browseFolderItem(
-                BrowseIds.RECENT, "最近播放", store.recentIds(VIRTUAL_LIMIT).size,
+                BrowseIds.RECENT, AppStrings.s(R.string.vp_recent).ifEmpty { "最近播放" }, store.recentIds(VIRTUAL_LIMIT).size,
             ),
             browseFolderItem(
-                BrowseIds.RECENTLY_ADDED, "最近添加", store.recentlyAddedIds(VIRTUAL_LIMIT).size,
+                BrowseIds.RECENTLY_ADDED, AppStrings.s(R.string.vp_recently_added).ifEmpty { "最近添加" }, store.recentlyAddedIds(VIRTUAL_LIMIT).size,
             ),
             browseFolderItem(
-                BrowseIds.MOST_PLAYED, "最常播放", store.mostPlayedIds(VIRTUAL_LIMIT).size,
+                BrowseIds.MOST_PLAYED, AppStrings.s(R.string.vp_most_played).ifEmpty { "最常播放" }, store.mostPlayedIds(VIRTUAL_LIMIT).size,
             ),
         )
         val user = store.allPlaylists().map { p ->

@@ -21,6 +21,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
  * 车机浏览树的回归（批次 9.1 遗留：车机媒体面板看不到歌单层级）。
@@ -36,6 +37,7 @@ import org.robolectric.RobolectricTestRunner
  *  ③ 真实 Room 上的取数（顺序、分页、过滤、展开）。
  */
 @RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], qualifiers = "zh")
 class LibraryBrowserTest {
 
     private lateinit var context: Context

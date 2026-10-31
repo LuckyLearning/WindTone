@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.withContext
+import com.luckylearning.windtone.R
+import com.luckylearning.windtone.ui.AppStrings
 
 /**
  * 收藏切换的**唯一落盘入口**（应用内红心、快捷磁贴共用）。
@@ -122,9 +124,10 @@ class FavoriteToggle(
         val label = title?.takeIf { it.isNotBlank() }
         messages.post(
             when {
-                favorite && label != null -> "已收藏「$label」"
-                favorite -> "已收藏"
-                else -> "已取消收藏"
+                favorite && label != null ->
+                    AppStrings.s(R.string.fav_on_titled, label).ifEmpty { "已收藏「$label」" }
+                favorite -> AppStrings.s(R.string.fav_on).ifEmpty { "已收藏" }
+                else -> AppStrings.s(R.string.fav_off).ifEmpty { "已取消收藏" }
             },
         )
     }
