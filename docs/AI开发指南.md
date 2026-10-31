@@ -2300,6 +2300,14 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 **MainScreen / MainScreenParts 高流量壳**：多选栏、存队列为歌单、快捷方式空库提示、外部分享搜索未命中、删文件 / 移文件夹确认进 values / values-zh（`ms_*`）。加入歌单复用 `ss_add_to_playlist`；收藏复用 `cd_favorite`；保存 / 取消 / 删除复用 `save` / `cancel` / `delete`。Compose 用 `stringResource`；非 Composable 默认歌单名用 `Context.getString`。
 
 - 本批键名：`ms_exit_selection`, `ms_selected_count`, `ms_select_songs`, `ms_select_all`, `ms_invert_selection`, `ms_add_to_queue`, `ms_remove_from_library`, `ms_delete_files`, `ms_save_queue_title`, `ms_save_queue_body`, `ms_playlist_name_hint`, `ms_default_playlist_name`, `ms_shortcut_empty_library`, `ms_search_not_found`, `ms_delete_song_title`, `ms_delete_song_body`, `ms_bulk_delete_title`, `ms_bulk_delete_body`, `ms_remove_folder_title`, `ms_remove_folder_body`, `ms_remove`
-- CarLibrary / Aliyun / SoftEq / SheetsScanScope 本批不改
+- CarLibrary（已第 15 批）/ Aliyun / SoftEq / SheetsScanScope 本批不改
 - 文档：`docs/功能-i18n主界面壳.md`
+
+### i18n 第 15 批（2026-10-31）
+
+**CarLibraryScreen 车机曲库壳**：顶栏 / 左导航视图名 / 搜索占位 / 播放条无障碍文案进 values / values-zh。SONGS 专键 `car_view_all_songs`；其余视图复用 `view_*`（`carViewLabelRes`）；搜索 hint `car_search_hint`；本地音乐 / 首数 / 搜索关闭 / 播放控制复用 `lib_title_local_music` / `lib_song_count` / `cd_*`；品牌复用 `app_name`；扫描范围 / 设置 / 云盘此前已 `drawer_*`。
+
+- 本批键名：`car_view_all_songs`, `car_search_hint`（其余复用）
+- ListeningReport / LibraryStats / SheetsScanScope / Aliyun / SoftEq 本批不改
+- 文档：`docs/功能-i18n车机曲库.md`
 

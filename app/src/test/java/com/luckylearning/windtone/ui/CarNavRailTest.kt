@@ -36,6 +36,10 @@ class CarNavRailTest {
         get() = ApplicationProvider.getApplicationContext<android.content.Context>()
             .getString(R.string.drawer_aliyun)
 
+    private fun viewLabel(view: LibraryView): String =
+        ApplicationProvider.getApplicationContext<android.content.Context>()
+            .getString(carViewLabelRes(view))
+
     private fun render(
         current: LibraryView = LibraryView.SONGS,
         aliyunActive: Boolean = false,
@@ -74,7 +78,7 @@ class CarNavRailTest {
         var selected: LibraryView? = null
         render(current = LibraryView.SONGS, aliyunActive = true, onSelect = { selected = it })
 
-        compose.onNodeWithText(carViewLabel(LibraryView.ALBUM)).performClick()
+        compose.onNodeWithText(viewLabel(LibraryView.ALBUM)).performClick()
         compose.waitForIdle()
         assertTrue("云盘页打开时曲库视图仍可点（用于退出云盘）", selected == LibraryView.ALBUM)
         compose.onNodeWithText(aliyunLabel).assertIsDisplayed()

@@ -1,38 +1,37 @@
 package com.luckylearning.windtone.ui
 
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.state.LibraryView
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 车机版视图 Tab 的标签（v1.1.19）。
+ * 车机版视图 Tab 的标签资源映射（i18n 第 15 批起走 strings）。
  *
- * 为什么值得单测：车机首页把抽屉里的五个视图平铺成 Tab，标签是**唯一**的视图名来源
- * （抽屉里的短名不同：歌曲 / 专辑 / 歌手 / 文件夹 / 歌单）。一旦漏一个枚举分支，
- * `when` 会编译失败；但"两个视图拿到同一个标签"编译得过、只有肉眼能发现 ——
- * 那时用户会看到两个长得一模一样的 Tab，点哪个都像坏了。
+ * 为什么值得单测：车机首页把抽屉里的视图平铺成导航项，标签是**唯一**的视图名来源
+ * （抽屉短名不同：歌曲 / 专辑 / …）。SONGS 必须用 car_view_all_songs（「全部歌曲」），
+ * 其余复用 [LibraryView.labelRes]。断言资源 id，避免默认 en locale 下中文硬断言失配。
  */
 class CarViewLabelTest {
 
     @Test
-    fun everyViewHasItsOwnLabel() {
-        val labels = LibraryView.entries.map { carViewLabel(it) }
-        assertEquals("Tab 数量必须与视图枚举一致", LibraryView.entries.size, labels.size)
-        assertTrue("Tab 标签不能为空", labels.none { it.isBlank() })
-        assertEquals("Tab 标签不能重复（重复的话两个 Tab 长得一样）", labels.size, labels.toSet().size)
+    fun everyViewHasItsOwnLabelRes() {
+        val ids = LibraryView.entries.map { carViewLabelRes(it) }
+        assertEquals("Tab 数量必须与视图枚举一致", LibraryView.entries.size, ids.size)
+        assertEquals("Tab 标签资源不能重复", ids.size, ids.toSet().size)
+        assertTrue(ids.all { it != 0 })
     }
 
     @Test
-    fun labelsAreTheExpectedWording() {
-        // 车机上「歌曲」单独一个词太含糊，统一叫「全部歌曲」
-        assertEquals("全部歌曲", carViewLabel(LibraryView.SONGS))
-        assertEquals("专辑", carViewLabel(LibraryView.ALBUM))
-        assertEquals("歌手", carViewLabel(LibraryView.ARTIST))
-        assertEquals("合辑艺人", carViewLabel(LibraryView.ALBUM_ARTIST))
-        assertEquals("流派", carViewLabel(LibraryView.GENRE))
-        assertEquals("年代", carViewLabel(LibraryView.YEAR))
-        assertEquals("文件夹", carViewLabel(LibraryView.FOLDER))
-        assertEquals("歌单", carViewLabel(LibraryView.PLAYLIST))
+    fun labelResAreTheExpectedIds() {
+        assertEquals(R.string.car_view_all_songs, carViewLabelRes(LibraryView.SONGS))
+        assertEquals(R.string.view_albums, carViewLabelRes(LibraryView.ALBUM))
+        assertEquals(R.string.view_artists, carViewLabelRes(LibraryView.ARTIST))
+        assertEquals(R.string.view_album_artists, carViewLabelRes(LibraryView.ALBUM_ARTIST))
+        assertEquals(R.string.view_genres, carViewLabelRes(LibraryView.GENRE))
+        assertEquals(R.string.view_years, carViewLabelRes(LibraryView.YEAR))
+        assertEquals(R.string.view_folders, carViewLabelRes(LibraryView.FOLDER))
+        assertEquals(R.string.view_playlists, carViewLabelRes(LibraryView.PLAYLIST))
     }
 }

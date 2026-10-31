@@ -1268,4 +1268,8 @@ The list is fetched once on add — nothing is saved if the fetch fails.</string
     <string name="ms_remove_folder_title">Remove folder scan results</string>
     <string name="ms_remove_folder_body">Remove the %2$d song(s) under «%1$s» from the music library, and clean them from playlists, the play queue, favorites, and play stats.\nThe matching import folder is also removed from the scan list, so a rescan will not bring these songs back. Original audio files are not deleted.</string>
     <string name="ms_remove">Remove</string>
+
+    <!-- i18n batch 15: CarLibraryScreen -->
+    <string name="car_view_all_songs">All songs</string>
+    <string name="car_search_hint">Search title / artist / album / pinyin initials</string>
 </resources>

@@ -20,7 +20,7 @@ title: 功能 · i18n 单曲 Sheet（第 13 批）
 
 ## 刻意未改
 
-- **MainScreen** / MainScreenParts（已第 14 批）/ CarLibrary / ListeningReport / LibraryStats / SheetsScanScope（留给更后批次）
+- **MainScreen** / MainScreenParts（已第 14 批）/ CarLibrary（已第 15 批）/ ListeningReport / LibraryStats / SheetsScanScope（留给更后批次）
 - Aliyun 整包 / SoftEq / SoftEqSpike / 播放内核
 - `songDisplayPath` 路径还原逻辑与 versionName / tag / release
 

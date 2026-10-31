@@ -47,12 +47,15 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.state.LibraryUiState
 import com.luckylearning.windtone.state.LibraryView
@@ -86,17 +89,17 @@ private val CAR_MAIN_BUTTON: Dp = 88.dp
 private val COVER_CLIP_SHAPE = RoundedCornerShape(16.dp)
 private val COUNT_BADGE_SHAPE = RoundedCornerShape(50)
 
-/** 车机版视图名：比抽屉里的短名更明确（「歌曲」→「全部歌曲」），标签只在这里定义一份 */
-internal fun carViewLabel(view: LibraryView): String = when (view) {
-    LibraryView.SONGS -> "全部歌曲"
-    LibraryView.ALBUM -> "专辑"
-    LibraryView.ARTIST -> "歌手"
-    LibraryView.ALBUM_ARTIST -> "合辑艺人"
-    LibraryView.GENRE -> "流派"
-    LibraryView.YEAR -> "年代"
-    LibraryView.FOLDER -> "文件夹"
-    LibraryView.PLAYLIST -> "歌单"
+/**
+ * 车机版视图名资源：比抽屉短名更明确（「歌曲」→「全部歌曲」）。
+ * 映射只在这里一份；SONGS 用 [R.string.car_view_all_songs]，其余复用 [LibraryView.labelRes]。
+ */
+internal fun carViewLabelRes(view: LibraryView): Int = when (view) {
+    LibraryView.SONGS -> R.string.car_view_all_songs
+    else -> view.labelRes()
 }
+
+@Composable
+internal fun carViewLabel(view: LibraryView): String = stringResource(carViewLabelRes(view))
 
 /** 车机首页顶栏：标题 + 首数 + 搜索。搜索就地展开，不跳页、不弹键盘二级页（设置移入左侧导航） */
 @Composable
@@ -126,7 +129,7 @@ internal fun CarLibraryHeader(
                 singleLine = true,
                 placeholder = {
                     Text(
-                        "搜索歌名 / 歌手 / 专辑 / 拼音首字母",
+                        stringResource(R.string.car_search_hint),
                         style = MaterialTheme.typography.titleMedium,
                         color = scheme.onSurfaceVariant,
                     )
@@ -142,19 +145,19 @@ internal fun CarLibraryHeader(
                     .focusRequester(focus),
             )
             CarIconButton(onClick = { onSubmitSearch(input) }) {
-                Icon(Icons.Filled.Search, contentDescription = "搜索", tint = scheme.onBackground)
+                Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.cd_search), tint = scheme.onBackground)
             }
             CarIconButton(onClick = {
                 input = ""
                 onQuery("")
                 searchMode = false
             }) {
-                Icon(Icons.Filled.Close, contentDescription = "退出搜索", tint = scheme.onBackground)
+                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.cd_close_search), tint = scheme.onBackground)
             }
             LaunchedEffect(Unit) { focus.requestFocus() }
         } else {
             Text(
-                text = "本地音乐",
+                text = stringResource(R.string.lib_title_local_music),
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = scheme.onBackground,
@@ -166,7 +169,11 @@ internal fun CarLibraryHeader(
                     shape = COUNT_BADGE_SHAPE,
                 ) {
                     Text(
-                        text = "${library.songs.size} 首",
+                        text = pluralStringResource(
+                            R.plurals.lib_song_count,
+                            library.songs.size,
+                            library.songs.size,
+                        ),
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Medium,
                         color = scheme.onSecondaryContainer,
@@ -176,7 +183,7 @@ internal fun CarLibraryHeader(
             }
             Spacer(Modifier.weight(1f))
             CarIconButton(onClick = { searchMode = true }) {
-                Icon(Icons.Filled.Search, contentDescription = "搜索", tint = scheme.onBackground)
+                Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.cd_search), tint = scheme.onBackground)
             }
         }
     }
@@ -229,7 +236,7 @@ internal fun CarNavRail(
                     )
                 }
                 Spacer(Modifier.width(12.dp))
-                Text("听风", fontSize = m.navTitleSp, fontWeight = FontWeight.Bold, color = scheme.onBackground)
+                Text(stringResource(R.string.app_name), fontSize = m.navTitleSp, fontWeight = FontWeight.Bold, color = scheme.onBackground)
             }
             LibraryView.entries.forEach { view ->
                 CarNavItem(
@@ -244,7 +251,7 @@ internal fun CarNavRail(
             // v1.1.84：车机模式下没有抽屉，阿里云盘原本只能从抽屉进 —— 等于进不去。
             // 这里补一个常驻入口，位置紧跟曲库视图，与手机端「在线音乐」组同一个层级。
             CarNavItem(
-                label = androidx.compose.ui.res.stringResource(com.luckylearning.windtone.R.string.drawer_aliyun),
+                label = stringResource(R.string.drawer_aliyun),
                 icon = AppIcons.Cloud,
                 accent = scheme.onSurfaceVariant,
                 selected = aliyunActive,
@@ -254,14 +261,14 @@ internal fun CarNavRail(
             // v1.3.0：与手机抽屉「更多」组对齐 —— 扫描范围 + 设置。
             // 之前车机只有「设置」，用户想换扫描目录得先点进设置再找，与手机上多一层。
             CarNavItem(
-                label = androidx.compose.ui.res.stringResource(com.luckylearning.windtone.R.string.drawer_scan_scope),
+                label = stringResource(R.string.drawer_scan_scope),
                 icon = AppIcons.Folder,
                 accent = scheme.onSurfaceVariant,
                 selected = false,
                 onClick = onOpenScanScope,
             )
             CarNavItem(
-                label = androidx.compose.ui.res.stringResource(com.luckylearning.windtone.R.string.drawer_settings),
+                label = stringResource(R.string.drawer_settings),
                 icon = AppIcons.Tune,
                 accent = scheme.onSurfaceVariant,
                 selected = false,
@@ -391,17 +398,17 @@ internal fun CarPlayerBar(
             CarIconButton(onClick = onToggleFavorite) {
                 Icon(
                     imageVector = if (isFavorite) AppIcons.Favorite else AppIcons.FavoriteBorder,
-                    contentDescription = if (isFavorite) "取消收藏" else "收藏",
+                    contentDescription = stringResource(if (isFavorite) R.string.cd_unfavorite else R.string.cd_favorite),
                     tint = if (isFavorite) scheme.primary else scheme.onSurfaceVariant,
                     modifier = Modifier.size(34.dp),
                 )
             }
             CarIconButton(onClick = onPrevious) {
-                Icon(AppIcons.SkipPrevious, contentDescription = "上一首", tint = scheme.onSurface)
+                Icon(AppIcons.SkipPrevious, contentDescription = stringResource(R.string.cd_previous), tint = scheme.onSurface)
             }
             PlayButton(isPlaying = isPlaying, onClick = onToggle)
             CarIconButton(onClick = onNext) {
-                Icon(AppIcons.SkipNext, contentDescription = "下一首", tint = scheme.onSurface)
+                Icon(AppIcons.SkipNext, contentDescription = stringResource(R.string.cd_next), tint = scheme.onSurface)
             }
             Spacer(Modifier.width(24.dp))
             Box(Modifier.weight(1.6f)) {
@@ -430,7 +437,7 @@ private fun PlayButton(isPlaying: Boolean, onClick: () -> Unit) {
     ) {
         Icon(
             imageVector = if (isPlaying) AppIcons.Pause else Icons.Filled.PlayArrow,
-            contentDescription = if (isPlaying) "暂停" else "播放",
+            contentDescription = stringResource(if (isPlaying) R.string.cd_pause else R.string.cd_play),
             tint = scheme.onPrimary,
             modifier = Modifier.size(44.dp),
         )
