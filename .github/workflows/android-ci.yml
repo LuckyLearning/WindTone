@@ -11,6 +11,15 @@ on:
         required: false
         default: 'manual check'
         type: string
+      mode:
+        description: '跑什么：full=单测+lint+组装；lint=只 lint；test=只单测'
+        required: false
+        default: full
+        type: choice
+        options:
+          - full
+          - lint
+          - test
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -54,13 +63,26 @@ jobs:
           cache-cleanup: on-success
 
       # 一次 Gradle 调用：共用配置与编译；随后仍按 lint XML 做 Error 门禁
-      - name: 单测 + Lint + Debug 包
-        run: ./gradlew testDebugUnitTest lintDebug assembleDebug --stacktrace
+      # mode=full|lint|test（默认 full）。发版不跑本 workflow；日常合入按需手动。
+      - name: 按 mode 跑 Gradle
+        run: |
+          case "${{ inputs.mode }}" in
+            lint)
+              ./gradlew lintDebug --stacktrace
+              ;;
+            test)
+              ./gradlew testDebugUnitTest --stacktrace
+              ;;
+            *)
+              ./gradlew testDebugUnitTest lintDebug assembleDebug --stacktrace
+              ;;
+          esac
 
       # 注意：app/build.gradle.kts 里 lint { abortOnError = false }，所以
       # “构建成功 ≠ lint 干净”。这里显式解析 XML，把 Error 级作为合入门禁：
       # 本地保留不阻断（发版不受影响），CI 上不允许 Error 级新增。
       - name: Lint（Error 级门禁）
+        if: ${{ inputs.mode != 'test' }}
         run: |
           report=app/build/reports/lint-results-debug.xml
           if [ ! -f "$report" ]; then
