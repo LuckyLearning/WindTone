@@ -1373,4 +1373,60 @@ Expired codes refresh automatically. This app is read-only — it never uploads,
     <string name="svm_crash_exported">Crash log exported</string>
     <string name="svm_export_failed">Export failed: %1$s</string>
 
+
+    <!-- i18n batch 21: PlaybackErrorMessages (pem_*) + UserFacingCopy next-step glue (ufc_*) -->
+    <string name="ufc_next_mark">Next: </string>
+    <string name="ufc_next_only">Next: %1$s</string>
+    <string name="ufc_with_next">%1$s. Next: %2$s</string>
+
+    <string name="pem_http_auth">HTTP %1$d, link has no permission or has expired</string>
+    <string name="pem_http_auth_next">Go to Settings → Online services and re-authorize the cloud drive</string>
+    <string name="pem_http_404">HTTP 404, file is no longer at that location</string>
+    <string name="pem_http_404_next">Confirm the cloud file is still there, or remove it from the library and import again</string>
+    <string name="pem_http_416">HTTP 416, cache span incomplete</string>
+    <string name="pem_clear_cache_next">Go to Settings → Online services, clear the cache, then retry</string>
+    <string name="pem_http_generic">HTTP %1$d</string>
+    <string name="pem_http_generic_next">Retry later; if it keeps happening, go to Settings → Online services and re-authorize</string>
+    <string name="pem_dns">Cannot resolve server address (DNS)</string>
+    <string name="pem_check_network_next">Check the network and retry</string>
+    <string name="pem_timeout">Network connection timed out</string>
+    <string name="pem_timeout_next">Check the network and retry; on a weak network, lower parallel downloads in Settings</string>
+    <string name="pem_ssl">Secure connection failed</string>
+    <string name="pem_ssl_next">Confirm the system clock is correct, then check the network and retry</string>
+    <string name="pem_local_missing">Local file missing or cannot be opened</string>
+    <string name="pem_rescan_next">Confirm the file is still there, or rescan the library</string>
+    <string name="pem_eof">File data incomplete</string>
+    <string name="pem_eof_next">Re-download or use a complete copy</string>
+    <string name="pem_network_failed">Network connection failed</string>
+    <string name="pem_file_missing">File missing or cannot be opened</string>
+    <string name="pem_no_permission">No read permission</string>
+    <string name="pem_no_permission_next">Grant storage/audio permission to this app in system Settings</string>
+    <string name="pem_cleartext">Cleartext HTTP not permitted</string>
+    <string name="pem_cleartext_next">Use an HTTPS source, or allow cleartext traffic for this app in system settings</string>
+    <string name="pem_read_oor">Read position out of range (cache may be corrupt)</string>
+    <string name="pem_bad_http">Server returned an unexpected status</string>
+    <string name="pem_bad_http_next">Retry later; for cloud tracks, go to Settings → Online services and re-authorize</string>
+    <string name="pem_bad_content">Server returned non-audio content</string>
+    <string name="pem_bad_content_next">Confirm the link is still audio; for cloud tracks, re-authorize and try again</string>
+    <string name="pem_parse">Cannot parse this audio format</string>
+    <string name="pem_parse_next">Try another encoding or convert the file</string>
+    <string name="pem_read_failed_detail">Failed to read audio (%1$s)</string>
+    <string name="pem_read_failed">Failed to read audio</string>
+    <string name="pem_read_failed_next">Check the network or file and retry</string>
+    <string name="pem_online_read_detail">Failed to read online audio (%1$s)</string>
+    <string name="pem_online_read">Failed to read online audio</string>
+    <string name="pem_online_read_next">Check the network and retry; for cloud tracks you can re-authorize</string>
+    <string name="pem_diag_next">Go to Settings → About &amp; diagnostics and copy the diagnostics pack to report</string>
+    <string name="pem_parallel_timeout">Parallel shard wait timed out (not necessarily offline)</string>
+    <string name="pem_parallel_timeout_next">Lower parallel downloads in Settings, or check the network and retry</string>
+    <string name="pem_parallel_incomplete">Parallel shard data incomplete</string>
+    <string name="pem_parallel_cancelled">Parallel download cancelled</string>
+    <string name="pem_parallel_cancelled_next">Tap play again</string>
+    <string name="pem_parallel_no_range">Server does not support ranged downloads</string>
+    <string name="pem_parallel_no_range_next">Turn off parallel downloads in Settings and retry</string>
+    <string name="pem_parallel_fail">Parallel download failed</string>
+    <string name="pem_parallel_fail_detail">Parallel download failed (%1$s)</string>
+    <string name="pem_parallel_fail_next">Check the network and retry, or turn off parallel downloads in Settings</string>
+    <string name="pem_cache_read">Failed to read local cache</string>
+
 </resources>

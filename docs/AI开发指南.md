@@ -2351,3 +2351,11 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 - SoftEq / 播放内核 / `PlaybackErrorMessages` 本批不改
 - 文档：`docs/功能-i18n设置歌词与维护Toast.md`
 
+### i18n 第 21 批（2026-10-31）
+
+**PlaybackErrorMessages + UserFacingCopy**：播放失败人话进 `pem_*`；A4「原因 + 下一步」模板进 `ufc_*`。`ParallelMsg` 与并行下载异常 message 对齐，不进 strings。
+
+- SoftEq / 播放内核逻辑 / ParallelDownload 协议键本批不改
+- 单测改 Robolectric `zh-rCN` + `AppStrings.init`
+- 文档：`docs/功能-i18n播放失败文案.md`
+

@@ -1,10 +1,16 @@
 package com.luckylearning.windtone.playback
 
 import androidx.media3.common.PlaybackException
+import androidx.test.core.app.ApplicationProvider
+import com.luckylearning.windtone.ui.AppStrings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.net.SocketTimeoutException
@@ -16,8 +22,17 @@ import java.net.UnknownHostException
  * 歌词与音频是两条路径；Media3 又常把缓存 / 并行分片失败包成
  * `HttpDataSourceException` 或 `ERROR_CODE_IO_UNSPECIFIED`。这里钉住：
  * 只有真正的网络失败才说「网络连接失败」。
+ *
+ * i18n 第 21 批后文案走 `pem_*`；断言用 zh-rCN 资源。
  */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], qualifiers = "zh-rCN")
 class PlaybackErrorMessagesTest {
+
+    @Before
+    fun setUp() {
+        AppStrings.init(ApplicationProvider.getApplicationContext())
+    }
 
     @Test
     fun `HTTP 403 说权限而不是网络`() {
@@ -52,7 +67,7 @@ class PlaybackErrorMessagesTest {
             httpStatus = 0,
             errorCode = PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
             errorCodeName = "ERROR_CODE_IO_UNSPECIFIED",
-            causeChain = listOf(IOException("等待分段数据超时")),
+            causeChain = listOf(IOException(PlaybackErrorMessages.ParallelMsg.WAIT_TIMEOUT)),
             hasHttpDataSourceException = true,
         )
         assertTrue(msg.contains("并行") || msg.contains("分段"))
@@ -66,7 +81,13 @@ class PlaybackErrorMessagesTest {
             httpStatus = 0,
             errorCode = PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
             errorCodeName = "ERROR_CODE_IO_UNSPECIFIED",
-            causeChain = listOf(IOException("并行下载失败：HTTP 502", IOException("HTTP 502"))),
+            causeChain = listOf(
+                IOException(
+                    PlaybackErrorMessages.ParallelMsg.FAIL_PREFIX +
+                        PlaybackErrorMessages.ParallelMsg.FAIL_SEP + "HTTP 502",
+                    IOException("HTTP 502"),
+                ),
+            ),
             hasHttpDataSourceException = true,
         )
         assertTrue(msg.contains("并行下载失败"))

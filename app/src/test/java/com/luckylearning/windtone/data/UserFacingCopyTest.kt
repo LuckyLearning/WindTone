@@ -1,12 +1,25 @@
 package com.luckylearning.windtone.data
 
+import androidx.test.core.app.ApplicationProvider
+import com.luckylearning.windtone.ui.AppStrings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
-/** A4：原因 + 下一步 拼接规则。 */
+/** A4：原因 + 下一步 拼接规则（i18n 第 21 批后走 ufc_*）。 */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], qualifiers = "zh-rCN")
 class UserFacingCopyTest {
+
+    @Before
+    fun setUp() {
+        AppStrings.init(ApplicationProvider.getApplicationContext())
+    }
 
     @Test
     fun `withNext 拼接原因与路径`() {
@@ -41,5 +54,11 @@ class UserFacingCopyTest {
     @Test
     fun `空原因只保留下一步`() {
         assertEquals("下一步：去设置", UserFacingCopy.withNext("", "去设置"))
+    }
+
+    @Test
+    fun `英文 Next 标记也视为已有路径`() {
+        val already = "Expired. Next: re-authorize"
+        assertEquals(already, UserFacingCopy.withNext(already, "other"))
     }
 }

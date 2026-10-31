@@ -1339,4 +1339,60 @@
     <string name="svm_crash_exported">崩溃日志已导出</string>
     <string name="svm_export_failed">导出失败：%1$s</string>
 
+
+    <!-- i18n 第 21 批：PlaybackErrorMessages（pem_*）+ UserFacingCopy 下一步拼装（ufc_*） -->
+    <string name="ufc_next_mark">下一步：</string>
+    <string name="ufc_next_only">下一步：%1$s</string>
+    <string name="ufc_with_next">%1$s。下一步：%2$s</string>
+
+    <string name="pem_http_auth">HTTP %1$d，直链没有权限或已过期</string>
+    <string name="pem_http_auth_next">到设置 → 在线服务重新授权云盘</string>
+    <string name="pem_http_404">HTTP 404，文件已不在原位置</string>
+    <string name="pem_http_404_next">确认云盘文件还在，或从曲库移除后重新导入</string>
+    <string name="pem_http_416">HTTP 416，缓存片段不完整</string>
+    <string name="pem_clear_cache_next">到设置 → 在线服务清理缓存后重试</string>
+    <string name="pem_http_generic">HTTP %1$d</string>
+    <string name="pem_http_generic_next">稍后重试；若反复出现，到设置 → 在线服务重新授权</string>
+    <string name="pem_dns">无法解析服务器地址（DNS）</string>
+    <string name="pem_check_network_next">检查网络后重试</string>
+    <string name="pem_timeout">网络连接超时</string>
+    <string name="pem_timeout_next">检查网络后重试；弱网可到设置降低并行下载</string>
+    <string name="pem_ssl">安全连接失败</string>
+    <string name="pem_ssl_next">核对系统时间是否准确，再检查网络后重试</string>
+    <string name="pem_local_missing">本地文件不存在或无法打开</string>
+    <string name="pem_rescan_next">确认文件还在，或重新扫描曲库</string>
+    <string name="pem_eof">文件数据不完整</string>
+    <string name="pem_eof_next">重新下载或换一份完整文件</string>
+    <string name="pem_network_failed">网络连接失败</string>
+    <string name="pem_file_missing">文件不存在或无法打开</string>
+    <string name="pem_no_permission">没有读取权限</string>
+    <string name="pem_no_permission_next">到系统设置为本应用授予存储/音频权限</string>
+    <string name="pem_cleartext">禁止明文 HTTP 连接</string>
+    <string name="pem_cleartext_next">改用 HTTPS 源，或到系统允许本应用明文流量</string>
+    <string name="pem_read_oor">读取位置超出范围（缓存可能损坏）</string>
+    <string name="pem_bad_http">服务器返回异常状态</string>
+    <string name="pem_bad_http_next">稍后重试；云盘歌可到设置 → 在线服务重新授权</string>
+    <string name="pem_bad_content">服务器返回了非音频内容</string>
+    <string name="pem_bad_content_next">确认链接仍是音频；云盘歌请重新授权后再试</string>
+    <string name="pem_parse">音频格式无法解析</string>
+    <string name="pem_parse_next">换编码格式或转码后再试</string>
+    <string name="pem_read_failed_detail">读取音频失败（%1$s）</string>
+    <string name="pem_read_failed">读取音频失败</string>
+    <string name="pem_read_failed_next">检查网络或文件后重试</string>
+    <string name="pem_online_read_detail">读取在线音频失败（%1$s）</string>
+    <string name="pem_online_read">读取在线音频失败</string>
+    <string name="pem_online_read_next">检查网络后重试；云盘歌可重新授权</string>
+    <string name="pem_diag_next">到设置 → 关于与诊断复制诊断包反馈</string>
+    <string name="pem_parallel_timeout">并行分片等待超时（未必是断网）</string>
+    <string name="pem_parallel_timeout_next">到设置降低并行下载，或检查网络后重试</string>
+    <string name="pem_parallel_incomplete">并行分片数据不完整</string>
+    <string name="pem_parallel_cancelled">并行下载已取消</string>
+    <string name="pem_parallel_cancelled_next">重新点播放即可</string>
+    <string name="pem_parallel_no_range">服务器不支持分段下载</string>
+    <string name="pem_parallel_no_range_next">到设置关闭并行下载后重试</string>
+    <string name="pem_parallel_fail">并行下载失败</string>
+    <string name="pem_parallel_fail_detail">并行下载失败（%1$s）</string>
+    <string name="pem_parallel_fail_next">检查网络后重试，或到设置关闭并行下载</string>
+    <string name="pem_cache_read">本地缓存读取失败</string>
+
 </resources>

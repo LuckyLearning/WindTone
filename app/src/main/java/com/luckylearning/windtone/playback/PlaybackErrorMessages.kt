@@ -1,8 +1,11 @@
 package com.luckylearning.windtone.playback
 
-import com.luckylearning.windtone.data.UserFacingCopy
+import androidx.annotation.StringRes
 import androidx.media3.common.PlaybackException
 import androidx.media3.datasource.HttpDataSource
+import com.luckylearning.windtone.R
+import com.luckylearning.windtone.data.UserFacingCopy
+import com.luckylearning.windtone.ui.AppStrings
 import java.io.EOFException
 import java.io.FileNotFoundException
 import java.net.SocketTimeoutException
@@ -15,6 +18,9 @@ import javax.net.ssl.SSLException
  * 歌词与音频是两条独立路径（同目录 `.lrc` / 云盘旁路歌词可以成功，音频直链仍可能挂），
  * 所以提示条**不能**凡是 IO 一律写成「网络连接失败」——并行分片超时、缓存片段坏了、
  * 本地文件打不开，都会被 Media3 包成 `HttpDataSourceException` 或 `ERROR_CODE_IO_UNSPECIFIED`。
+ *
+ * 用户可见文案走 `pem_*` / `ufc_*`（i18n 第 21 批）。
+ * [ParallelMsg] 与 `ParallelDownload` 抛出的 `message` 对齐，是**内部协议键**，不进 strings。
  */
 object PlaybackErrorMessages {
 
@@ -46,20 +52,20 @@ object PlaybackErrorMessages {
     ): String {
         when (httpStatus) {
             401, 403 -> return withNext(
-                "HTTP $httpStatus，直链没有权限或已过期",
-                "到设置 → 在线服务重新授权云盘",
+                s(R.string.pem_http_auth, httpStatus),
+                s(R.string.pem_http_auth_next),
             )
             404 -> return withNext(
-                "HTTP 404，文件已不在原位置",
-                "确认云盘文件还在，或从曲库移除后重新导入",
+                s(R.string.pem_http_404),
+                s(R.string.pem_http_404_next),
             )
             416 -> return withNext(
-                "HTTP 416，缓存片段不完整",
-                "到设置 → 在线服务清理缓存后重试",
+                s(R.string.pem_http_416),
+                s(R.string.pem_clear_cache_next),
             )
             in 400..599 -> return withNext(
-                "HTTP $httpStatus",
-                "稍后重试；若反复出现，到设置 → 在线服务重新授权",
+                s(R.string.pem_http_generic, httpStatus),
+                s(R.string.pem_http_generic_next),
             )
         }
 
@@ -68,79 +74,79 @@ object PlaybackErrorMessages {
         for (t in causeChain) {
             when (t) {
                 is UnknownHostException -> return withNext(
-                    "无法解析服务器地址（DNS）",
-                    "检查网络后重试",
+                    s(R.string.pem_dns),
+                    s(R.string.pem_check_network_next),
                 )
                 is SocketTimeoutException -> return withNext(
-                    "网络连接超时",
-                    "检查网络后重试；弱网可到设置降低并行下载",
+                    s(R.string.pem_timeout),
+                    s(R.string.pem_timeout_next),
                 )
                 is SSLException -> return withNext(
-                    "安全连接失败",
-                    "核对系统时间是否准确，再检查网络后重试",
+                    s(R.string.pem_ssl),
+                    s(R.string.pem_ssl_next),
                 )
                 is FileNotFoundException -> return withNext(
-                    "本地文件不存在或无法打开",
-                    "确认文件还在，或重新扫描曲库",
+                    s(R.string.pem_local_missing),
+                    s(R.string.pem_rescan_next),
                 )
                 is EOFException -> return withNext(
-                    "文件数据不完整",
-                    "重新下载或换一份完整文件",
+                    s(R.string.pem_eof),
+                    s(R.string.pem_eof_next),
                 )
             }
         }
 
         when (errorCode) {
             PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED -> return withNext(
-                "网络连接失败",
-                "检查网络后重试",
+                s(R.string.pem_network_failed),
+                s(R.string.pem_check_network_next),
             )
             PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT -> return withNext(
-                "网络连接超时",
-                "检查网络后重试；弱网可到设置降低并行下载",
+                s(R.string.pem_timeout),
+                s(R.string.pem_timeout_next),
             )
             PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND -> return withNext(
-                "文件不存在或无法打开",
-                "确认文件还在，或重新扫描曲库",
+                s(R.string.pem_file_missing),
+                s(R.string.pem_rescan_next),
             )
             PlaybackException.ERROR_CODE_IO_NO_PERMISSION -> return withNext(
-                "没有读取权限",
-                "到系统设置为本应用授予存储/音频权限",
+                s(R.string.pem_no_permission),
+                s(R.string.pem_no_permission_next),
             )
             PlaybackException.ERROR_CODE_IO_CLEARTEXT_NOT_PERMITTED -> return withNext(
-                "禁止明文 HTTP 连接",
-                "改用 HTTPS 源，或到系统允许本应用明文流量",
+                s(R.string.pem_cleartext),
+                s(R.string.pem_cleartext_next),
             )
             PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE -> return withNext(
-                "读取位置超出范围（缓存可能损坏）",
-                "到设置 → 在线服务清理缓存后重试",
+                s(R.string.pem_read_oor),
+                s(R.string.pem_clear_cache_next),
             )
             PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> return withNext(
-                "服务器返回异常状态",
-                "稍后重试；云盘歌可到设置 → 在线服务重新授权",
+                s(R.string.pem_bad_http),
+                s(R.string.pem_bad_http_next),
             )
             PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE -> return withNext(
-                "服务器返回了非音频内容",
-                "确认链接仍是音频；云盘歌请重新授权后再试",
+                s(R.string.pem_bad_content),
+                s(R.string.pem_bad_content_next),
             )
             PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
             PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
             -> return withNext(
-                "音频格式无法解析",
-                "换编码格式或转码后再试",
+                s(R.string.pem_parse),
+                s(R.string.pem_parse_next),
             )
             PlaybackException.ERROR_CODE_IO_UNSPECIFIED -> {
                 val detail = firstUsefulMessage(causeChain)
                 return when {
                     detail != null && looksLocalOrCache(detail) ->
-                        withNext(trimDetail(detail), "到设置 → 在线服务清理缓存后重试")
+                        withNext(trimDetail(detail), s(R.string.pem_clear_cache_next))
                     hasHttpDataSourceException && isNetworkish(causeChain, detail) ->
-                        withNext("网络连接失败", "检查网络后重试")
+                        withNext(s(R.string.pem_network_failed), s(R.string.pem_check_network_next))
                     detail != null -> withNext(
-                        "读取音频失败（${trimDetail(detail)}）",
-                        "检查网络或文件后重试",
+                        s(R.string.pem_read_failed_detail, trimDetail(detail)),
+                        s(R.string.pem_read_failed_next),
                     )
-                    else -> withNext("读取音频失败", "检查网络或文件后重试")
+                    else -> withNext(s(R.string.pem_read_failed), s(R.string.pem_read_failed_next))
                 }
             }
         }
@@ -150,18 +156,18 @@ object PlaybackErrorMessages {
             val detail = firstUsefulMessage(causeChain)
             return when {
                 detail != null && looksLocalOrCache(detail) ->
-                    withNext(trimDetail(detail), "到设置 → 在线服务清理缓存后重试")
+                    withNext(trimDetail(detail), s(R.string.pem_clear_cache_next))
                 isNetworkish(causeChain, detail) ->
-                    withNext("网络连接失败", "检查网络后重试")
+                    withNext(s(R.string.pem_network_failed), s(R.string.pem_check_network_next))
                 detail != null -> withNext(
-                    "读取在线音频失败（${trimDetail(detail)}）",
-                    "检查网络后重试；云盘歌可重新授权",
+                    s(R.string.pem_online_read_detail, trimDetail(detail)),
+                    s(R.string.pem_online_read_next),
                 )
-                else -> withNext("读取在线音频失败", "检查网络后重试；云盘歌可重新授权")
+                else -> withNext(s(R.string.pem_online_read), s(R.string.pem_online_read_next))
             }
         }
 
-        return withNext(errorCodeName, "到设置 → 关于与诊断复制诊断包反馈")
+        return withNext(errorCodeName, s(R.string.pem_diag_next))
     }
 
     /** A4：原因 + 一条可操作路径（句号衔接，便于 Snackbar 一次读完） */
@@ -171,32 +177,36 @@ object PlaybackErrorMessages {
     private fun parallelOrCacheHint(chain: List<Throwable>): String? {
         val joined = chain.mapNotNull { it.message }.joinToString(" ")
         return when {
-            "等待分段数据超时" in joined -> withNext(
-                "并行分片等待超时（未必是断网）",
-                "到设置降低并行下载，或检查网络后重试",
+            ParallelMsg.WAIT_TIMEOUT in joined -> withNext(
+                s(R.string.pem_parallel_timeout),
+                s(R.string.pem_parallel_timeout_next),
             )
-            "分段数据不完整" in joined -> withNext(
-                "并行分片数据不完整",
-                "到设置 → 在线服务清理缓存后重试",
+            ParallelMsg.INCOMPLETE in joined -> withNext(
+                s(R.string.pem_parallel_incomplete),
+                s(R.string.pem_clear_cache_next),
             )
-            "并行下载已取消" in joined -> withNext(
-                "并行下载已取消",
-                "重新点播放即可",
+            ParallelMsg.CANCELLED in joined -> withNext(
+                s(R.string.pem_parallel_cancelled),
+                s(R.string.pem_parallel_cancelled_next),
             )
-            "服务器不支持分段" in joined -> withNext(
-                "服务器不支持分段下载",
-                "到设置关闭并行下载后重试",
+            ParallelMsg.NO_RANGE in joined -> withNext(
+                s(R.string.pem_parallel_no_range),
+                s(R.string.pem_parallel_no_range_next),
             )
-            "并行下载失败" in joined -> {
+            ParallelMsg.FAIL_PREFIX in joined -> {
                 val inner = chain.mapNotNull { it.message }
-                    .firstOrNull { it.startsWith("并行下载失败") }
-                    ?.substringAfter("：", "")
+                    .firstOrNull { it.startsWith(ParallelMsg.FAIL_PREFIX) }
+                    ?.substringAfter(ParallelMsg.FAIL_SEP, "")
                     ?.ifBlank { null }
-                val reason = if (inner != null) "并行下载失败（${trimDetail(inner)}）" else "并行下载失败"
-                withNext(reason, "检查网络后重试，或到设置关闭并行下载")
+                val reason = if (inner != null) {
+                    s(R.string.pem_parallel_fail_detail, trimDetail(inner))
+                } else {
+                    s(R.string.pem_parallel_fail)
+                }
+                withNext(reason, s(R.string.pem_parallel_fail_next))
             }
-            "缓存片段" in joined || ("Cache" in joined && "span" in joined.lowercase()) ->
-                withNext("本地缓存读取失败", "到设置 → 在线服务清理缓存后重试")
+            ParallelMsg.CACHE_SPAN in joined || ("Cache" in joined && "span" in joined.lowercase()) ->
+                withNext(s(R.string.pem_cache_read), s(R.string.pem_clear_cache_next))
             else -> null
         }
     }
@@ -212,15 +222,15 @@ object PlaybackErrorMessages {
 
     private fun looksLocalOrCache(message: String): Boolean {
         val m = message.lowercase()
-        return "并行" in message ||
-            "分段" in message ||
-            "缓存" in message ||
+        return ParallelMsg.TOKEN_PARALLEL in message ||
+            ParallelMsg.TOKEN_RANGE in message ||
+            ParallelMsg.TOKEN_CACHE in message ||
             "cache" in m ||
             "enospc" in m ||
             "no space" in m ||
             "file not found" in m ||
             "permission denied" in m ||
-            "本地" in message
+            ParallelMsg.TOKEN_LOCAL in message
     }
 
     private fun isNetworkish(chain: List<Throwable>, detail: String?): Boolean {
@@ -242,9 +252,31 @@ object PlaybackErrorMessages {
             "unreachable" in m ||
             "unknown host" in m ||
             "unable to resolve" in m ||
-            "网络" in (detail ?: "")
+            ParallelMsg.TOKEN_NETWORK in (detail ?: "")
     }
 
     private fun trimDetail(message: String): String =
         message.replace('\n', ' ').trim().take(48)
+
+    private fun s(@StringRes id: Int, vararg args: Any): String = AppStrings.s(id, *args)
+
+    /**
+     * 与 [com.luckylearning.windtone.playback.parallel.ParallelDownload] 抛出的
+     * `IOException.message` 对齐。改并行层文案时必须同步这里，否则分类会退回笼统网络失败。
+     * **不进 i18n**（内部协议键，不是界面文案）。
+     */
+    internal object ParallelMsg {
+        const val WAIT_TIMEOUT = "等待分段数据超时"
+        const val INCOMPLETE = "分段数据不完整"
+        const val CANCELLED = "并行下载已取消"
+        const val NO_RANGE = "服务器不支持分段"
+        const val FAIL_PREFIX = "并行下载失败"
+        const val FAIL_SEP = "："
+        const val CACHE_SPAN = "缓存片段"
+        const val TOKEN_PARALLEL = "并行"
+        const val TOKEN_RANGE = "分段"
+        const val TOKEN_CACHE = "缓存"
+        const val TOKEN_LOCAL = "本地"
+        const val TOKEN_NETWORK = "网络"
+    }
 }
