@@ -1184,4 +1184,30 @@
     <string name="dup_remove">移出</string>
     <string name="dup_meta">%1$s · %2$s · %3$s</string>
 
+
+    <!-- i18n 第 13 批：SheetsSong 单曲操作 / 音频信息 / 编辑弹窗 -->
+    <string name="ss_share">分享…</string>
+    <string name="ss_play_next">下一首播放</string>
+    <string name="ss_add_to_playlist">加入歌单…</string>
+    <string name="ss_view_album">查看专辑</string>
+    <string name="ss_view_artist">查看歌手</string>
+    <string name="ss_edit_info">编辑歌曲信息…</string>
+    <string name="ss_delete_file">删除歌曲文件…</string>
+    <string name="ss_info_loading">正在读取…</string>
+    <string name="ss_info_unavailable">无法读取该文件的音频信息，可能是不受支持的容器格式。</string>
+    <string name="ss_info_container">容器格式</string>
+    <string name="ss_info_codec">编码</string>
+    <string name="ss_info_sample_rate">采样率</string>
+    <string name="ss_info_channels">声道</string>
+    <string name="ss_info_bits">位深</string>
+    <string name="ss_info_bitrate">码率</string>
+    <string name="ss_info_duration">时长</string>
+    <string name="ss_info_size">文件大小</string>
+    <string name="ss_info_mime">MIME</string>
+    <string name="ss_info_path">路径</string>
+    <string name="ss_edit_title">编辑歌曲信息</string>
+    <string name="ss_edit_hint">仅在本应用内覆盖显示，不会修改音频文件本身。</string>
+    <string name="ss_field_title">标题</string>
+    <string name="ss_field_artist">歌手</string>
+    <string name="ss_field_album">专辑</string>
 </resources>

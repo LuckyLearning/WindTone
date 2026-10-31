@@ -1218,4 +1218,30 @@ The list is fetched once on add — nothing is saved if the fetch fails.</string
     <string name="dup_remove">Remove</string>
     <string name="dup_meta">%1$s · %2$s · %3$s</string>
 
+
+    <!-- i18n batch 13: SheetsSong song actions / audio info / edit dialog -->
+    <string name="ss_share">Share…</string>
+    <string name="ss_play_next">Play next</string>
+    <string name="ss_add_to_playlist">Add to playlist…</string>
+    <string name="ss_view_album">View album</string>
+    <string name="ss_view_artist">View artist</string>
+    <string name="ss_edit_info">Edit song info…</string>
+    <string name="ss_delete_file">Delete song file…</string>
+    <string name="ss_info_loading">Reading…</string>
+    <string name="ss_info_unavailable">Could not read audio info for this file; the container format may be unsupported.</string>
+    <string name="ss_info_container">Container</string>
+    <string name="ss_info_codec">Codec</string>
+    <string name="ss_info_sample_rate">Sample rate</string>
+    <string name="ss_info_channels">Channels</string>
+    <string name="ss_info_bits">Bit depth</string>
+    <string name="ss_info_bitrate">Bitrate</string>
+    <string name="ss_info_duration">Duration</string>
+    <string name="ss_info_size">File size</string>
+    <string name="ss_info_mime">MIME</string>
+    <string name="ss_info_path">Path</string>
+    <string name="ss_edit_title">Edit song info</string>
+    <string name="ss_edit_hint">Overrides display in this app only; the audio file itself is not modified.</string>
+    <string name="ss_field_title">Title</string>
+    <string name="ss_field_artist">Artist</string>
+    <string name="ss_field_album">Album</string>
 </resources>

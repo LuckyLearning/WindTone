@@ -29,9 +29,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.AudioInspector
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.ui.theme.glassContainerColor
@@ -40,6 +42,7 @@ import com.luckylearning.windtone.ui.theme.glassContainerColor
  * 单曲相关的底部弹层与弹窗：长按操作、音频技术信息、编辑歌曲信息。
  *
  * 从 Sheets.kt 按「页面」拆出（v1.1.37）。[songDisplayPath] 只被本文件使用，故为 private。
+ * 用户可见文案：i18n 第 13 批（ss_*；复用 cd_favorite / cd_unfavorite / po_audio_info / save / cancel）。
  */
 
 // ================================================================ 歌曲长按操作
@@ -75,19 +78,25 @@ fun SongActionsSheet(
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
             )
             Spacer(Modifier.height(6.dp))
-            SheetAction(if (isFavorite) "取消收藏" else "收藏") { onToggleFavorite(); onDismiss() }
-            SheetAction("分享…") {
+            SheetAction(
+                if (isFavorite) stringResource(R.string.cd_unfavorite)
+                else stringResource(R.string.cd_favorite),
+            ) { onToggleFavorite(); onDismiss() }
+            SheetAction(stringResource(R.string.ss_share)) {
                 ShareCurrentSong.start(shareContext, song)
                 onDismiss()
             }
-            SheetAction("下一首播放") { onPlayNext(); onDismiss() }
-            SheetAction("加入歌单…") { onAddToPlaylist(); onDismiss() }
-            SheetAction("查看专辑") { onViewAlbum(); onDismiss() }
-            SheetAction("查看歌手") { onViewArtist(); onDismiss() }
-            SheetAction("编辑歌曲信息…") { onEdit(); onDismiss() }
-            SheetAction("音频信息") { onAudioInfo(); onDismiss() }
+            SheetAction(stringResource(R.string.ss_play_next)) { onPlayNext(); onDismiss() }
+            SheetAction(stringResource(R.string.ss_add_to_playlist)) { onAddToPlaylist(); onDismiss() }
+            SheetAction(stringResource(R.string.ss_view_album)) { onViewAlbum(); onDismiss() }
+            SheetAction(stringResource(R.string.ss_view_artist)) { onViewArtist(); onDismiss() }
+            SheetAction(stringResource(R.string.ss_edit_info)) { onEdit(); onDismiss() }
+            SheetAction(stringResource(R.string.po_audio_info)) { onAudioInfo(); onDismiss() }
             if (canDelete) {
-                SheetAction("删除歌曲文件…", color = MaterialTheme.colorScheme.error) { onDelete() }
+                SheetAction(
+                    stringResource(R.string.ss_delete_file),
+                    color = MaterialTheme.colorScheme.error,
+                ) { onDelete() }
             }
             Spacer(Modifier.height(20.dp))
         }
@@ -106,7 +115,7 @@ fun SongInfoSheet(
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
             Text(
-                "音频信息",
+                stringResource(R.string.po_audio_info),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -128,26 +137,26 @@ fun SongInfoSheet(
                 loading -> Row(verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(10.dp))
-                    Text("正在读取…", style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.ss_info_loading), style = MaterialTheme.typography.bodySmall)
                 }
 
                 info == null -> Text(
-                    "无法读取该文件的音频信息，可能是不受支持的容器格式。",
+                    stringResource(R.string.ss_info_unavailable),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
                 else -> {
-                    InfoRow("容器格式", info.container)
-                    InfoRow("编码", info.codec)
-                    InfoRow("采样率", info.sampleRateText)
-                    InfoRow("声道", info.channelsText)
-                    InfoRow("位深", info.bitsText)
-                    InfoRow("码率", info.bitrateText)
-                    InfoRow("时长", info.durationText)
-                    InfoRow("文件大小", info.sizeText)
-                    info.mime?.let { InfoRow("MIME", it) }
-                    InfoRow("路径", songDisplayPath(song))
+                    InfoRow(stringResource(R.string.ss_info_container), info.container)
+                    InfoRow(stringResource(R.string.ss_info_codec), info.codec)
+                    InfoRow(stringResource(R.string.ss_info_sample_rate), info.sampleRateText)
+                    InfoRow(stringResource(R.string.ss_info_channels), info.channelsText)
+                    InfoRow(stringResource(R.string.ss_info_bits), info.bitsText)
+                    InfoRow(stringResource(R.string.ss_info_bitrate), info.bitrateText)
+                    InfoRow(stringResource(R.string.ss_info_duration), info.durationText)
+                    InfoRow(stringResource(R.string.ss_info_size), info.sizeText)
+                    info.mime?.let { InfoRow(stringResource(R.string.ss_info_mime), it) }
+                    InfoRow(stringResource(R.string.ss_info_path), songDisplayPath(song))
                 }
             }
             Spacer(Modifier.height(20.dp))
@@ -234,25 +243,44 @@ fun EditSongDialog(
     var album by remember { mutableStateOf(song.albumOrUnknown) }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("编辑歌曲信息") },
+        title = { Text(stringResource(R.string.ss_edit_title)) },
         text = {
             Column {
                 Text(
-                    "仅在本应用内覆盖显示，不会修改音频文件本身。",
+                    stringResource(R.string.ss_edit_hint),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(10.dp))
-                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("标题") }, singleLine = true)
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text(stringResource(R.string.ss_field_title)) },
+                    singleLine = true,
+                )
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = artist, onValueChange = { artist = it }, label = { Text("歌手") }, singleLine = true)
+                OutlinedTextField(
+                    value = artist,
+                    onValueChange = { artist = it },
+                    label = { Text(stringResource(R.string.ss_field_artist)) },
+                    singleLine = true,
+                )
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = album, onValueChange = { album = it }, label = { Text("专辑") }, singleLine = true)
+                OutlinedTextField(
+                    value = album,
+                    onValueChange = { album = it },
+                    label = { Text(stringResource(R.string.ss_field_album)) },
+                    singleLine = true,
+                )
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(title, artist, album); onDismiss() }) { Text("保存") }
+            TextButton(onClick = { onSave(title, artist, album); onDismiss() }) {
+                Text(stringResource(R.string.save))
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
     )
 }

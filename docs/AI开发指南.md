@@ -2284,5 +2284,13 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 
 **DuplicateCleanupScreen 重复清理页**：规则说明、扫描/空态/结果、确认弹窗、保留/移出徽章与元信息行进 values / values-zh（`dup_*`；标题复用 `duplicate_cleanup`，返回 `cd_back`，取消 `cancel`）。Compose 用 `stringResource`。
 
-- SheetsSong / MainScreen / Aliyun / SoftEq 本批不改
+- SheetsSong（已第 13 批）/ MainScreen / Aliyun / SoftEq 本批不改
 - 文档：`docs/功能-i18n重复清理页.md`
+
+### i18n 第 13 批（2026-10-31）
+
+**SheetsSong 单曲 Sheet**：长按操作 / 音频信息 / 编辑歌曲信息面向用户文案进 values / values-zh（`ss_*`）。收藏复用 `cd_favorite` / `cd_unfavorite`；音频信息标题复用 `po_audio_info`；保存 / 取消复用 `save` / `cancel`。Compose 用 `stringResource`。
+
+- 本批键名：`ss_share`, `ss_play_next`, `ss_add_to_playlist`, `ss_view_album`, `ss_view_artist`, `ss_edit_info`, `ss_delete_file`, `ss_info_loading`, `ss_info_unavailable`, `ss_info_container`, `ss_info_codec`, `ss_info_sample_rate`, `ss_info_channels`, `ss_info_bits`, `ss_info_bitrate`, `ss_info_duration`, `ss_info_size`, `ss_info_mime`, `ss_info_path`, `ss_edit_title`, `ss_edit_hint`, `ss_field_title`, `ss_field_artist`, `ss_field_album`
+- MainScreen / Aliyun / SoftEq 本批不改
+- 文档：`docs/功能-i18n单曲Sheet.md`
