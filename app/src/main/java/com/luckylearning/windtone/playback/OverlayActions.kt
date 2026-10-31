@@ -14,19 +14,19 @@ interface OverlayActions {
     fun setLyricOverlay(enabled: Boolean)
     fun setLyricOverlayLines(lines: Int)
 
-    /** 悬浮窗左侧三颗侧钮是否显示（v1.2.0，仅车载模式生效） */
+    /** 悬浮窗左侧侧钮是否显示（v1.2.0+，仅车载模式生效；含无障碍） */
     fun setOverlayHandles(enabled: Boolean)
 
     /**
      * 单颗侧钮开关（v1.3.0）。
      *
-     * @param kind 0 = 收起 / 1 = 播放暂停 / 2 = 打开播放页
+     * @param kind 0 = 收起 / 1 = 播放暂停 / 2 = 打开播放页 / 3 = 无障碍
      */
     fun setOverlayHandle(kind: Int, enabled: Boolean)
 
     /**
      * 侧钮上下顺序（B1）。
-     * @param orderCsv 如 "collapse,play_pause,player"；非法项由 merge 纠正
+     * @param orderCsv 如 "collapse,play_pause,player,a11y"；非法项由 merge 纠正
      */
     fun setOverlayHandleOrder(orderCsv: String)
 

@@ -86,7 +86,7 @@ object OverlayCollapseHelper {
     }
 
     /**
-     * 该显示哪几颗侧钮（v1.3.0）：bit0 收起 / bit1 播放暂停 / bit2 打开播放页。
+     * 该显示哪几颗侧钮（v1.3.0 + a11y）：bit0 收起 / bit1 播放暂停 / bit2 打开播放页 / bit3 无障碍。
      *
      * 抽成纯函数是为了能测：这里一旦算错，用户看到的就是"关掉的那颗还在、
      * 或者点了第二颗触发的是第三颗"——窗口层没法靠肉眼定位。
@@ -97,12 +97,14 @@ object OverlayCollapseHelper {
         collapse: Boolean,
         playPause: Boolean,
         player: Boolean,
+        a11y: Boolean = false,
     ): Int {
         if (!carMode || !handlesEnabled) return 0
         var mask = 0
         if (collapse) mask = mask or 1
         if (playPause) mask = mask or 2
         if (player) mask = mask or 4
+        if (a11y) mask = mask or 8
         return mask
     }
 
@@ -130,11 +132,13 @@ object OverlayCollapseHelper {
     }
 
 
-    /** 侧钮种类（与位掩码 bit0/1/2、设置页 kind 0/1/2 对齐） */
+    /** 侧钮种类（与位掩码 bit0..3、设置页 kind 0..3 对齐） */
     enum class OverlayHandleKind(val id: String, val bit: Int, val kind: Int) {
         COLLAPSE("collapse", 1, 0),
         PLAY_PAUSE("play_pause", 2, 1),
         PLAYER("player", 4, 2),
+        /** 无障碍状态 / 跳系统设置（不能进程内假开关） */
+        A11Y("a11y", 8, 3),
         ;
 
         companion object {
@@ -142,11 +146,12 @@ object OverlayCollapseHelper {
         }
     }
 
-    /** 出厂上下顺序：收起 → 播放暂停 → 打开播放页（与改前写死顺序一致） */
+    /** 出厂上下顺序：收起 → 播放暂停 → 打开播放页 → 无障碍（前三项与改前一致） */
     val DEFAULT_HANDLE_ORDER: List<OverlayHandleKind> = listOf(
         OverlayHandleKind.COLLAPSE,
         OverlayHandleKind.PLAY_PAUSE,
         OverlayHandleKind.PLAYER,
+        OverlayHandleKind.A11Y,
     )
 
     /**

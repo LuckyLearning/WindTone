@@ -112,7 +112,7 @@ object SettingsDefaults {
     const val PLAYER_A11Y_ACTION = true
 
     /**
-     * 悬浮窗左侧的侧钮（收起 / 播放暂停 / 打开播放页，v1.2.0）是否显示。
+     * 悬浮窗左侧的侧钮（收起 / 播放暂停 / 打开播放页 / 无障碍，v1.2.0+）是否显示。
      *
      * 只在**车载模式**下才会真正挂出来 —— 鼠标键盘的手机上，那三颗钮纯属遮挡；
      * 车机上仍给一个开关，觉得挡视线的人可以关掉（关掉不影响按应用隐藏与收起逻辑本身）。
@@ -123,12 +123,14 @@ object SettingsDefaults {
     const val OVERLAY_HANDLE_COLLAPSE = true
     const val OVERLAY_HANDLE_PLAY_PAUSE = true
     const val OVERLAY_HANDLE_PLAYER = true
+    /** 单颗侧钮：无障碍状态（对齐播放页前台识别；默认开，可在设置关掉） */
+    const val OVERLAY_HANDLE_A11Y = true
 
     /**
      * 悬浮窗侧钮上下顺序（B1）：CSV，id 为 collapse / play_pause / player。
      * 默认与改前写死顺序一致。解析见 OverlayCollapseHelper.mergeHandleOrder。
      */
-    const val OVERLAY_HANDLE_ORDER = "collapse,play_pause,player"
+    const val OVERLAY_HANDLE_ORDER = "collapse,play_pause,player,a11y"
 
     /**
      * 无缝播放（C1→A7）：Media3 单实例 + 连续 MediaItems 默认识别分轨 encoder delay/padding。
@@ -760,6 +762,14 @@ class Prefs private constructor(context: Context) {
         set(value) {
             sp.edit().putBoolean(KEY_OVERLAY_HANDLE_PLAYER, value).apply()
             ioScope.launch { store.putBoolean(KEY_OVERLAY_HANDLE_PLAYER, value) }
+        }
+
+    /** 单颗侧钮：无障碍状态 / 跳系统设置（同播放页前台识别） */
+    var overlayHandleA11y: Boolean
+        get() = sp.getBoolean(KEY_OVERLAY_HANDLE_A11Y, SettingsDefaults.OVERLAY_HANDLE_A11Y)
+        set(value) {
+            sp.edit().putBoolean(KEY_OVERLAY_HANDLE_A11Y, value).apply()
+            ioScope.launch { store.putBoolean(KEY_OVERLAY_HANDLE_A11Y, value) }
         }
 
     /** 悬浮窗侧钮开关（v1.2.0；仅在车载模式下生效） */
@@ -1753,6 +1763,7 @@ class Prefs private constructor(context: Context) {
         const val KEY_OVERLAY_HANDLE_COLLAPSE = "overlay_handle_collapse"
         const val KEY_OVERLAY_HANDLE_PLAY_PAUSE = "overlay_handle_play_pause"
         const val KEY_OVERLAY_HANDLE_PLAYER = "overlay_handle_player"
+        const val KEY_OVERLAY_HANDLE_A11Y = "overlay_handle_a11y"
         const val KEY_OVERLAY_HANDLE_ORDER = "overlay_handle_order"
         const val KEY_GAPLESS_PLAYBACK = "gapless_playback"
         const val KEY_LYRICS_PANE = "lyrics_pane_visible"

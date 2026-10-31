@@ -100,6 +100,10 @@ class OverlaySettings(
                 settings.setOverlayHandlePlayer(enabled)
                 state.update { it.copy(overlayHandlePlayer = enabled) }
             }
+            3 -> {
+                settings.setOverlayHandleA11y(enabled)
+                state.update { it.copy(overlayHandleA11y = enabled) }
+            }
             else -> return
         }
         // 由服务在下一帧按新的掩码整组重建（syncHandlesVisibility）

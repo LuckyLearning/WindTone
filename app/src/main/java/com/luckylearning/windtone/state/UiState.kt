@@ -379,6 +379,7 @@ data class PlayerUiState(
     val overlayHandleCollapse: Boolean = SettingsDefaults.OVERLAY_HANDLE_COLLAPSE,
     val overlayHandlePlayPause: Boolean = SettingsDefaults.OVERLAY_HANDLE_PLAY_PAUSE,
     val overlayHandlePlayer: Boolean = SettingsDefaults.OVERLAY_HANDLE_PLAYER,
+    val overlayHandleA11y: Boolean = SettingsDefaults.OVERLAY_HANDLE_A11Y,
     /** 侧钮上下顺序 CSV（B1），默认与改前写死顺序一致 */
     val overlayHandleOrder: String = SettingsDefaults.OVERLAY_HANDLE_ORDER,
     /** 播放页左侧竖排是否显示「无障碍状态」按钮（v1.1.92） */

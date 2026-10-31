@@ -21,6 +21,7 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.TextView
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.CrashLog
 import com.luckylearning.windtone.diag.PerfMarks
 import com.luckylearning.windtone.data.Prefs
@@ -114,6 +115,11 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
     // v1.2.0：第三颗钮 —— 播放 / 暂停（图标自绘，不依赖系统字体里的符号）
     private var pauseHandleView: PlayPauseIconView? = null
     private var pauseHandleParams: WindowManager.LayoutParams? = null
+
+    /** 无障碍状态侧钮（绿=已开 / 红=未开；点击跳系统无障碍页） */
+    private var a11yHandleView: AccessibilityIconView? = null
+    private var a11yHandleParams: WindowManager.LayoutParams? = null
+    private var a11yWatchJob: Job? = null
 
     /**
      * 钮的纵向锚点（v1.1.95）。
@@ -1371,8 +1377,12 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         collapseHandleView?.let { if (it.visibility != target) it.visibility = target }
         playHandleView?.let { if (it.visibility != target) it.visibility = target }
         pauseHandleView?.let { if (it.visibility != target) it.visibility = target }
+        a11yHandleView?.let { if (it.visibility != target) it.visibility = target }
         windowVisible = show
-        if (show) updateHandlesPosition()
+        if (show) {
+            refreshA11yHandleStatus()
+            updateHandlesPosition()
+        }
     }
 
     // ---------------------------------------------------------------- 收起钮（v1.1.91）
@@ -1397,6 +1407,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             collapse = prefs.overlayHandleCollapse,
             playPause = prefs.overlayHandlePlayPause,
             player = prefs.overlayHandlePlayer,
+            a11y = prefs.overlayHandleA11y,
         )
     }
 
@@ -1534,6 +1545,74 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         }
     }
 
+
+    /**
+     * 第四颗钮：无障碍状态（对齐播放页「前台识别」）。
+     *
+     * 绿 = 已开，红 = 未开；点击走 [ForegroundAppDetector.openAccessibilitySettings]，
+     * **不能**在进程内假开关（系统无障碍必须由用户在系统页确认）。
+     */
+    private fun attachA11yHandle() {
+        if (a11yHandleView != null) return
+        if (desiredHandleMask() and 8 == 0) return
+        val size = dp(48)
+        val view = AccessibilityIconView(this).apply {
+            background = handleDisc(HANDLE_DISC_ALPHA)
+            setA11yEnabled(ForegroundAppDetector.accessibilityEnabled(this@LyricOverlayService))
+            elevation = dp(4).toFloat()
+            setOnClickListener {
+                com.luckylearning.windtone.diag.DiagLog.log("OVERLAY", "无障碍侧钮被点击")
+                openAccessibilityFromHandle()
+            }
+        }
+        val lp = WindowManager.LayoutParams(
+            size,
+            size,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = 0
+            y = dp(312)
+        }
+        if (!runCatching { windowManager?.addView(view, lp) }.isSuccess) return
+        a11yHandleView = view
+        a11yHandleParams = lp
+        startA11yWatch()
+    }
+
+    private fun startA11yWatch() {
+        a11yWatchJob?.cancel()
+        a11yWatchJob = scope.launch {
+            while (a11yHandleView != null) {
+                refreshA11yHandleStatus()
+                delay(2_000)
+            }
+        }
+    }
+
+    private fun refreshA11yHandleStatus() {
+        val view = a11yHandleView ?: return
+        view.setA11yEnabled(ForegroundAppDetector.accessibilityEnabled(this))
+    }
+
+    private fun openAccessibilityFromHandle() {
+        val ok = ForegroundAppDetector.openAccessibilitySettings(this)
+        if (!ok) {
+            val msg = if (ForegroundAppDetector.canOpenAccessibilityPage(this)) {
+                getString(R.string.player_a11y_open_failed)
+            } else {
+                getString(R.string.player_a11y_no_page)
+            }
+            android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_LONG).show()
+        } else {
+            // 用户可能马上开完返回：立刻刷一次，轮询会再确认
+            refreshA11yHandleStatus()
+        }
+    }
+
     /** 按当前模式与开关，挂上或摘掉侧钮（v1.2.0） */
     private fun syncHandlesVisibility() {
         val mask = desiredHandleMask()
@@ -1550,6 +1629,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         attachCollapseHandle()
         attachPauseHandle()
         attachPlayHandle()
+        attachA11yHandle()
         appliedHandleMask = mask
         updateHandlesPosition()
     }
@@ -1565,6 +1645,11 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         pauseHandleView?.let { runCatching { windowManager?.removeView(it) } }
         pauseHandleView = null
         pauseHandleParams = null
+        a11yWatchJob?.cancel()
+        a11yWatchJob = null
+        a11yHandleView?.let { runCatching { windowManager?.removeView(it) } }
+        a11yHandleView = null
+        a11yHandleParams = null
         handleAnchorY = -1
         anchorFromWindowY = Int.MIN_VALUE
         // appliedHandleMask / Order 由 syncHandlesVisibility 在重建时重写
@@ -1606,7 +1691,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
      */
     private fun updateHandlesPosition() {
         val p = layoutParams ?: return
-        val anyView = collapseHandleView ?: pauseHandleView ?: playHandleView ?: return
+        val anyView = collapseHandleView ?: pauseHandleView ?: playHandleView ?: a11yHandleView ?: return
         val size = anyView.height.takeIf { it > 0 }
             ?: dp(OverlayCollapseHelper.DEFAULT_HANDLE_SIZE_DP)
         val gap = dp(OverlayCollapseHelper.HANDLE_GAP_DP)
@@ -1652,6 +1737,8 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
                     pauseHandleView to pauseHandleParams
                 OverlayCollapseHelper.OverlayHandleKind.PLAYER ->
                     playHandleView to playHandleParams
+                OverlayCollapseHelper.OverlayHandleKind.A11Y ->
+                    a11yHandleView to a11yHandleParams
             }
             if (view == null || params == null) return@forEachIndexed
             params.x = column.x

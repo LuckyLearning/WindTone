@@ -92,6 +92,7 @@ private fun overlayHandleOrderTitle(kind: OverlayCollapseHelper.OverlayHandleKin
     OverlayCollapseHelper.OverlayHandleKind.COLLAPSE -> stringResource(R.string.oh_name_collapse)
     OverlayCollapseHelper.OverlayHandleKind.PLAY_PAUSE -> stringResource(R.string.oh_name_play_pause)
     OverlayCollapseHelper.OverlayHandleKind.PLAYER -> stringResource(R.string.oh_name_player)
+    OverlayCollapseHelper.OverlayHandleKind.A11Y -> stringResource(R.string.oh_name_a11y)
 }
 
 
@@ -136,9 +137,9 @@ internal fun SettingsOverlayPage(
     onApplyOverlayPreset: (OverlayPreset) -> Unit = {},
     /** 悬浮窗左侧三颗侧钮的显示开关（v1.2.0，仅车载模式生效） */
     onOverlayHandles: (Boolean) -> Unit = {},
-    /** 单颗侧钮开关：0 收起 / 1 播放暂停 / 2 打开播放页（v1.3.0） */
+    /** 单颗侧钮开关：0 收起 / 1 播放暂停 / 2 打开播放页 / 3 无障碍 */
     onOverlayHandle: (Int, Boolean) -> Unit = { _, _ -> },
-    /** 侧钮上下顺序 CSV（B1），如 collapse,play_pause,player */
+    /** 侧钮上下顺序 CSV（B1），如 collapse,play_pause,player,a11y */
     onOverlayHandleOrder: (String) -> Unit = {},
     onOverlayEditing: (Boolean) -> Unit,
     onOverlayPreview: () -> Unit,
@@ -247,6 +248,12 @@ internal fun SettingsOverlayPage(
                 subtitle = stringResource(R.string.oh_show_player_sub),
                 checked = player.overlayHandlePlayer,
                 onCheckedChange = { onOverlayHandle(2, it) },
+            )
+            SwitchRow(
+                title = stringResource(R.string.oh_show_a11y),
+                subtitle = stringResource(R.string.oh_show_a11y_sub),
+                checked = player.overlayHandleA11y,
+                onCheckedChange = { onOverlayHandle(3, it) },
             )
             // 侧钮上下顺序 UI（今晚 A1：补齐 B1 缺的设置页控件）。
             // Prefs / mergeHandleOrder / LyricOverlayService 引擎早已就绪；此前只挂了

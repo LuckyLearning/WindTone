@@ -103,6 +103,10 @@ class SettingsRepository(val prefs: Prefs) {
         prefs.overlayHandlePlayer = enabled
     }
 
+    fun setOverlayHandleA11y(enabled: Boolean) {
+        prefs.overlayHandleA11y = enabled
+    }
+
     fun setOverlayHandleOrder(orderCsv: String) {
         val merged = OverlayCollapseHelper.mergeHandleOrder(
             orderCsv.split(',').map { it.trim() }.filter { it.isNotEmpty() },

@@ -1037,7 +1037,7 @@
 
     <!-- i18n batch 7: SettingsOverlayPage side buttons / order (2026-10-31) -->
     <string name="oh_show_handles">显示悬浮窗侧钮（仅车载模式）</string>
-    <string name="oh_show_handles_on">歌词窗左侧三颗钮：收起 / 播放暂停 / 打开播放页</string>
+    <string name="oh_show_handles_on">歌词窗左侧侧钮：收起 / 播放暂停 / 打开播放页 / 无障碍</string>
     <string name="oh_show_handles_off">已隐藏；收起与按应用隐藏仍照常工作，只是屏幕上不再显示这三颗钮</string>
     <string name="oh_show_collapse">　显示「收起 / 展开」钮</string>
     <string name="oh_show_collapse_sub">关掉后只能从通知栏「收起 / 展开」操作悬浮歌词</string>
@@ -1045,12 +1045,15 @@
     <string name="oh_show_play_pause_sub">关掉后仍可用播放页、通知栏或方向盘控制</string>
     <string name="oh_show_player">　显示「打开播放页」钮</string>
     <string name="oh_show_player_sub">关掉后可从桌面图标或通知栏进入播放页</string>
-    <string name="oh_order_title">侧钮上下顺序</string>
-    <string name="oh_order_hint">从上到下对应屏幕上三颗钮的位置；默认：收起 → 播放暂停 → 打开播放页</string>
+        <string name="oh_show_a11y">　显示「无障碍状态」钮</string>
+    <string name="oh_show_a11y_sub">绿=已开、红=未开；点按打开系统无障碍页（与播放页同一通道，不能在应用内假开关）</string>
+<string name="oh_order_title">侧钮上下顺序</string>
+    <string name="oh_order_hint">自上而下对应屏幕顺序；默认：收起 → 播放暂停 → 打开播放页 → 无障碍</string>
     <string name="oh_name_collapse">「收起 / 展开」</string>
     <string name="oh_name_play_pause">「播放 / 暂停」</string>
     <string name="oh_name_player">「打开播放页」</string>
-    <string name="oh_order_item">%1$d. %2$s</string>
+        <string name="oh_name_a11y">「无障碍状态」</string>
+<string name="oh_order_item">%1$d. %2$s</string>
     <string name="oh_restore_order">恢复默认顺序</string>
 
 

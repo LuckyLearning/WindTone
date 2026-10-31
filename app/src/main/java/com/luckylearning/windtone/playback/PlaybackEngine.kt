@@ -105,6 +105,7 @@ class PlaybackEngine(
             overlayHandleCollapse = prefs.overlayHandleCollapse,
             overlayHandlePlayPause = prefs.overlayHandlePlayPause,
             overlayHandlePlayer = prefs.overlayHandlePlayer,
+            overlayHandleA11y = prefs.overlayHandleA11y,
             overlayHandleOrder = prefs.overlayHandleOrder,
             lyricTapSeeks = prefs.lyricTapSeeks,
             showA11yAction = prefs.playerA11yAction,

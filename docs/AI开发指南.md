@@ -2220,7 +2220,7 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 
 ### i18n 第 7 批（2026-10-31）
 
-范围：`SettingsOverlayPage.kt` 侧钮显隐 + 上下顺序（功能-侧钮顺序设置相关 UI）。
+范围：`SettingsOverlayPage.kt` 侧钮显隐 + 上下顺序；**2026-10-31** 起含第四颗无障碍状态（见 `功能-侧钮无障碍状态.md`）（功能-侧钮顺序设置相关 UI）。
 
 约定不变：`values/strings.xml` = 英文兜底，`values-zh/strings.xml` = 中文。上移/下移复用 `move_up` / `move_down`。本批前缀 `oh_`。
 

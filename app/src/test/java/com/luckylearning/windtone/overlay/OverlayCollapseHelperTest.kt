@@ -126,30 +126,35 @@ class OverlayCollapseHelperTest {
 
     @Test
     fun `侧钮掩码与整体开关、车载模式联动`() {
-        // 全开：三颗（1+2+4）
+        // 全开四颗（1+2+4+8）
+        assertEquals(15, OverlayCollapseHelper.handleMask(true, true, true, true, true, true))
+        // 旧三颗（不传 a11y，默认 false）仍为 7
         assertEquals(7, OverlayCollapseHelper.handleMask(true, true, true, true, true))
         // 只留播放暂停
         assertEquals(2, OverlayCollapseHelper.handleMask(true, true, false, true, false))
+        // 只开无障碍
+        assertEquals(8, OverlayCollapseHelper.handleMask(true, true, false, false, false, true))
         // 手机模式：一颗都不显示
-        assertEquals(0, OverlayCollapseHelper.handleMask(false, true, true, true, true))
+        assertEquals(0, OverlayCollapseHelper.handleMask(false, true, true, true, true, true))
         // 整体开关关掉：即使单颗都开着也不显示
-        assertEquals(0, OverlayCollapseHelper.handleMask(true, false, true, true, true))
+        assertEquals(0, OverlayCollapseHelper.handleMask(true, false, true, true, true, true))
         // 全关
-        assertEquals(0, OverlayCollapseHelper.handleMask(true, true, false, false, false))
+        assertEquals(0, OverlayCollapseHelper.handleMask(true, true, false, false, false, false))
     }
 
     @Test
-    fun `侧钮顺序默认与改前写死一致`() {
+    fun `侧钮顺序默认含无障碍第四颗`() {
         val order = OverlayCollapseHelper.DEFAULT_HANDLE_ORDER
         assertEquals(
             listOf(
                 OverlayCollapseHelper.OverlayHandleKind.COLLAPSE,
                 OverlayCollapseHelper.OverlayHandleKind.PLAY_PAUSE,
                 OverlayCollapseHelper.OverlayHandleKind.PLAYER,
+                OverlayCollapseHelper.OverlayHandleKind.A11Y,
             ),
             order,
         )
-        assertEquals("collapse,play_pause,player", OverlayCollapseHelper.handleOrderCsv())
+        assertEquals("collapse,play_pause,player,a11y", OverlayCollapseHelper.handleOrderCsv())
     }
 
     @Test
@@ -157,12 +162,13 @@ class OverlayCollapseHelperTest {
         val merged = OverlayCollapseHelper.mergeHandleOrder(
             listOf("player", "bogus", "collapse"),
         )
-        // 缺的 play_pause 按默认相对位置插到 player 前（与 SettingsMenuOrder.merge 同口径）
+        // 缺的 play_pause / a11y 按默认相对位置补齐（与 SettingsMenuOrder.merge 同口径）
         assertEquals(
             listOf(
                 OverlayCollapseHelper.OverlayHandleKind.PLAY_PAUSE,
                 OverlayCollapseHelper.OverlayHandleKind.PLAYER,
                 OverlayCollapseHelper.OverlayHandleKind.COLLAPSE,
+                OverlayCollapseHelper.OverlayHandleKind.A11Y,
             ),
             merged,
         )
@@ -186,7 +192,7 @@ class OverlayCollapseHelperTest {
 
     @Test
     fun `上移下移等价于 CSV 重排并可 roundtrip`() {
-        // 模拟设置页「把第 3 颗上移」：player 提到第二位
+        // 模拟设置页「把第 3 颗上移」：player 提到第二位（a11y 由 merge 补在末尾）
         val start = OverlayCollapseHelper.mergeHandleOrder(listOf("collapse", "play_pause", "player"))
         val ids = start.map { it.id }.toMutableList()
         val moved = ids.removeAt(2)
@@ -198,10 +204,24 @@ class OverlayCollapseHelperTest {
                 OverlayCollapseHelper.OverlayHandleKind.COLLAPSE,
                 OverlayCollapseHelper.OverlayHandleKind.PLAYER,
                 OverlayCollapseHelper.OverlayHandleKind.PLAY_PAUSE,
+                OverlayCollapseHelper.OverlayHandleKind.A11Y,
             ),
             again,
         )
         assertEquals(csv, OverlayCollapseHelper.handleOrderCsv(again))
+    }
+
+    @Test
+    fun `可见掩码含无障碍时按顺序出现`() {
+        val order = OverlayCollapseHelper.DEFAULT_HANDLE_ORDER
+        val visible = OverlayCollapseHelper.visibleHandles(order, mask = 8 or 1)
+        assertEquals(
+            listOf(
+                OverlayCollapseHelper.OverlayHandleKind.COLLAPSE,
+                OverlayCollapseHelper.OverlayHandleKind.A11Y,
+            ),
+            visible,
+        )
     }
 }
 
