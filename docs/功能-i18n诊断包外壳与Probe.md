@@ -48,5 +48,5 @@ title: 功能 · i18n 诊断包外壳 + SoftEq/默认音乐 Probe（第 24 批�
 
 ## 下一批候选
 
-- MemoryProbe / SceneProbe / PlaybackQualityProbe / PerfMarks / ForensicsScript
-- 扫尾仍硬编码的引擎/云盘 Toast；或车上 §5·E6 / 产品项
+- ✅ 第 25 批已覆盖 Memory/Scene/PlaybackQuality/PerfMarks/Forensics（见 `功能-i18n诊断Probe扫尾.md`）
+- 扫尾扫仓 / 车上 §5·E6 / 产品项

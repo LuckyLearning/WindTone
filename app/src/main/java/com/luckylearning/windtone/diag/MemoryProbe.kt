@@ -3,44 +3,22 @@ package com.luckylearning.windtone.diag
 import android.app.ActivityManager
 import android.content.Context
 import android.os.Debug
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.CoverRepository
+import com.luckylearning.windtone.ui.AppStrings
 import java.util.Locale
 
 /**
- * 内存画像（诊断包 `[内存]` 段，v1.2.12；2026-10-31 扩写）。
+ * 内存画像（诊断包 `[内存]` / `[Memory]` 段，v1.2.12；2026-10-31 扩写）。
  *
  * ## 为什么放进诊断包
  *
  * 车机上的内存问题只能靠用户回传诊断包来取数：这类设备不让 adb、也不方便录屏，
  * 而本段每一项都是「打开应用、点导出」就能拿到的，不需要任何额外操作。
  *
- * ## 读什么、为什么
- *
- *  - **Java 堆 used/max**：`used` 含已分配未回收的对象，比「存活集」偏大 ——
- *    只能用来比两版之间的变化，**不能当真实占用读**。
- *  - **native 堆**：`Debug.getNativeHeapAllocatedSize()` 给的是**真实分配**（不是保留），
- *    但它只有一个总数，说不出「是谁」。所以下面必须配 [ProcStats] 的映射归类。
- *  - **进程规模（线程 / fd / VmRSS / VmHWM）**：线程与 fd 是两类最典型的「慢性泄漏」，
- *    数量只增不减就说明有东西没释放；VmHWM 是历史峰值，用来判断「现在这数是不是刚涨上来的」。
- *  - **CPU 均值 + 线程热点**：分母取「进程启动至今」，所以是平均占用。播放中
- *    1%~3% 正常，8% 以上就是有线程在空转，榜单直接指出是谁。
- *  - **native 明细**：按内存映射归类。位图、JPEG 解码缓冲、解码器输出都落在
- *    `libc malloc`；图形缓冲在 `/dev/kgsl*` 或具名 anon 映射；代码在 `.so` / ART。
- *  - **封面两级缓存与解码计量**：本工程唯一可以主动收缩的常驻内存；解码计量
- *    则回答「是不是一直在解」。
- *
- * ## 判读口径（写在报告里，免得下次又从头推）
- *
- * 这里有**三个不同的分母**，混用就会得出错误结论（v1.2.40 的诊断包就踩过）：
- *
- *  - `getNativeHeapAllocatedSize` ↔ 明细里的 `libc malloc`：**这两个可比**，
- *    都是 native 分配器口径；
- *  - `Java 堆 used` ↔ 明细里的 `dalvik-*` 与 ART 映射：**这两个可比**；
- *  - `Private_Dirty 合计` = 上面两者 + /dev 共享映射 + GPU 驱动 + .so/字体。
- *    它**不是** native 堆，拿它去比 `getNativeHeapAllocatedSize` 必然「差异大」。
- *
- * 另外 `libc malloc` 要再看**段级分布**：少数几个大段 = 大对象没释放，
- * 海量小段 = 分配器碎片，两者处置相反。
+ * i18n 第 25 批：用户可见外壳进 `mp_*`。ProcStats 桶标签（如 `libc malloc…` /
+ * `匿名：dalvik`）作机器可读归类键，本批不改。
+ * **不改** SoftEq / 播放内核行为。
  */
 object MemoryProbe {
 
@@ -50,22 +28,32 @@ object MemoryProbe {
     private const val TOP_BUCKETS = 6
 
     fun buildReport(context: Context, librarySongs: Int = 0): String = buildString {
-        appendLine("[内存]")
+        appendLine(AppStrings.s(R.string.mp_sec))
 
         val rt = Runtime.getRuntime()
         val usedMb = (rt.totalMemory() - rt.freeMemory()) / MB
         val maxMb = rt.maxMemory() / MB
-        appendLine("Java 堆：$usedMb / $maxMb MB（${percent(usedMb, maxMb)}，含未回收对象，不等于存活集）")
+        appendLine(
+            AppStrings.s(R.string.mp_java_heap, usedMb, maxMb, percent(usedMb, maxMb)),
+        )
 
         // getNativeHeapAllocatedSize 在 API 24 起可用（与本工程 minSdk 一致）
         val nativeMb = runCatching { Debug.getNativeHeapAllocatedSize() / MB }.getOrDefault(-1L)
-        appendLine("native 堆：${if (nativeMb >= 0) "$nativeMb MB" else "查询失败"}")
+        val nativeText = if (nativeMb >= 0) {
+            AppStrings.s(R.string.mp_mb_int, nativeMb)
+        } else {
+            AppStrings.s(R.string.mp_query_failed)
+        }
+        appendLine(AppStrings.s(R.string.mp_native_heap, nativeText))
 
         val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
         val info = ActivityManager.MemoryInfo().also { am?.getMemoryInfo(it) }
         appendLine(
-            "系统可用：${info.availMem / MB} MB" +
-                "   低内存标志：${if (info.lowMemory) "是" else "否"}"
+            AppStrings.s(
+                R.string.mp_sys_avail,
+                info.availMem / MB,
+                yn(info.lowMemory),
+            ),
         )
 
         appendProcess()
@@ -73,43 +61,67 @@ object MemoryProbe {
 
         val s = CoverRepository.stats()
         appendLine(
-            "封面位图缓存：${mb(s.bitmapBytes)} / ${mb(s.bitmapMax.toLong())}" +
-                "   命中 ${s.bitmapHits} / 未命中 ${s.bitmapMisses}（${hitRate(s.bitmapHits, s.bitmapMisses)}）"
+            AppStrings.s(
+                R.string.mp_cover_bitmap,
+                mb(s.bitmapBytes),
+                mb(s.bitmapMax.toLong()),
+                s.bitmapHits,
+                s.bitmapMisses,
+                hitRate(s.bitmapHits, s.bitmapMisses),
+            ),
         )
         appendLine(
-            "封面原始缓存：${mb(s.rawBytes)} / ${mb(s.rawMax.toLong())}" +
-                "   命中 ${s.rawHits} / 未命中 ${s.rawMisses}（${hitRate(s.rawHits, s.rawMisses)}）"
+            AppStrings.s(
+                R.string.mp_cover_raw,
+                mb(s.rawBytes),
+                mb(s.rawMax.toLong()),
+                s.rawHits,
+                s.rawMisses,
+                hitRate(s.rawHits, s.rawMisses),
+            ),
         )
-        appendLine("封面磁盘缓存：${mb(s.diskBytes)}")
+        appendLine(AppStrings.s(R.string.mp_cover_disk, mb(s.diskBytes)))
         appendLine(
-            "封面解码：磁盘 ${s.decodeFromDisk} 次 · 原始 ${s.decodeFromSource} 次" +
-                "   累计产出 ${mb(s.decodedBytes)}（吞吐，非常驻）   峰值单张 ${mb(s.peakDecodedBytes.toLong())}"
+            AppStrings.s(
+                R.string.mp_cover_decode,
+                s.decodeFromDisk,
+                s.decodeFromSource,
+                mb(s.decodedBytes),
+                mb(s.peakDecodedBytes.toLong()),
+            ),
         )
-        if (librarySongs > 0) appendLine("曲库：$librarySongs 首")
+        if (librarySongs > 0) appendLine(AppStrings.s(R.string.mp_library, librarySongs))
 
         // 位图账：这是判定「libc malloc 到底是不是位图」的唯一直接证据。
         // 弱引用跟踪，含「已 recycle 但还没被 GC」的位图，所以只会偏大不会漏报。
         val bm = BitmapMeter.stats()
         appendLine(
-            "位图存活（本进程，弱引用跟踪）：当前 ${mb(bm.liveBytes)}" +
-                "   峰值 ${mb(bm.peakLiveBytes)}" +
-                "   累计创建 ${bm.created} 张 / ${mb(bm.createdBytes)}（吞吐，非常驻）"
+            AppStrings.s(
+                R.string.mp_bitmap_live,
+                mb(bm.liveBytes),
+                mb(bm.peakLiveBytes),
+                bm.created,
+                mb(bm.createdBytes),
+            ),
         )
-        appendLine("  判读：当前存活若与上方 libc malloc 同量级 → 那几十上百 MB 就是位图；" +
-            "若远小于它 → 占用在别处（解码器缓冲 / Skia / 分配器碎片）")
-        appendLine("预算依据：位图 maxMemory/8（夹 8~32MB）· 原始 maxMemory/32（夹 1.5~3MB）")
+        appendLine(AppStrings.s(R.string.mp_bitmap_read))
+        appendLine(AppStrings.s(R.string.mp_budget))
     }
 
     /** 进程规模 + CPU 均值 + 线程热点 */
     private fun StringBuilder.appendProcess() {
         val proc = ProcStats.read()
         if (proc == null) {
-            appendLine("进程：/proc/self 读取失败（本机限制），线程与 fd 数量不可得")
+            appendLine(AppStrings.s(R.string.mp_proc_fail))
         } else {
             appendLine(
-                "进程：线程 ${if (proc.threads >= 0) proc.threads else "?"}" +
-                    "   文件描述符 ${if (proc.fds >= 0) proc.fds else "?"}" +
-                    "   VmRSS ${proc.vmRssKb / 1024} MB   历史峰值 ${proc.vmHwmKb / 1024} MB"
+                AppStrings.s(
+                    R.string.mp_proc_line,
+                    if (proc.threads >= 0) proc.threads.toString() else "?",
+                    if (proc.fds >= 0) proc.fds.toString() else "?",
+                    proc.vmRssKb / 1024,
+                    proc.vmHwmKb / 1024,
+                ),
             )
         }
 
@@ -118,17 +130,25 @@ object MemoryProbe {
         if (cpu == null) {
             // 2026-10-31：以前只写「读取失败」，等于把线索一起丢了。
             // 现在把具体环节带上，并明确说明这一段的缺失意味着什么。
-            appendLine("CPU：不可得 —— ${reading.failReason ?: "原因未知"}")
-            appendLine("  判读：CPU 段失效时，卡顿/空转问题无法从诊断包判断；请把这行原文回传")
+            appendLine(
+                AppStrings.s(
+                    R.string.mp_cpu_fail,
+                    reading.failReason ?: AppStrings.s(R.string.mp_reason_unknown),
+                ),
+            )
+            appendLine(AppStrings.s(R.string.mp_cpu_fail_read))
             return
         }
         appendLine(
-            "CPU：平均 ${oneDecimal(cpu.processPercent)}%（进程存活 ${duration(cpu.uptimeSec)}，" +
-                "分母 ${cpu.basis}）" +
-                "   判读：播放中 1~3% 属正常，≥8% 说明有线程空转",
+            AppStrings.s(
+                R.string.mp_cpu_ok,
+                oneDecimal(cpu.processPercent),
+                duration(cpu.uptimeSec),
+                cpu.basis,
+            ),
         )
         cpu.top.forEach {
-            appendLine("  · ${oneDecimal(it.percent)}%  ${it.name}")
+            appendLine(AppStrings.s(R.string.mp_cpu_top, oneDecimal(it.percent), it.name))
         }
     }
 
@@ -136,21 +156,25 @@ object MemoryProbe {
     private fun StringBuilder.appendNativeBuckets(nativeMb: Long, javaUsedMb: Long) {
         val smaps = ProcStats.readSmaps()
         if (smaps == null || smaps.buckets.isEmpty()) {
-            appendLine("native 明细：/proc/self/smaps 不可读（本机限制），只能看总数")
+            appendLine(AppStrings.s(R.string.mp_native_detail_fail))
             return
         }
-        appendLine("native 明细（/proc/self/smaps，按 Private_Dirty 降序）：")
+        appendLine(AppStrings.s(R.string.mp_native_detail_hdr))
         smaps.buckets.take(TOP_BUCKETS).forEach {
-            appendLine("  ${it.label}  ${mbFromKb(it.privateDirtyKb)}")
+            appendLine(AppStrings.s(R.string.mp_bucket_line, it.label, mbFromKb(it.privateDirtyKb)))
         }
         val rest = smaps.buckets.drop(TOP_BUCKETS)
         if (rest.isNotEmpty()) {
             val restKb = rest.sumOf { it.privateDirtyKb }
-            appendLine("  其它 ${rest.size} 类   ${mbFromKb(restKb)}")
+            appendLine(AppStrings.s(R.string.mp_other_buckets, rest.size, mbFromKb(restKb)))
         }
         appendLine(
-            "  合计 Private_Dirty ${mbFromKb(smaps.privateDirtyKb)}" +
-                " · Pss ${mbFromKb(smaps.pssKb)} · Rss ${mbFromKb(smaps.rssKb)}"
+            AppStrings.s(
+                R.string.mp_totals,
+                mbFromKb(smaps.privateDirtyKb),
+                mbFromKb(smaps.pssKb),
+                mbFromKb(smaps.rssKb),
+            ),
         )
         appendMallocSegments(smaps)
         appendReconciliation(nativeMb, javaUsedMb, smaps)
@@ -173,27 +197,31 @@ object MemoryProbe {
         val over4Mb = malloc.filter { it.dirtyKb >= 4096 }
         val maxKb = malloc.maxOf { it.dirtyKb }
         appendLine(
-            "  malloc 段分布：共 ${malloc.size} 段 · 合计 ${mbFromKb(totalKb)}" +
-                " · 最大单段 ${mbFromKb(maxKb)}" +
-                " · ≥1MB ${over1Mb.size} 段（占 ${share(over1Mb.sumOf { it.dirtyKb }, totalKb)}）" +
-                " · ≥4MB ${over4Mb.size} 段"
+            AppStrings.s(
+                R.string.mp_malloc_dist,
+                malloc.size,
+                mbFromKb(totalKb),
+                mbFromKb(maxKb),
+                over1Mb.size,
+                share(over1Mb.sumOf { it.dirtyKb }, totalKb),
+                over4Mb.size,
+            ),
         )
         // 只列前 3 段：再多就是重复信息，报告要看的是「量级对不对」
         malloc.take(3).forEach {
-            appendLine("    · ${mbFromKb(it.dirtyKb)}  ${it.name.take(48)}")
+            appendLine(AppStrings.s(R.string.mp_malloc_seg, mbFromKb(it.dirtyKb), it.name.take(48)))
         }
-        appendLine("  判读：≥1MB 段占比高 = 少数大对象没释放（位图/解码缓冲）；段多而单段小 = 分配器碎片")
+        appendLine(AppStrings.s(R.string.mp_malloc_read))
     }
 
     /**
      * 三个口径分开对账。
      *
-     * v1.2.40 的判读写的是「明细 405MB 与 native 255MB 差太多，本机
-     * getNativeHeapAllocatedSize 不可信」—— **这是错的**：255MB 恰好等于
-     * libc malloc 的 246MB，两者本来就吻合；405MB 是全进程 Private_Dirty，
-     * 多出来的是 ART 堆（122MB）+ /dev + GPU。拿分子比分母，才会「差异大」。
+     * v1.2.40 的判读写的是「明细 405MB 与 native 255MB 差太多…」—— **这是错的**：
+     * 255MB 恰好等于 libc malloc；405MB 是全进程 Private_Dirty。
+     * 现在的写法把三组关系各自说清。
      *
-     * 现在的写法把三组关系各自说清：对得上就说对得上，对不上才说不可信。
+     * 桶标签匹配仍用 ProcStats 中文归类键（机器可读，本批不改）。
      */
     private fun StringBuilder.appendReconciliation(
         nativeMb: Long,
@@ -206,11 +234,22 @@ object MemoryProbe {
         }.sumOf { it.privateDirtyKb } / 1024
         val restMb = smaps.privateDirtyKb / 1024 - mallocMb - artMb
 
-        appendLine("  对账（三组口径各算各的，不可互相替代）：")
-        val nativePart = if (nativeMb >= 0) "${nativeMb}MB ${agree(mallocMb, nativeMb)}" else "查询失败"
-        appendLine("    · native malloc ${mallocMb}MB ↔ getNativeHeapAllocatedSize $nativePart")
-        appendLine("    · ART 堆映射 ${artMb}MB ↔ Java 堆 used ${javaUsedMb}MB ${agree(artMb, javaUsedMb)}")
-        appendLine("    · 其余 ${restMb}MB = /dev 共享映射、GPU 驱动、.so 与字体（不归任何一方）")
+        appendLine(AppStrings.s(R.string.mp_reconcile_hdr))
+        val nativePart = if (nativeMb >= 0) {
+            "${nativeMb}MB ${agree(mallocMb, nativeMb)}"
+        } else {
+            AppStrings.s(R.string.mp_query_failed)
+        }
+        appendLine(AppStrings.s(R.string.mp_reconcile_native, mallocMb, nativePart))
+        appendLine(
+            AppStrings.s(
+                R.string.mp_reconcile_art,
+                artMb,
+                javaUsedMb,
+                agree(artMb, javaUsedMb),
+            ),
+        )
+        appendLine(AppStrings.s(R.string.mp_reconcile_rest, restMb))
     }
 
     /** 秒 → `1h02m` / `12m30s`。长跑诊断里「跑了多久才涨成这样」比精确到秒更重要 */
@@ -234,7 +273,11 @@ object MemoryProbe {
     private fun agree(a: Long, b: Long): String {
         val diff = kotlin.math.abs(a - b)
         val tolerant = maxOf(16L, maxOf(a, b) / 4)
-        return if (diff <= tolerant) "（一致，差 ${diff}MB）" else "（差 ${diff}MB，异常）"
+        return if (diff <= tolerant) {
+            AppStrings.s(R.string.mp_agree_ok, diff)
+        } else {
+            AppStrings.s(R.string.mp_agree_bad, diff)
+        }
     }
 
     private fun mb(bytes: Int): String = mb(bytes.toLong())
@@ -242,8 +285,6 @@ object MemoryProbe {
     private fun mb(bytes: Long): String = String.format(Locale.US, "%.1f MB", bytes / 1024.0 / 1024.0)
 
     private fun mbFromKb(kb: Long): String = String.format(Locale.US, "%.1f MB", kb / 1024.0)
-
-    private fun oneDecimal(v: Double): String = String.format(Locale.US, "%.1f", v)
 
     private fun percent(used: Long, max: Long): String =
         if (max <= 0L) "—" else String.format(Locale.US, "%.0f%%", used * 100.0 / max)
@@ -254,4 +295,9 @@ object MemoryProbe {
         if (total <= 0) return "—"
         return String.format(Locale.US, "%.0f%%", hits * 100.0 / total)
     }
+
+    private fun oneDecimal(v: Double): String = String.format(Locale.US, "%.1f", v)
+
+    private fun yn(v: Boolean) =
+        AppStrings.s(if (v) R.string.dr_yes else R.string.dr_no)
 }

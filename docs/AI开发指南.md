@@ -2383,3 +2383,11 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 - `SoftEqProbeTest` / `DiagnosticsReportTest` → Robolectric `zh-rCN` + `AppStrings.init`
 - 文档：`docs/功能-i18n诊断包外壳与Probe.md`
 
+### i18n 第 25 批（2026-11-01）
+
+**诊断 Probe 扫尾**：`mp_*` MemoryProbe；`scn_*` SceneProbe；`pq_*` PlaybackQualityProbe；`pf_*` PerfMarks；`fs_*` ForensicsScript（注释/短提示）。
+
+- SoftEq / 播放内核本批不改；ProcStats 桶标签作机器可读归类键保留
+- 相关单测 → Robolectric `zh-rCN` + `AppStrings.init`
+- 文档：`docs/功能-i18n诊断Probe扫尾.md`
+

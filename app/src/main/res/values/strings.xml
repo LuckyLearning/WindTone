@@ -1703,4 +1703,121 @@ Expired codes refresh automatically. This app is read-only — it never uploads,
     <string name="dmp_note1">Note: this section only proves candidacy as a music app. Whether it is the system default is set in the car UI;</string>
     <string name="dmp_note2">      there is no standard query API. If the first three are “declared” but this app is still missing from the list,</string>
     <string name="dmp_note3">      the car likely uses a private whitelist (see docs/竞品调研-车机音乐应用.md).</string>
+
+    <!-- i18n batch 25: MemoryProbe (mp_*) -->
+    <string name="mp_sec">[Memory]</string>
+    <string name="mp_java_heap">Java heap: %1$d / %2$d MB (%3$s, includes unreclaimed objects, not live set)</string>
+    <string name="mp_native_heap">native heap: %1$s</string>
+    <string name="mp_mb_int">%1$d MB</string>
+    <string name="mp_query_failed">query failed</string>
+    <string name="mp_sys_avail">System available: %1$d MB   Low-memory flag: %2$s</string>
+    <string name="mp_cover_bitmap">Cover bitmap cache: %1$s / %2$s   hits %3$d / misses %4$d (%5$s)</string>
+    <string name="mp_cover_raw">Cover raw cache: %1$s / %2$s   hits %3$d / misses %4$d (%5$s)</string>
+    <string name="mp_cover_disk">Cover disk cache: %1$s</string>
+    <string name="mp_cover_decode">Cover decode: disk %1$d · source %2$d   produced %3$s (throughput, not resident)   peak one %4$s</string>
+    <string name="mp_library">Library: %1$d tracks</string>
+    <string name="mp_bitmap_live">Bitmap live (this process, weak-ref tracked): now %1$s   peak %2$s   created %3$d / %4$s (throughput, not resident)</string>
+    <string name="mp_bitmap_read">  Reading: if live ≈ libc malloc above → those tens/hundreds of MB are bitmaps; if much smaller → elsewhere (decoder buffers / Skia / allocator fragmentation)</string>
+    <string name="mp_budget">Budget: bitmap maxMemory/8 (clamped 8~32MB) · raw maxMemory/32 (clamped 1.5~3MB)</string>
+    <string name="mp_proc_fail">Process: /proc/self read failed (device limit); thread and fd counts unavailable</string>
+    <string name="mp_proc_line">Process: threads %1$s   fds %2$s   VmRSS %3$d MB   peak %4$d MB</string>
+    <string name="mp_cpu_fail">CPU: unavailable — %1$s</string>
+    <string name="mp_reason_unknown">reason unknown</string>
+    <string name="mp_cpu_fail_read">  Reading: when the CPU section fails, jank/spin cannot be judged from the pack; paste this line back</string>
+    <string name="mp_cpu_ok">CPU: avg %1$s%% (alive %2$s, basis %3$s)   Reading: 1~3%% while playing is normal; ≥8%% means a spinning thread</string>
+    <string name="mp_cpu_top">  · %1$s%%  %2$s</string>
+    <string name="mp_native_detail_fail">native detail: /proc/self/smaps unreadable (device limit); total only</string>
+    <string name="mp_native_detail_hdr">native detail (/proc/self/smaps, by Private_Dirty desc):</string>
+    <string name="mp_bucket_line">  %1$s  %2$s</string>
+    <string name="mp_other_buckets">  other %1$d classes   %2$s</string>
+    <string name="mp_totals">  total Private_Dirty %1$s · Pss %2$s · Rss %3$s</string>
+    <string name="mp_malloc_dist">  malloc segments: %1$d segs · total %2$s · largest %3$s · ≥1MB %4$d segs (%5$s) · ≥4MB %6$d segs</string>
+    <string name="mp_malloc_seg">    · %1$s  %2$s</string>
+    <string name="mp_malloc_read">  Reading: high ≥1MB share = few large objects unreleased (bitmap/decoder); many tiny segs = allocator fragmentation</string>
+    <string name="mp_reconcile_hdr">  Reconciliation (three bases, not interchangeable):</string>
+    <string name="mp_reconcile_native">    · native malloc %1$dMB ↔ getNativeHeapAllocatedSize %2$s</string>
+    <string name="mp_reconcile_art">    · ART heap maps %1$dMB ↔ Java heap used %2$dMB %3$s</string>
+    <string name="mp_reconcile_rest">    · rest %1$dMB = /dev shared maps, GPU drivers, .so and fonts (neither side)</string>
+    <string name="mp_agree_ok">(match, Δ %1$dMB)</string>
+    <string name="mp_agree_bad">(Δ %1$dMB, anomaly)</string>
+
+    <!-- i18n batch 25: SceneProbe (scn_*) -->
+    <string name="scn_sec">[Scene]</string>
+    <string name="scn_current">Current: %1$s</string>
+    <string name="scn_cold">Cold-start plan: %1$s</string>
+    <string name="scn_prefs_id">Prefs.sceneId: %1$s</string>
+    <string name="scn_prefs_empty">(empty=off)</string>
+    <string name="scn_prefs_stash">Prefs.sceneStash: %1$s</string>
+    <string name="scn_snap_summary">Snapshot summary: %1$s</string>
+    <string name="scn_recent_hdr">Recent switches (this process DiagLog · SCENE):</string>
+    <string name="scn_recent_empty">(empty: no scene switch yet this process, or just started)</string>
+    <string name="scn_note">Note: read-only; no credentials; bands curve length only, not values.</string>
+    <string name="scn_off">off</string>
+    <string name="scn_drive">drive</string>
+    <string name="scn_commute">commute</string>
+    <string name="scn_sleep">sleep</string>
+    <string name="scn_id_fmt">%1$s (%2$s)</string>
+    <string name="scn_id_unknown">%1$s (unknown profile)</string>
+    <string name="scn_mismatch">Prefs=%1$s · memory=%2$s (mismatch)</string>
+    <string name="scn_cold_none">no scene (do not reapply)</string>
+    <string name="scn_cold_reapply">reapply %1$s (do not re-snapshot stash)</string>
+    <string name="scn_cold_clear">clear invalid id (exit-restore if stash exists)</string>
+    <string name="scn_stash_none">none</string>
+    <string name="scn_stash_ok">present (decodable)</string>
+    <string name="scn_stash_bad">present (corrupt format, treat as none)</string>
+    <string name="scn_stash_decode_fail">decode failed (field count/version)</string>
+    <string name="scn_no_scheme">(no scheme)</string>
+    <string name="scn_none_paren">(none)</string>
+    <string name="scn_snap_fmt">EQ%1$s preset=%2$s bandsLen=%3$d bass=%4$d virtual=%5$d loudness=%6$d reverb=%7$s scheme=%8$s speed=%9$s pitch=%10$d sleepLeft=%11$dms</string>
+
+    <!-- i18n batch 25: PlaybackQualityProbe (pq_*) -->
+    <string name="pq_sec">[Playback quality]</string>
+    <string name="pq_decoder">Decoder: %1$s</string>
+    <string name="pq_decoder_unknown">unknown (not started or no callback yet)</string>
+    <string name="pq_format">Format: %1$s</string>
+    <string name="pq_unknown">unknown</string>
+    <string name="pq_bitrate">Bitrate: %1$d kbps</string>
+    <string name="pq_passthrough">Passthrough: %1$s</string>
+    <string name="pq_pt_yes">likely yes (compressed direct out)</string>
+    <string name="pq_pt_no">no (PCM / common decode path)</string>
+    <string name="pq_pt_unknown">unknown</string>
+    <string name="pq_underrun">Audio underruns: %1$d (this process)</string>
+    <string name="pq_last_err">Last audio error: %1$s</string>
+    <string name="pq_none">none</string>
+
+    <!-- i18n batch 25: PerfMarks (pf_*) -->
+    <string name="pf_sec">[Performance]</string>
+    <string name="pf_cold_none">Cold start: no previous BootTrace (first install or file cleared)</string>
+    <string name="pf_cold_hdr">Cold start (previous): %1$s</string>
+    <string name="pf_cold_frame">first frame shown, %1$d ms</string>
+    <string name="pf_cold_diag">stopped at diagnostics (did not enter app)</string>
+    <string name="pf_cold_no_frame">no first frame, last stage=%1$s</string>
+    <string name="pf_empty">(empty)</string>
+    <string name="pf_stage_line">  · %1$s @ %2$d ms</string>
+    <string name="pf_stage_frame">  · %1$s @ %2$d ms (first frame)</string>
+    <string name="pf_fail_line">  · fail %1$s: %2$s</string>
+    <string name="pf_overlay">Overlay mount: %1$s</string>
+    <string name="pf_overlay_ok">ok, %1$d ms</string>
+    <string name="pf_overlay_fail">failed, %1$d ms</string>
+    <string name="pf_overlay_ok_nocost">mounted (no timing)</string>
+    <string name="pf_overlay_fail_nocost">mount failed (no timing)</string>
+    <string name="pf_overlay_never">not mounted this process</string>
+
+    <!-- i18n batch 25: ForensicsScript (fs_*) -->
+    <string name="fs_title"># WindTone one-tap forensics</string>
+    <string name="fs_app"># App: v%1$s (%2$d)    package: %3$s</string>
+    <string name="fs_mapping"># mapping: mapping-v%1$s (same name as GitHub Release asset)</string>
+    <string name="fs_usage1"># Usage: connect the phone via USB/wireless debug, paste the block below into a terminal.</string>
+    <string name="fs_usage2"># Windows: Git Bash / WSL; PowerShell: run line by line (drop comment lines).</string>
+    <string name="fs_sec_proc"># Is the process alive</string>
+    <string name="fs_sec_pkg"># Package info / permissions / components</string>
+    <string name="fs_sec_act"># Foreground Activity / services</string>
+    <string name="fs_sec_win"># Overlay / accessibility / notifications</string>
+    <string name="fs_sec_audio"># Audio focus / session (useful for playback bugs)</string>
+    <string name="fs_sec_log"># logcat: by PID if present; otherwise coarse tag filter</string>
+    <string name="fs_sec_priv"># App-private crash / boot trace / diagnostics (debug: run-as; release needs debuggable)</string>
+    <string name="fs_sec_ext"># External diagnostics dir (app-writable, no run-as)</string>
+    <string name="fs_done">echo &quot;Forensics done: $OUT&quot;</string>
+    <string name="fs_retrace"># Retrace (place Release mapping-v%1$s.txt in cwd first):</string>
+    <string name="fs_hint">Settings → About &amp; diagnostics → \"One-tap forensics\" copies the full adb script (package %1$s, mapping-v%2$s).</string>
 </resources>

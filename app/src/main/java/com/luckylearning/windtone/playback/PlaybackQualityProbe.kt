@@ -7,12 +7,16 @@ import androidx.media3.exoplayer.DecoderCounters
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioSink
+import com.luckylearning.windtone.R
+import com.luckylearning.windtone.ui.AppStrings
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * 播放质量可观测（A3）：挂在 ExoPlayer 的 [AnalyticsListener] 上，只记账、不改听感。
  *
  * 诊断包「播放质量」段读取 [report]；拿不到的字段如实写「未知」。
+ *
+ * i18n 第 25 批：报告正文进 `pq_*`；AnalyticsListener 记账逻辑不改。
  */
 @UnstableApi
 object PlaybackQualityProbe : AnalyticsListener {
@@ -149,26 +153,35 @@ object PlaybackQualityProbe : AnalyticsListener {
     }
 
     fun report(): String = buildString {
-        appendLine("[播放质量]")
-        appendLine("解码器：${decoderName ?: "未知（尚未起播或未回调）"}")
+        appendLine(AppStrings.s(R.string.pq_sec))
+        appendLine(
+            AppStrings.s(
+                R.string.pq_decoder,
+                decoderName ?: AppStrings.s(R.string.pq_decoder_unknown),
+            ),
+        )
         val fmtBits = buildString {
-            append(sampleMimeType ?: "未知")
+            append(sampleMimeType ?: AppStrings.s(R.string.pq_unknown))
             if (sampleRateHz > 0) append("  ").append(sampleRateHz).append(" Hz")
             if (channelCount > 0) append("  ").append(channelCount).append(" ch")
         }
-        appendLine("格式：$fmtBits")
+        appendLine(AppStrings.s(R.string.pq_format, fmtBits))
         if (bitrate != Format.NO_VALUE && bitrate > 0) {
-            appendLine("码率：${bitrate / 1000} kbps")
+            appendLine(AppStrings.s(R.string.pq_bitrate, bitrate / 1000))
         }
+        val pt = when (passthrough) {
+            true -> AppStrings.s(R.string.pq_pt_yes)
+            false -> AppStrings.s(R.string.pq_pt_no)
+            null -> AppStrings.s(R.string.pq_pt_unknown)
+        }
+        appendLine(AppStrings.s(R.string.pq_passthrough, pt))
+        appendLine(AppStrings.s(R.string.pq_underrun, underruns.get()))
         appendLine(
-            "直通：" + when (passthrough) {
-                true -> "疑似是（压缩格式直出）"
-                false -> "否（PCM/常见解码路径）"
-                null -> "未知"
-            },
+            AppStrings.s(
+                R.string.pq_last_err,
+                lastAudioError ?: AppStrings.s(R.string.pq_none),
+            ),
         )
-        appendLine("缓冲欠载次数：${underruns.get()}（本进程累计）")
-        appendLine("最近音频错误：${lastAudioError ?: "无"}")
         // gapless 行由 DiagnosticsReport 追加（A7：平台默认开启说明 + 历史死键），避免本对象依赖 Context
     }.trimEnd()
 }

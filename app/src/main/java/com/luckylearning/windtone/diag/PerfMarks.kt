@@ -1,12 +1,16 @@
 package com.luckylearning.windtone.diag
 
 import android.content.Context
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.BootTrace
+import com.luckylearning.windtone.ui.AppStrings
 
 /**
  * 轻量性能埋点（A3）：冷启动 / 首帧复用 [BootTrace]；悬浮窗挂载单独记一次耗时。
  *
  * 只写内存计数与时间戳，**不改播放路径**；供诊断包「性能」段读取。
+ *
+ * i18n 第 25 批：报告正文进 `pf_*`；BootTrace stage 常量字面量保持机器可读。
  */
 object PerfMarks {
 
@@ -50,40 +54,61 @@ object PerfMarks {
 
     /** 拼进诊断包的「性能」段 */
     fun buildReport(context: Context): String = buildString {
-        appendLine("[性能]")
+        appendLine(AppStrings.s(R.string.pf_sec))
         val prev = runCatching { BootTrace.previous(context) }.getOrNull()
         if (prev == null || prev.lines.isEmpty()) {
-            appendLine("冷启动：尚无上一轮 BootTrace（首次安装或文件被清）")
+            appendLine(AppStrings.s(R.string.pf_cold_none))
         } else {
             val frame = prev.lines.firstOrNull { it.stage == BootTrace.STAGE_FRAME }
             val app = prev.lines.firstOrNull { it.stage == BootTrace.STAGE_APP }
             val activity = prev.lines.firstOrNull { it.stage == BootTrace.STAGE_ACTIVITY }
             val content = prev.lines.firstOrNull { it.stage == BootTrace.STAGE_CONTENT }
-            appendLine(
-                "冷启动（上一轮）：" + when {
-                    frame != null -> "已出首帧，耗时 ${frame.elapsedMs} ms"
-                    prev.stoppedAtDiag -> "停在诊断页（未点进入应用）"
-                    else -> "未出首帧，最后阶段=${prev.lastStage ?: "（空）"}"
-                },
-            )
-            if (app != null) appendLine("  · ${BootTrace.STAGE_APP} @ ${app.elapsedMs} ms")
-            if (activity != null) appendLine("  · ${BootTrace.STAGE_ACTIVITY} @ ${activity.elapsedMs} ms")
-            if (content != null) appendLine("  · ${BootTrace.STAGE_CONTENT} @ ${content.elapsedMs} ms")
-            if (frame != null) appendLine("  · ${BootTrace.STAGE_FRAME} @ ${frame.elapsedMs} ms（首帧）")
+            val coldDetail = when {
+                frame != null -> AppStrings.s(R.string.pf_cold_frame, frame.elapsedMs)
+                prev.stoppedAtDiag -> AppStrings.s(R.string.pf_cold_diag)
+                else -> AppStrings.s(
+                    R.string.pf_cold_no_frame,
+                    prev.lastStage ?: AppStrings.s(R.string.pf_empty),
+                )
+            }
+            appendLine(AppStrings.s(R.string.pf_cold_hdr, coldDetail))
+            if (app != null) {
+                appendLine(AppStrings.s(R.string.pf_stage_line, BootTrace.STAGE_APP, app.elapsedMs))
+            }
+            if (activity != null) {
+                appendLine(
+                    AppStrings.s(R.string.pf_stage_line, BootTrace.STAGE_ACTIVITY, activity.elapsedMs),
+                )
+            }
+            if (content != null) {
+                appendLine(
+                    AppStrings.s(R.string.pf_stage_line, BootTrace.STAGE_CONTENT, content.elapsedMs),
+                )
+            }
+            if (frame != null) {
+                appendLine(
+                    AppStrings.s(R.string.pf_stage_frame, BootTrace.STAGE_FRAME, frame.elapsedMs),
+                )
+            }
             prev.failures.forEach {
-                appendLine("  · 失败 ${it.stage.removePrefix("fail:")}：${it.note ?: ""}")
+                appendLine(
+                    AppStrings.s(
+                        R.string.pf_fail_line,
+                        it.stage.removePrefix("fail:"),
+                        it.note ?: "",
+                    ),
+                )
             }
         }
         val cost = overlayMountCostMs
         val ok = overlayMountOk
-        appendLine(
-            "悬浮窗挂载：" + when {
-                cost != null && ok == true -> "成功，耗时 ${cost} ms"
-                cost != null && ok == false -> "失败，耗时 ${cost} ms"
-                ok == true -> "已挂载（未采到耗时）"
-                ok == false -> "挂载失败（未采到耗时）"
-                else -> "本进程尚未挂载过"
-            },
-        )
+        val overlayDetail = when {
+            cost != null && ok == true -> AppStrings.s(R.string.pf_overlay_ok, cost)
+            cost != null && ok == false -> AppStrings.s(R.string.pf_overlay_fail, cost)
+            ok == true -> AppStrings.s(R.string.pf_overlay_ok_nocost)
+            ok == false -> AppStrings.s(R.string.pf_overlay_fail_nocost)
+            else -> AppStrings.s(R.string.pf_overlay_never)
+        }
+        appendLine(AppStrings.s(R.string.pf_overlay, overlayDetail))
     }.trimEnd()
 }

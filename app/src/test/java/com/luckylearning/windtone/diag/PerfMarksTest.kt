@@ -3,6 +3,7 @@ package com.luckylearning.windtone.diag
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.luckylearning.windtone.data.BootTrace
+import com.luckylearning.windtone.ui.AppStrings
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -11,13 +12,14 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+@Config(sdk = [34], application = Application::class, qualifiers = "zh-rCN")
 class PerfMarksTest {
 
     private val context: Application = ApplicationProvider.getApplicationContext()
 
     @Before
     fun setUp() {
+        AppStrings.init(context)
         PerfMarks.resetForTest()
         // 清掉上一轮 boot 文件，避免串味
         BootTrace.begin(context)

@@ -1,16 +1,31 @@
 package com.luckylearning.windtone.diag
 
+import android.app.Application
+import androidx.test.core.app.ApplicationProvider
 import com.luckylearning.windtone.playback.SceneProfiles
 import com.luckylearning.windtone.playback.SceneStash
+import com.luckylearning.windtone.ui.AppStrings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
- * `[场景]` 段纯函数（不启 Robolectric）：标签、冷启动文案、stash 摘要、日志过滤。
+ * `[场景]` 段（i18n 第 25 批后正文走 `scn_*`）。
+ * Robolectric zh-rCN 对齐中文断言；不测 SceneMode 门控。
  */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], application = Application::class, qualifiers = "zh-rCN")
 class SceneProbeTest {
+
+    @Before
+    fun setUp() {
+        AppStrings.init(ApplicationProvider.getApplicationContext())
+    }
 
     @Test
     fun `labelOf 已知档附中文`() {
@@ -73,14 +88,14 @@ class SceneProbeTest {
     @Test
     fun `recentSceneLogs 只留 SCENE`() {
         val lines = listOf(
-            "10:00:00.000 [FG] x",
-            "10:00:01.000 [SCENE] 套用 drive",
-            "10:00:02.000 [OVERLAY] y",
-            "10:00:03.000 [SCENE] 退出并还原",
+            "[FG] x",
+            "12:00 [SCENE] enter drive",
+            "[OVERLAY] y",
+            "12:01 [SCENE] exit",
         )
-        val recent = SceneProbe.recentSceneLogs(lines)
-        assertEquals(2, recent.size)
-        assertTrue(recent[0].contains("套用 drive"))
-        assertTrue(recent[1].contains("退出并还原"))
+        val out = SceneProbe.recentSceneLogs(lines)
+        assertEquals(2, out.size)
+        assertTrue(out[0].contains("[SCENE]"))
+        assertTrue(out[1].contains("[SCENE]"))
     }
 }
