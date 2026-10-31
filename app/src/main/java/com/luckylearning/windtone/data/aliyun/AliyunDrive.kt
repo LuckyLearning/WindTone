@@ -42,6 +42,11 @@ data class AliyunListPage(
  * 文件类型、展示名与「用哪个盘」的选择。
  */
 object AliyunRules {
+    /** 盘类型稳定键（与接口语义对应；UI 再本地化展示，勿当已翻译文案）。 */
+    const val LABEL_BACKUP = "备份盘"
+    const val LABEL_RESOURCE = "资源库"
+    const val LABEL_DEFAULT = "默认盘"
+
 
     /** 播放器能解的音频后缀。wma/ape/dsf 不在内：本工程没接 ffmpeg 解码器 */
     private val PLAYABLE = setOf("mp3", "flac", "m4a", "aac", "ogg", "oga", "opus", "wav")
@@ -123,8 +128,8 @@ object AliyunRules {
         atRoot: Boolean,
     ): String? {
         if (!atRoot) return null
-        val resource = drives.firstOrNull { it.first == "资源库" }?.second ?: return null
-        val backup = drives.firstOrNull { it.first == "备份盘" }?.second ?: return null
+        val resource = drives.firstOrNull { it.first == LABEL_RESOURCE }?.second ?: return null
+        val backup = drives.firstOrNull { it.first == LABEL_BACKUP }?.second ?: return null
         if (currentDriveId == backup && resource != currentDriveId) return resource
         return null
     }
@@ -189,7 +194,7 @@ class AliyunDrive(
             AliyunRules.pickDrive(defaultDriveId, resourceDriveId, backupDriveId)
 
         /**
-         * 可切换的盘：Pair(显示名, drive_id)。
+         * 可切换的盘：Pair(稳定键 / 展示键, drive_id)；UI 用 [AliyunRules] 常量映射到 strings。
          *
          * **默认盘也要列出来**：接口给的 default_drive_id 有时既不等于备份盘也不等于
          * 资源库，只列后两个的话，用户切走之后就没有入口切回来了。
@@ -198,9 +203,9 @@ class AliyunDrive(
          */
         fun availableDrives(): List<Pair<String, String>> {
             val candidates = buildList {
-                if (backupDriveId.isNotBlank()) add("备份盘" to backupDriveId)
-                if (resourceDriveId.isNotBlank()) add("资源库" to resourceDriveId)
-                if (defaultDriveId.isNotBlank()) add("默认盘" to defaultDriveId)
+                if (backupDriveId.isNotBlank()) add(AliyunRules.LABEL_BACKUP to backupDriveId)
+                if (resourceDriveId.isNotBlank()) add(AliyunRules.LABEL_RESOURCE to resourceDriveId)
+                if (defaultDriveId.isNotBlank()) add(AliyunRules.LABEL_DEFAULT to defaultDriveId)
             }
             val seen = HashSet<String>()
             return candidates.filter { seen.add(it.second) }

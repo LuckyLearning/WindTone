@@ -1945,4 +1945,9 @@
     <string name="bst_ago_hours">%1$d 小时前</string>
     <string name="bst_ago_days">%1$d 天前</string>
 
+
+    <!-- i18n(29): AliyunDrive 盘类型展示名（数据层键仍用中文常量，仅 UI 本地化） -->
+    <string name="aliyun_drive_backup">备份盘</string>
+    <string name="aliyun_drive_resource">资源库</string>
+    <string name="aliyun_drive_default">默认盘</string>
 </resources>

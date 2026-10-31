@@ -87,11 +87,11 @@ class AliyunDriveTest {
 
     @Test
     fun `备份盘根目录的上级是资源库`() {
-        val drives = listOf("备份盘" to "B", "资源库" to "R")
+        val drives = listOf(AliyunRules.LABEL_BACKUP to "B", AliyunRules.LABEL_RESOURCE to "R")
         assertEquals("R", AliyunRules.backupRootParent("B", drives, atRoot = true))
         assertNull(AliyunRules.backupRootParent("B", drives, atRoot = false))
         assertNull(AliyunRules.backupRootParent("R", drives, atRoot = true))
-        assertNull(AliyunRules.backupRootParent("B", listOf("备份盘" to "B"), atRoot = true))
+        assertNull(AliyunRules.backupRootParent("B", listOf(AliyunRules.LABEL_BACKUP to "B"), atRoot = true))
     }
 
     @Test
@@ -99,11 +99,11 @@ class AliyunDriveTest {
         val onlyDefault = AliyunDrive.DriveInfo("某用户", "D", "", "")
         assertEquals("D", onlyDefault.preferredDriveId())
         // 列表里只有它自己：界面按 size > 1 判断，不会显示切换
-        assertEquals(listOf("默认盘" to "D"), onlyDefault.availableDrives())
+        assertEquals(listOf(AliyunRules.LABEL_DEFAULT to "D"), onlyDefault.availableDrives())
 
         val onlyBackup = AliyunDrive.DriveInfo("某用户", "", "", "B")
         assertEquals("B", onlyBackup.preferredDriveId())
-        assertEquals(listOf("备份盘" to "B"), onlyBackup.availableDrives())
+        assertEquals(listOf(AliyunRules.LABEL_BACKUP to "B"), onlyBackup.availableDrives())
     }
 
     @Test
@@ -111,10 +111,10 @@ class AliyunDriveTest {
         val both = AliyunDrive.DriveInfo("某用户", "D", "R", "B")
         val drives = both.availableDrives()
         assertEquals(3, drives.size)
-        assertEquals("备份盘" to "B", drives[0])
-        assertEquals("资源库" to "R", drives[1])
+        assertEquals(AliyunRules.LABEL_BACKUP to "B", drives[0])
+        assertEquals(AliyunRules.LABEL_RESOURCE to "R", drives[1])
         // 默认盘 id 与另外两个都不同 —— 必须列出来，否则切走后无法切回
-        assertEquals("默认盘" to "D", drives[2])
+        assertEquals(AliyunRules.LABEL_DEFAULT to "D", drives[2])
         // 登录后进资源库（网页「全部文件」），不进备份盘
         assertEquals("R", both.preferredDriveId())
     }
@@ -125,8 +125,8 @@ class AliyunDriveTest {
         val info = AliyunDrive.DriveInfo("某用户", "B", "R", "B")
         val drives = info.availableDrives()
         assertEquals(2, drives.size)
-        assertEquals("备份盘" to "B", drives[0])
-        assertEquals("资源库" to "R", drives[1])
+        assertEquals(AliyunRules.LABEL_BACKUP to "B", drives[0])
+        assertEquals(AliyunRules.LABEL_RESOURCE to "R", drives[1])
         assertEquals("R", info.preferredDriveId())
     }
 }

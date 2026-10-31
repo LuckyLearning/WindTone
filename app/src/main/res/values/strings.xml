@@ -1979,4 +1979,9 @@ Expired codes refresh automatically. This app is read-only — it never uploads,
     <string name="bst_ago_hours">%1$d h ago</string>
     <string name="bst_ago_days">%1$d d ago</string>
 
+
+    <!-- i18n(29): AliyunDrive disk type display names (keys stay Chinese in data layer) -->
+    <string name="aliyun_drive_backup">Backup drive</string>
+    <string name="aliyun_drive_resource">File library</string>
+    <string name="aliyun_drive_default">Default drive</string>
 </resources>

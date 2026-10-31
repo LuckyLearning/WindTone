@@ -83,6 +83,16 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
+
+/** 盘类型稳定键 → 本地化展示名（仅 UI；不改 data 层 Pair 键，零缓存）。 */
+@Composable
+private fun aliyunDriveTypeLabel(key: String): String = when (key) {
+    AliyunRules.LABEL_BACKUP -> stringResource(R.string.aliyun_drive_backup)
+    AliyunRules.LABEL_RESOURCE -> stringResource(R.string.aliyun_drive_resource)
+    AliyunRules.LABEL_DEFAULT -> stringResource(R.string.aliyun_drive_default)
+    else -> key
+}
+
 /**
  * 阿里云盘（在线播放）—— **一级公民页**（v1.1.75 起：从「设置 → 在线播放」提升为
  * 抽屉里的独立入口，与歌曲 / 专辑 / 歌手同级）。
@@ -852,7 +862,7 @@ private fun LoggedInBody(
                     )
                     Text(
                         when {
-                            driveName.isNotBlank() -> stringResource(R.string.aliyun_current_drive, driveName)
+                            driveName.isNotBlank() -> stringResource(R.string.aliyun_current_drive, aliyunDriveTypeLabel(driveName))
                             accountError != null -> stringResource(R.string.aliyun_account_read_failed)
                             else -> readingAccount
                         },
@@ -890,7 +900,7 @@ private fun LoggedInBody(
                                 .padding(horizontal = 12.dp, vertical = 6.dp),
                         ) {
                             Text(
-                                name,
+                                aliyunDriveTypeLabel(name),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = if (selected) MaterialTheme.colorScheme.onPrimary
                                 else MaterialTheme.colorScheme.onSurfaceVariant,

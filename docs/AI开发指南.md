@@ -2427,3 +2427,14 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 - 文档：`docs/功能-i18n扫尾扫仓.md`
 - 下一项建议：**AliyunDrive 盘类型展示名 i18n 扫尾**（本机；仍勿把 E6/长稳开车当实现任务）
 
+### i18n 第 29 批（2026-11-01）
+
+**AliyunDrive 盘类型展示名**：`aliyun_drive_backup` / `_resource` / `_default`。
+
+- 数据层 `AliyunRules.LABEL_*` 仍作稳定键；仅 `AliyunPanPage` 展示时 `stringResource` 映射
+- **不改**云盘协议 / 下载热路径；无常驻缓存
+- SoftEq / 播放内核不改；`LyricOverlayBridge` 长诊断文另批
+- 单测：`AliyunDriveTest`
+- 文档：`docs/功能-i18n扫尾扫仓.md`
+- 下一项建议：**LyricOverlayBridge 长诊断文 i18n**（本机排障冷路径；仍勿把 E6/长稳开车当实现任务；性能优先分批）
+
