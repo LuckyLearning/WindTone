@@ -139,3 +139,42 @@ gradlew.bat testDebugUnitTest lintDebug assembleDebug --stacktrace
 - 若合并 Gradle 后 lint 报告路径变化 → 立刻拆回分步。
 - 若 docs 目录误放了需编译校验的生成物 → 收紧 ignore，改为只 ignore docs 下 markdown 等。
 - Soft EQ / 声道平衡 / 无障碍等并行 WIP **与本 Spike 无代码交叉**。
+
+---
+
+## 8. 第二轮实证（2026-10-31 转 public 后）
+
+### 8.1 触发与耗时（Actions API）
+
+| 项 | 数据 |
+| --- | --- |
+| 最近一页失败 | **40/45** 为 **&lt;10s 秒失败**（无 runner / 额度） |
+| 成功 Android CI | 约 **7–14 分钟**（中位 ~9） |
+| 成功 Release | 约 **8–15 分钟**（含重复单测时） |
+| paths-ignore 生效 | 纯 docs 提交 `8aa90fa` / `a388743` / `6afb90d` → **0** 条 run |
+| 误报「docs」触发 CI | `234a29e` 标题像 docs，但改了 `app/`、`scripts/`、`android-release.yml` → **应跑** CI |
+
+### 8.2 本轮已落地
+
+| 改动 | 说明 |
+| --- | --- |
+| CI paths-ignore 扩 | 追加 `.gitignore` / `.github-token.example` / `LICENSE` / `NOTICE` / `SECURITY.md` |
+| Release **去掉** `testDebugUnitTest` | 约省 **~3 分钟/发版**；门禁改靠 `release.sh` 本地测 + main 上 Android CI |
+| concurrency | 维持：CI `cancel-in-progress: true`；Release/Pages 不取消 |
+
+### 8.3 仍存在的问题（未在本轮改业务）
+
+| 问题 | 说明 |
+| --- | --- |
+| **Actions 额度 / spending limit** | 大量秒失败；额度未恢复前优化无法实测墙钟收益 |
+| **发版双跑** | `release.sh` 推 main（CI）+ 推 tag（Release）仍各跑一遍构建；Release 已不再重复单测，但仍各装 SDK/Gradle |
+| **连推过密** | 一晚几十次 push 仍会排队；concurrency 只取消同 ref 旧 CI，秒失败仍占「启动」 |
+| **GitHub Pages** | `/repos/.../pages` **404**（站点未用 Actions 配好或未启用）；`pages.yml` 近一周无成功部署，与本次 path filter 无关 |
+| **SDK 缓存 / configuration-cache** | 仍按 §4 P1，未开（中高风险） |
+| **孤儿 tag** | 约定必须走 `release.sh`；直接推 tag 将少云端单测 |
+
+### 8.4 验证（额度恢复后）
+
+1. 只改 `LICENSE` 或 `.gitignore` push → 不应触发 Android CI  
+2. 打 tag 发版 → Release 日志只有 `assembleRelease`，无 `testDebugUnitTest`  
+3. 对照 Release 总分钟是否下降约 3 分钟  
