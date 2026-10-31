@@ -173,6 +173,8 @@ LibraryViewModel   PlayerViewModel    UpdateViewModel    SettingsViewModel
 
 #### 额度恢复后
 
+> **发版不跑单测（2026-10-31）**：`scripts/release.sh` 默认跳过 `testDebugUnitTest`；单测只在功能合入时跑。`--verify` 只等云端 Release 资产（APK / mapping / latest.json），不本地测。云端 `android-release` 保留 lint Error + 签名出包，**不再**跑全量单测；`android-ci` 仍仅手动。避免「本地发版测 + Actions 再测」重复烧时间/额度。
+
 按 [`待发版积压.md`](待发版积压.md) 的顺序操作：先核已有 tag 的 Release 资产（无包则 **Re-run**，勿改号），再对新合入走标准 `release.sh`（§8.3）。构建对照 [`可复现构建.md`](可复现构建.md)；CI 省时见 [`spike-CI提速.md`](spike-CI提速.md)。
 
 ## 1. 产品概览

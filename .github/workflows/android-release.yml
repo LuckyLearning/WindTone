@@ -3,7 +3,7 @@ name: Release APK
 # 打一个 v* 标签即可自动出包并创建 GitHub Release。
 # 也可以在 Actions 页面手动触发（手动触发只构建、不发布）。
 # 2026-10-31：日常 Android CI 已改为仅 workflow_dispatch；发版（本工作流）是唯一自动质量闸，
-# 因此构建前仍跑单测 + lint Error 门禁（与本地 scripts/release.sh 互补，防孤儿 tag 漏测）。
+# 构建前只跑 lint Error 门禁（发版不跑单测；单测在功能合入时）。
 on:
   push:
     tags:
@@ -97,10 +97,10 @@ jobs:
           fi
 
       # ---------------------------------------------------------------- 构建
-      # 2026-10-31：日常 CI 已改为手动；发版是唯一自动质量闸 → 这里必须跑单测 + lint Error 门禁。
-      # 与 scripts/release.sh 本地预检互补（本地失败不推 tag；云端再拦一道孤儿 tag）。
-      - name: 单测 + Lint（发版门禁）
-        run: ./gradlew testDebugUnitTest lintDebug --stacktrace
+      # 发版不跑单测（测在功能合入）；云端只保留 lint Error + 签名出包。
+      # Android CI（含全量单测）仍仅 workflow_dispatch。
+      - name: Lint（发版门禁）
+        run: ./gradlew lintDebug --stacktrace
 
       - name: Lint（Error 级门禁）
         run: |

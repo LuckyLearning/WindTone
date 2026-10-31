@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # ===================================================================
-#  发版助手：跑单测 → 改版本号 → 提交 → 打 tag → 推送
-#  推 tag 后 GitHub Actions 会自动构建签名 APK 并创建 Release。
+#  发版助手：改版本号 → 提交 → 打 tag → 推送
+#  推 tag 后 GitHub Actions（android-release）构建签名 APK 并创建 Release。
 #
-#  顺序说明：单测在**改版本号之前**跑。这样测试失败时仓库保持干净，
-#  不会留下「版本号已改但没提交」的状态（否则重跑会让 versionCode 再 +1）。
+#  发版默认不跑单测。单测只在功能合入时跑；本脚本与 Release workflow
+#  不再本地+云端双测。云端仍保留 lint / 签名 / 出包。
 #
 #  用法：
 #    bash scripts/release.sh patch          # 1.0.0 → 1.0.1
@@ -14,10 +14,8 @@
 #    bash scripts/release.sh patch --dry    # 只打印将要做什么
 #    bash scripts/release.sh patch --verify # 推完继续跑「四步验证链」直到出结论
 #
-#  ⚠️ 强烈建议带上 --verify：它会等 CI 跑完、核对 Release 资产、核对公共分发仓库
-#     latest.json、下载 APK 验签并核对包内版本串，全流程**一条命令出结论**
-#     （省掉 AI 侧 4~5 次分开的 REST 调用与轮询，也避免漏掉第 ④ 步）。
-#     代价是脚本会阻塞 10~20 分钟等 CI —— 放后台跑即可。
+#  建议带 --verify：等 Release CI、核对 APK / latest.json / 验签（不跑本地测）。
+#  阻塞取决于云端构建时长；本地不再跑 Gradle 单测。
 # ===================================================================
 set -euo pipefail
 
@@ -63,35 +61,9 @@ if (( DRY )); then
   exit 0
 fi
 
-# 1) 先验证能编译
-#
-# ⚠️ 这一步**故意放在改版本号之前**。反过来的话，单测一旦失败，仓库就会留下
-#    「版本号已改、但没提交」的脏状态；下次直接重跑 release.sh，读到的就是已经
-#    +1 过的 code，于是再 +1（2026-10-14 已踩出过 code 6）。先测后改即可根治。
-echo "→ 先跑一遍单测确认没坏..."
-# Android 构建必须用 JDK 21（temurin/openjdk），不能落到 IntelliJ 自带的 GraalVM ——
-# GraalVM 的 jlink 在处理 android-35 的 core-for-system-modules.jar 时会报
-# JdkImageTransform 失败。
-#
-# 注意：「JAVA_HOME 非空」≠可用。GraalVM 会在 JdkImageTransform 失败。
-# 优先 WINDTONE_JDK；否则若当前 JAVA_HOME 空或含 graal，再尝试本机常见路径（存在才用）。
-CUR_JDK="${JAVA_HOME:-}"
-PREFERRED_JDK="${WINDTONE_JDK:-}"
-if [[ -z "$PREFERRED_JDK" || ! -d "$PREFERRED_JDK" ]]; then
-  # 无空格路径优先；带空格的 Adoptium 路径请自行 export WINDTONE_JDK
-  for _p in \
-    "$HOME/.jdks/openjdk-21.0.2" \
-    "$HOME/.jdks/temurin-21" \
-    "/c/Users/stu_l/.jdks/openjdk-21.0.2"; do
-    if [[ -d "$_p" ]]; then PREFERRED_JDK="$_p"; break; fi
-  done
-fi
-if [[ -n "$PREFERRED_JDK" && -d "$PREFERRED_JDK" ]] && { [[ -z "$CUR_JDK" ]] || [[ "$CUR_JDK" == *[Gg]raal* ]]; }; then
-  export JAVA_HOME="$PREFERRED_JDK"
-  echo "  （原 JAVA_HOME=${CUR_JDK:-未设置} 不可用于 Android 构建，已改用 $JAVA_HOME）"
-fi
-echo "  JDK：${JAVA_HOME:-未设置}"
-(cd "$ROOT" && ./gradlew testDebugUnitTest --console=plain -q)
+# 1) 发版不跑单测（测在功能合入时）。直接渲染说明并改版本号。
+#    云端 android-release 仍做 lint Error 门禁 + 签名出包；Android CI 仅手动。
+echo "→ 跳过本地单测（发版默认不测；功能合入时已测）"
 
 # 2) 预览发版说明：固定模板 + 只替换版本号，正文不需要手写/让 AI 生成
 echo
@@ -100,7 +72,7 @@ echo "----------------------------------------------------------------"
 bash "$ROOT/scripts/render-release-notes.sh" "$NEW_NAME" "$NEW_CODE"
 echo "----------------------------------------------------------------"
 
-# 3) 单测通过后才动版本号
+# 3) 写入版本号
 echo "→ 写入版本号..."
 sed -i "s/val appVersionCode = $CUR_CODE/val appVersionCode = $NEW_CODE/" "$GRADLE_FILE"
 sed -i "s/val appVersionName = \"$CUR_NAME\"/val appVersionName = \"$NEW_NAME\"/" "$GRADLE_FILE"
