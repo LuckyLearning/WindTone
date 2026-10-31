@@ -179,8 +179,13 @@ class LayoutContractTest {
     fun overlayServiceSubscribesToForegroundPackage() {
         val src = sourceFile("src/main/java/com/luckylearning/windtone/overlay/OverlayStateBinder.kt").readText()
         assertTrue(
-            "OverlayStateBinder 必须把 ForegroundAppState.currentPkg 接进 combine（否则按应用隐藏不生效）",
-            Regex("""combine\(\s*visuals\s*,\s*ForegroundAppState\.currentPkg\s*\)""").containsMatchIn(src),
+            "OverlayStateBinder 必须订阅 ForegroundAppState.currentPkg（否则按应用隐藏不生效）",
+            src.contains("ForegroundAppState.currentPkg"),
+        )
+        assertTrue(
+            "v1.2.43 起前台包名须 debounce 稳定后再进 combine（防 avc 等短闪狂闪）",
+            src.contains("debounce(foregroundStableMs)") &&
+                src.contains("combine(visuals, stableForegroundPkg)"),
         )
         assertFalse(
             "判可见性时不要再直接读 ForegroundAppState.currentPkg.value（那是快照，收不到后续变化）",

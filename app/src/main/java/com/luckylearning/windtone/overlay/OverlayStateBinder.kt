@@ -8,6 +8,8 @@ import com.luckylearning.windtone.data.Prefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.launch
 
 /**
@@ -19,9 +21,15 @@ import kotlinx.coroutines.launch
  * 抽到本类后，[LyricOverlayService] 只负责窗口的创建 / 销毁 / 手势，状态接线全部交给这里；
  * 所有对宿主的操作都走 [Host] 接口，便于在单测里用替身驱动。
  */
+@OptIn(FlowPreview::class)
 class OverlayStateBinder(
     private val host: Host,
     private val scope: CoroutineScope,
+    /**
+     * 前台包名稳定窗口（v1.2.43）。生产默认 [ForegroundPkgStabilizer.STABLE_MS]；
+     * 单测传 0，避免 Unconfined 下 debounce 等不到时间。
+     */
+    private val foregroundStableMs: Long = ForegroundPkgStabilizer.STABLE_MS,
 ) {
     /** 暂停表现：隐藏（另一档是淡出） */
     private val PAUSE_HIDE = 1
@@ -71,7 +79,11 @@ class OverlayStateBinder(
             // 只往 ForegroundAppState 写值；「写」不产生任何既有通道的事件，
             // 于是切到名单应用后没有任何东西触发重判 —— 只能等下一句歌词或暂停恢复
             // 碰巧重算，暂停 / 无歌词变化时就是永远不收起。
-            combine(visuals, ForegroundAppState.currentPkg) { state, pkg ->
+            // v1.2.43：前台包名走滞回再参与隐藏判定——短时闪 avc/gesture/sr
+            // 不立刻改显隐；诊断用的 currentPkg 仍即时（见 ForegroundPkgStabilizer）。
+            val stableForegroundPkg = ForegroundAppState.currentPkg
+                .debounce(foregroundStableMs)
+            combine(visuals, stableForegroundPkg) { state, pkg ->
                 state to pkg
             }.collect { (visual, foregroundPkg) ->
                 val (content, isEditing, isForeground, isPreview) = visual

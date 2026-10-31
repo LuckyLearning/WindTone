@@ -38,7 +38,7 @@ class OverlayStateBinderTest {
         LyricOverlayBus.clear()
         host = FakeHost(app)
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
-        binder = OverlayStateBinder(host, scope)
+        binder = OverlayStateBinder(host, scope, foregroundStableMs = 0L)
     }
 
     @After
