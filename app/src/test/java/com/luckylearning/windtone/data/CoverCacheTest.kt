@@ -38,6 +38,34 @@ class CoverCacheTest {
         assertEquals(0, CoverRepository.targetPxFor(-10))
     }
 
+    // ------------------------------------------------------------ 缓存边长分桶
+
+    @Test
+    fun `缩略图相邻像素收成同一桶`() {
+        // 列表缩略图密度/字体漂移：142/143/144 应收成 160，避免磁盘近重复 JPEG
+        assertEquals(160, CoverRepository.cachePxFor(142))
+        assertEquals(160, CoverRepository.cachePxFor(143))
+        assertEquals(160, CoverRepository.cachePxFor(144))
+        assertEquals(160, CoverRepository.cachePxFor(160))
+        assertEquals(192, CoverRepository.cachePxFor(161))
+    }
+
+    @Test
+    fun `大图用 64 步长分桶`() {
+        // < LARGE_COVER_PX(512) 仍用 32 步：450 → 480
+        assertEquals(480, CoverRepository.cachePxFor(450))
+        // ≥ 512 用 64 步
+        assertEquals(512, CoverRepository.cachePxFor(512))
+        assertEquals(576, CoverRepository.cachePxFor(513))
+        assertEquals(832, CoverRepository.cachePxFor(803)) // 播放页常见物理边长
+    }
+
+    @Test
+    fun `非法目标像素返回 0`() {
+        assertEquals(0, CoverRepository.cachePxFor(0))
+        assertEquals(0, CoverRepository.cachePxFor(-8))
+    }
+
     // ------------------------------------------------------------ 采样倍数
 
     @Test

@@ -2064,7 +2064,7 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 
 **改法（三条缺一不可）**：
 
-- 解码尺寸 = 显示像素，**只有 ≥ 512px 的大图**留 1.25 倍余量（`CoverRepository.targetPxFor`）；
+- 解码尺寸 = 显示像素，**只有 ≥ 512px 的大图**留 1.25 倍余量（`CoverRepository.targetPxFor`）；落盘/位图键再经 `cachePxFor` 分桶（缩略图步长 32、大图 64），避免相邻 px 打穿磁盘命中；
 - 两段式缩放：`inSampleSize` 按**长边**粗降 → `fitSize` 算出精确目标 → `createScaledBitmap` 收尾，
   旧图 `recycle()`（用 `!==` 兜住「尺寸已相同、返回自身」）；
 - 两级内存缓存都按堆比例取上限（位图 `maxMemory/8`、原始 `maxMemory/16`），
@@ -2075,13 +2075,13 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 ② 只用 `inSampleSize` 的缩放**必然**存在「目标大于原图 → 全尺寸」的漏洞，必须配精确收尾；
 ③ 常驻缓存的上限必须与 `Runtime.maxMemory()` 挂钩，**不能写死 MB 数** —— 手机与车机的堆差 2~3 倍。
 
-**为什么这组测试写成纯函数**：`CoverCacheTest` 测 `targetPxFor` / `sampleSizeFor` / `fitSize`
+**为什么这组测试写成纯函数**：`CoverCacheTest` 测 `targetPxFor` / `cachePxFor` / `sampleSizeFor` / `fitSize`
 三个纯函数，不需要 Context、不需要真实图片。其中一条专门断言
 `sampleSizeFor(3000, 3000, 1606) == 1` —— 把「旧倍率下会全尺寸解码」这个事实钉在测试里，
 任何人把倍率调回去都会红。
 
 **上线后怎么量化**：诊断包新增 `[内存]` 段（`diag/MemoryProbe.kt`），给 Java 堆 used/max、native 堆、
-系统可用与低内存标志、封面两级缓存的占用与命中率、磁盘缓存大小。车机不让 adb，这一段是唯一能拿到的数：
+系统可用与低内存标志、封面两级缓存的占用与命中率、磁盘缓存大小与磁盘 hits/miss/命中率。车机不让 adb，这一段是唯一能拿到的数：
 **命中率低 → 预算给小了或键设计有问题；位图占用贴着上限 → 列表尺寸档位太多或 targetPx 又算大了。**
 
 ---

@@ -141,6 +141,17 @@ object CoverRepository {
     private val decodeFromSource = AtomicLong()
     private val decodedBytes = AtomicLong()
 
+    /** 磁盘层探测：文件存在且解出 vs 缺失/损坏（位图命中不计入） */
+    private val diskHits = AtomicLong()
+    private val diskMisses = AtomicLong()
+
+    /**
+     * 磁盘占用惰性缓存。`stats()` / 设置页会反复问；每次 `listFiles+sumOf`
+     * 在 50MB/~千文件目录上是无谓的 eMMC 税。写入 / 淘汰 / 清空时失效。
+     * `-1` = 未知，下次再扫。
+     */
+    private val diskBytesCached = AtomicLong(-1L)
+
     @Volatile
     private var peakDecodedBytes = 0
 
@@ -198,13 +209,16 @@ object CoverRepository {
      */
     suspend fun cover(context: Context, song: Song, targetPx: Int): Bitmap? {
         if (targetPx <= 0) return null
-        val key = "${song.stableKey}@$targetPx"
+        // 分桶：邻近显示边长共用一份位图/磁盘键，避免 142/143/144 各写一张 JPEG
+        val px = cachePxFor(targetPx)
+        if (px <= 0) return null
+        val key = "${song.stableKey}@$px"
         bitmapCache.get(key)?.let { return it }
 
         // 快速路径：已有同键任务在跑，直接等
         inFlight[key]?.let { return runCatching { it.await() }.getOrNull() }
 
-        val fresh = scope.async(start = CoroutineStart.LAZY) { decodeInto(key, context, song, targetPx) }
+        val fresh = scope.async(start = CoroutineStart.LAZY) { decodeInto(key, context, song, px) }
         // 完成后自摘表项；用 remove(key, fresh) 保证不会误删别人的任务
         fresh.invokeOnCompletion { inFlight.remove(key, fresh) }
 
@@ -221,21 +235,28 @@ object CoverRepository {
     /** [cover] 的实际加载：磁盘命中 → 原始字节 → 解码 → 写盘。只由单飞任务调用 */
     private suspend fun decodeInto(key: String, context: Context, song: Song, targetPx: Int): Bitmap? {
         val file = diskFile(song, targetPx)
-        if (file != null && file.exists()) {
-            val diskOpts = BitmapFactory.Options().apply {
-                inPreferredConfig = Bitmap.Config.RGB_565
+        if (file != null) {
+            if (file.exists()) {
+                val diskOpts = BitmapFactory.Options().apply {
+                    inPreferredConfig = Bitmap.Config.RGB_565
+                }
+                // 磁盘是我们压的 JPEG；默认 ARGB_8888 会让磁盘命中路径占双倍像素。
+                val cached = runCatching { BitmapFactory.decodeFile(file.absolutePath, diskOpts) }.getOrNull()
+                    ?.let { ensureRgb565(it) }
+                    ?.let { BitmapMeter.track(it) }
+                if (cached != null) {
+                    diskHits.incrementAndGet()
+                    recordDecode(fromDisk = true, byteCount = cached.byteCount)
+                    bitmapCache.put(key, cached)
+                    return cached
+                }
+                // 文件损坏：计 miss，删掉后走原始解码
+                diskMisses.incrementAndGet()
+                runCatching { file.delete() }
+                invalidateDiskBytes()
+            } else {
+                diskMisses.incrementAndGet()
             }
-            // 磁盘是我们压的 JPEG；默认 ARGB_8888 会让磁盘命中路径占双倍像素。
-            val cached = runCatching { BitmapFactory.decodeFile(file.absolutePath, diskOpts) }.getOrNull()
-                ?.let { ensureRgb565(it) }
-                ?.let { BitmapMeter.track(it) }
-            if (cached != null) {
-                recordDecode(fromDisk = true, byteCount = cached.byteCount)
-                bitmapCache.put(key, cached)
-                return cached
-            }
-            // 文件损坏：删掉，走后续流程重新生成
-            runCatching { file.delete() }
         }
 
         val raw = loadRaw(context, song) ?: return null
@@ -374,6 +395,20 @@ object CoverRepository {
     }
 
     /**
+     * 缓存边长分桶（位图键 + 磁盘文件名共用）。
+     *
+     * 列表缩略图随密度/字体常在相邻像素间漂移（142↔144）；若按精确 px 落盘，
+     * 冷启动磁盘命中率会被「差 1px」打穿，诊断包里表现为 decodeFromSource 偏高、
+     * 磁盘体积堆了很多近重复 JPEG。向上取整到步长：小于 [LARGE_COVER_PX] 用 32，
+     * 大图用 64 —— 显示最多偏一档，换共享缓存。
+     */
+    fun cachePxFor(targetPx: Int): Int {
+        if (targetPx <= 0) return 0
+        val step = if (targetPx < LARGE_COVER_PX) 32 else 64
+        return ((targetPx + step - 1) / step) * step
+    }
+
+    /**
      * `inSampleSize` 取值：解出来的**长边**落在 `[target, 2×target)`。
      *
      * 与旧实现按「宽和高都 ≥ 2×target」判定的差别：极端比例（长方形专辑图、
@@ -434,6 +469,10 @@ object CoverRepository {
         val decodeFromSource: Long = 0L,
         val decodedBytes: Long = 0L,
         val peakDecodedBytes: Int = 0,
+        /** 磁盘层命中（文件存在且解出）；位图命中不计入 */
+        val diskHits: Long = 0L,
+        /** 磁盘层未命中（无文件或损坏） */
+        val diskMisses: Long = 0L,
     )
 
     fun stats(): Stats = Stats(
@@ -450,6 +489,8 @@ object CoverRepository {
         decodeFromSource = decodeFromSource.get(),
         decodedBytes = decodedBytes.get(),
         peakDecodedBytes = peakDecodedBytes,
+        diskHits = diskHits.get(),
+        diskMisses = diskMisses.get(),
     )
 
     /** 连磁盘一起清（设置页「清空封面缓存」） */
@@ -458,12 +499,24 @@ object CoverRepository {
         val dir = cacheDir ?: return
         runCatching { dir.listFiles()?.forEach { it.delete() } }
             .onFailure { Log.w(TAG, "清理封面磁盘缓存失败", it) }
+        diskBytesCached.set(0L)
     }
 
-    /** 当前磁盘缓存占用（字节），设置页展示用 */
+    /** 当前磁盘缓存占用（字节），设置页 / 诊断用；带惰性缓存 */
     fun diskUsageBytes(): Long {
-        val dir = cacheDir ?: return 0L
-        return runCatching { dir.listFiles()?.sumOf { it.length() } ?: 0L }.getOrDefault(0L)
+        val cached = diskBytesCached.get()
+        if (cached >= 0L) return cached
+        val dir = cacheDir ?: run {
+            diskBytesCached.set(0L)
+            return 0L
+        }
+        val actual = runCatching { dir.listFiles()?.sumOf { it.length() } ?: 0L }.getOrDefault(0L)
+        diskBytesCached.set(actual)
+        return actual
+    }
+
+    private fun invalidateDiskBytes() {
+        diskBytesCached.set(-1L)
     }
 
     /** 单曲封面缓存淘汰（删除歌曲时调用） */
@@ -474,6 +527,7 @@ object CoverRepository {
         }
         cache.remove(song.stableKey)
         cacheDir?.listFiles { f -> f.name.startsWith(prefix) }?.forEach { runCatching { it.delete() } }
+        invalidateDiskBytes()
     }
 
     // ---------------------------------------------------------------- 磁盘
@@ -492,6 +546,7 @@ object CoverRepository {
             runCatching {
                 file.outputStream().use { out -> bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out) }
             }.onFailure { Log.w(TAG, "写封面缓存失败", it) }
+            invalidateDiskBytes()
             trimDisk(force = false)
         }
     }
@@ -513,7 +568,10 @@ object CoverRepository {
         val dir = cacheDir ?: return
         val files = dir.listFiles()?.toMutableList() ?: return
         var total = files.sumOf { it.length() }
-        if (total <= DISK_LIMIT_BYTES) return
+        if (total <= DISK_LIMIT_BYTES) {
+            diskBytesCached.set(total)
+            return
+        }
         val target = (DISK_LIMIT_BYTES * DISK_TRIM_RATIO).toLong()
         files.sortBy { it.lastModified() }
         for (f in files) {
@@ -521,6 +579,7 @@ object CoverRepository {
             val len = f.length()
             if (runCatching { f.delete() }.getOrDefault(false)) total -= len
         }
+        diskBytesCached.set(total.coerceAtLeast(0L))
     }
 }
 

@@ -1679,7 +1679,7 @@
     <string name="mp_sys_avail">系统可用：%1$d MB   低内存标志：%2$s</string>
     <string name="mp_cover_bitmap">封面位图缓存：%1$s / %2$s   命中 %3$d / 未命中 %4$d（%5$s）</string>
     <string name="mp_cover_raw">封面原始缓存：%1$s / %2$s   命中 %3$d / 未命中 %4$d（%5$s）</string>
-    <string name="mp_cover_disk">封面磁盘缓存：%1$s</string>
+    <string name="mp_cover_disk">封面磁盘缓存：%1$s · 命中 %2$d / 未中 %3$d（%4$s）</string>
     <string name="mp_cover_decode">封面解码：磁盘 %1$d 次 · 原始 %2$d 次   累计产出 %3$s（吞吐，非常驻）   峰值单张 %4$s</string>
     <string name="mp_library">曲库：%1$d 首</string>
     <string name="mp_bitmap_live">位图存活（本进程，弱引用跟踪）：当前 %1$s   峰值 %2$s   累计创建 %3$d 张 / %4$s（吞吐，非常驻）</string>

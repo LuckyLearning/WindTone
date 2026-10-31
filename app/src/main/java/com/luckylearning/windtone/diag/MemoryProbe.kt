@@ -80,7 +80,15 @@ object MemoryProbe {
                 hitRate(s.rawHits, s.rawMisses),
             ),
         )
-        appendLine(AppStrings.s(R.string.mp_cover_disk, mb(s.diskBytes)))
+        appendLine(
+            AppStrings.s(
+                R.string.mp_cover_disk,
+                mb(s.diskBytes),
+                s.diskHits,
+                s.diskMisses,
+                hitRate(s.diskHits, s.diskMisses),
+            ),
+        )
         appendLine(
             AppStrings.s(
                 R.string.mp_cover_decode,
@@ -290,9 +298,11 @@ object MemoryProbe {
         if (max <= 0L) "—" else String.format(Locale.US, "%.0f%%", used * 100.0 / max)
 
     /** 命中率；总次数为 0 时给「—」而不是 0%，避免误读成「全都不命中」 */
-    private fun hitRate(hits: Int, misses: Int): String {
+    private fun hitRate(hits: Int, misses: Int): String = hitRate(hits.toLong(), misses.toLong())
+
+    private fun hitRate(hits: Long, misses: Long): String {
         val total = hits + misses
-        if (total <= 0) return "—"
+        if (total <= 0L) return "—"
         return String.format(Locale.US, "%.0f%%", hits * 100.0 / total)
     }
 
