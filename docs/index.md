@@ -104,3 +104,5 @@ Android 原生本地音乐播放器。**数据全部留在本机**，只在你�
 
 - 排期以对话 Canvas「WindTone 可用规划（现行）」为准。
 - 历史分期规划已移入 [archive/](archive/)（见 [DELETIONS](DELETIONS.html)），不再作排期源。
+
+<!-- 最后部署核验: 2026-10-31 Pages Source=GitHub Actions -->

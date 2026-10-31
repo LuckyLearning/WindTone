@@ -34,7 +34,7 @@ jobs:
       - name: 配置 Pages
         uses: actions/configure-pages@v5
         with:
-          enablement: true
+          enablement: false
 
 
       - name: Jekyll 构建
