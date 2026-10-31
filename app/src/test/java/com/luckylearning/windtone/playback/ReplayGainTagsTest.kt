@@ -134,6 +134,26 @@ class ReplayGainTagsTest {
         assertNull(ReplayGainTags.resolveGainMb(null, null))
     }
 
+
+    @Test
+    fun `APEv2 尾标曲目与专辑增益`() {
+        val bytes = apeTag(
+            "REPLAYGAIN_TRACK_GAIN" to "-5.00 dB",
+            "REPLAYGAIN_ALBUM_GAIN" to "-7.25 dB",
+        )
+        val gains = ReplayGainTags.parse(bytes)!!
+        assertEquals(-5.0, gains.trackDb!!, 1e-9)
+        assertEquals(-7.25, gains.albumDb!!, 1e-9)
+        assertEquals(-5.0, gains.preferredDb(ReplayGainMode.TRACK)!!, 1e-9)
+        assertEquals(-7.25, gains.preferredDb(ReplayGainMode.ALBUM)!!, 1e-9)
+        // 有标签就压掉 RMS；无标签路径仍是 null → 调用方去算 RMS
+        assertEquals(
+            -500,
+            ReplayGainTags.resolveGainMb(ReplayGainTags.toGainMb(gains.preferredDb()!!), -100),
+        )
+        assertNull(ReplayGainTags.parse("APETAGEX".toByteArray()))
+    }
+
     // ---------------------------------------------------------------- fixtures
 
     private fun txxx(desc: String, value: String): ByteArray {
@@ -220,4 +240,35 @@ class ReplayGainTagsTest {
         val udta = box("udta", meta)
         return box("moov", udta)
     }
+
+    /** 仅 footer 的 APEv2（无 header）：items + 32 字节 APETAGEX。 */
+    private fun apeTag(vararg entries: Pair<String, String>): ByteArray {
+        fun le32(v: Int): ByteArray = byteArrayOf(
+            (v and 0xFF).toByte(),
+            ((v shr 8) and 0xFF).toByte(),
+            ((v shr 16) and 0xFF).toByte(),
+            ((v shr 24) and 0xFF).toByte(),
+        )
+        val items = java.io.ByteArrayOutputStream()
+        for ((key, value) in entries) {
+            val vb = value.toByteArray(Charsets.UTF_8)
+            items.write(le32(vb.size))
+            items.write(le32(0)) // flags
+            items.write(key.toByteArray(Charsets.US_ASCII))
+            items.write(0)
+            items.write(vb)
+        }
+        val itemBytes = items.toByteArray()
+        val size = itemBytes.size + 32 // 含 footer
+        val footer = ByteArray(32)
+        "APETAGEX".toByteArray(Charsets.US_ASCII).copyInto(footer, 0)
+        // version 2000
+        le32(2000).copyInto(footer, 8)
+        le32(size).copyInto(footer, 12)
+        le32(entries.size).copyInto(footer, 16)
+        // flags / reserved 已是 0
+        return itemBytes + footer
+    }
+
+
 }

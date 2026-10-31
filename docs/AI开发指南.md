@@ -957,7 +957,7 @@ id 持久化后**不可改名**（改了用户已选方案丢失）。
   - **淡入淡出**：`FadeRamp` 纯函数曲线（线性、接缝连续），自动切歌时曲尾淡出 / 新曲淡入；
     手动暂停 / 拖动 / 关开关立即恢复基线。注意 Media3 的 `onPositionDiscontinuity` 在
     **自动切歌时也会回调**（reason = AUTO_TRANSITION），那条路径必须放行给淡入。
-  - **音量平衡**：衰减制——按曲目 RMS（`TrackLoudnessAnalyzer` 解码前 120s）把过响的歌压到
+  - **音量平衡**：衰减制——**先读 ReplayGain / iTunes / R128 / APEv2 标签**，无标签再按曲目 RMS（`TrackLoudnessAnalyzer` 解码前 120s）把过响的歌压到
     -20 dBFS（`LoudnessScan` 纯函数），增益缓存进 `LoudnessCache`（filesDir 文本文件，
     **不进 Room**：纯缓存不配 schema 升版，否则 `fallbackToDestructiveMigration` 会拿真数据陪葬）。
     没分析过的曲目先原音量播，分析完下一遍生效；分析失败静默跳过。
@@ -2408,5 +2408,12 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 - **刻意保留**：`UpdateChecker.DOWNLOAD_ABORTED_MSG` + IOException 分类匹配子串；LyricOverlay **windowGeometry** 匹配键；ProcStats / API message / 内容库名
 - `UpdateCheckerTest` → Robolectric `zh-rCN`（断言钉中文）
 - 文档：`docs/功能-i18n扫尾扫仓.md`
-- **主路径 + 扫尾 Toast：已收口**；下一项产品建议：**ReplayGain / iTunes 标签读取**（规划 C3 余项）
+- **主路径 + 扫尾 Toast：已收口**；下一项曾建议 C3 标签读取 —— **已核对完成**（见下）
+
+### C3 ReplayGain / iTunes 标签收口（2026-11-01）
+
+核对：`ReplayGainReader` + `ReplayGainTags`（ID3 / FLAC / Ogg / MP4 iTunNORM / APEv2 / R128）已由 **v1.2.14** 接入 `TrackVolume`（标签优先，无标签回落 RMS）；**v1.2.29** N6 曲目/专辑模式。本轮：**规划文档对齐** + `ReplayGainTagsTest` 补 APEv2 用例。性能铁律：音量平衡可关；标签解析只走既有 IO `analyzeScope`，不堵切歌热路径；无新常驻线程、无大缓存；无标签回落与现网一致。不改 SoftEq / 播放内核行为。
+
+- 文档：`docs/功能-ReplayGain模式.md`、`docs/规划-下一步.md`
+- 下一项产品建议：**i18n 可选残余**（OnlinePlaylistRules / BootStatus / AppShortcut）
 
