@@ -95,8 +95,10 @@ jobs:
           fi
 
       # ---------------------------------------------------------------- 构建
-      # 一次 Gradle：单测 + Release 包（仍保留发版前单测门禁，只省二次配置）
-      - name: 单测 + 构建 Release 包
+      # 2026-10-31：Release 不再重复跑单测（约省 3 分钟）。门禁靠：
+      #   1) scripts/release.sh 本地先测；2) 推 main 触发 Android CI。
+      # 风险：有人绕过 release.sh 直接推孤儿 tag → 少一道云端单测。约定禁止。
+      - name: 构建 Release 包
         env:
           WINDTONE_KEYSTORE: ${{ steps.ks.outputs.path }}
           WINDTONE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -107,7 +109,7 @@ jobs:
           BAIDU_APP_KEY: ${{ secrets.BAIDU_APP_KEY }}
           BAIDU_SECRET_KEY: ${{ secrets.BAIDU_SECRET_KEY }}
         # -PabiSplits=true：按 ABI 分包并额外产出 universal 包（本地开发默认关闭）
-        run: ./gradlew testDebugUnitTest assembleRelease -PabiSplits=true --stacktrace
+        run: ./gradlew assembleRelease -PabiSplits=true --stacktrace
 
       - name: 收集产物并计算校验值
         id: apk

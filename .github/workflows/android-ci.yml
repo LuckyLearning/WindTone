@@ -1,7 +1,7 @@
 name: Android CI
 
 # 主干与 PR 的快速校验：跑单测 + 出一个 debug 包，确保任何提交都能编译通过
-# 2026-10-31 CI 提速：paths-ignore 避免纯文档触发；一次 Gradle 跑完 test/lint/assemble
+# 2026-10-31 CI 提速：paths-ignore（docs/纯 md/许可证等）避免误触发；一次 Gradle；concurrency 取消旧跑
 on:
   push:
     branches: [ main, master ]
@@ -10,6 +10,11 @@ on:
       - '*.md'
       - '.github/workflows/pages.yml'
       - '.github/release-notes/**'
+      - '.gitignore'
+      - '.github-token.example'
+      - 'LICENSE'
+      - 'NOTICE'
+      - 'SECURITY.md'
   pull_request:
     branches: [ main, master ]
     paths-ignore:
@@ -17,6 +22,11 @@ on:
       - '*.md'
       - '.github/workflows/pages.yml'
       - '.github/release-notes/**'
+      - '.gitignore'
+      - '.github-token.example'
+      - 'LICENSE'
+      - 'NOTICE'
+      - 'SECURITY.md'
   workflow_dispatch:
 
 concurrency:

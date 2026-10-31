@@ -148,25 +148,18 @@ a:hover{text-decoration:underline}
     <span>开发文档</span>
     <a href="{{ '/AI开发指南.html' | relative_url }}"{% if u == '/AI开发指南.html' %} class="active"{% endif %}>AI 开发指南</a>
     <a href="{{ '/数据库设计-MusicDb.html' | relative_url }}"{% if u == '/数据库设计-MusicDb.html' %} class="active"{% endif %}>数据库设计</a>
-    <a href="{{ '/数据层重构规划.html' | relative_url }}"{% if u == '/数据层重构规划.html' %} class="active"{% endif %}>数据层重构规划</a>
     <a href="{{ '/版本号发版规则.html' | relative_url }}"{% if u == '/版本号发版规则.html' %} class="active"{% endif %}>发版规则</a>
-    <a href="{{ '/悬浮歌词完善方案.html' | relative_url }}"{% if u == '/悬浮歌词完善方案.html' %} class="active"{% endif %}>悬浮歌词完善方案</a>
+    <a href="{{ '/可复现构建.html' | relative_url }}"{% if u == '/可复现构建.html' %} class="active"{% endif %}>可复现构建</a>
+    <a href="{{ '/转public检查清单.html' | relative_url }}"{% if u == '/转public检查清单.html' %} class="active"{% endif %}>转 public 清单</a>
+    <a href="{{ '/真机验证清单.html' | relative_url }}"{% if u == '/真机验证清单.html' %} class="active"{% endif %}>真机验证清单</a>
     <a href="{{ '/ui/README.html' | relative_url }}"{% if u == '/ui/README.html' %} class="active"{% endif %}>效果图维护约定</a>
-    <a href="{{ '/代码审计-2026-10-15.html' | relative_url }}"{% if u == '/代码审计-2026-10-15.html' %} class="active"{% endif %}>死代码审计</a>
-  </nav>
-
-  <nav class="nav-group">
-    <span>功能规划</span>
-    <a href="{{ '/功能规划.html' | relative_url }}"{% if u == '/功能规划.html' %} class="active"{% endif %}>总纲</a>
-    <a href="{{ '/功能规划-第二期.html' | relative_url }}"{% if u == '/功能规划-第二期.html' %} class="active"{% endif %}>第二期</a>
-    <a href="{{ '/功能规划-第三期.html' | relative_url }}"{% if u == '/功能规划-第三期.html' %} class="active"{% endif %}>第三期</a>
-    {% comment %} 第四期·云盘音乐规划文档已按用户要求删除（2026-10-20），此处不再挂链接 {% endcomment %}
-    <a href="{{ '/功能规划-第五期.html' | relative_url }}"{% if u == '/功能规划-第五期.html' %} class="active"{% endif %}>第五期</a>
+    <a href="{{ '/archive/' | relative_url }}"{% if u contains '/archive/' %} class="active"{% endif %}>历史归档</a>
   </nav>
 
   <div class="sidebar-foot">
-    <a href="https://github.com/LuckyLearning/WindTone">GitHub 仓库</a> ·
-    <a href="https://github.com/LuckyLearning/WindTone/releases/latest">下载最新版</a>
+    <a href="https://github.com/LuckyLearning/WindTone">源码</a> ·
+    <a href="https://github.com/LuckyLearning/WindTone/blob/main/LICENSE">Apache-2.0</a> ·
+    <a href="https://github.com/LuckyLearning/Release/tree/main/WindTone">下载 APK</a>
   </div>
 </aside>
 
