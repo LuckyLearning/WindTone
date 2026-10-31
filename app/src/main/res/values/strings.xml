@@ -1331,4 +1331,10 @@ The list is fetched once on add — nothing is saved if the fetch fails.</string
     <string name="ssc_chip_full">Entire device</string>
     <string name="ssc_chip_folders">Chosen folders</string>
     <string name="ssc_chip_folders_n">Chosen folders · %1$d</string>
+
+    <!-- i18n batch 18: OnlineListeningReport (shell; reuses lr_* body) -->
+    <string name="olr_title">Online listening report</string>
+    <string name="olr_empty_plays">No Aliyun Drive plays in this period</string>
+    <string name="olr_empty_listen">No Aliyun Drive listening recorded in this period</string>
+
 </resources>

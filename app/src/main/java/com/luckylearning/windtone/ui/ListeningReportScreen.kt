@@ -56,8 +56,9 @@ private val REPORT_SPANS = listOf(7, 30)
 /**
  * 收听报告页（批次 10.1）。
  *
- * 数据全部来自本机：曲线与时段分布读 `listen_log` 的小时桶，榜单读 `song_state`
- * 的累计统计。**不新增任何网络请求**——"纯本地"是这个应用的定位红线。
+ * 本地路径：曲线/时段读 `listen_log`，榜单读 `song_state`（不新增网络请求）。
+ * 在线路径由 OnlineListeningReport 注入阿里云盘统计后复用本屏；
+ * 可用 title / emptyPlaysHint / emptyListenHint 覆盖壳文案。
  *
  * 图表自绘（Row + 加权 Box），不引图表库：需要的只有"柱状对比"这一种形式，
  * 为了它多背一个几百 KB 的依赖、多一套主题适配，收益不成比例。
@@ -69,11 +70,20 @@ fun ListeningReportScreen(
     onSetDays: (Int) -> Unit,
     onPlayTop: (List<Song>) -> Unit,
     onOpenCalendar: (() -> Unit)? = null,
+    /** 标题；在线报告传 olr_title，默认本地收听报告。 */
+    title: String? = null,
+    /** 榜单空态；在线报告可覆盖。 */
+    emptyPlaysHint: String? = null,
+    /** 曲线/时段空态；在线报告可覆盖。 */
+    emptyListenHint: String? = null,
 ) {
     BackHandler { onClose() }
 
     val days = state?.days ?: REPORT_SPANS.last()
     val report = state?.report
+    val resolvedTitle = title ?: stringResource(R.string.lib_listening_report)
+    val resolvedEmptyPlays = emptyPlaysHint ?: stringResource(R.string.lr_empty_plays)
+    val resolvedEmptyListen = emptyListenHint ?: stringResource(R.string.lr_empty_listen)
     // 宽屏（平板横屏 / 车机）限宽，否则一根柱子会被拉到半米宽，比例完全读不出来
     val wide = LocalConfiguration.current.screenWidthDp >= 840
 
@@ -91,7 +101,7 @@ fun ListeningReportScreen(
                     )
                 }
                 Text(
-                    stringResource(R.string.lib_listening_report),
+                    resolvedTitle,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                 )
@@ -143,12 +153,12 @@ fun ListeningReportScreen(
 
                 // ------------------------------------------------ 日曲线
                 SectionHeader(stringResource(R.string.lr_section_daily))
-                DayCurve(report)
+                DayCurve(report, resolvedEmptyListen)
                 Spacer(Modifier.height(18.dp))
 
                 // ------------------------------------------------ 时段分布
                 SectionHeader(stringResource(R.string.lr_section_hours))
-                HourBars(report)
+                HourBars(report, resolvedEmptyListen)
                 Spacer(Modifier.height(18.dp))
 
                 // ------------------------------------------------ 榜单
@@ -158,7 +168,7 @@ fun ListeningReportScreen(
                 TopList(
                     rows = topPlayed,
                     valueOf = { stringResource(R.string.lr_play_count, it.playCount) },
-                    emptyHint = stringResource(R.string.lr_empty_plays),
+                    emptyHint = resolvedEmptyPlays,
                     onPlayAll = { songs -> onPlayTop(songs) },
                 )
                 Spacer(Modifier.height(14.dp))
@@ -166,7 +176,7 @@ fun ListeningReportScreen(
                 TopList(
                     rows = topListened,
                     valueOf = { formatListenDuration(it.listenedMs) },
-                    emptyHint = stringResource(R.string.lr_empty_plays),
+                    emptyHint = resolvedEmptyPlays,
                     onPlayAll = { songs -> onPlayTop(songs) },
                 )
 
@@ -224,7 +234,7 @@ private fun StatGrid(report: ListeningReport) {
  * 所以不画轴、不做点击，只给"哪天多哪天少"的整体形状。
  */
 @Composable
-private fun DayCurve(report: ListeningReport) {
+private fun DayCurve(report: ListeningReport, emptyListenHint: String) {
     val max = report.maxDayMs
     val scheme = MaterialTheme.colorScheme
     val zone = remember { TimeZone.getDefault() }
@@ -234,7 +244,7 @@ private fun DayCurve(report: ListeningReport) {
         Box(Modifier.fillMaxWidth().height(120.dp)) {
             if (max <= 0L) {
                 Text(
-                    stringResource(R.string.lr_empty_listen),
+                    emptyListenHint,
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant,
                     modifier = Modifier.align(Alignment.Center),
@@ -295,7 +305,7 @@ private fun DayCurve(report: ListeningReport) {
  * 每根都能稳定放下；`hour % 6 == 0` 的位置标刻度，避免逐个标数字。
  */
 @Composable
-private fun HourBars(report: ListeningReport) {
+private fun HourBars(report: ListeningReport, emptyListenHint: String) {
     val max = report.hours.maxOfOrNull { it.ms } ?: 0L
     val scheme = MaterialTheme.colorScheme
 
@@ -303,7 +313,7 @@ private fun HourBars(report: ListeningReport) {
         Box(Modifier.fillMaxWidth().height(72.dp)) {
             if (max <= 0L) {
                 Text(
-                    stringResource(R.string.lr_empty_listen),
+                    emptyListenHint,
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant,
                     modifier = Modifier.align(Alignment.Center),

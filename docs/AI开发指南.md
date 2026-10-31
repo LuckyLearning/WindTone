@@ -2325,3 +2325,12 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 - 前缀：`ssc_*`；复用 `drawer_scan_scope`、`lib_scan_full`、`plurals/lib_song_count`
 - 未碰 SoftEq / 播放内核 / 扫描逻辑
 - 文档：`docs/功能-i18n扫描范围Sheet.md`
+
+### i18n 第 18 批（2026-10-31）
+
+**OnlineListeningReport**：在线听歌报告壳与本地第 16 批对称。标题/空态 `olr_*`；正文分区复用 `lr_*`。`ListeningReportScreen` 增加可选 `title` / `emptyPlaysHint` / `emptyListenHint`。
+
+- 本批键名：`olr_title`, `olr_empty_plays`, `olr_empty_listen`
+- SoftEq / 播放内核 / Aliyun 其它壳本批不改
+- 文档：`docs/功能-i18n在线听歌报告.md`
+

@@ -1297,4 +1297,10 @@
     <string name="ssc_chip_full">全盘扫描</string>
     <string name="ssc_chip_folders">指定目录</string>
     <string name="ssc_chip_folders_n">指定目录 %1$d 个</string>
+
+    <!-- i18n 第 18 批：OnlineListeningReport（壳；正文复用 lr_*） -->
+    <string name="olr_title">在线收听报告</string>
+    <string name="olr_empty_plays">这段时间还没有云盘播放记录</string>
+    <string name="olr_empty_listen">这段时间还没有云盘收听记录</string>
+
 </resources>

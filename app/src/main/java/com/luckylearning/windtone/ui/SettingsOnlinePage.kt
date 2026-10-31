@@ -179,7 +179,8 @@ internal fun SettingsOnlinePage(
 }
 
 /**
- * 在线曲目的收听报告。版式与本地 [ListeningReportScreen] 相同，
+ * 在线曲目的收听报告（i18n 第 18 批）。版式与本地 [ListeningReportScreen] 相同，
+ * 标题/空态用 `olr_*`，其余分区复用 `lr_*`；
  * 小时桶和榜单都来自 [AliyunTrackStore]，不读曲库的 `listen_log`。
  */
 @Composable
@@ -211,6 +212,9 @@ internal fun OnlineListeningReport(
         state = state,
         onClose = onClose,
         onSetDays = { days = it },
+        title = stringResource(R.string.olr_title),
+        emptyPlaysHint = stringResource(R.string.olr_empty_plays),
+        emptyListenHint = stringResource(R.string.olr_empty_listen),
         onPlayTop = { songs ->
             if (songs.isEmpty()) return@ListeningReportScreen
             scope.launch {
