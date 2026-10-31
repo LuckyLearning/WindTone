@@ -6,6 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import java.io.File
 import java.nio.file.Files
 
@@ -24,6 +25,7 @@ import java.nio.file.Files
  * `JSONArray.length()` 恒为 0。这类失败看着像「解析逻辑写错了」，其实是测试环境问题。
  */
 @RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], qualifiers = "zh-rCN")
 class UpdateCheckerTest {
 
     private fun manifest(

@@ -2400,3 +2400,13 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 - 文档：`docs/功能-i18n扫尾扫仓.md`
 - **主路径近尾**；下一项产品建议：**长稳资源回归**
 
+### i18n 第 27 批（2026-11-01）
+
+**LyricOverlay / Folder / M3u / Update 零散 Toast 扫尾**：`fc_*` FolderController；`m3u_*` M3uStore；`upd_*` UpdateRepository；`uc_*` UpdateChecker 用户可见失败/描述句；`los_*` LyricOverlayService 状态 report + contentDescription。
+
+- SoftEq / 播放内核本批不改
+- **刻意保留**：`UpdateChecker.DOWNLOAD_ABORTED_MSG` + IOException 分类匹配子串；LyricOverlay **windowGeometry** 匹配键；ProcStats / API message / 内容库名
+- `UpdateCheckerTest` → Robolectric `zh-rCN`（断言钉中文）
+- 文档：`docs/功能-i18n扫尾扫仓.md`
+- **主路径 + 扫尾 Toast：已收口**；下一项产品建议：**ReplayGain / iTunes 标签读取**（规划 C3 余项）
+

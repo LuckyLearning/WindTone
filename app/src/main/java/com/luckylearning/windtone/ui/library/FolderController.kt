@@ -21,6 +21,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.luckylearning.windtone.R
+import com.luckylearning.windtone.ui.AppStrings
 
 /**
  * 文件夹域的**实现**（SAF 目录导入 / 排除 / 移除、歌词刷新、扫描权限、移除分组扫描结果）。
@@ -79,8 +81,10 @@ internal class FolderController(private val session: LibrarySession) : FolderAct
                 reloadFolders()
             }
             pushMessage(
-                if (excluded) "已排除「${target.name}」：以后不再扫描，已导入的 ${target.songCount} 首仍在曲库"
-                else "已取消排除「${target.name}」，下次扫描会重新收录"
+                if (excluded) AppStrings.s(R.string.fc_excluded, target.name, target.songCount)
+                    .ifEmpty { "已排除「${target.name}」：以后不再扫描，已导入的 ${target.songCount} 首仍在曲库" }
+                else AppStrings.s(R.string.fc_unexcluded, target.name)
+                    .ifEmpty { "已取消排除「${target.name}」，下次扫描会重新收录" }
             )
             if (!excluded) session.core.scan(false)
         }
@@ -209,10 +213,10 @@ internal class FolderController(private val session: LibrarySession) : FolderAct
                     prefs.scanScope = ScanScope.UNSET
                     prefs.scanScopeChosen = true
                     session.core.clearLibraryForScopeReset()
-                    pushMessage("已移除全部目录，请重新选择扫描范围")
+                    pushMessage(AppStrings.s(R.string.fc_removed_all_need_scope).ifEmpty { "已移除全部目录，请重新选择扫描范围" })
                 } else {
                     // 全盘扫描范围：曲库由系统媒体库决定，导入的目录只是附加来源，无需重扫
-                    pushMessage("已移除全部目录")
+                    pushMessage(AppStrings.s(R.string.fc_removed_all).ifEmpty { "已移除全部目录" })
                 }
                 return@launch
             }
@@ -221,7 +225,7 @@ internal class FolderController(private val session: LibrarySession) : FolderAct
                 // 「指定目录」范围里目录就是唯一来源，剩下的目录要重扫（只扫这几个，很快）
                 ScanScope.FOLDERS -> session.core.scan(false)
                 // 「全盘扫描」范围：为了一个目录重扫整块盘不值得，等用户手动重扫
-                else -> pushMessage("已移除目录「${treeDisplayName(uriString)}」")
+                else -> pushMessage(AppStrings.s(R.string.fc_removed_one, treeDisplayName(uriString)).ifEmpty { "已移除目录「${treeDisplayName(uriString)}」" })
             }
         }
     }
@@ -257,7 +261,7 @@ internal class FolderController(private val session: LibrarySession) : FolderAct
     /** 重新为缺少歌词文件的歌曲匹配同目录 .lrc */
     override fun refreshLyrics() {
         scope.launch {
-            _library.update { it.copy(statusText = "正在重新匹配歌词…") }
+            _library.update { it.copy(statusText = AppStrings.s(R.string.fc_rematching_lyrics).ifEmpty { "正在重新匹配歌词…" }) }
             val updated = repository.refreshSidecarLyrics(_library.value.songs)
             playback.setLibrarySongs(updated)
             val query = _library.value.query
@@ -271,7 +275,7 @@ internal class FolderController(private val session: LibrarySession) : FolderAct
                     statusText = "",
                 )
             }
-            pushMessage("已重新匹配歌词文件：${updated.count { it.lrcUri != null }} 首")
+            pushMessage(AppStrings.s(R.string.fc_rematched_lyrics, updated.count { it.lrcUri != null }).ifEmpty { "已重新匹配歌词文件：${updated.count { it.lrcUri != null }} 首" })
         }
     }
 
@@ -285,8 +289,10 @@ internal class FolderController(private val session: LibrarySession) : FolderAct
     /** 用户拒绝音频读取权限时的提示（不影响「指定目录」方式） */
     override fun notifyScanPermissionDenied() {
         pushMessage(UserFacingCopy.withNext(
-            "没有读取音频的权限",
-            "点「选择音乐目录」用文件选择器授权指定文件夹，或到系统设置授予音频权限",
+            AppStrings.s(R.string.fc_no_audio_perm).ifEmpty { "没有读取音频的权限" },
+            AppStrings.s(R.string.fc_no_audio_perm_next).ifEmpty {
+                "点「选择音乐目录」用文件选择器授权指定文件夹，或到系统设置授予音频权限"
+            },
         ))
     }
 
@@ -346,13 +352,18 @@ internal class FolderController(private val session: LibrarySession) : FolderAct
                     prefs.scanScope = ScanScope.UNSET
                     prefs.scanScopeChosen = true
                     session.core.clearLibraryForScopeReset()
-                    pushMessage("已移除「${group.title}」，导入目录已清空，请重新选择扫描范围")
+                    pushMessage(AppStrings.s(R.string.fc_removed_group_empty, group.title).ifEmpty { "已移除「${group.title}」，导入目录已清空，请重新选择扫描范围" })
                     return@launch
                 }
             }
+            val treesJoined = matchedTrees.joinToString("、") { treeDisplayName(it) }
             val dirNote = if (matchedTrees.isEmpty()) ""
-            else "，导入目录「${matchedTrees.joinToString("、") { treeDisplayName(it) }}」已一并移除"
-            pushMessage("已移除「${group.title}」的 ${removed.size} 首歌曲$dirNote")
+            else AppStrings.s(R.string.fc_removed_trees_note, treesJoined)
+                .ifEmpty { "，导入目录「$treesJoined」已一并移除" }
+            pushMessage(
+                AppStrings.s(R.string.fc_removed_group_songs, group.title, removed.size)
+                    .ifEmpty { "已移除「${group.title}」的 ${removed.size} 首歌曲" } + dirNote,
+            )
         }
     }
 

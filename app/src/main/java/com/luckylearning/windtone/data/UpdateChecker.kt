@@ -24,6 +24,8 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
+import com.luckylearning.windtone.R
+import com.luckylearning.windtone.ui.AppStrings
 
 /** 公共分发仓库中某个版本的信息 */
 data class UpdateInfo(
@@ -196,7 +198,8 @@ object UpdateChecker {
         // 这是签名校验唯一"卡住"的地方，播放等核心功能不受影响，避免误伤自编译用户。
         if (!AppIntegrity.isOfficial) {
             return@withContext UpdateCheckResult.Failed(
-                "当前安装包不是官方签名构建（${AppIntegrity.describe()}），已停用应用内更新",
+                AppStrings.s(R.string.uc_non_official, AppIntegrity.describe())
+                    .ifEmpty { "当前安装包不是官方签名构建（${AppIntegrity.describe()}），已停用应用内更新" },
             )
         }
         val candidates = checkCandidates(route)
@@ -248,7 +251,7 @@ object UpdateChecker {
         try {
             withTimeoutOrNull(CHECK_BUDGET_MS) { winner.await() }
                 ?: foldCheckFailure(
-                    lastError.get() ?: java.net.SocketTimeoutException("连接更新服务器超时"),
+                    lastError.get() ?: java.net.SocketTimeoutException(AppStrings.s(R.string.uc_timeout).ifEmpty { "连接更新服务器超时，请稍后重试，或点「打开发布页面」手动下载" }),
                 )
         } finally {
             jobs.forEach { it.cancel() }
@@ -258,9 +261,15 @@ object UpdateChecker {
     private fun foldCheckFailure(error: Throwable?): UpdateCheckResult {
         val http = error as? HttpFail
         return when {
-            http?.code == 404 -> UpdateCheckResult.Failed("公共仓库还没有发布版本")
-            http != null -> UpdateCheckResult.Failed("检查更新失败（HTTP ${http.code}）")
-            else -> UpdateCheckResult.Failed(describe(error ?: IOException("网络异常")))
+            http?.code == 404 -> UpdateCheckResult.Failed(
+                AppStrings.s(R.string.uc_no_release).ifEmpty { "公共仓库还没有发布版本" },
+            )
+            http != null -> UpdateCheckResult.Failed(
+                AppStrings.s(R.string.uc_check_http, http.code).ifEmpty { "检查更新失败（HTTP ${http.code}）" },
+            )
+            else -> UpdateCheckResult.Failed(
+                describe(error ?: IOException(AppStrings.s(R.string.uc_net_fallback).ifEmpty { "网络异常" })),
+            )
         }
     }
 
@@ -288,15 +297,15 @@ object UpdateChecker {
         viaMirror: Boolean = false,
     ): UpdateCheckResult {
         val json = runCatching { JSONObject(body) }.getOrNull()
-            ?: return UpdateCheckResult.Failed("版本清单格式不正确")
+            ?: return UpdateCheckResult.Failed(AppStrings.s(R.string.uc_bad_manifest).ifEmpty { "版本清单格式不正确" })
         val version = normalizeVersion(json.optString("version"))
-        if (version.isBlank()) return UpdateCheckResult.Failed("版本清单里没有版本号")
+        if (version.isBlank()) return UpdateCheckResult.Failed(AppStrings.s(R.string.uc_no_version).ifEmpty { "版本清单里没有版本号" })
         if (!isNewer(version, current)) return UpdateCheckResult.UpToDate(version, viaMirror)
 
         val tag = json.optString("tag").ifBlank { "v$version" }
         val versionDir = "$appBase/$tag"
         val ordered = orderAssets(json.optJSONArray("assets"), abis)
-        if (ordered.isEmpty()) return UpdateCheckResult.Failed("新版本没有附带 APK 安装包")
+        if (ordered.isEmpty()) return UpdateCheckResult.Failed(AppStrings.s(R.string.uc_no_apk).ifEmpty { "新版本没有附带 APK 安装包" })
 
         val first = ordered.first()
         val urls = ordered.map { "$versionDir/${it.first}" }
@@ -900,12 +909,17 @@ object UpdateChecker {
      * 手动指定线路时点明是哪条线、并告诉用户去哪里换。
      */
     internal fun describeDownloadFailure(route: DownloadRoute, error: Throwable?): String {
-        val base = error?.message?.ifBlank { null } ?: "网络异常"
+        val base = error?.message?.ifBlank { null }
+            ?: AppStrings.s(R.string.uc_net_fallback).ifEmpty { "网络异常" }
         return if (route == DownloadRoute.AUTO) {
-            "下载失败：$base\n可到「设置 → 更新 → 下载线路」换一条线路，或点「在浏览器中查看发布页」手动下载。"
+            AppStrings.s(R.string.uc_dl_fail_auto, base).ifEmpty {
+                "下载失败：$base\n可到「设置 → 更新 → 下载线路」换一条线路，或点「在浏览器中查看发布页」手动下载。"
+            }
         } else {
-            "「${route.label}」线路下载失败：$base\n" +
-                "可到「设置 → 更新 → 下载线路」换成「自动」或其它线路后重试。"
+            AppStrings.s(R.string.uc_dl_fail_route, route.label, base).ifEmpty {
+                "「${route.label}」线路下载失败：$base\n" +
+                    "可到「设置 → 更新 → 下载线路」换成「自动」或其它线路后重试。"
+            }
         }
     }
 
@@ -913,12 +927,22 @@ object UpdateChecker {
     private fun describe(t: Throwable): String = when (t) {
         // DNS 污染在国内很常见，表现就是「网络明明通着却解析不了」，
         // 直接说「网络不可用」会让用户去白折腾路由器。
-        is java.net.UnknownHostException -> "无法解析更新服务器地址，请检查网络后重试"
+        is java.net.UnknownHostException ->
+            AppStrings.s(R.string.uc_dns).ifEmpty { "无法解析更新服务器地址，请检查网络后重试" }
         is java.net.SocketTimeoutException ->
-            "连接更新服务器超时，请稍后重试，或点「打开发布页面」手动下载"
-        is javax.net.ssl.SSLException -> "安全连接失败，请检查网络环境"
-        is IOException -> "网络异常：${t.message ?: "请稍后重试"}"
-        else -> "检查更新失败：${t.message ?: t.javaClass.simpleName}"
+            AppStrings.s(R.string.uc_timeout).ifEmpty {
+                "连接更新服务器超时，请稍后重试，或点「打开发布页面」手动下载"
+            }
+        is javax.net.ssl.SSLException ->
+            AppStrings.s(R.string.uc_ssl).ifEmpty { "安全连接失败，请检查网络环境" }
+        is IOException -> AppStrings.s(
+            R.string.uc_io,
+            t.message ?: AppStrings.s(R.string.uc_retry_later).ifEmpty { "请稍后重试" },
+        ).ifEmpty { "网络异常：${t.message ?: "请稍后重试"}" }
+        else -> AppStrings.s(
+            R.string.uc_check_fail,
+            t.message ?: t.javaClass.simpleName,
+        ).ifEmpty { "检查更新失败：${t.message ?: t.javaClass.simpleName}" }
     }
 
     /**

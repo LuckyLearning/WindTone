@@ -9,6 +9,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.luckylearning.windtone.R
+import com.luckylearning.windtone.ui.AppStrings
 
 /**
  * M3U 与歌曲信息编辑域的**实现**（M3U 导入导出 + `song_overrides` 本地标签覆盖）。
@@ -75,7 +77,7 @@ internal class M3uStore(private val session: LibrarySession) : M3uActions {
             playback.setLibrarySongs(sorted)
             session.core.refreshGroups()
             playback.renameCurrentSong(uri, t.ifBlank { song.title })
-            pushMessage("已更新歌曲信息（仅本应用内显示，不修改原文件）")
+            pushMessage(AppStrings.s(R.string.m3u_info_updated).ifEmpty { "已更新歌曲信息（仅本应用内显示，不修改原文件）" })
         }
     }
 
@@ -98,10 +100,10 @@ internal class M3uStore(private val session: LibrarySession) : M3uActions {
                 app.contentResolver.openOutputStream(target)?.use {
                     it.write(text.toByteArray(Charsets.UTF_8))
                 }
-                pushMessage("已导出「${playlist.name}」（${songs.size} 首）")
+                pushMessage(AppStrings.s(R.string.m3u_exported, playlist.name, songs.size).ifEmpty { "已导出「${playlist.name}」（${songs.size} 首）" })
             }.onFailure { pushMessage(UserFacingCopy.withNext(
-                "导出失败：${it.message}",
-                "换一个可写位置再试，或检查存储权限",
+                AppStrings.s(R.string.m3u_export_fail, it.message ?: "").ifEmpty { "导出失败：${it.message}" },
+                AppStrings.s(R.string.m3u_export_fail_next).ifEmpty { "换一个可写位置再试，或检查存储权限" },
             )) }
         }
     }
@@ -115,8 +117,10 @@ internal class M3uStore(private val session: LibrarySession) : M3uActions {
             }.getOrNull()
             if (text.isNullOrBlank()) {
                 pushMessage(UserFacingCopy.withNext(
-                    "无法读取 M3U 文件",
-                    "换一份 UTF-8 的 .m3u/.m3u8，或确认文件未被占用",
+                    AppStrings.s(R.string.m3u_read_fail).ifEmpty { "无法读取 M3U 文件" },
+                    AppStrings.s(R.string.m3u_read_fail_next).ifEmpty {
+                        "换一份 UTF-8 的 .m3u/.m3u8，或确认文件未被占用"
+                    },
                 ))
                 return@launch
             }
@@ -146,12 +150,16 @@ internal class M3uStore(private val session: LibrarySession) : M3uActions {
             }
             if (matched.isEmpty()) {
                 pushMessage(UserFacingCopy.withNext(
-                    "M3U 中没有匹配到本地歌曲",
-                    "先扫描曲库导入对应文件，或检查清单路径是否为本机路径",
+                    AppStrings.s(R.string.m3u_no_match).ifEmpty { "M3U 中没有匹配到本地歌曲" },
+                    AppStrings.s(R.string.m3u_no_match_next).ifEmpty {
+                        "先扫描曲库导入对应文件，或检查清单路径是否为本机路径"
+                    },
                 ))
                 return@launch
             }
-            val name = "导入 " + (target.lastPathSegment?.substringBeforeLast('.')?.takeLast(20) ?: "歌单")
+            val fallback = AppStrings.s(R.string.m3u_import_fallback).ifEmpty { "歌单" }
+            val base = target.lastPathSegment?.substringBeforeLast('.')?.takeLast(20) ?: fallback
+            val name = AppStrings.s(R.string.m3u_import_name, base).ifEmpty { "导入 $base" }
             session.playlists.createPlaylist(name, matched, {})
         }
     }

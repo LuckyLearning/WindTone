@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive
 import kotlin.math.roundToInt
+import com.luckylearning.windtone.ui.AppStrings
 
 /**
  * 桌面悬浮歌词服务。
@@ -282,7 +283,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
                 registerReceiver(screenReceiver, filter)
             }
         }
-        LyricOverlayBridge.report(LyricOverlayBus.Status.RUNNING, "服务已启动")
+        LyricOverlayBridge.report(LyricOverlayBus.Status.RUNNING, AppStrings.s(R.string.los_svc_started).ifEmpty { "服务已启动" })
         observeState()
     }
 
@@ -290,13 +291,13 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         // 每次被拉起都对齐一次开关状态：关闭了就地退出，打开着就补挂窗口。
         val enabled = OverlayPrefs.enabled(this)
         if (!enabled) {
-            LyricOverlayBridge.report(LyricOverlayBus.Status.IDLE, "开关已关闭")
+            LyricOverlayBridge.report(LyricOverlayBus.Status.IDLE, AppStrings.s(R.string.los_switch_off).ifEmpty { "开关已关闭" })
             stopSelf()
             return START_NOT_STICKY
         }
         if (!canDraw()) {
             // 授权被系统撤掉：开关由播放域回置，这里只负责把原因说清楚
-            LyricOverlayBridge.report(LyricOverlayBus.Status.FAILED, "未获得「出现在其他应用上」权限")
+            LyricOverlayBridge.report(LyricOverlayBus.Status.FAILED, AppStrings.s(R.string.los_no_overlay_perm).ifEmpty { "未获得「出现在其他应用上」权限" })
             stopSelf()
             return START_NOT_STICKY
         }
@@ -343,7 +344,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         detachWindow()
         LyricOverlayBus.clear()
         ForegroundAppState.reset()
-        LyricOverlayBridge.report(LyricOverlayBus.Status.IDLE, "服务已停止")
+        LyricOverlayBridge.report(LyricOverlayBus.Status.IDLE, AppStrings.s(R.string.los_svc_stopped).ifEmpty { "服务已停止" })
         super.onDestroy()
     }
 
@@ -491,7 +492,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
                 updateGeometryReport()
             }
             box.post { updateGeometryReport() }
-            LyricOverlayBridge.report(LyricOverlayBus.Status.RUNNING, "窗口已显示")
+            LyricOverlayBridge.report(LyricOverlayBus.Status.RUNNING, AppStrings.s(R.string.los_window_shown).ifEmpty { "窗口已显示" })
             PerfMarks.overlayMountEnd(ok = true)
             true
         } catch (t: Throwable) {
@@ -501,7 +502,8 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             // 设置页 → 关于与诊断 → 崩溃日志里能看到这条诊断。
             windowAttached = false
             PerfMarks.overlayMountEnd(ok = false)
-            val detail = "挂载悬浮窗失败：${t.javaClass.simpleName}: ${t.message}"
+            val detail = AppStrings.s(R.string.los_attach_fail, t.javaClass.simpleName, t.message ?: "")
+                .ifEmpty { "挂载悬浮窗失败：${t.javaClass.simpleName}: ${t.message}" }
             CrashLog.record(this, "LyricOverlay", detail + "\n\n" + t.stackTraceToString())
             LyricOverlayBridge.report(LyricOverlayBus.Status.FAILED, detail)
             // 同步把开关关掉，别让设置页显示「已开启」而桌面什么都没有
@@ -1462,7 +1464,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             // v1.2.0：按用户给的截图统一风格 —— 深色半透明底 + 白色图标，
             // 不再用实心橙 / 蓝大圆块（在车机上"按钮特别大"的观感一半来自那个色块）
             background = handleDisc(HANDLE_DISC_ALPHA)
-            contentDescription = "收起悬浮歌词"
+            contentDescription = AppStrings.s(R.string.los_cd_collapse).ifEmpty { "收起悬浮歌词" }
             elevation = dp(4).toFloat()
             setOnClickListener {
                 com.luckylearning.windtone.diag.DiagLog.log("OVERLAY", "收起钮被点击")
@@ -1512,7 +1514,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             includeFontPadding = false
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             background = handleDisc(HANDLE_DISC_ALPHA)
-            contentDescription = "打开播放页"
+            contentDescription = AppStrings.s(R.string.los_cd_open_player).ifEmpty { "打开播放页" }
             elevation = dp(4).toFloat()
             setOnClickListener {
                 com.luckylearning.windtone.diag.DiagLog.log("OVERLAY", "打开播放页按钮被点击")
@@ -1877,7 +1879,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             p.width = geo.widthPx
             p.x = geo.x
             handle?.text = "›"
-            handle?.contentDescription = "展开悬浮歌词"
+            handle?.contentDescription = AppStrings.s(R.string.los_cd_expand).ifEmpty { "展开悬浮歌词" }
         } else {
             contentColumn?.visibility = View.VISIBLE
             val prefs = Prefs(this)
@@ -1892,7 +1894,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             p.x = frame.x
             p.y = frame.y
             handle?.text = "‹"
-            handle?.contentDescription = "收起悬浮歌词"
+            handle?.contentDescription = AppStrings.s(R.string.los_cd_collapse).ifEmpty { "收起悬浮歌词" }
         }
 
         val applied = runCatching { windowManager?.updateViewLayout(box, p) }
@@ -2183,7 +2185,8 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             } catch (t: Throwable) {
                 // Android 12+ 禁止后台应用起前台服务；厂商 ROM 也可能直接拒绝。
                 // 这种失败原先被 runCatching 吞掉，用户侧就是「开关开了但什么都没发生」。
-                val detail = "启动悬浮窗服务失败：${t.javaClass.simpleName}: ${t.message}"
+                val detail = AppStrings.s(R.string.los_start_fail, t.javaClass.simpleName, t.message ?: "")
+                    .ifEmpty { "启动悬浮窗服务失败：${t.javaClass.simpleName}: ${t.message}" }
                 CrashLog.record(context, "LyricOverlay", detail + "\n\n" + t.stackTraceToString())
                 LyricOverlayBus.report(LyricOverlayBus.Status.FAILED, detail)
                 runCatching { context.stopService(intent) }

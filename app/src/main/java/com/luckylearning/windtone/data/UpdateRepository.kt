@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
+import com.luckylearning.windtone.R
+import com.luckylearning.windtone.ui.AppStrings
 
 /**
  * 应用内更新域。
@@ -103,7 +105,7 @@ class UpdateRepository(
                     // 指路要指到**实际那一级**：设置主页上是「更新」分类卡，
                     // 「检查更新」是它下面那一行（2026-10-17 入口收敛后更是只剩这一处，
                     // 见《AI 开发指南》§11 第 16 条）。
-                    messages.post("发现新版本 v${r.info.version}，可在「设置 → 更新」中升级")
+                    messages.post(AppStrings.s(R.string.upd_new_version, r.info.version).ifEmpty { "发现新版本 v${r.info.version}，可在「设置 → 更新」中升级" })
                 }
                 // 已是最新 / 检查失败：自动模式下都不提示
                 else -> Unit
@@ -130,9 +132,11 @@ class UpdateRepository(
                             // 走镜像拿到「已是最新」时明说一句：镜像有 CDN 缓存，
                             // 刚发布的版本可能还没同步过来，免得用户以为「明明发了却查不到」。
                             message = if (r.viaMirror) {
-                                "已是最新版本（v${r.latestVersion}）· 经镜像线路检查，刚发布的版本可能有延迟"
+                                AppStrings.s(R.string.upd_latest_mirror, r.latestVersion)
+                                    .ifEmpty { "已是最新版本（v${r.latestVersion}）· 经镜像线路检查，刚发布的版本可能有延迟" }
                             } else {
-                                "已是最新版本（v${r.latestVersion}）"
+                                AppStrings.s(R.string.upd_latest, r.latestVersion)
+                                    .ifEmpty { "已是最新版本（v${r.latestVersion}）" }
                             },
                         )
                     }
@@ -180,7 +184,7 @@ class UpdateRepository(
                     progress = 0,
                     downloadedBytes = 0L,
                     totalBytes = info.apkSizeBytes,
-                    message = if (aborted) "已切换线路：${route.label}，重新下载…" else null,
+                    message = if (aborted) AppStrings.s(R.string.upd_switched_route, route.label).ifEmpty { "已切换线路：${route.label}，重新下载…" } else null,
                     readyApkPath = null,
                     readyApkVersion = "",
                     needInstallPermission = false,
@@ -202,7 +206,7 @@ class UpdateRepository(
                     onLineFallback = { attempt, count ->
                         // 只在线路**报错**时才会触发（v1.1.74 起不再做速度自动切换）
                         _update.update {
-                            it.copy(progress = 0, downloadedBytes = 0L, message = "线路失败，切换线路 $attempt/$count…")
+                            it.copy(progress = 0, downloadedBytes = 0L, message = AppStrings.s(R.string.upd_route_fail_switch, attempt, count).ifEmpty { "线路失败，切换线路 $attempt/$count…" })
                         }
                     },
                     checkCancelled = { downloadAborted },
@@ -250,7 +254,12 @@ class UpdateRepository(
             .onSuccess { _update.update { it.copy(dialogVisible = false) } }
             .onFailure { t ->
                 _update.update {
-                    it.copy(message = "无法启动安装器：${t.message ?: "请到公共仓库页面手动下载"}")
+                    it.copy(message = AppStrings.s(
+                        R.string.upd_install_fail,
+                        t.message ?: AppStrings.s(R.string.upd_install_fail_fallback).ifEmpty { "请到公共仓库页面手动下载" },
+                    ).ifEmpty {
+                        "无法启动安装器：${t.message ?: "请到公共仓库页面手动下载"}"
+                    })
                 }
             }
     }
@@ -274,11 +283,11 @@ class UpdateRepository(
     override fun grantInstallPermission() {
         val intent = UpdateChecker.unknownSourcesIntent(app)
         if (intent == null) {
-            _update.update { it.copy(needInstallPermission = false, message = "当前系统无需额外授权，请直接点击安装") }
+            _update.update { it.copy(needInstallPermission = false, message = AppStrings.s(R.string.upd_no_perm_needed).ifEmpty { "当前系统无需额外授权，请直接点击安装" }) }
             return
         }
         runCatching { app.startActivity(intent) }.onFailure {
-            _update.update { it.copy(message = "无法打开授权页，请到「设置 → 应用 → 安装未知应用」中手动允许") }
+            _update.update { it.copy(message = AppStrings.s(R.string.upd_open_perm_fail).ifEmpty { "无法打开授权页，请到「设置 → 应用 → 安装未知应用」中手动允许" }) }
         }
     }
 
