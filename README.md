@@ -32,6 +32,8 @@ Android 原生本地音乐播放器 —— Kotlin + Jetpack Compose，**数据�
 
 完整的功能说明、界面效果图与开发文档在文档站：**<https://luckylearning.github.io/WindTone/>**
 
+文档站使用 [Just the Docs](https://just-the-docs.github.io/just-the-docs/)（`docs/` + GitHub Actions Pages）。
+
 | 文档 | 内容 |
 |---|---|
 | [功能说明](https://luckylearning.github.io/WindTone/功能说明.html) | 音乐库 / 格式支持 / 歌词 / 播放 / 桌面组件 / 设置页 |

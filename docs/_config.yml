@@ -1,26 +1,91 @@
 # ===================================================================
-#  GitHub Pages 站点配置（Source = GitHub Actions，构建 docs/ 目录）
-#  docs/ 既是文档源，也是发布目录 —— 一份内容，两处用途。
+#  GitHub Pages（Source = GitHub Actions，构建 docs/）
+#  主题：just-the-docs（remote_theme，白名单插件）
 # ===================================================================
 
 title: 听风 WindTone
 description: Android 原生本地音乐播放器 · 项目文档
+repository: LuckyLearning/WindTone
 
-# 用 GFM 解析：表格、围栏代码块、自动链接、删除线
+# 项目站路径；configure-pages 也会注入，显式写出便于本地预览
+url: https://luckylearning.github.io
+baseurl: /WindTone
+
+remote_theme: just-the-docs/just-the-docs@v0.10.1
+
+plugins:
+  - jekyll-remote-theme
+  - jekyll-seo-tag
+  - jekyll-include-cache
+
 markdown: kramdown
 kramdown:
   input: GFM
   syntax_highlighter: rouge
 
-# 所有页面统一套自定义布局（docs/_layouts/default.html）
+# 默认不进侧栏（docs 下功能稿/spike 很多）；关键页在 front matter 里打开
 defaults:
   - scope:
       path: ""
     values:
-      layout: "default"
+      layout: default
+      nav_exclude: true
 
-# 本地备份与草稿不入站
 exclude:
   - "*.bak"
   - "*.bak-*"
   - "*.tmp"
+  - "spike-*"
+  - "DOC_INVENTORY.md"
+  - "DELETIONS.md"
+
+# ---- just-the-docs ----
+search_enabled: true
+search:
+  heading_level: 3
+  previews: 2
+  preview_words_before: 4
+  preview_words_after: 4
+
+heading_anchors: true
+nav_enabled: true
+nav_sort: case_sensitive
+
+# 浅色为默认；页脚脚本按系统偏好 / localStorage 切到 dark
+color_scheme: light
+
+aux_links:
+  "源码 GitHub":
+    - "https://github.com/LuckyLearning/WindTone"
+  "下载 APK":
+    - "https://github.com/LuckyLearning/Release/tree/main/WindTone"
+  "LICENSE":
+    - "https://github.com/LuckyLearning/WindTone/blob/main/LICENSE"
+aux_links_new_tab: true
+
+nav_external_links:
+  - title: 源码仓库
+    url: https://github.com/LuckyLearning/WindTone
+  - title: 下载 APK
+    url: https://github.com/LuckyLearning/Release/tree/main/WindTone
+
+footer_content: "听风 WindTone · <a href=\"https://github.com/LuckyLearning/WindTone/blob/main/LICENSE\">Apache-2.0</a>"
+
+back_to_top: true
+back_to_top_text: "回到顶部"
+
+gh_edit_link: true
+gh_edit_link_text: "在 GitHub 上编辑此页"
+gh_edit_repository: "https://github.com/LuckyLearning/WindTone"
+gh_edit_branch: "main"
+gh_edit_source: docs
+gh_edit_view_mode: "tree"
+
+callouts_level: quiet
+callouts:
+  note:
+    title: 说明
+    color: blue
+  warning:
+    title: 注意
+    color: red

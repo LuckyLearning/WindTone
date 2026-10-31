@@ -1,8 +1,7 @@
 name: Deploy docs to GitHub Pages
 
-# docs/ 目录既是文档源，也是 Pages 的发布目录。
-# 只在 docs/ 或本工作流有改动时自动触发；其它业务提交不跑 Pages。
-# 也可手动：Actions → Deploy docs to GitHub Pages → Run workflow。
+# docs/ 既是文档源也是发布目录。
+# 只在 docs/ 或本工作流有改动时自动触发；也可手动 Run workflow。
 on:
   push:
     branches: [main]
@@ -11,13 +10,11 @@ on:
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
-# 允许写入 Pages，并用 id-token 向部署服务证明来源
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# 同一时间只跑一个部署；不取消进行中的部署（避免站点处于半更新状态）
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -30,14 +27,11 @@ jobs:
       - name: 检出仓库
         uses: actions/checkout@v4
 
-      # ⚠️ 不要开 `enablement: true`：仓库的 GITHUB_TOKEN 没有创建 Pages 站点的权限，
-      # 该选项会以「Resource not accessible by integration」直接失败。
-      # Pages（Source = GitHub Actions）只需在仓库 Settings → Pages 里手工开一次，
-      # 之后这套流程就能一直跑。
+      # 首次必须在仓库 Settings → Pages → Build and deployment → Source
+      # 选「GitHub Actions」。未启用时本步会 404 失败（PAT/GITHUB_TOKEN 均无法代开）。
       - name: 配置 Pages
         uses: actions/configure-pages@v5
 
-      # 用 GitHub Pages 官方 Jekyll 环境构建，插件白名单与线上一致
       - name: Jekyll 构建
         uses: actions/jekyll-build-pages@v1
         with:

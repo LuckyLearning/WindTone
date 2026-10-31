@@ -1,6 +1,9 @@
 ---
 layout: default
-title: 项目文档
+title: 首页
+nav_exclude: false
+nav_order: 1
+permalink: /
 ---
 
 # 听风 WindTone

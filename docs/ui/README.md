@@ -1,6 +1,8 @@
 ---
 layout: default
-title: 界面效果图（设计基准）
+title: 界面效果图
+nav_exclude: false
+nav_order: 3
 ---
 
 # UI 效果图（设计基准 / Design Source of Truth）

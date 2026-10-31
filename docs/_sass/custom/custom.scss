@@ -1,0 +1,54 @@
+// 首页卡片网格（保留原信息架构）
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(238px, 1fr));
+  gap: 14px;
+  margin: 1.5rem 0 2rem;
+}
+
+.card {
+  display: block;
+  padding: 1.1rem 1.2rem;
+  border: 1px solid $border-color;
+  border-radius: 10px;
+  background-color: $body-background-color;
+  color: $body-text-color;
+  text-decoration: none !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card:hover {
+  border-color: $link-color;
+  box-shadow: 0 3px 14px -6px rgba(0, 0, 0, 0.25);
+}
+
+.card b {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 650;
+  margin-bottom: 0.3rem;
+  color: $body-heading-color;
+}
+
+.card span {
+  font-size: 0.8rem;
+  color: $body-text-color;
+  opacity: 0.78;
+  line-height: 1.55;
+}
+
+// 主题切换按钮
+.wt-theme-toggle {
+  margin-left: 0.75rem;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid $border-color;
+  border-radius: 6px;
+  background: transparent;
+  color: $body-text-color;
+  cursor: pointer;
+}
+.wt-theme-toggle:hover {
+  border-color: $link-color;
+  color: $link-color;
+}
