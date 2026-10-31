@@ -2264,7 +2264,9 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 
 ### i18n 第 10 批（2026-10-31）
 
-**BootDiagView 启动诊断页**：探针 / 状态说明 / 分区标题 / 按钮与 Toast / 屏幕·窗口快照字段进 alues / alues-zh（oot_diag_*）。纯 View，用 getString。
+**BootDiagView 启动诊断页**：探针 / 状态说明 / 分区标题 / 按钮与 Toast / 屏幕·窗口快照字段进 
+alues / 
+alues-zh（oot_diag_*）。纯 View，用 getString。
 
 - 曲库格式筛选已在既有 lib_format_filter_*，本批不改
 - 设置诊断导出 chrome、DiagnosticsReport 正文留给后续
@@ -2416,6 +2418,7 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 
 - 文档：`docs/功能-ReplayGain模式.md`、`docs/规划-下一步.md`
 - **2026-11-01 规划盘点**：本机可审写码队列已空；下一项以真机 §5 / E6 为主（仅上车）；详见 `功能-规划盘点收口.md`。
+- **2026-11-01 本机暂停点**：暂缓项（C4/D4/B3 等）评估后停写码；等真机 §5；见 `功能-本机暂停点.md` / 规划 §8。
 - 下一项产品建议：**i18n 可选残余**（OnlinePlaylistRules / BootStatus / AppShortcut）
 
 ### i18n 第 28 批（2026-11-01）
