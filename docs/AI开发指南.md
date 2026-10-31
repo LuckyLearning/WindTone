@@ -2292,5 +2292,14 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 **SheetsSong 单曲 Sheet**：长按操作 / 音频信息 / 编辑歌曲信息面向用户文案进 values / values-zh（`ss_*`）。收藏复用 `cd_favorite` / `cd_unfavorite`；音频信息标题复用 `po_audio_info`；保存 / 取消复用 `save` / `cancel`。Compose 用 `stringResource`。
 
 - 本批键名：`ss_share`, `ss_play_next`, `ss_add_to_playlist`, `ss_view_album`, `ss_view_artist`, `ss_edit_info`, `ss_delete_file`, `ss_info_loading`, `ss_info_unavailable`, `ss_info_container`, `ss_info_codec`, `ss_info_sample_rate`, `ss_info_channels`, `ss_info_bits`, `ss_info_bitrate`, `ss_info_duration`, `ss_info_size`, `ss_info_mime`, `ss_info_path`, `ss_edit_title`, `ss_edit_hint`, `ss_field_title`, `ss_field_artist`, `ss_field_album`
-- MainScreen / Aliyun / SoftEq 本批不改
+- MainScreen（已第 14 批）/ Aliyun / SoftEq 本批不改
 - 文档：`docs/功能-i18n单曲Sheet.md`
+
+### i18n 第 14 批（2026-10-31）
+
+**MainScreen / MainScreenParts 高流量壳**：多选栏、存队列为歌单、快捷方式空库提示、外部分享搜索未命中、删文件 / 移文件夹确认进 values / values-zh（`ms_*`）。加入歌单复用 `ss_add_to_playlist`；收藏复用 `cd_favorite`；保存 / 取消 / 删除复用 `save` / `cancel` / `delete`。Compose 用 `stringResource`；非 Composable 默认歌单名用 `Context.getString`。
+
+- 本批键名：`ms_exit_selection`, `ms_selected_count`, `ms_select_songs`, `ms_select_all`, `ms_invert_selection`, `ms_add_to_queue`, `ms_remove_from_library`, `ms_delete_files`, `ms_save_queue_title`, `ms_save_queue_body`, `ms_playlist_name_hint`, `ms_default_playlist_name`, `ms_shortcut_empty_library`, `ms_search_not_found`, `ms_delete_song_title`, `ms_delete_song_body`, `ms_bulk_delete_title`, `ms_bulk_delete_body`, `ms_remove_folder_title`, `ms_remove_folder_body`, `ms_remove`
+- CarLibrary / Aliyun / SoftEq / SheetsScanScope 本批不改
+- 文档：`docs/功能-i18n主界面壳.md`
+

@@ -1210,4 +1210,28 @@
     <string name="ss_field_title">标题</string>
     <string name="ss_field_artist">歌手</string>
     <string name="ss_field_album">专辑</string>
+
+
+    <!-- i18n 第 14 批：MainScreen / MainScreenParts 壳文案 -->
+    <string name="ms_exit_selection">退出多选</string>
+    <string name="ms_selected_count">已选 %1$d 首</string>
+    <string name="ms_select_songs">请选择歌曲</string>
+    <string name="ms_select_all">全选</string>
+    <string name="ms_invert_selection">反选</string>
+    <string name="ms_add_to_queue">加入队列</string>
+    <string name="ms_remove_from_library">移出曲库</string>
+    <string name="ms_delete_files">删除文件</string>
+    <string name="ms_save_queue_title">把当前队列存为歌单</string>
+    <string name="ms_save_queue_body">将把队列里的 %1$d 首歌按当前顺序保存成一个新歌单。</string>
+    <string name="ms_playlist_name_hint">歌单名称</string>
+    <string name="ms_default_playlist_name">队列 %1$s %2$s</string>
+    <string name="ms_shortcut_empty_library">曲库里还没有歌曲，先选好扫描范围并等扫描完成</string>
+    <string name="ms_search_not_found">没找到「%1$s」，试试歌名或歌手</string>
+    <string name="ms_delete_song_title">删除歌曲文件</string>
+    <string name="ms_delete_song_body">将从存储中永久删除「%1$s」（%2$s），同目录的歌词文件会一并删除。\n此操作无法撤销，确定继续吗？</string>
+    <string name="ms_bulk_delete_title">删除 %1$d 个音频文件</string>
+    <string name="ms_bulk_delete_body">将从存储中永久删除所选的 %1$d 个文件（媒体库文件会再弹一次系统确认框），同目录的歌词文件会一并删除。\n此操作无法撤销。只想让它们不出现在曲库里，请改用「移出曲库」。</string>
+    <string name="ms_remove_folder_title">移除文件夹扫描结果</string>
+    <string name="ms_remove_folder_body">将从音乐库中移除「%1$s」下的 %2$d 首歌曲，同时从歌单、播放队列、收藏和播放统计中清理。\n该组对应的导入目录也会从扫描列表中移除，重新扫描后这些歌曲不会再出现；原始音频文件不会被删除。</string>
+    <string name="ms_remove">移除</string>
 </resources>

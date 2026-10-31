@@ -1244,4 +1244,28 @@ The list is fetched once on add — nothing is saved if the fetch fails.</string
     <string name="ss_field_title">Title</string>
     <string name="ss_field_artist">Artist</string>
     <string name="ss_field_album">Album</string>
+
+
+    <!-- i18n batch 14: MainScreen / MainScreenParts shell copy -->
+    <string name="ms_exit_selection">Exit multi-select</string>
+    <string name="ms_selected_count">Selected %1$d</string>
+    <string name="ms_select_songs">Select songs</string>
+    <string name="ms_select_all">Select all</string>
+    <string name="ms_invert_selection">Invert</string>
+    <string name="ms_add_to_queue">Add to queue</string>
+    <string name="ms_remove_from_library">Remove from library</string>
+    <string name="ms_delete_files">Delete files</string>
+    <string name="ms_save_queue_title">Save current queue as playlist</string>
+    <string name="ms_save_queue_body">The %1$d song(s) in the queue will be saved as a new playlist in the current order.</string>
+    <string name="ms_playlist_name_hint">Playlist name</string>
+    <string name="ms_default_playlist_name">Queue %1$s %2$s</string>
+    <string name="ms_shortcut_empty_library">No songs in the library yet. Choose a scan scope and wait for the scan to finish.</string>
+    <string name="ms_search_not_found">No results for «%1$s». Try a title or artist.</string>
+    <string name="ms_delete_song_title">Delete song file</string>
+    <string name="ms_delete_song_body">Permanently delete «%1$s» (%2$s) from storage. Lyric files in the same folder are deleted too.\nThis cannot be undone. Continue?</string>
+    <string name="ms_bulk_delete_title">Delete %1$d audio file(s)</string>
+    <string name="ms_bulk_delete_body">Permanently delete the selected %1$d file(s) from storage (media-store files will show one more system confirmation). Lyric files in the same folder are deleted too.\nThis cannot be undone. To hide them from the library only, use «Remove from library» instead.</string>
+    <string name="ms_remove_folder_title">Remove folder scan results</string>
+    <string name="ms_remove_folder_body">Remove the %2$d song(s) under «%1$s» from the music library, and clean them from playlists, the play queue, favorites, and play stats.\nThe matching import folder is also removed from the scan list, so a rescan will not bring these songs back. Original audio files are not deleted.</string>
+    <string name="ms_remove">Remove</string>
 </resources>

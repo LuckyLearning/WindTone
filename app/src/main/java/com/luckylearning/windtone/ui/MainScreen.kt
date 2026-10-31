@@ -59,6 +59,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -67,6 +68,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.ScanScope
 import com.luckylearning.windtone.data.applyLibraryFormatFilter
 import com.luckylearning.windtone.data.LibrarySearch
@@ -347,7 +349,7 @@ fun MainScreen(
         )
         if (!ready) return@LaunchedEffect
         AppShortcut.consumePending()
-        if (library.songs.isEmpty()) snackbarHostState.showSnackbar("曲库里还没有歌曲，先选好扫描范围并等扫描完成")
+        if (library.songs.isEmpty()) snackbarHostState.showSnackbar(context.getString(R.string.ms_shortcut_empty_library))
         when (action) {
             AppShortcut.PLAY_ALL -> {
                 val queue = applyLibraryFormatFilter(library.songs, library.formatFilter)
@@ -413,7 +415,7 @@ fun MainScreen(
                 ExternalMedia.consumePending()
                 val hits = LibrarySearch.search(library.songs, request.query)
                 if (hits.isEmpty()) {
-                    snackbarHostState.showSnackbar("没找到「${request.query}」，试试歌名或歌手")
+                    snackbarHostState.showSnackbar(context.getString(R.string.ms_search_not_found, request.query))
                 } else {
                     playerVm.playQueue(hits, 0)
                 }
@@ -1003,11 +1005,14 @@ fun MainScreen(
             deleteConfirmSong?.let { song ->
                 AlertDialog(
                     onDismissRequest = { deleteConfirmSong = null },
-                    title = { Text("删除歌曲文件") },
+                    title = { Text(stringResource(R.string.ms_delete_song_title)) },
                     text = {
                         Text(
-                            "将从存储中永久删除「${song.title}」（${song.displayName}），" +
-                                "同目录的歌词文件会一并删除。\n此操作无法撤销，确定继续吗？",
+                            stringResource(
+                                R.string.ms_delete_song_body,
+                                song.title,
+                                song.displayName,
+                            ),
                         )
                     },
                     confirmButton = {
@@ -1019,10 +1024,14 @@ fun MainScreen(
                                 }
                             },
                         ) {
-                            Text("删除", color = MaterialTheme.colorScheme.error)
+                            Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
                         }
                     },
-                    dismissButton = { TextButton(onClick = { deleteConfirmSong = null }) { Text("取消") } },
+                    dismissButton = {
+                        TextButton(onClick = { deleteConfirmSong = null }) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                    },
                 )
             }
 
@@ -1030,13 +1039,9 @@ fun MainScreen(
                 val count = library.selection.size
                 AlertDialog(
                     onDismissRequest = { bulkDeleteConfirm = false },
-                    title = { Text("删除 $count 个音频文件") },
+                    title = { Text(stringResource(R.string.ms_bulk_delete_title, count)) },
                     text = {
-                        Text(
-                            "将从存储中永久删除所选的 $count 个文件（媒体库文件会再弹一次系统确认框），" +
-                                "同目录的歌词文件会一并删除。\n" +
-                                "此操作无法撤销。只想让它们不出现在曲库里，请改用「移出曲库」。",
-                        )
+                        Text(stringResource(R.string.ms_bulk_delete_body, count))
                     },
                     confirmButton = {
                         TextButton(
@@ -1046,9 +1051,18 @@ fun MainScreen(
                                     bulkDeleteLauncher.launch(IntentSenderRequest.Builder(sender).build())
                                 }
                             },
-                        ) { Text("删除文件", color = MaterialTheme.colorScheme.error) }
+                        ) {
+                            Text(
+                                stringResource(R.string.ms_delete_files),
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
                     },
-                    dismissButton = { TextButton(onClick = { bulkDeleteConfirm = false }) { Text("取消") } },
+                    dismissButton = {
+                        TextButton(onClick = { bulkDeleteConfirm = false }) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                    },
                 )
             }
 
@@ -1094,13 +1108,14 @@ fun MainScreen(
             folderRemoveConfirmGroup?.let { group ->
                 AlertDialog(
                     onDismissRequest = { folderRemoveConfirmGroup = null },
-                    title = { Text("移除文件夹扫描结果") },
+                    title = { Text(stringResource(R.string.ms_remove_folder_title)) },
                     text = {
                         Text(
-                            "将从音乐库中移除「${group.title}」下的 ${group.count} 首歌曲，" +
-                                "同时从歌单、播放队列、收藏和播放统计中清理。\n" +
-                                "该组对应的导入目录也会从扫描列表中移除，重新扫描后这些歌曲不会再出现；" +
-                                "原始音频文件不会被删除。",
+                            stringResource(
+                                R.string.ms_remove_folder_body,
+                                group.title,
+                                group.count,
+                            ),
                         )
                     },
                     confirmButton = {
@@ -1110,11 +1125,13 @@ fun MainScreen(
                                 lib.removeFolderScanResults(group)
                             },
                         ) {
-                            Text("移除", color = MaterialTheme.colorScheme.error)
+                            Text(stringResource(R.string.ms_remove), color = MaterialTheme.colorScheme.error)
                         }
                     },
                     dismissButton = {
-                        TextButton(onClick = { folderRemoveConfirmGroup = null }) { Text("取消") }
+                        TextButton(onClick = { folderRemoveConfirmGroup = null }) {
+                            Text(stringResource(R.string.cancel))
+                        }
                     },
                 )
             }

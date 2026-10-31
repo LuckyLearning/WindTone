@@ -45,10 +45,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.luckylearning.windtone.R
 
 /**
  * 播放页在手机上是全屏覆盖层、在平板右栏里是一块面板，两处调用只差一个 `pane`。
@@ -140,16 +143,21 @@ internal fun SelectionBar(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
             ) {
                 IconButton(onClick = onExit) {
-                    Icon(Icons.Filled.Close, contentDescription = "退出多选", tint = scheme.onSurface)
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = stringResource(R.string.ms_exit_selection),
+                        tint = scheme.onSurface,
+                    )
                 }
                 Text(
-                    if (hasSelection) "已选 $count 首" else "请选择歌曲",
+                    if (hasSelection) stringResource(R.string.ms_selected_count, count)
+                    else stringResource(R.string.ms_select_songs),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = onSelectAll) { Text("全选") }
-                TextButton(onClick = onInvert) { Text("反选") }
+                TextButton(onClick = onSelectAll) { Text(stringResource(R.string.ms_select_all)) }
+                TextButton(onClick = onInvert) { Text(stringResource(R.string.ms_invert_selection)) }
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -159,11 +167,38 @@ internal fun SelectionBar(
                     .horizontalScroll(rememberScrollState())
                     .padding(start = 6.dp, end = 6.dp, bottom = 8.dp),
             ) {
-                SelectionAction(AppIcons.PlaylistAdd, "加入歌单", hasSelection, onAddToPlaylist)
-                SelectionAction(AppIcons.FavoriteBorder, "收藏", hasSelection, onFavorite)
-                SelectionAction(AppIcons.QueueMusic, "加入队列", hasSelection, onEnqueue)
-                SelectionAction(AppIcons.VisibilityOff, "移出曲库", hasSelection, onRemoveFromLibrary, danger = true)
-                SelectionAction(Icons.Filled.Close, "删除文件", hasSelection, onDeleteFiles, danger = true)
+                SelectionAction(
+                    AppIcons.PlaylistAdd,
+                    stringResource(R.string.ss_add_to_playlist),
+                    hasSelection,
+                    onAddToPlaylist,
+                )
+                SelectionAction(
+                    AppIcons.FavoriteBorder,
+                    stringResource(R.string.cd_favorite),
+                    hasSelection,
+                    onFavorite,
+                )
+                SelectionAction(
+                    AppIcons.QueueMusic,
+                    stringResource(R.string.ms_add_to_queue),
+                    hasSelection,
+                    onEnqueue,
+                )
+                SelectionAction(
+                    AppIcons.VisibilityOff,
+                    stringResource(R.string.ms_remove_from_library),
+                    hasSelection,
+                    onRemoveFromLibrary,
+                    danger = true,
+                )
+                SelectionAction(
+                    Icons.Filled.Close,
+                    stringResource(R.string.ms_delete_files),
+                    hasSelection,
+                    onDeleteFiles,
+                    danger = true,
+                )
             }
         }
     }
@@ -202,14 +237,15 @@ internal fun SaveQueueAsPlaylistDialog(
     onDismiss: () -> Unit,
     onSave: (String) -> Unit,
 ) {
-    var name by remember { mutableStateOf(defaultPlaylistName()) }
+    val context = LocalContext.current
+    var name by remember { mutableStateOf(defaultPlaylistName(context)) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("把当前队列存为歌单") },
+        title = { Text(stringResource(R.string.ms_save_queue_title)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(
-                    "将把队列里的 $count 首歌按当前顺序保存成一个新歌单。",
+                    stringResource(R.string.ms_save_queue_body, count),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -217,7 +253,7 @@ internal fun SaveQueueAsPlaylistDialog(
                 androidx.compose.material3.OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    placeholder = { Text("歌单名称") },
+                    placeholder = { Text(stringResource(R.string.ms_playlist_name_hint)) },
                     singleLine = true,
                 )
             }
@@ -226,15 +262,18 @@ internal fun SaveQueueAsPlaylistDialog(
             TextButton(
                 onClick = { if (name.isNotBlank()) onSave(name.trim()) },
                 enabled = name.isNotBlank(),
-            ) { Text("保存") }
+            ) { Text(stringResource(R.string.save)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
     )
 }
-/** 默认歌单名：`队列 10-15 14:30`（按时间命名，用户可改） */
-internal fun defaultPlaylistName(): String {
+
+/** Default playlist name: Queue MM-DD HH:MM (user can edit; ms_default_playlist_name). */
+internal fun defaultPlaylistName(context: android.content.Context): String {
     val now = java.util.Calendar.getInstance()
     val md = "%02d-%02d".format(now.get(java.util.Calendar.MONTH) + 1, now.get(java.util.Calendar.DAY_OF_MONTH))
     val hm = "%02d:%02d".format(now.get(java.util.Calendar.HOUR_OF_DAY), now.get(java.util.Calendar.MINUTE))
-    return "队列 $md $hm"
+    return context.getString(R.string.ms_default_playlist_name, md, hm)
 }
