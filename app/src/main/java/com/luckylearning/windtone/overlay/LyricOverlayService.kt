@@ -963,7 +963,8 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             return
         }
         if (foregroundJob?.isActive == true) return
-        if (!ForegroundAppDetector.usageStatsGranted(this)) return
+        // 缓存版：未授权时这个前置检查会每次都白跑一次 AppOps Binder（见方法注释）
+        if (!ForegroundAppDetector.usageStatsGrantedCached(this)) return
         foregroundJob = scope.launch {
             ForegroundAppDetector.pollLoop(this@LyricOverlayService) { pkg ->
                 if (Prefs(this@LyricOverlayService).foregroundLogEnabled) {

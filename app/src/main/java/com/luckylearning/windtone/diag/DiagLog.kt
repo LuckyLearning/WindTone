@@ -21,12 +21,20 @@ internal object DiagLog {
     private const val MAX = 300
 
     private val entries = ArrayDeque<String>()
-    private val fmt = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
+
+    /**
+     * `SimpleDateFormat` 非线程安全，而这个日志从无障碍回调线程、主线程、
+     * 多个协程并发写入 —— 共享一个实例会产出错乱时间戳甚至抛异常（外围
+     * `runCatching` 会静默吞掉）。每线程一份，既线程安全又无锁争用。
+     */
+    private val fmt = object : ThreadLocal<SimpleDateFormat>() {
+        override fun initialValue() = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
+    }
 
     /** 记录一条。tag 用短词（A11Y / OVERLAY / PLAYER / LIB），msg 写人话。 */
     fun log(tag: String, msg: String) {
         runCatching {
-            val line = "${fmt.format(Date())} [${tag}] $msg"
+            val line = "${fmt.get()!!.format(Date())} [${tag}] $msg"
             synchronized(this) {
                 entries.addLast(line)
                 while (entries.size > MAX) entries.removeFirst()

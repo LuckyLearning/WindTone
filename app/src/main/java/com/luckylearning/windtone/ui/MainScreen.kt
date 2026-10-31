@@ -53,6 +53,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
@@ -83,6 +84,14 @@ import com.luckylearning.windtone.state.virtualPlaylistInfo
  * 只用来判断底部要不要给车机 Dock 让位，**不再**用来切双栏——v1.1.14 起双栏整体停用。
  */
 private const val LARGE_SCREEN_WIDTH_DP = 840
+
+/**
+ * 播放页展开动画的时长。
+ *
+ * 摘除底层内容必须等 slideIn 跑完，否则动画期间会露出背景 —— 这里的取值只要
+ * 不小于 `AnimatedVisibility` 的默认动画时长（300ms）即可，稍大一点更安全。
+ */
+private const val PLAYER_EXPAND_ANIM_MS = 320L
 
 /**
  * 车机底部固定按钮栏的保底高度。
@@ -588,6 +597,24 @@ fun MainScreen(
                         onOpenScanScope = { showScanScope = true },
                     )
                 }
+                // 2026-10-31：播放页是不透明的全屏覆盖层，但 Compose **不做遮挡
+                // 剔除** —— 展开后底下这一整棵子树（车机导航、曲库 LazyColumn 每行
+                // 一张封面、底部大播放条里那条每 500ms 重绘的进度条）依然每帧被
+                // 组合、测量、绘制。而车机启动即进播放页，`playerExpanded` 长期为真，
+                // 这份浪费是常驻的。
+                //
+                // 延迟一个动画时长再摘除：直接摘会让 slideIn 期间露出背景。
+                // 收起时立刻恢复，动画一开始底层就在，不会有空档。
+                var underlyingVisible by remember { mutableStateOf(true) }
+                LaunchedEffect(player.playerExpanded) {
+                    if (player.playerExpanded) {
+                        delay(PLAYER_EXPAND_ANIM_MS)
+                        underlyingVisible = false
+                    } else {
+                        underlyingVisible = true
+                    }
+                }
+
                 Column(Modifier.weight(1f)) {
                 if (showAliyun) {
                     // 阿里云盘一级页（v1.1.75）：自带头部（返回/标题/菜单），顶替
@@ -635,25 +662,27 @@ fun MainScreen(
                 }
 
                 Box(Modifier.weight(1f)) {
-                    if (library.selecting) {
-                        SelectionBar(
-                            count = library.selection.size,
-                            onExit = lib::exitSelection,
-                            onSelectAll = lib::selectAllVisible,
-                            onInvert = lib::invertSelection,
-                            onAddToPlaylist = { showBulkAddToPlaylist = true },
-                            onFavorite = { lib.bulkSetFavorite(true) },
-                            onEnqueue = lib::bulkAddToQueue,
-                            onRemoveFromLibrary = { lib.bulkRemoveFromLibrary() },
-                            onDeleteFiles = { bulkDeleteConfirm = true },
-                        )
-                    } else {
-                        listArea()
+                    if (underlyingVisible) {
+                        if (library.selecting) {
+                            SelectionBar(
+                                count = library.selection.size,
+                                onExit = lib::exitSelection,
+                                onSelectAll = lib::selectAllVisible,
+                                onInvert = lib::invertSelection,
+                                onAddToPlaylist = { showBulkAddToPlaylist = true },
+                                onFavorite = { lib.bulkSetFavorite(true) },
+                                onEnqueue = lib::bulkAddToQueue,
+                                onRemoveFromLibrary = { lib.bulkRemoveFromLibrary() },
+                                onDeleteFiles = { bulkDeleteConfirm = true },
+                            )
+                        } else {
+                            listArea()
+                        }
                     }
                 }
                 } // else（曲库页）：阿里云盘一级页时不渲染曲库头部与列表
 
-                if (!library.selecting) {
+                if (!library.selecting && underlyingVisible) {
                     if (carMode) {
                         // 车机大播放条：112dp、主键 88dp、收藏 + 上一首 / 播放 / 下一首 + 进度。
                         // 不放「歌词」快捷键（用户明确不要），进播放页点封面 / 歌名即可。

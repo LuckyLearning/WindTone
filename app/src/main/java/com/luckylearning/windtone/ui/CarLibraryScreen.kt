@@ -82,6 +82,10 @@ internal val CAR_TOUCH_TARGET: Dp = 76.dp
 private val CAR_COVER_SIZE: Dp = 80.dp
 private val CAR_MAIN_BUTTON: Dp = 88.dp
 
+/** 固定圆角的 Shape 必须是常量：新建实例会让下游 clip / background 无法跳过重组 */
+private val COVER_CLIP_SHAPE = RoundedCornerShape(16.dp)
+private val COUNT_BADGE_SHAPE = RoundedCornerShape(50)
+
 /** 车机版视图名：比抽屉里的短名更明确（「歌曲」→「全部歌曲」），标签只在这里定义一份 */
 internal fun carViewLabel(view: LibraryView): String = when (view) {
     LibraryView.SONGS -> "全部歌曲"
@@ -159,7 +163,7 @@ internal fun CarLibraryHeader(
                 Spacer(Modifier.width(14.dp))
                 Surface(
                     color = scheme.secondaryContainer,
-                    shape = RoundedCornerShape(50),
+                    shape = COUNT_BADGE_SHAPE,
                 ) {
                     Text(
                         text = "${library.songs.size} 首",
@@ -293,14 +297,16 @@ private fun CarNavItem(
     val scheme = MaterialTheme.colorScheme
     val m = rememberCarMetrics()
     var focused by remember { mutableStateOf(false) }
+    // Shape 不 remember 的话每次重组都是新实例，clip / background / border 无法跳过
+    val navShape = remember(m.navCorner) { RoundedCornerShape(m.navCorner) }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = m.navItemGap)
-            .clip(RoundedCornerShape(m.navCorner))
+            .clip(navShape)
             .then(if (selected) Modifier.background(scheme.primary.copy(alpha = 0.10f)) else Modifier)
-            .then(if (focused) Modifier.border(2.dp, scheme.primary, RoundedCornerShape(m.navCorner)) else Modifier)
+            .then(if (focused) Modifier.border(2.dp, scheme.primary, navShape) else Modifier)
             .onFocusChanged { focused = it.isFocused }
             .focusable()
             .clickable(onClick = onClick)
@@ -356,7 +362,7 @@ internal fun CarPlayerBar(
                 .height(rememberCarMetrics().barHeight)
                 .padding(horizontal = 20.dp),
         ) {
-            Box(Modifier.clip(RoundedCornerShape(16.dp)).clickable(onClick = onExpand)) {
+            Box(Modifier.clip(COVER_CLIP_SHAPE).clickable(onClick = onExpand)) {
                 CoverArt(song = song, size = CAR_COVER_SIZE, cornerRadius = 16.dp)
             }
             Spacer(Modifier.width(16.dp))

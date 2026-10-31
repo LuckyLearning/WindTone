@@ -72,6 +72,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -98,6 +99,7 @@ import com.luckylearning.windtone.ui.theme.AppVisual
 import com.luckylearning.windtone.ui.theme.windShadow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlin.math.abs
 
 /** 车载模式：歌词态无操作多久后收起顶栏 / 控制键 / 状态行（毫秒） */
@@ -289,14 +291,23 @@ fun PlayerScreen(
         if (showLyrics) lastActionAt = System.currentTimeMillis()
     }
 
-    // 空闲 5 秒 → 收起。关键：这里的重启条件是 [lastActionAt] + [showLyrics]，
-    // 两者都不含 [immersiveOn]，所以本协程自己置真后不会被自己的写入取消，
-    // 否则 setState 会让 LaunchedEffect 重启，「5 秒后收起」永远执行不完。
-    // 2026-10-20：不再限定车载模式，手机歌词态同样生效。
-    LaunchedEffect(showLyrics, lastActionAt) {
-        if (!showLyrics || lastActionAt <= 0L) return@LaunchedEffect
-        delay(CAR_IMMERSIVE_DELAY_MS)
-        immersiveOn = true
+    // 空闲 5 秒 → 收起。
+    //
+    // ⚠️ 2026-10-31：key **不能**带 [lastActionAt]。写在 key 里的状态是在组合期
+    // 求值的，等于把它的「读取」登记进 PlayerScreen 自己的 recompose scope ——
+    // 而下面那个 pointerInput 每次指针 move 事件（60~120Hz）都会写它，结果就是
+    // 在车机上滚一下歌词、拖一下进度条，每一帧都把整个播放页重组一遍
+    // （侧栏按钮、歌词 LazyColumn、黑胶 Canvas、进度条控制行全跟着重走组合+测量）。
+    //
+    // 改成 snapshotFlow 在协程里读（不触发重组）+ collectLatest（新值到来取消
+    // 上一段，正好等价于原来 LaunchedEffect 重启的语义）。
+    LaunchedEffect(showLyrics) {
+        if (!showLyrics) return@LaunchedEffect
+        snapshotFlow { lastActionAt }.collectLatest { at ->
+            if (at <= 0L) return@collectLatest
+            delay(CAR_IMMERSIVE_DELAY_MS)
+            immersiveOn = true
+        }
     }
 
     // 沉浸态下按返回：先恢复完整界面，而不是直接收起播放页（手机 / 车机一致）。
@@ -356,6 +367,16 @@ fun PlayerScreen(
         keepScreenView.keepScreenOn = showLyrics
         onDispose { keepScreenView.keepScreenOn = previous }
     }
+    // 渐变每次重组都新建（1 个 List + 2 次 lerp + 1 个 Brush），按配色缓存住
+    val bgBrush = remember(scheme) {
+        Brush.verticalGradient(
+            colors = listOf(
+                lerp(scheme.background, scheme.primary, 0.32f),
+                lerp(scheme.background, scheme.primary, 0.10f),
+                scheme.background,
+            ),
+        )
+    }
     Box(Modifier.fillMaxSize()) {
         // 背景：封面主色 → 背景色的垂直渐变，营造氛围。
         // 注意必须用「不透明混色」而不是 copy(alpha=)：播放页是覆盖在主界面之上的，
@@ -363,15 +384,7 @@ fun PlayerScreen(
         Box(
             Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            lerp(scheme.background, scheme.primary, 0.32f),
-                            lerp(scheme.background, scheme.primary, 0.10f),
-                            scheme.background,
-                        )
-                    )
-                )
+                .background(bgBrush)
         )
 
         Column(
@@ -395,10 +408,19 @@ fun PlayerScreen(
                     // 2026-10-20：手机也进沉浸态，所以「任意触摸即恢复并重新计时」两端都要挂。
                     // 只观察不消费，既有手势（滑动切歌 / 拖进度）不受影响。
                     awaitPointerEventScope {
+                        // 节流：指针 move 事件是 60~120Hz，每次都写 [lastActionAt]
+                        // 会让上面那条 collectLatest 每秒取消重启一百多次协程。
+                        // 250ms 一档对「5 秒后收起」的判定精度绰绰有余。
+                        // 用局部变量记上次写入时刻，避免在协程里读状态。
+                        var lastWrite = 0L
                         while (true) {
                             awaitPointerEvent()
                             immersiveOn = false
-                            lastActionAt = System.currentTimeMillis()
+                            val now = System.currentTimeMillis()
+                            if (now - lastWrite > 250L) {
+                                lastWrite = now
+                                lastActionAt = now
+                            }
                         }
                     }
                 }
@@ -672,12 +694,21 @@ fun PlayerScreen(
                     // v1.1.23 曾为「控制键并进这一行靠右」把标题列撑满整行、红心随之贴右；
                     // 控制键已回到独立的三段式控制行（2026-10-18 用户反馈「应该居中」），
                     // 这里一并改回紧跟式：标题按内容收缩（超长省略），红心紧随其后。
+                    // `copy(fontSize=)` 每次重组都是新实例，会让 Text 无法跳过；按字号缓存住。
+                    // MaterialTheme.typography 是 @Composable getter，必须先取出来再进 remember。
+                    val typography = MaterialTheme.typography
+                    val carTitleStyle = remember(carM.titleSp, typography) {
+                        typography.headlineSmall.copy(fontSize = carM.titleSp)
+                    }
+                    val carArtistStyle = remember(carM.artistSp, typography) {
+                        typography.bodyLarge.copy(fontSize = carM.artistSp)
+                    }
                     Column(Modifier.weight(1f, fill = false)) {
                         Text(
                             text = song?.title ?: stringResource(R.string.player_not_playing),
                             // 车机：歌名 / 歌手各放大一档（22sp / 16sp），60~70cm 视距下读得清
                             style = if (state.carMode) {
-                                MaterialTheme.typography.headlineSmall.copy(fontSize = carM.titleSp)
+                                carTitleStyle
                             } else {
                                 MaterialTheme.typography.titleMedium
                             },
@@ -688,7 +719,7 @@ fun PlayerScreen(
                         Text(
                             text = song?.artistOrUnknown ?: "",
                             style = if (state.carMode) {
-                                MaterialTheme.typography.bodyLarge.copy(fontSize = carM.artistSp)
+                                carArtistStyle
                             } else {
                                 MaterialTheme.typography.labelMedium
                             },
@@ -996,12 +1027,18 @@ fun PlayerScreen(
             onDismiss = { showOptions = false },
         )
     }
-    if (showBookmarks) BookmarkSheet(
-        song = song,
-        positionMs = progressState.value.positionMs,
-        onSeekTo = onSeekTo,
-        onClose = { showBookmarks = false },
-    )
+    // 打开瞬间快照一次位置：书签要的是「按下那一刻的时间点」，不是实时进度。
+    // ⚠️ 不能在这里读 `progressState.value` —— 那会把读取登记进本组件的
+    // recompose scope，弹层打开期间每 500ms 把整棵播放页重组一遍。
+    if (showBookmarks) {
+        val atMs = remember { progressState.value.positionMs }
+        BookmarkSheet(
+            song = song,
+            positionMs = atMs,
+            onSeekTo = onSeekTo,
+            onClose = { showBookmarks = false },
+        )
+    }
     if (showOverlayStyle) {
         OverlayStyleSheet(
             carMode = state.carMode,
@@ -1024,7 +1061,8 @@ fun PlayerScreen(
 
     // ---------------------------------------------- 长按歌词行 → D1 菜单 / 校准偏移
     lyricLineMenu?.let { (lineIndex, lineMs, positionMs) ->
-        val durationMs = progressState.value.durationMs
+        // 同上：菜单打开时长按的是那一刻，用快照而不是实时进度
+        val durationMs = remember { progressState.value.durationMs }
         val interval = state.lyrics.lineIntervalMs(lineIndex, fallbackEndMs = durationMs)
         val loopingThis = state.abLoopFromLyric &&
             state.abLoopAMs != null &&
@@ -1342,19 +1380,20 @@ internal fun CarVinylPane(
                 drawCircle(Color(0xFF121214), radius = radius)
                 // 细密同心纹：黑胶的"沟槽"。透明度压得很低，只是让深色盘面有层次
                 val rings = 18
+                val ringStroke = Stroke(width = 1.dp.toPx())
                 for (i in 1..rings) {
                     val r = radius * (0.58f + 0.42f * i / rings)
                     drawCircle(
                         color = Color.White.copy(alpha = 0.05f),
                         radius = r,
-                        style = Stroke(width = 1.dp.toPx()),
+                        style = ringStroke,
                     )
                 }
                 // 外沿高光：让盘面从背景里"浮"出来
                 drawCircle(
                     color = Color.White.copy(alpha = 0.10f),
                     radius = radius - 1.dp.toPx(),
-                    style = Stroke(width = 1.dp.toPx()),
+                    style = ringStroke,
                 )
             }
             // 中心贴纸（封面）

@@ -357,8 +357,14 @@ internal object DiagnosticsReport {
 
     private fun yn(v: Boolean) = if (v) "是" else "否"
 
+    /** 诊断包保留份数。单份含完整 smaps，可达数 MB，不清理会一直堆在用户存储里 */
+    private const val KEEP_FILES = 3
+
     /**
      * 落盘到应用私有目录（卸载即清），返回路径。
+     *
+     * 写完后按份数淘汰：这个目录此前只增不减，而诊断包带完整 `smaps`
+     * 分类（1~2MB 文本），导几次就是几十 MB 白占着。
      */
     fun saveToFile(context: Context, report: String): String? = runCatching {
         val dir = java.io.File(context.getExternalFilesDir(null) ?: context.filesDir, "diagnostics")
@@ -366,6 +372,15 @@ internal object DiagnosticsReport {
         val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val file = java.io.File(dir, "diag_$stamp.txt")
         file.writeText(report)
+        prune(dir)
         file.absolutePath
     }.getOrElse { null }
+
+    private fun prune(dir: java.io.File) {
+        val files = dir.listFiles()?.filter { it.isFile } ?: return
+        if (files.size <= KEEP_FILES) return
+        files.sortedByDescending { it.lastModified() }
+            .drop(KEEP_FILES)
+            .forEach { runCatching { it.delete() } }
+    }
 }

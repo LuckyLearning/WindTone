@@ -55,6 +55,20 @@ class MusicWidgetProvider : AppWidgetProvider() {
             for (id in ids) manager.updateAppWidget(id, views)
         }
 
+        /**
+         * 丢掉常驻的封面位图。
+         *
+         * [WidgetState] 是 `object` 单例，那张 Bitmap 既不在任何 LRU 里、也不参与
+         * `CoverRepository.trim()` —— 只有切歌时才会被替换，后台闲置时一直占着
+         * （位图像素在 native）。内存紧张时由 `MusicApp.onTrimMemory` 调这里。
+         * 不 `recycle()`：push 时已经把它交给 RemoteViews，系统侧有自己的副本。
+         */
+        fun dropCachedCover() {
+            val cur = WidgetState.current
+            if (cur.cover == null) return
+            WidgetState.current = cur.copy(cover = null)
+        }
+
         private fun buildViews(context: Context, snap: WidgetState.Snapshot): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.widget_music)
             views.setTextViewText(R.id.widget_title, snap.title.ifEmpty { "未在播放" })

@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -253,6 +254,15 @@ private fun SyncedLyrics(
             }
     }
 
+    // 两个回调必须在重组之间保持**同一个实例**：item 的 content lambda 每次
+    // 执行都会新建 lambda（捕获了 line.timeMs），参数一变 LyricLineItem 就无法
+    // 被跳过，于是换行时全部可见行（车机 10~15 行）各自重跑组合 + 文本布局。
+    // 提到外面用 remember 固定住，item 里只做「传 / 不传 null」的选择。
+    val lineClick: ((Long) -> Unit)? = remember(tapSeeks, onSeekTo) {
+        if (!tapSeeks) null else { { t -> if (t >= 0) onSeekTo(t) } }
+    }
+    val lineLongPress: ((Int, Long) -> Unit)? = remember(onLineLongPress) { onLineLongPress }
+
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
@@ -260,22 +270,23 @@ private fun SyncedLyrics(
         verticalArrangement = Arrangement.spacedBy(3.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        itemsIndexed(lyrics.lines) { index, line ->
+        // key 用下标而不是 timeMs：同一首里有多行 timeMs == -1（纯文本行），
+        // 用作 key 会重复而导致崩溃。歌词列表在切歌前是静态的，下标即稳定身份。
+        itemsIndexed(
+            items = lyrics.lines,
+            key = { index, _ -> index },
+            contentType = { _, _ -> "lyricLine" },
+        ) { index, line ->
             LyricLineItem(
                 line = line,
+                index = index,
                 active = index == currentIndex,
                 scale = scale,
                 // 关闭时传 null：整行不再可点，滑动不会被当成点击
-                onClick = if (tapSeeks) {
-                    { if (line.timeMs >= 0) onSeekTo(line.timeMs) }
-                } else {
-                    null
-                },
+                onClick = if (line.timeMs >= 0) lineClick else null,
                 // 没有时间轴的行（`timeMs < 0`）不参与校准：拿它算偏移只会算出一个
                 // 无意义的巨大数字，等于把偏移一次搞坏。
-                onLongClick = onLineLongPress
-                    ?.takeIf { line.timeMs >= 0 }
-                    ?.let { cb -> { cb(index, line.timeMs) } },
+                onLongClick = if (line.timeMs >= 0) lineLongPress else null,
             )
         }
     }
@@ -285,11 +296,17 @@ private fun SyncedLyrics(
 @Composable
 private fun LyricLineItem(
     line: LyricLine,
+    index: Int,
     active: Boolean,
     scale: Float,
-    onClick: (() -> Unit)?,
+    /**
+     * 点击这一行跳转。签名带时间而不是无参，是为了让调用方能把**同一个** lambda
+     * 实例传下来（无参版本必须在 item 里新建一份来捕获 `line.timeMs`，
+     * 参数一变本组件就无法被跳过）。
+     */
+    onClick: ((Long) -> Unit)?,
     /** 长按这一行（校准偏移用）；null = 不接管长按 */
-    onLongClick: (() -> Unit)? = null,
+    onLongClick: ((Int, Long) -> Unit)? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     val alpha by animateFloatAsState(
@@ -301,16 +318,22 @@ private fun LyricLineItem(
     // 两个手势都没有时**不挂 clickable**：`combinedClickable` 的 onClick 不可为空，
     // 传个空 lambda 会让这一行变成「可点但什么都不做」——在 Compose 里它仍然吃掉
     // 手势，父级的滚动就会变得迟钝。干脆整条 modifier 不加。
-    val gestureModifier = if (onClick != null || onLongClick != null) {
-        Modifier.combinedClickable(onClick = onClick ?: {}, onLongClick = onLongClick)
+    val click = onClick
+    val longPress = onLongClick
+    val gestureModifier = if (click != null || longPress != null) {
+        Modifier.combinedClickable(
+            onClick = { click?.invoke(line.timeMs) },
+            onLongClick = if (longPress != null) { { longPress(index, line.timeMs) } } else null,
+        )
     } else {
         Modifier
     }
+    val corner = remember { RoundedCornerShape(12.dp) }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(corner)
             .background(if (active) scheme.primary.copy(alpha = 0.10f) else Color.Transparent)
             .then(gestureModifier)
             .padding(horizontal = 14.dp, vertical = 9.dp),
@@ -322,7 +345,11 @@ private fun LyricLineItem(
             // 移除后这一行不再随进度重组，只有换行时才重画。
             Text(
                 text = line.text.ifEmpty { "♪" },
-                modifier = Modifier.alpha(alpha),
+                // ⚠️ `Modifier.alpha(float)` 不是快路径：alpha 一变就重建 modifier
+                // 实例、更新 LayoutNode，于是这一行每帧重组并**重跑文本布局**
+                // （320ms 动画 × 60fps ≈ 19 帧，换行时两行同时动）。
+                // `graphicsLayer` 只改图层参数，不重组也不重排。
+                modifier = Modifier.graphicsLayer { this.alpha = alpha },
                 color = if (active) scheme.primary else scheme.onSurface,
                 fontSize = (if (active) 17.5f * scale else 15.5f * scale).sp,
                 fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
@@ -333,7 +360,8 @@ private fun LyricLineItem(
                 Spacer(Modifier.height(3.dp))
                 Text(
                     text = tr,
-                    modifier = Modifier.alpha(if (active) 0.85f else alpha * 0.8f),
+                    // 同上：走图层快路径，别用 Modifier.alpha
+                    modifier = Modifier.graphicsLayer { this.alpha = if (active) 0.85f else alpha * 0.8f },
                     color = if (active) scheme.primary.copy(alpha = 0.8f) else scheme.onSurfaceVariant,
                     fontSize = (13 * scale).sp,
                     lineHeight = (18 * scale).sp,

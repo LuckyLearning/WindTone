@@ -275,9 +275,16 @@ internal fun SettingsDiagnosisPage(
         var probePath by remember { mutableStateOf<String?>(null) }
         val clipboard = LocalClipboardManager.current
         val scope = rememberCoroutineScope()
-        // 检测源状态每次重组都探一次：三次 Settings.Secure / AppOps 查询很便宜，
-        // 换来「用户在系统设置里刚开完无障碍，返回就是最新状态」。
-        val detector = ForegroundAppDetector.status(context)
+        // 2026-10-31：这行原本每次重组都执行，而 `status()` 内部会 fork 一个 logcat
+        // 子进程并 waitFor()（30~200ms 主线程阻塞）—— 车机上每次前台切换、每次拖动
+        // 设置滑块都卡一下。现在拆成两路：两项权限状态随前台切换刷新（2 次 IPC，便宜），
+        // logcat 只在下面按钮点击时探一次（见 `logcatProbe`）。
+        var detector by remember {
+            mutableStateOf(ForegroundAppDetector.status(context, includeLogcat = false))
+        }
+        LaunchedEffect(currentPkg) {
+            detector = ForegroundAppDetector.status(context, includeLogcat = false)
+        }
 
         Text(
             text = stringResource(

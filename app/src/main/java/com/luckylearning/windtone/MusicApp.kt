@@ -14,6 +14,7 @@ import com.luckylearning.windtone.data.PinyinIndex
 import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.data.StorageHotplugMonitor
 import com.luckylearning.windtone.data.UpdateChecker
+import com.luckylearning.windtone.widget.MusicWidgetProvider
 import com.luckylearning.windtone.overlay.LyricOverlayBridge
 import com.luckylearning.windtone.ui.AppStrings
 
@@ -110,6 +111,9 @@ class MusicApp : Application() {
             else -> return
         }
         runCatching { CoverRepository.trim(coverLevel) }
+        // 小部件那张位图是单例常驻的，不在任何 LRU 里，只有切歌才会被换掉 ——
+        // 界面一隐藏就没人看得见它了，先还回去
+        runCatching { MusicWidgetProvider.dropCachedCover() }
         // 进程排在 LRU 末尾（即将被回收）：连拼音字符缓存一起丢，反正下次重建只要几毫秒
         if (level == ComponentCallbacks2.TRIM_MEMORY_COMPLETE) {
             runCatching { PinyinIndex.dropCaches() }

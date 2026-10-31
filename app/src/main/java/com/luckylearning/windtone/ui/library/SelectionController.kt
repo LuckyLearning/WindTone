@@ -1,5 +1,6 @@
 package com.luckylearning.windtone.ui.library
 
+import androidx.room.withTransaction
 import com.luckylearning.windtone.data.db.PlaylistSongEntity
 import com.luckylearning.windtone.data.model.Song
 import kotlinx.coroutines.Dispatchers
@@ -63,10 +64,15 @@ internal class SelectionController(private val session: LibrarySession) : Select
         scope.launch {
             withContext(Dispatchers.IO) {
                 val dao = db.playlistDao()
-                var pos = dao.maxPosition(playlistId) + 1
-                val now = System.currentTimeMillis()
-                songs.forEach { s ->
-                    idOf(s)?.let { dao.insertSong(PlaylistSongEntity(playlistId, it, pos++, now)) }
+                // 包事务：旧实现每首一个独立事务，多选 500 首就是 500 次 WAL commit。
+                // 落库那一侧（LibraryCore.persistSongs）本来就用了 withTransaction，
+                // 这里是同一笔账，只是当初漏了。
+                db.withTransaction {
+                    var pos = dao.maxPosition(playlistId) + 1
+                    val now = System.currentTimeMillis()
+                    songs.forEach { s ->
+                        idOf(s)?.let { dao.insertSong(PlaylistSongEntity(playlistId, it, pos++, now)) }
+                    }
                 }
             }
             session.playlists.refreshPlaylists()
@@ -83,12 +89,15 @@ internal class SelectionController(private val session: LibrarySession) : Select
         scope.launch {
             withContext(Dispatchers.IO) {
                 val dao = db.songStateDao()
-                val now = System.currentTimeMillis()
-                songs.forEach { s ->
-                    idOf(s)?.let { id ->
-                        dao.ensure(id, now)
-                        dao.setFavorite(id, favorite, now)
-                        index.bump(id) { it.copy(favorite = favorite) }
+                // 同上：这里每首是「ensure + setFavorite」两次写，500 首 = 1000 次事务
+                db.withTransaction {
+                    val now = System.currentTimeMillis()
+                    songs.forEach { s ->
+                        idOf(s)?.let { id ->
+                            dao.ensure(id, now)
+                            dao.setFavorite(id, favorite, now)
+                            index.bump(id) { it.copy(favorite = favorite) }
+                        }
                     }
                 }
             }

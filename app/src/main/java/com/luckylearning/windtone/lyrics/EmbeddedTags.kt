@@ -10,7 +10,14 @@ package com.luckylearning.windtone.lyrics
  */
 internal object EmbeddedTags {
 
-    private const val MAX_ID3_TAG = 32 * 1024 * 1024
+    /**
+     * ID3 标签体上限。
+     *
+     * 从 32MB 收到 8MB：APIC 之外的所有文本帧加起来从没超过几十 KB，超过 8MB 的
+     * 标签体几乎必然是超大内嵌封面 —— 而整块读入意味着「为找歌词先分配 8MB、
+     * 再拷贝三四份」，读出来还多半用不上。放弃这类极端标签是划算的。
+     */
+    private const val MAX_ID3_TAG = 8 * 1024 * 1024
     private const val MAX_SCAN = 1024 * 1024
 
     private val LYRICS_KEYS = setOf(
@@ -18,15 +25,26 @@ internal object EmbeddedTags {
         "LYRICS_TEXT", "SYNCEDLYRICS", "SONGLYRICS",
     )
 
-    fun parse(r: BinaryReader, extension: String, mime: String?): EmbeddedTagResult? {
+    /**
+     * @param wantPicture 是否提取内嵌封面。本地曲库为找歌词而解析时**应当传 false**：
+     *   一张 1~8MB 的 APIC 会被复制三四份，而 `LyricsLoader` 根本不读它。
+     *   只有远程路径（拿不到文件、只能顺带取图）才需要 true。
+     */
+    fun parse(r: BinaryReader, extension: String, mime: String?, wantPicture: Boolean = true): EmbeddedTagResult? {
         val ext = extension.lowercase()
         val m = mime?.lowercase().orEmpty()
         return when {
-            ext == "mp3" || ext == "mp2" || ext == "mpga" || m.contains("mpeg") -> parseId3(r)
+            ext == "mp3" || ext == "mp2" || ext == "mpga" || m.contains("mpeg") -> parseId3(r, wantPicture)
             ext == "flac" || m.contains("flac") -> parseFlac(r)
             ext == "m4a" || ext == "m4b" || ext == "mp4" || ext == "aac" || m.contains("mp4") || m.contains("aac") -> parseMp4(r)
             ext == "ogg" || ext == "oga" || ext == "opus" || m.contains("ogg") || m.contains("opus") -> parseOgg(r)
-            else -> firstHit(r, ::parseId3, ::parseFlac, ::parseMp4, ::parseOgg)
+            else -> firstHit(
+                r,
+                { parseId3(it, wantPicture) },
+                ::parseFlac,
+                ::parseMp4,
+                ::parseOgg,
+            )
         }
     }
 
@@ -43,7 +61,7 @@ internal object EmbeddedTags {
 
     // ---------------------------------------------------------------- ID3v2
 
-    private fun parseId3(r: BinaryReader): EmbeddedTagResult? {
+    private fun parseId3(r: BinaryReader, wantPicture: Boolean = true): EmbeddedTagResult? {
         r.position = 0
         val head = r.readBytes(10) ?: return null
         if (head.size < 10) return null
@@ -93,6 +111,13 @@ internal object EmbeddedTags {
                 }
                 pos += headerLen
                 if (fsize <= 0 || pos + fsize > body.size) break
+
+                // 不需要封面时，APIC 帧整帧跳过 —— 这是整个标签里最大的一帧
+                // （1~8MB），复制它只为最后扔掉。注意必须在 copyOfRange 之前。
+                if (!wantPicture && (id == "APIC" || id == "PIC")) {
+                    pos += fsize
+                    continue
+                }
 
                 var data = body.copyOfRange(pos, pos + fsize)
                 pos += fsize

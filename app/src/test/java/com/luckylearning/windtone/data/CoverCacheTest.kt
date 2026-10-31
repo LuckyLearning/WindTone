@@ -1,6 +1,8 @@
 package com.luckylearning.windtone.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -126,5 +128,19 @@ class CoverCacheTest {
         // 真机上的实际占用由诊断包 [内存] 段的两行数字反映。
         CoverRepository.trim(CoverTrimLevel.UI_HIDDEN)
         CoverRepository.trim(CoverTrimLevel.RUNNING_LOW)
+    }
+
+    // -------------------------------------------- 通知栏封面（2026-10-31 新增）
+
+    @Test
+    fun `通知封面：空字节不出错`() {
+        assertNull(CoverRepository.downscaleForNotification(ByteArray(0)))
+    }
+
+    @Test
+    fun `通知封面：已经够小的字节原样返回，不再编解码一次`() {
+        // 上限 64KB 以内：encode/decode 往返只会让画质变差，直接沿用原件
+        val small = ByteArray(1000) { it.toByte() }
+        assertSame(small, CoverRepository.downscaleForNotification(small))
     }
 }

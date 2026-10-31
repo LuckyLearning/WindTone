@@ -150,7 +150,11 @@ fun CoverArt(
         bitmap = runCatching { CoverRepository.cover(appContext, s, targetPx) }.getOrNull()
     }
 
-    val shape = if (circular) CircleShape else RoundedCornerShape(cornerRadius)
+    // shape 必须 remember：`RoundedCornerShape` 每次重组都是新实例，下游的
+    // `clip`/`background` 就无法跳过重组。固定值的 CircleShape 是常量，不受影响。
+    val shape = remember(cornerRadius, circular) {
+        if (circular) CircleShape else RoundedCornerShape(cornerRadius)
+    }
     val sized = if (fillContainer) modifier.fillMaxSize() else modifier.size(size)
     val coverKey = song?.stableKey ?: ""
     Box(
@@ -161,8 +165,14 @@ fun CoverArt(
     ) {
         val bmp = bitmap
         if (bmp != null) {
+            // ⚠️ 必须 remember：`asImageBitmap()` 每次调用都返回一个**新的**包装对象
+            // （底层 Bitmap 是同一个），而 `Image(bitmap = …)` 内部是
+            // `remember(bitmap) { BitmapPainter(bitmap) }` —— 包装对象一变，
+            // painter 每次重组重建，等于丢掉 Compose 对 ImageBitmap 的缓存、
+            // 重新 prepareToDraw。列表里每一行封面都会因此重画。
+            val imageBitmap = remember(bmp) { bmp.asImageBitmap() }
             Image(
-                bitmap = bmp.asImageBitmap(),
+                bitmap = imageBitmap,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),

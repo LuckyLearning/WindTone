@@ -78,4 +78,39 @@ class LoudnessCacheTest {
         f.writeText("-500 key with space")
         assertEquals(-500, LoudnessCache(f).gainMb("key with space"))
     }
+
+    // ------------------------------------------------ 2026-10-31：追加写改造后新增
+
+    @Test
+    fun `追加写累计超过 REWRITE_EVERY 后所有条目仍可读回`() {
+        val c = LoudnessCache(cacheFile())
+        // 300 > REWRITE_EVERY(256)，中途必定触发一次整理，两侧行为都要对
+        repeat(300) { c.put("content://media/$it", -it) }
+        val fresh = LoudnessCache(cacheFile())
+        repeat(300) { assertEquals(-it, fresh.gainMb("content://media/$it")) }
+    }
+
+    @Test
+    fun `整理后文件里不残留重复 key 行`() {
+        // 追加写天然会留重复行（靠 ensureLoaded 的「后写覆盖前值」兜住正确性），
+        // 但整理那一次必须把它们压掉 —— 否则文件会随重复分析次数无限变长。
+        // 256 正好等于 REWRITE_EVERY：第 256 次写入后立刻整理，此时应只剩一行。
+        val f = cacheFile()
+        val c = LoudnessCache(f)
+        repeat(256) { c.put("same", it) }
+        val lines = f.readLines().filter { it.isNotBlank() }
+        assertEquals(1, lines.size)
+        assertEquals("255 same", lines[0])
+    }
+
+    @Test
+    fun `追加写不丢：连续 put 三百个不同 key 全在读回`() {
+        // 旧实现是全量重写，等价于「最后一份快照」；改成追加后必须保证
+        // 早期写入没有被后续追加覆盖掉。
+        val c = LoudnessCache(cacheFile())
+        repeat(120) { c.put("k$it", 1000 + it) }
+        val fresh = LoudnessCache(cacheFile())
+        assertEquals(1000, fresh.gainMb("k0"))
+        assertEquals(1119, fresh.gainMb("k119"))
+    }
 }

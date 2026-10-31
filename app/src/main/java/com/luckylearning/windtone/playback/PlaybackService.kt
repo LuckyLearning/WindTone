@@ -29,6 +29,7 @@ import com.luckylearning.windtone.MainActivity
 import com.luckylearning.windtone.MusicApp
 import com.luckylearning.windtone.data.CrashLog
 import com.luckylearning.windtone.data.Prefs
+import com.luckylearning.windtone.playback.parallel.ParallelDownloadRegistry
 import com.luckylearning.windtone.playback.softEq.SoftEqPath
 import com.luckylearning.windtone.data.aliyun.AliyunAuth
 import com.luckylearning.windtone.data.aliyun.AliyunDrive
@@ -380,6 +381,9 @@ class PlaybackService : MediaLibraryService() {
         // 缓存持有目录锁与索引文件：不释放的话，进程内下次建 SimpleCache 会直接抛
         // 「Another SimpleCache instance uses the folder」，在线播放从此永久没缓存。
         OnlineMediaCache.release()
+        // 并行下载的分段读句柄：服务没了就该 reap，否则下次重建会撞目录锁 /
+        // 句柄悬空（与上面两条 native 资源同一口径）
+        ParallelDownloadRegistry.setCurrentKey(null)
         SleepTimer.cancel()
         PlayerHandle.player = null
         mediaSession?.run {

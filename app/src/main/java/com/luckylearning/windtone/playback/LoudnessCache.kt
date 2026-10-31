@@ -24,7 +24,20 @@ class LoudnessCache(private val file: File) {
 
     private val map = ConcurrentHashMap<String, Int>()
     @Volatile private var loaded = false
-    @Volatile private var dirty = false
+
+    /** 距上次全量重写又追加了多少条 */
+    private var appendsSinceRewrite = 0
+
+    companion object {
+        /**
+         * 累计追加多少条之后整理一次。
+         *
+         * 追加写天然会产生重复 key 行（同一首歌重复分析），`ensureLoaded` 的
+         * 「后写覆盖前值」会正确处理，所以重复不是正确性问题；但无限追加会让文件
+         * 缓慢变长。每 [REWRITE_EVERY] 条整理一次，行数稳定在 `N ~ N+256`。
+         */
+        private const val REWRITE_EVERY = 256
+    }
 
     /** 首次访问时把文件读进内存；坏行跳过、重行后写覆盖前值 */
     private fun ensureLoaded() {
@@ -50,16 +63,33 @@ class LoudnessCache(private val file: File) {
         return map[stableKey]
     }
 
-    /** 记录一条分析结果并落盘（追加写；写入失败静默 —— 缓存丢了能重算） */
+    /**
+     * 记录一条分析结果并落盘。**追加一行**，不是全量重写。
+     *
+     * 2026-10-31 改：旧实现每 `put` 一次就 `toSortedSet()` + 全文件写一遍。
+     * 而每分析完一首歌会 `put` 三处（track / album / 分析结果各一次），
+     * 于是把整个曲库跑一遍的累计写盘量是 **O(N²)** —— 3000 首约 1.5GB
+     * 累计写入，8000 首约 10GB。车机上是 eMMC，这笔账直接体现在「越用越卡」。
+     *
+     * 追加写之后文件里会有重复 key 行，`ensureLoaded` 的「后写覆盖前值」
+     * 本来就是这么设计的（见类注释），不需要额外去重。
+     */
     fun put(stableKey: String, gainMb: Int) {
         ensureLoaded()
         map[stableKey] = gainMb
-        dirty = true
-        persist()
+        runCatching {
+            file.parentFile?.mkdirs()
+            file.appendText("$gainMb $stableKey\n")
+            appendsSinceRewrite++
+            if (appendsSinceRewrite >= REWRITE_EVERY) rewriteAll()
+        }.onFailure {
+            // 追加失败（目录被清、存储不可用）退化为全量写，缓存丢了能重算
+            rewriteAll()
+        }
     }
 
-    private fun persist() {
-        if (!dirty) return
+    /** 全量重写一份有序、无重复的文件 */
+    private fun rewriteAll() {
         runCatching {
             file.parentFile?.mkdirs()
             val sb = StringBuilder()
@@ -74,7 +104,7 @@ class LoudnessCache(private val file: File) {
                 file.writeText(sb.toString())
                 tmp.delete()
             }
-            dirty = false
+            appendsSinceRewrite = 0
         }
     }
 }

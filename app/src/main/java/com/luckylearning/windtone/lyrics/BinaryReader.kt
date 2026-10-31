@@ -39,6 +39,14 @@ internal class BinaryReader(private val channel: SeekableByteChannel) : Closeabl
         return buf1.get().toInt() and 0xFF
     }
 
+    /**
+     * 读 n 字节。
+     *
+     * **不再无条件 copyOf**：旧实现 `bb.array().copyOf(got)` 每次都要多分配一份
+     * 等大的数组。ID3 解析里这一次调用就能拿到几 MB（`EmbeddedTags` 整个标签体
+     * 一次读入），等于凭空多一份 8MB 的堆分配。读满时直接交出 `ByteBuffer` 的
+     *  backing array（这个数组本来就是刚分配的、外部无其他引用，交出去没有别名风险）。
+     */
     fun readBytes(n: Int): ByteArray? {
         if (n <= 0) return ByteArray(0)
         val bb = ByteBuffer.allocate(n)
@@ -48,7 +56,7 @@ internal class BinaryReader(private val channel: SeekableByteChannel) : Closeabl
         }
         val got = bb.position()
         if (got == 0) return null
-        return bb.array().copyOf(got)
+        return if (got == n) bb.array() else bb.array().copyOf(got)
     }
 
     fun readUInt32BE(): Long {

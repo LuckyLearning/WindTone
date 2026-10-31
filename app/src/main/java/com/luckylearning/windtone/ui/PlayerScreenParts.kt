@@ -5,6 +5,7 @@ import com.luckylearning.windtone.state.PlayMode
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -217,17 +218,26 @@ internal fun CoverPane(
 ) {
     val scheme = MaterialTheme.colorScheme
 
-    // 播放时缓慢呼吸，让静止的画面有一点生命力
+    // 播放时缓慢呼吸，让静止的画面有一点生命力。
+    //
+    // ⚠️ 暂停时**不能**还挂在无限动画上：旧实现把 `targetValue` 改成 1f 就以为停了，
+    // 但 `rememberInfiniteTransition` 的动画仍在跑 —— 1f→1f 视觉上没变化，却照样
+    // 每帧写状态、每帧更新 graphicsLayer 图层（手机封面 292dp ≈ 1.4MB 图层，
+    // 60fps 持续光栅化）。暂停时改走一次性动画平滑回到 1f 然后彻底停下。
     val transition = rememberInfiniteTransition(label = "coverBreath")
-    val breath by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = if (isPlaying) 1.025f else 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2600),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "breath",
-    )
+    val breath by if (isPlaying) {
+        transition.animateFloat(
+            initialValue = 1f,
+            targetValue = 1.025f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(2600),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "breath",
+        )
+    } else {
+        animateFloatAsState(targetValue = 1f, label = "breathRest")
+    }
 
     Column(
         modifier = Modifier

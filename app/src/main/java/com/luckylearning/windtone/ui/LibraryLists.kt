@@ -430,7 +430,20 @@ internal fun GroupDetail(
             onPlayAll = { playerVm.playQueue(library.detailSongs, 0) },
         )
         val detail = library.detailSongs
-        val showDiscs = shouldShowDiscHeaders(detail)
+        // 两处聚合都不该每次重组重算：`shouldShowDiscHeaders` 内部是 O(n) 的
+        // mapNotNull + toSet，`groupBy + toSortedMap` 也是 O(n) —— 而这个组件
+        // 会因为切歌 / 播放暂停 / 歌词加载反复重组。
+        val showDiscs = remember(detail) { shouldShowDiscHeaders(detail) }
+        // 多碟时「碟内下标 → 完整列表下标」的映射：旧的 `indexOfFirst` 写在
+        // item 的 content lambda 里，滚动时每个进入视口的行都要做一次 O(n) 扫描
+        // （3000 首的分组一屏滚下来就是几万次 String.equals）。
+        val indexInDetail = remember(detail) {
+            detail.withIndex().associate { it.value.stableKey to it.index }
+        }
+        // 只在真的要多碟分区时才建这个 Map（单碟分组占绝大多数）
+        val groupsByDisc = remember(detail, showDiscs) {
+            if (!showDiscs) emptyMap() else detail.groupBy { it.discForGrouping() }.toSortedMap()
+        }
         LazyColumn(
             contentPadding = PaddingValues(top = 2.dp, bottom = 16.dp),
             modifier = Modifier.fillMaxSize(),
@@ -453,7 +466,7 @@ internal fun GroupDetail(
                 }
             } else {
                 // 多碟：按碟分区；播放索引仍对完整 detail 列表
-                val byDisc = detail.groupBy { it.discForGrouping() }.toSortedMap()
+                val byDisc = groupsByDisc
                 byDisc.forEach { (disc, songs) ->
                     item(key = "disc-$disc", contentType = "disc-header") {
                         DiscSectionHeader(disc = disc, carMode = carMode)
@@ -463,8 +476,7 @@ internal fun GroupDetail(
                         key = { _, s -> s.stableKey },
                         contentType = { _, _ -> "song" },
                     ) { _, song ->
-                        val index = detail.indexOfFirst { it.stableKey == song.stableKey }
-                            .coerceAtLeast(0)
+                        val index = indexInDetail[song.stableKey] ?: 0
                         SongRow(
                             song = song,
                             isCurrent = player.current?.stableKey == song.stableKey,

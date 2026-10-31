@@ -51,7 +51,14 @@ object TrackVolume {
     private val _state = MutableStateFlow(State())
     val state = _state.asStateFlow()
 
-    private const val TICK_MS = 100L
+    /**
+     * 曲尾轮询间隔。
+     *
+     * 它只负责「判断是否进入淡出区间」，真正拉音量的是 [RAMP_STEP_MS] 那条
+     * 独立斜坡（40ms 一档），所以检测间隔不需要 100ms —— 250ms 最坏只是晚
+     * 250ms 开始淡出，而唤醒次数降到原来的 40%。
+     */
+    private const val TICK_MS = 250L
     private const val RAMP_STEP_MS = 40L
 
     /** 标签缓存里的「查过了，没有」。0 是合法的 0 dB 标签，不能拿来当缺失。 */
@@ -100,7 +107,11 @@ object TrackVolume {
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             if (isPlaying) {
-                startTick()
+                // 淡出没开就不起轮询。旧实现无条件 `startTick()`，播放期间每秒
+                // 唤醒 10 次协程，而 `tick()` 里绝大多数用户走到的只是一句
+                // `!p.fadeEnabled` 的早退 —— 一天下来约 86 万次空转。
+                // 开关本身在 [setFadeEnabled] 里补启，用户打开后立刻生效。
+                if (prefs?.fadeEnabled == true) startTick()
             } else {
                 // 暂停即收手：停在半坡的音量会让「按暂停」看起来像「声音坏了」
                 stopTick()
@@ -165,6 +176,10 @@ object TrackVolume {
         if (!enabled) {
             cancelFade()
             setVolumeNow(loudnessFactor)
+            stopTick()
+        } else if (player?.isPlaying == true) {
+            // 开着且正在播：onIsPlayingChanged 不会再触发一次，这里补启
+            startTick()
         }
     }
 
@@ -260,17 +275,24 @@ object TrackVolume {
             return
         }
         analyzeScope.launch {
-            val gains = ReplayGainReader.readGains(context, uri)
-            if (gains == null || gains.isEmpty()) {
-                trackTagCache?.put(stableKey, TAG_ABSENT)
-                albumTagCache?.put(stableKey, TAG_ABSENT)
-            } else {
-                val trackMb = gains.preferredDb(ReplayGainMode.TRACK)?.let(ReplayGainTags::toGainMb)
-                val albumMb = gains.preferredDb(ReplayGainMode.ALBUM)?.let(ReplayGainTags::toGainMb)
-                trackTagCache?.put(stableKey, trackMb ?: TAG_ABSENT)
-                albumTagCache?.put(stableKey, albumMb ?: TAG_ABSENT)
+            // ⚠️ remove 必须在 finally 里：tagPending 无上限、无淘汰，一旦某个 key
+            // 因异常没被移除，它就永久留在集合里 —— 此后 requestTagRead 的
+            // `if (!tagPending.add(...)) return` 会永远提前返回，这首歌的音量标签
+            // 从此再也不会被读取，静默降级。磁盘写满 / 存储被拔在车机上并不罕见。
+            try {
+                val gains = ReplayGainReader.readGains(context, uri)
+                if (gains == null || gains.isEmpty()) {
+                    trackTagCache?.put(stableKey, TAG_ABSENT)
+                    albumTagCache?.put(stableKey, TAG_ABSENT)
+                } else {
+                    val trackMb = gains.preferredDb(ReplayGainMode.TRACK)?.let(ReplayGainTags::toGainMb)
+                    val albumMb = gains.preferredDb(ReplayGainMode.ALBUM)?.let(ReplayGainTags::toGainMb)
+                    trackTagCache?.put(stableKey, trackMb ?: TAG_ABSENT)
+                    albumTagCache?.put(stableKey, albumMb ?: TAG_ABSENT)
+                }
+            } finally {
+                tagPending.remove(stableKey)
             }
-            tagPending.remove(stableKey)
             scope.launch {
                 if (player?.currentMediaItem?.mediaId == stableKey && !fadingOut) {
                     applyLoudnessFor(stableKey)

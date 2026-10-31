@@ -1650,11 +1650,15 @@ class PlaybackEngine(
         if (count <= 1) return emptyList()
         val from = c.currentMediaItemIndex + 1
         if (from >= count) return emptyList()
-        // 只需要看最近几首：候选只取两首，没必要把三百首队列整个映射一遍
-        val window = (from until minOf(count, from + 6)).mapNotNull { i ->
-            songByMediaId(c.getMediaItemAt(i).mediaId)
-        }
-        return CachePrefetchPolicy.candidates(window.map { it.uri.scheme }).map { window[it] }
+        val to = minOf(count, from + 6)
+        // 先用 MediaItem 自带的 URI 判 scheme：纯本地队列根本不需要预取，也就
+        // 不必为每首各跑一次 songByMediaId —— 那是一次全曲库线性扫描，旧实现
+        // 每 3 秒在主线程做 6 × N 次字符串比较（N = 曲库规模），只为最后被扔掉。
+        val schemes = ArrayList<String?>(to - from)
+        for (i in from until to) schemes += c.getMediaItemAt(i).localConfiguration?.uri?.scheme
+        val picked = CachePrefetchPolicy.candidates(schemes)
+        if (picked.isEmpty()) return emptyList()
+        return picked.mapNotNull { songByMediaId(c.getMediaItemAt(from + it).mediaId) }
     }
 
     private fun songByMediaId(mediaId: String): Song? =
@@ -1796,7 +1800,12 @@ class PlaybackEngine(
             val item = c.getMediaItemAt(index)
             if (item.mediaId != song.stableKey) return@launch
             if (item.mediaMetadata.artworkData != null) return@launch
-            runCatching { c.replaceMediaItem(index, PlaybackConnection.withArtwork(item, bytes)) }
+            // 只装缩略后的字节：通知栏大图标 256px，装原件（可达 8MB）会让锁屏歌词
+            // 每换一行都把整份图搬一次 Binder，还会撞 TransactionTooLargeException。
+            val packed = withContext(Dispatchers.Default) {
+                CoverRepository.downscaleForNotification(bytes)
+            } ?: return@launch
+            runCatching { c.replaceMediaItem(index, PlaybackConnection.withArtwork(item, packed)) }
         }
     }
 
@@ -1924,7 +1933,10 @@ class PlaybackEngine(
                     }
                 }
 
-                if (pos > 0 && now - lastSavedAt >= 5_000L) {
+                // 15 秒一存（原 5 秒）：断点续播不需要秒级精度，而这是播放全程唯一
+                // 一条持续写入 —— 每小时从 720 次降到 240 次 WAL 提交。
+                // 切歌 / 暂停 / 进程收尾另有落盘，不会因此丢掉整首的进度。
+                if (pos > 0 && now - lastSavedAt >= POSITION_SAVE_INTERVAL_MS) {
                     lastSavedAt = now
                     val id = mediaId?.let { TrackFragment.parse(it.removePrefix("aliyun:")) }
                     scope.launch {
@@ -1990,6 +2002,9 @@ class PlaybackEngine(
 
         /** 睡眠定时到点前的渐弱时长：10 秒内线性降为 0（文档承诺的「淡出渐弱」） */
         private const val SLEEP_FADE_MS = 10_000L
+
+        /** 播放位置落盘间隔 */
+        private const val POSITION_SAVE_INTERVAL_MS = 15_000L
 
         /**
          * 进度轮询主频（v1.2.40）。

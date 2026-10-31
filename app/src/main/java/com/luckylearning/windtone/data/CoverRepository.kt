@@ -13,8 +13,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -54,6 +56,14 @@ object CoverRepository {
     /** 磁盘缓存上限 50MB，超出后按最后访问时间淘汰到 80% */
     private const val DISK_LIMIT_BYTES = 50L * 1024 * 1024
     private const val DISK_TRIM_RATIO = 0.8
+    /** 多少次写盘才做一次容量检查 */
+    private const val DISK_TRIM_EVERY_WRITES = 64
+    /** 两次容量检查的最小间隔 */
+    private const val DISK_TRIM_MIN_INTERVAL_MS = 30_000L
+    /** 通知栏封面压到这个尺寸（大图标实际只用 256px，留一倍余量给不同 ROM） */
+    private const val NOTIFICATION_COVER_PX = 512
+    /** 小于这个体积的封面不必再编解码一次 */
+    private const val NOTIFICATION_COVER_INLINE_BYTES = 64 * 1024
 
     /**
      * 「大图」门槛：显示像素超过它才给 1.25 倍解码余量。
@@ -110,6 +120,22 @@ object CoverRepository {
      *    用来判断「一直在解」；
      *  - `peakDecodedBytes`：单张最大产出，用来抓异常大图（内嵌 3000px 之类）。
      */
+    /**
+     * 磁盘容量检查节流（2026-10-31）。
+     *
+     * 旧实现每写一张新封面就扫一遍缓存目录：`sumOf { length() }` 是 N 次 `stat()`，
+     * `sortBy { lastModified() }` 又是 O(N log N) 次 —— 50MB 上限 / 30KB 一张
+     * ≈ 1700 个文件，即**每解一张封面约两万次系统调用**。首次滚完 169 首就是
+     * 三百多万次，曲库涨到数千首是 O(N² log N)。eMMC 上单次 stat 20~100µs，
+     * 这就是「越用越卡」里最纯粹的那一块浪费。
+     *
+     * 改成「累计写够 [DISK_TRIM_EVERY_WRITES] 张、或距上次检查超过
+     * [DISK_TRIM_MIN_INTERVAL_MS]」才扫一次。最坏情况超出上限 64 张 × 30KB ≈ 2MB，
+     * 相对 50MB 上限可以忽略。
+     */
+    private val diskWritesSinceTrim = AtomicInteger()
+    private val diskTrimAt = AtomicLong()
+
     private val decodeFromDisk = AtomicLong()
     private val decodeFromSource = AtomicLong()
     private val decodedBytes = AtomicLong()
@@ -155,7 +181,7 @@ object CoverRepository {
             runCatching { if (!exists()) mkdirs() }
         }
         // 启动时做一次体积修剪，避免上次异常退出留下的超额缓存一直占着空间
-        Thread { runCatching { trimDisk() } }.apply { isDaemon = true }.start()
+        Thread { runCatching { trimDisk(force = true) } }.apply { isDaemon = true }.start()
     }
 
     /**
@@ -262,6 +288,40 @@ object CoverRepository {
         // 像素已经搬到新位图，旧的大图立刻还给堆（`!==` 兜住「尺寸本就相同、返回自身」的情况）
         if (scaled !== decoded) decoded.recycle()
         return scaled
+    }
+
+    /**
+     * 给「通知栏 / 锁屏」用的封面字节。
+     *
+     * 内嵌封面常见 1000~3000px、1~8MB，而通知栏大图标只有 256px。把原始字节原样
+     * 塞进 MediaItem 有三重代价，而且都会随播放时长反复发生：
+     *   1. 字节常驻在当前播放项的 `MediaMetadata` 上（可达 8MB）；
+     *   2. 锁屏歌词**每换一行**就 `replaceMediaItem`，`buildUpon()` 会继承
+     *      `artworkData`，整份字节随 Binder 事务再搬一次 —— 一首 60 行的歌
+     *      = 60 次，8MB 封面还会直接撞 `TransactionTooLargeException`
+     *      （调用点包着 `runCatching`，表现为「大封面歌曲的锁屏歌词不更新」）；
+     *   3. 通知重建时按全尺寸解码，几 MB 的 JPEG 解出来是几十 MB 的位图。
+     * 这里压到 [NOTIFICATION_COVER_PX] / JPEG 85，典型结果 20~60KB，小两个数量级。
+     *
+     * 已经够小的字节直接原样返回，省掉一次编解码往返。
+     *
+     * 阻塞函数：调用方负责切到 `Dispatchers.Default`。
+     */
+    fun downscaleForNotification(raw: ByteArray): ByteArray? {
+        if (raw.isEmpty()) return null
+        if (raw.size <= NOTIFICATION_COVER_INLINE_BYTES) return raw
+        val bmp = decodeScaled(raw, NOTIFICATION_COVER_PX) ?: return raw
+        return try {
+            val out = ByteArrayOutputStream()
+            if (!bmp.compress(Bitmap.CompressFormat.JPEG, 85, out)) return raw
+            val packed = out.toByteArray()
+            // 压完反而更大（极小图 / 已高度压缩的 JPEG）就沿用原件，不做负优化
+            if (packed.isEmpty() || packed.size >= raw.size) raw else packed
+        } catch (_: Throwable) {
+            raw
+        } finally {
+            bmp.recycle()
+        }
     }
 
     /**
@@ -400,12 +460,24 @@ object CoverRepository {
             runCatching {
                 file.outputStream().use { out -> bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out) }
             }.onFailure { Log.w(TAG, "写封面缓存失败", it) }
-            trimDisk()
+            trimDisk(force = false)
         }
     }
 
-    /** 超过上限时按最后修改时间淘汰到 80% */
-    private fun trimDisk() {
+    /**
+     * 超过上限时按最后修改时间淘汰到 80%。
+     *
+     * @param force true 时无视节流立刻检查（`clear()` 之类需要马上看到结果的场合）。
+     */
+    private fun trimDisk(force: Boolean) {
+        val now = System.currentTimeMillis()
+        if (!force) {
+            val writes = diskWritesSinceTrim.incrementAndGet()
+            val last = diskTrimAt.get()
+            if (writes < DISK_TRIM_EVERY_WRITES && now - last < DISK_TRIM_MIN_INTERVAL_MS) return
+        }
+        diskWritesSinceTrim.set(0)
+        diskTrimAt.set(now)
         val dir = cacheDir ?: return
         val files = dir.listFiles()?.toMutableList() ?: return
         var total = files.sumOf { it.length() }

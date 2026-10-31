@@ -47,6 +47,9 @@ internal object AccessibilityWatchdog {
     /** 曾开启时记下的组件扁平名（包名/类名），供有 WRITE_SECURE_SETTINGS 时写回 */
     private const val KEY_COMPONENT = "component"
 
+    /** 「已开启」记录多久刷新一次时间戳：一天一次足够支撑「最近有没有连上」的判断 */
+    private const val REFRESH_MS = 24 * 60 * 60 * 1000L
+
     private const val CHANNEL_ID = "fg_recovery"
 
     /** 与前台服务通知（0x7701）分开，避免互相顶掉 */
@@ -69,11 +72,21 @@ internal object AccessibilityWatchdog {
 
     /** 服务连上 / 检查到已开启时调用：记住「曾经开过」，并撤销可能存在的提醒 */
     fun markOn(context: Context) {
-        sp(context).edit()
-            .putBoolean(KEY_SEEN_ON, true)
-            .putLong(KEY_SEEN_AT, System.currentTimeMillis())
-            .putString(KEY_COMPONENT, serviceComponent(context))
-            .apply()
+        val sp = sp(context)
+        // 已经记过就不再写：apply() 虽是异步落盘，但每次都会把整个 XML 重写一遍，
+        // 而 markOn 在每次回到前台、每次无障碍服务连上都会被调用（车机上很频繁）。
+        // 只有「首次记」「组件名变了」「距上次超过一天」才真正落盘。
+        val now = System.currentTimeMillis()
+        val stale = !sp.getBoolean(KEY_SEEN_ON, false) ||
+            sp.getString(KEY_COMPONENT, null) != serviceComponent(context) ||
+            now - sp.getLong(KEY_SEEN_AT, 0L) > REFRESH_MS
+        if (stale) {
+            sp.edit()
+                .putBoolean(KEY_SEEN_ON, true)
+                .putLong(KEY_SEEN_AT, now)
+                .putString(KEY_COMPONENT, serviceComponent(context))
+                .apply()
+        }
         runCatching {
             context.getSystemService(NotificationManager::class.java)?.cancel(NOTIFICATION_ID)
         }

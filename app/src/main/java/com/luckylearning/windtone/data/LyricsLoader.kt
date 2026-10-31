@@ -168,7 +168,9 @@ class LyricsLoader(private val context: Context) {
             context.contentResolver.openFileDescriptor(song.uri, "r")?.use { pfd ->
                 val fis = java.io.FileInputStream(pfd.fileDescriptor)
                 val reader = BinaryReader.open(fis)
-                if (reader == null) null else EmbeddedTags.parse(reader, ext, song.mimeType)
+                // 本地路径不要内嵌封面：APIC 帧 1~8MB，复制三四份只为最后扔掉
+                // （本方法只取 syncedLines / lyricsText / title / artist / album）。
+                if (reader == null) null else EmbeddedTags.parse(reader, ext, song.mimeType, wantPicture = false)
             }
         }.onFailure { Log.w(TAG, "解析内嵌歌词失败: ${song.uri}", it) }.getOrNull()
     }

@@ -38,6 +38,9 @@ internal object ForegroundAppDetector {
 
     private const val POLL_INTERVAL_MS = 1_500L
 
+    /** [usageStatsGrantedCached] 的缓存有效期 */
+    private const val USAGE_STATS_CACHE_MS = 3_000L
+
     /** `Settings.ACTION_ACCESSIBILITY_DETAILS_SETTINGS`（API 31）的字面量 */
     private const val ACTION_ACCESSIBILITY_DETAILS = "android.settings.ACCESSIBILITY_DETAILS_SETTINGS"
 
@@ -48,12 +51,43 @@ internal object ForegroundAppDetector {
         val logcat: Boolean,
     )
 
-    /** 探测两个通道 + logcat 可读性 */
-    fun status(context: Context): Status = Status(
+    /**
+     * 探测两个通道 + logcat 可读性。
+     *
+     * @param includeLogcat 是否探测 logcat。**默认 true，但每次重组都调用的 UI 必须
+     *   传 false**：`logcatReadable()` 会 `fork/exec` 一个子进程并 `waitFor()`，
+     *   单次典型 30~200ms 且阻塞调用线程。设置页曾把它放在 Composable 函数体里，
+     *   结果车机上每次前台切换 / 每次拖动设置滑块都卡一次。
+     */
+    fun status(context: Context, includeLogcat: Boolean = true): Status = Status(
         usageStats = usageStatsGranted(context),
         accessibility = accessibilityEnabled(context),
-        logcat = logcatReadable(),
+        logcat = if (includeLogcat) logcatReadable() else false,
     )
+
+    /**
+     * [usageStatsGranted] 的短期缓存版。
+     *
+     * 权限判定是一次 AppOps Binder 调用，而它被放在了两个热路径上：悬浮窗状态
+     * 合并流每次歌词换行都要判一次「要不要起 UsageStats 兜底轮询」（未授权时
+     * 每次都白跑），诊断页每次重组也探一次。授权状态一个会话内几乎不变，
+     * 缓存 [USAGE_STATS_CACHE_MS] 足够 —— 用户刚在设置里授权后最多延迟 3 秒生效。
+     */
+    fun usageStatsGrantedCached(context: Context): Boolean {
+        val now = android.os.SystemClock.elapsedRealtime()
+        val v = usageStatsCached
+        if (v >= 0 && now - usageStatsCachedAt < USAGE_STATS_CACHE_MS) return v == 1
+        val granted = usageStatsGranted(context)
+        usageStatsCached = if (granted) 1 else 0
+        usageStatsCachedAt = now
+        return granted
+    }
+
+    @Volatile
+    private var usageStatsCached = -1
+
+    @Volatile
+    private var usageStatsCachedAt = 0L
 
     /**
      * UsageStats 权限是否已授予。
