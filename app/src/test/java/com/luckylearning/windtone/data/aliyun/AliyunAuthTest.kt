@@ -1,18 +1,32 @@
 package com.luckylearning.windtone.data.aliyun
 
+import android.app.Application
+import androidx.test.core.app.ApplicationProvider
+import com.luckylearning.windtone.ui.AppStrings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
- * 授权层的纯 JVM 用例（不碰 android.* 类）。
+ * 授权层用例：端点拼装契约 + [AliyunErrors] 用户可见错误句（i18n 第 22 批后走 strings）。
  *
  * 端点拼装是「按 OpenList 源码逐字对齐」的契约：参数名写错不会编译失败，
  * 只会在真机上表现为「粘贴令牌后一直失败」，所以这里逐条钉住。
- * 依赖 android.net.Uri / org.json 的用例在 [AliyunAndroidTest]（Robolectric）。
+ * 依赖 android.net.Uri / org.json 的其它用例在 [AliyunAndroidTest]。
  */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [28], application = Application::class, qualifiers = "zh-rCN")
 class AliyunAuthTest {
+
+    @Before
+    fun setUp() {
+        AppStrings.init(ApplicationProvider.getApplicationContext())
+    }
 
     @Test
     fun `OpenList 在线接口的 URL 参数与源码一致`() {

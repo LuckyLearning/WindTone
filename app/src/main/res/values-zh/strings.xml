@@ -1395,4 +1395,60 @@
     <string name="pem_parallel_fail_next">检查网络后重试，或到设置关闭并行下载</string>
     <string name="pem_cache_read">本地缓存读取失败</string>
 
+
+    <!-- i18n 第 22 批：PlaybackEngine A-B/逐句/悬浮 Toast（pe_*）+ AliyunAuth 错误句（aa_*） -->
+    <string name="pe_overlay_start_failed">桌面悬浮歌词启动失败：%1$s</string>
+    <string name="pe_overlay_start_failed_next">到系统设置开启「显示在其他应用上层」，或到设置 → 歌词关闭后再开</string>
+    <string name="pe_overlay_auto_locked">悬浮歌词已自动锁定位置，需要再调整可重新点「调整悬浮歌词位置」</string>
+    <string name="pe_ab_marked_a">已设 A 点 %1$s</string>
+    <string name="pe_ab_need_a">请先设 A 点</string>
+    <string name="pe_ab_need_a_next">先点「设 A」再设 B</string>
+    <string name="pe_ab_b_after_a">B 点需晚于 A 点</string>
+    <string name="pe_ab_b_after_a_next">把进度拖到 A 点之后再设 B</string>
+    <string name="pe_ab_marked_b">已设 B 点 %1$s，区间循环中</string>
+    <string name="pe_ab_cleared">已清除 A-B 循环</string>
+    <string name="pe_lyric_loop_exited">已退出逐句循环</string>
+    <string name="pe_lyric_loop_no_timing">这句没有有效时间轴，无法循环</string>
+    <string name="pe_lyric_loop_no_timing_next">换一句有时间戳的歌词，或用播放设置手动设 A/B</string>
+    <string name="pe_lyric_looping">逐句循环中（%1$s–%2$s）</string>
+    <string name="pe_lyric_looping_next">长按该句或到播放设置清除即可退出</string>
+
+    <string name="aa_paste_empty">粘贴的内容是空的</string>
+    <string name="aa_missing_refresh">缺少刷新令牌，请重新获取</string>
+    <string name="aa_via_official">直连官方接口：%1$s</string>
+    <string name="aa_via_web">直连网页令牌端点：%1$s</string>
+    <string name="aa_via_oa">旧扫码线</string>
+    <string name="aa_via_cs">扫码登录线</string>
+    <string name="aa_via_openlist_detail">%1$s(%2$s)：%3$s</string>
+    <string name="aa_refresh_failed">刷新令牌失败</string>
+    <string name="aa_net_official">网络请求失败（官方接口）</string>
+    <string name="aa_no_token_official">官方接口没有返回令牌</string>
+    <string name="aa_net_web">网络请求失败（网页令牌端点）</string>
+    <string name="aa_no_token_web">网页令牌端点没有返回令牌</string>
+    <string name="aa_net_openlist">网络请求失败（OpenList 在线接口）</string>
+    <string name="aa_no_token_openlist">OpenList 在线接口没有返回令牌（令牌可能已失效）</string>
+    <string name="aa_empty_http">空响应（HTTP %1$d）</string>
+    <string name="aa_not_json">响应不是 JSON（HTTP %1$d）</string>
+    <string name="aa_request_failed">请求失败</string>
+    <string name="aa_err_token_expired">登录状态已过期</string>
+    <string name="aa_err_token_expired_next">到设置 → 在线服务重新扫码授权</string>
+    <string name="aa_err_invalid_grant">刷新令牌无效或已失效</string>
+    <string name="aa_err_invalid_grant_next">到设置 → 在线服务重新扫码授权</string>
+    <string name="aa_err_invalid_client">应用凭据无效（ClientId / ClientSecret）</string>
+    <string name="aa_err_invalid_client_next">核对自建应用配置后重试</string>
+    <string name="aa_err_invalid_param">请求参数错误</string>
+    <string name="aa_err_invalid_param_next">稍后重试；若反复出现请反馈诊断包</string>
+    <string name="aa_err_bad_request">请求参数无效（多为 drive_id / file_id 为空或不匹配，不是登录问题）</string>
+    <string name="aa_err_bad_request_next">重新进入云盘目录再试</string>
+    <string name="aa_err_not_found">文件或目录不存在（可能已被移动或删除）</string>
+    <string name="aa_err_not_found_next">回云盘根目录重新浏览，或从曲库移除失效项</string>
+    <string name="aa_err_denied">没有权限访问这个资源</string>
+    <string name="aa_err_denied_next">确认账号有权访问该文件，或重新授权云盘</string>
+    <string name="aa_err_rate_limit">请求过于频繁，被限流了</string>
+    <string name="aa_err_rate_limit_next">等几分钟再试</string>
+    <string name="aa_err_capacity">网盘容量超限，播放被限制</string>
+    <string name="aa_err_capacity_next">到阿里云盘清理空间或扩容后再播</string>
+    <string name="aa_err_unknown">阿里云盘返回错误：%1$s</string>
+    <string name="aa_err_unknown_next">到设置 → 关于与诊断复制诊断包反馈</string>
+
 </resources>

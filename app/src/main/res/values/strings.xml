@@ -1429,4 +1429,60 @@ Expired codes refresh automatically. This app is read-only — it never uploads,
     <string name="pem_parallel_fail_next">Check the network and retry, or turn off parallel downloads in Settings</string>
     <string name="pem_cache_read">Failed to read local cache</string>
 
+
+    <!-- i18n batch 22: PlaybackEngine A-B / lyric-loop / overlay toasts (pe_*) + AliyunAuth errors (aa_*) -->
+    <string name="pe_overlay_start_failed">Desktop floating lyrics failed to start: %1$s</string>
+    <string name="pe_overlay_start_failed_next">Enable “Display over other apps” in system Settings, or turn floating lyrics off and on again under Settings → Lyrics</string>
+    <string name="pe_overlay_auto_locked">Floating lyrics position locked automatically. To adjust again, tap “Adjust floating lyrics position”</string>
+    <string name="pe_ab_marked_a">A point set at %1$s</string>
+    <string name="pe_ab_need_a">Set point A first</string>
+    <string name="pe_ab_need_a_next">Tap “Set A”, then set B</string>
+    <string name="pe_ab_b_after_a">Point B must be after A</string>
+    <string name="pe_ab_b_after_a_next">Seek past A, then set B</string>
+    <string name="pe_ab_marked_b">B point set at %1$s — looping this range</string>
+    <string name="pe_ab_cleared">A-B loop cleared</string>
+    <string name="pe_lyric_loop_exited">Line loop exited</string>
+    <string name="pe_lyric_loop_no_timing">This line has no usable timing — cannot loop</string>
+    <string name="pe_lyric_loop_no_timing_next">Pick a timed lyric line, or set A/B manually in playback settings</string>
+    <string name="pe_lyric_looping">Line loop (%1$s–%2$s)</string>
+    <string name="pe_lyric_looping_next">Long-press the line or clear it in playback settings to exit</string>
+
+    <string name="aa_paste_empty">Pasted content is empty</string>
+    <string name="aa_missing_refresh">Missing refresh token — get a new one</string>
+    <string name="aa_via_official">Official API direct: %1$s</string>
+    <string name="aa_via_web">Web token endpoint direct: %1$s</string>
+    <string name="aa_via_oa">Legacy QR path</string>
+    <string name="aa_via_cs">QR sign-in path</string>
+    <string name="aa_via_openlist_detail">%1$s(%2$s): %3$s</string>
+    <string name="aa_refresh_failed">Failed to refresh token</string>
+    <string name="aa_net_official">Network request failed (official API)</string>
+    <string name="aa_no_token_official">Official API returned no token</string>
+    <string name="aa_net_web">Network request failed (web token endpoint)</string>
+    <string name="aa_no_token_web">Web token endpoint returned no token</string>
+    <string name="aa_net_openlist">Network request failed (OpenList online API)</string>
+    <string name="aa_no_token_openlist">OpenList online API returned no token (token may be invalid)</string>
+    <string name="aa_empty_http">Empty response (HTTP %1$d)</string>
+    <string name="aa_not_json">Response is not JSON (HTTP %1$d)</string>
+    <string name="aa_request_failed">Request failed</string>
+    <string name="aa_err_token_expired">Sign-in expired</string>
+    <string name="aa_err_token_expired_next">Go to Settings → Online services and scan to re-authorize</string>
+    <string name="aa_err_invalid_grant">Refresh token invalid or expired</string>
+    <string name="aa_err_invalid_grant_next">Go to Settings → Online services and scan to re-authorize</string>
+    <string name="aa_err_invalid_client">App credentials invalid (ClientId / ClientSecret)</string>
+    <string name="aa_err_invalid_client_next">Check your self-hosted app config and retry</string>
+    <string name="aa_err_invalid_param">Bad request parameters</string>
+    <string name="aa_err_invalid_param_next">Retry later; if it keeps happening, send a diagnostics pack</string>
+    <string name="aa_err_bad_request">Invalid parameters (often empty/mismatched drive_id or file_id — not a sign-in issue)</string>
+    <string name="aa_err_bad_request_next">Re-enter the cloud folder and try again</string>
+    <string name="aa_err_not_found">File or folder not found (may have been moved or deleted)</string>
+    <string name="aa_err_not_found_next">Browse again from the cloud root, or remove stale items from the library</string>
+    <string name="aa_err_denied">No permission for this resource</string>
+    <string name="aa_err_denied_next">Confirm the account can access the file, or re-authorize the cloud drive</string>
+    <string name="aa_err_rate_limit">Too many requests — rate limited</string>
+    <string name="aa_err_rate_limit_next">Wait a few minutes and try again</string>
+    <string name="aa_err_capacity">Drive capacity exceeded — playback blocked</string>
+    <string name="aa_err_capacity_next">Free space or upgrade on Aliyun Drive, then play again</string>
+    <string name="aa_err_unknown">Aliyun Drive error: %1$s</string>
+    <string name="aa_err_unknown_next">Go to Settings → About &amp; diagnostics and copy the diagnostics pack to report</string>
+
 </resources>

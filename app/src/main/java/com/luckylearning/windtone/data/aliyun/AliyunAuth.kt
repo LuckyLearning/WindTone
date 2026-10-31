@@ -2,6 +2,9 @@ package com.luckylearning.windtone.data.aliyun
 
 import android.content.Context
 import com.luckylearning.windtone.BuildConfig
+import com.luckylearning.windtone.R
+import com.luckylearning.windtone.data.UserFacingCopy
+import com.luckylearning.windtone.ui.AppStrings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -146,7 +149,7 @@ class AliyunAuth(context: Context) {
      */
     suspend fun applyRefreshToken(pasted: String): AliyunExchange = withContext(Dispatchers.IO) {
         val trimmed = pasted.trim()
-        if (trimmed.isBlank()) return@withContext AliyunExchange.Failed("粘贴的内容是空的")
+        if (trimmed.isBlank()) return@withContext AliyunExchange.Failed(AppStrings.s(R.string.aa_paste_empty))
         // 粘贴令牌大概率是网页扫码线（OpenList 网页工具发的就是网页令牌）：先走网页
         // 刷新，不行再试 OpenList 两条兜底；成功即按实际成功的那条记来源
         refreshAuto(trimmed, preferred = AliyunTokenSource.CS)
@@ -229,7 +232,7 @@ class AliyunAuth(context: Context) {
      * 应用内扫码），而我们只有「先成功的那条」才知道它属于哪条线。
      */
     private fun refreshAuto(refreshToken: String, preferred: AliyunTokenSource): AliyunExchange {
-        if (refreshToken.isBlank()) return AliyunExchange.Failed("缺少刷新令牌，请重新获取")
+        if (refreshToken.isBlank()) return AliyunExchange.Failed(AppStrings.s(R.string.aa_missing_refresh))
         val failures = mutableListOf<String>()
 
         // 路径一：直连官方（需要自己的 client_id / client_secret）
@@ -239,7 +242,7 @@ class AliyunAuth(context: Context) {
                     save(direct.token, preferred)
                     return direct
                 }
-                is AliyunExchange.Failed -> failures += "直连官方接口：${direct.reason}"
+                is AliyunExchange.Failed -> failures += AppStrings.s(R.string.aa_via_official, direct.reason)
             }
         }
 
@@ -252,7 +255,7 @@ class AliyunAuth(context: Context) {
                     save(direct.token, AliyunTokenSource.CS)
                     return direct
                 }
-                is AliyunExchange.Failed -> failures += "直连网页令牌端点：${direct.reason}"
+                is AliyunExchange.Failed -> failures += AppStrings.s(R.string.aa_via_web, direct.reason)
             }
         }
 
@@ -266,14 +269,18 @@ class AliyunAuth(context: Context) {
                         return r
                     }
                     is AliyunExchange.Failed -> failures += (
-                        (if (source == AliyunTokenSource.OA) "旧扫码线" else "扫码登录线") +
-                            "(${base.substringAfter("://")})：" + r.reason
+                        AppStrings.s(
+                            R.string.aa_via_openlist_detail,
+                            AppStrings.s(if (source == AliyunTokenSource.OA) R.string.aa_via_oa else R.string.aa_via_cs),
+                            base.substringAfter("://"),
+                            r.reason,
+                        )
                         )
                 }
             }
         }
         return AliyunExchange.Failed(
-            failures.joinToString("；").ifBlank { "刷新令牌失败" },
+            failures.joinToString("；").ifBlank { AppStrings.s(R.string.aa_refresh_failed) },
         )
     }
 
@@ -287,12 +294,12 @@ class AliyunAuth(context: Context) {
         }
         val json = runCatching {
             AliyunHttp.postJson(AliyunEndpoints.tokenUrl(), body, AliyunEndpoints.UA)
-        }.getOrElse { return AliyunExchange.Failed(it.message ?: "网络请求失败（官方接口）") }
+        }.getOrElse { return AliyunExchange.Failed(it.message ?: AppStrings.s(R.string.aa_net_official)) }
         val token = parseToken(json, fallbackRefresh = refreshToken)
         return if (token != null) {
             AliyunExchange.Ready(token)
         } else {
-            AliyunExchange.Failed(AliyunErrors.hint(json).ifBlank { "官方接口没有返回令牌" })
+            AliyunExchange.Failed(AliyunErrors.hint(json).ifBlank { AppStrings.s(R.string.aa_no_token_official) })
         }
     }
 
@@ -304,12 +311,12 @@ class AliyunAuth(context: Context) {
         }
         val json = runCatching {
             AliyunHttp.postJson(AliyunEndpoints.WEB_TOKEN_URL, body, AliyunEndpoints.UA)
-        }.getOrElse { return AliyunExchange.Failed(it.message ?: "网络请求失败（网页令牌端点）") }
+        }.getOrElse { return AliyunExchange.Failed(it.message ?: AppStrings.s(R.string.aa_net_web)) }
         val token = parseToken(json, fallbackRefresh = refreshToken)
         return if (token != null) {
             AliyunExchange.Ready(token)
         } else {
-            AliyunExchange.Failed(AliyunErrors.hint(json).ifBlank { "网页令牌端点没有返回令牌" })
+            AliyunExchange.Failed(AliyunErrors.hint(json).ifBlank { AppStrings.s(R.string.aa_no_token_web) })
         }
     }
 
@@ -324,13 +331,13 @@ class AliyunAuth(context: Context) {
                 AliyunEndpoints.renewApiUrl(refreshToken, source, base),
                 AliyunEndpoints.UA,
             )
-        }.getOrElse { return AliyunExchange.Failed(it.message ?: "网络请求失败（OpenList 在线接口）") }
+        }.getOrElse { return AliyunExchange.Failed(it.message ?: AppStrings.s(R.string.aa_net_openlist)) }
         // 在线接口的错误放在 text 字段里（成功时为空）
         val text = json.optString("text")
         val token = parseToken(json, fallbackRefresh = refreshToken)
         if (token == null) {
             return AliyunExchange.Failed(
-                text.ifBlank { "OpenList 在线接口没有返回令牌（令牌可能已失效）" },
+                text.ifBlank { AppStrings.s(R.string.aa_no_token_openlist) },
             )
         }
         return AliyunExchange.Ready(token)
@@ -612,12 +619,12 @@ internal object AliyunHttp {
             val code = conn.responseCode
             val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
                 ?.bufferedReader()?.use { it.readText() }.orEmpty()
-            if (text.isBlank()) throw IOException("空响应（HTTP $code）")
+            if (text.isBlank()) throw IOException(AppStrings.s(R.string.aa_empty_http, code))
             // 阿里 passport 出错时偶尔回 HTML 错误页，JSON 解析失败的报错要可读
             return try {
                 JSONObject(text)
             } catch (e: Exception) {
-                throw IOException("响应不是 JSON（HTTP $code）")
+                throw IOException(AppStrings.s(R.string.aa_not_json, code))
             }
         } finally {
             runCatching { conn.disconnect() }
@@ -641,30 +648,60 @@ object AliyunErrors {
     fun hint(code: String): String = when (code) {
         "" -> ""
         "AccessTokenExpired", "AccessTokenInvalid", "InvalidAccessToken", "I400JD" ->
-            "登录状态已过期。下一步：到设置 → 在线服务重新扫码授权"
+            UserFacingCopy.withNext(
+                AppStrings.s(R.string.aa_err_token_expired),
+                AppStrings.s(R.string.aa_err_token_expired_next),
+            )
         "InvalidGrant", "invalid_grant" ->
-            "刷新令牌无效或已失效。下一步：到设置 → 在线服务重新扫码授权"
+            UserFacingCopy.withNext(
+                AppStrings.s(R.string.aa_err_invalid_grant),
+                AppStrings.s(R.string.aa_err_invalid_grant_next),
+            )
         "InvalidClient", "invalid_client" ->
-            "应用凭据无效（ClientId / ClientSecret）。下一步：核对自建应用配置后重试"
+            UserFacingCopy.withNext(
+                AppStrings.s(R.string.aa_err_invalid_client),
+                AppStrings.s(R.string.aa_err_invalid_client_next),
+            )
         "InvalidParameter", "invalid_parameter" ->
-            "请求参数错误。下一步：稍后重试；若反复出现请反馈诊断包"
+            UserFacingCopy.withNext(
+                AppStrings.s(R.string.aa_err_invalid_param),
+                AppStrings.s(R.string.aa_err_invalid_param_next),
+            )
         "BadRequest" ->
-            "请求参数无效（多为 drive_id / file_id 为空或不匹配，不是登录问题）。下一步：重新进入云盘目录再试"
+            UserFacingCopy.withNext(
+                AppStrings.s(R.string.aa_err_bad_request),
+                AppStrings.s(R.string.aa_err_bad_request_next),
+            )
         "NotFound", "ResourceNotFound" ->
-            "文件或目录不存在（可能已被移动或删除）。下一步：回云盘根目录重新浏览，或从曲库移除失效项"
+            UserFacingCopy.withNext(
+                AppStrings.s(R.string.aa_err_not_found),
+                AppStrings.s(R.string.aa_err_not_found_next),
+            )
         "AccessDenied", "PermissionDenied", "Forbidden" ->
-            "没有权限访问这个资源。下一步：确认账号有权访问该文件，或重新授权云盘"
+            UserFacingCopy.withNext(
+                AppStrings.s(R.string.aa_err_denied),
+                AppStrings.s(R.string.aa_err_denied_next),
+            )
         "QuotaExceeded", "TooManyRequests", "TooManyRequestsError" ->
-            "请求过于频繁，被限流了。下一步：等几分钟再试"
+            UserFacingCopy.withNext(
+                AppStrings.s(R.string.aa_err_rate_limit),
+                AppStrings.s(R.string.aa_err_rate_limit_next),
+            )
         "ExceedCapacityForbidden" ->
-            "网盘容量超限，播放被限制。下一步：到阿里云盘清理空间或扩容后再播"
-        else -> "阿里云盘返回错误：$code。下一步：到设置 → 关于与诊断复制诊断包反馈"
+            UserFacingCopy.withNext(
+                AppStrings.s(R.string.aa_err_capacity),
+                AppStrings.s(R.string.aa_err_capacity_next),
+            )
+        else -> UserFacingCopy.withNext(
+            AppStrings.s(R.string.aa_err_unknown, code),
+            AppStrings.s(R.string.aa_err_unknown_next),
+        )
     }
 
-    /** API 响应（带 code 字段）→ 人话 */
+    /** API 响应（带 code 字段）→ 人话；无 code 时保留服务端 message 原文。 */
     fun hint(json: JSONObject): String {
         val code = json.optString("code").ifBlank { json.optString("error") }
         if (code.isNotBlank()) return hint(code)
-        return json.optString("message").ifBlank { "请求失败" }
+        return json.optString("message").ifBlank { AppStrings.s(R.string.aa_request_failed) }
     }
 }

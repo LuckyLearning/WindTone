@@ -374,8 +374,8 @@ class PlaybackEngine(
                 if (h.status == LyricOverlayBus.Status.FAILED) {
                     if (prefs.lyricOverlay) setLyricOverlay(false)
                     messages.post(UserFacingCopy.ensureNext(
-                        "桌面悬浮歌词启动失败：${h.detail}",
-                        "到系统设置开启「显示在其他应用上层」，或到设置 → 歌词关闭后再开",
+                        AppStrings.s(R.string.pe_overlay_start_failed, h.detail),
+                        AppStrings.s(R.string.pe_overlay_start_failed_next),
                     ))
                 }
             }
@@ -394,7 +394,7 @@ class PlaybackEngine(
             LyricOverlayBridge.exitEditingRequests.collect {
                 if (_player.value.overlayEditing) {
                     setOverlayEditing(false)
-                    messages.post("悬浮歌词已自动锁定位置，需要再调整可重新点「调整悬浮歌词位置」")
+                    messages.post(AppStrings.s(R.string.pe_overlay_auto_locked))
                 }
             }
         }
@@ -1281,34 +1281,51 @@ class PlaybackEngine(
         abLoopFromLyric = false
         abLoop = abLoop.markA(pos)
         publishAbLoop()
-        messages.post("已设 A 点 " + formatAbMs(pos))
+        messages.post(AppStrings.s(R.string.pe_ab_marked_a, formatAbMs(pos)))
     }
 
     override fun markAbLoopB() {
         val pos = controller?.currentPosition?.coerceAtLeast(0L) ?: _progress.value.positionMs
         if (!abLoop.canMarkB(pos)) {
             messages.post(
-                if (abLoop.aMs == null) "请先设 A 点。下一步：先点「设 A」再设 B"
-                else "B 点需晚于 A 点。下一步：把进度拖到 A 点之后再设 B",
+                if (abLoop.aMs == null) {
+                    UserFacingCopy.withNext(
+                        AppStrings.s(R.string.pe_ab_need_a),
+                        AppStrings.s(R.string.pe_ab_need_a_next),
+                    )
+                } else {
+                    UserFacingCopy.withNext(
+                        AppStrings.s(R.string.pe_ab_b_after_a),
+                        AppStrings.s(R.string.pe_ab_b_after_a_next),
+                    )
+                },
             )
             return
         }
         abLoopFromLyric = false
         abLoop = abLoop.markB(pos)
         publishAbLoop()
-        messages.post("已设 B 点 " + formatAbMs(pos) + "，区间循环中")
+        messages.post(AppStrings.s(R.string.pe_ab_marked_b, formatAbMs(pos)))
     }
 
     override fun clearAbLoop() {
         val wasLyric = abLoopFromLyric
         clearAbLoopInternal()
-        messages.post(if (wasLyric) "已退出逐句循环" else "已清除 A-B 循环")
+        messages.post(
+            if (wasLyric) AppStrings.s(R.string.pe_lyric_loop_exited)
+            else AppStrings.s(R.string.pe_ab_cleared),
+        )
     }
 
     override fun loopLyricLine(startMs: Long, endMs: Long) {
         val next = AbLoopState.fromInterval(startMs, endMs)
         if (!next.armed) {
-            messages.post("这句没有有效时间轴，无法循环。下一步：换一句有时间戳的歌词，或用播放设置手动设 A/B")
+            messages.post(
+                UserFacingCopy.withNext(
+                    AppStrings.s(R.string.pe_lyric_loop_no_timing),
+                    AppStrings.s(R.string.pe_lyric_loop_no_timing_next),
+                ),
+            )
             return
         }
         abLoop = next
@@ -1317,7 +1334,12 @@ class PlaybackEngine(
         val a = next.aMs!!
         controller?.seekTo(a)
         controller?.play()
-        messages.post("逐句循环中（" + formatAbMs(a) + "–" + formatAbMs(next.bMs!!) + "）。下一步：长按该句或到播放设置清除即可退出")
+        messages.post(
+            UserFacingCopy.withNext(
+                AppStrings.s(R.string.pe_lyric_looping, formatAbMs(a), formatAbMs(next.bMs!!)),
+                AppStrings.s(R.string.pe_lyric_looping_next),
+            ),
+        )
     }
 
     private fun clearAbLoopInternal() {

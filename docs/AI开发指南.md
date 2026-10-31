@@ -2359,3 +2359,12 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 - 单测改 Robolectric `zh-rCN` + `AppStrings.init`
 - 文档：`docs/功能-i18n播放失败文案.md`
 
+### i18n 第 22 批（2026-10-31）
+
+**PlaybackEngine A-B / 逐句 / 悬浮 Toast + AliyunAuth 错误句**：`pe_overlay_*` / `pe_ab_*` / `pe_lyric_*`；AliyunAuth 交换失败与 `AliyunErrors.hint` 进 `aa_*` / `aa_err_*`。API 无 code 时仍原样展示服务端 message。
+
+- SoftEq / 播放内核逻辑 / 云协议本批不改
+- `AliyunAuthTest` 改 Robolectric `zh-rCN` + `AppStrings.init`（hint 断言仍钉中文）
+- 文档：`docs/功能-i18n播放A-B与AliyunAuth.md`
+
+
