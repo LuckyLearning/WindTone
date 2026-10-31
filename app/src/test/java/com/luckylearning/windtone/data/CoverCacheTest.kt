@@ -167,9 +167,21 @@ class CoverCacheTest {
     }
 
     @Test
-    fun `通知封面：已经够小的字节原样返回，不再编解码一次`() {
-        // 上限 64KB 以内：encode/decode 往返只会让画质变差，直接沿用原件
+    fun `通知封面：解不出尺寸且字节小则原样返回`() {
+        // JVM stub / 非图：bounds 长边为 0；≤64KB 沿用原件，避免空转编解码
         val small = ByteArray(1000) { it.toByte() }
         assertSame(small, CoverRepository.downscaleForNotification(small))
+    }
+
+    @Test
+    fun `通知封面：解不出尺寸且字节过大则丢弃`() {
+        // 避免把不明大包塞进 MediaMetadata（旧逻辑会在 decodeScaled 失败后仍 return raw）
+        val big = ByteArray(65 * 1024) { it.toByte() }
+        assertNull(CoverRepository.downscaleForNotification(big))
+    }
+
+    @Test
+    fun `小部件目标边长经 cachePxFor 仍为 128`() {
+        assertEquals(128, CoverRepository.cachePxFor(CoverRepository.WIDGET_COVER_PX))
     }
 }

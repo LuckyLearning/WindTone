@@ -4,6 +4,7 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import com.luckylearning.windtone.data.CoverRepository
 import android.util.Log
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -348,22 +349,9 @@ class PlaybackService : MediaLibraryService() {
         }
     }
 
-    private fun decodeSmall(bytes: ByteArray): Bitmap? = runCatching {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-        var sample = 1
-        var w = bounds.outWidth
-        var h = bounds.outHeight
-        while (w / 2 >= 128 && h / 2 >= 128) {
-            sample *= 2
-            w /= 2
-            h /= 2
-        }
-        BitmapFactory.decodeByteArray(
-            bytes, 0, bytes.size,
-            BitmapFactory.Options().apply { inSampleSize = sample },
-        )
-    }.getOrNull()?.let { com.luckylearning.windtone.diag.BitmapMeter.track(it) }
+    /** 小部件封面：统一走 CoverRepository（RGB_565 + cachePxFor），勿本地 BitmapFactory。 */
+    private fun decodeSmall(bytes: ByteArray): Bitmap? =
+        CoverRepository.decodeForWidget(bytes)
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? =
         mediaSession

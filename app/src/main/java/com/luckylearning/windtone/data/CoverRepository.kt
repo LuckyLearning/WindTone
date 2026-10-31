@@ -63,6 +63,8 @@ object CoverRepository {
     private const val DISK_TRIM_MIN_INTERVAL_MS = 30_000L
     /** 通知栏封面压到这个尺寸（大图标实际只用 256px，留一倍余量给不同 ROM） */
     private const val NOTIFICATION_COVER_PX = 512
+    /** 桌面小部件封面边长（RemoteViews），与旧 decodeSmall 的 ~128 采样目标对齐 */
+    const val WIDGET_COVER_PX = 128
     /** 小于这个体积的封面不必再编解码一次 */
     private const val NOTIFICATION_COVER_INLINE_BYTES = 64 * 1024
 
@@ -356,14 +358,27 @@ object CoverRepository {
      *   3. 通知重建时按全尺寸解码，几 MB 的 JPEG 解出来是几十 MB 的位图。
      * 这里压到 [NOTIFICATION_COVER_PX] / JPEG 85，典型结果 20~60KB，小两个数量级。
      *
-     * 已经够小的字节直接原样返回，省掉一次编解码往返。
+     * 长边已 ≤ 目标且字节 ≤ [NOTIFICATION_COVER_INLINE_BYTES] 才原样返回；
+     * **只看字节不够**——高压缩大图必须仍走降采样。
      *
      * 阻塞函数：调用方负责切到 `Dispatchers.Default`。
      */
     fun downscaleForNotification(raw: ByteArray): ByteArray? {
         if (raw.isEmpty()) return null
-        if (raw.size <= NOTIFICATION_COVER_INLINE_BYTES) return raw
-        val bmp = decodeScaled(raw, NOTIFICATION_COVER_PX) ?: return raw
+        // 先看像素边长：高度压缩的 2000px JPEG 可 < 64KB，旧「按字节跳过」会把大图原样
+        // 塞进 MediaMetadata → 通知/锁屏按全尺寸解码，Binder 与 native 堆一起被打穿。
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(raw, 0, raw.size, bounds)
+        val longSide = maxOf(bounds.outWidth, bounds.outHeight)
+        if (longSide <= 0) {
+            // 非图 / JVM 单测 stub：沿用小字节原样，避免空转编解码
+            return if (raw.size <= NOTIFICATION_COVER_INLINE_BYTES) raw else null
+        }
+        if (longSide <= NOTIFICATION_COVER_PX && raw.size <= NOTIFICATION_COVER_INLINE_BYTES) {
+            return raw
+        }
+        val target = cachePxFor(NOTIFICATION_COVER_PX)
+        val bmp = decodeScaled(raw, target) ?: return raw
         return try {
             val out = ByteArrayOutputStream()
             if (!bmp.compress(Bitmap.CompressFormat.JPEG, 85, out)) return raw
@@ -375,6 +390,15 @@ object CoverRepository {
         } finally {
             bmp.recycle()
         }
+    }
+
+    /**
+     * 桌面小部件 RemoteViews 封面：把已压过的通知 JPEG 解成 RGB_565 位图。
+     * 目标边长经 [cachePxFor]；勿在调用方再开一套 BitmapFactory（易漏 565）。
+     */
+    fun decodeForWidget(bytes: ByteArray, targetPx: Int = WIDGET_COVER_PX): Bitmap? {
+        if (bytes.isEmpty()) return null
+        return decodeScaled(bytes, cachePxFor(targetPx))
     }
 
     /**

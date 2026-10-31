@@ -2064,7 +2064,7 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 
 **改法（三条缺一不可）**：
 
-- 解码尺寸 = 显示像素，**只有 ≥ 512px 的大图**留 1.25 倍余量（`CoverRepository.targetPxFor`）；落盘/位图键再经 `cachePxFor` 分桶（缩略图步长 32、大图 64），避免相邻 px 打穿磁盘命中；
+- 解码尺寸 = 显示像素，**只有 ≥ 512px 的大图**留 1.25 倍余量（`CoverRepository.targetPxFor`）；落盘/位图键再经 `cachePxFor` 分桶（缩略图步长 32、大图 64），避免相邻 px 打穿磁盘命中；通知字节走 `downscaleForNotification`（按**长边**）、小部件走 `decodeForWidget`（RGB_565），勿在 `PlaybackService` 另开 BitmapFactory；
 - 两段式缩放：`inSampleSize` 按**长边**粗降 → `fitSize` 算出精确目标 → `createScaledBitmap` 收尾，
   旧图 `recycle()`（用 `!==` 兜住「尺寸已相同、返回自身」）；
 - 两级内存缓存都按堆比例取上限（位图 `maxMemory/8`、原始 `maxMemory/16`），

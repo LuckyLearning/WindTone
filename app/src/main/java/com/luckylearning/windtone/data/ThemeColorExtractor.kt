@@ -26,7 +26,8 @@ object ThemeColorExtractor {
                 imageBytes, 0, imageBytes.size,
                 BitmapFactory.Options().apply {
                     inSampleSize = sample
-                    inPreferredConfig = Bitmap.Config.ARGB_8888
+                    // 取色只读 RGB 桶；ARGB_8888 峰值约为 565 的两倍，无 alpha 收益
+                    inPreferredConfig = Bitmap.Config.RGB_565
                 },
             )
         }.getOrNull() ?: return null
