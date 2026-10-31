@@ -9,7 +9,9 @@ import android.os.PowerManager
 import android.os.Process
 import android.provider.Settings
 import android.util.Log
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.Prefs
+import com.luckylearning.windtone.ui.AppStrings
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -140,7 +142,7 @@ internal object ForegroundProbe {
                 AppOpsManager.MODE_DEFAULT -> "MODE_DEFAULT(3)"
                 else -> "MODE_$m"
             }
-        }.getOrElse { "查询失败：${it.javaClass.simpleName}" }
+        }.getOrElse { AppStrings.s(R.string.fp_query_failed, it.javaClass.simpleName) }
 
         val ignoringBattery = ForegroundAppDetector.ignoringBatteryOptimizations(context)
 
@@ -189,7 +191,7 @@ internal object ForegroundProbe {
             backgroundRestricted = ForegroundAppDetector.backgroundRestricted(context),
             runInBackgroundMode = ForegroundAppDetector.runInBackgroundMode(context),
             batteryCandidates = ForegroundAppDetector.batteryOptimizationIntents(context).map {
-                Candidate("电池优化", describe(it), resolvable(it))
+                Candidate(AppStrings.s(R.string.fp_label_battery), describe(it), resolvable(it))
             },
             usageStatsMode = mode,
             usageStatsGranted = ForegroundAppDetector.usageStatsGranted(context),
@@ -197,11 +199,11 @@ internal object ForegroundProbe {
             currentForeground = ForegroundAppDetector.currentForegroundPackage(context),
             settingsApps = settingsApps,
             candidates = (accessibilityCandidates.map {
-                Candidate("无障碍", describe(it), resolvable(it))
+                Candidate(AppStrings.s(R.string.fp_label_a11y), describe(it), resolvable(it))
             } + usageCandidates.map {
-                Candidate("使用情况", describe(it), resolvable(it))
+                Candidate(AppStrings.s(R.string.fp_label_usage), describe(it), resolvable(it))
             } + Candidate(
-                "系统设置首页",
+                AppStrings.s(R.string.fp_label_settings_home),
                 Settings.ACTION_SETTINGS,
                 resolvable(ForegroundAppDetector.systemSettingsIntent()),
             )),
@@ -264,94 +266,138 @@ internal object ForegroundProbe {
     fun buildReport(facts: Facts): String {
         val time = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date(facts.collectedAt))
         val sb = StringBuilder()
+        fun s(id: Int, vararg args: Any) = AppStrings.s(id, *args)
+        fun mark(ok: Boolean) = if (ok) s(R.string.fp_resolvable) else s(R.string.fp_not_resolvable)
 
-        sb.appendLine("=== 听风 · 前台识别排障报告 ===")
-        sb.appendLine("采集时间：$time")
-        sb.appendLine("机型：${facts.manufacturer} ${facts.model}（${facts.device}）")
-        sb.appendLine("系统：Android ${facts.androidRelease}（API ${facts.sdkInt}）")
-        sb.appendLine("应用：${facts.appPackage} v${facts.appVersion}")
+        sb.appendLine(s(R.string.fp_report_title))
+        sb.appendLine(s(R.string.fp_collected_at, time))
+        sb.appendLine(s(R.string.fp_device, facts.manufacturer, facts.model, facts.device))
+        sb.appendLine(s(R.string.fp_system, facts.androidRelease, facts.sdkInt))
+        sb.appendLine(s(R.string.fp_app, facts.appPackage, facts.appVersion))
         sb.appendLine()
 
-        sb.appendLine("[结论]")
-        sb.appendLine("· 无障碍设置页：${if (facts.accessibilityPageResolvable) "本机可打开" else "本机没有这个页面（被系统裁剪）"}")
-        sb.appendLine("· 无障碍服务：${if (facts.accessibilityServiceEnabled) "已开启" else "未开启"}")
-        sb.appendLine("· 使用情况访问：${if (facts.usageStatsGranted) "已授权" else "未授权"}")
-        sb.appendLine("· 建议走哪条：${recommend(facts)}")
+        sb.appendLine(s(R.string.fp_sec_conclusion))
+        sb.appendLine(
+            s(
+                R.string.fp_a11y_page,
+                s(if (facts.accessibilityPageResolvable) R.string.fp_a11y_page_ok else R.string.fp_a11y_page_missing),
+            ),
+        )
+        sb.appendLine(
+            s(
+                R.string.fp_a11y_service,
+                s(if (facts.accessibilityServiceEnabled) R.string.fp_a11y_on else R.string.fp_a11y_off),
+            ),
+        )
+        sb.appendLine(
+            s(
+                R.string.fp_usage,
+                s(if (facts.usageStatsGranted) R.string.fp_usage_granted else R.string.fp_usage_denied),
+            ),
+        )
+        sb.appendLine(s(R.string.fp_recommend, recommend(facts)))
         sb.appendLine()
 
-        sb.appendLine("[无障碍]")
-        sb.appendLine("服务已声明在案：${yesNo(facts.serviceDeclared)}（exported=${yesNo(facts.serviceExported)}）")
-        sb.appendLine("系统总开关 ACCESSIBILITY_ENABLED：${yesNo(facts.accessibilityMasterEnabled)}")
-        sb.appendLine("掉线看护（曾开启过）：${yesNo(facts.watchdogSeenOn)}")
+        sb.appendLine(s(R.string.fp_sec_a11y))
+        sb.appendLine(s(R.string.fp_service_declared, yesNo(facts.serviceDeclared), yesNo(facts.serviceExported)))
+        sb.appendLine(s(R.string.fp_a11y_master, yesNo(facts.accessibilityMasterEnabled)))
+        sb.appendLine(s(R.string.fp_watchdog, yesNo(facts.watchdogSeenOn)))
         val connectedAt = if (facts.serviceLastConnectedAt > 0L) {
             SimpleDateFormat("MM-dd HH:mm:ss", Locale.US).format(Date(facts.serviceLastConnectedAt))
         } else {
-            "从未连上"
+            s(R.string.fp_never_connected)
         }
-        sb.appendLine("本服务上次被系统连上：$connectedAt")
+        sb.appendLine(s(R.string.fp_last_connected, connectedAt))
         val ours = "${facts.appPackage}/${ForegroundAppService::class.java.name}"
         val running = facts.activeServices.any { it.equals(ours, ignoreCase = true) }
         sb.appendLine(
-            "系统认为在跑的服务里含本服务：${yesNo(running)}" +
-                if (facts.activeServices.isEmpty()) "（列表为空：勾着但没绑上，事件不会来）" else "",
+            s(
+                R.string.fp_service_running,
+                yesNo(running),
+                if (facts.activeServices.isEmpty()) s(R.string.fp_service_list_empty) else "",
+            ),
         )
-        sb.appendLine("已启用服务列表（截断 400 字）：${facts.enabledAccessibilityServices.take(400).ifBlank { "（空）" }}")
+        sb.appendLine(
+            s(
+                R.string.fp_enabled_services,
+                facts.enabledAccessibilityServices.take(400).ifBlank { s(R.string.fp_empty) },
+            ),
+        )
         sb.appendLine()
 
-        sb.appendLine("[使用情况访问]")
-        sb.appendLine("AppOps android:get_usage_stats：${facts.usageStatsMode}")
-        sb.appendLine("判定为已授权：${yesNo(facts.usageStatsGranted)}")
-        sb.appendLine("当前前台包名：${facts.currentForeground ?: "（查不到，通常是没有授权）"}")
-        sb.appendLine("logcat 可读：${yesNo(facts.logcatReadable)}")
+        sb.appendLine(s(R.string.fp_sec_usage))
+        sb.appendLine(s(R.string.fp_usage_appops, facts.usageStatsMode))
+        sb.appendLine(s(R.string.fp_usage_judged, yesNo(facts.usageStatsGranted)))
+        sb.appendLine(
+            s(
+                R.string.fp_fg_pkg,
+                facts.currentForeground ?: s(R.string.fp_fg_unavailable),
+            ),
+        )
+        sb.appendLine(s(R.string.fp_logcat, yesNo(facts.logcatReadable)))
         sb.appendLine()
 
-        sb.appendLine("[后台限制]")
+        sb.appendLine(s(R.string.fp_sec_bg))
         sb.appendLine(
-            "电池优化白名单：${
-                if (facts.ignoringBatteryOptimizations) "已加入（后台保活正常）" else "未加入"
-            }",
+            s(
+                R.string.fp_battery_whitelist,
+                s(if (facts.ignoringBatteryOptimizations) R.string.fp_battery_in else R.string.fp_battery_out),
+            ),
         )
-        sb.appendLine("省电模式：${yesNo(facts.powerSaveMode)}")
+        sb.appendLine(s(R.string.fp_power_save, yesNo(facts.powerSaveMode)))
         sb.appendLine(
-            "系统标记「限制后台活动」：${
+            s(
+                R.string.fp_bg_restricted,
                 when (facts.backgroundRestricted) {
-                    true -> "是（这个应用被系统限后台了）"
-                    false -> "否"
-                    null -> "查不到（系统版本较低）"
-                }
-            }",
+                    true -> s(R.string.fp_bg_restricted_yes)
+                    false -> s(R.string.fp_bg_restricted_no)
+                    null -> s(R.string.fp_bg_restricted_unknown)
+                },
+            ),
         )
-        sb.appendLine("AppOps runAnyInBackground：${facts.runInBackgroundMode}")
-        sb.appendLine("电池优化页候选：")
+        sb.appendLine(s(R.string.fp_run_bg_appops, facts.runInBackgroundMode))
+        sb.appendLine(s(R.string.fp_battery_candidates))
         if (facts.batteryCandidates.isEmpty()) {
-            sb.appendLine("（没有候选）")
+            sb.appendLine(s(R.string.fp_no_candidates))
         } else {
             facts.batteryCandidates.forEach { c ->
-                sb.appendLine("[${if (c.resolvable) "可解析" else "  ×  "}] ${c.target}")
+                sb.appendLine(s(R.string.fp_candidate_line, mark(c.resolvable), c.target))
             }
         }
         sb.appendLine()
 
-        sb.appendLine("[不显示悬浮窗的应用]")
+        sb.appendLine(s(R.string.fp_sec_hidden))
         if (facts.hiddenApps.isEmpty()) {
-            sb.appendLine("（名单为空，功能不生效是预期）")
+            sb.appendLine(s(R.string.fp_hidden_empty))
         } else {
             facts.hiddenApps.forEach { pkg ->
                 val hit = pkg == facts.liveForeground
-                sb.appendLine("· $pkg${if (hit) "  ← 当前正是它" else ""}")
+                sb.appendLine(
+                    s(
+                        R.string.fp_hidden_item,
+                        pkg,
+                        if (hit) s(R.string.fp_hidden_hit) else "",
+                    ),
+                )
             }
         }
-        sb.appendLine("事件看到的前台：${facts.liveForeground ?: "（还没有收到任何事件）"}")
         sb.appendLine(
-            "名单是否命中：${
-                if (facts.liveForeground != null && facts.liveForeground in facts.hiddenApps) "是" else "否"
-            }",
+            s(
+                R.string.fp_live_fg,
+                facts.liveForeground ?: s(R.string.fp_no_events),
+            ),
+        )
+        sb.appendLine(
+            s(
+                R.string.fp_list_hit,
+                yesNo(facts.liveForeground != null && facts.liveForeground in facts.hiddenApps),
+            ),
         )
         sb.appendLine()
 
-        sb.appendLine("[最近的前台切换（旧的在前）]")
+        sb.appendLine(s(R.string.fp_sec_switches))
         if (facts.recentSwitches.isEmpty()) {
-            sb.appendLine("（空：无障碍服务可能还没收到窗口事件，或进程刚重启）")
+            sb.appendLine(s(R.string.fp_switches_empty))
         } else {
             val fmt = SimpleDateFormat("HH:mm:ss", Locale.US)
             facts.recentSwitches.takeLast(20).forEach { (pkg, at) ->
@@ -360,14 +406,14 @@ internal object ForegroundProbe {
         }
         sb.appendLine()
 
-        sb.appendLine("[设置类应用]")
+        sb.appendLine(s(R.string.fp_sec_settings_apps))
         if (facts.settingsApps.isEmpty()) {
-            sb.appendLine("（从启动器里没找到设置类应用，可能被系统隐藏）")
+            sb.appendLine(s(R.string.fp_settings_apps_empty))
         } else {
             facts.settingsApps.forEach { app ->
-                sb.appendLine("· ${app.packageName} v${app.versionName}")
+                sb.appendLine(s(R.string.fp_settings_app_item, app.packageName, app.versionName))
                 if (app.accessibilityActivities.isEmpty()) {
-                    sb.appendLine("    无 accessibility 相关 Activity")
+                    sb.appendLine(s(R.string.fp_no_a11y_activity))
                 } else {
                     app.accessibilityActivities.forEach { sb.appendLine("    $it") }
                 }
@@ -375,35 +421,37 @@ internal object ForegroundProbe {
         }
         sb.appendLine()
 
-        sb.appendLine("[候选 Intent 解析]")
+        sb.appendLine(s(R.string.fp_sec_candidates))
         facts.candidates.forEach { c ->
-            sb.appendLine("[${if (c.resolvable) "可解析" else "  ×  "}] ${c.label}：${c.target}")
+            sb.appendLine(s(R.string.fp_candidate_labeled, mark(c.resolvable), c.label, c.target))
         }
         sb.appendLine()
 
         // 车机上「无障碍页被裁」时的唯一硬路子（社区实践：MacroDroid / 按键助手都是这么开的）。
         // 必须提醒会覆盖原列表 —— 直接把原值接在前面，否则用户会把别人的服务顶掉。
-        sb.appendLine("[可选的 adb 方式（仅能连 ADB 时）]")
-        sb.appendLine("注意：下面第一条会**覆盖**已启用服务列表，务必把现有值接在前面，用冒号分隔；")
-        sb.appendLine("      2026 款起部分 DiLink 固件已收紧 ADB，此路可能不通。")
+        sb.appendLine(s(R.string.fp_sec_adb))
+        sb.appendLine(s(R.string.fp_adb_note1))
+        sb.appendLine(s(R.string.fp_adb_note2))
         sb.appendLine("adb shell settings put secure enabled_accessibility_services " +
             "${facts.enabledAccessibilityServices.ifBlank { "" }.let { if (it.isBlank()) "" else "$it:" }}" +
             "${facts.appPackage}/${ForegroundAppService::class.java.name}")
         sb.appendLine("adb shell settings put secure accessibility_enabled 1")
         sb.appendLine()
-        sb.appendLine("=== 报告结束 ===")
+        sb.appendLine(s(R.string.fp_report_end))
         return sb.toString()
     }
 
     private fun recommend(facts: Facts): String = when {
-        facts.accessibilityServiceEnabled -> "无障碍（事件即时）"
-        facts.accessibilityPageResolvable -> "无障碍优先；打不开再用使用情况访问"
-        facts.usageStatsGranted -> "使用情况访问（本机没有无障碍页，延迟约 1.5 秒）"
-        facts.usageAccessPageResolvable -> "去开使用情况访问（本机没有无障碍页）"
-        else -> "两个页面都被裁掉：只能靠 adb 授权，否则按应用隐藏不可用"
+        facts.accessibilityServiceEnabled -> AppStrings.s(R.string.fp_rec_a11y)
+        facts.accessibilityPageResolvable -> AppStrings.s(R.string.fp_rec_a11y_first)
+        facts.usageStatsGranted -> AppStrings.s(R.string.fp_rec_usage)
+        facts.usageAccessPageResolvable -> AppStrings.s(R.string.fp_rec_open_usage)
+        else -> AppStrings.s(R.string.fp_rec_adb_only)
     }
 
-    private fun yesNo(v: Boolean) = if (v) "是" else "否"
+    private fun yesNo(v: Boolean) =
+        AppStrings.s(if (v) R.string.fp_yes else R.string.fp_no)
+
 
     /**
      * 把报告落盘到应用私有目录（卸载即清），返回路径。
@@ -419,7 +467,7 @@ internal object ForegroundProbe {
         file.writeText(report)
         file.absolutePath
     }.getOrElse {
-        Log.w(TAG, "报告落盘失败", it)
+        Log.w(TAG, AppStrings.s(R.string.fp_save_failed), it)
         null
     }
 }

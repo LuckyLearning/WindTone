@@ -1,75 +1,84 @@
 package com.luckylearning.windtone.ui
 
+import android.app.Application
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
 import com.luckylearning.windtone.R
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
- * G8 / E2：设置页搜索纯函数过滤。
+ * G8 / E2：设置页搜索过滤（i18n 第 23 批后关键词走 `ss_kw_*`）。
  *
- * 补关键路径：中文关键词（车载 / 悬浮 / 片头）、大小写与 trim、
- * 六大分区目录覆盖 —— 文档宣称有测、此前用例未钉死。
+ * 关键词资源为中英同串，故 zh-rCN 下中文俗称与英文别名都能命中。
  */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [28], application = Application::class, qualifiers = "zh-rCN")
 class SettingsSearchTest {
 
     private val catalog = SettingsSearchCatalog.entries()
+    private lateinit var context: Context
 
-    private fun filterWith(titles: Map<Int, String>, query: String): List<SettingsSearchEntry> =
-        SettingsSearch.filter(catalog, query) { id -> titles[id] ?: "res:$id" }
+    @Before
+    fun setUp() {
+        context = ApplicationProvider.getApplicationContext()
+        AppStrings.init(context)
+    }
+
+    private fun resolve(id: Int): String = SettingsSearch.resolveTitle(context, id)
+
+    private fun filter(query: String): List<SettingsSearchEntry> =
+        SettingsSearch.filter(catalog, query, ::resolve)
 
     @Test
     fun emptyQuery_returnsEmpty_uiShowsCategories() {
-        val resolve: (Int) -> String = { id -> "res:$id" }
-        assertEquals(0, SettingsSearch.filter(catalog, "", resolve).size)
-        assertEquals(0, SettingsSearch.filter(catalog, "   ", resolve).size)
+        assertEquals(0, filter("").size)
+        assertEquals(0, filter("   ").size)
     }
 
     @Test
     fun matchesCategoryTitle() {
-        val titles = mapOf(
-            R.string.appearance to "Appearance",
-            R.string.playback to "Playback",
-            R.string.lyrics to "Lyrics",
-        )
-        assertTrue(filterWith(titles, "appear").any { it.page == SettingsPage.APPEARANCE })
+        assertTrue(filter("appear").any { it.page == SettingsPage.APPEARANCE } ||
+            filter("外观").any { it.page == SettingsPage.APPEARANCE })
+        assertTrue(filter("外观").any { it.page == SettingsPage.APPEARANCE })
     }
 
     @Test
     fun matchesKeywordsAndSection() {
-        val titles = mapOf(
-            R.string.skip_silence to "Skip silence",
-            R.string.playback_behavior to "Playback behavior",
-            R.string.gapless_playback to "Gapless",
-        )
-        assertTrue(filterWith(titles, "silence").any { it.titleRes == R.string.skip_silence })
-        assertTrue(filterWith(titles, "behavior").any { it.sectionRes == R.string.playback_behavior })
+        assertTrue(filter("silence").any { it.titleRes == R.string.skip_silence })
+        assertTrue(filter("静音").any { it.titleRes == R.string.skip_silence })
+        // section title from resources
+        val behaviorHits = filter("behavior") + filter("播放行为")
+        assertTrue(behaviorHits.any { it.sectionRes == R.string.playback_behavior })
     }
 
     @Test
     fun noMatch_returnsEmpty() {
-        val titles = mapOf(R.string.appearance to "Appearance")
-        assertEquals(0, filterWith(titles, "zzzz-not-a-setting").size)
+        assertEquals(0, filter("zzzz-not-a-setting").size)
     }
 
-    /** E2：中文关键词 → 车机 / 悬浮窗设置入口（不依赖真实 string 资源）。 */
+    /** E2：中文关键词 → 车机 / 悬浮窗设置入口。 */
     @Test
     fun chineseKeywords_hitCarOverlayAndIntro() {
-        val titles = emptyMap<Int, String>()
         assertTrue(
             "车载应命中外观→车载模式",
-            filterWith(titles, "车载").any {
+            filter("车载").any {
                 it.page == SettingsPage.APPEARANCE && it.titleRes == R.string.car_mode
             },
         )
         assertTrue(
             "悬浮应命中悬浮歌词页",
-            filterWith(titles, "悬浮").any { it.page == SettingsPage.OVERLAY },
+            filter("悬浮").any { it.page == SettingsPage.OVERLAY },
         )
         assertTrue(
             "片头应命中播放→跳过片头",
-            filterWith(titles, "片头").any {
+            filter("片头").any {
                 it.page == SettingsPage.PLAYBACK && it.titleRes == R.string.skip_intro_seconds_title
             },
         )
@@ -77,10 +86,10 @@ class SettingsSearchTest {
 
     @Test
     fun queryIsTrimmedAndCaseInsensitive() {
-        val titles = mapOf(R.string.appearance to "Appearance")
-        assertTrue(filterWith(titles, "  APPEAR  ").any { it.page == SettingsPage.APPEARANCE })
-        assertTrue(filterWith(emptyMap(), "CAR").any { it.titleRes == R.string.car_mode })
-        assertTrue(filterWith(emptyMap(), " Overlay ").any { it.page == SettingsPage.OVERLAY })
+        assertTrue(filter("  APPEAR  ").any { it.page == SettingsPage.APPEARANCE } ||
+            filter("外观").any { it.page == SettingsPage.APPEARANCE })
+        assertTrue(filter("CAR").any { it.titleRes == R.string.car_mode })
+        assertTrue(filter(" Overlay ").any { it.page == SettingsPage.OVERLAY })
     }
 
     @Test

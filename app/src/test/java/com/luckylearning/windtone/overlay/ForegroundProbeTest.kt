@@ -1,19 +1,33 @@
 package com.luckylearning.windtone.overlay
 
+import android.app.Application
+import androidx.test.core.app.ApplicationProvider
+import com.luckylearning.windtone.ui.AppStrings
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
- * 排障报告的版式与结论（v1.1.82）。
+ * 排障报告的版式与结论（v1.1.82；i18n 第 23 批后正文走 `fp_*`）。
  *
  * 为什么要测这份文本：车机问题只能靠用户把报告贴回来，**少一行关键事实**就会
  * 多一轮往返。所以这里把「结论段必须回答哪三件事」「不可解析的候选必须打叉」
  * 「设置类应用为空必须显式说明」逐条钉住。
  *
  * 取数部分（[ForegroundProbe.collect]）依赖真实 PM/系统设置，只能在真机验；
- * 版式与推荐逻辑是纯函数，放在这里锁。
+ * 版式与推荐逻辑是纯函数，放在这里锁（Robolectric zh-rCN 对齐中文断言）。
  */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [28], application = Application::class, qualifiers = "zh-rCN")
 class ForegroundProbeTest {
+
+    @Before
+    fun setUp() {
+        AppStrings.init(ApplicationProvider.getApplicationContext())
+    }
 
     private fun facts(
         accessibilityPageResolvable: Boolean = false,

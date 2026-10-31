@@ -2367,4 +2367,13 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 - `AliyunAuthTest` 改 Robolectric `zh-rCN` + `AppStrings.init`（hint 断言仍钉中文）
 - 文档：`docs/功能-i18n播放A-B与AliyunAuth.md`
 
+### i18n 第 23 批（2026-11-01）
+
+**设置搜索关键词 + ForegroundProbe 排障报告**：`ss_kw_*`（中英同串，保证双语命中）；`fp_*` 前台识别排障报告正文与 Candidate 标签。
+
+- SoftEq / 播放内核 / DiagnosticsReport 外壳本批不改
+- `SettingsSearchTest` / `ForegroundProbeTest` → Robolectric `zh-rCN` + `AppStrings.init`
+- 文档：`docs/功能-i18n设置搜索与排障报告.md`
+
+
 
