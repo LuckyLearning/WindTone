@@ -40,6 +40,62 @@ class BootTraceTest {
         assertNull(BootTrace.lastIncompleteBoot(context))
     }
 
+    // ---------------------------------------------------------------- 攒批落盘（v1.2.40）
+
+    @Test
+    fun onlyEvidenceLinesForceAWrite() {
+        assertTrue(BootTrace.mustFlushImmediately(BootTrace.STAGE_APP))
+        assertTrue(BootTrace.mustFlushImmediately(BootTrace.STAGE_FRAME))
+        assertTrue(BootTrace.mustFlushImmediately("fail:cover"))
+        assertFalse(BootTrace.mustFlushImmediately(BootTrace.STAGE_ACTIVITY))
+        assertFalse(BootTrace.mustFlushImmediately(BootTrace.STAGE_CONTENT))
+        assertFalse(BootTrace.mustFlushImmediately("boot:prefs"))
+    }
+
+    @Test
+    fun batchedWritesKeepEveryLine() {
+        // 攒批的前提是「内容一个字都不能少」：冷启动十几行里丢任何一行，
+        // 都可能正好丢掉定位黑屏要用的那一阶段。20 行跨越阈值（12）多次，
+        // 顺带验证 flush 之后不会把已写的行再写一遍。
+        BootTrace.begin(context)
+        repeat(20) { BootTrace.mark(context, "step:$it") }
+        BootTrace.mark(context, BootTrace.STAGE_FRAME)
+
+        BootTrace.begin(context)   // 上一轮滚动成 prev.txt
+        val prev = BootTrace.previous(context)
+        assertNotNull(prev)
+        // 1 行 app:onCreate + 20 行 step + 1 行 frame
+        assertEquals(22, prev!!.lines.size)
+        assertEquals(BootTrace.STAGE_APP, prev.lines.first().stage)
+        assertEquals(BootTrace.STAGE_FRAME, prev.lastStage)
+        assertTrue(prev.reachedFrame)
+    }
+
+    @Test
+    fun failureFlushesImmediately() {
+        // 失败行是最要紧的证物：进程可能在下一行之前就被杀，不能让它躺在内存里
+        BootTrace.begin(context)
+        BootTrace.mark(context, "boot:prefs")
+        BootTrace.fail(context, "integrity", RuntimeException("boom"))
+
+        val file = java.io.File(bootDir(), "trace.txt")
+        val text = file.readText()
+        assertTrue(text.contains("fail:integrity"))
+        assertTrue(text.contains("boot:prefs"))
+    }
+
+    @Test
+    fun incompleteVerdictCanBeDerivedFromAReadRecord() {
+        // MainActivity 只读一次 prev.txt，判定复用同一份对象
+        BootTrace.begin(context)
+        BootTrace.mark(context, BootTrace.STAGE_CONTENT)
+        BootTrace.begin(context)
+
+        val prev = BootTrace.previous(context)!!
+        assertTrue(BootTrace.isIncomplete(prev))
+        assertEquals(prev, BootTrace.lastIncompleteBoot(context))
+    }
+
     @Test
     fun bootWithoutFirstFrameIsReported() {
         // 第一轮：走到了 setContent，但一帧都没画出去（车机黑屏就是这个形状）

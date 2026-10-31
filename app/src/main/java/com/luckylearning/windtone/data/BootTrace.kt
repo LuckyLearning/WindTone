@@ -26,12 +26,23 @@ import java.util.Locale
  * 决定要不要弹诊断页的依据。
  *
  * 记录本身很便宜：冷启动只写十几行，滚动覆盖单个文件。
+ *
+ * v1.2.40：写盘方式从「每记一行就 append 一次」改成攒批。
+ * 原实现每一条 `mark()` 都是一次 `open → write → close` 的同步主线程 I/O，
+ * 一次冷启动十五行就是十五次；诊断包实测的 `onCreate → setContent` 那 2.45s
+ * 里，这是唯一成规模且纯粹浪费的开销。现在只在三类时刻真正落盘：
+ *   1. `app:onCreate` —— 进程确实起来了，这条不能丢；
+ *   2. 任何 `fail:` 行 —— 出错时的上下文是最要紧的证物；
+ *   3. 首帧 / 攒够 [FLUSH_THRESHOLD] 行。
  */
 object BootTrace {
 
     private const val DIR_NAME = "boot"
     private const val CURRENT = "trace.txt"
     private const val PREVIOUS = "prev.txt"
+
+    /** 攒够这么多行落一次盘（fail / 首帧 / 首行不受此限，见类注释） */
+    private const val FLUSH_THRESHOLD = 12
 
     const val STAGE_APP = "app:onCreate"
     const val STAGE_ACTIVITY = "activity:onCreate"
@@ -48,6 +59,20 @@ object BootTrace {
     @Volatile
     private var startAt = 0L
 
+    /** 待落盘的行；`mark()` 可能来自主线程以外的兜底路径，所以加锁 */
+    private val lock = Any()
+    private val pending = StringBuilder(512)
+    private var pendingLines = 0
+
+    /**
+     * 哪些阶段必须立刻落盘，不能等攒够。
+     *
+     * 判据是「这一行本身是不是关键证物」：进程起来了、首帧画出来了、某一步失败了。
+     * 抽成纯函数是为了单测能直接断言，不必真的去碰文件系统。
+     */
+    internal fun mustFlushImmediately(stage: String): Boolean =
+        stage == STAGE_APP || stage == STAGE_FRAME || stage.startsWith(FAIL_PREFIX)
+
     /**
      * 在 `Application.onCreate` 的最开头调用。
      *
@@ -55,6 +80,10 @@ object BootTrace {
      * 不能因为本次启动就冲掉。
      */
     fun begin(context: Context) {
+        // 先把仍攒着的行落下去 —— 它们属于上一轮，一旦下面把 trace.txt 改名成
+        // prev.txt，这些行就再也回不到该去的那一轮里了（表现为上一轮只剩第一行）。
+        // 进程被复用时的残留同理：该留的留，不该留的由 rollover 自然覆盖。
+        flush(context)
         val dir = dir(context)
         runCatching {
             File(dir, PREVIOUS).delete()
@@ -76,10 +105,28 @@ object BootTrace {
                 append('\t')
                 append(note.replace("\r", " ").replace('\n', ' ').replace('\t', ' '))
             }
+            append('\n')
         }
-        runCatching {
-            File(dir(context), CURRENT).appendText(line + "\n")
+        val force = mustFlushImmediately(stage)
+        synchronized(lock) {
+            pending.append(line)
+            pendingLines++
+            if (force || pendingLines >= FLUSH_THRESHOLD) flushLocked(context)
         }
+    }
+
+    /** 主动把攒着的行落盘（首帧之后、进后台之前用） */
+    fun flush(context: Context) {
+        synchronized(lock) { flushLocked(context) }
+    }
+
+    /** 调用方必须持有 [lock] */
+    private fun flushLocked(context: Context) {
+        if (pending.isEmpty()) return
+        val text = pending.toString()
+        pending.setLength(0)
+        pendingLines = 0
+        runCatching { File(dir(context), CURRENT).appendText(text) }
     }
 
     /**
@@ -116,7 +163,16 @@ object BootTrace {
      * 只要他点过「进入应用」，最后一行就会被 [STAGE_CONTENT] 覆盖，信号不会丢。
      */
     fun lastIncompleteBoot(context: Context): BootRecord? =
-        previous(context)?.takeIf { !it.reachedFrame && !it.stoppedAtDiag }
+        previous(context)?.takeIf { isIncomplete(it) }
+
+    /**
+     * 「上一轮没画出首帧」的判据，与 [lastIncompleteBoot] 共用同一份。
+     *
+     * 拆出来是为了让调用方只读一次文件就能同时拿到完整记录和这个判定 ——
+     * 之前 MainActivity 是 `previous()` 和 `lastIncompleteBoot()` 各调一次，
+     * 同一个 prev.txt 开了两遍流。
+     */
+    fun isIncomplete(record: BootRecord): Boolean = !record.reachedFrame && !record.stoppedAtDiag
 
     fun parse(text: String): List<BootLine> = text.lineSequence()
         .mapNotNull { raw ->

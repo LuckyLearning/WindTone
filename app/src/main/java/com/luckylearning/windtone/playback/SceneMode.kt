@@ -87,7 +87,9 @@ object SceneMode {
             }
             is SceneProfiles.ColdStart.Reapply -> {
                 DiagLog.log("SCENE", "冷启动重套 ${plan.id}")
-                apply(plan.id, captureBaseline = false)
+                // force：此时的 activeId 是从 Prefs 读回来的同一个 id，
+                // 但音效链是进程重启后全新的，必须真的套一遍
+                apply(plan.id, captureBaseline = false, force = true)
             }
         }
     }
@@ -95,10 +97,18 @@ object SceneMode {
     /**
      * @param captureBaseline 为 true 且尚无 stash 时拍进档前快照（用户点选进档）。
      *   冷启动重套传 false，沿用已落盘 stash。
+     * @param force 跳过幂等判断。只有冷启动重套需要：那时 [activeId] 已经从 Prefs
+     *   恢复成同一个 id，但音效链是进程重启后全新的，必须真的套一遍。
      */
-    fun apply(id: String, captureBaseline: Boolean = true) {
+    fun apply(id: String, captureBaseline: Boolean = true, force: Boolean = false) {
         val profile = SceneProfiles.byId(id) ?: return
         val p = prefs ?: return
+        // 幂等（v1.2.40）：已经身处这一档就什么都不做。
+        // 车机诊断包实测过 2.7 秒内「套用 commute → 套用 drive → 退出还原」三轮，
+        // 每一轮都要重建音效链、写两处 Prefs、再推一次状态流。重复套同一档是最
+        // 常见的那一类，拦掉它不改变任何可见结果 —— 人已经在档里了，再套一次
+        // 得到的完全一样。不同档之间的切换（commute → drive）是真实意图，不拦。
+        if (!force && _activeId.value == id && p.sceneId == id) return
         val h = hooks
         if (SceneProfiles.shouldCaptureBaseline(captureBaseline, p.sceneStash)) {
             p.sceneStash = SceneStash.encode(capture(p, h))
@@ -134,6 +144,9 @@ object SceneMode {
 
     fun exit() {
         val p = prefs ?: return
+        // 本来就不在任何场景里（三者皆空）：不用再走一遍还原动作。
+        // 任一非空都照常往下走 —— 那属于状态残留，正是要清掉的东西。
+        if (_activeId.value.isEmpty() && p.sceneId.isEmpty() && p.sceneStash.isEmpty()) return
         val raw = p.sceneStash
         p.sceneStash = SettingsDefaults.SCENE_STASH
         p.sceneId = SettingsDefaults.SCENE_ID

@@ -77,13 +77,13 @@ class MainActivity : ComponentActivity() {
         val pendingCrash = runCatching { CrashLog.latestUnseen(applicationContext) }.getOrNull()
         // 2026-10-31：车机诊断包里 `activity:onCreate → setContent` 有一段 2.45s 的空档，
         // 而这两行之间只有下面三处 I/O。分三段埋点，下次冷启动就能看 trace 直接定位，
-        // 不必再靠猜。埋点走 BootTrace 的追加写（一次 open/close 约 1ms），
-        // 比起「能定位」这点代价可以接受 —— 这里刻意不为省 I/O 改成内存缓冲，
-        // 那会破坏「进程被杀也能留下痕迹」这个立身之本。
+        // 不必再靠猜。埋点本身在 v1.2.40 已改为攒批落盘（只在首行 / 失败 / 首帧 / 攒够
+        // 12 行时写），所以「能留下进程被杀时的痕迹」和「不刷十几次 I/O」两者兼得。
         BootTrace.mark(this, "boot:crash-scan")
         val previousBoot = runCatching { BootTrace.previous(applicationContext) }.getOrNull()
-        // 判据只在 BootTrace 里写一份，这里不重复实现
-        val incomplete = runCatching { BootTrace.lastIncompleteBoot(applicationContext) }.getOrNull()
+        // 判据只在 BootTrace 里写一份，这里不重复实现；顺带复用上面那一次读，
+        // 不为同一个 prev.txt 再开一遍流。
+        val incomplete = previousBoot?.takeIf { BootTrace.isIncomplete(it) }
         BootTrace.mark(this, "boot:trace-read")
 
         if (BuildConfig.BOOT_DIAG || pendingCrash != null || incomplete != null) {

@@ -1843,10 +1843,35 @@ class PlaybackEngine(
         }
     }
 
+    /**
+     * 进度轮询（v1.2.40 重写为分层节流）。
+     *
+     * 原实现是「播放中 200ms 一轮，每轮把 position / buffered / duration / isPlaying
+     * 全取一遍，再挨个做六件事」。在车机上这是常驻 CPU 的最大单项：每秒 5 轮 ×
+     * 至少 4 次 Media3 跨进程调用，外加每轮 new 一个进度对象广播给整个播放页。
+     *
+     * 重写按「谁真的需要多高的频率」分层：
+     *  - 位置（进度条）：500ms 足够 —— 5 分钟的歌每轮只走 1/600，肉眼分辨不出
+     *  - 缓冲段：2s —— 只用来画缓冲条，快了没有意义
+     *  - 时长：换轨才变，按 mediaId 缓存失效
+     *  - 收听统计：1s —— 内部按时间差累加，降频不影响总量
+     *  - 睡眠淡出 / 锁屏歌词：只在真的有事做时才算，且各留一次「收尾」边沿
+     *
+     * 两个边沿（sleepFadeWasActive / lastHadLyrics）不能省：跳过调用的同时，
+     * 必须保证「定时被取消 → 音量复位」「这首歌没歌词 → 清掉上一首的锁屏文案」
+     * 这两种收尾动作各执行一次，否则会留下状态残留。
+     */
     private fun startPositionTicker() {
         if (positionJob?.isActive == true) return
         positionJob = scope.launch {
             var lastSavedAt = SystemClock.elapsedRealtime()
+            var lastBufferedAt = 0L
+            var lastStatsAt = 0L
+            var bufferedMs = 0L
+            var durationKey: String? = null
+            var cachedDuration = 0L
+            var sleepFadeWasActive = false
+            var lastHadLyrics = false
             while (isActive) {
                 val c = controller ?: break
                 val pos = c.currentPosition.coerceAtLeast(0L)
@@ -1856,14 +1881,27 @@ class PlaybackEngine(
                     runCatching { c.seekTo(abSeek) }
                 }
                 maybeApplyOutroSkip(c, pos)
-                val buffered = c.bufferedPosition.coerceAtLeast(0L)
-                val rawDuration = c.duration
-                val duration = if (rawDuration > 0) rawDuration else (_player.value.current?.durationMs ?: 0L)
                 val playing = c.isPlaying
-
-                _progress.value = PlaybackProgress(pos, duration, buffered)
-
                 val now = SystemClock.elapsedRealtime()
+
+                // 缓冲位置：只给进度条画缓冲段用，2s 一取
+                if (now - lastBufferedAt >= BUFFERED_INTERVAL_MS) {
+                    lastBufferedAt = now
+                    bufferedMs = c.bufferedPosition.coerceAtLeast(0L)
+                }
+                // 时长：换轨才重新取；仍是 0 说明还没准备好，下轮继续试
+                val mediaId = c.currentMediaItem?.mediaId
+                if (mediaId != durationKey || cachedDuration <= 0L) {
+                    durationKey = mediaId
+                    cachedDuration = c.duration
+                }
+                val duration = if (cachedDuration > 0) {
+                    cachedDuration
+                } else {
+                    _player.value.current?.durationMs ?: 0L
+                }
+
+                _progress.value = PlaybackProgress(pos, duration, bufferedMs)
 
                 // 后台预取（v1.1.46）：缓冲领先 20 秒（或已暂停）才动手，每 3 秒最多规划一次。
                 // 之所以放在这条 ticker 里：这里刚好有最新 position / buffered / isPlaying，
@@ -1874,12 +1912,12 @@ class PlaybackEngine(
                     if (!ParallelDownloadRegistry.isActive() &&
                         CachePrefetchPolicy.shouldStart(
                             playing,
-                            buffered - pos,
+                            bufferedMs - pos,
                             // 缺口指播放位置往前还不够 20 秒，不是「整首歌还没下完」。
                             // 缓冲窗口最多 120 秒，用文件结尾判断会让后面两首永远等不到预取。
                             currentTailOpen = duration > 0L &&
-                                buffered + 1_000L < duration &&
-                                buffered - pos < CachePrefetchPolicy.MIN_AHEAD_MS,
+                                bufferedMs + 1_000L < duration &&
+                                bufferedMs - pos < CachePrefetchPolicy.MIN_AHEAD_MS,
                         )
                     ) {
                         runCatching { CachePrefetcher.plan(app, upcomingSongs(c)) }
@@ -1888,7 +1926,6 @@ class PlaybackEngine(
 
                 if (pos > 0 && now - lastSavedAt >= 5_000L) {
                     lastSavedAt = now
-                    val mediaId = c.currentMediaItem?.mediaId
                     val id = mediaId?.let { TrackFragment.parse(it.removePrefix("aliyun:")) }
                     scope.launch {
                         withContext(Dispatchers.IO) {
@@ -1900,15 +1937,28 @@ class PlaybackEngine(
                     }
                 }
 
-                stats.accumulateListening(c.currentMediaItem?.mediaId, playing)
-                // 睡眠定时淡出：与进度同频（播放中 200ms）把音量拉下来，比 500ms 一档的
-                // 剩余时间流更细腻；定时未开启时只是一个常数比较。
-                applySleepFade(SleepTimer.remainingMs.value)
+                // 收听统计按时间差累加，1s 一记总量不变，省掉每轮的比对与累加
+                if (now - lastStatsAt >= STATS_INTERVAL_MS) {
+                    lastStatsAt = now
+                    stats.accumulateListening(mediaId, playing)
+                }
+                // 睡眠定时淡出：只有定时真的在跑才每轮拉音量（一次 binder 调用）；
+                // 定时结束/被取消后再补最后一轮，把音量复位回 1f。
+                val remaining = SleepTimer.remainingMs.value
+                if (remaining > 0L || sleepFadeWasActive) {
+                    applySleepFade(remaining)
+                    sleepFadeWasActive = remaining > 0L
+                }
                 // 悬浮歌词：与进度同频驱动，去重在 LyricOverlayBridge 内部按内容比对完成。
                 // 转发逻辑抽到 OverlayTickHelper，开关关闭时直接跳过。
                 if (prefs.lyricOverlay) OverlayTickHelper.publishLyric(pos, playing, _player.value)
                 // H4：通知栏 / 锁屏 SYNOPSIS（与悬浮窗同源时间轴；不依赖悬浮窗开关）
-                runCatching { LockScreenLyricPublisher.publish(c, _player.value, pos) }
+                // 没歌词时只在「上一首还有」的那一轮跑一次，把残留文案清掉。
+                val hasLyrics = _player.value.lyrics.lines.isNotEmpty()
+                if (hasLyrics || lastHadLyrics) {
+                    runCatching { LockScreenLyricPublisher.publish(c, _player.value, pos) }
+                    lastHadLyrics = hasLyrics
+                }
                 // 顺便看一眼服务还在不在（进程被 ROM 杀掉的情况）——带 30 秒节流，
                 // 正常情况下就是读一个 volatile boolean。决策抽到 OverlayTickHelper。
                 if (OverlayTickHelper.shouldReviveOverlay(
@@ -1921,8 +1971,8 @@ class PlaybackEngine(
                 }
 
                 if (!playing && !appForeground) break
-                // 播放中 200ms 刷新，暂停时降到 1s，避免空转耗电
-                delay(if (c.isPlaying) 200L else 1_000L)
+                // 播放中 500ms、暂停 2s；暂停那一路只在后台等自愈，前台暂停基本不动
+                delay(if (playing) TICK_PLAYING_MS else TICK_PAUSED_MS)
             }
         }
     }
@@ -1940,5 +1990,24 @@ class PlaybackEngine(
 
         /** 睡眠定时到点前的渐弱时长：10 秒内线性降为 0（文档承诺的「淡出渐弱」） */
         private const val SLEEP_FADE_MS = 10_000L
+
+        /**
+         * 进度轮询主频（v1.2.40）。
+         *
+         * 原来是 200ms。降频依据：进度条走完一首 5 分钟的歌要 600 轮（500ms）
+         * 而不是 1500 轮（200ms），每一轮的宽度仍只有全长的 1/600 —— 在 1920px
+         * 宽的车机屏上就是 3px，人眼分辨不出，但每秒少掉 3 次跨进程调用和
+         * 3 次整页重组。歌词行推进同样够用：行间最短间隔远大于 500ms。
+         */
+        private const val TICK_PLAYING_MS = 500L
+
+        /** 暂停后的轮询间隔：只在后台等自愈，前台暂停时进度不动，没必要勤快 */
+        private const val TICK_PAUSED_MS = 2_000L
+
+        /** 缓冲位置的重取间隔：只用来画缓冲条 */
+        private const val BUFFERED_INTERVAL_MS = 2_000L
+
+        /** 收听统计的累加间隔：内部按时间差累加，降频不改变总量 */
+        private const val STATS_INTERVAL_MS = 1_000L
     }
 }

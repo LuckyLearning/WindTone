@@ -1617,7 +1617,10 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
                 refreshA11yHandleStatus()
                 if (desiredHandleMask() != appliedHandleMask) syncHandlesVisibility()
                 OverlayMetrics.onA11yTick(System.nanoTime() - started)
-                delay(2_000)
+                // v1.2.40：悬浮窗藏着的时候，这颗状态钮也跟着一起藏 —— 此刻没人看得见它，
+                // 状态就算变了等下次显示时由 applyVisibility() 立刻补刷一次即可。
+                // 车机上悬浮窗被导航挡住是常态，这一段能省掉大部分跨进程调用。
+                delay(if (windowVisible) A11Y_WATCH_INTERVAL_MS else A11Y_WATCH_INTERVAL_HIDDEN_MS)
             }
         }
     }
@@ -2062,6 +2065,18 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
          * 长时间有一条吃触摸的横条挡在桌面上。
          */
         private const val EDITING_TIMEOUT_MS = 60_000L
+
+        /**
+         * 侧钮状态轮询间隔（v1.2.40 由 2s 放宽）。
+         *
+         * 那颗钮只是「无障碍到底在不在跑」的一个指示，不是播放控件：
+         * 状态晚 5 秒才变色没有任何后果，而 2s 一次意味着每分钟 30 次
+         * `Settings.Secure` 跨进程查询。悬浮窗隐藏时用下面那个更长的间隔。
+         */
+        private const val A11Y_WATCH_INTERVAL_MS = 5_000L
+
+        /** 悬浮窗不可见时的轮询间隔：此时钮也不可见，状态变化等显示时补刷 */
+        private const val A11Y_WATCH_INTERVAL_HIDDEN_MS = 15_000L
 
         /** 是否已获得「出现在其他应用上」授权 */
         fun canDrawOverlay(context: Context): Boolean = Settings.canDrawOverlays(context)

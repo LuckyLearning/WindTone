@@ -344,7 +344,9 @@ internal fun CarPlayerBar(
 ) {
     if (song == null) return
     val scheme = MaterialTheme.colorScheme
-    val progress by progressFlow.collectAsStateWithLifecycle()
+    // 这里刻意**不**读 progressFlow：读了就等于整个车机底条（封面、歌名、
+    // 四个按钮）跟着进度每 500ms 重组一遍。收集下沉到 CarProgressBar 内部，
+    // 失效范围就只剩那一条 Canvas 和两个时间文字。
 
     Surface(color = scheme.surfaceContainerLow) {
         Row(
@@ -397,7 +399,7 @@ internal fun CarPlayerBar(
             }
             Spacer(Modifier.width(24.dp))
             Box(Modifier.weight(1.6f)) {
-                CarProgressBar(progress = progress, onSeek = onSeek)
+                CarProgressBar(progressFlow = progressFlow, onSeek = onSeek)
             }
         }
     }
@@ -456,14 +458,20 @@ private fun CarIconButton(
     }
 }
 
-/** 车机进度条：轨道 12dp、滑块 34dp，自带「已播 / 总时长」 */
+/**
+ * 车机进度条：轨道 12dp、滑块 34dp，自带「已播 / 总时长」。
+ *
+ * 收的是 Flow 而不是快照值：进度在这里才被读取，重组范围就只有本组件
+ * （一条 Canvas + 两个文字），不会带上整个底条。
+ */
 @Composable
 private fun CarProgressBar(
-    progress: PlaybackProgress,
+    progressFlow: StateFlow<PlaybackProgress>,
     onSeek: (Long) -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
     var dragFraction by remember { mutableStateOf<Float?>(null) }
+    val progress by progressFlow.collectAsStateWithLifecycle()
 
     val drag = dragFraction
     val played = when {
