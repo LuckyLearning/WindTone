@@ -1950,4 +1950,33 @@ Expired codes refresh automatically. This app is read-only — it never uploads,
     <string name="los_cd_collapse">Collapse floating lyrics</string>
     <string name="los_cd_expand">Expand floating lyrics</string>
     <string name="los_cd_open_player">Open now playing</string>
+
+    <!-- i18n batch 28: OnlinePlaylistRules / BootStatusText (AppShortcut labels already shortcut_*) -->
+    <string name="opr_url_empty">URL cannot be empty</string>
+    <string name="opr_url_no_host">URL is missing a host name</string>
+    <string name="opr_url_bad">URL format is invalid</string>
+    <string name="opr_dns">Cannot resolve this host (network down, or the address is wrong)</string>
+    <string name="opr_dns_next">Check the network and retry, or verify the playlist URL</string>
+    <string name="opr_timeout">Connection timed out: the server did not respond, or the network is too slow</string>
+    <string name="opr_timeout_next">Switch networks and retry, or refresh this playlist later</string>
+    <string name="opr_ssl">HTTPS handshake failed: the server certificate is not trusted</string>
+    <string name="opr_ssl_next">Check that the system clock is accurate, or use an HTTPS URL with a trusted certificate</string>
+    <string name="opr_connect">Cannot reach this address (%1$s)</string>
+    <string name="opr_connect_next">Check the network and retry; confirm the URL opens in a browser</string>
+    <string name="bst_action_autoplay">Background autoplay (no UI)</string>
+    <string name="bst_action_open_ui">Open main UI</string>
+    <string name="bst_action_none">Do nothing</string>
+    <string name="bst_never_received">No boot broadcast received yet</string>
+    <string name="bst_ok">Started playback</string>
+    <string name="bst_ok_reason">Started playback (%1$s)</string>
+    <string name="bst_fail">Did not start: %1$s</string>
+    <string name="bst_fail_unknown">unknown reason</string>
+    <string name="bst_stuck">Started then stopped (process may have been killed mid-start)</string>
+    <string name="bst_restoring">Restoring queue…</string>
+    <string name="bst_ago_none">—</string>
+    <string name="bst_ago_just_now">Just now</string>
+    <string name="bst_ago_minutes">%1$d min ago</string>
+    <string name="bst_ago_hours">%1$d h ago</string>
+    <string name="bst_ago_days">%1$d d ago</string>
+
 </resources>

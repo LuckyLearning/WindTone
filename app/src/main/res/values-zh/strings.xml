@@ -1916,4 +1916,33 @@
     <string name="los_cd_collapse">收起悬浮歌词</string>
     <string name="los_cd_expand">展开悬浮歌词</string>
     <string name="los_cd_open_player">打开播放页</string>
+
+    <!-- i18n 第 28 批：OnlinePlaylistRules / BootStatusText（AppShortcut 短标签已是 shortcut_*） -->
+    <string name="opr_url_empty">地址不能为空</string>
+    <string name="opr_url_no_host">地址里缺少域名</string>
+    <string name="opr_url_bad">地址格式不对</string>
+    <string name="opr_dns">解析不到这个域名（网络不可用，或地址写错了）</string>
+    <string name="opr_dns_next">检查网络后重试，或核对歌单地址是否写对</string>
+    <string name="opr_timeout">连接超时：对方没有响应，或当前网络太慢</string>
+    <string name="opr_timeout_next">换网络后重试，或稍后再刷新该歌单</string>
+    <string name="opr_ssl">HTTPS 握手失败：对方的证书不受信任</string>
+    <string name="opr_ssl_next">核对系统时间是否准确，或换用可信证书的 HTTPS 地址</string>
+    <string name="opr_connect">连不上这个地址（%1$s）</string>
+    <string name="opr_connect_next">检查网络后重试；确认地址可在浏览器打开</string>
+    <string name="bst_action_autoplay">后台起播（不打开界面）</string>
+    <string name="bst_action_open_ui">打开主界面</string>
+    <string name="bst_action_none">什么都不做</string>
+    <string name="bst_never_received">还没有收到过开机广播</string>
+    <string name="bst_ok">已起播</string>
+    <string name="bst_ok_reason">已起播（%1$s）</string>
+    <string name="bst_fail">未起播：%1$s</string>
+    <string name="bst_fail_unknown">原因未知</string>
+    <string name="bst_stuck">起了个头就没下文（进程可能在起播途中被系统回收）</string>
+    <string name="bst_restoring">正在恢复队列…</string>
+    <string name="bst_ago_none">—</string>
+    <string name="bst_ago_just_now">刚刚</string>
+    <string name="bst_ago_minutes">%1$d 分钟前</string>
+    <string name="bst_ago_hours">%1$d 小时前</string>
+    <string name="bst_ago_days">%1$d 天前</string>
+
 </resources>

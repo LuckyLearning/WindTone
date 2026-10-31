@@ -11,6 +11,8 @@ import java.nio.ByteBuffer
 import java.nio.charset.Charset
 import java.nio.charset.CodingErrorAction
 import javax.net.ssl.SSLException
+import com.luckylearning.windtone.R
+import com.luckylearning.windtone.ui.AppStrings
 
 /**
  * 在线播放列表的**纯规则**：无网络、无 Context、无协程，可完整单测（2026-10-21 从
@@ -38,20 +40,20 @@ internal object OnlinePlaylistRules {
      */
     fun normalizeUrl(raw: String): String {
         val t = raw.trim()
-        if (t.isEmpty()) error("地址不能为空")
+        if (t.isEmpty()) error(AppStrings.s(R.string.opr_url_empty).ifEmpty { "地址不能为空" })
         val withScheme = when {
             t.startsWith("http://", true) || t.startsWith("https://", true) -> t
             else -> "https://$t"
         }
         val hostPart = withScheme.substringAfter("://", "")
             .substringBefore('/').substringBefore('?').substringBefore('#')
-        if (hostPart.isBlank()) error("地址里缺少域名")
-        if (hostPart.count { it == '[' } != hostPart.count { it == ']' }) error("地址格式不对")
+        if (hostPart.isBlank()) error(AppStrings.s(R.string.opr_url_no_host).ifEmpty { "地址里缺少域名" })
+        if (hostPart.count { it == '[' } != hostPart.count { it == ']' }) error(AppStrings.s(R.string.opr_url_bad).ifEmpty { "地址格式不对" })
         val bare = hostPart.substringBeforeLast(':').trim('[', ']') // 剥端口 / IPv6 括号
-        if (bare.isBlank()) error("地址里缺少域名")
-        if (hostPart.any { it.isWhitespace() }) error("地址格式不对")
-        val parsed = runCatching { URL(withScheme) }.getOrNull() ?: error("地址格式不对")
-        if (parsed.host.isNullOrBlank()) error("地址里缺少域名")
+        if (bare.isBlank()) error(AppStrings.s(R.string.opr_url_no_host).ifEmpty { "地址里缺少域名" })
+        if (hostPart.any { it.isWhitespace() }) error(AppStrings.s(R.string.opr_url_bad).ifEmpty { "地址格式不对" })
+        val parsed = runCatching { URL(withScheme) }.getOrNull() ?: error(AppStrings.s(R.string.opr_url_bad).ifEmpty { "地址格式不对" })
+        if (parsed.host.isNullOrBlank()) error(AppStrings.s(R.string.opr_url_no_host).ifEmpty { "地址里缺少域名" })
         return withScheme
     }
 
@@ -149,23 +151,26 @@ internal object OnlinePlaylistRules {
     fun friendly(e: IOException): String = when (e) {
         is UnknownHostException ->
             UserFacingCopy.withNext(
-                "解析不到这个域名（网络不可用，或地址写错了）",
-                "检查网络后重试，或核对歌单地址是否写对",
+                AppStrings.s(R.string.opr_dns).ifEmpty { "解析不到这个域名（网络不可用，或地址写错了）" },
+                AppStrings.s(R.string.opr_dns_next).ifEmpty { "检查网络后重试，或核对歌单地址是否写对" },
             )
         is SocketTimeoutException ->
             UserFacingCopy.withNext(
-                "连接超时：对方没有响应，或当前网络太慢",
-                "换网络后重试，或稍后再刷新该歌单",
+                AppStrings.s(R.string.opr_timeout).ifEmpty { "连接超时：对方没有响应，或当前网络太慢" },
+                AppStrings.s(R.string.opr_timeout_next).ifEmpty { "换网络后重试，或稍后再刷新该歌单" },
             )
         is SSLException ->
             UserFacingCopy.withNext(
-                "HTTPS 握手失败：对方的证书不受信任",
-                "核对系统时间是否准确，或换用可信证书的 HTTPS 地址",
+                AppStrings.s(R.string.opr_ssl).ifEmpty { "HTTPS 握手失败：对方的证书不受信任" },
+                AppStrings.s(R.string.opr_ssl_next).ifEmpty { "核对系统时间是否准确，或换用可信证书的 HTTPS 地址" },
             )
         else ->
             UserFacingCopy.withNext(
-                "连不上这个地址（${e.message ?: e.javaClass.simpleName}）",
-                "检查网络后重试；确认地址可在浏览器打开",
+                AppStrings.s(
+                    R.string.opr_connect,
+                    e.message ?: e.javaClass.simpleName,
+                ).ifEmpty { "连不上这个地址（${e.message ?: e.javaClass.simpleName}）" },
+                AppStrings.s(R.string.opr_connect_next).ifEmpty { "检查网络后重试；确认地址可在浏览器打开" },
             )
     }
 

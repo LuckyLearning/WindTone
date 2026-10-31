@@ -1,6 +1,8 @@
 package com.luckylearning.windtone.data
 
 import android.content.Context
+import com.luckylearning.windtone.R
+import com.luckylearning.windtone.ui.AppStrings
 
 /**
  * 开机自启的「落盘证据」（v1.1.27）。
@@ -100,9 +102,12 @@ object BootStatus {
 object BootStatusText {
 
     fun actionLabel(action: String): String = when (action) {
-        BootStatus.ACTION_AUTOPLAY -> "后台起播（不打开界面）"
-        BootStatus.ACTION_OPEN_UI -> "打开主界面"
-        else -> "什么都不做"
+        BootStatus.ACTION_AUTOPLAY ->
+            AppStrings.s(R.string.bst_action_autoplay).ifEmpty { "后台起播（不打开界面）" }
+        BootStatus.ACTION_OPEN_UI ->
+            AppStrings.s(R.string.bst_action_open_ui).ifEmpty { "打开主界面" }
+        else ->
+            AppStrings.s(R.string.bst_action_none).ifEmpty { "什么都不做" }
     }
 
     /**
@@ -110,29 +115,51 @@ object BootStatusText {
      *
      * [Snapshot.ok] 为 null 且已经过了很久 → 「起了个头就没下文」，即进程在起播途中被回收；
      * 这种情况在车机上不算罕见（开机阶段内存最紧张），值得单独说一句。
+     *
+     * 冷路径（设置页排障）：每次展示调一次 [AppStrings.s]，不缓存大对象。
      */
     fun resultLabel(s: BootStatus.Snapshot, now: Long = System.currentTimeMillis()): String {
-        if (!s.received) return "还没有收到过开机广播"
+        if (!s.received) {
+            return AppStrings.s(R.string.bst_never_received).ifEmpty { "还没有收到过开机广播" }
+        }
         return when (s.ok) {
-            true -> "已起播" + if (s.reason.isNotBlank()) "（${s.reason}）" else ""
-            false -> "未起播：" + s.reason.ifBlank { "原因未知" }
-            null -> if (now - s.atMillis > STUCK_MS) {
-                "起了个头就没下文（进程可能在起播途中被系统回收）"
+            true -> if (s.reason.isNotBlank()) {
+                AppStrings.s(R.string.bst_ok_reason, s.reason)
+                    .ifEmpty { "已起播（${s.reason}）" }
             } else {
-                "正在恢复队列…"
+                AppStrings.s(R.string.bst_ok).ifEmpty { "已起播" }
+            }
+            false -> {
+                val reason = s.reason.ifBlank {
+                    AppStrings.s(R.string.bst_fail_unknown).ifEmpty { "原因未知" }
+                }
+                AppStrings.s(R.string.bst_fail, reason).ifEmpty { "未起播：$reason" }
+            }
+            null -> if (now - s.atMillis > STUCK_MS) {
+                AppStrings.s(R.string.bst_stuck)
+                    .ifEmpty { "起了个头就没下文（进程可能在起播途中被系统回收）" }
+            } else {
+                AppStrings.s(R.string.bst_restoring).ifEmpty { "正在恢复队列…" }
             }
         }
     }
 
     /** 「多久以前」。开机时间只精确到分钟就够，不需要秒。 */
     fun agoLabel(now: Long, at: Long): String {
-        if (at <= 0L) return "—"
+        if (at <= 0L) return AppStrings.s(R.string.bst_ago_none).ifEmpty { "—" }
         val d = (now - at).coerceAtLeast(0L)
         return when {
-            d < 60_000L -> "刚刚"
-            d < 3_600_000L -> "${d / 60_000L} 分钟前"
-            d < 86_400_000L -> "${d / 3_600_000L} 小时前"
-            else -> "${d / 86_400_000L} 天前"
+            d < 60_000L ->
+                AppStrings.s(R.string.bst_ago_just_now).ifEmpty { "刚刚" }
+            d < 3_600_000L ->
+                AppStrings.s(R.string.bst_ago_minutes, d / 60_000L)
+                    .ifEmpty { "${d / 60_000L} 分钟前" }
+            d < 86_400_000L ->
+                AppStrings.s(R.string.bst_ago_hours, d / 3_600_000L)
+                    .ifEmpty { "${d / 3_600_000L} 小时前" }
+            else ->
+                AppStrings.s(R.string.bst_ago_days, d / 86_400_000L)
+                    .ifEmpty { "${d / 86_400_000L} 天前" }
         }
     }
 

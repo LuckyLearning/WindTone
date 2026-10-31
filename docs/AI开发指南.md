@@ -2417,3 +2417,13 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 - 文档：`docs/功能-ReplayGain模式.md`、`docs/规划-下一步.md`
 - 下一项产品建议：**i18n 可选残余**（OnlinePlaylistRules / BootStatus / AppShortcut）
 
+### i18n 第 28 批（2026-11-01）
+
+**可选残余**：`opr_*` OnlinePlaylistRules；`bst_*` BootStatusText。AppShortcut 短/长标签本就 `shortcut_*`（xml），无 Kotlin 硬编码。
+
+- SoftEq / 播放内核不改；`LyricOverlayBridge` 长诊断文另批
+- **性能**：非热路径；`AppStrings.s` + `ifEmpty`，无大对象缓存、无预加载
+- 单测：`OnlinePlaylistRulesTest` / `BootStatusTextTest`（无 Robolectric，靠中文回落）
+- 文档：`docs/功能-i18n扫尾扫仓.md`
+- 下一项建议：**AliyunDrive 盘类型展示名 i18n 扫尾**（本机；仍勿把 E6/长稳开车当实现任务）
+
