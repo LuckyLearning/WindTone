@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -57,10 +58,10 @@ class OverlayStateBinderTest {
     @Test
     fun `后续状态变化会重新走接线（切前台态触发一次重算）`() {
         binder.observe()
-        val before = host.applyVisibilityCount
+        val beforeAppearance = host.applyAppearanceCount
         LyricOverlayBus.setForeground(true)
-        assertTrue("状态变化后应当再次调用 applyVisibility", host.applyVisibilityCount > before)
-        assertTrue("状态变化后应当再次调用 applyAppearance", host.applyAppearanceCount > 0)
+        // v1.2.42：显隐未变时不再 applyVisibility；接线是否还在跑看 applyAppearance
+        assertTrue("状态变化后应当再次调用 applyAppearance", host.applyAppearanceCount > beforeAppearance)
     }
 
     @Test
@@ -71,7 +72,22 @@ class OverlayStateBinderTest {
         assertTrue(host.applyVisibilityCount > 0)
     }
 
-    private class FakeHost(app: Application) : OverlayStateBinder.Host {
+    
+    @Test
+    fun `显隐未变时不重复 applyVisibility`() {
+        // 首帧必刷；之后仅外观版本变化、可见性不变时不应再 applyVisibility
+        binder.observe()
+        val afterFirst = host.applyVisibilityCount
+        assertTrue("首帧应 applyVisibility", afterFirst > 0)
+        LyricOverlayBus.bumpAppearance()
+        assertEquals(
+            "可见性未变时不应重复 applyVisibility",
+            afterFirst,
+            host.applyVisibilityCount,
+        )
+    }
+
+private class FakeHost(app: Application) : OverlayStateBinder.Host {
         var applyAppearanceCount = 0
         var applyVisibilityCount = 0
         private val prefs = Prefs(app)

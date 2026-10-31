@@ -52,6 +52,7 @@ class OverlayStateBinder(
     /** 订阅各路状态并逐帧重算窗口外观 / 可见性；重复调用会先取消上一次订阅 */
     fun observe() {
         job?.cancel()
+        visibilitySyncedOnce = false
         job = scope.launch {
             // 内容 + 编辑态 + 前台态 + 预览态 + 外观版本 五路合并：
             // 任一变化都重新决定「显不显示 / 长什么样」。
@@ -131,9 +132,14 @@ class OverlayStateBinder(
                         "可见性 ${if (visible) "显示" else "隐藏"}（前台=${foregroundPkg ?: "?"}）",
                     )
                 }
+                val visibilityChanged = host.desiredVisible != visible
                 host.desiredVisible = visible
                 if (!visible) {
-                    host.applyVisibility()
+                    // 藏着时歌词推进不必反复 apply；首帧仍要刷，避免默认 VISIBLE 漏藏
+                    if (visibilityChanged || !visibilitySyncedOnce) {
+                        host.applyVisibility()
+                        visibilitySyncedOnce = true
+                    }
                     return@collect
                 }
 
@@ -167,7 +173,11 @@ class OverlayStateBinder(
                 // 「强调当前行」在播放时、以及调整 / 预览态下都要给 ——
                 // 调整态可能没在放歌，但用户正看着它摆位置。
                 host.renderLines(tv, lines, content.playing || isEditing || isPreview, full)
-                host.applyVisibility()
+                // 显隐未变时跳过：render 已更新文字；Secure/侧钮坐标已在 applyVisibility 收口
+                if (visibilityChanged || !visibilitySyncedOnce) {
+                    host.applyVisibility()
+                    visibilitySyncedOnce = true
+                }
                 host.updateGeometryReport()
             }
         }
@@ -177,9 +187,13 @@ class OverlayStateBinder(
     fun dispose() {
         job?.cancel()
         job = null
+        visibilitySyncedOnce = false
     }
 
     private var job: Job? = null
+
+    /** 首帧必须 apply 一次，避免默认 VISIBLE 窗口在 desired=false 时漏藏 */
+    private var visibilitySyncedOnce = false
 
     /**
      * 状态接线需要宿主（[LyricOverlayService]）提供的窗口与外观操作面。

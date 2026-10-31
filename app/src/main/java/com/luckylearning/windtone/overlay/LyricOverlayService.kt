@@ -14,6 +14,10 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
+import android.os.Looper
+import android.os.Handler
+import android.net.Uri
+import android.database.ContentObserver
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
@@ -121,6 +125,8 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
     private var a11yHandleView: AccessibilityIconView? = null
     private var a11yHandleParams: WindowManager.LayoutParams? = null
     private var a11yWatchJob: Job? = null
+    /** Settings.Secure 无障碍名单变更 → 立刻刷侧钮，轮询只做兜底 */
+    private var a11ySettingsObserver: ContentObserver? = null
 
     /**
      * 播放/暂停钮的状态订阅（v1.2.40 起有名字）。
@@ -331,6 +337,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         editingTimeoutJob?.cancel()
         foregroundJob?.cancel()
         pauseHandleJob?.cancel()
+        stopA11yWatch()
         runCatching { unregisterReceiver(screenReceiver) }
         scope.cancel()
         detachWindow()
@@ -1383,8 +1390,8 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
      */
     override fun applyVisibility() {
         val box = container ?: return
-        // 2026-10-31：这里跟着播放进度被状态流驱动（播放中约 5 次/秒），
-        // 所以「调用次数」与「真正改动次数」分开记 —— 两者比值才说明问题。
+        // 调用次数与真正改动次数分开记；v1.2.42 起：未改显隐时不再刷无障碍 /
+        // 重算侧钮坐标（那两步各带跨进程 / updateViewLayout，歌词推进时无意义）。
         OverlayMetrics.onVisibilityApply()
         val show = desiredVisible && screenInteractive
         val target = if (show) View.VISIBLE else View.INVISIBLE
@@ -1400,7 +1407,9 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         a11yHandleView?.let { if (it.visibility != target) { it.visibility = target; changed = true } }
         if (changed) OverlayMetrics.onVisibilityChanged()
         windowVisible = show
-        if (show) {
+        // 仅在「本次真变成显示」时补刷：平时靠 ContentObserver + 慢轮询；
+        // 侧钮坐标随 applyPosition() 走，不必每句歌词重算。
+        if (changed && show) {
             refreshA11yHandleStatus()
             updateHandlesPosition()
         }
@@ -1622,12 +1631,38 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
      * **不随无障碍钮一起生灭**：那颗钮被摘掉之后，轮询仍要跑，否则状态恢复时
      * 没人把它挂回来。只有「一颗钮都不该显示」时才停（见 [stopA11yWatch]）。
      */
+    private fun ensureA11ySettingsObserver() {
+        if (a11ySettingsObserver != null) return
+        val obs = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) = onChange(selfChange, null)
+            override fun onChange(selfChange: Boolean, uri: Uri?) {
+                // 系统改了无障碍名单：立刻刷灯 + 可能要重建「仅未运行时显示」的侧钮
+                refreshA11yHandleStatus()
+                if (desiredHandleMask() != appliedHandleMask) syncHandlesVisibility()
+            }
+        }
+        runCatching {
+            contentResolver.registerContentObserver(
+                Settings.Secure.getUriFor(Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES),
+                /* notifyForDescendants = */ false,
+                obs,
+            )
+            a11ySettingsObserver = obs
+        }
+    }
+
+    private fun clearA11ySettingsObserver() {
+        val obs = a11ySettingsObserver ?: return
+        runCatching { contentResolver.unregisterContentObserver(obs) }
+        a11ySettingsObserver = null
+    }
+
     private fun startA11yWatch() {
         if (a11yWatchJob?.isActive == true) return
+        ensureA11ySettingsObserver()
         a11yWatchJob = scope.launch {
             while (isActive) {
-                // 计时只为了回答一个问题：这 2s 一次的轮询贵不贵（内部读一次
-                // Settings.Secure，是跨进程调用）。累计到 OverlayMetrics，诊断包可见。
+                // 计时回答：慢轮询 + Secure 跨进程到底贵不贵。进 OverlayMetrics。
                 val started = System.nanoTime()
                 refreshA11yHandleStatus()
                 if (desiredHandleMask() != appliedHandleMask) syncHandlesVisibility()
@@ -1644,6 +1679,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
     private fun stopA11yWatch() {
         a11yWatchJob?.cancel()
         a11yWatchJob = null
+        clearA11ySettingsObserver()
     }
 
     private fun refreshA11yHandleStatus() {
@@ -2085,16 +2121,17 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         private const val EDITING_TIMEOUT_MS = 60_000L
 
         /**
-         * 侧钮状态轮询间隔（v1.2.40 由 2s 放宽）。
+         * 侧钮状态轮询间隔（v1.2.40 由 2s→5s；v1.2.42 再放到 15s）。
          *
-         * 那颗钮只是「无障碍到底在不在跑」的一个指示，不是播放控件：
-         * 状态晚 5 秒才变色没有任何后果，而 2s 一次意味着每分钟 30 次
-         * `Settings.Secure` 跨进程查询。悬浮窗隐藏时用下面那个更长的间隔。
+         * 无障碍名单变更优先走 ContentObserver；轮询只防厂商 ROM 漏回调。
+         * 那颗钮只是指示灯，晚几秒变色无后果。隐藏时用更长间隔。
          */
-        private const val A11Y_WATCH_INTERVAL_MS = 5_000L
+        // v1.2.42：有 ContentObserver 兜底后，可见时 15s、隐藏时 60s 足够；
+        // 状态变色晚几秒无听感影响，诊断包「无障碍轮询」次数应明显下降。
+        private const val A11Y_WATCH_INTERVAL_MS = 15_000L
 
         /** 悬浮窗不可见时的轮询间隔：此时钮也不可见，状态变化等显示时补刷 */
-        private const val A11Y_WATCH_INTERVAL_HIDDEN_MS = 15_000L
+        private const val A11Y_WATCH_INTERVAL_HIDDEN_MS = 60_000L
 
         /** 是否已获得「出现在其他应用上」授权 */
         fun canDrawOverlay(context: Context): Boolean = Settings.canDrawOverlays(context)

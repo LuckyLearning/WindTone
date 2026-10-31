@@ -222,7 +222,12 @@ object CoverRepository {
     private suspend fun decodeInto(key: String, context: Context, song: Song, targetPx: Int): Bitmap? {
         val file = diskFile(song, targetPx)
         if (file != null && file.exists()) {
-            val cached = runCatching { BitmapFactory.decodeFile(file.absolutePath) }.getOrNull()
+            val diskOpts = BitmapFactory.Options().apply {
+                inPreferredConfig = Bitmap.Config.RGB_565
+            }
+            // 磁盘是我们压的 JPEG；默认 ARGB_8888 会让磁盘命中路径占双倍像素。
+            val cached = runCatching { BitmapFactory.decodeFile(file.absolutePath, diskOpts) }.getOrNull()
+                ?.let { ensureRgb565(it) }
                 ?.let { BitmapMeter.track(it) }
             if (cached != null) {
                 recordDecode(fromDisk = true, byteCount = cached.byteCount)
@@ -288,14 +293,33 @@ object CoverRepository {
             ?: return null
 
         val (w, h) = fitSize(decoded.width, decoded.height, targetPx)
-        if (w == decoded.width && h == decoded.height) return BitmapMeter.track(decoded)
+        if (w == decoded.width && h == decoded.height) {
+            return BitmapMeter.track(ensureRgb565(decoded))
+        }
         val scaled = runCatching { Bitmap.createScaledBitmap(decoded, w, h, true) }.getOrNull()
-            ?: return BitmapMeter.track(decoded)
-        // 像素已经搬到新位图，旧的大图立刻还给堆（`!==` 兜住「尺寸本就相同、返回自身」的情况）
+            ?: return BitmapMeter.track(ensureRgb565(decoded))
+        // 像素已经搬到新位图，旧的大图立刻还给堆（!== 兜住「尺寸本就相同、返回自身」的情况）
         if (scaled !== decoded) decoded.recycle()
+        // createScaledBitmap 在多数机型上会升成 ARGB_8888，封面不需要 alpha，压回 565。
+        val compact = ensureRgb565(scaled)
         // 只在这里登记：所有解码路径（含通知封面 downscaleForNotification）都经过本方法，
         // 在调用方再登记一次会重复计数
-        return BitmapMeter.track(scaled)
+        return BitmapMeter.track(compact)
+    }
+
+    /**
+     * 封面不透明，统一压到 RGB_565（2 byte/px）。
+     *
+     * BitmapFactory 的 inPreferredConfig 只是「请求」——部分 JPEG / PNG 仍会解成
+     * ARGB_8888；createScaledBitmap 更是几乎总升配置。这里做一次硬性收口，
+     * 同一张 1000px 方图从 ~4MB 降到 ~2MB。
+     */
+    private fun ensureRgb565(bmp: Bitmap): Bitmap {
+        if (bmp.config == Bitmap.Config.RGB_565 || bmp.config == Bitmap.Config.ALPHA_8) return bmp
+        val copy = runCatching { bmp.copy(Bitmap.Config.RGB_565, /* mutable = */ false) }.getOrNull()
+            ?: return bmp
+        if (copy !== bmp) bmp.recycle()
+        return copy
     }
 
     /**
