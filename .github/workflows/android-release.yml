@@ -1,7 +1,9 @@
 name: Release APK
 
-# 打一个 v* 标签即可自动出包并创建 GitHub Release；
+# 打一个 v* 标签即可自动出包并创建 GitHub Release。
 # 也可以在 Actions 页面手动触发（手动触发只构建、不发布）。
+# 2026-10-31：日常 Android CI 已改为仅 workflow_dispatch；发版（本工作流）是唯一自动质量闸，
+# 因此构建前仍跑单测 + lint Error 门禁（与本地 scripts/release.sh 互补，防孤儿 tag 漏测）。
 on:
   push:
     tags:
@@ -95,9 +97,26 @@ jobs:
           fi
 
       # ---------------------------------------------------------------- 构建
-      # 2026-10-31：Release 不再重复跑单测（约省 3 分钟）。门禁靠：
-      #   1) scripts/release.sh 本地先测；2) 推 main 触发 Android CI。
-      # 风险：有人绕过 release.sh 直接推孤儿 tag → 少一道云端单测。约定禁止。
+      # 2026-10-31：日常 CI 已改为手动；发版是唯一自动质量闸 → 这里必须跑单测 + lint Error 门禁。
+      # 与 scripts/release.sh 本地预检互补（本地失败不推 tag；云端再拦一道孤儿 tag）。
+      - name: 单测 + Lint（发版门禁）
+        run: ./gradlew testDebugUnitTest lintDebug --stacktrace
+
+      - name: Lint（Error 级门禁）
+        run: |
+          report=app/build/reports/lint-results-debug.xml
+          if [ ! -f "$report" ]; then
+            echo "::error::未生成 lint 报告：$report"
+            exit 1
+          fi
+          errors=$(grep -c 'severity="Error"' "$report" || true)
+          echo "lint Error 级数量：$errors"
+          if [ "$errors" -ne 0 ]; then
+            grep -B1 -A3 'severity="Error"' "$report" | head -100
+            echo "::error::lint 存在 $errors 条 Error，发版中止"
+            exit 1
+          fi
+
       - name: 构建 Release 包
         env:
           WINDTONE_KEYSTORE: ${{ steps.ks.outputs.path }}

@@ -95,4 +95,10 @@ title: 转 public 检查清单
 - 不把仓库改为 public（须你在 GitHub UI 操作）  
 - 不 `filter-repo` / force-push  
 - 不打 tag / 不改 `versionName`  
-- 不擅自更换许可证（维持 Apache-2.0）  
+- 不擅自更换许可证（维持 Apache-2.0）
+
+---
+
+## Actions 触发（公开后同样适用）
+
+见 [`spike-CI提速.md`](spike-CI提速.md) §9：Android CI **仅手动**；发版 `v*` **自动**（含单测门禁）；Pages 随 `docs/**` **自动**。

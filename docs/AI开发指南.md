@@ -148,6 +148,16 @@ LibraryViewModel   PlayerViewModel    UpdateViewModel    SettingsViewModel
 
 `.github-token` 已在 `.gitignore`，**绝不要改名后提交**。
 
+### 0.3a Actions 触发矩阵（2026-10-31）
+
+| 工作流 | 何时自动跑 | 手动 |
+| --- | --- | --- |
+| Android CI | **不自动**（push/PR 已关） | Actions → Android CI → Run workflow |
+| Release APK | 推送 `v*` tag | 可 workflow_dispatch（一般用 tag） |
+| Pages | 改 `docs/**`（或本 workflow）推 main | Actions → Deploy docs → Run workflow |
+
+详情与省分钟背景见 [`spike-CI提速.md`](spike-CI提速.md) §9。
+
 ### 0.3 Actions 额度不足时的发版策略
 
 > **现象**：GitHub Actions 分钟 / 消费额度用尽时，打 `v*` tag 会立刻触发 workflow 并**秒失败**，白白烧额度、也出不了 APK。
@@ -264,8 +274,9 @@ WindTone/                        ← 仓库根 == Gradle 根（已扁平化，�
 ├─ app/                          ← 唯一的 Gradle 模块（`app/schemas/` 是 Room schema 快照，**入库**）
 ├─ .github/
 │   └─ workflows/
-│       ├─ android-release.yml   打 v* tag → 构建签名包 + 创建 Release
-│       └─ android-ci.yml        push/PR → 单测 + debug 包
+│       ├─ android-release.yml   打 v* tag → 单测/lint 门禁 + 签名包 + Release（唯一自动 CI）
+│       ├─ pages.yml             docs/** → GitHub Pages（亦可手动）
+│       └─ android-ci.yml        仅 workflow_dispatch → 单测 + debug 包（日常 push 不跑）
 ├─ docs/                         ⚠️ 本地开发资料，已 gitignore，**不会上传**
 │   ├─ AI开发指南.md（本文）      接手必读
 │   ├─ 数据库设计-MusicDb.md     表结构 / 红线

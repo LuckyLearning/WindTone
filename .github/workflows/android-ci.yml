@@ -1,33 +1,16 @@
 name: Android CI
 
-# 主干与 PR 的快速校验：跑单测 + 出一个 debug 包，确保任何提交都能编译通过
-# 2026-10-31 CI 提速：paths-ignore（docs/纯 md/许可证等）避免误触发；一次 Gradle；concurrency 取消旧跑
+# 日常质量检查：仅手动触发（workflow_dispatch）。
+# 2026-10-31：取消 push / pull_request 自动跑，省 Actions 分钟；发版质量闸改由 Release（v* tag）承担。
+# 手动跑法：Actions → Android CI → Run workflow（选分支）。
 on:
-  push:
-    branches: [ main, master ]
-    paths-ignore:
-      - 'docs/**'
-      - '*.md'
-      - '.github/workflows/pages.yml'
-      - '.github/release-notes/**'
-      - '.gitignore'
-      - '.github-token.example'
-      - 'LICENSE'
-      - 'NOTICE'
-      - 'SECURITY.md'
-  pull_request:
-    branches: [ main, master ]
-    paths-ignore:
-      - 'docs/**'
-      - '*.md'
-      - '.github/workflows/pages.yml'
-      - '.github/release-notes/**'
-      - '.gitignore'
-      - '.github-token.example'
-      - 'LICENSE'
-      - 'NOTICE'
-      - 'SECURITY.md'
   workflow_dispatch:
+    inputs:
+      reason:
+        description: '本次手动跑的原因（可选，仅作记录）'
+        required: false
+        default: 'manual check'
+        type: string
 
 concurrency:
   group: ci-${{ github.ref }}

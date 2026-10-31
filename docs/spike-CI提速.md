@@ -2,7 +2,7 @@
 
 > 日期：2026-10-31（Asia/Shanghai）  
 > 范围：`.github/workflows/android-ci.yml` / `android-release.yml` / `pages.yml`  
-> 状态：**结论文档 + 已落地小改（path filter / 合并 Gradle 调用 / cache-cleanup）**；**不打 tag、不发版**  
+> 状态：**结论文档 + 已落地**（path filter / 合并 Gradle / cache-cleanup / **CI 仅手动 / Release 唯一自动闸 / Pages 仍跟 docs/**）**；本轮不打 tag  
 > 数据来源：GitHub Actions API（额度耗尽前最近若干次成功跑次）
 
 ## 1. 问题
@@ -177,4 +177,45 @@ gradlew.bat testDebugUnitTest lintDebug assembleDebug --stacktrace
 
 1. 只改 `LICENSE` 或 `.gitignore` push → 不应触发 Android CI  
 2. 打 tag 发版 → Release 日志只有 `assembleRelease`，无 `testDebugUnitTest`  
-3. 对照 Release 总分钟是否下降约 3 分钟  
+3. 对照 Release 总分钟是否下降约 3 分钟
+
+---
+
+## 9. 触发策略收束（2026-10-31 · 用户拍板）
+
+> 目标：日常 push **不再烧** Android CI 分钟；质量闸只在发版自动跑；文档站仍随 `docs/` 更新。
+
+### 9.1 触发矩阵（现行）
+
+| 工作流 | 自动触发 | 手动 | 说明 |
+| --- | --- | --- | --- |
+| **Android CI** | **无**（已删 push / pull_request） | `workflow_dispatch`（可选 input `reason`） | 日常合入不跑；需要时 Actions → Android CI → Run workflow |
+| **Release APK** | `push` tags `v*` | `workflow_dispatch`（通常只构建不发 Release） | **唯一自动质量闸**：单测 + lint Error 门禁 + assembleRelease |
+| **Pages** | `push` → `main` 且 paths = `docs/**` 或本 workflow | `workflow_dispatch` | 非 docs 业务提交不触发 |
+
+### 9.2 相对 §8 的变更
+
+| 项 | §8 状态 | 现行 |
+| --- | --- | --- |
+| Android CI paths-ignore | 已扩 | **整段 push/PR 触发已删除**（比 ignore 更彻底） |
+| Release 去掉单测 | 曾去掉省 ~3 分钟 | **已加回** testDebugUnitTest + lint Error（发版是唯一自动闸） |
+| Pages | docs/** 自动 | **维持** docs/** 自动（用户更正：不要改成仅手动） |
+
+### 9.3 手动怎么跑
+
+```text
+# 临时要云端校验某分支（不发版）
+GitHub → Actions → Android CI → Run workflow → 选分支 → 可选填 reason
+
+# 更新文档站（一般改 docs/ 推 main 即自动；也可手动）
+GitHub → Actions → Deploy docs to GitHub Pages → Run workflow
+
+# 发版（自动跑 Release，含单测门禁）
+bash scripts/release.sh patch --verify
+```
+
+### 9.4 仍存在的问题
+
+- Actions 额度 / spending limit：额度不足时打 tag 仍会秒失败（见 `待发版积压.md`）。
+- 发版墙钟因加回单测会回升约 ~3 分钟；换来的是孤儿 tag 也有云端门禁。
+- SDK cache / configuration-cache 仍未开（§4 P1）。
