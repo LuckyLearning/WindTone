@@ -342,6 +342,34 @@ object AudioFx {
         // 混响单独 runCatching：拿不到就只少一档功能，不能连带把均衡器整页判成不可用
         val rev = runCatching { PresetReverb(0, session) }.getOrNull()
 
+        // 从这里往下任一步抛异常，上面这五个**已经构造成功**的效果器就再也没人
+        // 能 release 了：字段赋值在最后，抛出时引用还没挂上去，而它们占的是
+        // native 侧的 binder 句柄 + audioflinger 实例，不是普通 Java 对象。
+        // 车机上效果链常常建不起来（retryIfUnavailable 每次起播都重跑一整轮），
+        // 漏一套就是漏一套，且会随起播次数累加。所以先兜住、回收、再原样抛出
+        // —— 抛出的语义不变，[attach] 仍然照旧退到全局或判定不支持。
+        try {
+            bindEffectsConfigured(p, eq, bassMax, virt, loud, rev, global)
+        } catch (t: Throwable) {
+            runCatching { eq.release() }
+            runCatching { bassMax?.release() }
+            runCatching { virt?.release() }
+            runCatching { loud?.release() }
+            runCatching { rev?.release() }
+            throw t
+        }
+    }
+
+    /** [bindEffects] 里「构造之后」的那一段，抽出来只为让异常路径能回收效果器 */
+    private fun bindEffectsConfigured(
+        p: com.luckylearning.windtone.data.Prefs,
+        eq: Equalizer,
+        bassMax: BassBoost?,
+        virt: Virtualizer?,
+        loud: LoudnessEnhancer?,
+        rev: PresetReverb?,
+        global: Boolean,
+    ) {
         val bandCount = eq.numberOfBands.toInt()
         val min: Int = eq.bandLevelRange[0].toInt()
         val max: Int = eq.bandLevelRange[1].toInt()

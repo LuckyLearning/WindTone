@@ -123,6 +123,16 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
     private var a11yWatchJob: Job? = null
 
     /**
+     * 播放/暂停钮的状态订阅（v1.2.40 起有名字）。
+     *
+     * 之前是个裸 `scope.launch`，没有 Job 引用 —— 而 `detachHandles()` 只做
+     * `removeView` + 置 null，**不会**取消它。于是每次侧钮重建（车载模式进出、
+     * 无障碍掉线重连、用户改侧钮开关或顺序都会改掩码）就多挂一条永不返回的
+     * `content.collect`，订阅者只增不减。这条必须能被取消。
+     */
+    private var pauseHandleJob: Job? = null
+
+    /**
      * 钮的纵向锚点（v1.1.95）。
      *
      * 之前每次重算都用「当前测量高度」居中，而歌词行数一变窗口高度就变，
@@ -320,6 +330,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         stateBinder.dispose()
         editingTimeoutJob?.cancel()
         foregroundJob?.cancel()
+        pauseHandleJob?.cancel()
         runCatching { unregisterReceiver(screenReceiver) }
         scope.cancel()
         detachWindow()
@@ -1551,7 +1562,10 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         pauseHandleParams = lp
         // 状态由播放域推送（content.playing），这里只负责换图标 ——
         // 服务不判断"该不该播"，避免与播放域各算一套。
-        scope.launch {
+        // 必须存成 Job：detachHandles() 要能把它取消掉，否则每次重建都多留一条
+        // 永不返回的 collect（见 pauseHandleJob 的注释）。
+        pauseHandleJob?.cancel()
+        pauseHandleJob = scope.launch {
             LyricOverlayBus.content.collect { content ->
                 pauseHandleView?.setPlaying(content.playing)
             }
@@ -1691,6 +1705,9 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         pauseHandleView?.let { runCatching { windowManager?.removeView(it) } }
         pauseHandleView = null
         pauseHandleParams = null
+        // 摘钮就要摘订阅：这条协程挂在 StateFlow 上永不返回，不取消就永远留着
+        pauseHandleJob?.cancel()
+        pauseHandleJob = null
         // ⚠️ 这里**不取消** a11yWatch：它已经从"这颗钮的附属品"升级成
         // "侧钮状态轮询"（2026-10-31），摘钮时取消会让「仅未运行时显示」
         // 再也等不到状态变回来的那一刻。暂停由 stopA11yWatch() 单独负责。

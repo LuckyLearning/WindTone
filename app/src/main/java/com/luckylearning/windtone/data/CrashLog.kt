@@ -43,9 +43,17 @@ object CrashLog {
     fun dir(context: Context): File =
         File(context.applicationContext.filesDir, DIR_NAME).apply { if (!exists()) mkdirs() }
 
-    /** 按时间倒序排列的崩溃文件 */
+    /**
+     * 按时间倒序排列的崩溃文件。
+     *
+     * 刻意排除 [LOW_MEMORY_FILE]：那份是滚动覆盖的单份快照，既不是崩溃记录，
+     * 也不该参与 [latest] 的判定、更不该被 [prune] 按份数淘汰掉。
+     */
     fun files(context: Context): List<File> =
-        dir(context).listFiles()?.filter { it.isFile }?.sortedByDescending { it.lastModified() }.orEmpty()
+        dir(context).listFiles()
+            ?.filter { it.isFile && it.name != LOW_MEMORY_FILE }
+            ?.sortedByDescending { it.lastModified() }
+            .orEmpty()
 
     fun count(context: Context): Int = files(context).size
 
@@ -107,10 +115,18 @@ object CrashLog {
                 appendLine()
             }
         }
+        // 内存快照单独附在最后：OOM 之前系统必定先发过 onTrimMemory，
+        // 这份「死前最后一张照片」常常比崩溃栈更能说明内存是谁吃掉的
+        val lowMem = File(dir(context), LOW_MEMORY_FILE)
+        if (lowMem.isFile) {
+            appendLine("══════════ ${LOW_MEMORY_FILE}（最近一次内存吃紧快照）══════════")
+            appendLine(runCatching { lowMem.readText() }.getOrDefault("(读取失败)"))
+        }
     }
 
     fun clear(context: Context) {
         files(context).forEach { runCatching { it.delete() } }
+        runCatching { File(dir(context), LOW_MEMORY_FILE).delete() }
     }
 
     /**
@@ -162,9 +178,98 @@ object CrashLog {
                 depth++
             }
         }
+        // 先落栈：它是第一证物，不能因为后面采集快照失败而一起丢掉
         runCatching { file.writeText(body) }
+        // 再补一份临终资源快照。分两次写就是为了让这一步彻底独立。
+        runCatching { file.appendText(resourceSnapshot(context)) }
         prune(context)
     }
+
+    /**
+     * 崩溃发生那一刻的资源占用（v1.2.40）。
+     *
+     * 为什么栈之外还要这个：车机上「长时间运行后崩溃」至少有三种死法，而它们的栈
+     * 长得完全一样（都指向最后一个倒霉的分配点）：
+     *   1. **内存** —— 堆见顶，OOM；
+     *   2. **线程** —— 每线程默认 1MB 栈，几百个线程就能把虚拟内存撑爆；
+     *   3. **文件描述符** —— 进程上限通常 1024，泄漏到头就是 `Too many open files`。
+     * 没有这份快照，只能看着栈猜；有了它，线程数 / fd 数 / RSS / 堆水位一摆，
+     * 是哪一种一眼就分得清。
+     *
+     * 全程 `runCatching`：OOM 时连 `StringBuilder` 都可能失败，但那时栈已经写好了，
+     * 这里失败只是少一段辅助信息，不会把证物一起赔进去。
+     */
+    /**
+     * 记一次「系统内存吃紧」的资源快照，滚动覆盖单个文件 [LOW_MEMORY_FILE]。
+     *
+     * 为什么不走 [record]：崩溃/诊断日志只留 [KEEP] 份，而内存紧张会被系统高频
+     * 触发 —— 让它也进去会把真正的崩溃记录挤掉。单独一个文件、只留最后一次，
+     * 既不占位也不丢东西。
+     *
+     * 价值在于时序：OOM 之前系统**必定**先发过 `onTrimMemory`，所以这份
+     * 「死前最后一张照片」往往比崩溃栈更能说明是谁把内存吃掉的 —— 栈只指向
+     * 最后那个倒霉的分配点，而快照给出的是累积结果。
+     */
+    fun recordLowMemory(context: Context, level: Int) {
+        val file = File(dir(context), LOW_MEMORY_FILE)
+        val body = buildString {
+            appendLine(header())
+            appendLine("触发档位：$level")
+            append(resourceSnapshot(context))
+        }
+        runCatching { file.writeText(body) }
+    }
+
+    /** 内存快照的文件名（导出诊断包时一并带上） */
+    const val LOW_MEMORY_FILE = "lowmem-latest.txt"
+
+    private fun resourceSnapshot(context: Context): String = buildString {
+        appendLine()
+        appendLine("=== 资源快照（崩溃时） ===")
+        val rt = Runtime.getRuntime()
+        appendLine("Java 堆：${mb(rt.totalMemory() - rt.freeMemory())} / ${mb(rt.maxMemory())} MB")
+        runCatching {
+            appendLine("native 堆：${mb(android.os.Debug.getNativeHeapAllocatedSize())} MB")
+        }
+        runCatching {
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+            val mi = am?.let { android.app.ActivityManager.MemoryInfo().also { m -> it.getMemoryInfo(m) } }
+            if (mi != null) appendLine("系统可用：${mb(mi.availMem)} MB   低内存标志：${mi.lowMemory}")
+        }
+        runCatching {
+            val proc = com.luckylearning.windtone.diag.ProcStats.read()
+            if (proc != null) {
+                appendLine("线程数：${proc.threads}   文件描述符：${proc.fds}")
+                appendLine("VmRSS：${mb(proc.vmRssKb * 1024)} MB   峰值 VmHWM：${mb(proc.vmHwmKb * 1024)} MB")
+                // 两条判据：fd 逼近 1024 上限、线程数异常 —— 这两个数字比栈更能说明死因
+                if (proc.fds > 900) appendLine("⚠ fd 已逼近进程上限（1024），高度怀疑句柄泄漏")
+                if (proc.threads > 200) appendLine("⚠ 线程数异常，高度怀疑线程泄漏")
+            }
+        }
+        runCatching {
+            val cpu = com.luckylearning.windtone.diag.ProcStats.readCpu()
+            if (cpu != null) {
+                appendLine("进程 CPU：${"%.1f".format(cpu.processPercent)}%")
+                cpu.top.take(5).forEach { t ->
+                    appendLine("  ${"%.1f".format(t.percent)}%  ${t.name}")
+                }
+            }
+        }
+        runCatching {
+            val s = CoverRepository.stats()
+            appendLine(
+                "封面缓存：位图 ${mb(s.bitmapBytes.toLong())}/${mb(s.bitmapMax.toLong())} MB" +
+                    "   原始 ${mb(s.rawBytes.toLong())}/${mb(s.rawMax.toLong())} MB" +
+                    "   磁盘 ${mb(s.diskBytes)} MB",
+            )
+        }
+        runCatching {
+            appendLine("诊断日志条数：${com.luckylearning.windtone.diag.DiagLog.size()}")
+        }
+    }
+
+    /** 字节 → MB，保留一位小数（快照里一律用 MB，便于一眼比较） */
+    private fun mb(bytes: Long): String = "%.1f".format(bytes / 1048576.0)
 
     private fun prune(context: Context) {
         files(context).drop(KEEP).forEach { runCatching { it.delete() } }

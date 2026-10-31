@@ -312,13 +312,34 @@ class PlaybackService : MediaLibraryService() {
 
     // ================================================================ 小部件
 
+    /**
+     * 上次推给小部件的内容指纹。
+     *
+     * 存在的理由见 [pushWidget] 的去重注释：换一行歌词也会走到 pushWidget，
+     * 不去重就是每换一行重解一次封面。
+     */
+    @Volatile
+    private var lastWidgetKey: String? = null
+
     private fun pushWidget() {
         val player = mediaSession?.player ?: return
+        val item = player.currentMediaItem
+        val md = item?.mediaMetadata
+        val title = md?.title?.toString().orEmpty()
+        val artist = md?.artist?.toString().orEmpty()
+        val playing = player.isPlaying
+        val artworkSize = md?.artworkData?.size ?: 0
+        // 去重（v1.2.40）：锁屏歌词靠 `replaceMediaItem` 改 description 表达当前行，
+        // 每换一行都会触发 `onMediaMetadataChanged` → 走到这里。不去重的话，
+        // 一首 61 行的歌就是 61 次封面解码 + 61 次 RemoteViews 全量重建
+        // （每次还带 7 个 PendingIntent 的 IPC）；一小时播放下来几百次。
+        //
+        // 指纹里带 artworkSize 是为了不误伤「封面异步加载完成」那一次更新：
+        // 那时 mediaId / 标题 / 播放态都没变，只有封面字节从无到有。
+        val key = "${item?.mediaId.orEmpty()}|$title|$artist|$playing|$artworkSize"
+        if (key == lastWidgetKey) return
+        lastWidgetKey = key
         scope.launch {
-            val md = player.currentMediaItem?.mediaMetadata
-            val title = md?.title?.toString().orEmpty()
-            val artist = md?.artist?.toString().orEmpty()
-            val playing = player.isPlaying
             val cover = kotlinx.coroutines.withContext(Dispatchers.Default) {
                 md?.artworkData?.takeIf { it.isNotEmpty() }?.let { decodeSmall(it) }
             }

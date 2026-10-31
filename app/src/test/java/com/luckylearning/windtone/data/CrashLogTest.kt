@@ -43,6 +43,42 @@ class CrashLogTest {
         assertNull(CrashLog.latestUnseen(context))
     }
 
+    // -------------------------------------------------- 内存快照不干扰崩溃记录（v1.2.40）
+
+    @Test
+    fun lowMemorySnapshotIsNotCountedAsACrash() {
+        // 快照是滚动覆盖的单份文件。若混进 files()，就会顶掉「最近一次崩溃」，
+        // 启动时那张主动弹给用户的页拿到的就不是栈了。
+        CrashLog.recordLowMemory(context, 15)
+        writeCrash("crash-1.txt", "boom", 1_000L)
+
+        assertEquals(1, CrashLog.files(context).size)
+        assertEquals("crash-1.txt", CrashLog.files(context).first().name)
+        assertEquals("boom", CrashLog.latest(context))
+    }
+
+    @Test
+    fun lowMemorySnapshotSurvivesPruningButIsStillExported() {
+        repeat(8) { writeCrash("crash-$it.txt", "b$it", it.toLong()) }
+        CrashLog.recordLowMemory(context, 10)
+        // prune 只按崩溃份数（KEEP=5）淘汰，不该顺手删掉快照
+        CrashLog.record(context, "x", "y")
+
+        assertTrue(File(CrashLog.dir(context), CrashLog.LOW_MEMORY_FILE).isFile)
+        assertEquals(5, CrashLog.files(context).size)
+
+        val text = CrashLog.allText(context)
+        assertTrue(text.contains(CrashLog.LOW_MEMORY_FILE))
+        assertTrue(text.contains("资源快照"))
+    }
+
+    @Test
+    fun clearRemovesTheSnapshotToo() {
+        CrashLog.recordLowMemory(context, 15)
+        CrashLog.clear(context)
+        assertEquals(0, CrashLog.dir(context).listFiles()?.size ?: 0)
+    }
+
     @Test
     fun crashFileIsShownOnceThenNeverAgain() {
         writeCrash("crash-20261017-114100.txt", "java.lang.IllegalStateException: boom", 1_000L)

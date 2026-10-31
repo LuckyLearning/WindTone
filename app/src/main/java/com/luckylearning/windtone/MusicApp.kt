@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.ComponentCallbacks2
 import android.os.Build
+import android.os.SystemClock
 import com.luckylearning.windtone.data.BootTrace
 import com.luckylearning.windtone.data.CoverRepository
 import com.luckylearning.windtone.data.CoverTrimLevel
@@ -20,6 +21,9 @@ class MusicApp : Application() {
 
     /** 应用级依赖容器；ViewModel 与各仓库都从这里取依赖 */
     val container: AppContainer by lazy { AppContainer(this) }
+
+    /** 内存快照的节流时间戳：[Companion.LOW_MEM_NOTE_INTERVAL_MS] 内最多写一次 */
+    private var lastLowMemNoteAt = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -110,6 +114,18 @@ class MusicApp : Application() {
         if (level == ComponentCallbacks2.TRIM_MEMORY_COMPLETE) {
             runCatching { PinyinIndex.dropCaches() }
         }
+        // 内存吃紧时留一份资源快照（v1.2.40）。
+        // 车机上报过「长时间运行后崩溃」，而崩溃栈只指向最后一个倒霉的分配点，
+        // 说明不了是谁把内存吃掉的。系统内存紧张是 OOM 的必经前兆，
+        // 这里拍一张「死前最后一张照片」，比事后看栈有用得多。
+        // 带节流：这个回调可能被高频触发，不该每次都写一遍文件。
+        if (coverLevel == CoverTrimLevel.RUNNING_LOW) {
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastLowMemNoteAt >= LOW_MEM_NOTE_INTERVAL_MS) {
+                lastLowMemNoteAt = now
+                runCatching { CrashLog.recordLowMemory(this, level) }
+            }
+        }
     }
 
     /** 执行一步启动初始化；失败只记账，不阻断启动 */
@@ -158,5 +174,15 @@ class MusicApp : Application() {
 
     companion object {
         const val CHANNEL_ID = "local_music_player_playback"
+
+        /**
+         * 内存紧张留痕的最小间隔。
+         *
+         * `onTrimMemory(RUNNING_LOW)` 在系统持续吃紧时会被反复下发，每次都写一遍
+         * 文件反而是在给已经很紧张的系统添负担；一分钟一次足够画出「死前曲线」。
+         */
+        private const val LOW_MEM_NOTE_INTERVAL_MS = 60_000L
+
+        /** 通知渠道名之外的常量都放这里（Kotlin 的 const 只能在顶层 / object / companion） */
     }
 }
