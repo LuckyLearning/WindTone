@@ -27,10 +27,14 @@ jobs:
       - name: 检出仓库
         uses: actions/checkout@v4
 
-      # 首次必须在仓库 Settings → Pages → Build and deployment → Source
-      # 选「GitHub Actions」。未启用时本步会 404 失败（PAT/GITHUB_TOKEN 均无法代开）。
+      # 用 GITHUB_TOKEN（permissions.pages: write）尝试自动启用 Pages（enablement: true）。
+      # 若仍失败，请到 Settings → Pages → Build and deployment → Source 选「GitHub Actions」，
+      # 然后 Actions → Deploy docs to GitHub Pages → Run workflow。
       - name: 配置 Pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
 
       - name: Jekyll 构建
         uses: actions/jekyll-build-pages@v1
