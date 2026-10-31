@@ -27,9 +27,10 @@ jobs:
       - name: 检出仓库
         uses: actions/checkout@v4
 
-      # 用 GITHUB_TOKEN（permissions.pages: write）尝试自动启用 Pages（enablement: true）。
-      # 若仍失败，请到 Settings → Pages → Build and deployment → Source 选「GitHub Actions」，
-      # 然后 Actions → Deploy docs to GitHub Pages → Run workflow。
+      # enablement:true 会尝试用 GITHUB_TOKEN 创建 Pages 站点；GitHub 现已禁止
+      # integration 代开（会报 Resource not accessible by integration）。
+      # 首次必须人工：Settings → Pages → Build and deployment → Source = GitHub Actions，
+      # 再重跑本 workflow（或再推一次 docs/**）。启用后本步仅读取配置即可成功。
       - name: 配置 Pages
         uses: actions/configure-pages@v5
         with:

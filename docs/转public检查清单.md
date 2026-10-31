@@ -116,7 +116,7 @@ parent: 开发文档
 | 主题 | `remote_theme: just-the-docs/just-the-docs@v0.10.1`（侧栏 + 搜索 + 浅/深色切换） |
 | 旧布局 | 原内联 CSS 布局已挪到 `docs/archive/legacy-default-layout.html` |
 | 触发 | 仅 `docs/**` 或 `pages.yml` 变更自动部署；也可手动 Run |
-| **你必须开一次** | Settings → Pages → Build and deployment → **Source = GitHub Actions**。未开时 `configure-pages` 会 404。本机 PAT（fine-grained）缺 Pages 权限时 API 亦 403，agent 无法代开。 |
+| **你必须开一次** | Settings → Pages → Build and deployment → **Source = GitHub Actions**。未开时必挂：PAT API 403；workflow 里 `enablement: true` 亦被拒（`Resource not accessible by integration`）。**只能网页点一次**；开好后重跑 Deploy docs 即可。 |
 | 站点 URL | https://luckylearning.github.io/WindTone/ |
 
 开好 Source 后，再推一笔 `docs/**` 或 Actions 里手动跑 **Deploy docs to GitHub Pages** 即可上线。
