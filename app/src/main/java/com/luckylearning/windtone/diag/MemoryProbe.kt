@@ -122,15 +122,33 @@ object MemoryProbe {
         if (proc == null) {
             appendLine(AppStrings.s(R.string.mp_proc_fail))
         } else {
+            val fdText = when {
+                proc.fds < 0 -> "?"
+                proc.fdLimit > 0 && proc.fdLimit != Int.MAX_VALUE ->
+                    "${proc.fds}/${proc.fdLimit}"
+                proc.fdLimit == Int.MAX_VALUE -> "${proc.fds}/unlimited"
+                else -> proc.fds.toString()
+            }
             appendLine(
                 AppStrings.s(
                     R.string.mp_proc_line,
                     if (proc.threads >= 0) proc.threads.toString() else "?",
-                    if (proc.fds >= 0) proc.fds.toString() else "?",
+                    fdText,
                     proc.vmRssKb / 1024,
                     proc.vmHwmKb / 1024,
                 ),
             )
+            // 稳定键：长稳包互相对照用，字段名勿改（非 UI 文案）
+            appendLine(ProcStats.stableKeyLine(proc))
+            if (proc.fdSize >= 0) {
+                appendLine(AppStrings.s(R.string.mp_proc_fdsize, proc.fdSize))
+            }
+            if (ProcStats.fdNearLimit(proc)) {
+                appendLine(AppStrings.s(R.string.mp_proc_fd_warn))
+            }
+            if (ProcStats.threadsElevated(proc)) {
+                appendLine(AppStrings.s(R.string.mp_proc_thread_warn))
+            }
         }
 
         val reading = ProcStats.readCpu()

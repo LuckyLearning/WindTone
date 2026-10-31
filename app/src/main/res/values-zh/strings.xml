@@ -1687,6 +1687,9 @@
     <string name="mp_budget">预算依据：位图 maxMemory/8（夹 8~32MB）· 原始 maxMemory/32（夹 1.5~3MB）</string>
     <string name="mp_proc_fail">进程：/proc/self 读取失败（本机限制），线程与 fd 数量不可得</string>
     <string name="mp_proc_line">进程：线程 %1$s   文件描述符 %2$s   VmRSS %3$d MB   历史峰值 %4$d MB</string>
+    <string name="mp_proc_fdsize">  FDSize（内核表容量）：%1$d   判读：这是表大小不是打开数；请与 fds 对照</string>
+    <string name="mp_proc_fd_warn">  警告：fd 已逼近软上限（≥90%），高度怀疑句柄泄漏</string>
+    <string name="mp_proc_thread_warn">  警告：线程数偏高，高度怀疑线程泄漏</string>
     <string name="mp_cpu_fail">CPU：不可得 —— %1$s</string>
     <string name="mp_reason_unknown">原因未知</string>
     <string name="mp_cpu_fail_read">  判读：CPU 段失效时，卡顿/空转问题无法从诊断包判断；请把这行原文回传</string>

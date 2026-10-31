@@ -37,12 +37,20 @@ import java.io.File
  */
 object ProcStats {
 
-    /** 进程规模。`fds` 读不到时为 -1 */
+    /**
+     * 进程规模。
+     *
+     * - [fds]：`/proc/self/fd` 打开数（读不到为 -1）
+     * - [fdLimit]：`/proc/self/limits` 的 Max open files **软**上限（读不到为 -1）
+     * - [fdSize]：`status` 的 FDSize（内核 FD **表容量**，可大于打开数；勿与 [fds] 混淆）
+     */
     data class Proc(
         val threads: Int,
         val fds: Int,
         val vmRssKb: Long,
         val vmHwmKb: Long,
+        val fdLimit: Int = -1,
+        val fdSize: Int = -1,
     )
 
     /** 单线程 CPU 占比（相对「进程启动至今」这段墙钟时间） */
@@ -101,8 +109,10 @@ object ProcStats {
 
     fun read(): Proc? = runCatching {
         val status = readText("/proc/self/status") ?: return null
+        // list() 只在导出/崩溃快照时跑一次；含打开本目录瞬间多出的 1 个 fd，对照时按「约数」看即可
         val fds = runCatching { File("/proc/self/fd").list()?.size ?: -1 }.getOrDefault(-1)
-        parseStatus(status, fds)
+        val fdLimit = readText("/proc/self/limits")?.let { parseFdSoftLimit(it) } ?: -1
+        parseStatus(status, fds = fds, fdLimit = fdLimit)
     }.getOrNull()
 
     /**
@@ -122,8 +132,11 @@ object ProcStats {
      *  2. 读不到就用 `SystemClock.elapsedRealtime()` —— 同样以开机为原点，
      *     但**含深睡**，分母偏大 → CPU 百分比会被低估（报告里会写明）；
      *  3. 仍算不出就把失败环节带回去，不再返回一个没有信息量的 null。
+     *
+     * @param includeTopThreads false 时跳过扫 `/proc/self/task/` 下各 tid 的 `stat`
+     *   （崩溃快照冷路径用，少一次 N 文件读）
      */
-    fun readCpu(): CpuReading = runCatching {
+    fun readCpu(includeTopThreads: Boolean = true): CpuReading = runCatching {
         val selfText = readText("/proc/self/stat")
             ?: return@runCatching CpuReading(null, "/proc/self/stat 不可读（被 SELinux 或厂商策略拦下）")
         val self = parseStat(selfText)
@@ -146,13 +159,17 @@ object ProcStats {
 
         val procPercent = self.total / clk / elapsedSec * 100.0
 
-        val top = runCatching {
-            File("/proc/self/task").list()?.mapNotNull { tid ->
-                val text = readText("/proc/self/task/$tid/stat") ?: return@mapNotNull null
-                val ticks = parseStat(text) ?: return@mapNotNull null
-                ThreadCpu(threadName(text), ticks.total / clk / elapsedSec * 100.0)
-            }?.sortedByDescending { it.percent }?.take(TOP_THREADS)
-        }.getOrNull().orEmpty()
+        val top = if (!includeTopThreads) {
+            emptyList()
+        } else {
+            runCatching {
+                File("/proc/self/task").list()?.mapNotNull { tid ->
+                    val text = readText("/proc/self/task/$tid/stat") ?: return@mapNotNull null
+                    val ticks = parseStat(text) ?: return@mapNotNull null
+                    ThreadCpu(threadName(text), ticks.total / clk / elapsedSec * 100.0)
+                }?.sortedByDescending { it.percent }?.take(TOP_THREADS)
+            }.getOrNull().orEmpty()
+        }
 
         CpuReading(Cpu(procPercent, top, basis, elapsedSec))
     }.getOrElse { e ->
@@ -176,19 +193,65 @@ object ProcStats {
      *
      * 只挑四行，不整体切分 —— 这个文件有 50 多行，逐行 `startsWith` 比建 map 便宜。
      */
-    internal fun parseStatus(text: String, fds: Int = -1): Proc {
+    internal fun parseStatus(
+        text: String,
+        fds: Int = -1,
+        fdLimit: Int = -1,
+    ): Proc {
         var threads = -1
         var rss = 0L
         var hwm = 0L
+        var fdSize = -1
         for (line in text.lineSequence()) {
             when {
                 line.startsWith("Threads:") -> threads = numberAfterColon(line).toInt()
                 line.startsWith("VmRSS:") -> rss = numberAfterColon(line)
                 line.startsWith("VmHWM:") -> hwm = numberAfterColon(line)
+                line.startsWith("FDSize:") -> fdSize = numberAfterColon(line).toInt()
             }
         }
-        return Proc(threads.coerceAtLeast(-1), fds, rss, hwm)
+        return Proc(
+            threads = threads.coerceAtLeast(-1),
+            fds = fds,
+            vmRssKb = rss,
+            vmHwmKb = hwm,
+            fdLimit = fdLimit,
+            fdSize = fdSize,
+        )
     }
+
+    /**
+     * `/proc/self/limits` → Max open files 软上限。
+     *
+     * 行形如：`Max open files            1024                 4096                 files`
+     * 硬编码 1024 做告警会在厂商改软限时误报；对照长稳包必须带真实软限。
+     */
+    internal fun parseFdSoftLimit(text: String): Int {
+        for (line in text.lineSequence()) {
+            if (!line.startsWith("Max open files")) continue
+            val parts = WHITESPACE.split(line.trim())
+            if (parts.size < 4) return -1
+            val soft = parts[3]
+            if (soft.equals("unlimited", ignoreCase = true)) return Int.MAX_VALUE
+            return soft.toIntOrNull() ?: -1
+        }
+        return -1
+    }
+
+    /** fd 是否逼近软上限（≥ 90%）；无软限时不告警 */
+    fun fdNearLimit(proc: Proc): Boolean {
+        if (proc.fds < 0 || proc.fdLimit <= 0) return false
+        if (proc.fdLimit == Int.MAX_VALUE) return false
+        return proc.fds * 10L >= proc.fdLimit * 9L
+    }
+
+    /** 线程数是否异常偏高（与崩溃快照同一口径，便于诊断包对照） */
+    fun threadsElevated(proc: Proc): Boolean = proc.threads > THREAD_WARN
+
+    /** 稳定键行：跨语言/版本 grep 对照用，字段名勿改 */
+    fun stableKeyLine(proc: Proc): String =
+        "proc_key	threads=${proc.threads}	fds=${proc.fds}	fd_limit=${proc.fdLimit}	" +
+            "fd_size=${proc.fdSize}	vm_rss_kb=${proc.vmRssKb}	vm_hwm_kb=${proc.vmHwmKb}"
 
     /**
      * `/proc/[pid|tid]/stat` 解析。
@@ -371,6 +434,9 @@ object ProcStats {
 
     /** 线程榜只报前几个：再长就没人看了，也失去「一眼看出谁在转」的意义 */
     private const val TOP_THREADS = 5
+
+    /** 与 CrashLog 资源快照同一阈值：超过即提示怀疑线程泄漏 */
+    const val THREAD_WARN = 200
 
     /** malloc 归类的统一标签（MemoryProbe 按它取合计，别在两处各写一遍字符串） */
     const val MALLOC_LABEL = "libc malloc（位图/解码缓冲）"

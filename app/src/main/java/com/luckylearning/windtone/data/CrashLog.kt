@@ -239,15 +239,26 @@ object CrashLog {
         runCatching {
             val proc = com.luckylearning.windtone.diag.ProcStats.read()
             if (proc != null) {
-                appendLine("线程数：${proc.threads}   文件描述符：${proc.fds}")
+                val lim = when {
+                    proc.fdLimit < 0 -> "?"
+                    proc.fdLimit == Int.MAX_VALUE -> "unlimited"
+                    else -> proc.fdLimit.toString()
+                }
+                appendLine("线程数：${proc.threads}   文件描述符：${proc.fds}/$lim   FDSize：${proc.fdSize}")
                 appendLine("VmRSS：${mb(proc.vmRssKb * 1024)} MB   峰值 VmHWM：${mb(proc.vmHwmKb * 1024)} MB")
-                // 两条判据：fd 逼近 1024 上限、线程数异常 —— 这两个数字比栈更能说明死因
-                if (proc.fds > 900) appendLine("⚠ fd 已逼近进程上限（1024），高度怀疑句柄泄漏")
-                if (proc.threads > 200) appendLine("⚠ 线程数异常，高度怀疑线程泄漏")
+                appendLine(com.luckylearning.windtone.diag.ProcStats.stableKeyLine(proc))
+                if (com.luckylearning.windtone.diag.ProcStats.fdNearLimit(proc)) {
+                    appendLine("⚠ fd 已逼近软上限（${proc.fds}/${proc.fdLimit}），高度怀疑句柄泄漏")
+                }
+                if (com.luckylearning.windtone.diag.ProcStats.threadsElevated(proc)) {
+                    appendLine("⚠ 线程数异常（>${com.luckylearning.windtone.diag.ProcStats.THREAD_WARN}），高度怀疑线程泄漏")
+                }
             }
         }
         runCatching {
-            val reading = com.luckylearning.windtone.diag.ProcStats.readCpu()
+            // 崩溃路径不扫 task/*/stat：只要进程 CPU%；线程榜留给诊断包导出
+            val reading = com.luckylearning.windtone.diag.ProcStats.readCpu(includeTopThreads = false)
+
             val cpu = reading.cpu
             if (cpu != null) {
                 appendLine("进程 CPU：${"%.1f".format(cpu.processPercent)}%（分母 ${cpu.basis}）")

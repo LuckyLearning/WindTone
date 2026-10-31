@@ -1721,6 +1721,9 @@ Expired codes refresh automatically. This app is read-only — it never uploads,
     <string name="mp_budget">Budget: bitmap maxMemory/8 (clamped 8~32MB) · raw maxMemory/32 (clamped 1.5~3MB)</string>
     <string name="mp_proc_fail">Process: /proc/self read failed (device limit); thread and fd counts unavailable</string>
     <string name="mp_proc_line">Process: threads %1$s   fds %2$s   VmRSS %3$d MB   peak %4$d MB</string>
+    <string name="mp_proc_fdsize">  FDSize (kernel table): %1$d   Reading: table capacity, not open count; compare with fds</string>
+    <string name="mp_proc_fd_warn">  Warning: fds near soft Max open files (≥90%) — suspect handle leak</string>
+    <string name="mp_proc_thread_warn">  Warning: thread count elevated — suspect thread leak</string>
     <string name="mp_cpu_fail">CPU: unavailable — %1$s</string>
     <string name="mp_reason_unknown">reason unknown</string>
     <string name="mp_cpu_fail_read">  Reading: when the CPU section fails, jank/spin cannot be judged from the pack; paste this line back</string>

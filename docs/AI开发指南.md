@@ -2081,7 +2081,7 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 任何人把倍率调回去都会红。
 
 **上线后怎么量化**：诊断包新增 `[内存]` 段（`diag/MemoryProbe.kt`），给 Java 堆 used/max、native 堆、
-系统可用与低内存标志、封面两级缓存的占用与命中率、磁盘缓存大小与磁盘 hits/miss/命中率。车机不让 adb，这一段是唯一能拿到的数：
+系统可用与低内存标志、封面两级缓存的占用与命中率、磁盘缓存大小与磁盘 hits/miss/命中率。进程行带 `proc_key`（threads/fds/fd_limit/vm_rss_kb）便于长稳包 grep 对照；fd 告警按 `/proc/self/limits` 软限而非写死 1024。车机不让 adb，这一段是唯一能拿到的数：
 **命中率低 → 预算给小了或键设计有问题；位图占用贴着上限 → 列表尺寸档位太多或 targetPx 又算大了。**
 
 ---

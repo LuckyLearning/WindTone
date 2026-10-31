@@ -36,6 +36,8 @@ class ProcStatsTest {
         assertEquals(214, proc.fds)
         assertEquals(497664L, proc.vmRssKb)
         assertEquals(524288L, proc.vmHwmKb)
+        assertEquals(-1, proc.fdSize)
+        assertEquals(-1, proc.fdLimit)
     }
 
     @Test
@@ -46,6 +48,61 @@ class ProcStatsTest {
         assertEquals(-1, proc.fds)
         assertEquals(0L, proc.vmRssKb)
         assertEquals(0L, proc.vmHwmKb)
+    }
+
+
+    @Test
+    fun `status 解析 FDSize`() {
+        val text = """
+            Threads:	40
+            FDSize:	256
+            VmRSS:	  1000 kB
+            VmHWM:	  2000 kB
+        """.trimIndent()
+        val proc = ProcStats.parseStatus(text, fds = 80, fdLimit = 1024)
+        assertEquals(40, proc.threads)
+        assertEquals(80, proc.fds)
+        assertEquals(1024, proc.fdLimit)
+        assertEquals(256, proc.fdSize)
+        assertEquals(1000L, proc.vmRssKb)
+    }
+
+    @Test
+    fun `limits 解析 Max open files 软上限`() {
+        val text = """
+            Limit                     Soft Limit           Hard Limit           Units
+            Max cpu time              unlimited            unlimited            seconds
+            Max open files            1024                 4096                 files
+            Max locked memory         65536                65536                bytes
+        """.trimIndent()
+        assertEquals(1024, ProcStats.parseFdSoftLimit(text))
+    }
+
+    @Test
+    fun `limits 缺行返回 -1`() {
+        assertEquals(-1, ProcStats.parseFdSoftLimit("Max cpu time unlimited unlimited seconds"))
+    }
+
+    @Test
+    fun `fdNearLimit 按软限九成判定`() {
+        val near = ProcStats.Proc(10, fds = 922, vmRssKb = 1, vmHwmKb = 1, fdLimit = 1024) // 922/1024 >= 90%
+        val ok = ProcStats.Proc(10, fds = 100, vmRssKb = 1, vmHwmKb = 1, fdLimit = 1024)
+        val noLim = ProcStats.Proc(10, fds = 9999, vmRssKb = 1, vmHwmKb = 1, fdLimit = -1)
+        assertTrue(ProcStats.fdNearLimit(near))
+        assertTrue(!ProcStats.fdNearLimit(ok))
+        assertTrue(!ProcStats.fdNearLimit(noLim))
+    }
+
+    @Test
+    fun `stableKeyLine 字段名稳定可 grep`() {
+        val proc = ProcStats.Proc(38, 214, 497664, 524288, fdLimit = 1024, fdSize = 256)
+        val line = ProcStats.stableKeyLine(proc)
+        assertTrue(line.startsWith("proc_key"))
+        assertTrue(line.contains("threads=38"))
+        assertTrue(line.contains("fds=214"))
+        assertTrue(line.contains("fd_limit=1024"))
+        assertTrue(line.contains("fd_size=256"))
+        assertTrue(line.contains("vm_rss_kb=497664"))
     }
 
     // ------------------------------------------------------------------ stat
