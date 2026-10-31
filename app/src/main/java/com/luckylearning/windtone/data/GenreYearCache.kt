@@ -23,6 +23,10 @@ class GenreYearCache(
 
     data class Entry(val genre: String? = null, val year: Int? = null)
 
+    /** 解析结果驻留内存；save / clear 时失效。避免 applyLibrary 连读 6 次 JSON。 */
+    @Volatile
+    private var memo: Map<String, Entry>? = null
+
     /** 用缓存里的 genre/year 覆盖 Song（缓存无记录则原样返回）。 */
     fun overlay(song: Song): Song {
         val e = load()[song.stableKey] ?: return song
@@ -74,9 +78,32 @@ class GenreYearCache(
         if (changed) save(all)
     }
 
+    /**
+     * 曲库落地后调用：写入扫描字段，并只保留当前库的键（+ [MetadataPrefsPolicy.MAX_ENTRIES]）。
+     * 须在 IO 调度器调用。
+     */
+    fun syncFromLibrary(songs: List<Song>) {
+        putFromSongs(songs)
+        retainOnly(songs.mapNotNullTo(HashSet(songs.size.coerceAtLeast(16))) {
+            it.stableKey.takeIf { k -> k.isNotBlank() }
+        })
+    }
+
+    /** 丢掉已不在曲库的键；超上限再截断。 */
+    fun retainOnly(keep: Set<String>) {
+        val all = load().toMutableMap()
+        if (!MetadataPrefsPolicy.retainAndCap(all, keep)) return
+        save(all)
+    }
+
     private fun load(): Map<String, Entry> {
-        val raw = prefs.getString(KEY, null)?.takeIf { it.isNotBlank() } ?: return emptyMap()
-        return runCatching {
+        memo?.let { return it }
+        val raw = prefs.getString(KEY, null)?.takeIf { it.isNotBlank() }
+        if (raw == null) {
+            memo = emptyMap()
+            return emptyMap()
+        }
+        val parsed = runCatching {
             val root = JSONObject(raw)
             buildMap {
                 val keys = root.keys()
@@ -89,6 +116,8 @@ class GenreYearCache(
                 }
             }
         }.getOrDefault(emptyMap())
+        memo = parsed
+        return parsed
     }
 
     private fun save(map: Map<String, Entry>) {
@@ -100,6 +129,7 @@ class GenreYearCache(
             root.put(k, o)
         }
         prefs.edit().putString(KEY, root.toString()).apply()
+        memo = map
     }
 
     companion object {

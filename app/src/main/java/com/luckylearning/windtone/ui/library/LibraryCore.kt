@@ -404,11 +404,11 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
         // 每曲状态（收藏 / 标签覆盖 / 歌词偏移）一次读全，之后同步可用
         val states = withContext(Dispatchers.IO) { db.songStateDao().all() }
         index.replaceStates(states)
-        // G1/G2：扫描带来的 genre/year/albumArtist 写入 Prefs；冷启动从 Prefs 盖回（Room 无此列）
+        // G1/G2/G3：扫描字段写入 Prefs，并按当前曲库 prune（防 JSON 膨胀）；冷启动盖回
         withContext(Dispatchers.IO) {
-            session.genreYears.putFromSongs(raw)
-            session.albumArtists.putFromSongs(raw)
-            session.discNumbers.putFromSongs(raw)
+            session.genreYears.syncFromLibrary(raw)
+            session.albumArtists.syncFromLibrary(raw)
+            session.discNumbers.syncFromLibrary(raw)
         }
         val overlaid = session.discNumbers.overlay(
             session.albumArtists.overlay(session.genreYears.overlay(raw)),

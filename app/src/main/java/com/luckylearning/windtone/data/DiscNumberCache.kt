@@ -20,6 +20,9 @@ class DiscNumberCache(
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE),
     )
 
+    @Volatile
+    private var memo: Map<String, Int>? = null
+
     fun overlay(song: Song): Song {
         val d = normalizeDiscNumber(load()[song.stableKey]) ?: return song
         if (song.discNumber == d) return song
@@ -52,9 +55,27 @@ class DiscNumberCache(
         if (changed) save(all)
     }
 
+    fun syncFromLibrary(songs: List<Song>) {
+        putFromSongs(songs)
+        retainOnly(songs.mapNotNullTo(HashSet(songs.size.coerceAtLeast(16))) {
+            it.stableKey.takeIf { k -> k.isNotBlank() }
+        })
+    }
+
+    fun retainOnly(keep: Set<String>) {
+        val all = load().toMutableMap()
+        if (!MetadataPrefsPolicy.retainAndCap(all, keep)) return
+        save(all)
+    }
+
     private fun load(): Map<String, Int> {
-        val raw = prefs.getString(KEY, null)?.takeIf { it.isNotBlank() } ?: return emptyMap()
-        return runCatching {
+        memo?.let { return it }
+        val raw = prefs.getString(KEY, null)?.takeIf { it.isNotBlank() }
+        if (raw == null) {
+            memo = emptyMap()
+            return emptyMap()
+        }
+        val parsed = runCatching {
             val root = JSONObject(raw)
             buildMap {
                 val keys = root.keys()
@@ -67,12 +88,15 @@ class DiscNumberCache(
                 }
             }
         }.getOrDefault(emptyMap())
+        memo = parsed
+        return parsed
     }
 
     private fun save(map: Map<String, Int>) {
         val root = JSONObject()
         for ((k, v) in map) root.put(k, v)
         prefs.edit().putString(KEY, root.toString()).apply()
+        memo = map
     }
 
     companion object {

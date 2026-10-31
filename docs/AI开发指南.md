@@ -2448,5 +2448,6 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 - 验证：`compileDebugKotlin` + `OverlayPositionerTest`
 - 文档：`docs/功能-i18n扫尾扫仓.md`
 - D2 歌单 M3U 导入收口：`M3uLocalImport` IO+上限；见 `功能-歌单M3U导入.md`
-- 下一项建议：**内容库名可选 i18n**（本机 P3；仍勿把 E6/长稳开车当实现任务）
+- 元数据 Prefs 侧缓存裁剪：`MetadataPrefsPolicy` + G1/G2/G3 `syncFromLibrary`；见 `功能-元数据Prefs侧缓存裁剪.md`
+- 下一项建议：真机 §5（用户）；开发侧可选 **内容库名 i18n（P3）**（仍勿把 E6/长稳当写码）
 
