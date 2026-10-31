@@ -363,7 +363,7 @@ class PlaybackService : MediaLibraryService() {
             bytes, 0, bytes.size,
             BitmapFactory.Options().apply { inSampleSize = sample },
         )
-    }.getOrNull()
+    }.getOrNull()?.let { com.luckylearning.windtone.diag.BitmapMeter.track(it) }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? =
         mediaSession

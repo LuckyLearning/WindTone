@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.util.Log
 import android.util.LruCache
 import com.luckylearning.windtone.data.model.Song
+import com.luckylearning.windtone.diag.BitmapMeter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
@@ -162,17 +163,21 @@ object CoverRepository {
         (heapMax / 8).coerceIn(8L * 1024 * 1024, 32L * 1024 * 1024).toInt()
 
     /**
-     * 原始字节缓存上限：堆的 1/16，夹 2~6MB。
+     * 原始字节缓存上限：堆的 1/32，夹 1.5~3MB（v1.2.41 下调，原 1/16 夹 2~6MB）。
      *
-     * 旧实现是固定 16MB，与位图缓存内容重复（同一首歌既存 JPEG 字节又存解码结果），
-     * 而在车机 192MB 的堆上这一项就吃掉 8%。它的唯一用途是通知栏封面和主题取色，
-     * 两者都能从磁盘缓存重新解码（几十毫秒），不值得为它留 16MB。
+     * 依据是车机实测：v1.2.40 诊断包里 **原始缓存 4.1/6.0MB（68% 满）而位图缓存
+     * 0.3/32MB（1%）** —— 装的是压缩字节，占着 Java 堆却省不了解码时间，
+     * 而真正省 CPU 的位图缓存几乎闲置。命中率也只有 5%（20 次请求 1 次命中），
+     * 说明「同一首歌的原始字节被反复要」这件事基本不发生。
+     *
+     * 它的唯一用途是通知栏封面和主题取色，两者都能从磁盘缓存重新解码（几十毫秒），
+     * 不值得为它常驻 6MB。
      */
     private fun rawCacheSize(): Int = rawCacheSizeFor(Runtime.getRuntime().maxMemory())
 
-    /** 见 [bitmapCacheSizeFor] 的说明；夹 2~6MB */
+    /** 见 [rawCacheSize]；堆的 1/32，夹 1.5~3MB */
     internal fun rawCacheSizeFor(heapMax: Long): Int =
-        (heapMax / 16).coerceIn(2L * 1024 * 1024, 6L * 1024 * 1024).toInt()
+        (heapMax / 32).coerceIn(1536L * 1024, 3L * 1024 * 1024).toInt()
 
     /** 由 [com.luckylearning.windtone.MusicApp] 在启动时注入；未注入时退化为纯内存缓存 */
     fun attach(context: Context) {
@@ -218,6 +223,7 @@ object CoverRepository {
         val file = diskFile(song, targetPx)
         if (file != null && file.exists()) {
             val cached = runCatching { BitmapFactory.decodeFile(file.absolutePath) }.getOrNull()
+                ?.let { BitmapMeter.track(it) }
             if (cached != null) {
                 recordDecode(fromDisk = true, byteCount = cached.byteCount)
                 bitmapCache.put(key, cached)
@@ -282,12 +288,14 @@ object CoverRepository {
             ?: return null
 
         val (w, h) = fitSize(decoded.width, decoded.height, targetPx)
-        if (w == decoded.width && h == decoded.height) return decoded
+        if (w == decoded.width && h == decoded.height) return BitmapMeter.track(decoded)
         val scaled = runCatching { Bitmap.createScaledBitmap(decoded, w, h, true) }.getOrNull()
-            ?: return decoded
+            ?: return BitmapMeter.track(decoded)
         // 像素已经搬到新位图，旧的大图立刻还给堆（`!==` 兜住「尺寸本就相同、返回自身」的情况）
         if (scaled !== decoded) decoded.recycle()
-        return scaled
+        // 只在这里登记：所有解码路径（含通知封面 downscaleForNotification）都经过本方法，
+        // 在调用方再登记一次会重复计数
+        return BitmapMeter.track(scaled)
     }
 
     /**

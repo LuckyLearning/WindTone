@@ -99,14 +99,15 @@ class CoverCacheTest {
         val mb = 1024L * 1024L
         // 手机（256MB 堆）：位图 32MB、原始 6MB
         assertEquals(32L, CoverRepository.bitmapCacheSizeFor(256 * mb) / mb)
-        assertEquals(6L, CoverRepository.rawCacheSizeFor(256 * mb) / mb)
-        // 车机（192MB 堆）：位图 24MB、原始 6MB。
-        // 这一条是本次改造的回归点 —— 旧实现原始缓存是固定 16MB，占这台机器堆的 8%。
+        assertEquals(3L, CoverRepository.rawCacheSizeFor(256 * mb) / mb)
+        // 车机（192MB 堆）：位图 24MB、原始 3MB。
+        // 这一条是本次改造的回归点 —— 旧实现原始缓存是固定 16MB，占这台机器堆的 8%；
+        // v1.2.41 又从 6MB 下调到 3MB（实测 68% 满、命中率仅 5%，占着堆却省不了解码）。
         assertEquals(24L, CoverRepository.bitmapCacheSizeFor(192 * mb) / mb)
-        assertEquals(6L, CoverRepository.rawCacheSizeFor(192 * mb) / mb)
-        // 低内存设备（64MB 堆）：位图 8MB（触底）、原始 4MB
+        assertEquals(3L, CoverRepository.rawCacheSizeFor(192 * mb) / mb)
+        // 低内存设备（64MB 堆）：位图 8MB（触底）、原始 2MB
         assertEquals(8L, CoverRepository.bitmapCacheSizeFor(64 * mb) / mb)
-        assertEquals(4L, CoverRepository.rawCacheSizeFor(64 * mb) / mb)
+        assertEquals(2L, CoverRepository.rawCacheSizeFor(64 * mb) / mb)
     }
 
     @Test

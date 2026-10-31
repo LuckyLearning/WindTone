@@ -1,5 +1,6 @@
 package com.luckylearning.windtone.diag
 
+import android.os.SystemClock
 import android.system.Os
 import android.system.OsConstants
 import java.io.File
@@ -48,7 +49,14 @@ object ProcStats {
     data class ThreadCpu(val name: String, val percent: Double)
 
     /** 进程级 CPU：平均占比 + 前几个热点线程 */
-    data class Cpu(val processPercent: Double, val top: List<ThreadCpu>)
+    data class Cpu(
+        val processPercent: Double,
+        val top: List<ThreadCpu>,
+        /** 分母依据（正常是 /proc/uptime；兜底时写明会低估，见 [readCpu]） */
+        val basis: String = "/proc/uptime",
+        /** 进程已存活秒数。分母就是它 —— 报告里写出来，「跑多久之后涨成这样」才说得清 */
+        val uptimeSec: Double = 0.0,
+    )
 
     /** 一类内存映射的占用。三项都给：Private_Dirty 看「自己吃掉的」，Pss 看「公平分摊」 */
     data class MemBucket(
@@ -58,11 +66,31 @@ object ProcStats {
         val pssKb: Long,
     )
 
-    data class Smaps(val buckets: List<MemBucket>) {
+    /** 一条内存映射（段）的占用。用于「大对象 vs 碎片」的判别 */
+    data class Segment(val name: String, val dirtyKb: Long)
+
+    data class Smaps(
+        val buckets: List<MemBucket>,
+        /** 逐段明细，按 Private_Dirty 降序。段数可能上百，只在导出时算一次 */
+        val segments: List<Segment> = emptyList(),
+    ) {
         val privateDirtyKb: Long get() = buckets.sumOf { it.privateDirtyKb }
         val rssKb: Long get() = buckets.sumOf { it.rssKb }
         val pssKb: Long get() = buckets.sumOf { it.pssKb }
+
+        /** 某归类的合计（前缀匹配，容忍标签里的括号说明） */
+        fun totalOf(labelPrefix: String): Long =
+            buckets.filter { it.label.startsWith(labelPrefix) }.sumOf { it.privateDirtyKb }
     }
+
+    /**
+     * CPU 采样结果。
+     *
+     * 能算出来就给 [cpu]，算不出来给 [failReason] —— **不再静默返回 null**：
+     * v1.2.40 的诊断包只写「读取失败，平均占用不可得」，等于把排查线索一起丢了
+     * （到底是 stat 不可读、解析不过、还是 uptime 被 SELinux 拦下，无从判断）。
+     */
+    data class CpuReading(val cpu: Cpu?, val failReason: String? = null)
 
     /** `/proc/self/stat` 里我们关心的三个字段（单位：时钟滴答） */
     data class StatTicks(val utime: Long, val stime: Long, val starttime: Long) {
@@ -83,14 +111,38 @@ object ProcStats {
      * 分母用「当前时刻 − 进程启动时刻」而不是「采样窗口」，所以得到的是
      * **进程启动至今的平均 CPU%**：播放中稳定在 1%~3% 属正常，若到 8% 以上
      * 说明有线程在空转。线程榜用来指出是哪个。
+     *
+     * ## 分母为什么要兜底（2026-10-31 修）
+     *
+     * 原先分母只有 `/proc/uptime` 一条路，读不到就整个 CPU 段作废。BYD DiLink5
+     * （Android 12）实测就落在这个坑里：诊断包里只留一句「读取失败」，看不出
+     * 是哪一环。现在：
+     *
+     *  1. 优先 `/proc/uptime` —— 与 `starttime` 同源，休眠时段不推进，口径最准；
+     *  2. 读不到就用 `SystemClock.elapsedRealtime()` —— 同样以开机为原点，
+     *     但**含深睡**，分母偏大 → CPU 百分比会被低估（报告里会写明）；
+     *  3. 仍算不出就把失败环节带回去，不再返回一个没有信息量的 null。
      */
-    fun readCpu(): Cpu? = runCatching {
-        val selfText = readText("/proc/self/stat") ?: return null
-        val self = parseStat(selfText) ?: return null
-        val uptime = readText("/proc/uptime")?.let { parseUptimeSec(it) } ?: return null
+    fun readCpu(): CpuReading = runCatching {
+        val selfText = readText("/proc/self/stat")
+            ?: return@runCatching CpuReading(null, "/proc/self/stat 不可读（被 SELinux 或厂商策略拦下）")
+        val self = parseStat(selfText)
+            ?: return@runCatching CpuReading(null, "/proc/self/stat 解析失败（字段不足 20 个，内核格式差异）")
         val clk = clkTck()
-        val elapsedSec = uptime - self.starttime.toDouble() / clk
-        if (elapsedSec <= 0.5) return null
+
+        val uptime = readText("/proc/uptime")?.let { parseUptimeSec(it) }
+        val elapsedSec: Double
+        val basis: String
+        if (uptime != null) {
+            elapsedSec = uptime - self.starttime / clk
+            basis = "/proc/uptime"
+        } else {
+            elapsedSec = SystemClock.elapsedRealtime() / 1000.0 - self.starttime / clk
+            basis = "elapsedRealtime（/proc/uptime 不可读，含深睡，百分比偏低）"
+        }
+        if (elapsedSec <= 0.5) {
+            return@runCatching CpuReading(null, "进程存活不足 1 秒，取不到平均值（刚启动就想看平均占用）")
+        }
 
         val procPercent = self.total / clk / elapsedSec * 100.0
 
@@ -102,16 +154,19 @@ object ProcStats {
             }?.sortedByDescending { it.percent }?.take(TOP_THREADS)
         }.getOrNull().orEmpty()
 
-        Cpu(procPercent, top)
-    }.getOrNull()
+        CpuReading(Cpu(procPercent, top, basis, elapsedSec))
+    }.getOrElse { e ->
+        // 真异常（OOM / 权限）也带类型回去，不要只留一句「失败」
+        CpuReading(null, "/proc 读取异常：${e.javaClass.simpleName}${e.message?.let { "（$it）" } ?: ""}")
+    }
 
     /** 读 `/proc/self/smaps` 并归类；本机限制读取时返回 null（不影响诊断包其它段） */
     fun readSmaps(): Smaps? = runCatching {
         val file = File("/proc/self/smaps")
         if (!file.canRead()) return null
-        val buckets = file.useLines { parseSmaps(it) }
+        val (buckets, segments) = file.useLines { parseSmapsDetailed(it) }
         if (buckets.isEmpty()) return null
-        Smaps(buckets)
+        Smaps(buckets, segments)
     }.getOrNull()
 
     // ------------------------------------------------------------ 纯解析
@@ -178,8 +233,21 @@ object ProcStats {
      *
      * 归类粒度刻意粗：目标是「是位图还是 GPU 还是 .so」，不是逐条映射列表。
      */
-    internal fun parseSmaps(lines: Sequence<String>): List<MemBucket> {
+    internal fun parseSmaps(lines: Sequence<String>): List<MemBucket> = parseSmapsDetailed(lines).first
+
+    /**
+     * 同 [parseSmaps]，但同时保留**逐段**明细。
+     *
+     * 为什么需要逐段：`libc malloc` 合计 246MB 有两种完全不同的成因，处置方式也相反 ——
+     *
+     *  - **少数几个巨大段**（几 MB~几十 MB 一个）→ 大对象，如位图、解码器输出缓冲；
+     *  - **海量小段**（几十~几百 KB 一个，成百上千条）→ malloc 碎片 / 池化不归还。
+     *
+     * 只看合计永远分不出来，看段数、最大段、>1MB 段占比就能一眼判断。
+     */
+    internal fun parseSmapsDetailed(lines: Sequence<String>): Pair<List<MemBucket>, List<Segment>> {
         val acc = LinkedHashMap<String, LongArray>()
+        val segments = ArrayList<Segment>()
 
         fun flush(name: String?, dirty: Long, rss: Long, pss: Long) {
             if (name == null) return
@@ -187,6 +255,9 @@ object ProcStats {
             slot[0] += dirty
             slot[1] += rss
             slot[2] += pss
+            // 只留「写脏」的段：只读的文件映射（.so / apk）不参与「谁吃了我」的判断，
+            // 全量记会把几百条零占用的条目也塞进列表
+            if (dirty > 0) segments += Segment(name, dirty)
         }
 
         var name: String? = null
@@ -214,8 +285,9 @@ object ProcStats {
         }
         flush(name, dirty, rss, pss)
 
-        return acc.map { (label, v) -> MemBucket(label, v[0], v[1], v[2]) }
+        val buckets = acc.map { (label, v) -> MemBucket(label, v[0], v[1], v[2]) }
             .sortedByDescending { it.privateDirtyKb }
+        return buckets to segments.sortedByDescending { it.dirtyKb }
     }
 
     /**
@@ -223,11 +295,20 @@ object ProcStats {
      *
      * Android 8 起位图像素分配在 native（`calloc`），因此落在 `libc malloc`；
      * 图形缓冲通常在 `/dev/kgsl-*`（高通）或 `/dev/mali*`（ARM）/`gralloc` 具名映射。
+     *
+     * ⚠️ malloc 的映射名**随分配器实现而变**，必须都认：
+     *  - Android ≤10（jemalloc / 旧 Scudo）：`[anon:libc_malloc]`
+     *  - Android 11+（Scudo 默认）：`[anon:scudo:primary]` / `[anon:scudo:secondary]`
+     *
+     * 只认第一种的话，Android 11+ 机器上这几十上百 MB 会被折成「匿名：scudo:primary」
+     * 散落在「其它 N 类」里，等于把最大的嫌疑对象藏起来。
      */
     internal fun classify(mapping: String): String {
         val name = mapping.trim()
         if (name.isEmpty()) return "匿名（无名字）"
-        if (name.startsWith("[anon:libc_malloc]")) return "libc malloc（位图/解码缓冲）"
+        if (name.startsWith("[anon:libc_malloc]")) return MALLOC_LABEL
+        if (name.startsWith("[anon:scudo:")) return MALLOC_LABEL
+        if (name.startsWith("[anon:jemalloc]")) return MALLOC_LABEL
         if (name.startsWith("[anon:")) {
             val tag = name.removePrefix("[anon:").removeSuffix("]")
             return "匿名：" + tag.ifBlank { "?" }
@@ -290,6 +371,9 @@ object ProcStats {
 
     /** 线程榜只报前几个：再长就没人看了，也失去「一眼看出谁在转」的意义 */
     private const val TOP_THREADS = 5
+
+    /** malloc 归类的统一标签（MemoryProbe 按它取合计，别在两处各写一遍字符串） */
+    const val MALLOC_LABEL = "libc malloc（位图/解码缓冲）"
 
     private val WHITESPACE = Regex("\\s+")
 }

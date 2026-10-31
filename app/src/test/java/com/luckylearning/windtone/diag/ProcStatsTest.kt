@@ -206,4 +206,86 @@ class ProcStatsTest {
         assertEquals("匿名（无名字）", ProcStats.classify(""))
         assertEquals("匿名（无名字）", ProcStats.classify("   "))
     }
+
+    /**
+     * Android 11+ 的 malloc 映射名是 `[anon:scudo:*]`，不再叫 `[anon:libc_malloc]`。
+     *
+     * 只认旧名字的话，这几百 MB 会被折成「匿名：scudo:primary」散进「其它 N 类」，
+     * 等于把最大的嫌疑对象从报告里藏起来 —— 这正是 v1.2.40 诊断包最怕的事。
+     */
+    @Test
+    fun `classify 把 scudo 与 jemalloc 都归到 malloc`() {
+        assertEquals(ProcStats.MALLOC_LABEL, ProcStats.classify("[anon:scudo:primary]"))
+        assertEquals(ProcStats.MALLOC_LABEL, ProcStats.classify("[anon:scudo:secondary]"))
+        assertEquals(ProcStats.MALLOC_LABEL, ProcStats.classify("[anon:jemalloc]"))
+        assertEquals(ProcStats.MALLOC_LABEL, ProcStats.classify("[anon:libc_malloc]"))
+    }
+
+    /**
+     * 段级明细要能区分「几个大块」与「一堆碎片」。
+     *
+     * 车机上 `libc malloc` 合计 246MB，处置方式完全取决于这一点：
+     * 大块 = 业务对象没释放（改代码有用）；碎片 = 分配器行为（改代码收效甚微）。
+     */
+    @Test
+    fun `parseSmapsDetailed 保留逐段明细并按 Private_Dirty 降序`() {
+        val smaps = """
+            7f0000000000-7f0000100000 rw-p 00000000 00:00 0                          [anon:libc_malloc]
+            Rss:                4096 kB
+            Pss:                4096 kB
+            Private_Dirty:      4096 kB
+            7f0000200000-7f0000300000 rw-p 00000000 00:00 0                          [anon:libc_malloc]
+            Rss:                 512 kB
+            Pss:                 512 kB
+            Private_Dirty:       512 kB
+            7f0000400000-7f0000500000 r--p 00000000 fd:00 42                         /system/lib64/libc.so
+            Rss:                 256 kB
+            Pss:                 256 kB
+            Private_Dirty:         0 kB
+        """.trimIndent()
+
+        val (buckets, segments) = ProcStats.parseSmapsDetailed(smaps.lineSequence())
+
+        assertEquals(2, buckets.size)
+        // 只收「写脏」的段：只读 .so 不参与「谁吃了我」的判断
+        assertEquals(2, segments.size)
+        assertEquals(4096L, segments[0].dirtyKb)
+        assertEquals("[anon:libc_malloc]", segments[0].name)
+        assertEquals(512L, segments[1].dirtyKb)
+        assertTrue(segments[0].dirtyKb > segments[1].dirtyKb)
+    }
+
+    @Test
+    fun `Smaps 的 totalOf 能按标签前缀取合计`() {
+        val buckets = listOf(
+            ProcStats.MemBucket(ProcStats.MALLOC_LABEL, 2048, 2048, 2000),
+            ProcStats.MemBucket("匿名：dalvik-main space (region space)", 1024, 1024, 1024),
+            ProcStats.MemBucket("匿名：dalvik-free list large object space", 512, 512, 512),
+            ProcStats.MemBucket("GPU 驱动（kgsl）", 128, 128, 128),
+        )
+        val s = ProcStats.Smaps(buckets)
+
+        assertEquals(2048L, s.totalOf(ProcStats.MALLOC_LABEL))
+        assertEquals(1536L, s.totalOf("匿名：dalvik"))
+        assertEquals(3712L, s.privateDirtyKb)
+    }
+
+    /**
+     * CPU 段失败时必须带回**具体环节**，不能只给一个 null。
+     *
+     * v1.2.40 的诊断包只写「/proc/self/stat 读取失败」，看不出是被 SELinux 拦了、
+     * 还是解析格式不符、还是分母取不到 —— 等于把排查线索一起丢了。
+     */
+    @Test
+    fun `CpuReading 能携带失败原因与分母依据`() {
+        val failed = ProcStats.CpuReading(null, "/proc/self/stat 不可读")
+        assertNull(failed.cpu)
+        assertEquals("/proc/self/stat 不可读", failed.failReason)
+
+        val ok = ProcStats.CpuReading(
+            ProcStats.Cpu(2.5, emptyList(), "elapsedRealtime（含深睡）"),
+        )
+        assertEquals(2.5, ok.cpu!!.processPercent, 0.001)
+        assertEquals("elapsedRealtime（含深睡）", ok.cpu.basis)
+    }
 }

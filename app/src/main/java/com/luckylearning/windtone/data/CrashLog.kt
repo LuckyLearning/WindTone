@@ -247,12 +247,15 @@ object CrashLog {
             }
         }
         runCatching {
-            val cpu = com.luckylearning.windtone.diag.ProcStats.readCpu()
+            val reading = com.luckylearning.windtone.diag.ProcStats.readCpu()
+            val cpu = reading.cpu
             if (cpu != null) {
-                appendLine("进程 CPU：${"%.1f".format(cpu.processPercent)}%")
+                appendLine("进程 CPU：${"%.1f".format(cpu.processPercent)}%（分母 ${cpu.basis}）")
                 cpu.top.take(5).forEach { t ->
                     appendLine("  ${"%.1f".format(t.percent)}%  ${t.name}")
                 }
+            } else {
+                appendLine("进程 CPU：不可得 —— ${reading.failReason ?: "原因未知"}")
             }
         }
         runCatching {

@@ -288,6 +288,9 @@ private fun AppIcon(pkg: String) {
             val canvas = Canvas(bmp)
             drawable.setBounds(0, 0, w, h)
             drawable.draw(canvas)
+            // 位图仪表：这个页面会一次性创建「已装应用数」张图标（每张 ≤256KB），
+            // 是「活在缓存之外」的典型来源之一，登记后才能与 libc malloc 对账
+            com.luckylearning.windtone.diag.BitmapMeter.track(bmp)
             bmp.asImageBitmap()
         }.getOrNull()
     }

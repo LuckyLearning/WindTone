@@ -31,9 +31,16 @@ import java.util.Locale
  *
  * ## 判读口径（写在报告里，免得下次又从头推）
  *
- *  - 明细里 `libc malloc` 远大于「封面位图缓存」→ 有位图没进缓存（在用 / 泄漏）。
- *  - 明细合计 ≈ `native 堆` → 该数字可信，按明细去查。
- *  - 明细合计 ≪ `native 堆` → 本机 `getNativeHeapAllocatedSize` 不可信，以明细为准。
+ * 这里有**三个不同的分母**，混用就会得出错误结论（v1.2.40 的诊断包就踩过）：
+ *
+ *  - `getNativeHeapAllocatedSize` ↔ 明细里的 `libc malloc`：**这两个可比**，
+ *    都是 native 分配器口径；
+ *  - `Java 堆 used` ↔ 明细里的 `dalvik-*` 与 ART 映射：**这两个可比**；
+ *  - `Private_Dirty 合计` = 上面两者 + /dev 共享映射 + GPU 驱动 + .so/字体。
+ *    它**不是** native 堆，拿它去比 `getNativeHeapAllocatedSize` 必然「差异大」。
+ *
+ * 另外 `libc malloc` 要再看**段级分布**：少数几个大段 = 大对象没释放，
+ * 海量小段 = 分配器碎片，两者处置相反。
  */
 object MemoryProbe {
 
@@ -62,7 +69,7 @@ object MemoryProbe {
         )
 
         appendProcess()
-        appendNativeBuckets(nativeMb)
+        appendNativeBuckets(nativeMb, usedMb)
 
         val s = CoverRepository.stats()
         appendLine(
@@ -79,7 +86,18 @@ object MemoryProbe {
                 "   累计产出 ${mb(s.decodedBytes)}（吞吐，非常驻）   峰值单张 ${mb(s.peakDecodedBytes.toLong())}"
         )
         if (librarySongs > 0) appendLine("曲库：$librarySongs 首")
-        appendLine("预算依据：位图 maxMemory/8（夹 8~32MB）· 原始 maxMemory/16（夹 2~6MB）")
+
+        // 位图账：这是判定「libc malloc 到底是不是位图」的唯一直接证据。
+        // 弱引用跟踪，含「已 recycle 但还没被 GC」的位图，所以只会偏大不会漏报。
+        val bm = BitmapMeter.stats()
+        appendLine(
+            "位图存活（本进程，弱引用跟踪）：当前 ${mb(bm.liveBytes)}" +
+                "   峰值 ${mb(bm.peakLiveBytes)}" +
+                "   累计创建 ${bm.created} 张 / ${mb(bm.createdBytes)}（吞吐，非常驻）"
+        )
+        appendLine("  判读：当前存活若与上方 libc malloc 同量级 → 那几十上百 MB 就是位图；" +
+            "若远小于它 → 占用在别处（解码器缓冲 / Skia / 分配器碎片）")
+        appendLine("预算依据：位图 maxMemory/8（夹 8~32MB）· 原始 maxMemory/32（夹 1.5~3MB）")
     }
 
     /** 进程规模 + CPU 均值 + 线程热点 */
@@ -95,13 +113,18 @@ object MemoryProbe {
             )
         }
 
-        val cpu = ProcStats.readCpu()
+        val reading = ProcStats.readCpu()
+        val cpu = reading.cpu
         if (cpu == null) {
-            appendLine("CPU：/proc/self/stat 读取失败，平均占用不可得")
+            // 2026-10-31：以前只写「读取失败」，等于把线索一起丢了。
+            // 现在把具体环节带上，并明确说明这一段的缺失意味着什么。
+            appendLine("CPU：不可得 —— ${reading.failReason ?: "原因未知"}")
+            appendLine("  判读：CPU 段失效时，卡顿/空转问题无法从诊断包判断；请把这行原文回传")
             return
         }
         appendLine(
-            "CPU：平均 ${oneDecimal(cpu.processPercent)}%（进程启动至今）" +
+            "CPU：平均 ${oneDecimal(cpu.processPercent)}%（进程存活 ${duration(cpu.uptimeSec)}，" +
+                "分母 ${cpu.basis}）" +
                 "   判读：播放中 1~3% 属正常，≥8% 说明有线程空转",
         )
         cpu.top.forEach {
@@ -110,7 +133,7 @@ object MemoryProbe {
     }
 
     /** native 明细：按映射归类，让「232MB 是谁」有答案 */
-    private fun StringBuilder.appendNativeBuckets(nativeMb: Long) {
+    private fun StringBuilder.appendNativeBuckets(nativeMb: Long, javaUsedMb: Long) {
         val smaps = ProcStats.readSmaps()
         if (smaps == null || smaps.buckets.isEmpty()) {
             appendLine("native 明细：/proc/self/smaps 不可读（本机限制），只能看总数")
@@ -129,25 +152,89 @@ object MemoryProbe {
             "  合计 Private_Dirty ${mbFromKb(smaps.privateDirtyKb)}" +
                 " · Pss ${mbFromKb(smaps.pssKb)} · Rss ${mbFromKb(smaps.rssKb)}"
         )
-        appendLine("  " + nativeVerdict(nativeMb, smaps))
+        appendMallocSegments(smaps)
+        appendReconciliation(nativeMb, javaUsedMb, smaps)
     }
 
     /**
-     * 把「native 堆」与明细合计对质，直接给出结论行。
+     * malloc 的**段级**分布 —— 合计 246MB 到底是「几个大块」还是「一堆碎片」。
      *
-     * 这一行是给「下一次看诊断包的人」用的：省掉重新推一遍的时间。
+     * 这两者的处置完全相反：大块是业务对象（位图 / 解码缓冲）没释放，
+     * 碎片是分配器行为（池化不归还），改代码收效甚微。
+     * 只看合计永远分不出来，所以必须把段数与单段大小报出来。
      */
-    private fun nativeVerdict(nativeMb: Long, smaps: ProcStats.Smaps): String {
-        if (nativeMb < 0) return "判读：native 总数查询失败，以明细为准"
-        val detailMb = smaps.privateDirtyKb / 1024
-        // 允许 30% 或 16MB 的偏差：两个口径的统计范围本就不完全重合（ndk 分配、映射对齐）
-        val tolerant = maxOf(16L, nativeMb / 3)
-        return if (kotlin.math.abs(detailMb - nativeMb) <= tolerant) {
-            "判读：明细与 native 总数一致，按上面的分类去查（libc malloc = 位图/解码缓冲）"
-        } else {
-            "判读：明细（${detailMb}MB）与 native 总数（${nativeMb}MB）差异大，" +
-                "本机 getNativeHeapAllocatedSize 不可信，以明细为准"
+    private fun StringBuilder.appendMallocSegments(smaps: ProcStats.Smaps) {
+        val malloc = smaps.segments.filter { ProcStats.classify(it.name) == ProcStats.MALLOC_LABEL }
+        if (malloc.isEmpty()) return
+        val totalKb = malloc.sumOf { it.dirtyKb }
+        if (totalKb <= 0L) return
+
+        val over1Mb = malloc.filter { it.dirtyKb >= 1024 }
+        val over4Mb = malloc.filter { it.dirtyKb >= 4096 }
+        val maxKb = malloc.maxOf { it.dirtyKb }
+        appendLine(
+            "  malloc 段分布：共 ${malloc.size} 段 · 合计 ${mbFromKb(totalKb)}" +
+                " · 最大单段 ${mbFromKb(maxKb)}" +
+                " · ≥1MB ${over1Mb.size} 段（占 ${share(over1Mb.sumOf { it.dirtyKb }, totalKb)}）" +
+                " · ≥4MB ${over4Mb.size} 段"
+        )
+        // 只列前 3 段：再多就是重复信息，报告要看的是「量级对不对」
+        malloc.take(3).forEach {
+            appendLine("    · ${mbFromKb(it.dirtyKb)}  ${it.name.take(48)}")
         }
+        appendLine("  判读：≥1MB 段占比高 = 少数大对象没释放（位图/解码缓冲）；段多而单段小 = 分配器碎片")
+    }
+
+    /**
+     * 三个口径分开对账。
+     *
+     * v1.2.40 的判读写的是「明细 405MB 与 native 255MB 差太多，本机
+     * getNativeHeapAllocatedSize 不可信」—— **这是错的**：255MB 恰好等于
+     * libc malloc 的 246MB，两者本来就吻合；405MB 是全进程 Private_Dirty，
+     * 多出来的是 ART 堆（122MB）+ /dev + GPU。拿分子比分母，才会「差异大」。
+     *
+     * 现在的写法把三组关系各自说清：对得上就说对得上，对不上才说不可信。
+     */
+    private fun StringBuilder.appendReconciliation(
+        nativeMb: Long,
+        javaUsedMb: Long,
+        smaps: ProcStats.Smaps,
+    ) {
+        val mallocMb = smaps.totalOf(ProcStats.MALLOC_LABEL) / 1024
+        val artMb = smaps.buckets.filter {
+            it.label.startsWith("匿名：dalvik") || it.label.startsWith("ART")
+        }.sumOf { it.privateDirtyKb } / 1024
+        val restMb = smaps.privateDirtyKb / 1024 - mallocMb - artMb
+
+        appendLine("  对账（三组口径各算各的，不可互相替代）：")
+        val nativePart = if (nativeMb >= 0) "${nativeMb}MB ${agree(mallocMb, nativeMb)}" else "查询失败"
+        appendLine("    · native malloc ${mallocMb}MB ↔ getNativeHeapAllocatedSize $nativePart")
+        appendLine("    · ART 堆映射 ${artMb}MB ↔ Java 堆 used ${javaUsedMb}MB ${agree(artMb, javaUsedMb)}")
+        appendLine("    · 其余 ${restMb}MB = /dev 共享映射、GPU 驱动、.so 与字体（不归任何一方）")
+    }
+
+    /** 秒 → `1h02m` / `12m30s`。长跑诊断里「跑了多久才涨成这样」比精确到秒更重要 */
+    private fun duration(sec: Double): String {
+        val total = sec.toLong().coerceAtLeast(0L)
+        val h = total / 3600
+        val m = (total % 3600) / 60
+        val s = total % 60
+        return when {
+            h > 0 -> String.format(Locale.US, "%dh%02dm", h, m)
+            m > 0 -> String.format(Locale.US, "%dm%02ds", m, s)
+            else -> "${s}s"
+        }
+    }
+
+    /** 占比；分母为 0 时给「—」，不要输出 NaN */
+    private fun share(part: Long, total: Long): String =
+        if (total <= 0L) "—" else String.format(Locale.US, "%.0f%%", part * 100.0 / total)
+
+    /** 两口径是否吻合：容差取「16MB 或大者的 1/4」，够宽以免误报，也够窄能抓到真异常 */
+    private fun agree(a: Long, b: Long): String {
+        val diff = kotlin.math.abs(a - b)
+        val tolerant = maxOf(16L, maxOf(a, b) / 4)
+        return if (diff <= tolerant) "（一致，差 ${diff}MB）" else "（差 ${diff}MB，异常）"
     }
 
     private fun mb(bytes: Int): String = mb(bytes.toLong())
