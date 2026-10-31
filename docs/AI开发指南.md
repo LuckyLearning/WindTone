@@ -2319,4 +2319,9 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 - OnlineListeningReport / SheetsScanScope / Aliyun / SoftEq 本批不改
 - 文档：`docs/功能-i18n听歌报告与曲库统计.md`
 
+### i18n 第 17 批（2026-10-31）
 
+- 范围：`SheetsScanScope.kt`（`ScanScopeSheet` / `ScanScopeChip`）面向用户壳文案
+- 前缀：`ssc_*`；复用 `drawer_scan_scope`、`lib_scan_full`、`plurals/lib_song_count`
+- 未碰 SoftEq / 播放内核 / 扫描逻辑
+- 文档：`docs/功能-i18n扫描范围Sheet.md`

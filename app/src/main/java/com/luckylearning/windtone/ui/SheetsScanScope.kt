@@ -26,10 +26,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.ScanScope
 import com.luckylearning.windtone.state.FolderItem
 import com.luckylearning.windtone.ui.theme.glassContainerColor
@@ -37,7 +40,7 @@ import com.luckylearning.windtone.ui.theme.glassContainerColor
 /**
  * 扫描范围选择（底部弹层 + 顶栏小芯片）。
  *
- * 从 Sheets.kt 按「页面」拆出（v1.1.37）。[ScanScopeChip] 被 LibraryHeader 调用，保持 public。
+ * 自 Sheets.kt 按「页面」拆出（v1.1.37）。[ScanScopeChip] 被 LibraryHeader 调用，保持 public。
  */
 
 // ================================================================ 扫描范围选择
@@ -64,42 +67,54 @@ fun ScanScopeSheet(
     val folderCount = folders.size
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
-            Text("扫描范围", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
-                "默认不会扫描整个手机，由你指定去哪里找音乐。",
+                stringResource(R.string.drawer_scan_scope),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                stringResource(R.string.ssc_hint),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp),
             )
 
-            SectionLabel("扫描全盘")
+            SectionLabel(stringResource(R.string.ssc_section_full))
             OptionRow(
                 icon = AppIcons.MusicNote,
-                title = "扫描全盘音乐",
-                subtitle = "读取系统媒体库；已授予「所有文件访问权限」时会连同同目录歌词一起扫",
+                title = stringResource(R.string.lib_scan_full),
+                subtitle = stringResource(R.string.ssc_full_subtitle),
                 selected = current == ScanScope.FULL,
                 onClick = onFullScan,
             )
 
-            SectionLabel("指定目录")
+            SectionLabel(stringResource(R.string.ssc_section_folders))
             OptionRow(
                 icon = AppIcons.Folder,
-                title = if (activeCount > 0) "只看已导入的目录" else "选择音乐目录…",
-                subtitle = if (activeCount > 0) "当前参与扫描 $activeCount 个目录"
-                else if (folderCount > 0) "所有目录都被排除了，先取消排除或导入新目录"
-                else "通过系统文件选择器指定一个或多个音乐文件夹",
+                title = if (activeCount > 0) {
+                    stringResource(R.string.ssc_use_imported)
+                } else {
+                    stringResource(R.string.ssc_pick_folder)
+                },
+                subtitle = if (activeCount > 0) {
+                    stringResource(R.string.ssc_active_folders, activeCount)
+                } else if (folderCount > 0) {
+                    stringResource(R.string.ssc_all_excluded)
+                } else {
+                    stringResource(R.string.ssc_pick_via_picker)
+                },
                 selected = current == ScanScope.FOLDERS && activeCount > 0,
                 onClick = { if (activeCount > 0) onUseFolders() else onPickFolder() },
             )
             OptionRow(
                 icon = AppIcons.Folder,
-                title = "导入更多目录…",
-                subtitle = "新目录会追加进列表",
+                title = stringResource(R.string.ssc_import_more),
+                subtitle = stringResource(R.string.ssc_import_more_sub),
                 onClick = onPickFolder,
             )
 
             if (folderCount > 0) {
-                SectionLabel("已导入的目录")
+                SectionLabel(stringResource(R.string.ssc_section_imported))
                 folders.forEach { item ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -116,11 +131,22 @@ fun ScanScopeSheet(
                                 color = if (item.excluded) MaterialTheme.colorScheme.onSurfaceVariant
                                 else MaterialTheme.colorScheme.onSurface,
                             )
+                            val status = if (item.excluded) {
+                                stringResource(R.string.ssc_excluded)
+                            } else {
+                                pluralStringResource(
+                                    R.plurals.lib_song_count,
+                                    item.songCount,
+                                    item.songCount,
+                                )
+                            }
+                            val meta = if (item.fullPath.isNotEmpty()) {
+                                stringResource(R.string.ssc_folder_meta, item.fullPath, status)
+                            } else {
+                                status
+                            }
                             Text(
-                                buildString {
-                                    if (item.fullPath.isNotEmpty()) append(item.fullPath).append(" · ")
-                                    append(if (item.excluded) "已排除，不再扫描" else "${item.songCount} 首")
-                                },
+                                meta,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
@@ -135,15 +161,14 @@ fun ScanScopeSheet(
                         IconButton(onClick = { onRemoveFolder(item.treeUri) }) {
                             Icon(
                                 Icons.Filled.Close,
-                                contentDescription = "移除该目录",
+                                contentDescription = stringResource(R.string.ssc_cd_remove_folder),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
                 }
                 Text(
-                    "「排除」只停止以后扫描该目录，已导入的歌曲仍留在曲库里；" +
-                        "「✕ 移除」则会把目录和已导入的歌曲一起摘掉。",
+                    stringResource(R.string.ssc_exclude_hint),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 6.dp),
@@ -163,9 +188,13 @@ fun ScanScopeChip(
     onClick: () -> Unit,
 ) {
     val label = when (scope) {
-        ScanScope.UNSET -> "未选择扫描范围"
-        ScanScope.FULL -> "全盘扫描"
-        ScanScope.FOLDERS -> if (folderCount > 0) "指定目录 $folderCount 个" else "指定目录"
+        ScanScope.UNSET -> stringResource(R.string.ssc_chip_unset)
+        ScanScope.FULL -> stringResource(R.string.ssc_chip_full)
+        ScanScope.FOLDERS -> if (folderCount > 0) {
+            stringResource(R.string.ssc_chip_folders_n, folderCount)
+        } else {
+            stringResource(R.string.ssc_chip_folders)
+        }
     }
     Surface(
         shape = CircleShape,

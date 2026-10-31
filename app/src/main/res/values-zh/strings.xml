@@ -1276,4 +1276,25 @@
     <string name="ls_footnote_base">占用按文件大小累加，与系统「文件管理」里看到的一致；同一首歌的歌词、封面若单独存成文件，不计在这里。\n</string>
     <string name="ls_footnote_unknown_size">有 %1$d 首读不到文件大小（老系统 / 外部存储未挂载时常见），它们只计首数、不计占用。\n</string>
     <string name="ls_footnote_m4a">m4a 可能是无损的 ALAC，也可能是有损的 AAC，按扩展名分不出来，统计里计入「有损」。</string>
+    <!-- i18n 第 17 批：扫描范围 Sheet / 芯片（ssc_*） -->
+    <string name="ssc_hint">默认不会扫描整个手机，由你指定去哪里找音乐。</string>
+    <string name="ssc_section_full">扫描全盘</string>
+    <string name="ssc_section_folders">指定目录</string>
+    <string name="ssc_section_imported">已导入的目录</string>
+    <string name="ssc_full_subtitle">读取系统媒体库；已授予「所有文件访问权限」时会连同同目录歌词一起扫</string>
+    <string name="ssc_use_imported">只看已导入的目录</string>
+    <string name="ssc_pick_folder">选择音乐目录…</string>
+    <string name="ssc_active_folders">当前参与扫描 %1$d 个目录</string>
+    <string name="ssc_all_excluded">所有目录都被排除了，先取消排除或导入新目录</string>
+    <string name="ssc_pick_via_picker">通过系统文件选择器指定一个或多个音乐文件夹</string>
+    <string name="ssc_import_more">导入更多目录…</string>
+    <string name="ssc_import_more_sub">新目录会追加进列表</string>
+    <string name="ssc_excluded">已排除，不再扫描</string>
+    <string name="ssc_folder_meta">%1$s · %2$s</string>
+    <string name="ssc_cd_remove_folder">移除该目录</string>
+    <string name="ssc_exclude_hint">「排除」只停止以后扫描该目录，已导入的歌曲仍留在曲库里；「✕ 移除」则会把目录和已导入的歌曲一起摘掉。</string>
+    <string name="ssc_chip_unset">未选择扫描范围</string>
+    <string name="ssc_chip_full">全盘扫描</string>
+    <string name="ssc_chip_folders">指定目录</string>
+    <string name="ssc_chip_folders_n">指定目录 %1$d 个</string>
 </resources>

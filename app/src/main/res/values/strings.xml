@@ -1310,4 +1310,25 @@ The list is fetched once on add — nothing is saved if the fetch fails.</string
     <string name="ls_footnote_base">Size is summed from file length — same as what Files shows. Separate lyric or cover files for the same song are not counted here.\n</string>
     <string name="ls_footnote_unknown_size">%1$d track(s) have unknown file size (common on older systems / unmounted external storage); they count toward song totals only, not size.\n</string>
     <string name="ls_footnote_m4a">m4a may be lossless ALAC or lossy AAC — the extension alone cannot tell, so it is counted as lossy.</string>
+    <!-- i18n batch 17: ScanScope sheet / chip (ssc_*) -->
+    <string name="ssc_hint">By default WindTone does not scan the whole phone — you choose where to look for music.</string>
+    <string name="ssc_section_full">Entire device</string>
+    <string name="ssc_section_folders">Chosen folders</string>
+    <string name="ssc_section_imported">Imported folders</string>
+    <string name="ssc_full_subtitle">Reads the system media library; with All files access it also scans lyrics beside the audio</string>
+    <string name="ssc_use_imported">Only imported folders</string>
+    <string name="ssc_pick_folder">Choose music folder…</string>
+    <string name="ssc_active_folders">%1$d folder(s) in the current scan</string>
+    <string name="ssc_all_excluded">Every folder is excluded — clear exclusions or import a new folder</string>
+    <string name="ssc_pick_via_picker">Pick one or more music folders with the system file picker</string>
+    <string name="ssc_import_more">Import more folders…</string>
+    <string name="ssc_import_more_sub">New folders are appended to the list</string>
+    <string name="ssc_excluded">Excluded — not scanned again</string>
+    <string name="ssc_folder_meta">%1$s · %2$s</string>
+    <string name="ssc_cd_remove_folder">Remove this folder</string>
+    <string name="ssc_exclude_hint">Exclude only stops future scans of that folder; songs already in the library stay.\n✕ Remove drops the folder and the songs imported from it.</string>
+    <string name="ssc_chip_unset">Scan scope not set</string>
+    <string name="ssc_chip_full">Entire device</string>
+    <string name="ssc_chip_folders">Chosen folders</string>
+    <string name="ssc_chip_folders_n">Chosen folders · %1$d</string>
 </resources>
