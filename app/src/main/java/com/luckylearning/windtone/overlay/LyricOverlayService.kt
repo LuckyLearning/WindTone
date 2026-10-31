@@ -333,7 +333,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         serviceAlive = false
         windowAttached = false
         windowVisible = false
-        windowGeometry = "未挂载"
+        windowGeometry = OverlayGeometryMarks.NOT_ATTACHED
         stateBinder.dispose()
         editingTimeoutJob?.cancel()
         foregroundJob?.cancel()
@@ -713,11 +713,11 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         val box = container
         val tv = lyricView
         if (box == null || tv == null) {
-            windowGeometry = "未挂载"
+            windowGeometry = OverlayGeometryMarks.NOT_ATTACHED
             return
         }
         if (box.width <= 0 || box.height <= 0) {
-            windowGeometry = "尚未完成测量"
+            windowGeometry = OverlayGeometryMarks.NOT_MEASURED_YET
             return
         }
         val loc = IntArray(2)
@@ -726,12 +726,12 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         val onScreen = loc[0] + box.width > 0 && loc[0] < screenW &&
             loc[1] + box.height > 0 && loc[1] < screenH
         val textState = when {
-            tv.visibility != View.VISIBLE -> "文字View被隐藏 ← 异常"
-            tv.width <= 0 || tv.height <= 0 -> "文字View未测量 ← 异常"
+            tv.visibility != View.VISIBLE -> OverlayGeometryMarks.TEXT_HIDDEN
+            tv.width <= 0 || tv.height <= 0 -> OverlayGeometryMarks.TEXT_UNMEASURED
             else -> "文字View ${tv.width}x${tv.height}"
         }
         windowGeometry = "x=${loc[0]} y=${loc[1]} 窗口 ${box.width}x${box.height}，" +
-            "$textState / 屏幕 ${screenW}x${screenH}${if (onScreen) "" else " ← 已超出屏幕"}"
+            "$textState / 屏幕 ${screenW}x${screenH}${if (onScreen) "" else " ← 已" + OverlayGeometryMarks.MARK_OFF_SCREEN}"
     }
 
     // ------------------------------------------------------------------ 拖动
@@ -2058,7 +2058,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
          * `addView` 成功 ≠ 用户看得见——窗口被推到屏幕外时各项检查照样全绿。
          */
         @Volatile
-        var windowGeometry: String = "未挂载"
+        var windowGeometry: String = OverlayGeometryMarks.NOT_ATTACHED
             private set
 
         /** 窗口 View 当前是否处于 VISIBLE（前台时按设计为 false，不要据此判断故障） */

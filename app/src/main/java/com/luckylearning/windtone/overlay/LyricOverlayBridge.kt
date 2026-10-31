@@ -5,6 +5,8 @@ import com.luckylearning.windtone.data.OverlayPresetParams
 import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.lyrics.OverlayContentResolver
 import kotlinx.coroutines.flow.SharedFlow
+import com.luckylearning.windtone.R
+import com.luckylearning.windtone.ui.AppStrings
 
 /**
  * Prefs → 预设匹配参数快照（自检报告 FR-11 用）。
@@ -49,6 +51,22 @@ private fun prefsOverlayParams(prefs: Prefs) = OverlayPresetParams(
  * 窗口被推到屏幕外、文字 View 被隐藏、内容恰好是空行，都属于这一类。
  * 所以快照不只报"有没有"，还报"是什么、在哪儿"。
  */
+
+/**
+ * 窗口几何协议子串（[LyricOverlayService] 写入、自检 [OverlaySnapshot] 匹配）。
+ *
+ * **稳定键，勿当已翻译文案去改取值**；展示层报告里原样附带几何串即可。
+ * 不走 [AppStrings]，避免布局回调热路径取资源。
+ */
+object OverlayGeometryMarks {
+    const val NOT_ATTACHED = "未挂载"
+    const val NOT_MEASURED_YET = "尚未完成测量"
+    const val MARK_OFF_SCREEN = "超出屏幕"
+    const val MARK_ABNORMAL = "异常"
+    const val TEXT_HIDDEN = "文字View被隐藏 ← 异常"
+    const val TEXT_UNMEASURED = "文字View未测量 ← 异常"
+}
+
 data class OverlaySnapshot(
     /** 系统「出现在其他应用上」授权 */
     val permissionGranted: Boolean,
@@ -74,55 +92,134 @@ data class OverlaySnapshot(
     val appearance: String,
 ) {
     /** 窗口是否被判定为「几何上跑出屏幕」 */
-    private val offScreen: Boolean get() = windowGeometry.contains("超出屏幕")
+    private val offScreen: Boolean get() = windowGeometry.contains(OverlayGeometryMarks.MARK_OFF_SCREEN)
 
     /** 窗口挂上了但文字 View 被隐藏 / 未测量 —— 这类问题外行看不出来，必须显式点名 */
-    private val textViewBroken: Boolean get() = windowGeometry.contains("异常")
+    private val textViewBroken: Boolean get() = windowGeometry.contains(OverlayGeometryMarks.MARK_ABNORMAL)
 
-    /** 转成给人看的多行诊断报告 */
+    /**
+     * 转成给人看的多行诊断报告。
+     *
+     * 仅设置页「自检」冷路径调用；内部 [AppStrings.s] + ifEmpty，不进悬浮窗 tick。
+     * [windowGeometry] 仍为协议原文（含 [OverlayGeometryMarks] 稳定子串）。
+     */
     fun report(): String = buildString {
-        appendLine("① 系统授权：${if (permissionGranted) "已授权" else "未授权 ← 断点"}")
-        appendLine("② 开关状态：${if (prefEnabled) "已开启" else "已关闭 ← 断点"}")
-        appendLine("③ 服务进程：${if (serviceAlive) "运行中" else "未运行 ← 断点"}")
-        appendLine("④ 窗口挂载：${if (windowAttached) "已挂载" else "未挂载 ← 断点"}")
-        appendLine("⑤ 最近上报：${health.status}${if (health.detail.isNotBlank()) "（${health.detail}）" else ""}")
-        appendLine("⑥ App 前后台：${if (appForeground) "前台（此时按设计隐藏）" else "后台"}")
-        appendLine("⑦ 窗口可见：${if (windowVisible) "显示中" else "隐藏中（前台 / 无内容 / 已锁定）"}")
-        appendLine("⑧ 窗口位置：$windowGeometry")
         appendLine(
-            "⑨ 下发内容：" + if (resolved.current.isBlank()) {
-                "空（无歌词且取不到歌名）"
+            if (permissionGranted) AppStrings.s(R.string.lob_perm_ok).ifEmpty { "① 系统授权：已授权" }
+            else AppStrings.s(R.string.lob_perm_bad).ifEmpty { "① 系统授权：未授权 ← 断点" },
+        )
+        appendLine(
+            if (prefEnabled) AppStrings.s(R.string.lob_pref_on).ifEmpty { "② 开关状态：已开启" }
+            else AppStrings.s(R.string.lob_pref_off).ifEmpty { "② 开关状态：已关闭 ← 断点" },
+        )
+        appendLine(
+            if (serviceAlive) AppStrings.s(R.string.lob_svc_alive).ifEmpty { "③ 服务进程：运行中" }
+            else AppStrings.s(R.string.lob_svc_dead).ifEmpty { "③ 服务进程：未运行 ← 断点" },
+        )
+        appendLine(
+            if (windowAttached) AppStrings.s(R.string.lob_win_attached).ifEmpty { "④ 窗口挂载：已挂载" }
+            else AppStrings.s(R.string.lob_win_detached).ifEmpty { "④ 窗口挂载：未挂载 ← 断点" },
+        )
+        appendLine(
+            if (health.detail.isNotBlank()) {
+                AppStrings.s(R.string.lob_health_detail, health.status, health.detail)
+                    .ifEmpty { "⑤ 最近上报：${health.status}（${health.detail}）" }
             } else {
-                buildString {
-                    append("「${resolved.current}」")
-                    if (resolved.idle) append(" [非演唱行·压暗]")
-                    if (resolved.prev.isNotBlank()) append("  ↑「${resolved.prev}」")
-                    if (resolved.translation.isNotBlank()) append("  ⇩双语「${resolved.translation}」")
-                    if (resolved.next.isNotBlank()) append("  ↓「${resolved.next}」")
-                }
+                AppStrings.s(R.string.lob_health, health.status)
+                    .ifEmpty { "⑤ 最近上报：${health.status}" }
             },
         )
-        appendLine("⑩ 外观配置：$appearance")
-        appendLine("⑪ 播放状态：${if (contentPlaying) "播放中" else "已暂停"}")
+        appendLine(
+            if (appForeground) AppStrings.s(R.string.lob_fg).ifEmpty { "⑥ App 前后台：前台（此时按设计隐藏）" }
+            else AppStrings.s(R.string.lob_bg).ifEmpty { "⑥ App 前后台：后台" },
+        )
+        appendLine(
+            if (windowVisible) AppStrings.s(R.string.lob_vis_on).ifEmpty { "⑦ 窗口可见：显示中" }
+            else AppStrings.s(R.string.lob_vis_off).ifEmpty { "⑦ 窗口可见：隐藏中（前台 / 无内容 / 已锁定）" },
+        )
+        appendLine(
+            AppStrings.s(R.string.lob_geom, windowGeometry).ifEmpty { "⑧ 窗口位置：$windowGeometry" },
+        )
+        if (resolved.current.isBlank()) {
+            appendLine(
+                AppStrings.s(R.string.lob_content_empty)
+                    .ifEmpty { "⑨ 下发内容：空（无歌词且取不到歌名）" },
+            )
+        } else {
+            val body = buildString {
+                append("「${resolved.current}」")
+                if (resolved.idle) {
+                    append(AppStrings.s(R.string.lob_idle_tag).ifEmpty { " [非演唱行·压暗]" })
+                }
+                if (resolved.prev.isNotBlank()) {
+                    append(
+                        AppStrings.s(R.string.lob_prev_tag, resolved.prev)
+                            .ifEmpty { "  ↑「${resolved.prev}」" },
+                    )
+                }
+                if (resolved.translation.isNotBlank()) {
+                    append(
+                        AppStrings.s(R.string.lob_tr_tag, resolved.translation)
+                            .ifEmpty { "  ⇩双语「${resolved.translation}」" },
+                    )
+                }
+                if (resolved.next.isNotBlank()) {
+                    append(
+                        AppStrings.s(R.string.lob_next_tag, resolved.next)
+                            .ifEmpty { "  ↓「${resolved.next}」" },
+                    )
+                }
+            }
+            appendLine(
+                AppStrings.s(R.string.lob_content, body).ifEmpty { "⑨ 下发内容：$body" },
+            )
+        }
+        appendLine(
+            AppStrings.s(R.string.lob_appear, appearance).ifEmpty { "⑩ 外观配置：$appearance" },
+        )
+        appendLine(
+            if (contentPlaying) AppStrings.s(R.string.lob_playing).ifEmpty { "⑪ 播放状态：播放中" }
+            else AppStrings.s(R.string.lob_paused).ifEmpty { "⑪ 播放状态：已暂停" },
+        )
         appendLine()
         appendLine(
             when {
-                !permissionGranted -> "结论：缺系统授权。点下面的「去授权」，" +
-                    "在系统页面允许「显示悬浮窗」（部分系统叫「出现在其他应用上层」）。"
-                !prefEnabled -> "结论：开关是关的。打开开关后应能看到 6 秒预览。"
-                !serviceAlive -> "结论：服务没起来。点「重新拉起」；若反复失败，" +
-                    "多半是系统在限制本应用的后台服务，请看崩溃日志里的 LyricOverlay 记录。"
-                !windowAttached -> "结论：服务活着但窗口没挂上，即挂窗被系统拒绝。" +
-                    "这是厂商 ROM 的悬浮窗白名单问题，需在系统设置里放行；详情见崩溃日志。"
-                offScreen -> "结论：窗口挂上了但**跑到屏幕外**了。点下面的「重置位置」把它拉回来。"
-                textViewBroken -> "结论：窗口在，但**文字 View 被隐藏或没测量**。" +
-                    "这属于程序缺陷，请把这份报告反馈给开发者。"
-                appForeground -> "结论：前几项都正常。按设计，App 在前台时字幕是隐藏的——" +
-                    "退到桌面（或点「显示预览」）即可看到。"
-                resolved.current.isBlank() -> "结论：链路正常，但没有可显示的文字。" +
-                    "播放一首有 .lrc 歌词的歌，或保持播放状态（无歌词时会显示歌名）。"
-                else -> "结论：全链路正常，桌面上应当能看到这一行。若仍看不到，" +
-                    "请检查系统「悬浮窗/后台弹出」类限制，或把本应用加入省电策略白名单。"
+                !permissionGranted ->
+                    AppStrings.s(R.string.lob_concl_perm).ifEmpty {
+                        "结论：缺系统授权。点下面的「去授权」，在系统页面允许「显示悬浮窗」（部分系统叫「出现在其他应用上层」）。"
+                    }
+                !prefEnabled ->
+                    AppStrings.s(R.string.lob_concl_pref).ifEmpty {
+                        "结论：开关是关的。打开开关后应能看到 6 秒预览。"
+                    }
+                !serviceAlive ->
+                    AppStrings.s(R.string.lob_concl_svc).ifEmpty {
+                        "结论：服务没起来。点「重新拉起」；若反复失败，多半是系统在限制本应用的后台服务，请看崩溃日志里的 LyricOverlay 记录。"
+                    }
+                !windowAttached ->
+                    AppStrings.s(R.string.lob_concl_attach).ifEmpty {
+                        "结论：服务活着但窗口没挂上，即挂窗被系统拒绝。这是厂商 ROM 的悬浮窗白名单问题，需在系统设置里放行；详情见崩溃日志。"
+                    }
+                offScreen ->
+                    AppStrings.s(R.string.lob_concl_offscreen).ifEmpty {
+                        "结论：窗口挂上了但**跑到屏幕外**了。点下面的「重置位置」把它拉回来。"
+                    }
+                textViewBroken ->
+                    AppStrings.s(R.string.lob_concl_tv).ifEmpty {
+                        "结论：窗口在，但**文字 View 被隐藏或没测量**。这属于程序缺陷，请把这份报告反馈给开发者。"
+                    }
+                appForeground ->
+                    AppStrings.s(R.string.lob_concl_fg).ifEmpty {
+                        "结论：前几项都正常。按设计，App 在前台时字幕是隐藏的——退到桌面（或点「显示预览」）即可看到。"
+                    }
+                resolved.current.isBlank() ->
+                    AppStrings.s(R.string.lob_concl_empty).ifEmpty {
+                        "结论：链路正常，但没有可显示的文字。播放一首有 .lrc 歌词的歌，或保持播放状态（无歌词时会显示歌名）。"
+                    }
+                else ->
+                    AppStrings.s(R.string.lob_concl_ok).ifEmpty {
+                        "结论：全链路正常，桌面上应当能看到这一行。若仍看不到，请检查系统「悬浮窗/后台弹出」类限制，或把本应用加入省电策略白名单。"
+                    }
             },
         )
     }
@@ -169,33 +266,68 @@ object LyricOverlayBridge {
             contentPlaying = LyricOverlayBus.content.value.playing,
             windowGeometry = LyricOverlayService.windowGeometry,
             appearance = buildString {
-                // 自检里先说形态：全屏高度下行数按面板高度自动适配，
-                // 直接写用户那档会让人误以为设置没生效，所以两处都写清楚。
+                // 自检冷路径：形态摘要；AppStrings 仅此处取一次，不进 tick。
                 if (prefs.lyricOverlayFullHeight) {
-                    append("全屏高度 ")
-                    append(prefs.lyricOverlayFullWidthPercent).append("% 宽 / ")
-                    append(OverlayPositioner.offsetLabel(prefs.lyricOverlayFullOffsetPercent))
-                    append(" / 自动行数")
+                    append(
+                        AppStrings.s(
+                            R.string.lob_ap_full,
+                            prefs.lyricOverlayFullWidthPercent,
+                            OverlayPositioner.offsetLabel(prefs.lyricOverlayFullOffsetPercent),
+                        ).ifEmpty {
+                            "全屏高度 ${prefs.lyricOverlayFullWidthPercent}% 宽 / " +
+                                OverlayPositioner.offsetLabel(prefs.lyricOverlayFullOffsetPercent) +
+                                " / 自动行数"
+                        },
+                    )
                 } else {
                     if (prefs.lyricOverlayLines <= 0) {
-                        append("自动行数")
+                        append(AppStrings.s(R.string.lob_ap_auto_lines).ifEmpty { "自动行数" })
                     } else {
-                        append(prefs.lyricOverlayLines).append(" 行")
+                        append(
+                            AppStrings.s(R.string.lob_ap_lines, prefs.lyricOverlayLines)
+                                .ifEmpty { "${prefs.lyricOverlayLines} 行" },
+                        )
                     }
-                    append(" / 宽").append(prefs.lyricOverlayWidthPercent).append("%")
+                    append(
+                        AppStrings.s(R.string.lob_ap_width, prefs.lyricOverlayWidthPercent)
+                            .ifEmpty { " / 宽${prefs.lyricOverlayWidthPercent}%" },
+                    )
                 }
-                append(" / 字号").append(prefs.lyricOverlayTextSp).append("sp")
-                    .append("（标题 ").append(prefs.lyricOverlayTitlePercent).append("%）")
-                append(" / 对齐").append(if (prefs.lyricOverlayAlign == 1) "居左" else "居中")
-                append(" / 背景").append(prefs.lyricOverlayBgAlphaPercent).append("%")
-                append(" / 暂停").append(if (prefs.lyricOverlayPauseMode == 1) "隐藏" else "淡出")
-                // v1.1.78（FR-11）：预设名 + 触摸模式。预设名由参数反推（R5），
-                // 与设置页 / 歌词菜单显示的是同一个函数算出来的同一个名字，
-                // 三处永远一致；「自定义」就是真自定义，不存在状态漂移。
-                append(" / 预设：").append(
-                    com.luckylearning.windtone.data.overlayPresetLabel(prefsOverlayParams(prefs)),
+                append(
+                    AppStrings.s(
+                        R.string.lob_ap_text,
+                        prefs.lyricOverlayTextSp,
+                        prefs.lyricOverlayTitlePercent,
+                    ).ifEmpty {
+                        " / 字号${prefs.lyricOverlayTextSp}sp（标题 ${prefs.lyricOverlayTitlePercent}%）"
+                    },
                 )
-                append(" / 触摸：穿透（锁定态零干扰）")
+                append(
+                    if (prefs.lyricOverlayAlign == 1) {
+                        AppStrings.s(R.string.lob_ap_align_left).ifEmpty { " / 对齐居左" }
+                    } else {
+                        AppStrings.s(R.string.lob_ap_align_center).ifEmpty { " / 对齐居中" }
+                    },
+                )
+                append(
+                    AppStrings.s(R.string.lob_ap_bg, prefs.lyricOverlayBgAlphaPercent)
+                        .ifEmpty { " / 背景${prefs.lyricOverlayBgAlphaPercent}%" },
+                )
+                append(
+                    if (prefs.lyricOverlayPauseMode == 1) {
+                        AppStrings.s(R.string.lob_ap_pause_hide).ifEmpty { " / 暂停隐藏" }
+                    } else {
+                        AppStrings.s(R.string.lob_ap_pause_fade).ifEmpty { " / 暂停淡出" }
+                    },
+                )
+                // v1.1.78（FR-11）：预设名 + 触摸模式。预设名由参数反推（R5）。
+                val preset = com.luckylearning.windtone.data.overlayPresetLabel(prefsOverlayParams(prefs))
+                append(
+                    AppStrings.s(R.string.lob_ap_preset, preset).ifEmpty { " / 预设：$preset" },
+                )
+                append(
+                    AppStrings.s(R.string.lob_ap_touch).ifEmpty { " / 触摸：穿透（锁定态零干扰）" },
+                )
             },
         )
     }

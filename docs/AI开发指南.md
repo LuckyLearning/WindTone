@@ -2438,3 +2438,14 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 - 文档：`docs/功能-i18n扫尾扫仓.md`
 - 下一项建议：**LyricOverlayBridge 长诊断文 i18n**（本机排障冷路径；仍勿把 E6/长稳开车当实现任务；性能优先分批）
 
+### i18n 第 30 批（2026-11-01）
+
+**LyricOverlayBridge 自检长诊断**：`lob_*`（①–⑪ + 结论 + 外观摘要）。
+
+- `OverlayGeometryMarks`：Service 写入 / `contains` 匹配用稳定子串；**不**在布局回调里 `getString`
+- SoftEq / 播放内核不改；几何句面模板仍中文协议（报告原样附带）
+- 性能：仅自检冷路径；无大缓存
+- 验证：`compileDebugKotlin` + `OverlayPositionerTest`
+- 文档：`docs/功能-i18n扫尾扫仓.md`
+- 下一项建议：**歌单 m3u 导入**（本机产品；规划曲库缺口；仍勿把 E6/长稳开车当实现任务）
+

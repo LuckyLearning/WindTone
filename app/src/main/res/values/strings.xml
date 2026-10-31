@@ -1984,4 +1984,51 @@ Expired codes refresh automatically. This app is read-only — it never uploads,
     <string name="aliyun_drive_backup">Backup drive</string>
     <string name="aliyun_drive_resource">File library</string>
     <string name="aliyun_drive_default">Default drive</string>
+
+    <!-- i18n(30): LyricOverlayBridge self-check report (cold path only) -->
+    <string name="lob_perm_ok">① System permission: granted</string>
+    <string name="lob_perm_bad">① System permission: not granted ← break</string>
+    <string name="lob_pref_on">② Toggle: on</string>
+    <string name="lob_pref_off">② Toggle: off ← break</string>
+    <string name="lob_svc_alive">③ Service: running</string>
+    <string name="lob_svc_dead">③ Service: not running ← break</string>
+    <string name="lob_win_attached">④ Window attach: attached</string>
+    <string name="lob_win_detached">④ Window attach: not attached ← break</string>
+    <string name="lob_health">⑤ Last report: %1$s</string>
+    <string name="lob_health_detail">⑤ Last report: %1$s (%2$s)</string>
+    <string name="lob_fg">⑥ App foreground/background: foreground (hidden by design)</string>
+    <string name="lob_bg">⑥ App foreground/background: background</string>
+    <string name="lob_vis_on">⑦ Window visibility: visible</string>
+    <string name="lob_vis_off">⑦ Window visibility: hidden (foreground / empty / locked)</string>
+    <string name="lob_geom">⑧ Window position: %1$s</string>
+    <string name="lob_content_empty">⑨ Content: empty (no lyrics and no title)</string>
+    <string name="lob_content">⑨ Content: %1$s</string>
+    <string name="lob_idle_tag"> [non-singing line · dimmed]</string>
+    <string name="lob_prev_tag">  ↑「%1$s」</string>
+    <string name="lob_tr_tag">  ⇩bilingual「%1$s」</string>
+    <string name="lob_next_tag">  ↓「%1$s」</string>
+    <string name="lob_appear">⑩ Appearance: %1$s</string>
+    <string name="lob_playing">⑪ Playback: playing</string>
+    <string name="lob_paused">⑪ Playback: paused</string>
+    <string name="lob_concl_perm">Conclusion: missing system permission. Tap “Grant permission” below and allow “Display over other apps” (some OEMs phrase it differently).</string>
+    <string name="lob_concl_pref">Conclusion: the toggle is off. Turn it on to see a 6-second preview.</string>
+    <string name="lob_concl_svc">Conclusion: the service did not start. Tap “Restart”; if it keeps failing, the system is likely restricting background services—check LyricOverlay entries in the crash log.</string>
+    <string name="lob_concl_attach">Conclusion: the service is alive but the window was not attached (system rejected the overlay). This is usually an OEM overlay whitelist issue—allow it in system settings; see the crash log for details.</string>
+    <string name="lob_concl_offscreen">Conclusion: the window is attached but **off-screen**. Tap “Reset position” below to bring it back.</string>
+    <string name="lob_concl_tv">Conclusion: the window exists, but the **text view is hidden or unmeasured**. This is a bug—please send this report to the developer.</string>
+    <string name="lob_concl_fg">Conclusion: earlier checks look fine. By design the overlay is hidden while the app is in the foreground—leave to the home screen (or tap “Show preview”) to see it.</string>
+    <string name="lob_concl_empty">Conclusion: the pipeline is fine, but there is no text to show. Play a track with .lrc lyrics, or keep playback going (the title is shown when lyrics are missing).</string>
+    <string name="lob_concl_ok">Conclusion: the full pipeline looks healthy; the line should be visible on the desktop. If not, check system overlay / “display pop-ups while running in background” limits, or add this app to the battery whitelist.</string>
+    <string name="lob_ap_full">Full-height %1$d%% wide / %2$s / auto lines</string>
+    <string name="lob_ap_auto_lines">auto lines</string>
+    <string name="lob_ap_lines">%1$d lines</string>
+    <string name="lob_ap_width"> / width %1$d%%</string>
+    <string name="lob_ap_text"> / text %1$dsp (title %2$d%%)</string>
+    <string name="lob_ap_align_left"> / align left</string>
+    <string name="lob_ap_align_center"> / align center</string>
+    <string name="lob_ap_bg"> / background %1$d%%</string>
+    <string name="lob_ap_pause_hide"> / pause: hide</string>
+    <string name="lob_ap_pause_fade"> / pause: fade</string>
+    <string name="lob_ap_preset"> / preset: %1$s</string>
+    <string name="lob_ap_touch"> / touch: pass-through (locked = zero interference)</string>
 </resources>
