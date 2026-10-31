@@ -119,4 +119,49 @@ class OverlayLegacyMigrationTest {
         Prefs.clearCacheForTest()
         assertEquals(25, Prefs(context).lyricOverlayBgAlphaPercent)
     }
+
+    // ------------------------------------------------------------ 侧钮无障碍：布尔 → 三档
+
+    /**
+     * v1.2.38 及以前，侧钮上的「无障碍」只有布尔开/关（`overlay_handle_a11y`）。
+     * 2026-10-31 升级成三档（0 不显示 / 1 仅未运行时显示 / 2 常显）。
+     *
+     * 迁移口径与本节其它几条一致：**读时换算，不写回**。老值 true 对应「常显」
+     * （升级前就是这个观感），false 对应「不显示」。
+     */
+    @Test
+    fun `旧布尔 true 迁移为常显，false 迁移为不显示`() {
+        assertEquals(
+            SettingsDefaults.OVERLAY_HANDLE_A11Y_MODE,
+            prefs.overlayHandleA11yMode,
+        )
+
+        rawPreferences().edit().putBoolean("overlay_handle_a11y", true).commit()
+        assertEquals(2, prefs.overlayHandleA11yMode)
+
+        rawPreferences().edit().putBoolean("overlay_handle_a11y", false).commit()
+        assertEquals(0, prefs.overlayHandleA11yMode)
+    }
+
+    /**
+     * 新键一旦写过就以它为准 —— 否则用户改过三档、下次又被老布尔翻回去，
+     * 表现是「设置自己变回去了」。
+     */
+    @Test
+    fun `新键优先于旧布尔`() {
+        rawPreferences().edit()
+            .putBoolean("overlay_handle_a11y", true)
+            .putInt("overlay_handle_a11y_mode", 1)
+            .commit()
+        assertEquals("仅未运行时显示", 1, prefs.overlayHandleA11yMode)
+    }
+
+    /** 越界写入夹取到 0..2，别把非法值漏进服务里的 when 分支。 */
+    @Test
+    fun `三档写入越界会被夹取`() {
+        prefs.overlayHandleA11yMode = 9
+        assertEquals(2, prefs.overlayHandleA11yMode)
+        prefs.overlayHandleA11yMode = -3
+        assertEquals(0, prefs.overlayHandleA11yMode)
+    }
 }

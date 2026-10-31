@@ -65,6 +65,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.IconButton
 import com.luckylearning.windtone.overlay.OverlayCollapseHelper
+import com.luckylearning.windtone.overlay.A11yRuntime
 
 /**
  * 桌面悬浮歌词的**独立设置子页**（v1.1.52 从「歌词」子页拆出）。
@@ -139,6 +140,8 @@ internal fun SettingsOverlayPage(
     onOverlayHandles: (Boolean) -> Unit = {},
     /** 单颗侧钮开关：0 收起 / 1 播放暂停 / 2 打开播放页 / 3 无障碍 */
     onOverlayHandle: (Int, Boolean) -> Unit = { _, _ -> },
+    /** 侧钮「无障碍」三档（2026-10-31）：0 不显示 / 1 仅未运行时显示 / 2 常显 */
+    onOverlayHandleA11yMode: (Int) -> Unit = {},
     /** 侧钮上下顺序 CSV（B1），如 collapse,play_pause,player,a11y */
     onOverlayHandleOrder: (String) -> Unit = {},
     onOverlayEditing: (Boolean) -> Unit,
@@ -249,11 +252,28 @@ internal fun SettingsOverlayPage(
                 checked = player.overlayHandlePlayer,
                 onCheckedChange = { onOverlayHandle(2, it) },
             )
-            SwitchRow(
-                title = stringResource(R.string.oh_show_a11y),
-                subtitle = stringResource(R.string.oh_show_a11y_sub),
-                checked = player.overlayHandleA11y,
-                onCheckedChange = { onOverlayHandle(3, it) },
+            // 无障碍钮三档（2026-10-31，用户要求）：原来只有开/关，而"一直显示"
+            // 在多一颗钮就少一块屏幕的车机上很快变成噪音，"一直不显示"又丢了入口。
+            // 现在多一档「仅无障碍未运行时显示」——开着时不占地方，掉了才出现。
+            //
+            // ⚠️ 顺序从"显示得最多"排到"最少"（常显 → 仅未运行 → 不显示），
+            //    索引与 mode 值**不是**同序（mode: 2 / 1 / 0），换算在 a11yModes。
+            val a11yModes = listOf(2, 1, 0)
+            ChoiceRow(
+                title = stringResource(R.string.oh_a11y_mode),
+                subtitle = stringResource(R.string.oh_a11y_mode_sub),
+                options = listOf(
+                    stringResource(R.string.oh_a11y_mode_always),
+                    stringResource(R.string.oh_a11y_mode_only_off),
+                    stringResource(R.string.oh_a11y_mode_off),
+                ),
+                selectedIndex = a11yModes.indexOf(player.overlayHandleA11yMode).coerceAtLeast(0),
+                onSelect = { onOverlayHandleA11yMode(a11yModes[it]) },
+                onReset = resetAction(
+                    player.overlayHandleA11yMode != SettingsDefaults.OVERLAY_HANDLE_A11Y_MODE,
+                ) {
+                    onOverlayHandleA11yMode(SettingsDefaults.OVERLAY_HANDLE_A11Y_MODE)
+                },
             )
             // 侧钮上下顺序 UI（今晚 A1：补齐 B1 缺的设置页控件）。
             // Prefs / mergeHandleOrder / LyricOverlayService 引擎早已就绪；此前只挂了
@@ -282,13 +302,34 @@ internal fun SettingsOverlayPage(
                         .fillMaxWidth()
                         .padding(horizontal = 8.dp),
                 ) {
-                    Text(
-                        text = stringResource(R.string.oh_order_item, index + 1, overlayHandleOrderTitle(kind)),
-                        modifier = Modifier
+                    Column(
+                        Modifier
                             .weight(1f)
                             .padding(start = 8.dp, top = 4.dp, bottom = 4.dp),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                    ) {
+                        Text(
+                            text = stringResource(
+                                R.string.oh_order_item,
+                                index + 1,
+                                overlayHandleOrderTitle(kind),
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        // 顺序里仍占位，但「仅未运行时显示」这一档当前可能正被状态藏起来。
+                        // 不标注的话，用户会以为设置没生效（2026-10-31）。
+                        if (kind == OverlayCollapseHelper.OverlayHandleKind.A11Y &&
+                            !OverlayCollapseHelper.a11yHandleVisible(
+                                mode = player.overlayHandleA11yMode,
+                                running = A11yRuntime.running(context),
+                            )
+                        ) {
+                            Text(
+                                text = stringResource(R.string.oh_order_item_hidden),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                     IconButton(
                         enabled = index > 0,
                         onClick = {

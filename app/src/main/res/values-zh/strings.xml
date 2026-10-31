@@ -1045,8 +1045,12 @@
     <string name="oh_show_play_pause_sub">关掉后仍可用播放页、通知栏或方向盘控制</string>
     <string name="oh_show_player">　显示「打开播放页」钮</string>
     <string name="oh_show_player_sub">关掉后可从桌面图标或通知栏进入播放页</string>
-        <string name="oh_show_a11y">　显示「无障碍状态」钮</string>
-    <string name="oh_show_a11y_sub">绿=已开、红=未开；点按打开系统无障碍页（与播放页同一通道，不能在应用内假开关）</string>
+    <string name="oh_a11y_mode">　无障碍钮显示</string>
+    <string name="oh_a11y_mode_sub">绿 = 无障碍真的在运行。选「仅未开启时显示」，正常工作时侧栏少一颗，掉线时它自己回来</string>
+    <string name="oh_a11y_mode_always">常显</string>
+    <string name="oh_a11y_mode_only_off">仅未开启时显示</string>
+    <string name="oh_a11y_mode_off">不显示</string>
+    <string name="oh_order_item_hidden">（当前已隐藏）</string>
 <string name="oh_order_title">侧钮上下顺序</string>
     <string name="oh_order_hint">自上而下对应屏幕顺序；默认：收起 → 播放暂停 → 打开播放页 → 无障碍</string>
     <string name="oh_name_collapse">「收起 / 展开」</string>

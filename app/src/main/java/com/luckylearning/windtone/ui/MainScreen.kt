@@ -771,6 +771,7 @@ fun MainScreen(
                     onLyricOverlayLines = playerVm::setLyricOverlayLines,
                     onLyricOverlayHandles = playerVm::setOverlayHandles,
                     onOverlayHandle = playerVm::setOverlayHandle,
+                    onOverlayHandleA11yMode = playerVm::setOverlayHandleA11yMode,
                     onOverlayHandleOrder = playerVm::setOverlayHandleOrder,
                     onLyricOverlayFullHeight = playerVm::setLyricOverlayFullHeight,
                     onLyricOverlayFullWidthPercent = playerVm::setLyricOverlayFullWidthPercent,

@@ -105,7 +105,7 @@ class PlaybackEngine(
             overlayHandleCollapse = prefs.overlayHandleCollapse,
             overlayHandlePlayPause = prefs.overlayHandlePlayPause,
             overlayHandlePlayer = prefs.overlayHandlePlayer,
-            overlayHandleA11y = prefs.overlayHandleA11y,
+            overlayHandleA11yMode = prefs.overlayHandleA11yMode,
             overlayHandleOrder = prefs.overlayHandleOrder,
             lyricTapSeeks = prefs.lyricTapSeeks,
             showA11yAction = prefs.playerA11yAction,
@@ -1533,6 +1533,9 @@ class PlaybackEngine(
     override fun setOverlayHandles(enabled: Boolean) = overlaySettings.setOverlayHandles(enabled)
     override fun setOverlayHandle(kind: Int, enabled: Boolean) =
         overlaySettings.setOverlayHandle(kind, enabled)
+
+    override fun setOverlayHandleA11yMode(mode: Int) =
+        overlaySettings.setOverlayHandleA11yMode(mode)
 
     override fun setOverlayHandleOrder(orderCsv: String) =
         overlaySettings.setOverlayHandleOrder(orderCsv)

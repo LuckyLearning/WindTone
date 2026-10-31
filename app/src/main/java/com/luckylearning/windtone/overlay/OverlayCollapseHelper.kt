@@ -86,6 +86,21 @@ object OverlayCollapseHelper {
     }
 
     /**
+     * 侧钮「无障碍」的显示判据（2026-10-31，三档）。
+     *
+     * @param mode 0 不显示 / 1 仅无障碍**未运行**时显示 / 2 常显
+     * @param running 无障碍此刻**是否真的可用**（不是"系统里那个勾打没打"）
+     *
+     * 第 1 档的语义要小心：判据必须是"真的在跑"。DiLink 上服务被杀、开关却还勾着
+     * 是常态，若按"勾了就隐藏"处理，用户最需要这颗钮的时候它恰好不在。
+     */
+    fun a11yHandleVisible(mode: Int, running: Boolean): Boolean = when (mode) {
+        0 -> false
+        1 -> !running
+        else -> true
+    }
+
+    /**
      * 该显示哪几颗侧钮（v1.3.0 + a11y）：bit0 收起 / bit1 播放暂停 / bit2 打开播放页 / bit3 无障碍。
      *
      * 抽成纯函数是为了能测：这里一旦算错，用户看到的就是"关掉的那颗还在、

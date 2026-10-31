@@ -1079,8 +1079,12 @@ The list is fetched once on add — nothing is saved if the fetch fails.</string
     <string name="oh_show_play_pause_sub">When off, still control from the player, notification, or steering-wheel controls</string>
     <string name="oh_show_player">Show Open player</string>
     <string name="oh_show_player_sub">When off, open the player from the app icon or notification</string>
-    <string name="oh_show_a11y">Show Accessibility status</string>
-    <string name="oh_show_a11y_sub">Green = on, red = off; tap opens system Accessibility settings (same as the player button — cannot toggle inside the app)</string>
+    <string name="oh_a11y_mode">Accessibility button</string>
+    <string name="oh_a11y_mode_sub">Green = the service is actually running. "Only when off" keeps the sidebar tight once it is working, and puts the button back when it drops.</string>
+    <string name="oh_a11y_mode_always">Always show</string>
+    <string name="oh_a11y_mode_only_off">Only when not running</string>
+    <string name="oh_a11y_mode_off">Never show</string>
+    <string name="oh_order_item_hidden">(hidden right now)</string>
     <string name="oh_order_title">Side button order</string>
     <string name="oh_order_hint">Top to bottom matches on-screen order; default: collapse → play-pause → open player → accessibility</string>
     <string name="oh_name_collapse">Collapse / Expand</string>

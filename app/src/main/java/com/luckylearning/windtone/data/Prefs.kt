@@ -123,8 +123,16 @@ object SettingsDefaults {
     const val OVERLAY_HANDLE_COLLAPSE = true
     const val OVERLAY_HANDLE_PLAY_PAUSE = true
     const val OVERLAY_HANDLE_PLAYER = true
-    /** 单颗侧钮：无障碍状态（对齐播放页前台识别；默认开，可在设置关掉） */
-    const val OVERLAY_HANDLE_A11Y = true
+    /**
+     * 单颗侧钮：无障碍状态的显示策略（2026-10-31 由布尔升级为三档）。
+     *
+     * 0 = 不显示；1 = 仅无障碍**未运行**时显示；2 = 常显（默认，与升级前观感一致）。
+     *
+     * 为什么要有第 1 档：无障碍一开，这颗钮就只剩「看个绿点」的价值，而车机上
+     * 屏幕位置很金贵；反过来无障碍掉了（DiLink 上很常见），它又是唯一的一键回
+     * 系统无障碍页的入口 —— 「只在没开的时候出现」正好把两件事都照顾到。
+     */
+    const val OVERLAY_HANDLE_A11Y_MODE = 2
 
     /**
      * 悬浮窗侧钮上下顺序（B1）：CSV，id 为 collapse / play_pause / player。
@@ -764,12 +772,34 @@ class Prefs private constructor(context: Context) {
             ioScope.launch { store.putBoolean(KEY_OVERLAY_HANDLE_PLAYER, value) }
         }
 
-    /** 单颗侧钮：无障碍状态 / 跳系统设置（同播放页前台识别） */
-    var overlayHandleA11y: Boolean
-        get() = sp.getBoolean(KEY_OVERLAY_HANDLE_A11Y, SettingsDefaults.OVERLAY_HANDLE_A11Y)
+    /**
+     * 单颗侧钮：无障碍状态的显示策略（0 不显示 / 1 仅未运行时显示 / 2 常显）。
+     *
+     * 迁移：v1.2.38 及以前只存布尔 `overlay_handle_a11y`（true = 常显 / false = 隐藏）。
+     * 新键读不到时回落到旧布尔，再读不到才用默认值；旧键**只读不写、也不删**
+     * —— 删了以后想回滚旧版本就没有依据了，留着一个 bool 也不占地方。
+     */
+    var overlayHandleA11yMode: Int
+        get() {
+            if (sp.contains(KEY_OVERLAY_HANDLE_A11Y_MODE)) {
+                return sp.getInt(
+                    KEY_OVERLAY_HANDLE_A11Y_MODE,
+                    SettingsDefaults.OVERLAY_HANDLE_A11Y_MODE,
+                )
+            }
+            if (sp.contains(KEY_OVERLAY_HANDLE_A11Y)) {
+                return if (sp.getBoolean(KEY_OVERLAY_HANDLE_A11Y, true)) {
+                    SettingsDefaults.OVERLAY_HANDLE_A11Y_MODE
+                } else {
+                    0
+                }
+            }
+            return SettingsDefaults.OVERLAY_HANDLE_A11Y_MODE
+        }
         set(value) {
-            sp.edit().putBoolean(KEY_OVERLAY_HANDLE_A11Y, value).apply()
-            ioScope.launch { store.putBoolean(KEY_OVERLAY_HANDLE_A11Y, value) }
+            val v = value.coerceIn(0, 2)
+            sp.edit().putInt(KEY_OVERLAY_HANDLE_A11Y_MODE, v).apply()
+            ioScope.launch { store.putInt(KEY_OVERLAY_HANDLE_A11Y_MODE, v) }
         }
 
     /** 悬浮窗侧钮开关（v1.2.0；仅在车载模式下生效） */
@@ -1763,6 +1793,8 @@ class Prefs private constructor(context: Context) {
         const val KEY_OVERLAY_HANDLE_COLLAPSE = "overlay_handle_collapse"
         const val KEY_OVERLAY_HANDLE_PLAY_PAUSE = "overlay_handle_play_pause"
         const val KEY_OVERLAY_HANDLE_PLAYER = "overlay_handle_player"
+        /** 侧钮无障碍三档（2026-10-31）。旧布尔键见下，只读作迁移 */
+        const val KEY_OVERLAY_HANDLE_A11Y_MODE = "overlay_handle_a11y_mode"
         const val KEY_OVERLAY_HANDLE_A11Y = "overlay_handle_a11y"
         const val KEY_OVERLAY_HANDLE_ORDER = "overlay_handle_order"
         const val KEY_GAPLESS_PLAYBACK = "gapless_playback"

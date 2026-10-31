@@ -1,6 +1,8 @@
 ﻿package com.luckylearning.windtone.overlay
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -223,5 +225,55 @@ class OverlayCollapseHelperTest {
             visible,
         )
     }
-}
 
+    // ------------------------------------------------------------ 侧钮无障碍三档（2026-10-31）
+
+    /**
+     * 三档 × 两种运行态，六种组合逐一对质。
+     *
+     * 这一组全是不报错、只影响「按钮该不该出现」的判断 —— 算错的后果是
+     * 「明明开着却还占一块屏」或者「掉了却找不到入口」，只能靠断言守住。
+     */
+    @Test
+    fun `三档显示策略与无障碍运行态的组合`() {
+        // 0 不显示：与状态无关
+        assertFalse(OverlayCollapseHelper.a11yHandleVisible(mode = 0, running = false))
+        assertFalse(OverlayCollapseHelper.a11yHandleVisible(mode = 0, running = true))
+        // 1 仅未运行时显示：跑着就藏，掉了才出来
+        assertTrue(OverlayCollapseHelper.a11yHandleVisible(mode = 1, running = false))
+        assertFalse(OverlayCollapseHelper.a11yHandleVisible(mode = 1, running = true))
+        // 2 常显：与状态无关
+        assertTrue(OverlayCollapseHelper.a11yHandleVisible(mode = 2, running = false))
+        assertTrue(OverlayCollapseHelper.a11yHandleVisible(mode = 2, running = true))
+    }
+
+    /** 非法档位按「常显」处理，与 Prefs 的夹取一致：宁可多一颗，别把入口弄丢 */
+    @Test
+    fun `非法档位按常显处理`() {
+        assertTrue(OverlayCollapseHelper.a11yHandleVisible(mode = 42, running = true))
+        assertTrue(OverlayCollapseHelper.a11yHandleVisible(mode = -1, running = false))
+    }
+
+    /** 掩码层必须真的摘掉 bit3，否则「隐藏」只是画面上没了、布局还给留着位置 */
+    @Test
+    fun `无障碍位关掉时掩码不含 bit3`() {
+        val on = OverlayCollapseHelper.handleMask(
+            carMode = true,
+            handlesEnabled = true,
+            collapse = true,
+            playPause = true,
+            player = true,
+            a11y = true,
+        )
+        val off = OverlayCollapseHelper.handleMask(
+            carMode = true,
+            handlesEnabled = true,
+            collapse = true,
+            playPause = true,
+            player = true,
+            a11y = false,
+        )
+        assertEquals(15, on)
+        assertEquals(7, off)
+    }
+}

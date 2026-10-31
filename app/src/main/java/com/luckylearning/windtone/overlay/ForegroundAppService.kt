@@ -44,8 +44,21 @@ class ForegroundAppService : AccessibilityService() {
      */
     override fun onServiceConnected() {
         super.onServiceConnected()
+        connected = true
         runCatching { AccessibilityWatchdog.markOn(applicationContext) }
         com.luckylearning.windtone.diag.DiagLog.log("A11Y", "服务已连接（可接收窗口事件）")
+    }
+
+    /**
+     * 服务是否**此刻真的连着**（2026-10-31）。
+     *
+     * 与「系统设置里那个勾打没打」（[ForegroundAppDetector.accessibilityEnabled]）是两件事：
+     * DiLink 上服务被杀、勾还留着是常态。侧钮的「仅未运行显示」要用这个更严的判据，
+     * 否则用户最需要那颗钮时它恰好不在。
+     */
+    override fun onDestroy() {
+        connected = false
+        super.onDestroy()
     }
 
     /**
@@ -74,13 +87,26 @@ class ForegroundAppService : AccessibilityService() {
     }
 
     override fun onUnbind(intent: android.content.Intent?): Boolean {
+        connected = false
         // 用户在设置里关掉服务：清掉残留包名，别让下一次开启先继承一个过期值
         ForegroundAppState.reset()
         com.luckylearning.windtone.diag.DiagLog.log("A11Y", "服务被解绑（系统关闭或被杀）")
         return super.onUnbind(intent)
     }
 
-    private companion object {
-        const val TAG = "WindToneFgService"
+    companion object {
+        private const val TAG = "WindToneFgService"
+
+        /**
+         * 进程内「服务此刻已连接」标记。
+         *
+         * 只活在本进程：进程重启后一定是 false，要等服务重新连上才变 true ——
+         * 这正是「真的在跑」该有的语义，不需要额外持久化。
+         */
+        @Volatile
+        private var connected = false
+
+        /** 供 [A11yRuntime] 与诊断/自检读取 */
+        fun isConnected(): Boolean = connected
     }
 }

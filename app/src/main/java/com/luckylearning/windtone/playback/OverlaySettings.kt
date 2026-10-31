@@ -100,13 +100,23 @@ class OverlaySettings(
                 settings.setOverlayHandlePlayer(enabled)
                 state.update { it.copy(overlayHandlePlayer = enabled) }
             }
-            3 -> {
-                settings.setOverlayHandleA11y(enabled)
-                state.update { it.copy(overlayHandleA11y = enabled) }
-            }
+            // kind 3（无障碍钮）已改为三档（2026-10-31），不再走这个布尔口子，
+            // 见 setOverlayHandleA11yMode —— 这里遇到 3 直接忽略，别静默写成"开"。
             else -> return
         }
         // 由服务在下一帧按新的掩码整组重建（syncHandlesVisibility）
+        previewOverlayAfterConfigChange()
+    }
+
+    /**
+     * 侧钮「无障碍」三档（0 不显示 / 1 仅未运行时显示 / 2 常显）。
+     *
+     * 不动服务里的显隐判定：服务下一帧按新掩码整组重建（syncHandlesVisibility），
+     * 这里只落盘 + 更新 UI 状态 + 催一次预览。
+     */
+    override fun setOverlayHandleA11yMode(mode: Int) {
+        settings.setOverlayHandleA11yMode(mode)
+        state.update { it.copy(overlayHandleA11yMode = mode.coerceIn(0, 2)) }
         previewOverlayAfterConfigChange()
     }
 

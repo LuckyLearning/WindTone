@@ -34,6 +34,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 import kotlin.math.roundToInt
 
 /**
@@ -1407,7 +1408,11 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             collapse = prefs.overlayHandleCollapse,
             playPause = prefs.overlayHandlePlayPause,
             player = prefs.overlayHandlePlayer,
-            a11y = prefs.overlayHandleA11y,
+            // 三档（2026-10-31）：判据是"无障碍真的可用"，不是"系统里勾着"
+            a11y = OverlayCollapseHelper.a11yHandleVisible(
+                mode = prefs.overlayHandleA11yMode,
+                running = A11yRuntime.running(this),
+            ),
         )
     }
 
@@ -1558,7 +1563,9 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         val size = dp(48)
         val view = AccessibilityIconView(this).apply {
             background = handleDisc(HANDLE_DISC_ALPHA)
-            setA11yEnabled(ForegroundAppDetector.accessibilityEnabled(this@LyricOverlayService))
+            // 绿色 = 无障碍**真的可用**（开关勾着 + 服务在案）。只看勾选会把
+            // DiLink 掉线那种"看着绿的其实没工作"画成绿钮，误导比不显示更糟。
+            setA11yEnabled(A11yRuntime.running(this@LyricOverlayService))
             elevation = dp(4).toFloat()
             setOnClickListener {
                 com.luckylearning.windtone.diag.DiagLog.log("OVERLAY", "无障碍侧钮被点击")
@@ -1580,22 +1587,38 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         if (!runCatching { windowManager?.addView(view, lp) }.isSuccess) return
         a11yHandleView = view
         a11yHandleParams = lp
-        startA11yWatch()
     }
 
+    /**
+     * 侧钮状态轮询（2026-10-31 升级）。
+     *
+     * 两件事一起做：
+     * 1. 颜色 —— 绿 = 真的可用，红 = 未开 / 掉了；
+     * 2. 显隐 —— 「仅未运行时显示」这一档要靠它发现状态变了，然后整组重建。
+     *
+     * **不随无障碍钮一起生灭**：那颗钮被摘掉之后，轮询仍要跑，否则状态恢复时
+     * 没人把它挂回来。只有「一颗钮都不该显示」时才停（见 [stopA11yWatch]）。
+     */
     private fun startA11yWatch() {
-        a11yWatchJob?.cancel()
+        if (a11yWatchJob?.isActive == true) return
         a11yWatchJob = scope.launch {
-            while (a11yHandleView != null) {
+            while (isActive) {
                 refreshA11yHandleStatus()
+                if (desiredHandleMask() != appliedHandleMask) syncHandlesVisibility()
                 delay(2_000)
             }
         }
     }
 
+    /** 侧钮全关时停掉轮询，别让一个 2s 定时器白转 */
+    private fun stopA11yWatch() {
+        a11yWatchJob?.cancel()
+        a11yWatchJob = null
+    }
+
     private fun refreshA11yHandleStatus() {
         val view = a11yHandleView ?: return
-        view.setA11yEnabled(ForegroundAppDetector.accessibilityEnabled(this))
+        view.setA11yEnabled(A11yRuntime.running(this))
     }
 
     private fun openAccessibilityFromHandle() {
@@ -1624,6 +1647,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         appliedHandleOrder = order
         if (mask == 0) {
             appliedHandleMask = 0
+            stopA11yWatch()
             return
         }
         attachCollapseHandle()
@@ -1632,6 +1656,11 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         attachA11yHandle()
         appliedHandleMask = mask
         updateHandlesPosition()
+        // 重建出来的 View 默认是 VISIBLE；灭屏 / 前台不该显示时要按全局开关压回去。
+        applyVisibility()
+        // 无障碍钮可能已经被摘掉，但"状态一变就要重新算掩码"的轮询得继续跑
+        // （否则「仅未运行时显示」在修复无障碍后就再也不会自己回来）。
+        startA11yWatch()
     }
 
     /** 摘掉三颗侧钮（不碰歌词窗本身） */
@@ -1645,8 +1674,9 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         pauseHandleView?.let { runCatching { windowManager?.removeView(it) } }
         pauseHandleView = null
         pauseHandleParams = null
-        a11yWatchJob?.cancel()
-        a11yWatchJob = null
+        // ⚠️ 这里**不取消** a11yWatch：它已经从"这颗钮的附属品"升级成
+        // "侧钮状态轮询"（2026-10-31），摘钮时取消会让「仅未运行时显示」
+        // 再也等不到状态变回来的那一刻。暂停由 stopA11yWatch() 单独负责。
         a11yHandleView?.let { runCatching { windowManager?.removeView(it) } }
         a11yHandleView = null
         a11yHandleParams = null

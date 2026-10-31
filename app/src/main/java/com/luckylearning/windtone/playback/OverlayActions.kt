@@ -20,9 +20,19 @@ interface OverlayActions {
     /**
      * 单颗侧钮开关（v1.3.0）。
      *
-     * @param kind 0 = 收起 / 1 = 播放暂停 / 2 = 打开播放页 / 3 = 无障碍
+     * @param kind 0 = 收起 / 1 = 播放暂停 / 2 = 打开播放页
+     *
+     * ⚠️ 3（无障碍）**不再走这里**：它 2026-10-31 升级成三档，用
+     * [setOverlayHandleA11yMode]。留着 kind 3 的旧语义只会让"开着却又看不见"成为可能。
      */
     fun setOverlayHandle(kind: Int, enabled: Boolean)
+
+    /**
+     * 侧钮「无障碍」的显示策略（2026-10-31）。
+     *
+     * @param mode 0 = 不显示；1 = 仅无障碍未运行时显示；2 = 常显
+     */
+    fun setOverlayHandleA11yMode(mode: Int)
 
     /**
      * 侧钮上下顺序（B1）。

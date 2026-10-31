@@ -103,8 +103,9 @@ class SettingsRepository(val prefs: Prefs) {
         prefs.overlayHandlePlayer = enabled
     }
 
-    fun setOverlayHandleA11y(enabled: Boolean) {
-        prefs.overlayHandleA11y = enabled
+    /** 侧钮无障碍三档（0 不显示 / 1 仅未运行时显示 / 2 常显） */
+    fun setOverlayHandleA11yMode(mode: Int) {
+        prefs.overlayHandleA11yMode = mode
     }
 
     fun setOverlayHandleOrder(orderCsv: String) {
