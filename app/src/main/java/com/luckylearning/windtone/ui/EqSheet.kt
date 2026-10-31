@@ -1,7 +1,6 @@
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3Api::class,
     androidx.compose.foundation.layout.ExperimentalLayoutApi::class,
-    androidx.media3.common.util.UnstableApi::class,
 )
 
 package com.luckylearning.windtone.ui

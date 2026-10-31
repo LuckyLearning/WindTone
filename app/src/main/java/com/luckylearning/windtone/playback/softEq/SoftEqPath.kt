@@ -28,7 +28,8 @@ import kotlinx.coroutines.flow.asStateFlow
  *
  * Docs: docs/功能-软EQ.md; spike: docs/spike-软EQ.md.
  */
-@UnstableApi
+/** 自身消费 Media3 UnstableApi；勿标 @UnstableApi，否则 UI 调用方会触发 lint UnsafeOptInUsageError。 */
+@androidx.annotation.OptIn(UnstableApi::class)
 object SoftEqPath {
 
     data class State(

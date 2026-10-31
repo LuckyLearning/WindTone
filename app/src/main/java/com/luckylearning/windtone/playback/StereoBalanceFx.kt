@@ -17,7 +17,8 @@ import kotlinx.coroutines.flow.asStateFlow
  * [AudioFx.Unavailable.DEVICE_REJECTED] 时仍可用。挂到
  * [PlaybackService] 的 [androidx.media3.exoplayer.DefaultRenderersFactory.buildAudioSink]。
  */
-@UnstableApi
+/** 自身消费 Media3 UnstableApi；勿标 @UnstableApi，避免 UI/Engine 触发 lint UnsafeOptInUsageError。 */
+@androidx.annotation.OptIn(UnstableApi::class)
 object StereoBalanceFx {
 
     data class State(val balance: Int = SettingsDefaults.STEREO_BALANCE)

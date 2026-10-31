@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import com.luckylearning.windtone.data.Prefs
@@ -133,8 +134,14 @@ class BtAutoCarMonitor(
         val out = LinkedHashMap<String, BtAutoCarPolicy.DeviceRef>()
         for (d in mgr.getDevices(AudioManager.GET_DEVICES_OUTPUTS)) {
             if (!BtAutoCarPolicy.isBluetoothAudioType(d.type)) continue
+            // AudioDeviceInfo.address 需 API 28+；更低版本只用 productName 生成 id
+            val address = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                runCatching { d.address }.getOrNull()
+            } else {
+                null
+            }
             val id = BtAutoCarPolicy.deviceId(
-                address = runCatching { d.address }.getOrNull(),
+                address = address,
                 productName = runCatching { d.productName }.getOrNull(),
             ) ?: continue
             val name = runCatching { d.productName?.toString() }.getOrNull()
