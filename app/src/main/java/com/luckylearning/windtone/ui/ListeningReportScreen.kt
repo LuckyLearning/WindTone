@@ -30,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -85,12 +86,12 @@ fun ListeningReportScreen(
                 IconButton(onClick = onClose) {
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "返回",
+                        contentDescription = stringResource(R.string.cd_back),
                         tint = MaterialTheme.colorScheme.onBackground,
                     )
                 }
                 Text(
-                    "收听报告",
+                    stringResource(R.string.lib_listening_report),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                 )
@@ -108,7 +109,7 @@ fun ListeningReportScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     REPORT_SPANS.forEach { span ->
                         SpanChip(
-                            label = "近 $span 天",
+                            label = stringResource(R.string.lr_span_days, span),
                             selected = span == days,
                             onClick = { if (span != days) onSetDays(span) },
                         )
@@ -128,7 +129,7 @@ fun ListeningReportScreen(
 
                 if (report == null) {
                     Text(
-                        "正在统计…",
+                        stringResource(R.string.lr_loading),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -141,31 +142,31 @@ fun ListeningReportScreen(
                 Spacer(Modifier.height(18.dp))
 
                 // ------------------------------------------------ 日曲线
-                SectionHeader("每日收听时长")
+                SectionHeader(stringResource(R.string.lr_section_daily))
                 DayCurve(report)
                 Spacer(Modifier.height(18.dp))
 
                 // ------------------------------------------------ 时段分布
-                SectionHeader("时段分布")
+                SectionHeader(stringResource(R.string.lr_section_hours))
                 HourBars(report)
                 Spacer(Modifier.height(18.dp))
 
                 // ------------------------------------------------ 榜单
                 val topPlayed = state?.topPlayed.orEmpty()
                 val topListened = state?.topListened.orEmpty()
-                SectionHeader("最常播放")
+                SectionHeader(stringResource(R.string.lr_section_top_played))
                 TopList(
                     rows = topPlayed,
-                    valueOf = { "${it.playCount} 次" },
-                    emptyHint = "这段时间还没有播放记录",
+                    valueOf = { stringResource(R.string.lr_play_count, it.playCount) },
+                    emptyHint = stringResource(R.string.lr_empty_plays),
                     onPlayAll = { songs -> onPlayTop(songs) },
                 )
                 Spacer(Modifier.height(14.dp))
-                SectionHeader("最长收听")
+                SectionHeader(stringResource(R.string.lr_section_top_listened))
                 TopList(
                     rows = topListened,
                     valueOf = { formatListenDuration(it.listenedMs) },
-                    emptyHint = "这段时间还没有播放记录",
+                    emptyHint = stringResource(R.string.lr_empty_plays),
                     onPlayAll = { songs -> onPlayTop(songs) },
                 )
 
@@ -179,11 +180,14 @@ fun ListeningReportScreen(
 
 @Composable
 private fun StatGrid(report: ListeningReport) {
+    val peak = report.peakHour?.let {
+        stringResource(R.string.lr_peak_hour_range, it.hour, it.hour + 1)
+    } ?: stringResource(R.string.cal_em_dash)
     val rows = listOf(
-        "累计收听" to formatListenDuration(report.totalMs),
-        "日均" to formatListenDuration(report.averageDayMs),
-        "有收听的天数" to "${report.activeDays} 天",
-        "最常听的时段" to (report.peakHour?.let { "${it.hour}:00–${it.hour + 1}:00" } ?: "—"),
+        stringResource(R.string.lr_stat_total) to formatListenDuration(report.totalMs),
+        stringResource(R.string.lr_stat_avg_day) to formatListenDuration(report.averageDayMs),
+        stringResource(R.string.lr_stat_active_days) to stringResource(R.string.cal_active_days_value, report.activeDays),
+        stringResource(R.string.lr_stat_peak_hour) to peak,
     )
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
@@ -230,7 +234,7 @@ private fun DayCurve(report: ListeningReport) {
         Box(Modifier.fillMaxWidth().height(120.dp)) {
             if (max <= 0L) {
                 Text(
-                    "这段时间还没有收听记录",
+                    stringResource(R.string.lr_empty_listen),
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant,
                     modifier = Modifier.align(Alignment.Center),
@@ -274,7 +278,7 @@ private fun DayCurve(report: ListeningReport) {
             )
             Spacer(Modifier.weight(1f))
             Text(
-                todayStart?.let { "今天 ${formatDayLabel(it, zone)}" } ?: "",
+                todayStart?.let { stringResource(R.string.lr_today_label, formatDayLabel(it, zone)) } ?: "",
                 style = MaterialTheme.typography.labelSmall,
                 color = scheme.onSurfaceVariant,
             )
@@ -299,7 +303,7 @@ private fun HourBars(report: ListeningReport) {
         Box(Modifier.fillMaxWidth().height(72.dp)) {
             if (max <= 0L) {
                 Text(
-                    "这段时间还没有收听记录",
+                    stringResource(R.string.lr_empty_listen),
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant,
                     modifier = Modifier.align(Alignment.Center),
@@ -347,7 +351,7 @@ private fun HourBars(report: ListeningReport) {
 @Composable
 private fun TopList(
     rows: List<TopSong>,
-    valueOf: (TopSong) -> String,
+    valueOf: @Composable (TopSong) -> String,
     emptyHint: String,
     onPlayAll: (List<Song>) -> Unit,
 ) {
@@ -399,7 +403,7 @@ private fun TopList(
             }
         }
         if (songs.isNotEmpty()) {
-            TextButton(onClick = { onPlayAll(songs) }) { Text("播放这个榜单") }
+            TextButton(onClick = { onPlayAll(songs) }) { Text(stringResource(R.string.lr_play_chart)) }
         }
     }
 }

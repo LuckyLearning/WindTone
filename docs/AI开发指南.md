@@ -2311,3 +2311,12 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 - ListeningReport / LibraryStats / SheetsScanScope / Aliyun / SoftEq 本批不改
 - 文档：`docs/功能-i18n车机曲库.md`
 
+### i18n 第 16 批（2026-10-31）
+
+**ListeningReportScreen / LibraryStatsScreen**：听歌报告与曲库格式容量壳文案进 values / values-zh（`lr_*` / `ls_*`）。标题复用 `lib_listening_report`；返回 `cd_back`；日历入口 `cal_title`；天数值 / 破折号复用 `cal_active_days_value` / `cal_em_dash`；首数复用 `lib_song_count`。Compose 用 `stringResource` / `pluralStringResource`。
+
+- 本批键名：`lr_span_days`, `lr_loading`, `lr_section_daily`, `lr_section_hours`, `lr_section_top_played`, `lr_section_top_listened`, `lr_empty_plays`, `lr_empty_listen`, `lr_play_count`, `lr_stat_total`, `lr_stat_avg_day`, `lr_stat_active_days`, `lr_stat_peak_hour`, `lr_peak_hour_range`, `lr_today_label`, `lr_play_chart`, `ls_title`, `ls_empty`, `ls_stat_total_songs`, `ls_stat_total_size`, `ls_stat_total_duration`, `ls_stat_avg_size`, `ls_stat_format_count`, `ls_format_kinds`, `ls_section_by_size`, `ls_section_lossless_lossy`, `ls_lossless`, `ls_lossy`, `ls_unknown_format`, `ls_count_dot_size`, `ls_share_pct`, `ls_avg_bitrate`, `ls_footnote_base`, `ls_footnote_unknown_size`, `ls_footnote_m4a`
+- OnlineListeningReport / SheetsScanScope / Aliyun / SoftEq 本批不改
+- 文档：`docs/功能-i18n听歌报告与曲库统计.md`
+
+

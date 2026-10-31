@@ -31,9 +31,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.FormatStat
 import com.luckylearning.windtone.data.LibraryStats
 import com.luckylearning.windtone.data.formatByteSize
@@ -68,12 +71,12 @@ fun LibraryStatsScreen(
                 IconButton(onClick = onClose) {
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "返回",
+                        contentDescription = stringResource(R.string.cd_back),
                         tint = MaterialTheme.colorScheme.onBackground,
                     )
                 }
                 Text(
-                    "曲库格式与容量",
+                    stringResource(R.string.ls_title),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                 )
@@ -89,7 +92,7 @@ fun LibraryStatsScreen(
             ) {
                 if (stats.totalSongs <= 0) {
                     Text(
-                        "曲库还没有歌曲。扫描完成后这里会列出各格式的首数与占用。",
+                        stringResource(R.string.ls_empty),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(vertical = 14.dp),
@@ -101,17 +104,24 @@ fun LibraryStatsScreen(
                 // ------------------------------------------------ 汇总
                 StatCard(
                     rows = listOf(
-                        "歌曲总数" to "${stats.totalSongs} 首",
-                        "合计占用" to formatByteSize(stats.totalBytes),
-                        "总时长" to formatListenDuration(stats.totalDurationMs),
-                        "平均每首" to formatByteSize(stats.averageBytes),
-                        "格式种类" to "${stats.formatCount} 种",
+                        stringResource(R.string.ls_stat_total_songs) to pluralStringResource(
+                            R.plurals.lib_song_count,
+                            stats.totalSongs,
+                            stats.totalSongs,
+                        ),
+                        stringResource(R.string.ls_stat_total_size) to formatByteSize(stats.totalBytes),
+                        stringResource(R.string.ls_stat_total_duration) to formatListenDuration(stats.totalDurationMs),
+                        stringResource(R.string.ls_stat_avg_size) to formatByteSize(stats.averageBytes),
+                        stringResource(R.string.ls_stat_format_count) to stringResource(
+                            R.string.ls_format_kinds,
+                            stats.formatCount,
+                        ),
                     )
                 )
                 Spacer(Modifier.height(18.dp))
 
                 // ------------------------------------------------ 格式分布
-                SectionLabel("按占用排序")
+                SectionLabel(stringResource(R.string.ls_section_by_size))
                 stats.formats.forEach { stat ->
                     FormatBar(stat = stat, share = stats.shareOf(stat))
                 }
@@ -119,44 +129,68 @@ fun LibraryStatsScreen(
                 // ------------------------------------------------ 无损 / 有损
                 if (stats.losslessSongs > 0 || stats.lossySongs > 0) {
                     Spacer(Modifier.height(16.dp))
-                    SectionLabel("无损 / 有损")
-                    StatCard(
-                        rows = buildList {
-                            if (stats.losslessSongs > 0) {
-                                add(
-                                    "无损" to "${stats.losslessSongs} 首 · " +
-                                        formatByteSize(stats.losslessBytes) +
-                                        shareSuffix(stats.losslessBytes, stats.totalBytes),
-                                )
-                            }
-                            if (stats.lossySongs > 0) {
-                                add(
-                                    "有损" to "${stats.lossySongs} 首 · " +
-                                        formatByteSize(stats.lossyBytes) +
-                                        shareSuffix(stats.lossyBytes, stats.totalBytes),
-                                )
-                            }
-                            if (stats.unknownFormatSongs > 0) {
-                                add("格式未知" to "${stats.unknownFormatSongs} 首")
-                            }
-                        }
-                    )
+                    SectionLabel(stringResource(R.string.ls_section_lossless_lossy))
+                    val losslessLabel = stringResource(R.string.ls_lossless)
+                    val lossyLabel = stringResource(R.string.ls_lossy)
+                    val unknownLabel = stringResource(R.string.ls_unknown_format)
+                    val losslessRow = if (stats.losslessSongs > 0) {
+                        val count = pluralStringResource(
+                            R.plurals.lib_song_count,
+                            stats.losslessSongs,
+                            stats.losslessSongs,
+                        )
+                        losslessLabel to (
+                            stringResource(
+                                R.string.ls_count_dot_size,
+                                count,
+                                formatByteSize(stats.losslessBytes),
+                            ) + sharePctSuffix(stats.losslessBytes, stats.totalBytes)
+                        )
+                    } else {
+                        null
+                    }
+                    val lossyRow = if (stats.lossySongs > 0) {
+                        val count = pluralStringResource(
+                            R.plurals.lib_song_count,
+                            stats.lossySongs,
+                            stats.lossySongs,
+                        )
+                        lossyLabel to (
+                            stringResource(
+                                R.string.ls_count_dot_size,
+                                count,
+                                formatByteSize(stats.lossyBytes),
+                            ) + sharePctSuffix(stats.lossyBytes, stats.totalBytes)
+                        )
+                    } else {
+                        null
+                    }
+                    val unknownRow = if (stats.unknownFormatSongs > 0) {
+                        unknownLabel to pluralStringResource(
+                            R.plurals.lib_song_count,
+                            stats.unknownFormatSongs,
+                            stats.unknownFormatSongs,
+                        )
+                    } else {
+                        null
+                    }
+                    StatCard(rows = listOfNotNull(losslessRow, lossyRow, unknownRow))
                 }
 
                 // ------------------------------------------------ 口径说明
                 Spacer(Modifier.height(16.dp))
+                val footnote = stringResource(R.string.ls_footnote_base) +
+                    (if (stats.unknownSizeSongs > 0) {
+                        stringResource(
+                            R.string.ls_footnote_unknown_size,
+                            stats.unknownSizeSongs,
+                        )
+                    } else {
+                        ""
+                    }) +
+                    stringResource(R.string.ls_footnote_m4a)
                 Text(
-                    buildString {
-                        append("占用按文件大小累加，与系统「文件管理」里看到的一致；")
-                        append("同一首歌的歌词、封面若单独存成文件，不计在这里。\n")
-                        if (stats.unknownSizeSongs > 0) {
-                            append(
-                                "有 ${stats.unknownSizeSongs} 首读不到文件大小" +
-                                    "（老系统 / 外部存储未挂载时常见），它们只计首数、不计占用。\n",
-                            )
-                        }
-                        append("m4a 可能是无损的 ALAC，也可能是有损的 AAC，按扩展名分不出来，统计里计入「有损」。")
-                    },
+                    footnote,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 8.dp),
@@ -190,7 +224,7 @@ private fun FormatBar(stat: FormatStat, share: Float) {
                 modifier = Modifier.weight(1f),
             )
             Text(
-                "${stat.songs} 首",
+                pluralStringResource(R.plurals.lib_song_count, stat.songs, stat.songs),
                 style = MaterialTheme.typography.labelMedium,
                 color = scheme.onSurfaceVariant,
             )
@@ -229,7 +263,11 @@ private fun FormatBar(stat: FormatStat, share: Float) {
         if (stat.averageKbps > 0) {
             Spacer(Modifier.height(3.dp))
             Text(
-                "平均 ${stat.averageKbps} kbps · 平均每首 ${formatByteSize(stat.averageBytes)}",
+                stringResource(
+                    R.string.ls_avg_bitrate,
+                    stat.averageKbps,
+                    formatByteSize(stat.averageBytes),
+                ),
                 style = MaterialTheme.typography.labelSmall,
                 color = scheme.onSurfaceVariant,
             )
@@ -238,5 +276,7 @@ private fun FormatBar(stat: FormatStat, share: Float) {
 }
 
 /** 「 · 72%」这种后缀；合计为 0 时返回空串，避免写出「0%」误导 */
-private fun shareSuffix(part: Long, total: Long): String =
-    if (total <= 0L || part <= 0L) "" else " · ${part * 100 / total}%"
+@Composable
+private fun sharePctSuffix(part: Long, total: Long): String =
+    if (total <= 0L || part <= 0L) ""
+    else stringResource(R.string.ls_share_pct, (part * 100 / total).toInt())

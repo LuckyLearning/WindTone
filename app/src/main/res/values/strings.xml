@@ -1272,4 +1272,42 @@ The list is fetched once on add — nothing is saved if the fetch fails.</string
     <!-- i18n batch 15: CarLibraryScreen -->
     <string name="car_view_all_songs">All songs</string>
     <string name="car_search_hint">Search title / artist / album / pinyin initials</string>
+
+    <!-- i18n batch 16: ListeningReportScreen / LibraryStatsScreen -->
+    <string name="lr_span_days">Last %1$d days</string>
+    <string name="lr_loading">Summarizing…</string>
+    <string name="lr_section_daily">Daily listening time</string>
+    <string name="lr_section_hours">Time of day</string>
+    <string name="lr_section_top_played">Most played</string>
+    <string name="lr_section_top_listened">Longest listening</string>
+    <string name="lr_empty_plays">No plays in this period</string>
+    <string name="lr_empty_listen">No listening recorded in this period</string>
+    <string name="lr_play_count">%1$d plays</string>
+    <string name="lr_stat_total">Total listening</string>
+    <string name="lr_stat_avg_day">Daily average</string>
+    <string name="lr_stat_active_days">Days with listening</string>
+    <string name="lr_stat_peak_hour">Peak hour</string>
+    <string name="lr_peak_hour_range">%1$d:00–%2$d:00</string>
+    <string name="lr_today_label">Today %1$s</string>
+    <string name="lr_play_chart">Play this chart</string>
+
+    <string name="ls_title">Library formats &amp; size</string>
+    <string name="ls_empty">No songs in the library yet. After a scan finishes, format counts and sizes show up here.</string>
+    <string name="ls_stat_total_songs">Total songs</string>
+    <string name="ls_stat_total_size">Total size</string>
+    <string name="ls_stat_total_duration">Total duration</string>
+    <string name="ls_stat_avg_size">Average per track</string>
+    <string name="ls_stat_format_count">Formats</string>
+    <string name="ls_format_kinds">%1$d kinds</string>
+    <string name="ls_section_by_size">Sorted by size</string>
+    <string name="ls_section_lossless_lossy">Lossless / lossy</string>
+    <string name="ls_lossless">Lossless</string>
+    <string name="ls_lossy">Lossy</string>
+    <string name="ls_unknown_format">Unknown format</string>
+    <string name="ls_count_dot_size">%1$s · %2$s</string>
+    <string name="ls_share_pct"> · %1$d%%</string>
+    <string name="ls_avg_bitrate">Avg %1$d kbps · avg %2$s per track</string>
+    <string name="ls_footnote_base">Size is summed from file length — same as what Files shows. Separate lyric or cover files for the same song are not counted here.\n</string>
+    <string name="ls_footnote_unknown_size">%1$d track(s) have unknown file size (common on older systems / unmounted external storage); they count toward song totals only, not size.\n</string>
+    <string name="ls_footnote_m4a">m4a may be lossless ALAC or lossy AAC — the extension alone cannot tell, so it is counted as lossy.</string>
 </resources>

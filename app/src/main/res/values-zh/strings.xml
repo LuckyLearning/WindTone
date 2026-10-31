@@ -1238,4 +1238,42 @@
     <!-- i18n 第 15 批：CarLibraryScreen -->
     <string name="car_view_all_songs">全部歌曲</string>
     <string name="car_search_hint">搜索歌名 / 歌手 / 专辑 / 拼音首字母</string>
+
+    <!-- i18n 第 16 批：ListeningReportScreen / LibraryStatsScreen -->
+    <string name="lr_span_days">近 %1$d 天</string>
+    <string name="lr_loading">正在统计…</string>
+    <string name="lr_section_daily">每日收听时长</string>
+    <string name="lr_section_hours">时段分布</string>
+    <string name="lr_section_top_played">最常播放</string>
+    <string name="lr_section_top_listened">最长收听</string>
+    <string name="lr_empty_plays">这段时间还没有播放记录</string>
+    <string name="lr_empty_listen">这段时间还没有收听记录</string>
+    <string name="lr_play_count">%1$d 次</string>
+    <string name="lr_stat_total">累计收听</string>
+    <string name="lr_stat_avg_day">日均</string>
+    <string name="lr_stat_active_days">有收听的天数</string>
+    <string name="lr_stat_peak_hour">最常听的时段</string>
+    <string name="lr_peak_hour_range">%1$d:00–%2$d:00</string>
+    <string name="lr_today_label">今天 %1$s</string>
+    <string name="lr_play_chart">播放这个榜单</string>
+
+    <string name="ls_title">曲库格式与容量</string>
+    <string name="ls_empty">曲库还没有歌曲。扫描完成后这里会列出各格式的首数与占用。</string>
+    <string name="ls_stat_total_songs">歌曲总数</string>
+    <string name="ls_stat_total_size">合计占用</string>
+    <string name="ls_stat_total_duration">总时长</string>
+    <string name="ls_stat_avg_size">平均每首</string>
+    <string name="ls_stat_format_count">格式种类</string>
+    <string name="ls_format_kinds">%1$d 种</string>
+    <string name="ls_section_by_size">按占用排序</string>
+    <string name="ls_section_lossless_lossy">无损 / 有损</string>
+    <string name="ls_lossless">无损</string>
+    <string name="ls_lossy">有损</string>
+    <string name="ls_unknown_format">格式未知</string>
+    <string name="ls_count_dot_size">%1$s · %2$s</string>
+    <string name="ls_share_pct"> · %1$d%%</string>
+    <string name="ls_avg_bitrate">平均 %1$d kbps · 平均每首 %2$s</string>
+    <string name="ls_footnote_base">占用按文件大小累加，与系统「文件管理」里看到的一致；同一首歌的歌词、封面若单独存成文件，不计在这里。\n</string>
+    <string name="ls_footnote_unknown_size">有 %1$d 首读不到文件大小（老系统 / 外部存储未挂载时常见），它们只计首数、不计占用。\n</string>
+    <string name="ls_footnote_m4a">m4a 可能是无损的 ALAC，也可能是有损的 AAC，按扩展名分不出来，统计里计入「有损」。</string>
 </resources>
