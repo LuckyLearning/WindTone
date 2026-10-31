@@ -1359,4 +1359,18 @@ Expired codes refresh automatically. This app is read-only — it never uploads,
     <string name="aqr_cd_qr">Aliyun Drive authorization QR code</string>
     <string name="aliyun_refresh_token_field">Refresh Token</string>
 
+
+    <!-- i18n batch 20: Settings lyrics a11y row + SettingsViewModel maintenance toasts -->
+    <string name="sl_a11y_title">Show “foreground detection” status on Now Playing</string>
+    <string name="sl_a11y_sub_on">Adds an accessibility icon in the left vertical stack: gray/red = off, theme color = on; tap opens system Accessibility settings</string>
+    <string name="sl_a11y_sub_off">Hidden; per-app hide still works — only the Now Playing status entry is gone</string>
+    <string name="svm_cleaned_n">Cleared %1$d missing song(s)</string>
+    <string name="svm_cleaned_none">Nothing to clean up</string>
+    <string name="svm_cover_cleared">Cover cache cleared</string>
+    <string name="svm_user_data_cleared">Cleared all user data (favorites / stats / playlists / queue)</string>
+    <string name="svm_library_cleared">Library and import folders cleared — choose a scan scope again</string>
+    <string name="svm_crash_cleared">Crash log cleared</string>
+    <string name="svm_crash_exported">Crash log exported</string>
+    <string name="svm_export_failed">Export failed: %1$s</string>
+
 </resources>

@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.luckylearning.windtone.MusicApp
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.CrashLog
 import com.luckylearning.windtone.data.DataMaintenance
 import kotlinx.coroutines.Dispatchers
@@ -48,7 +49,7 @@ class SettingsViewModel(private val app: Application) : AndroidViewModel(app) {
                 runCatching { maintenance.cleanupMissingSongs() }.getOrDefault(0)
             }
             refreshMaintenanceReport()
-            messages.post(if (n > 0) "已清理 $n 首失效歌曲" else "没有需要清理的歌曲")
+            messages.post(if (n > 0) AppStrings.s(R.string.svm_cleaned_n, n) else AppStrings.s(R.string.svm_cleaned_none))
         }
     }
 
@@ -56,7 +57,7 @@ class SettingsViewModel(private val app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) { runCatching { maintenance.clearCoverCache() } }
             refreshMaintenanceReport()
-            messages.post("封面缓存已清空")
+            messages.post(AppStrings.s(R.string.svm_cover_cleared))
         }
     }
 
@@ -73,7 +74,7 @@ class SettingsViewModel(private val app: Application) : AndroidViewModel(app) {
             playback.resetListenAccumulator()
             index.clearStates()
             refreshMaintenanceReport()
-            messages.post("已清空全部用户数据（收藏 / 统计 / 歌单 / 队列）")
+            messages.post(AppStrings.s(R.string.svm_user_data_cleared))
         }
     }
 
@@ -93,7 +94,7 @@ class SettingsViewModel(private val app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) { runCatching { maintenance.resetLibrary() } }
             refreshMaintenanceReport()
-            messages.post("已清空曲库与导入目录，请重新选择扫描范围")
+            messages.post(AppStrings.s(R.string.svm_library_cleared))
         }
     }
 
@@ -105,7 +106,7 @@ class SettingsViewModel(private val app: Application) : AndroidViewModel(app) {
 
     fun clearCrashLog() {
         CrashLog.clear(app)
-        messages.post("崩溃日志已清空")
+        messages.post(AppStrings.s(R.string.svm_crash_cleared))
     }
 
     fun exportCrashLog(target: Uri) {
@@ -115,8 +116,8 @@ class SettingsViewModel(private val app: Application) : AndroidViewModel(app) {
                 app.contentResolver.openOutputStream(target)?.use {
                     it.write(text.toByteArray(Charsets.UTF_8))
                 }
-                messages.post("崩溃日志已导出")
-            }.onFailure { messages.post("导出失败：${it.message}") }
+                messages.post(AppStrings.s(R.string.svm_crash_exported))
+            }.onFailure { messages.post(AppStrings.s(R.string.svm_export_failed, it.message ?: "")) }
         }
     }
 }

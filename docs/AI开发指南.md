@@ -2343,3 +2343,11 @@ internal fun Modifier.good(): Modifier = pointerInput(Unit) {
 - 文档：`docs/功能-i18n阿里云盘壳.md`
 
 
+### i18n 第 20 批（2026-10-31）
+
+**设置深层 · 歌词前台识别 + 维护 Toast**：`SettingsLyricsPage` 前台识别开关进 `sl_a11y_*`；`SettingsViewModel` 清理/重置/崩溃日志 Toast 进 `svm_*`（`AppStrings.s`）。
+
+- 本批键名：`sl_a11y_title`, `sl_a11y_sub_on`, `sl_a11y_sub_off`, `svm_cleaned_n`, `svm_cleaned_none`, `svm_cover_cleared`, `svm_user_data_cleared`, `svm_library_cleared`, `svm_crash_cleared`, `svm_crash_exported`, `svm_export_failed`
+- SoftEq / 播放内核 / `PlaybackErrorMessages` 本批不改
+- 文档：`docs/功能-i18n设置歌词与维护Toast.md`
+

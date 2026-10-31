@@ -145,11 +145,11 @@ internal fun SettingsLyricsPage(
     // 车机上无障碍会被系统悄悄关掉，这个按钮是播放页里唯一能一眼确认「还活着」的入口；
     // 觉得占位置的人可以关掉，关掉只影响显示，不影响功能。
     SwitchRow(
-        title = "播放页显示「前台识别」状态按钮",
+        title = stringResource(R.string.sl_a11y_title),
         subtitle = if (player.showA11yAction) {
-            "左侧竖排多一颗无障碍图标：灰/红=未开启，主题色=已开启；点它直接进系统无障碍页"
+            stringResource(R.string.sl_a11y_sub_on)
         } else {
-            "已隐藏；按应用隐藏仍正常工作，只是播放页不再显示这个状态入口"
+            stringResource(R.string.sl_a11y_sub_off)
         },
         checked = player.showA11yAction,
         onCheckedChange = onPlayerA11yAction,

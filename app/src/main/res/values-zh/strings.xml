@@ -1325,4 +1325,18 @@
     <string name="aqr_cd_qr">阿里云盘扫码授权二维码</string>
     <string name="aliyun_refresh_token_field">Refresh Token</string>
 
+
+    <!-- i18n 第 20 批：设置·歌词前台识别行 + SettingsViewModel 维护 Toast -->
+    <string name="sl_a11y_title">播放页显示「前台识别」状态按钮</string>
+    <string name="sl_a11y_sub_on">左侧竖排多一颗无障碍图标：灰/红=未开启，主题色=已开启；点它直接进系统无障碍页</string>
+    <string name="sl_a11y_sub_off">已隐藏；按应用隐藏仍正常工作，只是播放页不再显示这个状态入口</string>
+    <string name="svm_cleaned_n">已清理 %1$d 首失效歌曲</string>
+    <string name="svm_cleaned_none">没有需要清理的歌曲</string>
+    <string name="svm_cover_cleared">封面缓存已清空</string>
+    <string name="svm_user_data_cleared">已清空全部用户数据（收藏 / 统计 / 歌单 / 队列）</string>
+    <string name="svm_library_cleared">已清空曲库与导入目录，请重新选择扫描范围</string>
+    <string name="svm_crash_cleared">崩溃日志已清空</string>
+    <string name="svm_crash_exported">崩溃日志已导出</string>
+    <string name="svm_export_failed">导出失败：%1$s</string>
+
 </resources>
