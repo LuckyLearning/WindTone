@@ -55,8 +55,10 @@ class MainActivity : ComponentActivity() {
         } else {
             ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
+        BootTrace.mark(this, "boot:prefs")
 
         enableEdgeToEdge()
+        BootTrace.mark(this, "boot:edge")
 
         // 半屏对照测试构建（`-Pprobe=split`，见 app/build.gradle.kts 的说明）。
         // 车机上已经确认原生 View 能正常显示，所以这里只需要回答一个问题：
@@ -73,9 +75,16 @@ class MainActivity : ComponentActivity() {
         //  · pendingCrash     —— 上一轮崩过、还没给用户看过；
         //  · lastIncompleteBoot —— 上一轮**进程活着但一帧都没画出去**（车机黑屏的核心线索）。
         val pendingCrash = runCatching { CrashLog.latestUnseen(applicationContext) }.getOrNull()
+        // 2026-10-31：车机诊断包里 `activity:onCreate → setContent` 有一段 2.45s 的空档，
+        // 而这两行之间只有下面三处 I/O。分三段埋点，下次冷启动就能看 trace 直接定位，
+        // 不必再靠猜。埋点走 BootTrace 的追加写（一次 open/close 约 1ms），
+        // 比起「能定位」这点代价可以接受 —— 这里刻意不为省 I/O 改成内存缓冲，
+        // 那会破坏「进程被杀也能留下痕迹」这个立身之本。
+        BootTrace.mark(this, "boot:crash-scan")
         val previousBoot = runCatching { BootTrace.previous(applicationContext) }.getOrNull()
         // 判据只在 BootTrace 里写一份，这里不重复实现
         val incomplete = runCatching { BootTrace.lastIncompleteBoot(applicationContext) }.getOrNull()
+        BootTrace.mark(this, "boot:trace-read")
 
         if (BuildConfig.BOOT_DIAG || pendingCrash != null || incomplete != null) {
             setContentView(

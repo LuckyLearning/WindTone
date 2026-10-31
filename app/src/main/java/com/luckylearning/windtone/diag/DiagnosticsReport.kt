@@ -107,6 +107,11 @@ internal object DiagnosticsReport {
         /** Soft EQ phase / confirm Prefs / curve digest (E5) */
         val softEqBlock: String = "",
         val versionCode: Long = 0L,
+        /**
+         * 悬浮窗自身开销（2026-10-31），见 [com.luckylearning.windtone.overlay.OverlayMetrics]。
+         * 与整机「内存 / CPU」是两回事：这里回答「悬浮窗自己花了多少」。
+         */
+        val overlayCostBlock: String = "",
     )
 
     /** 取数 */
@@ -221,6 +226,7 @@ internal object DiagnosticsReport {
             sceneBlock = SceneProbe.buildReport(context),
             softEqBlock = SoftEqProbe.buildReport(context),
             versionCode = BuildConfig.VERSION_CODE.toLong(),
+            overlayCostBlock = com.luckylearning.windtone.overlay.OverlayMetrics.summary(),
         )
     }
 
@@ -305,6 +311,7 @@ internal object DiagnosticsReport {
             "正文字号：${f.overlayTextSp}sp   暂停表现：${if (f.overlayPauseMode == 1) "隐藏" else "淡出"}   " +
                 "隐藏名单：${f.hiddenAppsCount} 个",
         )
+        if (f.overlayCostBlock.isNotBlank()) sb.appendLine(f.overlayCostBlock.trimEnd())
         sb.appendLine()
 
         sb.appendLine("[曲库]")

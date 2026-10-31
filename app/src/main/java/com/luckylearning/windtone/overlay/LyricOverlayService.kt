@@ -1371,14 +1371,22 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
      */
     override fun applyVisibility() {
         val box = container ?: return
+        // 2026-10-31：这里跟着播放进度被状态流驱动（播放中约 5 次/秒），
+        // 所以「调用次数」与「真正改动次数」分开记 —— 两者比值才说明问题。
+        OverlayMetrics.onVisibilityApply()
         val show = desiredVisible && screenInteractive
         val target = if (show) View.VISIBLE else View.INVISIBLE
-        if (box.visibility != target) box.visibility = target
+        var changed = false
+        if (box.visibility != target) {
+            box.visibility = target
+            changed = true
+        }
         // v1.1.91：收起钮跟着一起进出 —— 歌词都不显示了，单独飘一个钮只会让人困惑
-        collapseHandleView?.let { if (it.visibility != target) it.visibility = target }
-        playHandleView?.let { if (it.visibility != target) it.visibility = target }
-        pauseHandleView?.let { if (it.visibility != target) it.visibility = target }
-        a11yHandleView?.let { if (it.visibility != target) it.visibility = target }
+        collapseHandleView?.let { if (it.visibility != target) { it.visibility = target; changed = true } }
+        playHandleView?.let { if (it.visibility != target) { it.visibility = target; changed = true } }
+        pauseHandleView?.let { if (it.visibility != target) { it.visibility = target; changed = true } }
+        a11yHandleView?.let { if (it.visibility != target) { it.visibility = target; changed = true } }
+        if (changed) OverlayMetrics.onVisibilityChanged()
         windowVisible = show
         if (show) {
             refreshA11yHandleStatus()
@@ -1603,8 +1611,12 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         if (a11yWatchJob?.isActive == true) return
         a11yWatchJob = scope.launch {
             while (isActive) {
+                // 计时只为了回答一个问题：这 2s 一次的轮询贵不贵（内部读一次
+                // Settings.Secure，是跨进程调用）。累计到 OverlayMetrics，诊断包可见。
+                val started = System.nanoTime()
                 refreshA11yHandleStatus()
                 if (desiredHandleMask() != appliedHandleMask) syncHandlesVisibility()
+                OverlayMetrics.onA11yTick(System.nanoTime() - started)
                 delay(2_000)
             }
         }
@@ -1641,6 +1653,8 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         val mask = desiredHandleMask()
         val order = Prefs(this).overlayHandleOrder
         if (mask == appliedHandleMask && order == appliedHandleOrder) return
+        // 走到这里才会真的摘了重挂（addView/removeView），是本服务里最贵的操作
+        OverlayMetrics.onHandleRebuild()
         // 配置变了（整体关掉、或某颗单独关掉/打开、或上下顺序）：整组摘掉再按新配置挂，
         // 避免残留的钮与新序号错位。
         detachHandles()

@@ -15,6 +15,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -97,6 +98,31 @@ object CoverRepository {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount.coerceAtLeast(1)
     }
 
+    /**
+     * 解码计量（2026-10-31）。
+     *
+     * 起因：车机诊断包里 `native 堆 232 MB` 与 169 首曲库严重不成比例，而位图缓存
+     * 只有 0.8 MB —— 说明占用不在「缓存里」，要么在解码过程，要么根本不在本模块。
+     * 三个计数器用来把这条路走到头：
+     *
+     *  - `decodeFromDisk` / `decodeFromSource`：各走了多少次解码（磁盘派生图 vs 原始容器）；
+     *  - `decodedBytes`：累计产出多少像素字节 —— **这不是常驻内存**，是解码吞吐，
+     *    用来判断「一直在解」；
+     *  - `peakDecodedBytes`：单张最大产出，用来抓异常大图（内嵌 3000px 之类）。
+     */
+    private val decodeFromDisk = AtomicLong()
+    private val decodeFromSource = AtomicLong()
+    private val decodedBytes = AtomicLong()
+
+    @Volatile
+    private var peakDecodedBytes = 0
+
+    private fun recordDecode(fromDisk: Boolean, byteCount: Int) {
+        if (fromDisk) decodeFromDisk.incrementAndGet() else decodeFromSource.incrementAndGet()
+        decodedBytes.addAndGet(byteCount.toLong())
+        if (byteCount > peakDecodedBytes) peakDecodedBytes = byteCount
+    }
+
     private fun bitmapCacheSize(): Int = bitmapCacheSizeFor(Runtime.getRuntime().maxMemory())
 
     /**
@@ -167,6 +193,7 @@ object CoverRepository {
         if (file != null && file.exists()) {
             val cached = runCatching { BitmapFactory.decodeFile(file.absolutePath) }.getOrNull()
             if (cached != null) {
+                recordDecode(fromDisk = true, byteCount = cached.byteCount)
                 bitmapCache.put(key, cached)
                 return cached
             }
@@ -176,6 +203,7 @@ object CoverRepository {
 
         val raw = loadRaw(context, song) ?: return null
         val bmp = withContext(Dispatchers.Default) { decodeScaled(raw, targetPx) } ?: return null
+        recordDecode(fromDisk = false, byteCount = bmp.byteCount)
         bitmapCache.put(key, bmp)
         writeDisk(file, bmp)
         return bmp
@@ -309,6 +337,11 @@ object CoverRepository {
         val rawHits: Int,
         val rawMisses: Int,
         val diskBytes: Long,
+        // 解码计量（2026-10-31）：见 recordDecode 的注释。给默认值是为了不打断既有构造点。
+        val decodeFromDisk: Long = 0L,
+        val decodeFromSource: Long = 0L,
+        val decodedBytes: Long = 0L,
+        val peakDecodedBytes: Int = 0,
     )
 
     fun stats(): Stats = Stats(
@@ -321,6 +354,10 @@ object CoverRepository {
         rawHits = cache.hitCount(),
         rawMisses = cache.missCount(),
         diskBytes = diskUsageBytes(),
+        decodeFromDisk = decodeFromDisk.get(),
+        decodeFromSource = decodeFromSource.get(),
+        decodedBytes = decodedBytes.get(),
+        peakDecodedBytes = peakDecodedBytes,
     )
 
     /** 连磁盘一起清（设置页「清空封面缓存」） */
