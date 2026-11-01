@@ -1676,14 +1676,50 @@ class Prefs private constructor(context: Context) {
      *
      * ⚠️ setter 里拷贝一份：`getStringSet` 返回的实例不能被就地改，
      * 调用方（设置页勾选 / 诊断页）一律用新集合写回。
+     *
+     * ## 为什么读要加进程内快照（A-OV2，2026-11-01）
+     *
+     * 悬浮窗的显隐判定**每帧**（播放中约 2 次/秒）都要读一次名单，而
+     * `SharedPreferences.getStringSet` 的实现**每次都会 new 一个 HashSet 返回** ——
+     * 它必须这么做，否则调用方就地改就会污染 SharedPreferences 内部状态。
+     *
+     * 代价是每秒两次、每次一个新集合的分配，在车机弱 CPU 上是纯浪费：
+     * 名单一共就三五个包名，内容几乎从不变化。这里缓存一份**只读视图**，
+     * 读取零分配；写入时同步换掉快照，所以「设完立刻读」仍然一致。
+     *
+     * 一致性边界：Prefs 是进程内按 Application 缓存的单例（见 companion `invoke`），
+     * 名单的所有写入路径都走本 setter，因此不存在「别人改了 sp、快照没跟上」的窗口。
+     * 返回 `unmodifiableSet` 是刻意的 —— 调用方若想就地改会当场抛异常，
+     * 而不是静默污染这份共享快照。
      */
     var lyricOverlayHiddenApps: Set<String>
-        get() = sp.getStringSet(KEY_LYRIC_OVERLAY_HIDDEN_APPS, SettingsDefaults.OVERLAY_HIDDEN_APPS)
-            ?: SettingsDefaults.OVERLAY_HIDDEN_APPS
-        set(value) {
-            sp.edit().putStringSet(KEY_LYRIC_OVERLAY_HIDDEN_APPS, HashSet(value)).apply()
-            ioScope.launch { store.putStringSet(KEY_LYRIC_OVERLAY_HIDDEN_APPS, HashSet(value)) }
+        get() {
+            hiddenAppsCache?.let { return it }
+            val stored = sp.getStringSet(KEY_LYRIC_OVERLAY_HIDDEN_APPS, null)
+                ?: SettingsDefaults.OVERLAY_HIDDEN_APPS
+            val snapshot: Set<String> =
+                java.util.Collections.unmodifiableSet(LinkedHashSet(stored))
+            synchronized(hiddenAppsLock) {
+                // 并发首次读时可能已被别人填好，谁先谁算，后到的直接用已存在的
+                hiddenAppsCache?.let { return it }
+                hiddenAppsCache = snapshot
+            }
+            return snapshot
         }
+        set(value) {
+            val copy = LinkedHashSet(value)
+            synchronized(hiddenAppsLock) {
+                hiddenAppsCache = java.util.Collections.unmodifiableSet(LinkedHashSet(copy))
+            }
+            sp.edit().putStringSet(KEY_LYRIC_OVERLAY_HIDDEN_APPS, copy).apply()
+            ioScope.launch { store.putStringSet(KEY_LYRIC_OVERLAY_HIDDEN_APPS, HashSet(copy)) }
+        }
+
+    /** 名单的进程内快照；null = 还没读过（见 [lyricOverlayHiddenApps]） */
+    @Volatile
+    private var hiddenAppsCache: Set<String>? = null
+
+    private val hiddenAppsLock = Any()
 
     /**
      * 是否记录「前台应用切换」历史（默认 **false**）。

@@ -109,8 +109,7 @@ class OverlayStateBinderTest {
     }
 
     @Test
-    fun `外观 bump 会再次 renderLines；状态未变不空刷`() {
-        // 预览态让首帧可见并走 paint（默认空内容 + 非预览会直接藏窗，不 render）
+    fun `外观 bump 会再次 renderLines；状态未变不空刷`() {        // 预览态让首帧可见并走 paint（默认空内容 + 非预览会直接藏窗，不 render）
         LyricOverlayBus.setPreview(true)
         binder.observe()
         val afterFirst = host.renderLinesCount
@@ -130,6 +129,43 @@ class OverlayStateBinderTest {
         )
     }
 
+    /**
+     * A-OV1：内容对象没换、四个标量也没变时，应当**一次字符串指纹都不拼**就判定「不用刷」。
+     *
+     * 这条路径由「前台包名反复跳动但歌词不变」触发（车机上 avc / 地图来回切就是这种）。
+     * 断言方式：让前台包名在两个都不在名单里的值之间跳 4 次（每次都会重新跑一遍 collect），
+     * 期间 renderLines 必须一次都不加，而跳过计数正好加 4。
+     */
+    @Test
+    fun `同内容重入只记跳过，不重复刷字（A-OV1 快速判同）`() {
+        LyricOverlayBus.setPreview(true)
+        binder.observe()
+        val rendersAfterFirstFrame = host.renderLinesCount
+        assertTrue("预览首帧应 renderLines", rendersAfterFirstFrame > 0)
+
+        OverlayMetrics.reset()
+        repeat(4) { i ->
+            ForegroundAppState.report(if (i % 2 == 0) "com.byd.launchermap" else "com.byd.sr")
+        }
+
+        assertEquals(
+            "内容未变时不应重复 renderLines",
+            rendersAfterFirstFrame,
+            host.renderLinesCount,
+        )
+        val summary = OverlayMetrics.summary()
+        assertTrue("应记录 4 次跳过，实际：$summary", summary.contains("跳过 4 次"))
+        assertTrue("不应出现刷字计数增长，实际：$summary", summary.contains("刷字 0 次"))
+    }
+
+    /** A-OV2：每帧判定都要计数，否则诊断里看不出「判定 → 重算 → 变化」的收敛关系 */
+    @Test
+    fun `显隐判定每帧计数（A-OV2）`() {
+        binder.observe()
+        val summary = OverlayMetrics.summary()
+        assertTrue("应输出显隐判定次数，实际：$summary", summary.contains("显隐判定"))
+        assertTrue("判定次数应大于 0，实际：$summary", !summary.contains("显隐判定 0 次"))
+    }
 
 private class FakeHost(app: Application) : OverlayStateBinder.Host {
         var applyAppearanceCount = 0

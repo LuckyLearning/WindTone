@@ -70,6 +70,13 @@ class OverlayStateBinder(
         job?.cancel()
         visibilitySyncedOnce = false
         lastPaintKey = null
+        // A-OV1 的快速判同状态必须一起清：重订阅后若留着上一轮的引用，
+        // 第一帧会被误判成「内容没变」而跳过刷字，表现为「重开后首句不出字」。
+        lastContentRef = null
+        lastAppearanceRev = -1
+        lastFull = false
+        lastLineCount = -1
+        lastEmphasize = false
         job = scope.launch {
             // 内容 + 编辑态 + 前台态 + 预览态 + 外观版本 五路合并：
             // 任一变化都重新决定「显不显示 / 长什么样」。
@@ -141,6 +148,9 @@ class OverlayStateBinder(
                         hiddenApps = prefs.lyricOverlayHiddenApps,
                     ),
                 )
+                // A-OV2：判定每帧都跑，但只有结果变化才重算 —— 计数分开记，
+                // 诊断里才能看出「判定 → 重算 → 变化」三者的收敛关系
+                OverlayMetrics.onVisibilityEval()
                 // 名单或记录开着才需要知道前台是谁（否则一个字节都不查）；
                 // 两者都关了就撤掉轮询协程，并把残留包名清掉。
                 host.syncForegroundTracking(
@@ -174,29 +184,55 @@ class OverlayStateBinder(
                 val full = prefs.lyricOverlayFullHeight
                 val lineCount = host.resolveLineCount(prefs, full)
                 val emphasize = content.playing || isEditing || isPreview
-                // 指纹：内容 + 行数 + 强调 + 全屏 + 外观版本。包名防抖重入且字未变时跳过刷字。
-                val r = content.resolved
-                val paintKey = buildString(96) {
-                    append(appearanceRev).append('|')
-                    append(if (full) 'F' else 'S').append('|')
-                    append(lineCount).append('|')
-                    append(if (emphasize) '1' else '0').append('|')
-                    append(content.playing).append('|')
-                    append(content.title).append('|')
-                    append(content.artist).append('|')
-                    append(r.current).append('|')
-                    append(r.translation).append('|')
-                    append(r.idle).append('|')
-                    append(r.prevLines).append('|')
-                    append(r.nextLines)
-                }
-                val paintChanged = paintKey != lastPaintKey
+                // A-OV1：先用「内容引用 + 四个标量」快速判同。
+                //
+                // 原实现每帧都拼接一份含**歌词全文**（当前 / 翻译 / 待机 / 上下句）的
+                // 指纹字符串，只为和上一帧比一次。播放中这个循环约 2 次/秒，
+                // 等于每秒产生几百字符的临时字符串 —— 纯为比较而分配的垃圾。
+                //
+                // `LyricOverlayBus.content` 是 StateFlow（同值不重发），所以
+                // **引用相同 ⇒ 内容逐字段相同**；再加上外观版本、形态、行数、强调四个标量，
+                // 就能在绝大多数帧直接判定「不用刷」，完全不碰字符串。
+                // 引用变了但文案等价的情况（例如只翻了 playing）仍走慢路径细比。
+                val quickSame = content === lastContentRef &&
+                    appearanceRev == lastAppearanceRev &&
+                    full == lastFull &&
+                    lineCount == lastLineCount &&
+                    emphasize == lastEmphasize
                 var rendered = false
+                val r = content.resolved
+                val paintChanged: Boolean
+                if (quickSame) {
+                    paintChanged = false
+                } else {
+                    val paintKey = buildString(96) {
+                        append(appearanceRev).append('|')
+                        append(if (full) 'F' else 'S').append('|')
+                        append(lineCount).append('|')
+                        append(if (emphasize) '1' else '0').append('|')
+                        append(content.playing).append('|')
+                        append(content.title).append('|')
+                        append(content.artist).append('|')
+                        append(r.current).append('|')
+                        append(r.translation).append('|')
+                        append(r.idle).append('|')
+                        append(r.prevLines).append('|')
+                        append(r.nextLines)
+                    }
+                    paintChanged = paintKey != lastPaintKey
+                    if (paintChanged) lastPaintKey = paintKey
+                    // 只要走了慢路径就把输入快照对齐到本帧：否则「内容对象换了但文案等价」
+                    // （例如只翻了 playing）下一帧还会再拼一次字符串
+                    lastContentRef = content
+                    lastAppearanceRev = appearanceRev
+                    lastFull = full
+                    lastLineCount = lineCount
+                    lastEmphasize = emphasize
+                }
                 if (!paintChanged) {
                     // 包名防抖等重入、字未变：compose/render 都跳过，记跳过
                     OverlayMetrics.onRenderSkip()
                 } else {
-                    lastPaintKey = paintKey
                     val lines = when {
                         content.visible -> OverlayTextComposer.compose(
                             resolved = content.resolved,
@@ -239,6 +275,13 @@ class OverlayStateBinder(
         job = null
         visibilitySyncedOnce = false
         lastPaintKey = null
+        // A-OV1 的快速判同状态必须一起清：重订阅后若留着上一轮的引用，
+        // 第一帧会被误判成「内容没变」而跳过刷字，表现为「重开后首句不出字」。
+        lastContentRef = null
+        lastAppearanceRev = -1
+        lastFull = false
+        lastLineCount = -1
+        lastEmphasize = false
     }
 
     private var job: Job? = null
@@ -252,6 +295,20 @@ class OverlayStateBinder(
      * 指纹相同则跳过 compose 后的 render / 几何上报。
      */
     private var lastPaintKey: String? = null
+
+    /**
+     * 快速判同用的上一帧输入（A-OV1）：内容对象引用 + 四个标量。
+     *
+     * 为什么不在 [lastPaintKey] 之外再造一套：字符串指纹要把歌词全文拼一遍，
+     * 而**绝大多数帧的内容引用根本没变**（StateFlow 同值不重发，只有前台包名
+     * 防抖这类重入会再跑一遍 collect）。引用相同 ⇒ 逐字段相同，可以直接判「不用刷」，
+     * 连一次字符串分配都不需要。引用变了才回落到字符串细比。
+     */
+    private var lastContentRef: LyricOverlayBus.Content? = null
+    private var lastAppearanceRev: Int = -1
+    private var lastFull: Boolean = false
+    private var lastLineCount: Int = -1
+    private var lastEmphasize: Boolean = false
 
     /**
      * 状态接线需要宿主（[LyricOverlayService]）提供的窗口与外观操作面。
