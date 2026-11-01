@@ -288,14 +288,17 @@ class ProcStatsTest {
     fun `parseSmapsDetailed 保留逐段明细并按 Private_Dirty 降序`() {
         val smaps = """
             7f0000000000-7f0000100000 rw-p 00000000 00:00 0                          [anon:libc_malloc]
+            Size:              16384 kB
             Rss:                4096 kB
             Pss:                4096 kB
             Private_Dirty:      4096 kB
             7f0000200000-7f0000300000 rw-p 00000000 00:00 0                          [anon:libc_malloc]
+            Size:               2048 kB
             Rss:                 512 kB
             Pss:                 512 kB
             Private_Dirty:       512 kB
             7f0000400000-7f0000500000 r--p 00000000 fd:00 42                         /system/lib64/libc.so
+            Size:               8192 kB
             Rss:                 256 kB
             Pss:                 256 kB
             Private_Dirty:         0 kB
@@ -310,6 +313,43 @@ class ProcStatsTest {
         assertEquals("[anon:libc_malloc]", segments[0].name)
         assertEquals(512L, segments[1].dirtyKb)
         assertTrue(segments[0].dirtyKb > segments[1].dirtyKb)
+
+        // 四值都要留下：只有 Private_Dirty 的话，分不清「保留」与「真占用」
+        assertEquals(16384L, segments[0].sizeKb)
+        assertEquals(4096L, segments[0].rssKb)
+        assertEquals(4096L, segments[0].pssKb)
+    }
+
+    /**
+     * 「虚拟很大、脏页很小」是分配器 free 后只 madvise 不 munmap 的形态。
+     *
+     * 这一条决定了后续要不要继续在业务侧「少分配」：如果大头是未归还的地址空间，
+     * 减少分配完全无效。
+     */
+    @Test
+    fun `段级四值能区分保留与真占用`() {
+        val reserved = """
+            7f0000000000-7f0003000000 rw-p 00000000 00:00 0                          [anon:libc_malloc]
+            Size:              49152 kB
+            Rss:                2048 kB
+            Pss:                2048 kB
+            Private_Dirty:      1536 kB
+        """.trimIndent()
+        val held = """
+            7f0000000000-7f0003000000 rw-p 00000000 00:00 0                          [anon:libc_malloc]
+            Size:              49152 kB
+            Rss:               48128 kB
+            Pss:               48128 kB
+            Private_Dirty:     48128 kB
+        """.trimIndent()
+
+        val reservedSeg = ProcStats.parseSmapsDetailed(reserved.lineSequence()).second.single()
+        val heldSeg = ProcStats.parseSmapsDetailed(held.lineSequence()).second.single()
+
+        // 未归还：脏页远小于虚拟
+        assertTrue(reservedSeg.dirtyKb * 10 < reservedSeg.sizeKb * 6)
+        // 真占用：脏页接近虚拟
+        assertTrue(heldSeg.dirtyKb * 10 >= heldSeg.sizeKb * 6)
     }
 
     @Test

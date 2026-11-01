@@ -235,9 +235,48 @@ object MemoryProbe {
         )
         // 只列前 3 段：再多就是重复信息，报告要看的是「量级对不对」
         malloc.take(3).forEach {
-            appendLine(AppStrings.s(R.string.mp_malloc_seg, mbFromKb(it.dirtyKb), it.name.take(48)))
+            appendLine(
+                AppStrings.s(
+                    R.string.mp_malloc_seg4,
+                    mbFromKb(it.dirtyKb),
+                    mbFromKb(it.sizeKb),
+                    mbFromKb(it.rssKb),
+                    mbFromKb(it.pssKb),
+                    it.name.take(40),
+                ),
+            )
         }
         appendLine(AppStrings.s(R.string.mp_malloc_read))
+        appendLine(mallocVerdict(malloc))
+    }
+
+    /**
+     * 用「虚拟 / 驻留 / 脏页」三者的关系判断大头是**活着的对象**还是**已释放未归还**。
+     *
+     * 这条判读是 2026-11-01 补的：此前只有 Private_Dirty 一个数，于是 132MB（单段 79.9MB）
+     * 只能写成「大头 = 解码/播放缓冲」—— 那是推断，不是事实。jemalloc / Scudo 在 free 之后
+     * 常常只 `madvise` 不 `munmap`，映射还挂着但页已经可回收，`Size` 会明显大于 `Rss`。
+     * 两种情况的处置完全相反：
+     *
+     *  - 真占用 → 继续找是谁申请的大块（位图、解码器输出、Skia）；
+     *  - 未归还 → 减少业务侧分配根本没用，得考虑显式 trim 或换分配器行为。
+     */
+    private fun mallocVerdict(malloc: List<ProcStats.Segment>): String {
+        val biggest = malloc.firstOrNull() ?: return AppStrings.s(R.string.mp_malloc_read)
+        if (biggest.sizeKb <= 0L) return AppStrings.s(R.string.mp_malloc_no_size)
+        val dirty = biggest.dirtyKb
+        val size = biggest.sizeKb
+        // 脏页不到虚拟大小的六成 → 这段大部分地址空间没真正落页
+        return if (dirty * 10 < size * 6) {
+            AppStrings.s(
+                R.string.mp_malloc_verdict_virtual,
+                mbFromKb(size),
+                mbFromKb(dirty),
+                share(dirty, size),
+            )
+        } else {
+            AppStrings.s(R.string.mp_malloc_verdict_real, share(dirty, size))
+        }
     }
 
     /**

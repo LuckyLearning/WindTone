@@ -74,8 +74,27 @@ object ProcStats {
         val pssKb: Long,
     )
 
-    /** 一条内存映射（段）的占用。用于「大对象 vs 碎片」的判别 */
-    data class Segment(val name: String, val dirtyKb: Long)
+    /**
+     * 一条内存映射（段）的占用。
+     *
+     * 四值一起给，才能分清「真占用」与「只是保留了地址空间」：
+     *  - `Size` 是这段映射的**虚拟**大小，申请了就占，未必落物理页；
+     *  - `Rss` 是**驻留**页，已经映射到物理内存的部分；
+     *  - `Private_Dirty` 是其中**自己独占且写过**的部分 —— 泄漏/常驻看它；
+     *  - `Pss` 是按共享比例分摊后的口径，看「公平占了多少」。
+     *
+     * 分配器（jemalloc / Scudo）在 free 之后常常只 `madvise` 不 `munmap`：
+     * 这时 `Size` 仍然很大，但 `Rss` / `Private_Dirty` 会明显小于它。
+     * 只看 Private_Dirty 的旧版埋点分不出这两者，也就会把「已释放但未归还」
+     * 误判成「还活着的对象」。
+     */
+    data class Segment(
+        val name: String,
+        val dirtyKb: Long,
+        val sizeKb: Long = 0L,
+        val rssKb: Long = 0L,
+        val pssKb: Long = 0L,
+    )
 
     data class Smaps(
         val buckets: List<MemBucket>,
@@ -312,7 +331,7 @@ object ProcStats {
         val acc = LinkedHashMap<String, LongArray>()
         val segments = ArrayList<Segment>()
 
-        fun flush(name: String?, dirty: Long, rss: Long, pss: Long) {
+        fun flush(name: String?, size: Long, dirty: Long, rss: Long, pss: Long) {
             if (name == null) return
             val slot = acc.getOrPut(classify(name)) { LongArray(3) }
             slot[0] += dirty
@@ -320,10 +339,11 @@ object ProcStats {
             slot[2] += pss
             // 只留「写脏」的段：只读的文件映射（.so / apk）不参与「谁吃了我」的判断，
             // 全量记会把几百条零占用的条目也塞进列表
-            if (dirty > 0) segments += Segment(name, dirty)
+            if (dirty > 0) segments += Segment(name, dirty, size, rss, pss)
         }
 
         var name: String? = null
+        var size = 0L
         var dirty = 0L
         var rss = 0L
         var pss = 0L
@@ -333,20 +353,22 @@ object ProcStats {
             if (line.isEmpty()) continue
             val headerName = headerMappingName(line)
             if (headerName != null) {
-                flush(name, dirty, rss, pss)
+                flush(name, size, dirty, rss, pss)
                 name = headerName
+                size = 0L
                 dirty = 0L
                 rss = 0L
                 pss = 0L
                 continue
             }
             when {
+                line.startsWith("Size:") -> size = kbValue(line)
                 line.startsWith("Rss:") -> rss = kbValue(line)
                 line.startsWith("Pss:") -> pss = kbValue(line)
                 line.startsWith("Private_Dirty:") -> dirty = kbValue(line)
             }
         }
-        flush(name, dirty, rss, pss)
+        flush(name, size, dirty, rss, pss)
 
         val buckets = acc.map { (label, v) -> MemBucket(label, v[0], v[1], v[2]) }
             .sortedByDescending { it.privateDirtyKb }

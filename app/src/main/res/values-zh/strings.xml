@@ -1708,6 +1708,10 @@
     <string name="mp_totals">  合计 Private_Dirty %1$s · Pss %2$s · Rss %3$s</string>
     <string name="mp_malloc_dist">  malloc 段分布：共 %1$d 段 · 合计 %2$s · 最大单段 %3$s · ≥1MB %4$d 段（占 %5$s） · ≥4MB %6$d 段</string>
     <string name="mp_malloc_seg">    · %1$s  %2$s</string>
+    <string name="mp_malloc_seg4">    · 脏 %1$s · 虚拟 %2$s · Rss %3$s · Pss %4$s  %5$s</string>
+    <string name="mp_malloc_verdict_virtual">  判读：最大段虚拟 %1$s 但只脏 %2$s（%3$s）—— 更像已 free 未归还的分配器区域，减分配对它无效</string>
+    <string name="mp_malloc_verdict_real">  判读：最大段脏页占虚拟 %1$s —— 是实打实占着的对象，继续在业务侧找谁申请的</string>
+    <string name="mp_malloc_no_size">  判读：本机 smaps 未给 Size，无法区分「保留」与「占用」</string>
     <string name="mp_malloc_read">  判读：≥1MB 段占比高 = 少数大对象没释放（位图/解码缓冲）；段多而单段小 = 分配器碎片</string>
     <string name="mp_reconcile_hdr">  对账（三组口径各算各的，不可互相替代）：</string>
     <string name="mp_reconcile_native">    · native malloc %1$dMB ↔ getNativeHeapAllocatedSize %2$s</string>

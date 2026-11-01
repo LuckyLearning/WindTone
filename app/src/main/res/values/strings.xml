@@ -1742,6 +1742,10 @@ Expired codes refresh automatically. This app is read-only — it never uploads,
     <string name="mp_totals">  total Private_Dirty %1$s · Pss %2$s · Rss %3$s</string>
     <string name="mp_malloc_dist">  malloc segments: %1$d segs · total %2$s · largest %3$s · ≥1MB %4$d segs (%5$s) · ≥4MB %6$d segs</string>
     <string name="mp_malloc_seg">    · %1$s  %2$s</string>
+    <string name="mp_malloc_seg4">    · dirty %1$s · virtual %2$s · Rss %3$s · Pss %4$s  %5$s</string>
+    <string name="mp_malloc_verdict_virtual">  Reading: largest segment is %1$s virtual but only %2$s dirty (%3$s) — looks like allocator space already freed but not returned; allocating less won\'t help</string>
+    <string name="mp_malloc_verdict_real">  Reading: dirty pages are %1$s of the virtual size — these objects are really held; keep tracking who allocates them</string>
+    <string name="mp_malloc_no_size">  Reading: this device\'s smaps has no Size field, so \"reserved\" vs \"held\" cannot be told apart</string>
     <string name="mp_malloc_read">  Reading: high ≥1MB share = few large objects unreleased (bitmap/decoder); many tiny segs = allocator fragmentation</string>
     <string name="mp_reconcile_hdr">  Reconciliation (three bases, not interchangeable):</string>
     <string name="mp_reconcile_native">    · native malloc %1$dMB ↔ getNativeHeapAllocatedSize %2$s</string>
