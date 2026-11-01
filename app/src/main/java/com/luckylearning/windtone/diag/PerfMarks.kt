@@ -99,6 +99,24 @@ object PerfMarks {
                     ),
                 )
             }
+            // 2026-11-01：`MusicApp.step()` 每步都会写一行 `ok:<name>`，但旧报告只挑
+            // 上面四个固定 stage，其余全丢。而车机冷启动 12 秒那次，最需要的恰恰是
+            // 「哪一步吃掉了时间」—— 没有这层分布，只能看到 app→activity 之间 11.5 秒
+            // 的空白，无法判断是我们慢还是系统加载类慢。
+            val known = setOf(
+                BootTrace.STAGE_APP,
+                BootTrace.STAGE_ACTIVITY,
+                BootTrace.STAGE_CONTENT,
+                BootTrace.STAGE_FRAME,
+                BootTrace.STAGE_DIAG_SHOWN,
+            )
+            val steps = prev.lines.filter {
+                it.stage !in known && !it.stage.startsWith("fail:")
+            }
+            if (steps.isNotEmpty()) {
+                appendLine(AppStrings.s(R.string.pf_boot_steps_hdr))
+                steps.forEach { appendLine("  · ${it.elapsedMs} ms  ${it.stage}") }
+            }
         }
         val cost = overlayMountCostMs
         val ok = overlayMountOk

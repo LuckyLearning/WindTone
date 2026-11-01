@@ -1778,6 +1778,7 @@
     <string name="pf_empty">（空）</string>
     <string name="pf_stage_line">  · %1$s @ %2$d ms</string>
     <string name="pf_stage_frame">  · %1$s @ %2$d ms（首帧）</string>
+    <string name="pf_boot_steps_hdr">  启动各步耗时（自进程启动起，毫秒）：</string>
     <string name="pf_fail_line">  · 失败 %1$s：%2$s</string>
     <string name="pf_overlay">悬浮窗挂载：%1$s</string>
     <string name="pf_overlay_ok">成功，耗时 %1$d ms</string>

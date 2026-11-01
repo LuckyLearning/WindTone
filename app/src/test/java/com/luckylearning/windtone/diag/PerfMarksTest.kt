@@ -53,4 +53,30 @@ class PerfMarksTest {
         val text = PerfMarks.buildReport(context)
         assertTrue(text, text.contains("已出首帧") || text.contains(BootTrace.STAGE_FRAME))
     }
+
+    /**
+     * 2026-11-01：Application 每步的耗时也要进报告。
+     *
+     * 车机冷启动 12 秒那次，`app:onCreate @1ms → activity:onCreate @11534ms` 之间
+     * 11.5 秒是空白 —— 而 `MusicApp.step()` 其实每一步都写了 `ok:<name>`，
+     * 只是旧报告只挑四个固定 stage，把它们全丢了。没有这层分布，就没法判断
+     * 是「我们哪一步慢」还是「系统加载类慢」。
+     */
+    @Test
+    fun `上一轮的每步耗时写进性能段`() {
+        BootTrace.begin(context)
+        BootTrace.mark(context, "ok:crash-log")
+        BootTrace.mark(context, "ok:cover")
+        BootTrace.mark(context, "activity:attach")
+        BootTrace.markFrame(context)
+        BootTrace.begin(context) // 归档上一轮
+
+        val text = PerfMarks.buildReport(context)
+
+        assertTrue(text, text.contains("启动各步耗时"))
+        assertTrue(text, text.contains("ok:crash-log"))
+        assertTrue(text, text.contains("ok:cover"))
+        // attach 这一行是判断「时间花在系统侧还是我们 onCreate」的分界线
+        assertTrue(text, text.contains("activity:attach"))
+    }
 }

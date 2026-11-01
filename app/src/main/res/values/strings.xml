@@ -1812,6 +1812,7 @@ Expired codes refresh automatically. This app is read-only — it never uploads,
     <string name="pf_empty">(empty)</string>
     <string name="pf_stage_line">  · %1$s @ %2$d ms</string>
     <string name="pf_stage_frame">  · %1$s @ %2$d ms (first frame)</string>
+    <string name="pf_boot_steps_hdr">  Startup steps (ms since process start):</string>
     <string name="pf_fail_line">  · fail %1$s: %2$s</string>
     <string name="pf_overlay">Overlay mount: %1$s</string>
     <string name="pf_overlay_ok">ok, %1$d ms</string>

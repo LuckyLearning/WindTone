@@ -29,6 +29,22 @@ import com.luckylearning.windtone.ui.theme.MusicPlayerTheme
 
 class MainActivity : ComponentActivity() {
 
+    /**
+     * 进程内能拿到 Activity 实例的**最早**时刻（2026-11-01 加）。
+     *
+     * 动机是 v1.2.44 车机诊断包里那 12 秒冷启动：`app:onCreate` 在 1ms、
+     * `activity:onCreate` 在 11534ms，中间 11.5 秒完全空白 —— 分不清是
+     * 「系统加载 Activity 与 Compose 类慢」还是「我们的 onCreate 慢」。
+     *
+     * 类加载发生在构造与 attach 之前、埋不到点，但**这一行能当分界线**：
+     *  - `activity:attach` 就很晚 → 时间在系统侧（类加载 / dexopt），我们改代码没用；
+     *  - `activity:attach` 很早、`activity:onCreate` 很晚 → 是我们的 onCreate 在拖。
+     */
+    override fun attachBaseContext(newBase: android.content.Context?) {
+        super.attachBaseContext(newBase)
+        if (newBase != null) BootTrace.mark(newBase, "activity:attach")
+    }
+
     /** 首帧只记一次 */
     private var frameMarked = false
 
