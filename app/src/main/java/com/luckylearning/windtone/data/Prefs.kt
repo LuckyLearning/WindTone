@@ -97,7 +97,8 @@ object SettingsDefaults {
      */
     val THEME_MODE = ThemeMode.SYSTEM
 
-    const val DYNAMIC_THEME = true
+    /** 换曲取色默认关：解码+取色抢 CPU/堆；车机主路径是悬浮窗跟词，不是壁纸色 */
+    const val DYNAMIC_THEME = false
     const val CAR_MODE = false
 
     /** G7: bluetooth auto car layout (default off) */

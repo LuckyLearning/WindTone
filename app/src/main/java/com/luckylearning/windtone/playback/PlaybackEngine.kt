@@ -1987,6 +1987,7 @@ class PlaybackEngine(
                 // 转发逻辑抽到 OverlayTickHelper，开关关闭时直接跳过。
                 if (prefs.lyricOverlay) OverlayTickHelper.publishLyric(pos, playing, _player.value)
                 // H4：通知栏 / 锁屏 SYNOPSIS（与悬浮窗同源时间轴；不依赖悬浮窗开关）
+                // 发布侧按「文案 + 句内时间窗」去重：同句不 replaceMediaItem，也不反复跑 resolver。
                 // 没歌词时只在「上一首还有」的那一轮跑一次，把残留文案清掉。
                 val hasLyrics = _player.value.lyrics.lines.isNotEmpty()
                 if (hasLyrics || lastHadLyrics) {

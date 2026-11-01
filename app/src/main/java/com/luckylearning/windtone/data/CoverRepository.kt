@@ -33,12 +33,13 @@ import kotlin.math.roundToInt
  * 磁盘缓存是**派生数据**：可随时整体删除，不影响任何用户数据。
  * 用 `cacheDir` 而不是 `filesDir`：系统在存储紧张时可以自行回收。
  *
- * ## 内存预算（2026-10-29 收紧，v1.2.12）
+ * ## 内存预算（2026-11-01 再收紧：车机悬浮窗常开优先省堆）
  *
  * 两级内存缓存都**按堆比例**取上限，不再有固定常量：
- *  - 位图：`maxMemory/8`，夹 8~32MB（按 `byteCount` 计量，即真实像素内存）；
- *  - 原始字节：`maxMemory/16`，夹 2~6MB（旧实现固定 16MB —— 在车机
- *    192MB 堆上占 8%，而它只是通知栏封面与主题取色的中转，收益远不值这个价）。
+ *  - 位图：`maxMemory/16`，夹 4~16MB（按 `byteCount` 计量；原 /8、夹 8~32MB ——
+ *    列表命中率在诊断里本就偏低，常驻上限砍半更贴合「窗开着、封面非核心」）；
+ *  - 原始字节：`maxMemory/48`，夹 1~2MB（实现曾 /32、夹 1.5~3MB；只服务通知/取色，
+ *    磁盘 JPEG 可再解，不值得多占 Java 堆）。
  *
  * 另有两条配套纪律：
  *  - **解码尺寸 = 显示尺寸**（见 [targetPx]）。旧实现乘了 2，等于按 4 倍面积解码，
@@ -61,8 +62,8 @@ object CoverRepository {
     private const val DISK_TRIM_EVERY_WRITES = 64
     /** 两次容量检查的最小间隔 */
     private const val DISK_TRIM_MIN_INTERVAL_MS = 30_000L
-    /** 通知栏封面压到这个尺寸（大图标实际只用 256px，留一倍余量给不同 ROM） */
-    private const val NOTIFICATION_COVER_PX = 512
+    /** 通知栏封面边长：系统大图标约 256px；再高一倍只多 Binder/解码，不更清晰 */
+    private const val NOTIFICATION_COVER_PX = 256
     /** 桌面小部件封面边长（RemoteViews），与旧 decodeSmall 的 ~128 采样目标对齐 */
     const val WIDGET_COVER_PX = 128
     /** 小于这个体积的封面不必再编解码一次 */
@@ -166,17 +167,17 @@ object CoverRepository {
     private fun bitmapCacheSize(): Int = bitmapCacheSizeFor(Runtime.getRuntime().maxMemory())
 
     /**
-     * 位图缓存上限：堆的 1/8，夹 8~32MB。
+     * 位图缓存上限：堆的 1/16，夹 4~16MB（2026-11-01 资源极致；原 1/8、夹 8~32MB）。
      *
      * 抽成「接收 heapMax 的纯函数」是为了能按不同设备直接断言 —— 纯 JVM 单测里
      * `android.util.LruCache` 是 stub（`testOptions.unitTests.isReturnDefaultValues = true`），
      * 读 `maxSize()` 只会得到 0，测不出任何东西。
      */
     internal fun bitmapCacheSizeFor(heapMax: Long): Int =
-        (heapMax / 8).coerceIn(8L * 1024 * 1024, 32L * 1024 * 1024).toInt()
+        (heapMax / 16).coerceIn(4L * 1024 * 1024, 16L * 1024 * 1024).toInt()
 
     /**
-     * 原始字节缓存上限：堆的 1/32，夹 1.5~3MB（v1.2.41 下调，原 1/16 夹 2~6MB）。
+     * 原始字节缓存上限：堆的 1/48，夹 1~2MB（2026-11-01 再降；v1.2.41 为 1/32、1.5~3MB）。
      *
      * 依据是车机实测：v1.2.40 诊断包里 **原始缓存 4.1/6.0MB（68% 满）而位图缓存
      * 0.3/32MB（1%）** —— 装的是压缩字节，占着 Java 堆却省不了解码时间，
@@ -184,13 +185,13 @@ object CoverRepository {
      * 说明「同一首歌的原始字节被反复要」这件事基本不发生。
      *
      * 它的唯一用途是通知栏封面和主题取色，两者都能从磁盘缓存重新解码（几十毫秒），
-     * 不值得为它常驻 6MB。
+     * 不值得为它常驻数 MB。
      */
     private fun rawCacheSize(): Int = rawCacheSizeFor(Runtime.getRuntime().maxMemory())
 
-    /** 见 [rawCacheSize]；堆的 1/32，夹 1.5~3MB */
+    /** 见 [rawCacheSize]；堆的 1/48，夹 1~2MB */
     internal fun rawCacheSizeFor(heapMax: Long): Int =
-        (heapMax / 32).coerceIn(1536L * 1024, 3L * 1024 * 1024).toInt()
+        (heapMax / 48).coerceIn(1024L * 1024, 2L * 1024 * 1024).toInt()
 
     /** 由 [com.luckylearning.windtone.MusicApp] 在启动时注入；未注入时退化为纯内存缓存 */
     fun attach(context: Context) {
@@ -356,7 +357,7 @@ object CoverRepository {
      *      = 60 次，8MB 封面还会直接撞 `TransactionTooLargeException`
      *      （调用点包着 `runCatching`，表现为「大封面歌曲的锁屏歌词不更新」）；
      *   3. 通知重建时按全尺寸解码，几 MB 的 JPEG 解出来是几十 MB 的位图。
-     * 这里压到 [NOTIFICATION_COVER_PX] / JPEG 85，典型结果 20~60KB，小两个数量级。
+     * 这里压到 [NOTIFICATION_COVER_PX] / JPEG 85，典型结果约 10~40KB（目标边长 256），较全尺寸内嵌小两个数量级。
      *
      * 长边已 ≤ 目标且字节 ≤ [NOTIFICATION_COVER_INLINE_BYTES] 才原样返回；
      * **只看字节不够**——高压缩大图必须仍走降采样。
