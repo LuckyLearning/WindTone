@@ -69,6 +69,7 @@ class OverlayStateBinder(
     fun observe() {
         job?.cancel()
         visibilitySyncedOnce = false
+        lastPaintKey = null
         job = scope.launch {
             // 内容 + 编辑态 + 前台态 + 预览态 + 外观版本 五路合并：
             // 任一变化都重新决定「显不显示 / 长什么样」。
@@ -79,8 +80,8 @@ class OverlayStateBinder(
                 LyricOverlayBus.foreground,
                 LyricOverlayBus.preview,
                 LyricOverlayBus.appearance,
-            ) { content, isEditing, isForeground, isPreview, _ ->
-                OverlayVisualState(content, isEditing, isForeground, isPreview)
+            ) { content, isEditing, isForeground, isPreview, appearanceRev ->
+                OverlayVisualState(content, isEditing, isForeground, isPreview, appearanceRev)
             }
             // ⚠️ **第六路：前台应用包名必须订阅，不能只在判可见性时读一次**
             //（v1.1.29 真机回归：名单勾了没生效）。检测端（无障碍服务 / UsageStats 轮询）
@@ -94,7 +95,7 @@ class OverlayStateBinder(
             combine(visuals, stableForegroundPkg) { state, pkg ->
                 state to pkg
             }.collect { (visual, foregroundPkg) ->
-                val (content, isEditing, isForeground, isPreview) = visual
+                val (content, isEditing, isForeground, isPreview, appearanceRev) = visual
                 val box = host.container ?: return@collect
                 val tv = host.lyricView ?: return@collect
                 val prefs = host.prefs()
@@ -166,39 +167,65 @@ class OverlayStateBinder(
                 // 行数：全屏按面板高度自适应，单条字幕按用户档位（或「自动」按高度反推），
                 // 具体像素换算在宿主里做（那里才有 dp / 字号 / 屏幕尺寸）。
                 // 标题显隐会改变窗口高度，需要重新夹一次位置（否则窗口变高后可能出屏）。
-                if (host.applyTitle(content, prefs) && !host.editing) {
+                val titleChanged = host.applyTitle(content, prefs)
+                if (titleChanged && !host.editing) {
                     host.container?.post { host.applyPosition() }
                 }
                 val full = prefs.lyricOverlayFullHeight
                 val lineCount = host.resolveLineCount(prefs, full)
-                val lines = when {
-                    content.visible -> OverlayTextComposer.compose(
-                        resolved = content.resolved,
-                        lineCount = lineCount,
-                        // 双语副行不设开关：它是**同一句**的翻译，属于内容完整性
-                        // 而不是排版选择——能拿到双语歌词的用户本来就想要它。
-                        showTranslation = true,
-                    )
-                    isEditing -> listOf(if (full) hintEditingFull() else hintEditing())
-                    else -> listOf(hintPreview())
+                val emphasize = content.playing || isEditing || isPreview
+                // 指纹：内容 + 行数 + 强调 + 全屏 + 外观版本。包名防抖重入且字未变时跳过刷字。
+                val r = content.resolved
+                val paintKey = buildString(96) {
+                    append(appearanceRev).append('|')
+                    append(if (full) 'F' else 'S').append('|')
+                    append(lineCount).append('|')
+                    append(if (emphasize) '1' else '0').append('|')
+                    append(content.playing).append('|')
+                    append(content.title).append('|')
+                    append(content.artist).append('|')
+                    append(r.current).append('|')
+                    append(r.translation).append('|')
+                    append(r.idle).append('|')
+                    append(r.prevLines).append('|')
+                    append(r.nextLines)
                 }
-                // 行数上限按实际要画的行数放宽（每行都可能折成两行）；
-                // 全屏模式窗口更窄时可能折三行，额度按 3 倍给。
-                val cap = if (full) MAX_FULL_LINES_CAP else MAX_LINES_CAP
-                val maxLines = (lines.size * if (full) 3 else 2).coerceIn(2, cap)
-                if (tv.maxLines != maxLines) {
-                    tv.maxLines = maxLines
-                    tv.ellipsize = TextUtils.TruncateAt.END
+                val paintChanged = paintKey != lastPaintKey
+                var rendered = false
+                if (paintChanged) {
+                    lastPaintKey = paintKey
+                    val lines = when {
+                        content.visible -> OverlayTextComposer.compose(
+                            resolved = content.resolved,
+                            lineCount = lineCount,
+                            // 双语副行不设开关：它是**同一句**的翻译，属于内容完整性
+                            // 而不是排版选择——能拿到双语歌词的用户本来就想要它。
+                            showTranslation = true,
+                        )
+                        isEditing -> listOf(if (full) hintEditingFull() else hintEditing())
+                        else -> listOf(hintPreview())
+                    }
+                    // 行数上限按实际要画的行数放宽（每行都可能折成两行）；
+                    // 全屏模式窗口更窄时可能折三行，额度按 3 倍给。
+                    val cap = if (full) MAX_FULL_LINES_CAP else MAX_LINES_CAP
+                    val maxLines = (lines.size * if (full) 3 else 2).coerceIn(2, cap)
+                    if (tv.maxLines != maxLines) {
+                        tv.maxLines = maxLines
+                        tv.ellipsize = TextUtils.TruncateAt.END
+                    }
+                    // 「强调当前行」在播放时、以及调整 / 预览态下都要给 ——
+                    // 调整态可能没在放歌，但用户正看着它摆位置。
+                    rendered = host.renderLines(tv, lines, emphasize, full)
                 }
-                // 「强调当前行」在播放时、以及调整 / 预览态下都要给 ——
-                // 调整态可能没在放歌，但用户正看着它摆位置。
-                host.renderLines(tv, lines, content.playing || isEditing || isPreview, full)
                 // 显隐未变时跳过：render 已更新文字；Secure/侧钮坐标已在 applyVisibility 收口
                 if (visibilityChanged || !visibilitySyncedOnce) {
                     host.applyVisibility()
                     visibilitySyncedOnce = true
                 }
-                host.updateGeometryReport()
+                // 几何上报跟「刷字 / 显隐 / 标题」走，避免包名防抖空转时 getLocationOnScreen
+                if (visibilityChanged || titleChanged || rendered || paintChanged) {
+                    host.updateGeometryReport()
+                }
             }
         }
     }
@@ -208,12 +235,20 @@ class OverlayStateBinder(
         job?.cancel()
         job = null
         visibilitySyncedOnce = false
+        lastPaintKey = null
     }
 
     private var job: Job? = null
 
     /** 首帧必须 apply 一次，避免默认 VISIBLE 窗口在 desired=false 时漏藏 */
     private var visibilitySyncedOnce = false
+
+    /**
+     * 上一帧「画什么」指纹：行文案 + 行数 + 强调 + 全屏 + 外观版本。
+     * 进度 tick 若内容未变（Bus 已去重）仍可能因前台包名防抖等重入 collect；
+     * 指纹相同则跳过 compose 后的 render / 几何上报。
+     */
+    private var lastPaintKey: String? = null
 
     /**
      * 状态接线需要宿主（[LyricOverlayService]）提供的窗口与外观操作面。
@@ -243,7 +278,8 @@ class OverlayStateBinder(
         fun applyVisibility()
         fun applyTitle(content: LyricOverlayBus.Content, prefs: Prefs): Boolean
         fun applyPosition()
-        fun renderLines(tv: TextView, lines: List<OverlayTextComposer.StyledLine>, emphasize: Boolean, full: Boolean)
+        /** @return true 若文案/样式真的写进了 TextView（字未变则 false） */
+        fun renderLines(tv: TextView, lines: List<OverlayTextComposer.StyledLine>, emphasize: Boolean, full: Boolean): Boolean
         fun updateGeometryReport()
         fun refreshModeChrome()
         fun armEditingTimeout()
@@ -257,4 +293,6 @@ internal data class OverlayVisualState(
     val isEditing: Boolean,
     val isForeground: Boolean,
     val isPreview: Boolean,
+    /** 外观版本：改字号/颜色等会 bump，须参与 paint 指纹以免漏刷样式 */
+    val appearanceRev: Int = 0,
 )

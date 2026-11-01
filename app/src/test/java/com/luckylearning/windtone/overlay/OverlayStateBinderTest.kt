@@ -87,6 +87,29 @@ class OverlayStateBinderTest {
         )
     }
 
+    @Test
+    fun `外观 bump 会再次 renderLines；状态未变不空刷`() {
+        // 预览态让首帧可见并走 paint（默认空内容 + 非预览会直接藏窗，不 render）
+        LyricOverlayBus.setPreview(true)
+        binder.observe()
+        val afterFirst = host.renderLinesCount
+        assertTrue("预览首帧应 renderLines", afterFirst > 0)
+        val geoFirst = host.geometryCount
+        assertTrue("首帧应 updateGeometryReport", geoFirst > 0)
+        LyricOverlayBus.bumpAppearance()
+        assertTrue("外观 bump 应再 renderLines", host.renderLinesCount > afterFirst)
+        // 同值再 setForeground：StateFlow 去重，接线不应空转加计
+        val beforeFg = host.renderLinesCount
+        LyricOverlayBus.setForeground(false)
+        LyricOverlayBus.setForeground(false)
+        assertEquals(
+            "foreground 同值不应额外 renderLines",
+            beforeFg,
+            host.renderLinesCount,
+        )
+    }
+
+
 private class FakeHost(app: Application) : OverlayStateBinder.Host {
         var applyAppearanceCount = 0
         var applyVisibilityCount = 0
@@ -122,15 +145,20 @@ private class FakeHost(app: Application) : OverlayStateBinder.Host {
 
         override fun applyTitle(content: LyricOverlayBus.Content, p: Prefs) = false
         override fun applyPosition() {}
+        var renderLinesCount = 0
+        var geometryCount = 0
+
         override fun renderLines(
             tv: TextView,
             lines: List<OverlayTextComposer.StyledLine>,
             emphasize: Boolean,
             full: Boolean,
-        ) {
+        ): Boolean {
+            renderLinesCount++
+            return true
         }
 
-        override fun updateGeometryReport() {}
+        override fun updateGeometryReport() { geometryCount++ }
         override fun refreshModeChrome() {}
         override fun armEditingTimeout() {}
         override fun cancelEditingTimeout() {}

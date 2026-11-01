@@ -1307,7 +1307,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         lines: List<OverlayTextComposer.StyledLine>,
         opaque: Boolean,
         fullHeight: Boolean,
-    ) {
+    ): Boolean {
         val targetAlpha = OverlayAppearance.targetAlpha(opaque)
         // 样式需要的两个输入在服务侧现读：正文色用「已应用值」兜底用户最新设置，
         // 是否有底板决定配角/译文的压暗程度。
@@ -1319,6 +1319,28 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         val renderPrefs = Prefs(this)
         val noBackdrop = OverlayBackground.legibilityKey(renderPrefs.lyricOverlayBgAlphaPercent) ==
             OverlayAppearance.BACKDROP_NONE
+        // 先算去重键：字/角色/样式入参都没变就跳过 Spanned 与 setText（进度 tick 解耦刷字）。
+        val renderKey = OverlayRenderKey.build(
+            lines = lines,
+            fullHeight = fullHeight,
+            opaque = opaque,
+            baseColor = baseColor,
+            noBackdrop = noBackdrop,
+            currentColor = renderPrefs.lyricOverlayCurrentColor,
+            dimPercent = renderPrefs.lyricOverlayDimPercent,
+        )
+        if (renderKey == lastRenderKey) {
+            OverlayMetrics.onRenderSkip()
+            if (!fading && tv.alpha != targetAlpha) {
+                // 暂停 / 恢复：只改透明度，不动文字
+                tv.animate().cancel()
+                tv.alpha = targetAlpha
+            }
+            return false
+        }
+        lastRenderKey = renderKey
+        OverlayMetrics.onRenderApply()
+
         val spanned = OverlayTextStyler.build(
             lines,
             fullHeight,
@@ -1328,26 +1350,13 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             dimPercent = renderPrefs.lyricOverlayDimPercent,
         )
         val sameText = tv.text.toString() == spanned.toString()
-        // 「角色 + 文字 + 样式输入」一起做去重键：全屏模式下间奏 ⇄ 演唱是同一串文字、
-        // 不同角色，只比文字的话这次重绘会被跳过，画面停在旧的强调状态。
-        // v1.1.52：当前行颜色 / 压暗百分比也进了样式，一并入键 —— 否则改了设置
-        // 文字没变时这次重绘会被整个跳过。
-        val renderKey = buildString {
-            append(if (fullHeight) "F|" else "S|")
-            append(if (opaque) "1|" else "0|")
-            append(renderPrefs.lyricOverlayCurrentColor).append('|')
-            append(renderPrefs.lyricOverlayDimPercent).append('|')
-            lines.forEach { append(it.role.name).append(':').append(it.text).append('\n') }
-        }
-        val sameRender = renderKey == lastRenderKey
-        lastRenderKey = renderKey
 
         // v1.1.52：换行动画时长开放为设置项。淡出按 9/16 比例给（旧版 160/90 的关系），
         // 淡入即用户设的值；0 = 关动画，直接切。
         val fadeInMs = renderPrefs.lyricOverlayFadeMs.toLong()
         val fadeOutMs = fadeInMs * 9L / 16L
 
-        if (!sameRender && !sameText) {
+        if (!sameText) {
             tv.animate().cancel()
             if (fadeInMs <= 0L) {
                 // 动画关掉：直接换字，别再走 animate 链
@@ -1371,17 +1380,14 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
                 tv.text = spanned
                 tv.alpha = targetAlpha
             }
-        } else if (!sameText) {
-            // 文字没变、只有角色或暂停态变了：直接换 span，不做淡入淡出
+        } else {
+            // 文字相同、角色或样式变了：直接换 span，不做淡入淡出
             // （同一句歌词在间奏 ⇄ 演唱之间来回时，闪烁比硬切更刺眼）
             tv.animate().cancel()
             tv.text = spanned
             tv.alpha = targetAlpha
-        } else if (!fading && tv.alpha != targetAlpha) {
-            // 暂停 / 恢复：只改透明度，不动文字
-            tv.animate().cancel()
-            tv.alpha = targetAlpha
         }
+        return true
     }
 
     /**

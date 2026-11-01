@@ -30,11 +30,14 @@ class OverlayMetricsTest {
         OverlayMetrics.onVisibilityChanged()
         OverlayMetrics.onHandleRebuild()
         repeat(3) { OverlayMetrics.onA11yTick(1_000_000L) } // 3 × 1ms
+        OverlayMetrics.onRenderApply()
+        repeat(5) { OverlayMetrics.onRenderSkip() }
 
         val text = OverlayMetrics.summary()
 
         assertTrue(text, text.contains("可见性重算 20 次（实际变化 1 次）"))
         assertTrue(text, text.contains("侧钮重建 1 次"))
+        assertTrue(text, text.contains("刷字 1 次（跳过 5 次）"))
         assertTrue(text, text.contains("无障碍轮询 3 次"))
         assertTrue(text, text.contains("累计 3 ms"))
     }
