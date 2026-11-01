@@ -8,7 +8,7 @@ package com.luckylearning.windtone.playback
  */
 object CachePrefetchPolicy {
 
-    /** 一次最多预取几首。缓存 512MB，两首无损约 60MB，够覆盖切歌的两个间隙 */
+    /** 一次最多预取几首。默认缓存 128MB，两首有损约够覆盖切歌间隙；无损请自调上限 */
     const val MAX_SONGS = 2
 
     /**

@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import androidx.media3.datasource.DataSpec
+import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.data.aliyun.AliyunEndpoints
 import com.luckylearning.windtone.data.model.TrackFragment
 import com.luckylearning.windtone.playback.CachePrefetcher
@@ -27,8 +28,9 @@ import java.security.MessageDigest
 /**
  * 「当前这首」的并行分片下载（v1.1.47）。
  *
- * 只服务一首歌，理由很实际：5 条连接不限速会把带宽吃满（用户明确要求），同时再给别的歌
+ * 只服务一首歌，理由很实际：多连接不限速会把带宽吃满，同时再给别的歌
  * 分片只会让两边都慢。所以这里只有一个 [active]，切歌即换人、旧文件立刻删掉。
+ * A11 起默认关（[Prefs.onlineParallelDownload]）；车机多本地，需要时再在设置打开。
  *
  * 用 `MediaController` 的真实播放曲目作判据（引擎在切歌时调 [setCurrentKey]）：
  * `DataSource` 层看不到「这一首是不是当前播放」，只能靠这个 key 对号入座，
@@ -88,6 +90,8 @@ object ParallelDownloadRegistry {
     // DataSpec 是 UnstableApi 类型，这里显式 opt-in（不标在 object 上，避免污染 UI 调用方）
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     fun obtain(context: Context, dataSpec: DataSpec): ParallelDownload? {
+        // A11：默认关并行；未开设置时整条分片路径短路，本地/在线都走原单连接缓存
+        if (!Prefs(context).onlineParallelDownload) return null
         val key = currentKey ?: return null
         if (dataSpec.uri.fragment?.startsWith(TrackFragment.PREFIX) == true) return null
         if (AliyunEndpoints.isDownloadHost(dataSpec.uri.host)) return null

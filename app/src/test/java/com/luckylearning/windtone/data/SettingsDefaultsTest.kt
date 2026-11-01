@@ -73,6 +73,8 @@ class SettingsDefaultsTest {
         check("skipOutroSeconds", prefs.skipOutroSeconds, SettingsDefaults.SKIP_OUTRO_SECONDS)
         check("autoResume", prefs.autoResume, SettingsDefaults.AUTO_RESUME)
         check("autoPlayOnBoot", prefs.autoPlayOnBoot, SettingsDefaults.AUTO_PLAY_ON_BOOT)
+        check("onlineCachePrefetch", prefs.onlineCachePrefetch, SettingsDefaults.ONLINE_CACHE_PREFETCH)
+        check("onlineParallelDownload", prefs.onlineParallelDownload, SettingsDefaults.ONLINE_PARALLEL_DOWNLOAD)
 
         // 播放页歌词
         check("lyricScale", prefs.lyricScale, SettingsDefaults.LYRIC_SCALE)

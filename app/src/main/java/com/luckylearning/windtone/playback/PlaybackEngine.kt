@@ -1934,13 +1934,16 @@ class PlaybackEngine(
 
                 _progress.value = PlaybackProgress(pos, duration, bufferedMs)
 
-                // 后台预取（v1.1.46）：缓冲领先 20 秒（或已暂停）才动手，每 3 秒最多规划一次。
+                // 后台预取（v1.1.46 / A11）：默认关（prefs.onlineCachePrefetch）；
+                // 开时仍要缓冲领先 20 秒（或已暂停）才动手，每 3 秒最多规划一次。
                 // 之所以放在这条 ticker 里：这里刚好有最新 position / buffered / isPlaying，
                 // 不必再开一条计时器。预取失败一律静默，不影响播放。
                 if (now - lastPrefetchPlanAt >= CachePrefetchPolicy.PLAN_INTERVAL_MS) {
                     lastPrefetchPlanAt = now
-                    // 并行分片正在吃带宽时不再预取：两条路抢同一根管子，只会两边都慢
-                    if (!ParallelDownloadRegistry.isActive() &&
+                    if (!prefs.onlineCachePrefetch) {
+                        // 关预取时停掉可能还在跑的任务，避免设置关掉后仍占带宽
+                        runCatching { CachePrefetcher.cancel() }
+                    } else if (!ParallelDownloadRegistry.isActive() &&
                         CachePrefetchPolicy.shouldStart(
                             playing,
                             bufferedMs - pos,

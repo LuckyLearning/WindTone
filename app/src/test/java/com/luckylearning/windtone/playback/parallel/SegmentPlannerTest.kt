@@ -15,10 +15,10 @@ class SegmentPlannerTest {
     private val mb = 1024L * 1024
 
     @Test
-    fun `大文件切五段且首尾相接`() {
+    fun `大文件切三段且首尾相接`() {
         val total = 28 * mb
         val segments = SegmentPlanner.plan(total)
-        assertEquals(5, segments.size)
+        assertEquals(3, segments.size)
         assertEquals(0L, segments.first().start)
         assertEquals(total - 1, segments.last().endInclusive)
         segments.zipWithNext().forEach { (a, b) ->
@@ -33,7 +33,7 @@ class SegmentPlannerTest {
     fun `余数摊到前几段`() {
         val total = 5 * mb + 3
         val segments = SegmentPlanner.plan(total)
-        assertEquals(5, segments.size)
+        assertEquals(3, segments.size)
         assertEquals(total, segments.sumOf { it.length })
         val lengths = segments.map { it.length }.distinct()
         assertTrue("段长只应差 1 字节：$lengths", lengths.max() - lengths.min() <= 1)
@@ -41,7 +41,7 @@ class SegmentPlannerTest {
 
     @Test
     fun `小文件不切分`() {
-        // 300KB 的 mp3 用 5 条连接，握手比下载还贵
+        // 300KB 的 mp3 用多条连接，握手比下载还贵
         assertTrue(SegmentPlanner.plan(300 * 1024).isEmpty())
         // 1.5MB 只够一段 -> 等于不并行
         assertTrue(SegmentPlanner.plan(mb + mb / 2).isEmpty())
@@ -65,7 +65,7 @@ class SegmentPlannerTest {
         assertEquals(0, SegmentPlanner.indexOf(segments, 0))
         assertEquals(0, SegmentPlanner.indexOf(segments, segments[0].endInclusive))
         assertEquals(1, SegmentPlanner.indexOf(segments, segments[1].start))
-        assertEquals(4, SegmentPlanner.indexOf(segments, total - 1))
+        assertEquals(2, SegmentPlanner.indexOf(segments, total - 1))
         assertEquals(-1, SegmentPlanner.indexOf(segments, total))
         assertEquals(-1, SegmentPlanner.indexOf(segments, -1))
     }

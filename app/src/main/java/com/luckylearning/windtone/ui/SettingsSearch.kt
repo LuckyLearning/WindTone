@@ -64,6 +64,8 @@ object SettingsSearchCatalog {
         SettingsSearchEntry(R.string.set_lab_menu_order_title, SettingsPage.MENU_ORDER, sectionRes = R.string.set_lab_title, keywordsRes = R.string.ss_kw_menu_order),
         SettingsSearchEntry(R.string.online_playlists_m3u, SettingsPage.ONLINE, sectionRes = R.string.sources, keywordsRes = R.string.ss_kw_online_m3u),
         SettingsSearchEntry(R.string.cache_limit, SettingsPage.ONLINE_HUB, sectionRes = R.string.playback_cache, keywordsRes = R.string.ss_kw_cache_limit),
+        SettingsSearchEntry(R.string.online_cache_prefetch, SettingsPage.ONLINE_HUB, sectionRes = R.string.playback_cache, keywordsRes = R.string.ss_kw_online_cache_prefetch),
+        SettingsSearchEntry(R.string.online_parallel_download, SettingsPage.ONLINE_HUB, sectionRes = R.string.playback_cache, keywordsRes = R.string.ss_kw_online_parallel_download),
         SettingsSearchEntry(R.string.lib_listening_report, SettingsPage.LIBRARY, sectionRes = R.string.playback_history, keywordsRes = R.string.ss_kw_listening_report),
     )
 }

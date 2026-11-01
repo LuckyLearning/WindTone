@@ -35,6 +35,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.luckylearning.windtone.data.Prefs
+import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.data.aliyun.AliyunAuth
 import com.luckylearning.windtone.data.aliyun.AliyunDrive
 import com.luckylearning.windtone.data.aliyun.AliyunPlaybackWindow
@@ -59,6 +61,9 @@ internal fun SettingsOnlinePage(
     var limit by remember { mutableLongStateOf(OnlineMediaCache.limitBytes(context)) }
     var used by remember { mutableLongStateOf(OnlineMediaCache.sizeBytes(context)) }
     var pickingLimit by remember { mutableStateOf(false) }
+    val prefs = remember { Prefs(context) }
+    var prefetch by remember { mutableStateOf(prefs.onlineCachePrefetch) }
+    var parallel by remember { mutableStateOf(prefs.onlineParallelDownload) }
 
     SectionTitle(stringResource(R.string.sources))
     ActionRow(
@@ -101,6 +106,32 @@ internal fun SettingsOnlinePage(
             val ok = OnlineMediaCache.clear(context)
             used = OnlineMediaCache.sizeBytes(context)
             Toast.makeText(context, if (ok) AppStrings.s(R.string.online_cache_cleared) else AppStrings.s(R.string.nothing_to_clear), Toast.LENGTH_SHORT).show()
+        },
+    )
+    SwitchRow(
+        title = stringResource(R.string.online_cache_prefetch),
+        subtitle = stringResource(R.string.online_cache_prefetch_sub),
+        checked = prefetch,
+        onCheckedChange = {
+            prefetch = it
+            prefs.onlineCachePrefetch = it
+        },
+        onReset = resetAction(prefetch != SettingsDefaults.ONLINE_CACHE_PREFETCH) {
+            prefetch = SettingsDefaults.ONLINE_CACHE_PREFETCH
+            prefs.onlineCachePrefetch = SettingsDefaults.ONLINE_CACHE_PREFETCH
+        },
+    )
+    SwitchRow(
+        title = stringResource(R.string.online_parallel_download),
+        subtitle = stringResource(R.string.online_parallel_download_sub),
+        checked = parallel,
+        onCheckedChange = {
+            parallel = it
+            prefs.onlineParallelDownload = it
+        },
+        onReset = resetAction(parallel != SettingsDefaults.ONLINE_PARALLEL_DOWNLOAD) {
+            parallel = SettingsDefaults.ONLINE_PARALLEL_DOWNLOAD
+            prefs.onlineParallelDownload = SettingsDefaults.ONLINE_PARALLEL_DOWNLOAD
         },
     )
 

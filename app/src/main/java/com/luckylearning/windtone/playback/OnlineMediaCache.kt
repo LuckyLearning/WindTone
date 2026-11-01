@@ -36,13 +36,18 @@ import java.io.File
  *  2. **缓存失败不能影响播放**。`SimpleCache` 初始化要抢目录锁、要建 SQLite 索引，
  *     车机存储紧张时可能直接抛异常 —— 全部 `runCatching` 兜住，失败就退回「无缓存」，
  *     播放继续。宁可费流量，也不能因为缓存起不来就不出声。
- *  3. **上限固定 + LRU**。缓存目录在 `cacheDir` 下，系统随时可能回收；给 512MB 上限，
- *     超出按最近最少使用淘汰，避免把车机存储吃满。
+ *  3. **上限固定 + LRU**。缓存目录在 `cacheDir` 下，系统随时可能回收；默认 128MB 上限
+ *     （车机多本地，在线缓存偏省；设置里仍可选更高档），超出按最近最少使用淘汰。
  */
 object OnlineMediaCache {
 
-    /** 默认上限。设置里可以改成 [LIMIT_STEPS] 里的其它档。 */
-    const val MAX_BYTES = 512L * 1024 * 1024
+    /**
+     * 默认上限（资源极致 A3：512→128）。
+     *
+     * [limitBytes] 用 `getLong(KEY, MAX_BYTES)`：从未写入过 prefs 的新装/升级用户拿新默认；
+     * 已在设置里选过档位的用户保留现值。[LIMIT_STEPS] 不变。
+     */
+    const val MAX_BYTES = 128L * 1024 * 1024
 
     /** 认为「本地已有可播前缀」的最小连续缓存（512KB） */
     const val DEFAULT_CACHED_PREFIX_BYTES: Long = 512L * 1024

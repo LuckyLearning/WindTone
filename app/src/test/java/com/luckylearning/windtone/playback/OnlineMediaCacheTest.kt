@@ -39,6 +39,7 @@ class OnlineMediaCacheTest {
     @Test
     fun `缓存上限设置在合理区间`() {
         // 太小起不到作用，太大在车机上会挤占系统空间（cacheDir 本身会被系统回收）
+        assertEquals(128L * 1024 * 1024, OnlineMediaCache.MAX_BYTES)
         assertTrue(OnlineMediaCache.MAX_BYTES >= 64L * 1024 * 1024)
         assertTrue(OnlineMediaCache.MAX_BYTES <= 2L * 1024 * 1024 * 1024)
         assertEquals(0L, OnlineMediaCache.MAX_BYTES % (1024 * 1024))

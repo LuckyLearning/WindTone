@@ -559,6 +559,10 @@
     <string name="cleared_played_songs_will_be">清空后，听过的歌需要重新下载</string>
     <string name="online_cache_cleared">已清除在线缓存</string>
     <string name="nothing_to_clear">当前没有可清除的缓存</string>
+    <string name="online_cache_prefetch">预取后续曲</string>
+    <string name="online_cache_prefetch_sub">默认关，省流量与缓存。打开后：当前曲缓冲领先足够时，后台把后面的在线歌先拉进缓存。</string>
+    <string name="online_parallel_download">并行分片下载</string>
+    <string name="online_parallel_download_sub">默认关（车机偏省）。打开后：当前在线曲用少量连接分段下载。</string>
     <string name="playback_history">播放记录</string>
     <string name="listening_time_time_of_day">阿里云盘歌曲的收听时长、时段和榜单（云盘页已在抽屉一级入口，入口不再挂这里）</string>
     <string name="lowering_the_limit_immediately_drops">调小上限会立刻删掉最久没听的歌。默认 512MB。</string>
@@ -1489,6 +1493,8 @@
     <string name="ss_kw_menu_order">菜单顺序 分类卡 排序</string>
     <string name="ss_kw_online_m3u">在线歌单 m3u m3u8 pls</string>
     <string name="ss_kw_cache_limit">缓存上限</string>
+    <string name="ss_kw_online_cache_prefetch">预取 后续 在线缓存</string>
+    <string name="ss_kw_online_parallel_download">并行 分片 多连接</string>
     <string name="ss_kw_listening_report">收听报告 听歌</string>
 
     <!-- i18n 第 23 批：ForegroundProbe 前台识别排障报告正文（fp_*） -->

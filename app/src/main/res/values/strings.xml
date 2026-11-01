@@ -590,6 +590,10 @@ The app cannot stop the OEM clearing third-party accessibility on boot; tap the 
     <string name="cleared_played_songs_will_be">Cleared; played songs will be downloaded again</string>
     <string name="online_cache_cleared">Online cache cleared</string>
     <string name="nothing_to_clear">Nothing to clear</string>
+    <string name="online_cache_prefetch">Prefetch next tracks</string>
+    <string name="online_cache_prefetch_sub">Off by default to save data and cache. When on, downloads upcoming online tracks after the current song is buffered ahead.</string>
+    <string name="online_parallel_download">Parallel download</string>
+    <string name="online_parallel_download_sub">Off by default on car units. When on, splits the current online track across a few connections.</string>
     <string name="playback_history">Playback history</string>
     <string name="listening_time_time_of_day">Listening time, time-of-day and charts for Aliyun Drive songs (the drive page is a top-level drawer entry, so it is not linked here)</string>
     <string name="lowering_the_limit_immediately_drops">Lowering the limit immediately drops the least recently played songs. Default 512MB.</string>
@@ -1523,6 +1527,8 @@ Expired codes refresh automatically. This app is read-only — it never uploads,
     <string name="ss_kw_menu_order">菜单顺序 分类卡 排序</string>
     <string name="ss_kw_online_m3u">在线歌单 m3u m3u8 pls</string>
     <string name="ss_kw_cache_limit">缓存上限</string>
+    <string name="ss_kw_online_cache_prefetch">预取 后续 在线缓存</string>
+    <string name="ss_kw_online_parallel_download">并行 分片 多连接</string>
     <string name="ss_kw_listening_report">收听报告 听歌</string>
 
     <!-- i18n batch 23: ForegroundProbe troubleshooting report (fp_*) -->

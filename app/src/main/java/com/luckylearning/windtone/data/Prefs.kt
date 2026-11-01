@@ -180,6 +180,18 @@ object SettingsDefaults {
      * A7 起设置页改为只读说明（平台无关闭 API）；此常量仅保留给死键默认值，不再驱动 UI 开关。
      */
     const val GAPLESS_PLAYBACK = true
+
+    /**
+     * 在线后续曲预取（A11）。默认关：车机多本地，预取只浪费带宽/缓存；
+     * 纯本地队列本就不进候选，此开关挡住「偶有在线」时的后台下载。
+     */
+    const val ONLINE_CACHE_PREFETCH = false
+
+    /**
+     * 当前曲并行分片下载（A11）。默认关：多连接抢带宽与 CPU；需要时可在设置打开。
+     */
+    const val ONLINE_PARALLEL_DOWNLOAD = false
+
     /** 开机后台自启播放：默认关（要用户明确打开，避免一上车就突然出声） */
     const val AUTO_PLAY_ON_BOOT = false
 
@@ -926,6 +938,22 @@ class Prefs private constructor(context: Context) {
         set(value) {
             sp.edit().putBoolean(KEY_GAPLESS_PLAYBACK, value).apply()
             ioScope.launch { store.putBoolean(KEY_GAPLESS_PLAYBACK, value) }
+        }
+
+    /** 在线后续曲预取（默认关，A11） */
+    var onlineCachePrefetch: Boolean
+        get() = sp.getBoolean(KEY_ONLINE_CACHE_PREFETCH, SettingsDefaults.ONLINE_CACHE_PREFETCH)
+        set(value) {
+            sp.edit().putBoolean(KEY_ONLINE_CACHE_PREFETCH, value).apply()
+            ioScope.launch { store.putBoolean(KEY_ONLINE_CACHE_PREFETCH, value) }
+        }
+
+    /** 当前曲并行分片下载（默认关，A11） */
+    var onlineParallelDownload: Boolean
+        get() = sp.getBoolean(KEY_ONLINE_PARALLEL_DOWNLOAD, SettingsDefaults.ONLINE_PARALLEL_DOWNLOAD)
+        set(value) {
+            sp.edit().putBoolean(KEY_ONLINE_PARALLEL_DOWNLOAD, value).apply()
+            ioScope.launch { store.putBoolean(KEY_ONLINE_PARALLEL_DOWNLOAD, value) }
         }
 
     /** 播放页左侧竖排是否显示「无障碍状态」按钮（v1.1.92） */
@@ -1894,6 +1922,8 @@ class Prefs private constructor(context: Context) {
         const val KEY_OVERLAY_HANDLE_A11Y = "overlay_handle_a11y"
         const val KEY_OVERLAY_HANDLE_ORDER = "overlay_handle_order"
         const val KEY_GAPLESS_PLAYBACK = "gapless_playback"
+        const val KEY_ONLINE_CACHE_PREFETCH = "online_cache_prefetch"
+        const val KEY_ONLINE_PARALLEL_DOWNLOAD = "online_parallel_download"
         const val KEY_LYRICS_PANE = "lyrics_pane_visible"
         // ⚠️ 逐字歌词移除后（v1.1.8）有三个键不再读写：`lyric_word_by_word` /
         //    `lyric_sung_color` / `lyric_overlay_sung_color`。它们仍留在老用户的

@@ -13,15 +13,15 @@ data class RangeSegment(val index: Int, val start: Long, val endInclusive: Long)
  * 剩下那几百行线程代码才敢写。
  *
  * 几条规则：
- *  - 太小的文件不切（[MIN_TOTAL_BYTES]）：一首 300KB 的 mp3 用 5 个连接，握手比下载还贵；
+ *  - 太小的文件不切（[MIN_TOTAL_BYTES]）：一首 300KB 的 mp3 用多连接，握手比下载还贵；
  *  - 每段至少 [MIN_BYTES_PER_SEGMENT]：避免出现「5 段各 40KB」这种没意义的分片；
  *  - 段必须**首尾相接、不重叠、不留缝**，最后一段收在 totalBytes-1；
  *  - 长度未知（服务器不给 Content-Length）一律返回空 -> 调用方降级单连接。
  */
 object SegmentPlanner {
 
-    /** 默认并发数（用户指定 5） */
-    const val DEFAULT_SEGMENTS = 5
+    /** 默认并发数（A11：5→3；车机省连接，设置开并行时也偏省） */
+    const val DEFAULT_SEGMENTS = 3
 
     /** 单段最小 1MB：再小就只是把开销放大 */
     const val MIN_BYTES_PER_SEGMENT = 1L * 1024 * 1024
@@ -55,7 +55,7 @@ object SegmentPlanner {
     /** position 落在哪一段；越界返回 -1 */
     fun indexOf(segments: List<RangeSegment>, position: Long): Int {
         if (position < 0) return -1
-        // 段数最多 5，线性找足够，不必二分
+        // 段数很少，线性找足够，不必二分
         for (s in segments) if (position in s.start..s.endInclusive) return s.index
         return -1
     }
