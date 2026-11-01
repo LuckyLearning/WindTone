@@ -159,8 +159,9 @@ internal fun SettingsAboutPage(
     // 分区顺序表（自上而下）：
     //   ① 版本信息卡 —— 连点 5 次解锁调试
     //   ② 检查更新 —— 进更新子页
-    //   ③ 隐私说明 —— 只在本机 / 唯一联网点
-    //   ④ 诊断与排障 —— 排障工具入口，固定页尾
+    //   ③ 后台运行 —— 电池优化白名单状态与跳转（2026-11-01 从排障页提上来）
+    //   ④ 隐私说明 —— 只在本机 / 唯一联网点
+    //   ⑤ 诊断与排障 —— 排障工具入口，固定页尾
     AboutVersionSection(
         debugUnlocked = player.debugUnlocked,
         onDebugUnlocked = onDebugUnlocked,
@@ -170,6 +171,7 @@ internal fun SettingsAboutPage(
         autoCheckUpdate = autoCheckUpdate,
         onOpenUpdate = onOpenUpdate,
     )
+    BackgroundRunSection()
     PrivacyNoticeSection()
     DiagnosticsEntrySection(onOpenDiagnostics = onOpenDiagnostics)
 }

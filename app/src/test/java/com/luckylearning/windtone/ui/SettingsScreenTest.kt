@@ -243,6 +243,23 @@ class SettingsScreenTest {
         compose.onNodeWithText("启动时自动检查更新").performScrollTo().assertIsDisplayed()
     }
 
+    /**
+     * 2026-11-01：电池优化白名单从「诊断与排障」（要连点版本号 5 次才解锁）提到关于页。
+     *
+     * 车机上这一项没加白名单的后果是「后台被冻结 → 放着放着没声」，且不报错；
+     * 两次诊断包都是「否」。所以它必须在**普通用户能找到**的地方，而不是排障页。
+     */
+    @Test
+    fun aboutPageShowsBatteryOptimizationEntry() {
+        render()
+        compose.onNodeWithText("关于与更新").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("后台运行").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("电池优化").performScrollTo().assertIsDisplayed()
+        // Robolectric 下 isIgnoringBatteryOptimizations 恒为 false → 应显示「未加入」引导
+        compose.onNodeWithText("未加入白名单", substring = true).assertIsDisplayed()
+    }
+
     /** 主页分类卡（v1.1.80：6 张，一屏放下）。 */
     @Test
     fun rootShowsSixCategoryCards() {

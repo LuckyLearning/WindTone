@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -13,9 +14,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.luckylearning.windtone.BuildConfig
 import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.UpdateChecker
+import com.luckylearning.windtone.overlay.ForegroundAppDetector
 import com.luckylearning.windtone.state.UpdateUiState
 
 /**
@@ -101,8 +106,61 @@ internal fun UpdateEntrySection(
     )
 }
 
-// ================================================================ ③ 隐私说明
+// ================================================================ ③ 后台运行（电池白名单）
 
+/**
+ * 后台运行是否会被系统冻结（2026-11-01 从「诊断与排障」提到可见位置）。
+ *
+ * ## 为什么要提出来
+ *
+ * 这一项以前只存在于「诊断与排障」页，而那个页要**连点版本号 5 次**才解锁 ——
+ * 出问题的用户找不到，正常用户更不会去点。但车机上「电池优化未加入白名单」
+ * 的后果很具体：Doze / 后台冻结一旦生效，播放与悬浮窗会在息屏后被掐掉，
+ * 表现为「放着放着没声了」「悬浮歌词自己没了」，而且**没有任何报错**。
+ *
+ * 两次车机诊断包（v1.2.40 / v1.2.44）里这一项都是「否」，说明它是常态而非个例。
+ *
+ * ## 状态怎么刷新
+ *
+ * 用户点进去勾选后是**离开本页**去系统设置，回来时 Composable 不会重建。
+ * 所以挂一个 `ON_RESUME` 观察者重新判定一次 —— 否则用户明明已经加进去了，
+ * 界面上还写着「未加入」，只会让人反复去点。
+ */
+@Composable
+internal fun BackgroundRunSection() {
+    val context = LocalContext.current
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var ignoring by remember {
+        mutableStateOf(ForegroundAppDetector.ignoringBatteryOptimizations(context))
+    }
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                ignoring = ForegroundAppDetector.ignoringBatteryOptimizations(context)
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+
+    SectionTitle(stringResource(R.string.background_run))
+    ActionRow(
+        title = stringResource(R.string.battery_optimization),
+        subtitle = if (ignoring) {
+            stringResource(R.string.battery_opt_joined)
+        } else {
+            stringResource(R.string.battery_opt_not_joined)
+        },
+        // 未加入时给一个感叹号提示；已加入就没有可做的了，连箭头都不给
+        trailing = if (ignoring) null else "!",
+        chevron = !ignoring,
+        onClick = {
+            if (!ignoring) ForegroundAppDetector.requestIgnoreBatteryOptimizations(context)
+        },
+    )
+}
+
+// ================================================================ ④ 隐私说明
 /**
  * 隐私说明长文。
  *
