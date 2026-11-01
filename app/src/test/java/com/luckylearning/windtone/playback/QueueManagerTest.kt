@@ -15,6 +15,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
  * [QueueManager] 行为测试。
@@ -24,8 +25,18 @@ import org.robolectric.RobolectricTestRunner
  * 这里给一个 [Dispatchers.Unconfined] 的 scope，使其同步执行到底，断言无需等待。
  *
  * 用 Robolectric 跑：需要构造 [Song]（`Uri.parse` 在纯 JVM 下是 Android 桩会返回 null）。
+ *
+ * ## 为什么钉中文 locale（2026-11-01）
+ *
+ * `QueueManager` 的提示文案在 i18n 之后改走 `AppStrings.s(R.string.qm_*)`，
+ * 于是取值取决于设备语言：默认（无限定符）的 Robolectric 环境按 `values/` 的
+ * **英文兜底**解析，而下面的断言写的是中文 —— 六条提示全部红。
+ *
+ * 这不是产品缺陷，是测试没声明「在哪门语言下断言」。用 `@Config(qualifiers = "zh-rCN")`
+ * 把语言固定在中文，断言继续按中文校验（同时也就继续校验了中文资源确实存在）。
  */
 @RunWith(RobolectricTestRunner::class)
+@Config(qualifiers = "zh-rCN")
 class QueueManagerTest {
 
     private val toMediaItem: (Song) -> MediaItem = { s ->

@@ -585,9 +585,19 @@ class SettingsScreenTest {
 
         compose.onNodeWithText("缓存上限").performScrollTo().performClick()
         compose.waitForIdle()
-        compose.onNodeWithText("128MB").performClick()
+        // A3 把默认档从 512MB 改成 128MB 之后，「当前值摘要」与「弹窗里的选项文案」
+        // 会在同一个界面上撞车（两个节点都带 OnClick，`onNodeWithText` 直接报
+        // 「found 2 nodes」）。这里用「先切到非默认档、再切回默认」的路径绕开：
+        // 选 256MB 时行摘要还是 128MB、弹窗里 256MB 唯一；选回 128MB 时反过来。
+        compose.onNodeWithText("256MB").performClick()
         compose.waitForIdle()
         compose.onAllNodesWithText("2GB").assertCountEquals(0)
+        compose.onNodeWithText("256MB").assertIsDisplayed()
+
+        compose.onNodeWithText("缓存上限").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("128MB").performClick()
+        compose.waitForIdle()
         compose.onNodeWithText("128MB").assertIsDisplayed()
 
         compose.onNodeWithText("收听报告").performScrollTo().performClick()

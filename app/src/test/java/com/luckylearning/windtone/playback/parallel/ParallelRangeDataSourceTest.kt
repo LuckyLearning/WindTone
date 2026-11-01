@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
 import androidx.test.core.app.ApplicationProvider
+import com.luckylearning.windtone.data.Prefs
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -36,11 +37,19 @@ class ParallelRangeDataSourceTest {
     fun setUp() {
         server = MiniRangeServer(payload).also { it.start() }
         context = ApplicationProvider.getApplicationContext()
+        // A11 起「预取 / 并行下载」默认关（线上行为），`obtain()` 会直接短路返回 null。
+        // 本类测的是并行路径本身，所以必须显式打开 —— 否则断言「应处于并行下载状态」
+        // 测的其实是「默认关」这条新策略，与用例意图相反。
+        Prefs.clearCacheForTest()
+        Prefs(context).onlineParallelDownload = true
     }
 
     @After
     fun tearDown() {
         ParallelDownloadRegistry.setCurrentKey(null)
+        // 恢复默认关，避免污染同进程里后续用例（Prefs 按 Application 缓存）
+        Prefs(context).onlineParallelDownload = false
+        Prefs.clearCacheForTest()
         server.stop()
     }
 

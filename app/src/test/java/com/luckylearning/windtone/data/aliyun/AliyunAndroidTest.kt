@@ -7,14 +7,20 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
  * 依赖 android.net.Uri / org.json 的用例（Robolectric）。
  *
  * 工程的单测默认是纯 JVM 跑的，这两个类在那套环境里都是「不可调用的 stub」，
  * 一调就抛「not mocked」—— 所以单独挂 Robolectric。
+ *
+ * `@Config(qualifiers = "zh-rCN")`：`AliyunErrors.hint()` 的文案在 i18n 之后走
+ * `AppStrings.s(...)`，取值取决于设备语言。无限定符时会按 `values/` 的英文兜底解析，
+ * 下面的中文断言就会全部红 —— 这不是产品问题，是测试没声明断言语言。
  */
 @RunWith(RobolectricTestRunner::class)
+@Config(qualifiers = "zh-rCN")
 class AliyunAndroidTest {
 
     @Test
