@@ -641,6 +641,68 @@ class Prefs private constructor(context: Context) {
         ioScope.launch { runCatching { store.warmUp(sp) } }
     }
 
+    // ------------------------------------------------------- DataStore 写合并（A14）
+
+    /**
+     * 待落盘的 DataStore 写，按**键**合并。
+     *
+     * ## 为什么要合并
+     *
+     * 设置页拖滑块时，同一个键会在几十毫秒里被写十几次（悬浮窗的宽度 / 高度 /
+     * 位置 / 透明度都是这种）。每次 setter 都开一个 DataStore 事务，等于把这个
+     * IO 队列塞满 —— 设置页跟着迟钝，而中间那些值**没有任何意义**（用户根本没停在
+     * 那些位置上）。
+     *
+     * ## 为什么合并是安全的
+     *
+     * 读写权威一直是 `SharedPreferences`（`sp` 在 setter 里同步 `apply()`，
+     * 读路径全走 `sp`）。DataStore 目前只是**双写镜像**，晚 120ms 落盘不影响任何
+     * 读取；即使进程在这 120ms 内被杀，丢的也只是镜像里的一个中间值，
+     * 下次启动 `warmUp` 会从 `sp` 补齐。
+     *
+     * ## 保序
+     *
+     * `ioScope` 本来就是 `limitedParallelism(1)` 的单线程，flush 与其它写天然串行，
+     * 不同键之间不会乱序。
+     */
+    private val pendingStoreWrites = java.util.concurrent.ConcurrentHashMap<String, suspend () -> Unit>()
+
+    @Volatile
+    private var storeFlushJob: kotlinx.coroutines.Job? = null
+
+    /** 合并窗口：这段时间内同键的重复写只留最后一次 */
+    private val storeFlushDelayMs = 120L
+
+    private fun enqueueStoreWrite(key: String, write: suspend () -> Unit) {
+        pendingStoreWrites[key] = write
+        if (storeFlushJob?.isActive != true) {
+            storeFlushJob = ioScope.launch {
+                kotlinx.coroutines.delay(storeFlushDelayMs)
+                flushStoreWrites()
+            }
+        }
+    }
+
+    private suspend fun flushStoreWrites() {
+        // 循环到取空为止：flush 过程中设置页仍在拖时，新值会被下一轮带走
+        while (true) {
+            val batch = pendingStoreWrites.keys.toList()
+            if (batch.isEmpty()) return
+            for (key in batch) {
+                val write = pendingStoreWrites.remove(key) ?: continue
+                runCatching { write() }
+            }
+        }
+    }
+
+    /** 单测用：当前待落盘的键数（合并生效时应远小于写入次数） */
+    internal fun pendingStoreWritesForTest(): Int = pendingStoreWrites.size
+
+    /** 供设置页「退出时立刻落盘」用：不等窗口，立刻把待写的镜像推下去 */
+    fun flushStoreWritesNow() {
+        ioScope.launch { flushStoreWrites() }
+    }
+
     // ============================================================ 1. 音乐库与扫描
 
     /** 扫描范围：默认未选择，装机后不自动扫描 */
@@ -1345,7 +1407,7 @@ class Prefs private constructor(context: Context) {
         set(value) {
             val v = value.coerceIn(0, 100)
             sp.edit().putInt(KEY_LYRIC_OVERLAY_BG_ALPHA, v).apply()
-            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_BG_ALPHA, v) }
+            enqueueStoreWrite(KEY_LYRIC_OVERLAY_BG_ALPHA) { store.putInt(KEY_LYRIC_OVERLAY_BG_ALPHA, v) }
         }
 
     // ---------------- 样式细节（v1.1.52）----------------
@@ -1488,7 +1550,8 @@ class Prefs private constructor(context: Context) {
         set(value) {
             val v = value.coerceIn(SettingsDefaults.OVERLAY_WIDTH_RANGE.first, SettingsDefaults.OVERLAY_WIDTH_RANGE.last)
             sp.edit().putInt(KEY_LYRIC_OVERLAY_WIDTH, v).apply()
-            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_WIDTH, v) }
+            // A14：拖动滑块时同键连发，合并成一次 DataStore 落盘
+            enqueueStoreWrite(KEY_LYRIC_OVERLAY_WIDTH) { store.putInt(KEY_LYRIC_OVERLAY_WIDTH, v) }
         }
 
     /** 悬浮窗里的歌词文字颜色（ARGB，默认纯白） */
@@ -1599,7 +1662,7 @@ class Prefs private constructor(context: Context) {
                 SettingsDefaults.OVERLAY_BOX_HEIGHT_RANGE.last,
             )
             sp.edit().putInt(KEY_LYRIC_OVERLAY_BOX_HEIGHT, v).apply()
-            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_BOX_HEIGHT, v) }
+            enqueueStoreWrite(KEY_LYRIC_OVERLAY_BOX_HEIGHT) { store.putInt(KEY_LYRIC_OVERLAY_BOX_HEIGHT, v) }
         }
 
     /** 全屏形态的窗口高度（屏高百分比，30..100，默认 100 = 减去车机 Dock 让位） */
@@ -1612,7 +1675,9 @@ class Prefs private constructor(context: Context) {
                 SettingsDefaults.OVERLAY_FULL_HEIGHT_RANGE.last,
             )
             sp.edit().putInt(KEY_LYRIC_OVERLAY_FULL_HEIGHT_PCT, v).apply()
-            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_FULL_HEIGHT_PCT, v) }
+            enqueueStoreWrite(KEY_LYRIC_OVERLAY_FULL_HEIGHT_PCT) {
+                store.putInt(KEY_LYRIC_OVERLAY_FULL_HEIGHT_PCT, v)
+            }
         }
 
     /**
@@ -1628,7 +1693,7 @@ class Prefs private constructor(context: Context) {
         set(value) {
             val v = value.coerceIn(0, 100)
             sp.edit().putInt(KEY_LYRIC_OVERLAY_X_PCT, v).apply()
-            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_X_PCT, v) }
+            enqueueStoreWrite(KEY_LYRIC_OVERLAY_X_PCT) { store.putInt(KEY_LYRIC_OVERLAY_X_PCT, v) }
         }
 
     /** 单条字幕的纵向位置（可移动余量的百分比，0..100；-1 = 未迁移） */
@@ -1637,7 +1702,7 @@ class Prefs private constructor(context: Context) {
         set(value) {
             val v = value.coerceIn(0, 100)
             sp.edit().putInt(KEY_LYRIC_OVERLAY_Y_PCT, v).apply()
-            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_Y_PCT, v) }
+            enqueueStoreWrite(KEY_LYRIC_OVERLAY_Y_PCT) { store.putInt(KEY_LYRIC_OVERLAY_Y_PCT, v) }
         }
 
     /** 全屏形态的纵向位置（可移动余量的百分比，0..100，默认 0 = 贴顶） */

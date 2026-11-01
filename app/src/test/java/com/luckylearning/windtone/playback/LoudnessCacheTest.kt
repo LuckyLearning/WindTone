@@ -2,6 +2,7 @@ package com.luckylearning.windtone.playback
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -112,5 +113,52 @@ class LoudnessCacheTest {
         val fresh = LoudnessCache(cacheFile())
         assertEquals(1000, fresh.gainMb("k0"))
         assertEquals(1119, fresh.gainMb("k119"))
+    }
+
+    /**
+     * A12：条数硬顶。
+     *
+     * 这张表随曲库线性增长且永不回收 —— 8000 首约 24000 条。给它 LRU 上限之后，
+     * 最久没被问到的条目会被淘汰；用户真回去听那首歌时重新分析一遍即可（纯缓存）。
+     * 上限值本身不该出现在这个测试里，用常量引用，改上限时测试自动跟随。
+     */
+    @Test
+    fun `超过条数上限后按 LRU 淘汰最久未访问的`() {
+        // 上限做成构造参数，测试用小值 —— 否则要写两万行真实文件
+        val max = 50
+        val c = LoudnessCache(cacheFile(), max)
+        repeat(max + 10) { c.put("k$it", it) }
+
+        // 最早那 10 条应已被淘汰，最近一条仍在
+        assertNull("最久未访问的应被淘汰", c.gainMb("k0"))
+        assertEquals(max + 9, c.gainMb("k${max + 9}"))
+    }
+
+    /**
+     * 淘汰之后攒够一批会整理文件。
+     *
+     * 注意断言口径：整理是**攒批**的（表满后每写一条淘汰一条，若一条一整理就退化
+     * 成每条全量重写两万行），所以文件行数允许比上限多出「一个攒批窗口」，
+     * 但不能随写入次数无限增长，且被淘汰的 key 必须已经从磁盘上消失。
+     */
+    @Test
+    fun `淘汰攒批后磁盘不再保留被淘汰的 key 且不无限增长`() {
+        val max = 50
+        val f = cacheFile()
+        val c = LoudnessCache(f, max)
+        // 先写满并多写一条（开始淘汰），再继续写 70 条：
+        // 累计淘汰数必然超过攒批阈值，从而触发一次全量整理
+        repeat(max + 1) { c.put("k$it", it) }
+        repeat(70) { c.put("x$it", it) }
+
+        val lines = f.readLines().filter { it.isNotBlank() }
+        assertTrue(
+            "文件行数 ${lines.size} 不应超过「上限 + 一个攒批窗口」，实际 ${lines.size}",
+            lines.size <= max + 80,
+        )
+        assertTrue(
+            "最久未访问的 k0 已被 LRU 淘汰，磁盘上不该还留着它的行",
+            lines.none { it.endsWith(" k0") },
+        )
     }
 }

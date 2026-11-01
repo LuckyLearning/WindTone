@@ -1,7 +1,6 @@
 package com.luckylearning.windtone.playback
 
 import java.io.File
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 曲目响度分析结果的**文件缓存**（v1.1.52）。
@@ -20,13 +19,48 @@ import java.util.concurrent.ConcurrentHashMap
  * 读写都走 [ConcurrentHashMap] + 文件写入串行在调用方（[TrackVolume] 的
  * 单线程分析作用域）里，这里不再加锁 —— 崩在写文件最坏丢一条缓存，可接受。
  */
-class LoudnessCache(private val file: File) {
+class LoudnessCache(
+    private val file: File,
+    /** 条数上限；生产用 [MAX_ENTRIES]，单测传小值以免写两万行真实文件 */
+    private val maxEntries: Int = MAX_ENTRIES,
+) {
 
-    private val map = ConcurrentHashMap<String, Int>()
+    /**
+     * 表：LRU（accessOrder=true）。
+     *
+     * 2026-11-01（A12）从 `ConcurrentHashMap` 改成 LRU：原来这张表**没有条数上限**，
+     * 曲库多大它就长多大（8000 首 × 每条 80 字节的文件约 640KB，内存里还要再放一份）。
+     * 单个数字确实不大，但它是「随曲库线性增长且永不回收」的结构 —— 这类账在车机上
+     * 攒久了才是麻烦，给它一个硬顶比事后排查便宜得多。
+     *
+     * 换掉 ConcurrentHashMap 的代价是读写要自己加锁（见 [lock]）。访问频率是
+     * 「每首歌几次」，不在绘制热路径上，锁的开销可以忽略。
+     */
+    private val map = object : LinkedHashMap<String, Int>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Int>): Boolean {
+            val drop = size > maxEntries
+            if (drop) evictionsSinceRewrite++
+            return drop
+        }
+    }
+
+    /** 保护 LRU 表：accessOrder=true 时连 `get` 都会改结构，必须串行 */
+    private val lock = Any()
+
     @Volatile private var loaded = false
 
     /** 距上次全量重写又追加了多少条 */
     private var appendsSinceRewrite = 0
+
+    /**
+     * 距上次重写淘汰了多少条。
+     *
+     * 不能「一淘汰就重写」—— 表满之后**每次 put 都会淘汰一条**，那样等于每条都
+     * 全量重写一份两万行的文件（正是这次要修的那类退化）。攒够
+     * [EVICT_REWRITE_EVERY] 条整理一次：期间磁盘上最多多留几十行，
+     * 读取时由 `ensureLoaded` 的后写覆盖兜住正确性。
+     */
+    private var evictionsSinceRewrite = 0
 
     companion object {
         /**
@@ -37,22 +71,44 @@ class LoudnessCache(private val file: File) {
          * 缓慢变长。每 [REWRITE_EVERY] 条整理一次，行数稳定在 `N ~ N+256`。
          */
         private const val REWRITE_EVERY = 256
+
+        /**
+         * 淘汰攒够多少条才为它整理一次文件。
+         *
+         * 表满之后每次 put 都会淘汰一条，如果一淘汰就重写，等于**每条都全量重写**
+         * 一份两万行的文件 —— 比不做上限还糟。攒批之后磁盘最多多留
+         * [EVICT_REWRITE_EVERY] 行，读取时有「后写覆盖前值」兜底，正确性不受影响。
+         */
+        private const val EVICT_REWRITE_EVERY = 64
+
+        /**
+         * 条数硬顶。
+         *
+         * 一首歌会落三条（track / album / 分析结果），20000 条约合 6600 首歌。
+         * 超过之后按 LRU 淘汰最久没被问到的 —— 用户真回去听那些歌时，
+         * 重新分析一遍即可，本来这就是纯缓存。
+         */
+        internal const val MAX_ENTRIES = 20_000
     }
 
     /** 首次访问时把文件读进内存；坏行跳过、重行后写覆盖前值 */
     private fun ensureLoaded() {
         if (loaded) return
-        loaded = true
-        runCatching {
-            if (!file.isFile) return
-            file.readLines().forEach { line ->
-                val trimmed = line.trim()
-                if (trimmed.isEmpty()) return@forEach
-                val space = trimmed.indexOf(' ')
-                if (space <= 0) return@forEach
-                val gain = trimmed.substring(0, space).toIntOrNull() ?: return@forEach
-                val key = trimmed.substring(space + 1)
-                if (key.isNotBlank()) map[key] = gain
+        synchronized(lock) {
+            if (loaded) return
+            // 先置位再读：文件不存在时不该每首歌都 stat 一次（与旧实现同语义）
+            loaded = true
+            runCatching {
+                if (!file.isFile) return
+                file.readLines().forEach { line ->
+                    val trimmed = line.trim()
+                    if (trimmed.isEmpty()) return@forEach
+                    val space = trimmed.indexOf(' ')
+                    if (space <= 0) return@forEach
+                    val gain = trimmed.substring(0, space).toIntOrNull() ?: return@forEach
+                    val key = trimmed.substring(space + 1)
+                    if (key.isNotBlank()) map[key] = gain
+                }
             }
         }
     }
@@ -60,7 +116,7 @@ class LoudnessCache(private val file: File) {
     /** 某曲的增益（mB，带符号）；没分析过返回 null */
     fun gainMb(stableKey: String): Int? {
         ensureLoaded()
-        return map[stableKey]
+        return synchronized(lock) { map[stableKey] }
     }
 
     /**
@@ -76,12 +132,15 @@ class LoudnessCache(private val file: File) {
      */
     fun put(stableKey: String, gainMb: Int) {
         ensureLoaded()
-        map[stableKey] = gainMb
+        synchronized(lock) { map[stableKey] = gainMb }
         runCatching {
             file.parentFile?.mkdirs()
+            // 淘汰发生后，磁盘上仍留着被淘汰 key 的行 —— 下次启动会重新读回来。
+            // 因此除了常规的条数整理，淘汰攒够一批也要整理一次。
             file.appendText("$gainMb $stableKey\n")
             appendsSinceRewrite++
-            if (appendsSinceRewrite >= REWRITE_EVERY) rewriteAll()
+            val evicted = synchronized(lock) { evictionsSinceRewrite }
+            if (appendsSinceRewrite >= REWRITE_EVERY || evicted >= EVICT_REWRITE_EVERY) rewriteAll()
         }.onFailure {
             // 追加失败（目录被清、存储不可用）退化为全量写，缓存丢了能重算
             rewriteAll()
@@ -93,9 +152,11 @@ class LoudnessCache(private val file: File) {
         runCatching {
             file.parentFile?.mkdirs()
             val sb = StringBuilder()
+            // 先快照再写：LRU 表在别的线程里可能被改，遍历时不能持锁做 IO
+            val snapshot = synchronized(lock) { map.entries.map { it.key to it.value } }
             // 排序后写出：内容稳定，diff / 排障时两份文件才好对
-            for (key in map.keys.toSortedSet()) {
-                sb.append(map[key]).append(' ').append(key).append('\n')
+            for ((key, gain) in snapshot.sortedBy { it.first }) {
+                sb.append(gain).append(' ').append(key).append('\n')
             }
             val tmp = File(file.parentFile, file.name + ".tmp")
             tmp.writeText(sb.toString())
@@ -105,6 +166,7 @@ class LoudnessCache(private val file: File) {
                 tmp.delete()
             }
             appendsSinceRewrite = 0
+            synchronized(lock) { evictionsSinceRewrite = 0 }
         }
     }
 }
