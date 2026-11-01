@@ -428,7 +428,13 @@ object AudioFx {
         SoftEqPath.onHardBandLayout(centerHz)
         SoftEqPath.syncCurve(p.eqPresetId, p.eqBands, centerHz.toIntArray())
         SoftEqPath.onHardEqAvailable()
-        apply(p.eqEnabled)
+        if (p.eqEnabled) {
+            apply(true)
+            if (bypassed) apply(false)
+        } else {
+            // A6：读完频段元数据后立刻拆掉，避免关闭态仍占 AudioEffect 会话
+            releaseEffects()
+        }
     }
 
     /**
@@ -609,7 +615,20 @@ object AudioFx {
     fun setEnabled(enabled: Boolean) {
         prefs?.eqEnabled = enabled
         _state.value = _state.value.copy(enabled = enabled)
-        apply(enabled)
+        if (enabled) {
+            // 关闭时 A6 已 release；再开按会话重建，避免空指针 apply
+            if (equalizer == null && sessionId != 0) {
+                attach(sessionId)
+            } else {
+                apply(!bypassed)
+            }
+        } else if (bypassed) {
+            // A/B 旁路期间只熄效果，不拆实例（松手还要立刻回到原设置）
+            apply(false)
+        } else {
+            apply(false)
+            releaseEffects()
+        }
     }
 
     fun setBandLevel(band: Int, levelMb: Int) {
@@ -748,6 +767,8 @@ object AudioFx {
         // 必须放在状态更新**之后**：apply 会读 `_state.value` 里的三处强度
         // 决定要不要启用对应 effect。
         apply(false)
+        // A6：恢复默认即关闭硬 EQ，拆掉会话效果器
+        if (!bypassed) releaseEffects()
     }
 
     private fun apply(enabled: Boolean) {

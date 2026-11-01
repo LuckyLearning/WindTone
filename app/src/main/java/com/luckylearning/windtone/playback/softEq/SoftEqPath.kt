@@ -10,8 +10,9 @@ import kotlinx.coroutines.flow.asStateFlow
 /**
  * Soft EQ main-path facade (E1 skeleton + E2 DEVICE_REJECTED gate + E3 curve bridge).
  *
- * - Default **off** ([enabled]=false). Processor stays in the Media3 chain;
- *   when inactive it is PCM passthrough.
+ * - Default **off** ([enabled]=false). Processor stays **registered** on the
+ *   sink (avoid rebuild pops); when off / flat, [SoftEqAudioProcessor.isActive]
+ *   is false so Media3 skips it (B2 unload). Do not change SoftEq biquad core.
  * - [onHardEqUnavailable] records the hard-EQ reason and runs [SoftEqGate]:
  *   only [AudioFx.Unavailable.DEVICE_REJECTED] becomes a soft **candidate**;
  *   soft enables when the user confirm switch is on (Prefs skeleton).

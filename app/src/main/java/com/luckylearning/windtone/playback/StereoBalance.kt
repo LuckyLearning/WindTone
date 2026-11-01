@@ -5,8 +5,8 @@ package com.luckylearning.windtone.playback
  *
  * [balance] 取值 -100..100：负数偏左、正数偏右、0 居中。
  * 增益采用「保留较响一侧为 1」的经典算法，避免整轨再被压小。
- * 不碰 [AudioFx] 效果器链；真正乘在 PCM 上的是 [StereoBalanceFx]（Media3
- * [androidx.media3.common.audio.ChannelMixingAudioProcessor]）。
+ * 不碰 [AudioFx] 效果器链；真正乘在 PCM 上的是 [StereoBalanceFx] → [StereoBalanceAudioProcessor]
+ * （B3：居中时 isActive=false，不挂混音）。
  */
 object StereoBalance {
 

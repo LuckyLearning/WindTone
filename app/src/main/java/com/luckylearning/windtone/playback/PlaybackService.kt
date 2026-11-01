@@ -12,7 +12,6 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.audio.DefaultAudioSink
@@ -30,7 +29,6 @@ import com.luckylearning.windtone.MusicApp
 import com.luckylearning.windtone.data.CrashLog
 import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.playback.parallel.ParallelDownloadRegistry
-import com.luckylearning.windtone.playback.softEq.SoftEqPath
 import com.luckylearning.windtone.data.aliyun.AliyunAuth
 import com.luckylearning.windtone.data.aliyun.AliyunDrive
 import com.luckylearning.windtone.widget.MusicWidgetProvider
@@ -97,7 +95,7 @@ class PlaybackService : MediaLibraryService() {
 
         // A7 无缝：单 ExoPlayer + 连续 MediaItem 队列；Media3 读分轨 encoder delay/padding。
         // 平台无关闭 API；设置页为只读说明（Prefs.gaplessPlayback 为 C1 死键）。
-        // E1 Soft EQ + #9 stereo balance: SoftEqPath then StereoBalanceFx.
+        // E1 Soft EQ + #9 stereo balance: see PlaybackAudioProcessors (B2/B3 isActive unload).
         val renderersFactory = object : DefaultRenderersFactory(this) {
             override fun buildAudioSink(
                 context: android.content.Context,
@@ -107,12 +105,8 @@ class PlaybackService : MediaLibraryService() {
                 return DefaultAudioSink.Builder(context)
                     .setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                    .setAudioProcessors(
-                        arrayOf<AudioProcessor>(
-                            SoftEqPath.processor,
-                            StereoBalanceFx.processor, // #9
-                        ),
-                    )
+                    // A6/B2/B3：清单见 PlaybackAudioProcessors；关/居中靠 isActive 卸链，不重建 sink。
+                    .setAudioProcessors(PlaybackAudioProcessors.forAudioSink())
                     .build()
             }
         }
