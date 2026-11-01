@@ -1724,7 +1724,7 @@ Expired codes refresh automatically. This app is read-only — it never uploads,
     <string name="mp_library">Library: %1$d tracks</string>
     <string name="mp_bitmap_live">Bitmap live (this process, weak-ref tracked): now %1$s   peak %2$s   created %3$d / %4$s (throughput, not resident)</string>
     <string name="mp_bitmap_read">  Reading: if live ≈ libc malloc above → those tens/hundreds of MB are bitmaps; if much smaller → elsewhere (decoder buffers / Skia / allocator fragmentation)</string>
-    <string name="mp_budget">Budget: bitmap maxMemory/8 (clamped 8~32MB) · raw maxMemory/32 (clamped 1.5~3MB)</string>
+    <string name="mp_budget">Budget: bitmap maxMemory/16 (clamped 4~16MB) / raw maxMemory/48 (clamped 1~2MB)</string>
     <string name="mp_proc_fail">Process: /proc/self read failed (device limit); thread and fd counts unavailable</string>
     <string name="mp_proc_line">Process: threads %1$s   fds %2$s   VmRSS %3$d MB   peak %4$d MB</string>
     <string name="mp_proc_fdsize">  FDSize (kernel table): %1$d   Reading: table capacity, not open count; compare with fds</string>

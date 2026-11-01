@@ -142,6 +142,10 @@ object LyricOverlayBus {
         if (old.resolved == resolved && old.playing == playing &&
             old.title == title && old.artist == artist
         ) {
+            // 同句 tick：内容未变，不叫醒 binder —— 记「跳过」让诊断能看到
+            // 「跳过 >> 刷字」。否则跳过只挂在 renderLines 二次键上，paint 指纹
+            // 已超集过滤时诊断恒为「跳过 0」（1.2.44 宋 L 包）。
+            OverlayMetrics.onRenderSkip()
             return
         }
         // 内容（或播放态）变了才算一次修订。

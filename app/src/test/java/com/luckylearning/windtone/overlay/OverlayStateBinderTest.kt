@@ -36,6 +36,8 @@ class OverlayStateBinderTest {
     fun setup() {
         app = ApplicationProvider.getApplicationContext()
         LyricOverlayBus.clear()
+        ForegroundAppState.reset()
+        OverlayMetrics.reset()
         host = FakeHost(app)
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         binder = OverlayStateBinder(host, scope, foregroundStableMs = 0L)
@@ -46,6 +48,8 @@ class OverlayStateBinderTest {
         binder.dispose()
         scope.cancel()
         LyricOverlayBus.clear()
+        ForegroundAppState.reset()
+        OverlayMetrics.reset()
     }
 
     @Test
@@ -85,6 +89,23 @@ class OverlayStateBinderTest {
             afterFirst,
             host.applyVisibilityCount,
         )
+    }
+
+    @Test
+    fun `包名变化但字未变：不 renderLines 且记跳过`() {
+        LyricOverlayBus.setPreview(true)
+        binder.observe()
+        val afterFirst = host.renderLinesCount
+        assertTrue("preview first frame renders", afterFirst > 0)
+        OverlayMetrics.reset()
+        ForegroundAppState.report("com.example.nav")
+        assertEquals(
+            "same text must not re-renderLines",
+            afterFirst,
+            host.renderLinesCount,
+        )
+        val text = OverlayMetrics.summary()
+        assertTrue("paint hit should count skip: $text", text.contains("跳过") && !text.contains("跳过 0 次"))
     }
 
     @Test

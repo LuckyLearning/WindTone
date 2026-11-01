@@ -192,7 +192,10 @@ class OverlayStateBinder(
                 }
                 val paintChanged = paintKey != lastPaintKey
                 var rendered = false
-                if (paintChanged) {
+                if (!paintChanged) {
+                    // 包名防抖等重入、字未变：compose/render 都跳过，记跳过
+                    OverlayMetrics.onRenderSkip()
+                } else {
                     lastPaintKey = paintKey
                     val lines = when {
                         content.visible -> OverlayTextComposer.compose(

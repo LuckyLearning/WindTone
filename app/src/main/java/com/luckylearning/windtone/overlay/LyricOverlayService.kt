@@ -236,7 +236,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
      * 只有角色变（主角 vs 压暗），只比对 `tv.text` 的话这次重绘会被整个跳过，
      * 屏幕上就停在旧的强调状态。签名里带上角色即可。
      */
-    private var lastRenderKey = ""
+    private val renderDeduper = OverlayRenderDeduper()
 
     /** 已应用的正文色（ARGB）；哨兵值 = 还没应用过 */
     private var appliedTextColor = COLOR_NOT_APPLIED
@@ -1097,7 +1097,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             appliedLineSpacingDp = lineSpacingDp
             if (!fullHeight) {
                 tv.setLineSpacing(dp(lineSpacingDp).toFloat(), 1f)
-                lastRenderKey = ""
+                renderDeduper.clear()
                 // 行距变了行高就变：固定高度 + 行数自动的窗口行数会跟着变，
                 // 交一帧布局量完再重摆一次
                 container?.post { if (!editing) applyPosition() }
@@ -1160,7 +1160,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             )
         }
         // 描边变了必须重画：span 里的颜色没变，但字形渲染变了
-        lastRenderKey = ""
+        renderDeduper.clear()
     }
 
     /**
@@ -1210,7 +1210,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             tv.setLineSpacing(dp(prefs.lyricOverlayLineSpacingDp).toFloat(), 1f)
         }
         // 排版模式变了，旧的 span 签名作废，下一帧必须重画
-        lastRenderKey = ""
+        renderDeduper.clear()
         runCatching { windowManager?.updateViewLayout(container, p) }
         refreshModeChrome()
         container?.post {
@@ -1329,8 +1329,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             currentColor = renderPrefs.lyricOverlayCurrentColor,
             dimPercent = renderPrefs.lyricOverlayDimPercent,
         )
-        if (renderKey == lastRenderKey) {
-            OverlayMetrics.onRenderSkip()
+        if (!renderDeduper.begin(renderKey)) {
             if (!fading && tv.alpha != targetAlpha) {
                 // 暂停 / 恢复：只改透明度，不动文字
                 tv.animate().cancel()
@@ -1338,8 +1337,6 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             }
             return false
         }
-        lastRenderKey = renderKey
-        OverlayMetrics.onRenderApply()
 
         val spanned = OverlayTextStyler.build(
             lines,

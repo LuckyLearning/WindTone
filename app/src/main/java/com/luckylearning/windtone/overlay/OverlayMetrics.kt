@@ -20,7 +20,9 @@ import java.util.concurrent.atomic.AtomicLong
  *    若比值很小，说明重算是幂等的，代价只是空转几次 if；
  *  - **侧钮重建次数**：`syncHandlesVisibility` 真正摘掉再挂的次数。重建要
  *    `addView`/`removeView`，是这里最贵的操作，正常应该只有个位数；
- *  - **刷字 / 跳过**：`renderLines` 真写 TextView 与字不变跳过的次数；
+ *  - **刷字 / 跳过**：真写 TextView 的次数，与「同句未刷」次数。
+ *    跳过三路互斥：`LyricOverlayBus.publish` 内容未变、binder paint 指纹未变、
+ *    `OverlayRenderDeduper` 键未变（后两路都不再 setText）；
  *  - **无障碍轮询**次数与累计耗时：侧钮无障碍状态刷新。它的单次成本里
  *    含一次 `Settings.Secure` 读取（跨进程），所以只有实测才能说它便宜还是贵。
  *
@@ -59,7 +61,7 @@ object OverlayMetrics {
         renderApply.incrementAndGet()
     }
 
-    /** 字不变：跳过 Spanned / setText */
+    /** 同句未刷：Bus 去重 / paint 指纹 / RenderKey 任一跳过 setText 时调用 */
     fun onRenderSkip() {
         renderSkip.incrementAndGet()
     }
