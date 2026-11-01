@@ -13,7 +13,6 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.audio.AudioProcessor
-import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.audio.DefaultAudioSink
@@ -117,6 +116,7 @@ class PlaybackService : MediaLibraryService() {
                     .build()
             }
         }
+        val sceneLoadControl = SceneLoadControl()
         val player = ExoPlayer.Builder(this)
             .setRenderersFactory(renderersFactory)
             // 在线音频的磁盘缓存（v1.1.38）：http(s) 走 CacheDataSource，本地文件不受影响。
@@ -133,20 +133,9 @@ class PlaybackService : MediaLibraryService() {
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .setSkipSilenceEnabled(Prefs(this).skipSilence)
-            // 车机常年弱网（网盘直链更明显：第三方应用下载被限速）。Media3 默认缓冲上限
-            // 只有 50 秒，无损码率下垫不满 20 秒，稍一抖动就 re-buffer，听感就是「一直卡」。
-            // 这里把上限提到 120 秒、重缓冲门槛降到 8 秒：首播多等 1.5 秒，换播放中不中断。
-            .setLoadControl(
-                DefaultLoadControl.Builder()
-                    .setBufferDurationsMs(
-                        30_000,  // minBufferMs
-                        120_000, // maxBufferMs
-                        4_000,   // bufferForPlaybackMs
-                        8_000,   // bufferForPlaybackAfterRebufferMs
-                    )
-                    .setPrioritizeTimeOverSizeThresholds(true)
-                    .build(),
-            )
+            // B1 分场景 LoadControl：本地 file/content 小缓冲；http(s)/网盘仍 30s/120s。
+            // Media3 默认上限只有 50 秒，弱网无损易卡；远程侧保持既有大垫。
+            .setLoadControl(sceneLoadControl)
             .build()
 
         PlayerHandle.player = player
@@ -167,6 +156,7 @@ class PlaybackService : MediaLibraryService() {
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                sceneLoadControl.updateFromMediaItem(mediaItem)
                 pushWidget()
             }
 
