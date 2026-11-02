@@ -194,6 +194,9 @@
     <string name="a11y_watch_banner_sub">点此重新打开；也可改用「使用情况访问」作稳定通道（宋 L / DiLink 推荐）</string>
     <string name="a11y_watch_reopen">去开启</string>
     <string name="a11y_watch_text">宋 L DM-i / DiLink 重启后会关掉听风的辅助功能。点这里打开「无障碍」页重新打开即可。更稳的做法：同时开「使用情况访问」（车机一般不会清掉），按应用隐藏就不会整晚失效。</string>
+    <string name="a11y_watch_killed_title">辅助功能被系统停止了</string>
+    <string name="a11y_watch_killed_text">系统设置里还开着，但服务已被系统停掉（车机上常见）。点此重新打开；也可改用「使用情况访问」这个更稳的通道，按应用隐藏不必依赖无障碍。</string>
+    <string name="a11y_watch_open_usage">开启使用情况访问</string>
     <string name="battery_help_title">允许后台运行</string>
     <string name="background_run">后台运行</string>
     <string name="battery_optimization">电池优化</string>

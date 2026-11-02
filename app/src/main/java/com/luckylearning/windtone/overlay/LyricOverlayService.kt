@@ -285,6 +285,13 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         }
         LyricOverlayBridge.report(LyricOverlayBus.Status.RUNNING, AppStrings.s(R.string.los_svc_started).ifEmpty { "服务已启动" })
         observeState()
+        // 2026-11-02：进程被杀后重启时 `onUnbind` 不一定会跑（进程直接没了）。
+        // 给系统 20 秒把无障碍服务绑回来；仍没连上且勾还开着 → 提醒重开 / 改用「使用情况访问」。
+        // 提前连上时 promptServiceDead() 内部会自己跳过，不会误报。
+        scope.launch {
+            delay(20_000)
+            runCatching { AccessibilityWatchdog.promptServiceDead(this@LyricOverlayService) }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

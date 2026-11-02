@@ -91,6 +91,17 @@ class ForegroundAppService : AccessibilityService() {
         // 用户在设置里关掉服务：清掉残留包名，别让下一次开启先继承一个过期值
         ForegroundAppState.reset()
         com.luckylearning.windtone.diag.DiagLog.log("A11Y", "服务被解绑（系统关闭或被杀）")
+        // 2026-11-02：勾还开着 = 不是用户主动关的，是系统把服务杀了（DiLink 常态）。
+        // 有 WRITE_SECURE_SETTINGS 就立刻写回；没有就提醒点一下重开 —— 否则这条权限
+        // 掉了之后没有任何入口提示（侧钮颜色不算入口，用户不会一直盯着它）。
+        runCatching {
+            val app = applicationContext
+            if (ForegroundAppDetector.accessibilityEnabled(app) &&
+                !AccessibilityWatchdog.tryAutoRestore(app)
+            ) {
+                AccessibilityWatchdog.promptServiceDead(app)
+            }
+        }
         return super.onUnbind(intent)
     }
 

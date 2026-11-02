@@ -213,6 +213,9 @@
     <string name="a11y_watch_banner_sub">Tap to re-enable; or use Usage access as the stable channel (recommended on Song L / DiLink)</string>
     <string name="a11y_watch_reopen">Enable</string>
     <string name="a11y_watch_text">Song L DM-i / DiLink turns WindTone accessibility off after reboot. Tap to reopen it. More stable: also grant Usage access (usually survives reboot) so hide-by-app keeps working.</string>
+    <string name="a11y_watch_killed_title">Accessibility service was stopped</string>
+    <string name="a11y_watch_killed_text">It is still enabled in Settings, but the system stopped the service (common on head units). Tap to reopen, or switch to "Usage access", a more stable channel that does not depend on accessibility.</string>
+    <string name="a11y_watch_open_usage">Enable usage access</string>
     <string name="battery_help_title">Allow background running</string>
     <string name="background_run">Background playback</string>
     <string name="battery_optimization">Battery optimization</string>

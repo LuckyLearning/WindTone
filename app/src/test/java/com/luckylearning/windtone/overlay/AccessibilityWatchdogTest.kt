@@ -58,6 +58,34 @@ class AccessibilityWatchdogTest {
     }
 
     @Test
+    fun `勾还开着但服务被系统杀掉要提醒`() {
+        // DiLink 常态：设置里勾还在，服务被系统单独停掉 → 必须提醒（旧逻辑漏掉这一种）
+        assertTrue(
+            AccessibilityWatchdog.shouldPromptServiceDead(
+                seenOn = true, enabled = true, connected = false,
+            ),
+        )
+        // 服务正常连着 → 不打扰
+        assertFalse(
+            AccessibilityWatchdog.shouldPromptServiceDead(
+                seenOn = true, enabled = true, connected = true,
+            ),
+        )
+        // 勾被关掉 → 交给 shouldPromptRecovery 那条，不在这里重复
+        assertFalse(
+            AccessibilityWatchdog.shouldPromptServiceDead(
+                seenOn = true, enabled = false, connected = false,
+            ),
+        )
+        // 从没开过 → 不打扰
+        assertFalse(
+            AccessibilityWatchdog.shouldPromptServiceDead(
+                seenOn = false, enabled = true, connected = false,
+            ),
+        )
+    }
+
+    @Test
     fun `服务连上后记住曾经开启`() {
         // Robolectric 每个用例一个干净的 SharedPreferences，所以起点必是 false
         assertFalse(AccessibilityWatchdog.seenOn(context))

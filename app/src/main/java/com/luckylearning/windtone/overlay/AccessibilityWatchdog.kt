@@ -55,6 +55,13 @@ internal object AccessibilityWatchdog {
     /** 与前台服务通知（0x7701）分开，避免互相顶掉 */
     const val NOTIFICATION_ID = 0x7702
 
+    /** 「勾还开着但服务被杀」用独立 id，避免覆盖上面那条「勾被抹掉」的提醒 */
+    const val KILLED_NOTIFICATION_ID = 0x7703
+
+    /** 上次「服务被杀」提醒的时间；同一问题 10 分钟内只提醒一次，避免反复打扰 */
+    private const val KEY_KILLED_AT = "killed_at"
+    private const val KILLED_PROMPT_MIN_INTERVAL_MS = 10 * 60 * 1000L
+
     private fun sp(context: Context) =
         context.applicationContext.getSharedPreferences(SP, Context.MODE_PRIVATE)
 
@@ -100,6 +107,18 @@ internal object AccessibilityWatchdog {
      */
     fun shouldPromptRecovery(seenOn: Boolean, currentlyEnabled: Boolean): Boolean =
         seenOn && !currentlyEnabled
+
+    /**
+     * 纯决策：系统里**勾还打着**、服务却没连上（2026-11-02）。
+     *
+     * 这是 DiLink 上最刁钻的一种状态：[shouldPromptRecovery] 只覆盖「勾被抹掉」，
+     * 而车机更常见的是「勾还在、服务被系统单独杀掉」—— 此时 `accessibilityEnabled`
+     * 仍为 true，旧逻辑不会提醒；用户不看悬浮窗侧钮就完全意识不到权限已经失效。
+     *
+     * 三个条件缺一不可：曾经开过（不打扰从没用过的人）、勾仍在、服务未连。
+     */
+    fun shouldPromptServiceDead(seenOn: Boolean, enabled: Boolean, connected: Boolean): Boolean =
+        seenOn && enabled && !connected
 
     /** 是否已拿到 WRITE_SECURE_SETTINGS（通常靠 adb pm grant；普通安装永远是 false） */
     fun hasWriteSecureSettings(context: Context): Boolean =
@@ -179,11 +198,66 @@ internal object AccessibilityWatchdog {
         }
     }
 
-    private fun notifyRecovery(context: Context): Boolean {
-        val nm = context.getSystemService(NotificationManager::class.java) ?: return false
-        // 已经有一条同样的提醒挂着就不再发（冷启动可能连续触发两次检查）
-        if (nm.activeNotifications.any { it.id == NOTIFICATION_ID }) return false
+    /**
+     * 勾还开着、服务却没连上 → 提醒「点此重开」，并给「使用情况访问」这条更稳的路。
+     *
+     * 10 分钟内重复调用只提醒一次；真连上了 / 勾被关掉了都不提醒。
+     * 触发点：`ForegroundAppService.onUnbind`（精确：服务被系统解绑）与
+     * `LyricOverlayService` 启动后的延迟复核（覆盖进程被杀后重启）。
+     *
+     * @return 是否真的发了提醒
+     */
+    fun promptServiceDead(context: Context): Boolean {
+        val seen = seenOn(context)
+        val enabled = ForegroundAppDetector.accessibilityEnabled(context)
+        val connected = ForegroundAppService.isConnected()
+        if (!shouldPromptServiceDead(seen, enabled, connected)) return false
+        val sp = sp(context)
+        val now = System.currentTimeMillis()
+        if (now - sp.getLong(KEY_KILLED_AT, 0L) < KILLED_PROMPT_MIN_INTERVAL_MS) return false
+        return runCatching {
+            val posted = notifyServiceDead(context)
+            if (posted) sp.edit().putLong(KEY_KILLED_AT, now).apply()
+            posted
+        }.getOrElse {
+            Log.w(TAG, "「服务被杀」提醒发送失败（可能未授予通知权限）", it)
+            false
+        }
+    }
 
+    private fun notifyServiceDead(context: Context): Boolean {
+        val nm = context.getSystemService(NotificationManager::class.java) ?: return false
+        ensureChannel(nm, context)
+        val reopen = PendingIntent.getActivity(
+            context,
+            0,
+            accessibilityTarget(context),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val usage = PendingIntent.getActivity(
+            context,
+            1,
+            Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val text = context.getString(R.string.a11y_watch_killed_text)
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_widget_music)
+            .setContentTitle(context.getString(R.string.a11y_watch_killed_title))
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentIntent(reopen)
+            .addAction(0, context.getString(R.string.a11y_watch_reopen), reopen)
+            .addAction(0, context.getString(R.string.a11y_watch_open_usage), usage)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .build()
+        nm.notify(KILLED_NOTIFICATION_ID, notification)
+        return true
+    }
+
+    private fun ensureChannel(nm: NotificationManager, context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             nm.getNotificationChannel(CHANNEL_ID) == null
         ) {
@@ -197,31 +271,49 @@ internal object AccessibilityWatchdog {
                 },
             )
         }
+    }
 
-        // 点击直接进无障碍设置页；解析不到就退回主界面（不让通知点不动）
-        val target = ForegroundAppDetector.accessibilitySettingsIntents(context)
+    /** 无障碍设置页的跳转目标；解析不到就退回主界面（不让通知点不动） */
+    private fun accessibilityTarget(context: Context): Intent =
+        ForegroundAppDetector.accessibilitySettingsIntents(context)
             .firstOrNull { intent ->
                 runCatching {
                     context.packageManager.resolveActivity(intent, 0) != null
                 }.getOrDefault(false)
             } ?: Intent(context, MainActivity::class.java)
 
+    private fun notifyRecovery(context: Context): Boolean {
+        val nm = context.getSystemService(NotificationManager::class.java) ?: return false
+        // 已经有一条同样的提醒挂着就不再发（冷启动可能连续触发两次检查）
+        if (nm.activeNotifications.any { it.id == NOTIFICATION_ID }) return false
+
+        ensureChannel(nm, context)
+
+        // 点击直接进无障碍设置页；解析不到就退回主界面（不让通知点不动）
         val pending = PendingIntent.getActivity(
             context,
             0,
-            target,
+            accessibilityTarget(context),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        // 第二条动作：直接去开「使用情况访问」——车机上比无障碍更不容易被清掉
+        val usage = PendingIntent.getActivity(
+            context,
+            1,
+            Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
+        val text = context.getString(R.string.a11y_watch_text)
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_widget_music)
             .setContentTitle(context.getString(R.string.a11y_watch_title))
-            .setContentText(context.getString(R.string.a11y_watch_text))
-            .setStyle(
-                NotificationCompat.BigTextStyle()
-                    .bigText(context.getString(R.string.a11y_watch_text)),
-            )
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setContentIntent(pending)
+            .addAction(0, context.getString(R.string.a11y_watch_reopen), pending)
+            .addAction(0, context.getString(R.string.a11y_watch_open_usage), usage)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
