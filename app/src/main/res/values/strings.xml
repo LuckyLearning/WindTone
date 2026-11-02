@@ -218,7 +218,7 @@
     <string name="battery_optimization">Battery optimization</string>
     <string name="battery_opt_joined">Whitelisted — playback and the lyric overlay keep running in the background</string>
     <string name="battery_opt_not_joined">Not whitelisted — the system may freeze playback while in the background. Tap to allow.</string>
-    <string name="battery_help_body">This head unit has no battery optimisation page (common on BYD DiLink). Try any of these paths://n//n1) Settings → Apps → WindTone → Power management → Allow background activity\n2) Settings → Battery → App power management → WindTone → Unrestricted\n3) Settings → Apps → WindTone → Battery → Not optimised / Allow background\n\nIf none exists it still works: as long as the accessibility service stays on, app switches are reported instantly. The allow-list only protects against being frozen after a long standby.</string>
+    <string name="battery_help_body">This head unit may reject Android\'s "ignore battery optimisations" request (BYD DiLink shows "multimedia not supported"). Set WindTone manually via any of these paths:\n\n1) Settings → Apps → WindTone → Power management → Allow background activity\n2) Settings → Battery → App power management → WindTone → Unrestricted\n3) Settings → Apps → WindTone → Battery → Not optimised / Allow background\n\nIf none exists it still works: as long as the accessibility service stays on, app switches are reported instantly. The allow-list only protects against being frozen after a long standby.</string>
     <string name="battery_help_copy">Copy steps</string>
     <string name="battery_help_copied">Steps copied</string>
     <string name="fg_help_title">Finding the accessibility page</string>

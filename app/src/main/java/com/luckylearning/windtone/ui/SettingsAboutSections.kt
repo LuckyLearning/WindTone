@@ -1,9 +1,15 @@
 package com.luckylearning.windtone.ui
 
 import android.widget.Toast
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -11,8 +17,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -133,10 +141,19 @@ internal fun BackgroundRunSection() {
     var ignoring by remember {
         mutableStateOf(ForegroundAppDetector.ignoringBatteryOptimizations(context))
     }
+    // 2026-11-02：跳去系统页后回来仍未被收录 → 说明这条路走不通，改给路径向导。
+    // 以前只要 startActivity 不抛异常就当作"成功"，车机上落到「多媒体不支持」的死页，
+    // 用户回来还是「未加入」，却拿不到任何可操作的提示。
+    var showHelp by remember { mutableStateOf(false) }
+    var awaitingReturn by remember { mutableStateOf(false) }
     DisposableEffect(lifecycle) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 ignoring = ForegroundAppDetector.ignoringBatteryOptimizations(context)
+                if (!ignoring && awaitingReturn) {
+                    awaitingReturn = false
+                    showHelp = true
+                }
             }
         }
         lifecycle.addObserver(observer)
@@ -155,7 +172,56 @@ internal fun BackgroundRunSection() {
         trailing = if (ignoring) null else "!",
         chevron = !ignoring,
         onClick = {
-            if (!ignoring) ForegroundAppDetector.requestIgnoreBatteryOptimizations(context)
+            if (!ignoring) {
+                val jumped = ForegroundAppDetector.requestIgnoreBatteryOptimizations(context)
+                if (jumped) {
+                    // 上车机时这一步已改为落到「应用信息」页（见 batteryOptimizationIntents），
+                    // 回来后仍未收录再兜底提示，避免把用户丢在没法操作的地方。
+                    awaitingReturn = true
+                } else {
+                    showHelp = true
+                }
+            }
+        },
+    )
+    if (showHelp) BatteryHelpDialog(onDismiss = { showHelp = false })
+}
+
+/**
+ * 「允许后台运行」路径向导（2026-11-02 抽出，关于页与排障页复用）。
+ *
+ * 车机上标准「忽略电池优化」申请可能被系统直接拒绝（DiLink5 提示「多媒体不支持」），
+ * 所以这里不是可选项，而是**兜底出口**：给 3 条手动路径 + 一条「找不到也不影响」的说明。
+ */
+@Composable
+internal fun BatteryHelpDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    val steps = stringResource(R.string.battery_help_body)
+    val copiedMsg = stringResource(R.string.battery_help_copied)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.battery_help_title)) },
+        text = {
+            Column(
+                Modifier
+                    .heightIn(max = 340.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                Text(steps, style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                clipboard.setText(AnnotatedString(steps))
+                Toast.makeText(context, copiedMsg, Toast.LENGTH_SHORT).show()
+            }) { Text(stringResource(R.string.battery_help_copy)) }
+        },
+        dismissButton = {
+            TextButton(onClick = {
+                ForegroundAppDetector.openSystemSettings(context)
+                onDismiss()
+            }) { Text(stringResource(R.string.fg_help_open_settings)) }
         },
     )
 }

@@ -199,7 +199,7 @@
     <string name="battery_optimization">电池优化</string>
     <string name="battery_opt_joined">已加入白名单 —— 后台播放与悬浮歌词不会被系统冻结</string>
     <string name="battery_opt_not_joined">未加入白名单 —— 系统可能在后台冻结播放，点此去允许</string>
-    <string name="battery_help_body">这台车机没有「电池优化」设置页（比亚迪 DiLink 常见）。可以按下面任一路径把听风设为不受限：\n\n1）设置 → 应用管理 → 听风 → 耗电管理 → 允许后台活动\n2）设置 → 电池 → 应用耗电管理 → 听风 → 不受限制\n3）设置 → 应用 → 听风 → 电池 → 不优化 / 允许后台运行\n\n找不到也没关系：只要「无障碍服务」还开着，应用切换事件就是即时的；白名单主要防的是「息屏很久之后被系统冻结」。</string>
+    <string name="battery_help_body">这台车机可能不支持系统的「忽略电池优化」申请（比亚迪 DiLink 会提示「多媒体不支持」），请按下面任一路径手动把听风设为不受限：\n\n1）设置 → 应用管理 → 听风 → 耗电管理 → 允许后台活动\n2）设置 → 电池 → 应用耗电管理 → 听风 → 不受限制\n3）设置 → 应用 → 听风 → 电池 → 不优化 / 允许后台运行\n\n找不到也没关系：只要「无障碍服务」还开着，应用切换事件就是即时的；白名单主要防的是「息屏很久之后被系统冻结」。</string>
     <string name="battery_help_copy">复制说明</string>
     <string name="battery_help_copied">说明已复制</string>
     <string name="fg_help_title">找到「无障碍」这一页</string>

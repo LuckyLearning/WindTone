@@ -578,37 +578,7 @@ internal fun SettingsDiagnosisPage(
         )
         // 「电池优化」页在 DiLink 上同样被裁：三段候选都失败时给路径，不要只留一个死按钮。
         if (showBatteryHelp) {
-            val steps = stringResource(R.string.battery_help_body)
-            val copiedMsg = stringResource(R.string.battery_help_copied)
-            AlertDialog(
-                onDismissRequest = { showBatteryHelp = false },
-                title = { Text(stringResource(R.string.battery_help_title)) },
-                text = {
-                    Column(
-                        Modifier
-                            .heightIn(max = 340.dp)
-                            .verticalScroll(rememberScrollState()),
-                    ) {
-                        Text(steps, style = MaterialTheme.typography.bodySmall)
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        clipboard.setText(AnnotatedString(steps))
-                        Toast.makeText(
-                            context,
-                            copiedMsg,
-                            Toast.LENGTH_SHORT,
-                        ).show()
-                    }) { Text(stringResource(R.string.battery_help_copy)) }
-                },
-                dismissButton = {
-                    TextButton(onClick = {
-                        ForegroundAppDetector.openSystemSettings(context)
-                        showBatteryHelp = false
-                    }) { Text(stringResource(R.string.fg_help_open_settings)) }
-                },
-            )
+            BatteryHelpDialog(onDismiss = { showBatteryHelp = false })
         }
         if (probeReport != null) {
             val report = probeReport!!

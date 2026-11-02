@@ -1,11 +1,13 @@
 package com.luckylearning.windtone.overlay
 
 import android.app.AppOpsManager
+import android.app.UiModeManager
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.os.Build
 import android.os.PowerManager
 import android.os.Process
@@ -260,20 +262,55 @@ internal object ForegroundAppDetector {
      * 3. **本应用详情页** —— 车机（DiLink 实测）前两个都打不开，而「应用信息 → 电池 /
      *    耗电管理 → 允许后台活动」几乎每台车机都保留，这是最后的可走路径。
      */
-    fun batteryOptimizationIntents(context: Context): List<Intent> = listOf(
-        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+    fun batteryOptimizationIntents(context: Context): List<Intent> {
+        val requestDialog = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
             .setData(android.net.Uri.parse("package:${context.packageName}"))
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-        Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val whitelistPage = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val appDetails = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
             .setData(android.net.Uri.parse("package:${context.packageName}"))
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-    ) + discoverBatteryActivities(context).map { cn ->
-        // 车机把上面三段都裁掉时，从设置类应用里**动态找**电池 / 省电 / 后台管理页，
-        // 逻辑与无障碍的动态发现同源（DiLink 这类 ROM 改名比换实现勤快得多）。
-        Intent().setComponent(cn).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    }.distinctBy { it.component?.flattenToString() ?: it.action }
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val discovered = discoverBatteryActivities(context).map { cn ->
+            // 车机把上面三段都裁掉时，从设置类应用里**动态找**电池 / 省电 / 后台管理页，
+            // 逻辑与无障碍的动态发现同源（DiLink 这类 ROM 改名比换实现勤快得多）。
+            Intent().setComponent(cn).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        // 2026-11-02：DiLink5 实测 —— `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` 能启动，
+        // 但系统对该多媒体应用直接提示「多媒体不支持」，页面上没有任何可勾选项；
+        // 而 `startFirstResolvable` 只看 startActivity 是否抛异常，于是**停在这个死页**，
+        // 永远轮不到后面本就保留的「应用信息 → 耗电管理」。
+        // 车机上把申请弹窗排到最后，优先落到应用详情页；手机 / 平板上维持原顺序。
+        val ordered = if (isCarHeadUnit(context)) {
+            listOf(appDetails, whitelistPage) + discovered + listOf(requestDialog)
+        } else {
+            listOf(requestDialog, whitelistPage, appDetails) + discovered
+        }
+        return ordered.distinctBy { it.component?.flattenToString() ?: it.action }
+    }
+
+    /**
+     * 是否运行在车机（汽车 UI 模式）上。
+     *
+     * 用途不是"识别车型"，而是决定**系统设置页的跳转顺序**：车机常把标准申请页裁掉、
+     * 或直接拒绝（DiLink5 上 `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` 会提示「多媒体不支持」）。
+     *
+     * 三个判据任一成立即算车机：`UiModeManager` 当前为 CAR；系统声明 `FEATURE_AUTOMOTIVE`；
+     * 品牌 / 机型串里含 `byd` / `dilink`。
+     *
+     * 第三条是**必要兜底**：上一轮 DiLink5 诊断包实测，系统虽声明了 automotive 特性，
+     * 但个别固件的 `UiModeManager` 并不报 CAR。若不认 BYD，就会继续落到「多媒体不支持」的死页。
+     * 本项目就是面向比亚迪车机，认品牌没有误伤风险；都不成立时返回 false（手机 / 平板）。
+     */
+    fun isCarHeadUnit(context: Context): Boolean = runCatching {
+        val brand = listOf(Build.MANUFACTURER, Build.BRAND, Build.MODEL, Build.DEVICE)
+            .joinToString(" ").lowercase()
+        val knownCar = brand.contains("byd") || brand.contains("dilink")
+        val carUi = (context.getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager)
+            ?.currentModeType == Configuration.UI_MODE_TYPE_CAR
+        val automotive = context.packageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)
+        knownCar || carUi || automotive
+    }.getOrDefault(false)
 
     /**
      * 动态发现「电池 / 省电 / 后台管理」相关 Activity（v1.1.87）。
