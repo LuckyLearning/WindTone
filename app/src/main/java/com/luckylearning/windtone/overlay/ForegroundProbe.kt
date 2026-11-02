@@ -432,13 +432,40 @@ internal object ForegroundProbe {
         sb.appendLine(s(R.string.fp_sec_adb))
         sb.appendLine(s(R.string.fp_adb_note1))
         sb.appendLine(s(R.string.fp_adb_note2))
-        sb.appendLine("adb shell settings put secure enabled_accessibility_services " +
-            "${facts.enabledAccessibilityServices.ifBlank { "" }.let { if (it.isBlank()) "" else "$it:" }}" +
-            "${facts.appPackage}/${ForegroundAppService::class.java.name}")
+        sb.appendLine(
+            "adb shell settings put secure enabled_accessibility_services " +
+                mergeEnabledAccessibilityServices(
+                    existing = facts.enabledAccessibilityServices,
+                    appPackage = facts.appPackage,
+                    ourService = "${facts.appPackage}/${ForegroundAppService::class.java.name}",
+                ),
+        )
         sb.appendLine("adb shell settings put secure accessibility_enabled 1")
         sb.appendLine()
         sb.appendLine(s(R.string.fp_report_end))
         return sb.toString()
+    }
+
+    /**
+     * 合并「已启用无障碍服务」列表，把我们自己的服务去重后追加（2026-11-02）。
+     *
+     * 旧实现无条件把 `pkg/Service` 接在原值后面，而用户正常开启本应用后，原值里**本来就含**
+     * 本应用 → 生成的 adb 命令里本应用出现两次
+     * （实测：`…ForegroundAppService:com.byd...SceneSayService:…ForegroundAppService`）。
+     *
+     * 这里先按包名剔除本应用的所有条目（无论短名 `.Service` 还是全名），再追加一次规范写法，
+     * 保证幂等；别人的服务原样保留、顺序不变。抽成纯函数便于单测。
+     */
+    internal fun mergeEnabledAccessibilityServices(
+        existing: String,
+        appPackage: String,
+        ourService: String,
+    ): String {
+        val kept = existing.split(':')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .filterNot { it.substringBefore('/') == appPackage }
+        return (kept + ourService).distinct().joinToString(":")
     }
 
     private fun recommend(facts: Facts): String = when {

@@ -1568,7 +1568,7 @@
     <string name="fp_no_a11y_activity">    无 accessibility 相关 Activity</string>
     <string name="fp_sec_candidates">[候选 Intent 解析]</string>
     <string name="fp_sec_adb">[可选的 adb 方式（仅能连 ADB 时）]</string>
-    <string name="fp_adb_note1">注意：下面第一条会**覆盖**已启用服务列表，务必把现有值接在前面，用冒号分隔；</string>
+    <string name="fp_adb_note1">注意：下面第一条会**覆盖**已启用服务列表；命令已自动保留现有服务并去重，手工改时务必保留原有值，用冒号分隔；</string>
     <string name="fp_adb_note2">      2026 款起部分 DiLink 固件已收紧 ADB，此路可能不通。</string>
     <string name="fp_rec_a11y">无障碍（事件即时）</string>
     <string name="fp_rec_a11y_first">无障碍优先；打不开再用使用情况访问</string>

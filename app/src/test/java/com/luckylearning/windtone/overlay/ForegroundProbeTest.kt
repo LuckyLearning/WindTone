@@ -3,6 +3,7 @@ package com.luckylearning.windtone.overlay
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.luckylearning.windtone.ui.AppStrings
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -44,6 +45,7 @@ class ForegroundProbeTest {
         backgroundRestricted: Boolean? = false,
         runInBackgroundMode: String = "默认(3)",
         batteryCandidates: List<ForegroundProbe.Candidate> = emptyList(),
+        enabledAccessibilityServices: String = "",
     ) = ForegroundProbe.Facts(
         collectedAt = 1_700_000_000_000L,
         manufacturer = "BYD",
@@ -56,7 +58,7 @@ class ForegroundProbeTest {
         accessibilityPageResolvable = accessibilityPageResolvable,
         usageAccessPageResolvable = usageAccessPageResolvable,
         accessibilityServiceEnabled = accessibilityServiceEnabled,
-        enabledAccessibilityServices = "",
+        enabledAccessibilityServices = enabledAccessibilityServices,
         accessibilityMasterEnabled = false,
         serviceDeclared = true,
         usageStatsMode = "MODE_DEFAULT(3)",
@@ -110,6 +112,25 @@ class ForegroundProbeTest {
         assertTrue(report.contains("adb shell settings put secure enabled_accessibility_services"))
         assertTrue(report.contains(ForegroundAppService::class.java.name))
         assertTrue(report.contains("覆盖"))
+    }
+
+    @Test
+    fun `已启用列表已含本应用时 adb 命令不重复追加`() {
+        val ours = "com.luckylearning.windtone/${ForegroundAppService::class.java.name}"
+        val other = "com.byd.autovoice/com.byd.autovoice_bydapi.SceneSayService"
+        val report = ForegroundProbe.buildReport(
+            facts(
+                accessibilityPageResolvable = false,
+                usageAccessPageResolvable = false,
+                enabledAccessibilityServices = "$ours:$other",
+            ),
+        )
+        val line = report.lineSequence()
+            .first { it.startsWith("adb shell settings put secure enabled_accessibility_services") }
+        // 2026-11-02：原值已含本应用时不得再追加一次（车机实测出现过重复项）
+        assertEquals(1, line.split(ours).size - 1)
+        // 别人的服务一个都不能丢
+        assertTrue(line.contains(other))
     }
 
     @Test

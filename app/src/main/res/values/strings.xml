@@ -1602,7 +1602,7 @@ Expired codes refresh automatically. This app is read-only — it never uploads,
     <string name="fp_no_a11y_activity">    no accessibility-related Activity</string>
     <string name="fp_sec_candidates">[Candidate Intent resolve]</string>
     <string name="fp_sec_adb">[Optional adb path (only if ADB works)]</string>
-    <string name="fp_adb_note1">Note: the first command below **overwrites** the enabled-services list — prepend existing values, colon-separated;</string>
+    <string name="fp_adb_note1">Note: the first command below **overwrites** the enabled-services list; it already keeps and de-duplicates the existing services — if you edit it by hand, keep them, colon-separated;</string>
     <string name="fp_adb_note2">      Some 2026 DiLink firmwares tighten ADB; this path may not work.</string>
     <string name="fp_rec_a11y">Accessibility (instant events)</string>
     <string name="fp_rec_a11y_first">Prefer accessibility; fall back to usage access if it won’t open</string>
