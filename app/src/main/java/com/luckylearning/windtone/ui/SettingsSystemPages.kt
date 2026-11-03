@@ -435,10 +435,13 @@ internal fun SettingsDiagnosisPage(
         // v1.1.83：车机息屏后系统会冻结后台，1.5 秒轮询随之停摆 —— 这是「按应用隐藏」
         // 在车上失效的第二个原因（第一个是没有无障碍页）。白名单申请不需要 adb。
         val ignoringBattery = ForegroundAppDetector.ignoringBatteryOptimizations(context)
+        val isCarBattery = remember { ForegroundAppDetector.isCarHeadUnit(context) }
         ActionRow(
             title = stringResource(R.string.diag_battery_title),
             subtitle = if (ignoringBattery) {
                 stringResource(R.string.diag_battery_on)
+            } else if (isCarBattery) {
+                stringResource(R.string.battery_opt_car_hint)
             } else {
                 stringResource(R.string.diag_battery_off)
             },

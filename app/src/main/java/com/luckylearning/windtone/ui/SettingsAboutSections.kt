@@ -138,6 +138,9 @@ internal fun UpdateEntrySection(
 internal fun BackgroundRunSection() {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
+    // 车机上「电池优化」标准页会被拒成「多媒体不支持」，实际可走的是车厂「应用启动管理」。
+    // 状态文案要跟着换，否则用户点了没反应还以为没生效。
+    val isCar = remember { ForegroundAppDetector.isCarHeadUnit(context) }
     var ignoring by remember {
         mutableStateOf(ForegroundAppDetector.ignoringBatteryOptimizations(context))
     }
@@ -165,6 +168,8 @@ internal fun BackgroundRunSection() {
         title = stringResource(R.string.battery_optimization),
         subtitle = if (ignoring) {
             stringResource(R.string.battery_opt_joined)
+        } else if (isCar) {
+            stringResource(R.string.battery_opt_car_hint)
         } else {
             stringResource(R.string.battery_opt_not_joined)
         },

@@ -107,5 +107,15 @@ class ForegroundAppDetectorTest {
         assertTrue(ForegroundAppDetector.looksLikeBatteryPage("com.x.Settings\$BackgroundManager"))
         // 只有 power 但语义不明的不算
         assertTrue(!ForegroundAppDetector.looksLikeBatteryPage("com.x.SomePowerActivity"))
+        // 2026-11-03：车厂「应用启动管理」也是允许后台运行的入口（DiLink 走这条）
+        assertTrue(
+            ForegroundAppDetector.looksLikeBatteryPage(
+                "com.byd.appstartmanagement.ui.AppStartManagementActivity",
+            ),
+        )
+        assertTrue(ForegroundAppDetector.looksLikeBatteryPage("com.x.AutoStartSettings"))
+        assertTrue(ForegroundAppDetector.looksLikeBatteryPage("com.x.appmanage.AppManageActivity"))
+        // 桌面 / 启动器页面不能误认
+        assertTrue(!ForegroundAppDetector.looksLikeBatteryPage("com.byd.launcher3.Launcher"))
     }
 }

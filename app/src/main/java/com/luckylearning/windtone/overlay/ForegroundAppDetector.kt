@@ -263,6 +263,7 @@ internal object ForegroundAppDetector {
      *    耗电管理 → 允许后台活动」几乎每台车机都保留，这是最后的可走路径。
      */
     fun batteryOptimizationIntents(context: Context): List<Intent> {
+        val pm = context.packageManager
         val requestDialog = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
             .setData(android.net.Uri.parse("package:${context.packageName}"))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -276,18 +277,39 @@ internal object ForegroundAppDetector {
             // 逻辑与无障碍的动态发现同源（DiLink 这类 ROM 改名比换实现勤快得多）。
             Intent().setComponent(cn).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        // 2026-11-02：DiLink5 实测 —— `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` 能启动，
-        // 但系统对该多媒体应用直接提示「多媒体不支持」，页面上没有任何可勾选项；
-        // 而 `startFirstResolvable` 只看 startActivity 是否抛异常，于是**停在这个死页**，
-        // 永远轮不到后面本就保留的「应用信息 → 耗电管理」。
-        // 车机上把申请弹窗排到最后，优先落到应用详情页；手机 / 平板上维持原顺序。
+        // 2026-11-03：DiLink5 上标准三段（申请弹窗 / 白名单列表页 / 应用详情页）实测
+        // **都会**提示「多媒体不支持」—— 仅靠重排顺序解决不了。车厂自带的「应用启动管理」
+        // （com.byd.appstartmanagement）才是这台车上真正能「允许后台运行」的入口，
+        // 所以车机上把它放在最前面；包不存在时 `getLaunchIntentForPackage` 返回 null，自然跳过。
+        val vendorAppStart = APP_START_MANAGEMENT_PACKAGES.mapNotNull { pkg ->
+            runCatching { pm.getLaunchIntentForPackage(pkg) }.getOrNull()
+                ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
         val ordered = if (isCarHeadUnit(context)) {
-            listOf(appDetails, whitelistPage) + discovered + listOf(requestDialog)
+            vendorAppStart + discovered + listOf(appDetails, whitelistPage, requestDialog)
         } else {
-            listOf(requestDialog, whitelistPage, appDetails) + discovered
+            listOf(requestDialog, whitelistPage, appDetails) + vendorAppStart + discovered
         }
         return ordered.distinctBy { it.component?.flattenToString() ?: it.action }
     }
+
+    /**
+     * 车厂自带的「应用启动管理 / 自启动管理」包名（2026-11-03）。
+     *
+     * DiLink5 实测：标准电池白名单、应用详情页都会被系统拒成「多媒体不支持」，
+     * 但自带的「应用启动管理」（`com.byd.appstartmanagement`）可以逐应用允许
+     * 自启动 / 后台活动 —— 这是这台车上真正可用的入口。
+     *
+     * 已知包名优先（`getLaunchIntentForPackage` 拿不到就跳过），其余机型再由
+     * [discoverBatteryActivities] 动态补。
+     */
+    private val APP_START_MANAGEMENT_PACKAGES = listOf(
+        "com.byd.appstartmanagement",
+        "com.byd.appmanager",
+        "com.byd.bydsettings",
+        "com.byd.power",
+        "com.byd.carsettings",
+    )
 
     /**
      * 是否运行在车机（汽车 UI 模式）上。
@@ -332,10 +354,17 @@ internal object ForegroundAppDetector {
                 val label = runCatching {
                     pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
                 }.getOrDefault("")
-                pkg.contains("setting", ignoreCase = true) ||
-                    pkg.contains("byd.carsettings", ignoreCase = true) ||
+                val looksSettings = pkg.contains("setting", ignoreCase = true) ||
                     label.contains("设置") ||
                     label.contains("Setting", ignoreCase = true)
+                // 2026-11-03：车厂常把「允许后台运行」放进自带的「应用启动管理 / 权限管理」
+                // （DiLink 是 com.byd.appstartmanagement），包名与标签都不带「设置」，
+                // 旧过滤会把它整个漏掉。这里按包名特征补上，并保留全部 byd 应用兜底。
+                val looksAppManager = listOf(
+                    "appstart", "appmanage", "autostart", "startmanage",
+                    "permission", "security",
+                ).any { pkg.contains(it, ignoreCase = true) }
+                looksSettings || looksAppManager || pkg.contains("byd", ignoreCase = true)
             }
 
         // v1.1.89 收紧：`power` 单用会把「能量回收 / 充电」页也捞进来
@@ -360,9 +389,18 @@ internal object ForegroundAppDetector {
      */
     internal fun looksLikeBatteryPage(className: String): Boolean {
         val lower = className.lowercase()
-        val excluded = listOf("recharge", "charge", "energy", "newenergy")
+        // 充电 / 能量类一律排除；桌面也别误认（部分设置应用里有 Launcher 命名的页面）
+        val excluded = listOf("recharge", "charge", "energy", "newenergy", "launcher", "home")
         if (excluded.any { lower.contains(it) }) return false
-        val strong = listOf("battery", "optimiz", "background", "powersave", "power_save")
+        val strong = listOf(
+            "battery", "optimiz", "background", "powersave", "power_save",
+            // 2026-11-03：DiLink 把「允许后台运行」放在自带的「应用启动管理」里
+            // （com.byd.appstartmanagement），类名多为 AppStart/AutoStart/StartManagement，
+            // 不含 battery/power —— 旧过滤把这条路整个漏掉了，才会只剩「多媒体不支持」的死页。
+            "appstart", "autostart", "auto_start", "startmanage", "startup",
+            "appmanage", "app_manage", "keepalive", "keep_alive", "selfstart", "self_start",
+            "restrict",
+        )
         if (strong.any { lower.contains(it) }) return true
         val powerQualified = listOf("powermanager", "powerusage", "powerconsumption", "power_settings")
         return lower.contains("power") && powerQualified.any { lower.contains(it) }

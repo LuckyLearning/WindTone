@@ -213,6 +213,10 @@ internal object ForegroundProbe {
 
     private fun describe(intent: Intent): String =
         intent.component?.let { "${it.packageName}/${it.className}" }
+            // 2026-11-03：车厂「应用启动管理」用的是 `getLaunchIntentForPackage`，
+            // 没有显式 component，只有 package + MAIN/LAUNCHER；不带上包名的话
+            // 报告里会变成一串看不懂的 `android.intent.action.MAIN`。
+            ?: intent.`package`?.let { "$it (launch)" }
             ?: intent.action.orEmpty()
 
     /**
