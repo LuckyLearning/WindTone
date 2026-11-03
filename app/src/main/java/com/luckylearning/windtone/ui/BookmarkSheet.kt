@@ -66,7 +66,7 @@ fun BookmarkSheet(
         reload()
     }
 
-    ModalBottomSheet(onDismissRequest = onClose, containerColor = glassContainerColor()) {
+    AppSheet(onDismissRequest = onClose, containerColor = glassContainerColor()) {
         Column(
             Modifier
                 .fillMaxWidth()
@@ -129,7 +129,7 @@ fun BookmarkSheet(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 360.dp),
+                    .heightIn(max = DialogMaxHeight.large),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 items(rows, key = { it.id }) { row ->

@@ -31,7 +31,7 @@ internal fun LibraryFormatFilterSheet(
     onChange: (LibraryFormatFilter) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    AppSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

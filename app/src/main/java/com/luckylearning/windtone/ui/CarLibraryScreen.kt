@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
@@ -101,15 +102,25 @@ internal fun carViewLabelRes(view: LibraryView): Int = when (view) {
 @Composable
 internal fun carViewLabel(view: LibraryView): String = stringResource(carViewLabelRes(view))
 
-/** 车机首页顶栏：标题 + 首数 + 搜索。搜索就地展开，不跳页、不弹键盘二级页（设置移入左侧导航） */
+/**
+ * 车机首页顶栏：标题 + 曲数 + 搜索 + ⋮ 工具。
+ *
+ * UI v2 阶段四：`toolsActions` 非空时挂上与手机**同一个** [LibraryToolsMenu]。
+ * 重构前车机头部只有 3 个参数、⋮ 的 9 个就地动作整块缺失（功能按端裁剪）；
+ * 现在两端动作集合与文案完全一致，差异只剩按钮尺寸与密度。
+ * 参数保持可选，是为了让其它调用点（如预览）不必构造全套回调。
+ */
 @Composable
 internal fun CarLibraryHeader(
     library: LibraryUiState,
     onQuery: (String) -> Unit,
     onSubmitSearch: (String) -> Unit,
+    granted: Boolean = false,
+    toolsActions: LibraryToolsActions? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     var searchMode by remember { mutableStateOf(false) }
+    var moreMenu by remember { mutableStateOf(false) }
     var input by remember { mutableStateOf(library.query) }
     val focus = remember { FocusRequester() }
 
@@ -184,6 +195,27 @@ internal fun CarLibraryHeader(
             Spacer(Modifier.weight(1f))
             CarIconButton(onClick = { searchMode = true }) {
                 Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.cd_search), tint = scheme.onBackground)
+            }
+            // UI v2 阶段四：与手机共用的 ⋮ 工具菜单（扫描范围 / 重扫 / 导入 / 歌词重匹配 …）。
+            // 车机此前因为「行车中找不到」被整块裁掉；放一个 56dp 大目标 + 同一份菜单，
+            // 既不挤占标题，也不再让车机少 9 个功能。
+            if (toolsActions != null) {
+                Box {
+                    CarIconButton(onClick = { moreMenu = true }) {
+                        Icon(
+                            Icons.Filled.MoreVert,
+                            contentDescription = stringResource(R.string.cd_more),
+                            tint = scheme.onBackground,
+                        )
+                    }
+                    LibraryToolsMenu(
+                        expanded = moreMenu,
+                        onDismiss = { moreMenu = false },
+                        library = library,
+                        granted = granted,
+                        actions = toolsActions,
+                    )
+                }
             }
         }
     }

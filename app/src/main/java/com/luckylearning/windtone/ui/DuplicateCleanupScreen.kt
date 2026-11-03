@@ -40,7 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalConfiguration
+import com.luckylearning.windtone.ui.theme.adaptiveDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -72,7 +72,8 @@ fun DuplicateCleanupScreen(
     var showConfirm by remember { mutableStateOf(false) }
     val groups = state.duplicates
     val removable = groups.sumOf { it.duplicates.size }
-    val wide = LocalConfiguration.current.screenWidthDp >= 840
+    // UI v2 阶段三：限宽改读统一密度表，不再用第 4 套 `>= 840` 局部判据。
+    val density = adaptiveDensity()
 
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
@@ -98,7 +99,7 @@ fun DuplicateCleanupScreen(
                 Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .widthIn(max = if (wide) 900.dp else 720.dp)
+                    .widthIn(max = density.contentMaxWidth)
                     .align(Alignment.CenterHorizontally)
                     .padding(horizontal = 18.dp),
             ) {

@@ -182,13 +182,11 @@ internal fun SongsList(
                     // 注意：多选态的入口只有这一处（外加全选/反选），
                     // 改动前务必确认 `LibraryViewModel.enterSelection` 仍有调用者——
                     // 它一旦没人调，`selecting` 永远是 false，整个批量操作就此"隐身"。
-                    // 车载模式不认长按（见 carMode 注释）
-                    onLongClick = if (carMode) {
-                        null
-                    } else {
-                        {
-                            if (library.selecting) onToggleSelect(song) else onEnterSelection(song)
-                        }
+                    // UI v2 阶段八：长按多选全端开放。车机此前因「车机手势不可靠」整块禁用，
+                    // 但车机行高 ≥62dp、⋮ 56dp，长按本来就有足够大的目标；禁用反而让
+                    // 批量操作在车机完全不可达。手势语义表见 PlayerLayoutSpec.PlayerGestureSemantics。
+                    onLongClick = {
+                        if (library.selecting) onToggleSelect(song) else onEnterSelection(song)
                     },
                     onMore = if (library.selecting) null else ({ onSongLongPress(song) }),
                     selected = if (library.selecting) selected else null,

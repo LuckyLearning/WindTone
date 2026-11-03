@@ -138,7 +138,7 @@ internal fun ColorPickerSheet(
     var hsv by remember(value) { mutableStateOf(hsvOf(value)) }
     val custom = android.graphics.Color.HSVToColor(hsv)
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    AppSheet(onDismissRequest = onDismiss) {
         Column(
             Modifier
                 .fillMaxWidth()

@@ -219,7 +219,7 @@ internal fun UpdateDialog(
                         info.notes,
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier
-                            .heightIn(max = 240.dp)
+                            .heightIn(max = DialogMaxHeight.compact)
                             .verticalScroll(rememberScrollState()),
                     )
                 } else {

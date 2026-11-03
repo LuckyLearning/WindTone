@@ -114,7 +114,7 @@ fun EqSheet(onClose: () -> Unit) {
             state.bandLevels.any { it != 0 }
         )
 
-    ModalBottomSheet(onDismissRequest = onClose, containerColor = glassContainerColor()) {
+    AppSheet(onDismissRequest = onClose, containerColor = glassContainerColor()) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

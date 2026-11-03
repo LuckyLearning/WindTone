@@ -66,7 +66,7 @@ fun AddToPlaylistSheet(
 ) {
     var creating by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("") }
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
+    AppSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
             Text(
                 song?.let { stringResource(R.string.pl_add_song_title, it.title) }

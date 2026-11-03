@@ -131,7 +131,7 @@ internal fun OverlayHiddenAppsDialog(
                 )
                 Spacer(Modifier.height(8.dp))
                 LazyColumn(
-                    modifier = Modifier.heightIn(max = 360.dp),
+                    modifier = Modifier.heightIn(max = DialogMaxHeight.large),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     // 手动包名（搜索框里输入完整包名时出现）

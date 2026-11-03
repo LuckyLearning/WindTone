@@ -63,7 +63,7 @@ fun SongActionsSheet(
     onDelete: () -> Unit = {},
 ) {
     val shareContext = LocalContext.current
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
+    AppSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
             Text(
                 song.title,
@@ -112,7 +112,7 @@ fun SongInfoSheet(
     loading: Boolean,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
+    AppSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
             Text(
                 stringResource(R.string.po_audio_info),

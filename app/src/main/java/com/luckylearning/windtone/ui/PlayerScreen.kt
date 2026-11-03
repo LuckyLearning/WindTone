@@ -96,6 +96,8 @@ import com.luckylearning.windtone.data.OverlayPreset
 import com.luckylearning.windtone.data.overlayPresetLabel
 import com.luckylearning.windtone.state.overlayPresetParams
 import com.luckylearning.windtone.ui.theme.AppVisual
+import com.luckylearning.windtone.ui.theme.adaptiveDensity
+import com.luckylearning.windtone.ui.theme.adaptiveFormFactor
 import com.luckylearning.windtone.ui.theme.windShadow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
@@ -255,6 +257,14 @@ fun PlayerScreen(
     var immersiveOn by remember { mutableStateOf(false) }
     val immersive = showLyrics && immersiveOn
 
+    // v1.1.98：车机版所有「块头」尺寸统一取自 CarMetrics。
+    // UI v2 阶段七：提到布局查表之前，让尺寸也能进 PlayerLayoutSpec 一次算好。
+    val carM = rememberCarMetrics()
+    // UI v2 阶段五：播放页所有「是不是车机版式」的决策收成一张表，
+    // 结果来自主题根部注入的统一判据（含设备识别），不再只看手拨的 carMode。
+    // 定义在最前面，保证下面 LaunchedEffect / 手势 / 控制行都能读到。
+    val layoutSpec = PlayerLayoutSpec.from(adaptiveFormFactor(), adaptiveDensity(), carM)
+
     /** 任意交互：立刻退出沉浸态，并让 5 秒从头计起 */
     val keepAwake: () -> Unit = {
         immersiveOn = false
@@ -281,8 +291,8 @@ fun PlayerScreen(
     }
 
     // 进入车载模式且停在播放页时，先给满 5 秒再考虑收起
-    LaunchedEffect(state.carMode) {
-        if (state.carMode) keepAwake()
+    LaunchedEffect(layoutSpec.isCar) {
+        if (layoutSpec.isCar) keepAwake()
     }
 
     // 手机版同样有沉浸态：进入 / 切回歌词态时把计时起点重新种下。
@@ -351,9 +361,6 @@ fun PlayerScreen(
 
     val song = state.current
     val scheme = MaterialTheme.colorScheme
-    // v1.1.98：车机版所有"块头"尺寸统一取自 [CarMetrics]，不再各处写死
-    val carM = rememberCarMetrics()
-
     // 顶层只「收集」不「读取」：State 对象可以安全地传给子组件，
     // Compose 的失效是跟着 .value 的读取点走的，所以播放页本身不会随进度重组，
     // 只有真正读它的进度条 / 时间文字 / 歌词面板会重组。
@@ -392,7 +399,7 @@ fun PlayerScreen(
                 // 车机：只撑满高度（宽度交给 widthIn 约束，再由 align 居中）；
                 // 手机：撑满整个屏幕，行为与改动前完全一致。
                 .then(
-                    if (state.carMode) Modifier.fillMaxHeight() else Modifier.fillMaxSize()
+                    if (layoutSpec.fillHeightOnly) Modifier.fillMaxHeight() else Modifier.fillMaxSize()
                 )
                 .statusBarsPadding()
                 // ⚠️ 不加 navigationBarsPadding：宿主 MainScreen 已经让出过一次
@@ -434,7 +441,7 @@ fun PlayerScreen(
                 // v1.1.23：车机不再限宽（原先 760dp）。用户要的是「进来就是全屏宽度」——
                 // 歌词本来就在宽屏上更好读，限宽反而把两侧留成大片空白。
                 .align(Alignment.Center)
-                .padding(horizontal = if (state.carMode) 40.dp else 20.dp)
+                .padding(horizontal = layoutSpec.horizontalPadding)
                 // 沉浸态贴底（用户 2026-10-18 反馈「进度条及歌曲名应移到最下面，
                 // 现在和 Dock 之间还有很大间隙」）：底部不留白，直接贴到 MainScreen
                 // 让出的 Dock 安全区上沿；完整态保留 12dp 呼吸感。
@@ -457,7 +464,7 @@ fun PlayerScreen(
                             )
                         }
                     }
-                    if (state.carMode) {
+                    if (!layoutSpec.nowRowAlways) {
                         // 车机（v1.1.44 参考车机版布局）：歌名 / 歌手居中放在顶栏正中，
                         // 下方左歌词右唱片；底部只留进度与控制键，不再重复一行歌名。
                         Column(
@@ -500,7 +507,7 @@ fun PlayerScreen(
                         }
                     }
                     // 车机：播放设置已移进左侧竖排功能列（v1.1.53），顶栏不再出现
-                    if (!state.carMode) {
+                    if (!layoutSpec.sideActions) {
                         IconButton(onClick = { keepAwake(); showOptions = true }) {
                             Icon(
                                 imageVector = AppIcons.Tune,
@@ -525,7 +532,7 @@ fun PlayerScreen(
                 Modifier
                     .weight(1f)
                     .then(
-                        if (state.carMode) {
+                        if (layoutSpec.gesture.horizontal == HorizontalSwipe.SKIP_TRACK) {
                             Modifier.playerSwipeToSwitch(
                                 offset = swipeOffset,
                                 scope = swipeScope,
@@ -548,7 +555,9 @@ fun PlayerScreen(
                     )
                     // 歌词态 / 车机：边缘 overscroll 切歌。封面态改走 CoverPane 内 direct。
                     .then(
-                        if (state.carMode || showLyrics) {
+                        if (layoutSpec.gesture.vertical == VerticalSwipe.SKIP_TRACK &&
+                            (layoutSpec.isCar || showLyrics)
+                        ) {
                             Modifier.playerVerticalSkipEdge(onSwipe = onVerticalSkip)
                         } else {
                             Modifier
@@ -562,7 +571,7 @@ fun PlayerScreen(
                     keepAwake()
                     lyricLineMenu = Triple(lineIndex, lineMs, progressState.value.positionMs)
                 }
-                if (state.carMode) {
+                if (layoutSpec.vinylAlongsideLyrics) {
                     // 车机（v1.1.44）：参考车机版音乐应用的版式 —— **左歌词、右唱片**，
                     // 两者同时在场，不再「二选一」。宽屏上这样排的信息密度最高：
                     // 歌词占主视区（瞄一眼就能读），唱片在右侧做视觉锚点。
@@ -684,11 +693,11 @@ fun PlayerScreen(
             // 这一行是唯一保留的歌曲标识（效果图 ⑫D 的红框保留项）；
             // 手机版顶栏中间是留空的，歌名同样靠这一行显示（早先误把它做成车机专属，
             // 导致手机版顶栏空一截、歌名消失，已修回）。
-            if (!state.carMode || immersive) Row(
+            if (layoutSpec.nowRowAlways || immersive) Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                if (state.carMode) {
+                if (layoutSpec.isCar) {
                     // 车机（效果图 ⑫D）：红心**紧跟歌名/歌手**，不贴屏幕最右缘 ——
                     // 驾驶时视线不用扫到边上（1.0.6 起的既定要求）。
                     // v1.1.23 曾为「控制键并进这一行靠右」把标题列撑满整行、红心随之贴右；
@@ -707,7 +716,7 @@ fun PlayerScreen(
                         Text(
                             text = song?.title ?: stringResource(R.string.player_not_playing),
                             // 车机：歌名 / 歌手各放大一档（22sp / 16sp），60~70cm 视距下读得清
-                            style = if (state.carMode) {
+                            style = if (layoutSpec.isCar) {
                                 carTitleStyle
                             } else {
                                 MaterialTheme.typography.titleMedium
@@ -718,7 +727,7 @@ fun PlayerScreen(
                         )
                         Text(
                             text = song?.artistOrUnknown ?: "",
-                            style = if (state.carMode) {
+                            style = if (layoutSpec.isCar) {
                                 carArtistStyle
                             } else {
                                 MaterialTheme.typography.labelMedium
@@ -789,7 +798,7 @@ fun PlayerScreen(
 
             // N2：±10s / ±15s 快进快退。车机走系统通知/方控 seek，这里不重复占位。
             // 沉浸态整块控制收起，按钮一并隐藏。
-            if (!immersive && !state.carMode) {
+            if (!immersive && layoutSpec.seekJumpButtons) {
                 SeekJumpButtons(
                     onSeekBy = { delta -> onSeekBy(delta); keepAwake() },
                     modifier = Modifier.padding(top = 2.dp),
@@ -807,9 +816,10 @@ fun PlayerScreen(
             // → 恢复独立三段式控制行：播放模式左槽 / ⏮ ⏯ ⏭ 居中 / 队列右槽，
             // 与手机同一套结构，只是尺寸放大（车机尺寸分支保留至今）。
                         // Car scene chips (large targets)
-            if (state.carMode && !immersive) {
+            if (layoutSpec.sceneChips && !immersive) {
                 SceneChipsRow(
-                    large = true,
+                    // UI v2 阶段八：场景芯片全端可用，手机用小尺寸（36dp），车机用大触控目标。
+                    large = layoutSpec.isCar,
                     showHint = false,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -828,7 +838,7 @@ fun PlayerScreen(
                         // 播放模式（顺序 / 列表循环 / 单曲循环 / 随机）合并在这一个按钮上轮换
                         IconButton(
                             onClick = { onCyclePlayMode(); keepAwake() },
-                            modifier = if (state.carMode) Modifier.size(carM.secondaryButton) else Modifier,
+                            modifier = layoutSpec.secondaryButton?.let { Modifier.size(it) } ?: Modifier,
                         ) {
                             Icon(
                                 imageVector = playMode.icon,
@@ -836,7 +846,7 @@ fun PlayerScreen(
                                     R.string.cd_play_mode,
                                     playMode.displayName(),
                                 ),
-                                modifier = if (state.carMode) Modifier.size(34.dp) else Modifier,
+                                modifier = layoutSpec.modeIcon?.let { Modifier.size(it) } ?: Modifier,
                                 tint = if (playMode == PlayMode.SEQUENTIAL) scheme.onSurfaceVariant
                                 else scheme.primary,
                             )
@@ -844,24 +854,24 @@ fun PlayerScreen(
                     }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(if (state.carMode) 40.dp else 20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(layoutSpec.controlSpacing),
                     ) {
                         IconButton(
                             onClick = { onPrevious(); keepAwake() },
-                            modifier = if (state.carMode) Modifier.size(carM.sideButton) else Modifier,
+                            modifier = layoutSpec.sideButton?.let { Modifier.size(it) } ?: Modifier,
                         ) {
                             Icon(
                                 imageVector = AppIcons.SkipPrevious,
                                 contentDescription = stringResource(R.string.cd_previous),
                                 tint = scheme.onSurface,
-                                modifier = Modifier.size(if (state.carMode) 36.dp else 34.dp),
+                                modifier = Modifier.size(layoutSpec.sideIcon),
                             )
                         }
                         // 设计规范 v2：主播放键改风之渐变 + 靛蓝投影（--grad-action / --glow）
                         IconButton(
                             onClick = { onToggle(); keepAwake() },
                             modifier = Modifier
-                                .size(if (state.carMode) carM.mainButton else 66.dp)
+                                .size(layoutSpec.mainButton)
                                 .windShadow(level = 3, shape = CircleShape)
                                 .clip(CircleShape)
                                 .background(AppVisual.ActionGradient),
@@ -870,18 +880,18 @@ fun PlayerScreen(
                                 imageVector = if (state.isPlaying) AppIcons.Pause else Icons.Filled.PlayArrow,
                                 contentDescription = if (state.isPlaying) stringResource(R.string.cd_pause) else stringResource(R.string.cd_play),
                                 tint = Color.White,
-                                modifier = Modifier.size(if (state.carMode) 40.dp else 34.dp),
+                                modifier = Modifier.size(layoutSpec.mainIcon),
                             )
                         }
                         IconButton(
                             onClick = { onNext(); keepAwake() },
-                            modifier = if (state.carMode) Modifier.size(carM.sideButton) else Modifier,
+                            modifier = layoutSpec.sideButton?.let { Modifier.size(it) } ?: Modifier,
                         ) {
                             Icon(
                                 imageVector = AppIcons.SkipNext,
                                 contentDescription = stringResource(R.string.cd_next),
                                 tint = scheme.onSurface,
-                                modifier = Modifier.size(if (state.carMode) 36.dp else 34.dp),
+                                modifier = Modifier.size(layoutSpec.sideIcon),
                             )
                         }
                     }
@@ -890,7 +900,7 @@ fun PlayerScreen(
                     // ⚠️ 车机不放：队列键已移进左侧竖排功能列（v1.1.53），
                     // 但**槽位必须留着**——空了也要占着 1f，否则三键会被左槽顶偏。
                     Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-                        if (!state.carMode) {
+                        if (layoutSpec.queueInControls) {
                             IconButton(onClick = { keepAwake(); onShowQueue() }) {
                                 Icon(
                                     imageVector = AppIcons.QueueMusic,
@@ -907,7 +917,7 @@ fun PlayerScreen(
                 // 状态信息（内置歌词 / 偏移 / 队列数）只在手机显示：
                 // 车机这一行要占 30dp 高度，而它能提供的信息在播放页并不是驾驶时要看的
                 // （v1.1.23，用户要求「不要播放按钮的占高度」，这一行同理让位给歌词）。
-                if (!state.carMode && !immersive) Row(
+                if (layoutSpec.statusRow && !immersive) Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
@@ -1041,7 +1051,7 @@ fun PlayerScreen(
     }
     if (showOverlayStyle) {
         OverlayStyleSheet(
-            carMode = state.carMode,
+            carMode = layoutSpec.isCar,
             currentParams = state.overlayPresetParams(),
             onApply = onApplyOverlayPreset,
             onOpenSettings = onOpenSettings,
@@ -1208,7 +1218,8 @@ private fun PlayerLyrics(
         scale = state.lyricScale,
         onSeekTo = onSeekTo,
         modifier = modifier,
-        carMode = state.carMode,
+        // UI v2 阶段五：子组件也读主题根部的统一判据，不再靠上层透传布尔。
+        carMode = adaptiveFormFactor().isCar,
         tapSeeks = state.lyricTapSeeks,
         onLineLongPress = onLineLongPress,
     )

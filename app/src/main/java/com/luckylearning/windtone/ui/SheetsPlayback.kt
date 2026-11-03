@@ -91,7 +91,7 @@ fun QueueSheet(
 ) {
     // A3 清空要二次确认，避免车机误触一把清空
     var confirmClear by remember { mutableStateOf(false) }
-    ModalBottomSheet(onDismissRequest = onClose, containerColor = glassContainerColor()) {
+    AppSheet(onDismissRequest = onClose, containerColor = glassContainerColor()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -226,7 +226,7 @@ fun SleepSheet(
     // H6：再播 N 首自定义输入（与自定义分钟同形）
     var customSongsText by remember { mutableStateOf("") }
     var customSongsError by remember { mutableStateOf(false) }
-    ModalBottomSheet(onDismissRequest = onClose, containerColor = glassContainerColor()) {
+    AppSheet(onDismissRequest = onClose, containerColor = glassContainerColor()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
             Text(stringResource(R.string.sleep_timer_title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             if (remaining > 0) {
@@ -455,7 +455,7 @@ fun PlayerOptionsSheet(
     // 而这一层的入口是「播放设置」，多数人来这里调的是音效 / 睡眠定时，不是变速。
     var showSpeedPitch by remember { mutableStateOf(false) }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
+    AppSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
         Column(
             Modifier
                 .fillMaxWidth()
@@ -796,7 +796,7 @@ fun OverlayStyleSheet(
     var selectedId by remember { mutableStateOf(highlighted.id) }
     if (OverlayPreset.byId(selectedId) == null) selectedId = highlighted.id
 
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
+    AppSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
         Column(
             Modifier
                 .fillMaxWidth()

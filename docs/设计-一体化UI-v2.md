@@ -1,6 +1,6 @@
 # 设计 · UI v2：手机 / 车机一体化重构
 
-> 立项：2026-11-03。状态：**阶段一（设计系统地基）已落地**，阶段二起按本文矩阵逐屏推进。
+> 立项：2026-11-03。状态：**阶段一~八已全部落地**（2026-11-04 收口），仅「真机 A/B 验收」需在车机上完成。
 > 本文件是「全面审查 + 重新设计」的书面结论；视觉真源见 [`ui-v2/index.html`](ui-v2/index.html)。
 > 旧 `docs/ui/`（10 章 / DOM 实算 93 屏）保留为历史归档，**不再是重构后的真源**。
 
@@ -98,9 +98,16 @@
 | 密度 | `ui/theme/Density.kt` | `UiDensity` 一张表覆盖全端：手机/平板/车机紧凑/车机常规四档，字段完全相同；紧凑档沿用 `CarMetrics` 已验证真机值 |
 | 令牌 | `ui/theme/Tokens.kt` | 补齐 `Spacing` / `Radius` / `IconSize` / `Elevation` / `Duration` 五类；与既有 `AppVisual`（渐变/投影/玻璃/语义色）分工不重叠 |
 | 排版 | `ui/theme/Type.kt` | `AppTypography` 显式字阶，唯一出处；第一阶段取值与 M3 默认一致（零视觉回归） |
-| 接线 | `ui/theme/Theme.kt` | `AppShapes` 改从 `Radius` 读取；`MaterialTheme` 传入 `AppTypography` |
+| 接线 | `ui/theme/Theme.kt` | `AppShapes` 改从 `Radius` 读取；`MaterialTheme` 传入 `AppTypography`；根部注入形态与密度 |
+| 注入（阶段三） | `ui/theme/AdaptiveTheme.kt` | `LocalUiFormFactor` / `LocalUiDensity` 两个 CompositionLocal；`ProvideAdaptiveLayout()` 由 `MusicPlayerTheme` 唯一调用 |
 
-**已验证**：`compileDebugKotlin` 通过、`DesignSystemTest` 20 项全绿、既有 1410 项单测未受影响。
+**已验证**：`compileDebugKotlin` 通过、`DesignSystemTest` + `AdaptiveLayoutTest` 全绿、既有 1410 项单测未受影响。
+
+### 4.1 为什么用 CompositionLocal 而不是「每个屏幕各自调一次 resolve」
+
+如果各屏自己调 `FormFactor.resolve()`，调用方仍能随手写一句 `screenWidthDp >= 840`，判定结果又分裂了。把**判定结果本身**放到组合树根上，全 App 只读 `LocalUiFormFactor.current` / `LocalUiDensity.current`，任何局部判据都会在代码审查里显形。
+
+接线只有两处：`MainActivity` 把「用户是否拨车载模式 + 设备是否识别为车机」两项事实传给 `MusicPlayerTheme`，主题根部算出结果并注入。预览 / 脱离 Activity 的组合树拿默认手机档，不会误按车机尺寸渲染。
 
 ---
 
@@ -137,19 +144,56 @@
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
-| 一 | 设计系统四层地基 + 主题接线 + 单测 | ✅ 已完成（本轮） |
-| 二 | 视觉真源 v2 + 本规范文档 | ✅ 已完成（本轮） |
-| 三 | 统一判据接线：`MainScreen` 改用 `FormFactor.resolve()`，删掉 `>=840` 与三套分支；`carMode` 降级为偏好 | 待开工 |
-| 四 | 合并三对壳组件为 `AdaptiveNav` / `AdaptiveHeader` / `NowPlayingBar`，逐处替换 | 待开工 |
-| 五 | `PlayerScreen` 20+ 处 `if (carMode)` 改查表；统一手势语义表 | 待开工 |
-| 六 | 弹层统一 `AppSheet`（13 底栏 + 45 弹窗）+ 设置页显式路由（替换 100 回调） | 待开工 |
-| 七 | 全量硬编码收敛到令牌（44 文件 `.dp` / 60+ `.sp` / 圆角 / 图标 / 时长） | 待开工 |
-| 八 | 功能对等补齐（车机 6 项 / 手机 5 类）+ 真机 A/B 验收 | 待开工 |
+| 一 | 设计系统四层地基 + 主题接线 + 单测 | ✅ 已完成（commit `19aab10`） |
+| 二 | 视觉真源 v2 + 本规范文档 | ✅ 已完成（commit `19aab10`） |
+| 三 | 统一判据接线：CompositionLocal 根部注入；删掉 `MainScreen` 与 4 个子页的 `>=840`、56dp 常量 | ✅ 已完成 |
+| 四 | 三对壳组件合并为 `AdaptiveNavRail/Drawer`、`AdaptiveHeader`、`NowPlayingBar`；车机补齐 ⋮ 全套工具 | ✅ 已完成 |
+| 五 | `PlayerScreen` 28 处 `if (carMode)` 改成 `PlayerLayoutSpec` 查表；手势语义显式成表 | ✅ 已完成 |
+| 六 | 12 个底栏统一 `AppSheet`（玻璃底 + 70% 限高）；9 处弹窗限高收进 `DialogMaxHeight` | ✅ 已完成 |
+| 七 | 播放页 9 处尺寸三元式收进 `PlayerLayoutSpec`；4 个子页限宽改查密度表；令牌五类落地 | ✅ 结构性收敛完成 |
+| 八 | 功能对等：车机 ⋮ 工具 / 长按多选 / 快进快退，手机收藏 / 场景芯片；**真机 A/B 待用户** | ✅ 代码完成 / ⏳ 真机验收 |
 
 每阶段固定门禁：`compileDebugKotlin` → `testDebugUnitTest`（0 失败）→ `lintDebug`（Error = 0）→ 提交但不推送、不动版本号。
 
+### 7.1 与初版路线图的三处口径修正（审查结论复查后）
+
+1. **设置页「靠布尔状态导航」不成立**：`SettingsScreen.kt` 早已有 `SettingsPage` 枚举 + `when (page)` 显式分派 + `parent()` 三级返回 + 按 `ordinal` 保存滚动位置。真正多的是**约 100 个回调参数**，不是导航机制。本轮未重写它——重写会碰 13 个子页与全部 VM 绑定，收益只在可维护性，风险远大于价值。
+2. **「13 个底栏 / 45 个弹窗」**：源码实算 `ModalBottomSheet(` 共 **12** 处（8 个文件），已全部换成 `AppSheet`；`AlertDialog` 约 45 处，但**带固定 dp 限高的只有 9 处**，已全部收进 `DialogMaxHeight`。其余弹窗本就没有限高问题。
+3. **手势语义初版写反了**：原写「左右 = 切歌、上下 = 切视图，全端一致」，但歌词 `LazyColumn` 本身就是纵向滚动，上下滑拿去切视图会直接抢手势。落地时改为「**切歌在两端都可用且方向一致（上下）**；切面板只发生在有多余面板可切的形态（手机左右）」，车机双栏同场无面板可切，左右也切歌。见 `PlayerLayoutSpec.PlayerGestureSemantics` 的注释。
+
+### 7.2 有意不做 / 保留的差异（不是遗漏）
+
+| 项 | 原因 |
+|---|---|
+| 车机底部状态行（歌词源 / 偏移 / 队列数） | 用户 2026-10-18 明确要求删掉，占 30dp 会挤掉歌词区 |
+| 车机歌词快捷键 | 用户 2026-10-17 明确要求删掉，减少行车误触 |
+| 车机「常驻侧栏」vs 手机「抽屉」 | 竖屏触摸与横屏远距驾驶的物理形态差异，属密度/位置参数，不是功能裁剪 |
+| 车机歌名在顶栏、手机在歌名行 | 同上，由 `PlayerLayoutSpec.nowRowAlways` 显式表达 |
+| 44 个 UI 文件里剩余的非语义型 `.dp` | 本轮完成「结构性收敛」（尺寸集中到 spec / 密度表 / 令牌），逐字替换所有装饰性间距属机械工作，不改变架构，留待按需推进 |
+| 内部三套呈现态实现（`CarNavRail` / `CarLibraryHeader` / `CarPlayerBar` / `MiniPlayer` / `LibraryDrawer`） | 调用面已统一，内部实现仍委托给已验证真机的代码以保证视觉零回归；后续逐块合并的收口点只有 `AdaptiveShells.kt` |
+
 ## 八、治理
 
-- 旧 `docs/ui/` 保留归档，不做静默删除；`docs/DELETIONS.md` / `docs/DOC_INVENTORY.md` 待阶段三起同步口径。
-- `ai开发指南.md:291,1303` 与 `版本历史.md:171` 的「7 章 / 57 屏」旧口径，在本重构收口时一并修正。
+- 旧 `docs/ui/` 保留归档，不做静默删除；`docs/DOC_INVENTORY.md` 已登记 `ui-v2` 与旧目录的新身份。
+- `AI开发指南.md` 的目录树与 §10 第 12 条「7 章 / 57 屏」旧口径**已修正**为 ui-v2，并写明形态判定 / 令牌 / `AppSheet` 三条硬约定。
+- ⚠️ `版本历史.md` 的 v1.1.29 条目属**历史快照**，其中「7 章 / 57 屏」**刻意保留原话** —— 改历史即伪造史实（项目红线），不要「顺手修正」。
+- `LayoutContractTest` 的两条源码文本契约已随架构搬家：Dock 让位改查 `Density.kt`、车载三壳改查 `AdaptiveShells.kt` 的统一入口。**契约跟着实现搬家，而不是把代码改回去**。
 - 版本号遵循既有红线：**只在用户主动要求发版时才改**，本轮不动 `appVersionName` / `appVersionCode`。
+
+## 九、阶段三~八落地清单（2026-11-04）
+
+| 层 | 新增 / 改动 | 作用 |
+|---|---|---|
+| 注入 | `ui/theme/AdaptiveTheme.kt` | `LocalUiFormFactor` / `LocalUiDensity`；`ProvideAdaptiveLayout()` |
+| 接线 | `MainActivity.kt` / `ui/theme/Theme.kt` | 两项事实传给主题根部，一次判定全 App 生效 |
+| 判据收敛 | `MainScreen.kt` / 4 个全屏子页 | 删 `>=840` 与 56dp 局部常量，改查 `adaptiveDensity()` |
+| 壳组件 | `ui/AdaptiveShells.kt` | `AdaptiveNavRail/Drawer`（共用 `AdaptiveNavActions`）、`AdaptiveHeader`、`NowPlayingBar` |
+| 同源菜单 | `ui/LibraryToolsMenu.kt` | 车机 ⋮ 与手机共用 9 个就地动作；`CarLibraryHeader` 补菜单、`MiniPlayer` 补收藏 |
+| 播放页 | `ui/PlayerLayoutSpec.kt` | 28 处形态分支 + 9 处尺寸三元式收成一张纯函数表；手势语义显式化 |
+| 弹层 | `ui/AppSheet.kt` | 12 个底栏统一玻璃底 + 70% 限高；`DialogMaxHeight` 收 9 处限高 |
+| 功能对等 | `LibraryLists.kt` / `PlayerLayoutSpec.kt` | 车机长按多选 / 快进快退 / ⋮ 工具；手机收藏 / 场景芯片 |
+| 测试 | `AdaptiveLayoutTest` / `PlayerLayoutSpecTest` / `LayoutContractTest` | 新增 14 项；契约随架构搬家 |
+
+**门禁**：`compileDebugKotlin` 通过 · 单测 **1444 项 0 失败** · `lintDebug` **Error = 0**。
+
+**仍需真机**（代码无法代劳）：把包装到 DiLink5 上，按 `ui-v2/index.html` 的三组并排屏稿逐屏对照，重点验：① 车机头部 ⋮ 是否可用；② 手机迷你条新增收藏键是否挤到歌名；③ 车机长按多选与 ±10/15s 快进快退在 1280×656dp 下是否越界；④ 12 个底栏在平板横屏下尾项是否可见。有问题把诊断包 / 截图贴回来再精调。

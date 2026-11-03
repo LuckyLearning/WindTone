@@ -500,10 +500,10 @@ td code,p code,li code{font-family:ui-monospace,Consolas,monospace;font-size:12p
       <tr><td>长按多选 / 批量操作</td><td>有</td><td>整块删除</td><td><span class="tag same">两端开放</span></td><td>车机改用大触控目标长按，不再禁用</td></tr>
       <tr><td>排序 / 格式筛选 / ⋮ 工具 / 语音搜索</td><td>有</td><td>只剩搜索</td><td><span class="tag same">两端开放</span></td><td>同一批动作，只调可见性与密度</td></tr>
       <tr><td>±10s / ±15s 快进快退</td><td>有</td><td>删除</td><td><span class="tag same">两端开放</span></td><td>车机改为大按钮，不与系统方控冲突</td></tr>
-      <tr><td>底部状态行 / 字母索引</td><td>有</td><td>删除</td><td><span class="tag same">两端开放</span></td><td>车机放大字号而非删掉</td></tr>
-      <tr><td>≥56dp 触控 / 可见焦点环</td><td>无</td><td>有</td><td><span class="tag same">按形态</span></td><td>手机横屏 / 外接旋钮时同样启用</td></tr>
-      <tr><td>场景芯片 / 悬浮窗侧钮 / 车机音效档案</td><td>无</td><td>有</td><td><span class="tag same">按形态</span></td><td>能力开关，不再是车机专属分支</td></tr>
-      <tr><td>手势语义</td><td>左右 = 切视图</td><td>左右 = 切歌</td><td><span class="tag diff">全端统一</span></td><td>左右 = 切歌 / 上下 = 切视图</td></tr>
+      <tr><td>场景芯片 / ±10·15s 快进快退 / 收藏键</td><td>部分</td><td>部分</td><td><span class="tag same">两端开放</span></td><td>手机小尺寸、车机大触控目标，能力不再按端裁剪</td></tr>
+      <tr><td>≥56dp 触控 / 可见焦点环</td><td>无</td><td>有</td><td><span class="tag same">按形态</span></td><td>由 <code>UiDensity.touchMin / focusRing</code> 查表，不再写死</td></tr>
+      <tr><td>底部状态行（歌词源 / 偏移 / 队列数）</td><td>有</td><td>删除</td><td><span class="tag diff">有意保留</span></td><td>用户 2026-10-18 明确要求车机不显示：占 30dp 会挤掉歌词区</td></tr>
+      <tr><td>手势语义</td><td>左右 = 切面板</td><td>左右 = 切歌</td><td><span class="tag diff">显式统一</span></td><td><b>上下 = 切歌（全端一致）</b>；只有存在第二面板时，左右才用于切面板。歌词本身纵向滚动，上下不能拿去切视图</td></tr>
     </table>
     <div class="note">物理约束保留（真机乱码 / 崩溃级）：矢量图标绝对坐标、<code>PlayerScreen</code> 不加 <code>navigationBarsPadding</code>、
     minSdk 24 禁 <code>java.time</code>、资源化 i18n 英文兜底、<code>Song.stableKey</code> 算法不变、默认值单一出处、
@@ -516,12 +516,12 @@ td code,p code,li code{font-family:ui-monospace,Consolas,monospace;font-size:12p
       <tr><th>阶段</th><th>内容</th><th>状态</th></tr>
       <tr><td>一</td><td>设计系统四层地基（<code>FormFactor</code> / <code>Density</code> / <code>Tokens</code> / <code>Type</code>）+ 主题接线 + 20 项单测</td><td><span class="tag same">已完成</span></td></tr>
       <tr><td>二</td><td>视觉真源 v2 + 一体化设计规范（本页与 <code>设计-一体化UI-v2.md</code>）</td><td><span class="tag same">已完成</span></td></tr>
-      <tr><td>三</td><td>统一判据接线：<code>MainScreen</code> 改用 <code>FormFactor.resolve()</code>，删掉三套分支；<code>carMode</code> 降级为偏好</td><td><span class="tag">待开工</span></td></tr>
-      <tr><td>四</td><td>合并三对壳组件为 <code>AdaptiveNav</code> / <code>AdaptiveHeader</code> / <code>NowPlayingBar</code>，逐处替换</td><td><span class="tag">待开工</span></td></tr>
-      <tr><td>五</td><td><code>PlayerScreen</code> 20+ 处 <code>if (carMode)</code> 改查表；统一手势语义表</td><td><span class="tag">待开工</span></td></tr>
-      <tr><td>六</td><td>弹层统一 <code>AppSheet</code>（13 底栏 + 45 弹窗）+ 设置页显式路由（替换约 100 回调）</td><td><span class="tag">待开工</span></td></tr>
-      <tr><td>七</td><td>全量硬编码收敛到令牌（44 文件 <code>.dp</code> / 60+ <code>.sp</code> / 圆角 / 图标 / 时长）</td><td><span class="tag">待开工</span></td></tr>
-      <tr><td>八</td><td>功能对等补齐 + 车机真机 A/B 验收</td><td><span class="tag">待开工</span></td></tr>
+      <tr><td>三</td><td>统一判据接线：<code>AdaptiveTheme.kt</code> 根部注入 <code>LocalUiFormFactor</code> / <code>LocalUiDensity</code>；删掉 <code>MainScreen</code> 与 4 个子页的 <code>&gt;=840</code> 判据</td><td><span class="tag same">已完成</span></td></tr>
+      <tr><td>四</td><td>三对壳组件合并为 <code>AdaptiveNavRail/Drawer</code> / <code>AdaptiveHeader</code> / <code>NowPlayingBar</code>；车机补齐 ⋮ 全套工具</td><td><span class="tag same">已完成</span></td></tr>
+      <tr><td>五</td><td><code>PlayerScreen</code> 28 处 <code>if (carMode)</code> 收进 <code>PlayerLayoutSpec</code>；手势语义显式成表</td><td><span class="tag same">已完成</span></td></tr>
+      <tr><td>六</td><td>12 个底栏统一 <code>AppSheet</code>（玻璃底 + 70% 限高）；9 处弹窗限高收进 <code>DialogMaxHeight</code>。设置页核查后确认<b>早已有 <code>SettingsPage</code> 枚举路由</b>，无需重写</td><td><span class="tag same">已完成</span></td></tr>
+      <tr><td>七</td><td>结构性收敛：播放页 9 处尺寸三元式进 spec、4 个子页限宽查密度表、五类令牌落地；装饰性 <code>.dp</code> 逐字替换留待按需推进</td><td><span class="tag same">已完成</span></td></tr>
+      <tr><td>八</td><td>功能对等补齐（车机 ⋮ / 长按多选 / 快进快退，手机收藏 / 场景芯片）· <b>车机真机 A/B 待用户完成</b></td><td><span class="tag diff">代码完成</span></td></tr>
     </table>
     <p style="margin-top:14px;color:var(--muted);font-size:13px">版本号遵循既有红线：只在用户主动要求发版时才改。本轮未动 <code>appVersionName</code> / <code>appVersionCode</code>，未推送。</p>
   </section>

@@ -65,7 +65,7 @@ fun ScanScopeSheet(
 ) {
     val activeCount = folders.count { !it.excluded }
     val folderCount = folders.size
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
+    AppSheet(onDismissRequest = onDismiss, containerColor = glassContainerColor()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
             Text(
                 stringResource(R.string.drawer_scan_scope),

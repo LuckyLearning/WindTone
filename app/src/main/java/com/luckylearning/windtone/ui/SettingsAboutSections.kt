@@ -210,7 +210,7 @@ internal fun BatteryHelpDialog(onDismiss: () -> Unit) {
         text = {
             Column(
                 Modifier
-                    .heightIn(max = 340.dp)
+                    .heightIn(max = DialogMaxHeight.regular)
                     .verticalScroll(rememberScrollState()),
             ) {
                 Text(steps, style = MaterialTheme.typography.bodySmall)

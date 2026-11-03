@@ -281,78 +281,24 @@ internal fun LibraryHeader(
                         tint = MaterialTheme.colorScheme.onBackground,
                     )
                 }
-                DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
-                    // 这里只放「就地动作」（扫描 / 导入 / 重匹配 / 收听报告），**不放跳转项**：
-                    // 「设置」只有左侧抽屉一个入口，「检查更新」只在设置 → 更新里 ——
-                    // 2026-10-17 收的口子（原先本菜单与抽屉各挂一份，同一个目的地三处入口）。
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                when (library.scanScope) {
-                                    ScanScope.UNSET -> stringResource(R.string.lib_scan_scope_unset)
-                                    ScanScope.FULL -> stringResource(R.string.lib_scan_scope_full)
-                                    ScanScope.FOLDERS -> stringResource(
-                                        R.string.lib_scan_scope_folders,
-                                        library.folderCount,
-                                    )
-                                }
-                            )
-                        },
-                        onClick = { moreMenu = false; onOpenScanScope() },
-                    )
-                    if (library.scanScope != ScanScope.UNSET) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.lib_rescan_current)) },
-                            onClick = { moreMenu = false; onRescan() },
-                        )
-                    }
-                    if (library.scanScope != ScanScope.FULL) {
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    stringResource(
-                                        if (granted) R.string.lib_scan_full_deep
-                                        else R.string.lib_scan_full_grant
-                                    )
-                                )
-                            },
-                            onClick = { moreMenu = false; onFullScan() },
-                        )
-                    }
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.lib_import_folder)) },
-                        onClick = { moreMenu = false; onImportFolder() },
-                    )
-                    if (library.scanScope != ScanScope.FULL && !granted) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.lib_grant_audio_permission)) },
-                            onClick = { moreMenu = false; onRequestPermission() },
-                        )
-                    }
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.lib_rematch_lyrics)) },
-                        onClick = { moreMenu = false; onRefreshLyrics() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.lib_import_m3u)) },
-                        onClick = { moreMenu = false; onImportM3U() },
-                    )
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                stringResource(
-                                    if (library.deepScan) R.string.lib_deep_scan_on
-                                    else R.string.lib_deep_scan_off
-                                )
-                            )
-                        },
-                        onClick = { moreMenu = false; onDeepScan() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.lib_listening_report)) },
-                        onClick = { moreMenu = false; onOpenReport() },
-                    )
-                }
+                // UI v2 阶段四：菜单抽成两端共用的 LibraryToolsMenu，手机与车机看到同一批动作。
+                LibraryToolsMenu(
+                    expanded = moreMenu,
+                    onDismiss = { moreMenu = false },
+                    library = library,
+                    granted = granted,
+                    actions = LibraryToolsActions(
+                        onOpenScanScope = onOpenScanScope,
+                        onRescan = onRescan,
+                        onFullScan = onFullScan,
+                        onImportFolder = onImportFolder,
+                        onRequestPermission = onRequestPermission,
+                        onRefreshLyrics = onRefreshLyrics,
+                        onImportM3U = onImportM3U,
+                        onDeepScan = onDeepScan,
+                        onOpenReport = onOpenReport,
+                    ),
+                )
             }
         }
 

@@ -9,12 +9,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.luckylearning.windtone.data.BootTrace
 import com.luckylearning.windtone.data.CrashLog
 import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.overlay.AccessibilityWatchdog
+import com.luckylearning.windtone.overlay.ForegroundAppDetector
 import com.luckylearning.windtone.data.ThemeMode
 import com.luckylearning.windtone.ui.AppShortcut
 import com.luckylearning.windtone.ui.BootDiagView
@@ -147,8 +149,14 @@ class MainActivity : ComponentActivity() {
 
             val seed by playerVm.themeSeed.collectAsStateWithLifecycle()
             val themeMode by playerVm.themeMode.collectAsStateWithLifecycle()
+            val playerState by playerVm.player.collectAsStateWithLifecycle()
+            // UI v2 阶段三：形态判定的两项事实只在这里取一次，主题根部注入，全 App 共用。
+            // 设备识别是静态事实，remember 住避免每次重组都去问 PackageManager。
+            val carHardware = remember { ForegroundAppDetector.isCarHeadUnit(applicationContext) }
             MusicPlayerTheme(
                 seedColor = if (playerVm.dynamicThemeEnabled()) seed else null,
+                carMode = playerState.carMode,
+                carHardware = carHardware,
                 // 明暗模式（设置 → 外观 → 主题模式，v1.2.5）：
                 // 「跟随系统」才去问系统，浅色 / 深色是**越过系统**的明确选择。
                 // 只在这一层决定，子页面一律从 `MaterialTheme.colorScheme` 取色 ——

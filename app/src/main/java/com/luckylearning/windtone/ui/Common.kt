@@ -71,6 +71,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -78,6 +79,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.CoverRepository
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.ui.theme.AppVisual
@@ -363,6 +365,9 @@ fun MiniPlayer(
     onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier,
     large: Boolean = false,
+    /** UI v2 阶段四：手机迷你条也支持收藏（此前仅车机大播放条有）；传 null 则不显示该键。 */
+    isFavorite: Boolean = false,
+    onToggleFavorite: (() -> Unit)? = null,
 ) {
     if (song == null) return
     val scheme = MaterialTheme.colorScheme
@@ -433,10 +438,24 @@ fun MiniPlayer(
                         color = scheme.onSurfaceVariant,
                     )
                 }
+                if (onToggleFavorite != null) {
+                    IconButton(onClick = onToggleFavorite, modifier = Modifier.size(btnSize)) {
+                        Icon(
+                            imageVector = if (isFavorite) AppIcons.Favorite else AppIcons.FavoriteBorder,
+                            contentDescription = stringResource(
+                                if (isFavorite) R.string.cd_unfavorite else R.string.cd_favorite
+                            ),
+                            tint = if (isFavorite) scheme.primary else scheme.onSurfaceVariant,
+                            modifier = Modifier.size(iconSize),
+                        )
+                    }
+                }
                 IconButton(onClick = onToggle, modifier = Modifier.size(btnSize)) {
                     Icon(
                         imageVector = if (isPlaying) AppIcons.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = if (isPlaying) "暂停" else "播放",
+                        contentDescription = stringResource(
+                            if (isPlaying) R.string.cd_pause else R.string.cd_play
+                        ),
                         tint = scheme.onSurface,
                         modifier = Modifier.size(iconSize),
                     )
@@ -444,7 +463,7 @@ fun MiniPlayer(
                 IconButton(onClick = onNext, modifier = Modifier.size(btnSize)) {
                     Icon(
                         imageVector = AppIcons.SkipNext,
-                        contentDescription = "下一首",
+                        contentDescription = stringResource(R.string.cd_next),
                         tint = scheme.onSurface,
                         modifier = Modifier.size(iconSize),
                     )

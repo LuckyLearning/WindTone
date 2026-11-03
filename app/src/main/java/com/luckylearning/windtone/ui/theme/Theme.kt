@@ -152,6 +152,10 @@ private fun blend(base: Color, seed: Color, amount: Float) = Color(
 fun MusicPlayerTheme(
     seedColor: Int? = null,
     darkTheme: Boolean = isSystemInDarkTheme(),
+    /** UI v2 阶段三：用户显式拨的「车载模式」，与设备识别一起喂给统一判据。 */
+    carMode: Boolean = false,
+    /** UI v2 阶段三：设备是否被识别为车机（由 Activity 注入，theme 层不碰业务逻辑）。 */
+    carHardware: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val seed = seedColor?.let { Color(it) }
@@ -168,10 +172,15 @@ fun MusicPlayerTheme(
             }
         }
     }
-    MaterialTheme(
-        colorScheme = colors,
-        shapes = AppShapes,
-        typography = AppTypography,
-        content = content,
-    )
+    // UI v2 阶段三：形态与密度在主题根部一次判定、全 App 只读这一份结果。
+    // 放在 MaterialTheme 外层，保证所有子屏（含设置子页 / 播放页 / 弹层）都能读到。
+    ProvideAdaptiveLayout(carMode = carMode, carHardware = carHardware) {
+        MaterialTheme(
+            colorScheme = colors,
+            shapes = AppShapes,
+            typography = AppTypography,
+        ) {
+            content()
+        }
+    }
 }

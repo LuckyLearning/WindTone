@@ -394,7 +394,7 @@ internal fun SettingsDiagnosisPage(
                 text = {
                     Column(
                         Modifier
-                            .heightIn(max = 340.dp)
+                            .heightIn(max = DialogMaxHeight.regular)
                             .verticalScroll(rememberScrollState()),
                     ) {
                         Text(steps, style = MaterialTheme.typography.bodySmall)
@@ -513,7 +513,7 @@ internal fun SettingsDiagnosisPage(
                 text = {
                     Column(
                         Modifier
-                            .heightIn(max = 380.dp)
+                            .heightIn(max = DialogMaxHeight.xlarge)
                             .verticalScroll(rememberScrollState()),
                     ) {
                         Text(
@@ -543,7 +543,7 @@ internal fun SettingsDiagnosisPage(
                 text = {
                     Column(
                         Modifier
-                            .heightIn(max = 380.dp)
+                            .heightIn(max = DialogMaxHeight.xlarge)
                             .verticalScroll(rememberScrollState()),
                     ) {
                         Text(
@@ -591,7 +591,7 @@ internal fun SettingsDiagnosisPage(
                 text = {
                     Column(
                         Modifier
-                            .heightIn(max = 380.dp)
+                            .heightIn(max = DialogMaxHeight.xlarge)
                             .verticalScroll(rememberScrollState()),
                     ) {
                         Text(
@@ -701,7 +701,7 @@ internal fun SettingsDiagnosisPage(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
-            LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
+            LazyColumn(modifier = Modifier.heightIn(max = DialogMaxHeight.small)) {
                 items(logEntries.reversed(), key = { "${it.timeMs}-${it.pkg}" }) { entry ->
                     // 一行 = 时间 + 「名字 / 包名」两行 + 「加入名单」按钮。
                     // v1.1.30 起可以直接点「加入名单」，不必再复制包名去歌词子页粘贴 ——

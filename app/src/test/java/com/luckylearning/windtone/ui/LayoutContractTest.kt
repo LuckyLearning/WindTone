@@ -86,10 +86,23 @@ class LayoutContractTest {
     @Test
     fun mainScreenReservesCarDockHeight() {
         val source = sourceFile("src/main/java/com/luckylearning/windtone/ui/MainScreen.kt").readText()
-        assertTrue("MainScreen 缺少车机 Dock 保底高度常量", source.contains("CAR_DOCK_RESERVED_HEIGHT"))
+        // UI v2 阶段三：旧的 `screenWidthDp >= 840` + `CAR_DOCK_RESERVED_HEIGHT` 局部常量
+        // 已收进统一密度表。契约从「MainScreen 里有这个常量」改成「MainScreen 读密度表」，
+        // 因为按宽度判会在车机竖屏漏让、手机横屏白让。
+        assertTrue(
+            "UI v2：Dock 让位必须读 adaptiveDensity().dockReserved，不要再按屏幕宽度单独判",
+            source.contains("adaptiveDensity().dockReserved"),
+        )
         assertTrue(
             "根布局必须把内容抬到 bottomSafe 之上（padding(bottom = bottomSafe)）",
             Regex("""padding\(bottom = bottomSafe\)""").containsMatchIn(source),
+        )
+        val density = sourceFile(
+            "src/main/java/com/luckylearning/windtone/ui/theme/Density.kt",
+        ).readText()
+        assertTrue(
+            "车机两档密度表都必须保留 56dp Dock 让位（DiLink 自绘浮层，insets 报 0）",
+            Regex("""dockReserved = 56\.dp""").findAll(density).count() >= 2,
         )
     }
 
@@ -105,8 +118,22 @@ class LayoutContractTest {
     @Test
     fun carModeUsesLeftNavPlusContent() {
         val main = sourceFile("src/main/java/com/luckylearning/windtone/ui/MainScreen.kt").readText()
+        // UI v2 阶段四：MainScreen 不再有 `if (carMode)` 三处分支，改走统一入口；
+        // 形态决策收进 AdaptiveShells.kt 内部的一次 LocalUiFormFactor 查表。
+        listOf("AdaptiveNavRail(", "AdaptiveHeader(", "NowPlayingBar(").forEach { component ->
+            assertTrue(
+                "MainScreen 必须走统一入口 $component（两套自绘壳已合并）",
+                main.contains(component),
+            )
+        }
+        val shells = sourceFile(
+            "src/main/java/com/luckylearning/windtone/ui/AdaptiveShells.kt",
+        ).readText()
         listOf("CarNavRail(", "CarLibraryHeader(", "CarPlayerBar(").forEach { component ->
-            assertTrue("MainScreen 的车载分支没有接 $component", main.contains(component))
+            assertTrue(
+                "统一入口必须仍委托到车机呈现态 $component（视觉零回归）",
+                shells.contains(component),
+            )
         }
         assertFalse(
             "v3 已改用左导航，旧的横向 Tab 组件（CarViewTabs）不应再被引用",

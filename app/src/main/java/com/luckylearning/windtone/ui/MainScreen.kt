@@ -57,7 +57,6 @@ import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -79,13 +78,7 @@ import com.luckylearning.windtone.state.LibraryView
 import com.luckylearning.windtone.state.PlaylistInfo
 import com.luckylearning.windtone.state.VirtualPlaylist
 import com.luckylearning.windtone.state.virtualPlaylistInfo
-
-/**
- * 大屏阈值：≥ 840dp 视为「车机 / 平板 / 折叠屏展开」。
- *
- * 只用来判断底部要不要给车机 Dock 让位，**不再**用来切双栏——v1.1.14 起双栏整体停用。
- */
-private const val LARGE_SCREEN_WIDTH_DP = 840
+import com.luckylearning.windtone.ui.theme.adaptiveDensity
 
 /**
  * 播放页展开动画的时长。
@@ -94,15 +87,6 @@ private const val LARGE_SCREEN_WIDTH_DP = 840
  * 不小于 `AnimatedVisibility` 的默认动画时长（300ms）即可，稍大一点更安全。
  */
 private const val PLAYER_EXPAND_ANIM_MS = 320L
-
-/**
- * 车机底部固定按钮栏的保底高度。
- *
- * 比亚迪 DiLink 那条「Home / 应用 / 空调」的条子不是系统导航栏，不在 insets 里上报
- * （实测 navigationBars = 0），所以必须在布局上留死高度，否则「设置」和迷你播放条
- * 会整块压在按钮下面，点不到也看不见。
- */
-private val CAR_DOCK_RESERVED_HEIGHT = 56.dp
 
 /**
  * 主界面骨架：状态编排、权限申请、覆盖层与全部弹窗。
@@ -127,16 +111,13 @@ fun MainScreen(
     val maintenanceReport by settings.maintenanceReport.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
-    val widthDp = LocalConfiguration.current.screenWidthDp
-    // 底部安全留白：系统导航栏 insets 与「车机 Dock 保底高度」取大值。
+    // UI v2 阶段三：底部安全留白 = 系统导航栏 insets 与「形态密度表里的 Dock 让位」取大值。
     // 车机把底部按钮栏当浮层、insets 报 0，光靠 navigationBarsPadding 会让左下角
     // 「设置」被按钮压住点不到（用户实测比亚迪宋 L DM-i）。
+    // 旧实现用 `screenWidthDp >= 840` 单独判一次，手机横屏会白让 56dp、车机竖屏反而不让；
+    // 现在统一读 LocalUiDensity.dockReserved（PHONE/TABLET = 0，CAR = 56dp）。
     val navigationBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val bottomSafe = if (widthDp >= LARGE_SCREEN_WIDTH_DP) {
-        maxOf(navigationBottom, CAR_DOCK_RESERVED_HEIGHT)
-    } else {
-        navigationBottom
-    }
+    val bottomSafe = maxOf(navigationBottom, adaptiveDensity().dockReserved)
 
     // ---------------------------------------------------------------- 车载模式
     //
@@ -576,6 +557,20 @@ fun MainScreen(
         // 整块内容抬到底部安全线之上：车机 Dock 会把它压住，也顺带修好手机三键导航
         // 盖住迷你播放条的老问题（surface 背景仍铺满全屏，不会露出黑边）。
         Box(Modifier.fillMaxSize().padding(bottom = bottomSafe)) {
+            // UI v2 阶段四：一级导航的**动作集合只组装一次**，常驻栏（Row 内）与
+            // 抽屉（Row 外的覆盖层）共用。定义在 Box 层，两端作用域都覆盖得到。
+            // 旧实现两端各写一遍回调，云盘 / 扫描范围曾因「车机没抽屉」漏补入口。
+            val navActions = AdaptiveNavActions(
+                // 选曲库视图时退出云盘页（与抽屉 onSelectView 同一口径）
+                onSelectView = {
+                    showAliyun = false
+                    lib.setView(it)
+                },
+                onOpenSettings = { settingsEntryPage = SettingsPage.ROOT; showSettings = true },
+                onOpenAliyun = { showAliyun = true },
+                onOpenScanScope = { showScanScope = true },
+                onClose = { drawerOpen = false },
+            )
             // v1.1.14：双栏（车载两栏 / 平板双栏）整体停用 —— 车机上底部固定按钮栏会
             // 压住左下角「设置」，且用户明确不要双栏；统一走单栏（抽屉导航 + 迷你播放条）。
             // v3（2026-10-20）：车机改「左常驻导航 + 右内容区」，播放条只铺内容区；
@@ -585,20 +580,11 @@ fun MainScreen(
                     .fillMaxSize()
                     .statusBarsPadding()
             ) {
-                if (carMode) {
-                    CarNavRail(
-                        current = library.view,
-                        // 选曲库视图时退出云盘页（与抽屉 onSelectView 同一口径）
-                        onSelect = {
-                            showAliyun = false
-                            lib.setView(it)
-                        },
-                        onOpenSettings = { settingsEntryPage = SettingsPage.ROOT; showSettings = true },
-                        aliyunActive = showAliyun,
-                        onOpenAliyun = { showAliyun = true },
-                        onOpenScanScope = { showScanScope = true },
-                    )
-                }
+                AdaptiveNavRail(
+                    current = library.view,
+                    aliyunActive = showAliyun,
+                    actions = navActions,
+                )
                 // 2026-10-31：播放页是不透明的全屏覆盖层，但 Compose **不做遮挡
                 // 剔除** —— 展开后底下这一整棵子树（车机导航、曲库 LazyColumn 每行
                 // 一张封面、底部大播放条里那条每 500ms 重绘的进度条）依然每帧被
@@ -632,36 +618,31 @@ fun MainScreen(
                         modifier = Modifier.weight(1f),
                     )
                 } else {
-                if (carMode) {
-                    // 车机：标题行（搜索）；视图切换在左侧常驻导航
-                    CarLibraryHeader(
-                        library = library,
-                        onQuery = lib::setQuery,
-                        onSubmitSearch = lib::submitSearch,
-                    )
-                } else {
-                    LibraryHeader(
-                        library = library,
-                        granted = granted,
-                        onOpenDrawer = { drawerOpen = true },
-                        onQuery = lib::setQuery,
-                        onSort = lib::setSort,
-                        onFormatFilter = lib::setFormatFilter,
-                        onRequestPermission = { permissionLauncher.launch(arrayOf(audioPermission)) },
-                        onImportFolder = importFolder,
-                        onRescan = { lib.scan() },
-                        onRefreshLyrics = lib::refreshLyrics,
-                        onDeepScan = { lib.deepScanSettingsIntent()?.let { context.startActivity(it) } },
-                        onImportM3U = {
-                            m3uImportLauncher.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "text/plain", "*/*"))
-                        },
-                        onSubmitSearch = lib::submitSearch,
-                        onClearSearchHistory = lib::clearSearchHistory,
-                        onOpenScanScope = { showScanScope = true },
-                        onFullScan = requestFullScan,
-                        onOpenReport = { showReport = true },
-                    )
-                }
+                // UI v2 阶段四：工具菜单一套动作，手机与车机共用同一个 LibraryToolsMenu。
+                val tools = LibraryToolsActions(
+                    onOpenScanScope = { showScanScope = true },
+                    onRescan = { lib.scan() },
+                    onFullScan = requestFullScan,
+                    onImportFolder = importFolder,
+                    onRequestPermission = { permissionLauncher.launch(arrayOf(audioPermission)) },
+                    onRefreshLyrics = lib::refreshLyrics,
+                    onImportM3U = {
+                        m3uImportLauncher.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "text/plain", "*/*"))
+                    },
+                    onDeepScan = { lib.deepScanSettingsIntent()?.let { context.startActivity(it) } },
+                    onOpenReport = { showReport = true },
+                )
+                AdaptiveHeader(
+                    library = library,
+                    granted = granted,
+                    tools = tools,
+                    onOpenDrawer = { drawerOpen = true },
+                    onQuery = lib::setQuery,
+                    onSort = lib::setSort,
+                    onFormatFilter = lib::setFormatFilter,
+                    onSubmitSearch = lib::submitSearch,
+                    onClearSearchHistory = lib::clearSearchHistory,
+                )
 
                 Box(Modifier.weight(1f)) {
                     if (underlyingVisible) {
@@ -685,37 +666,21 @@ fun MainScreen(
                 } // else（曲库页）：阿里云盘一级页时不渲染曲库头部与列表
 
                 if (!library.selecting && underlyingVisible) {
-                    if (carMode) {
-                        // 车机大播放条：112dp、主键 88dp、收藏 + 上一首 / 播放 / 下一首 + 进度。
-                        // 不放「歌词」快捷键（用户明确不要），进播放页点封面 / 歌名即可。
-                        CarPlayerBar(
-                            song = player.current,
-                            isPlaying = player.isPlaying,
-                            progressFlow = playerVm.progress,
-                            isFavorite = player.current?.let { it.stableKey in library.favoriteUris } == true,
-                            onToggleFavorite = {
-                                player.current?.let { lib.toggleFavorite(it) }
-                            },
-                            onExpand = playerVm::openPlayer,
-                            onToggle = playerVm::togglePlay,
-                            onNext = playerVm::next,
-                            onPrevious = playerVm::previous,
-                            onSeek = playerVm::seekTo,
-                        )
-                    } else {
-                        // 迷你播放条：放进 Column 而不是浮在最上层，
-                        // 这样列表不会被它遮住，Snackbar 也不会和它打架。
-                        MiniPlayer(
-                            song = player.current,
-                            isPlaying = player.isPlaying,
-                            progressFlow = playerVm.progress,
-                            onExpand = playerVm::openPlayer,
-                            onToggle = playerVm::togglePlay,
-                            onNext = playerVm::next,
-                            onPrevious = playerVm::previous,
-                            onSeek = playerVm::seekTo,
-                        )
-                    }
+                    // UI v2 阶段四：一套播放回调、一个统一入口；手机也拿到收藏键，
+                    // 平板按密度表启用大尺寸呈现态。放进 Column 而不是浮在最上层，
+                    // 这样列表不会被它遮住，Snackbar 也不会和它打架。
+                    NowPlayingBar(
+                        song = player.current,
+                        isPlaying = player.isPlaying,
+                        progressFlow = playerVm.progress,
+                        isFavorite = player.current?.let { it.stableKey in library.favoriteUris } == true,
+                        onToggleFavorite = { player.current?.let { lib.toggleFavorite(it) } },
+                        onExpand = playerVm::openPlayer,
+                        onToggle = playerVm::togglePlay,
+                        onNext = playerVm::next,
+                        onPrevious = playerVm::previous,
+                        onSeek = playerVm::seekTo,
+                    )
 
                     // v1.1.3：底部五视图导航整体移除，五个浏览视图收进左侧抽屉
                     // （顶栏汉堡按钮开合，见 LibraryDrawer.kt）。列表因此多出
@@ -729,19 +694,11 @@ fun MainScreen(
             // 各有自己的返回按钮，抽屉不该压在其上（效果图里它们也没有汉堡入口）。
             // statusBarsPadding：效果图的抽屉在状态栏**之下**（.app 的坐标系起点），
             // 不是盖住状态栏。
-            LibraryDrawer(
+            AdaptiveNavDrawer(
                 open = drawerOpen,
-                currentView = library.view,
-                // 选曲库视图时退出阿里云盘页：抽屉里的「音乐库」组与「在线音乐」组互斥显示
-                onSelectView = {
-                    showAliyun = false
-                    lib.setView(it)
-                },
+                current = library.view,
                 aliyunActive = showAliyun,
-                onOpenAliyun = { showAliyun = true },
-                onOpenScanScope = { showScanScope = true },
-                onOpenSettings = { settingsEntryPage = SettingsPage.ROOT; showSettings = true },
-                onClose = { drawerOpen = false },
+                actions = navActions,
                 modifier = Modifier.statusBarsPadding(),
             )
 
