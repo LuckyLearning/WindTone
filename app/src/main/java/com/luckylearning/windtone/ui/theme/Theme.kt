@@ -14,7 +14,6 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 
 private val Indigo = Color(0xFF5B4BE0)
@@ -24,13 +23,15 @@ private val IndigoContainer = Color(0xFFE4E0FF)
  * 统一的圆角规范。
  * 此前各处手写 RoundedCornerShape(8/10/12/16/22.dp)，同一层级的卡片圆角不一致，
  * 视觉上显得零散。这里收敛成 5 档，全应用引用 Shapes token。
+ *
+ * UI v2：数值改从 [Radius] 读取，保证「圆角只有一处定义」（与 docs/ui/ui.css --r-* 对齐）。
  */
 val AppShapes = Shapes(
-    extraSmall = RoundedCornerShape(6.dp),
-    small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(14.dp),
-    large = RoundedCornerShape(20.dp),
-    extraLarge = RoundedCornerShape(28.dp),
+    extraSmall = RoundedCornerShape(Radius.xs),
+    small = RoundedCornerShape(Radius.s),
+    medium = RoundedCornerShape(Radius.m),
+    large = RoundedCornerShape(Radius.l),
+    extraLarge = RoundedCornerShape(Radius.xl),
 )
 
 private val LightColors = lightColorScheme(
@@ -167,5 +168,10 @@ fun MusicPlayerTheme(
             }
         }
     }
-    MaterialTheme(colorScheme = colors, shapes = AppShapes, content = content)
+    MaterialTheme(
+        colorScheme = colors,
+        shapes = AppShapes,
+        typography = AppTypography,
+        content = content,
+    )
 }
