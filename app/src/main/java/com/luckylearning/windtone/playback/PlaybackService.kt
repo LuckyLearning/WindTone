@@ -146,6 +146,9 @@ class PlaybackService : MediaLibraryService() {
                 // audioSessionId。此前只在 onAudioSessionIdChanged 里绑一次，
                 // 「先开 App 后放歌」的用户会一直停在「不可用」，只能杀进程重来。
                 if (isPlaying) AudioFx.retryIfUnavailable(player.audioSessionId)
+                // 音频焦点丢失策略（DUCK / KEEP_PLAYING 档）：起播要焦点、停播归还。
+                // STANDARD 档内部直接短路，零开销。
+                AudioFocusController.onIsPlayingChanged(isPlaying)
                 pushWidget()
             }
 
@@ -180,6 +183,9 @@ class PlaybackService : MediaLibraryService() {
         AudioFx.attach(player.audioSessionId)
         // 切歌淡入淡出 + 曲间响度平衡（v1.1.52）：挂自己的 Player.Listener 管理 player.volume
         TrackVolume.attach(player, this)
+        // 音频焦点丢失策略（竞品借鉴：Salt Player）：STANDARD 档走 Media3 内建，
+        // 另两档由此接管焦点（内部会改 handleAudioFocus）。
+        AudioFocusController.attach(player, this)
         pushWidget()
     }
 
@@ -350,6 +356,7 @@ class PlaybackService : MediaLibraryService() {
     override fun onDestroy() {
         AudioFx.release()
         TrackVolume.release()
+        AudioFocusController.release()
         // 缓存持有目录锁与索引文件：不释放的话，进程内下次建 SimpleCache 会直接抛
         // 「Another SimpleCache instance uses the folder」，在线播放从此永久没缓存。
         OnlineMediaCache.release()

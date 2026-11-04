@@ -90,6 +90,22 @@ object EqPresets {
         anchors(-150, 0, 50, 300, 650),
     )
 
+    // ---------------- 耳机档案（竞品借鉴：Salt Player「耳机适配档案」） ----------------
+    // 入耳式/大耳的频响天生歪（低频堆积、极高频衰减），这两条是「在耳机上听什么
+    // 都更接近箱子」的补偿曲线。曲线近似哈曼目标（不逐点复刻，锚点轴只有 5 个），
+    // 搭配「音效按设备自动挂档」可在插入耳机时一键切换。
+
+    /** 入耳式：低频略抬 + 中高频峰补偿 + 极高频收敛，久听不累 */
+    val HP_INEAR = Preset(
+        "hp_inear", "耳机·入耳", "近似参考目标：低频略抬、极高频收敛，入耳式更耐听", Group.FEEL,
+        anchors(350, 100, -100, 250, -50),
+    )
+    /** 开放式大耳：低频收敛防轰头，高频提亮补空气感 */
+    val HP_OPEN = Preset(
+        "hp_open", "耳机·开放式", "开放式大耳：低频收敛防轰头，高频提亮补空气感", Group.FEEL,
+        anchors(-150, -50, 0, 200, 350),
+    )
+
     // ---------------- 流派组 ----------------
 
     val POP = Preset(
@@ -128,6 +144,7 @@ object EqPresets {
     /** 界面固定展示顺序：组内按「低频 → 中频 → 高频 → 整体」排列，听感组在前 */
     val ALL: List<Preset> = listOf(
         FLAT, BASS_BOOST, TREBLE_BOOST, CLEAR, DYNAMIC, WARM, BRIGHT, TRANSPARENT,
+        HP_INEAR, HP_OPEN,
         POP, ROCK, CLASSIC, JAZZ, ELECTRONIC, FOLK, HIPHOP, DANCE,
     )
 

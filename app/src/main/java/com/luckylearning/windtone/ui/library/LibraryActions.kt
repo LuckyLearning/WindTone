@@ -29,6 +29,10 @@ interface LibraryActions {
     fun setScanScope(scope: ScanScope)
     fun minSongDurationSec(): Int
     fun setMinSongDurationSec(sec: Int)
+    /** 扫描黑名单（规则语义见 [ScanBlocklist]），空集 = 不过滤 */
+    fun scanBlocklist(): Set<String>
+    /** 更新扫描黑名单并立即重扫生效 */
+    fun setScanBlocklist(entries: Set<String>)
     fun scan(auto: Boolean = false)
     fun setQuery(q: String)
     fun setFormatFilter(filter: LibraryFormatFilter)

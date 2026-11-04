@@ -28,13 +28,16 @@ class FolderScanner(private val context: Context) {
      * @param skipTagRead 返回 true 时该文件不读内嵌标签（同名同大小的文件已被媒体库
      *   收录，标签/时长都在那条记录里，再开一次 MediaMetadataRetriever 是重复劳动）。
      *   键的构造口径与 `MusicRepository.buildKey` 一致：`文件名小写|字节数`。
+     * @param blocklist 扫描黑名单（规则见 [ScanBlocklist]）：命中的目录整棵剪掉。
      */
     fun scan(
         treeUri: Uri,
         readTags: Boolean = true,
         skipTagRead: (String, Long) -> Boolean = { _, _ -> false },
+        blocklist: Set<String> = emptySet(),
         onProgress: (Int) -> Unit = {},
     ): List<Song> {
+        val rules = ScanBlocklist.normalize(blocklist)
         // 文件夹视图按「用户选择的目录」分组：整棵子树的歌都归到所选目录名下，
         // 子目录不单独显示（用户在系统选择器里挑哪层，哪层就是一个分组）。
         // 分组键用**解码后的完整文档 ID**（如 primary:Music/华语）而不是叶名——
@@ -52,7 +55,7 @@ class FolderScanner(private val context: Context) {
         val batchOk = runCatching {
             val rootDocId = DocumentsContract.getTreeDocumentId(treeUri)
             rootDocId.isNotBlank() &&
-                walkBatch(treeUri, rootDocId, out, readTags, skipTagRead, folderLabel, 0) {
+                walkBatch(treeUri, rootDocId, out, readTags, skipTagRead, rules, folderLabel, 0) {
                 counted++
                 if (counted % 5 == 0) onProgress(out.size)
             }
@@ -66,7 +69,7 @@ class FolderScanner(private val context: Context) {
         out.clear()
         val root = runCatching { DocumentFile.fromTreeUri(context, treeUri) }.getOrNull() ?: return emptyList()
         counted = 0
-        walk(root, out, readTags, skipTagRead, folderLabel) {
+        walk(root, out, readTags, skipTagRead, rules, folderLabel) {
             counted++
             if (counted % 5 == 0) onProgress(out.size)
         }
@@ -88,6 +91,7 @@ class FolderScanner(private val context: Context) {
         out: MutableList<Song>,
         readTags: Boolean,
         skipTagRead: (String, Long) -> Boolean,
+        blockRules: List<String>,
         folderLabel: String,
         depth: Int,
         tick: () -> Unit,
@@ -114,7 +118,9 @@ class FolderScanner(private val context: Context) {
                 val isDir = mime == DocumentsContract.Document.MIME_TYPE_DIR ||
                     (mime.isNullOrBlank() && !name.contains('.'))
                 if (isDir) {
-                    dirs.add(docId)
+                    // 黑名单：命中规则的目录整棵剪掉（docId 最后一段就是目录名）
+                    val dirName = name.substringAfterLast('/')
+                    if (!ScanBlocklist.blocksDir(dirName, docId, blockRules)) dirs.add(docId)
                     continue
                 }
                 when {
@@ -152,7 +158,7 @@ class FolderScanner(private val context: Context) {
         }
 
         for (dirId in dirs) {
-            if (!walkBatch(treeUri, dirId, out, readTags, skipTagRead, folderLabel, depth + 1, tick)) return false
+            if (!walkBatch(treeUri, dirId, out, readTags, skipTagRead, blockRules, folderLabel, depth + 1, tick)) return false
         }
         return true
     }
@@ -162,6 +168,7 @@ class FolderScanner(private val context: Context) {
         out: MutableList<Song>,
         readTags: Boolean,
         skipTagRead: (String, Long) -> Boolean,
+        blockRules: List<String>,
         folderLabel: String,
         tick: () -> Unit,
     ) {
@@ -206,7 +213,9 @@ class FolderScanner(private val context: Context) {
         for (child in children) {
             val childName = child.name ?: continue
             if (child.isDirectory && !childName.startsWith(".")) {
-                walk(child, out, readTags, skipTagRead, folderLabel, tick)
+                // 黑名单：命中规则的子目录整棵剪掉
+                if (ScanBlocklist.blocksDir(childName, child.uri.toString(), blockRules)) continue
+                walk(child, out, readTags, skipTagRead, blockRules, folderLabel, tick)
             }
         }
     }
@@ -274,18 +283,21 @@ class FileScanner(private val context: Context) {
      *   **不再读标签** —— 标签在 MediaStore 那一步已经拿到，再开一次
      *   MediaMetadataRetriever 纯属重复劳动。深扫这一步的价值是「找到媒体库漏掉的文件」
      *   与「补上同目录歌词」，不是重新读一遍元数据。
+     * @param blocklist 扫描黑名单（规则见 [ScanBlocklist]）：命中的目录整棵剪掉。
      */
     fun scan(
         roots: List<File> = defaultRoots(),
         readTags: Boolean = true,
         knownPaths: Set<String> = emptySet(),
+        blocklist: Set<String> = emptySet(),
         onProgress: (Int) -> Unit = {},
     ): List<Song> {
         val out = ArrayList<Song>()
         val visited = HashSet<String>()
+        val rules = ScanBlocklist.normalize(blocklist)
         for (root in roots) {
             if (!root.exists() || !root.isDirectory) continue
-            walk(root, out, visited, readTags, knownPaths, 0, onProgress)
+            walk(root, out, visited, readTags, knownPaths, rules, 0, onProgress)
         }
         return out
     }
@@ -296,11 +308,14 @@ class FileScanner(private val context: Context) {
         visited: MutableSet<String>,
         readTags: Boolean,
         knownPaths: Set<String>,
+        blockRules: List<String>,
         depth: Int,
         onProgress: (Int) -> Unit,
     ) {
         if (depth > 12 || out.size > 20000) return
         if (!visited.add(dir.absolutePath)) return
+        // 黑名单：根目录本身也可能命中（用户把规则写成上层路径片段）
+        if (ScanBlocklist.blocksDir(dir.name, dir.absolutePath, blockRules)) return
         val children = runCatching { dir.listFiles() }.getOrNull() ?: return
 
         val audioFiles = ArrayList<File>()
@@ -310,7 +325,8 @@ class FileScanner(private val context: Context) {
             if (n.startsWith(".")) continue
             if (f.isDirectory) {
                 if (n.equals("Android", true) || n.equals("LOST.DIR", true) ||
-                    n.equals("obb", true) || n.equals("data", true)
+                    n.equals("obb", true) || n.equals("data", true) ||
+                    ScanBlocklist.blocksDir(n, f.absolutePath, blockRules)
                 ) continue
             } else {
                 when {
@@ -357,7 +373,7 @@ class FileScanner(private val context: Context) {
         }
 
         for (f in children) {
-            if (f.isDirectory) walk(f, out, visited, readTags, knownPaths, depth + 1, onProgress)
+            if (f.isDirectory) walk(f, out, visited, readTags, knownPaths, blockRules, depth + 1, onProgress)
         }
     }
 

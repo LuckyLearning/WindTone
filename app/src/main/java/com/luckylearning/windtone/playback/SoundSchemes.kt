@@ -80,9 +80,20 @@ object SoundSchemes {
         forCar = true,
     )
 
-    /** 界面固定展示顺序：原声在最前，车载方案放最后（带标，不混进听感组里） */
+    // 耳机档案（竞品借鉴：Salt Player「耳机适配档案」）：纯曲线补偿，
+    // 效果器全零 —— 配「音效按设备自动挂档」插入耳机即自动切换。
+    val HP_INEAR = Scheme(
+        "hp_inear", "耳机·入耳", "入耳式补偿：低频略抬、极高频收敛，更接近箱子听感",
+        EqPresets.HP_INEAR.id, 0, 0, 0, ReverbPresets.OFF.id,
+    )
+    val HP_OPEN = Scheme(
+        "hp_open", "耳机·开放式", "开放式大耳补偿：低频收敛防轰头，高频提亮",
+        EqPresets.HP_OPEN.id, 0, 0, 0, ReverbPresets.OFF.id,
+    )
+
+    /** 界面固定展示顺序：原声在最前，耳机档案随后，车载方案放最后（带标，不混进听感组里） */
     val ALL: List<Scheme> = listOf(
-        OFF, BASS, VOCAL, LIVE, SPACE, HALL, PARTY, CAR_DRIVE,
+        OFF, BASS, VOCAL, LIVE, SPACE, HALL, PARTY, HP_INEAR, HP_OPEN, CAR_DRIVE,
     )
 
     /** 与 [EqPresets.byId] 同一口径：未知 id / 空串返回 null */

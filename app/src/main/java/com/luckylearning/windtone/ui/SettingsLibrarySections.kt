@@ -1,6 +1,7 @@
 package com.luckylearning.windtone.ui
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
@@ -14,6 +15,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.toMutableStateList
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -140,6 +143,91 @@ internal fun LocalLibrarySection(
                 TextButton(
                     onClick = {
                         onMinSongDurationSec(input.toIntOrNull()?.coerceIn(0, 3600) ?: 0)
+                        showDialog = false
+                    },
+                ) { Text(stringResource(R.string.ok)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDialog = false }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+    }
+}
+
+// ================================================================ ②' 扫描黑名单
+
+/**
+ * 扫描黑名单分区（竞品借鉴：Salt Player「文件夹黑名单」）。
+ *
+ * 行为：一行展示当前规则数，点开管理弹窗 —— 弹窗内逐条列出规则、可删除，
+ * 底部输入框加新规则。保存即回调重扫（[onUpdate] 内部已带重扫）。
+ * 规则语义（目录名 / 路径片段、路径段全等匹配）见 `ScanBlocklist`，UI 不复述。
+ */
+@Composable
+internal fun ScanBlocklistSection(
+    entries: Set<String>,
+    onUpdate: (Set<String>) -> Unit,
+) {
+    var showDialog by remember { mutableStateOf(false) }
+
+    SectionTitle(stringResource(R.string.local_library))
+    ActionRow(
+        title = stringResource(R.string.scan_blocklist),
+        subtitle = stringResource(R.string.scan_blocklist_sub),
+        onClick = { showDialog = true },
+        trailing = if (entries.isEmpty()) stringResource(R.string.off) else stringResource(R.string.rules_count, entries.size),
+        chevron = true,
+        onReset = resetAction(entries.isNotEmpty()) { onUpdate(SettingsDefaults.SCAN_BLOCKLIST) },
+    )
+
+    if (showDialog) {
+        var input by remember { mutableStateOf("") }
+        // 工作副本：编辑在副本上进行，确认时才整体写回 —— 关掉弹窗即放弃
+        var working by remember(entries) { mutableStateOf(entries.sorted().toMutableStateList()) }
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text(stringResource(R.string.scan_blocklist)) },
+            text = {
+                Column {
+                    Text(
+                        stringResource(R.string.scan_blocklist_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (working.isNotEmpty()) {
+                        Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                            working.forEach { rule ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        rule,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    TextButton(onClick = { working.remove(rule) }) {
+                                        Text(stringResource(R.string.delete))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    OutlinedTextField(
+                        value = input,
+                        onValueChange = { input = it.take(100) },
+                        label = { Text(stringResource(R.string.scan_blocklist_add)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        // 输入框还有内容就先当作「再添一条」，一并保存；空着就纯保存
+                        val final = if (input.isNotBlank()) working + input.trim() else working
+                        onUpdate(final.toSet())
                         showDialog = false
                     },
                 ) { Text(stringResource(R.string.ok)) }

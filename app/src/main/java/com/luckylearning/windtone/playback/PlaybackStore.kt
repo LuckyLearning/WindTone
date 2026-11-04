@@ -55,6 +55,16 @@ class PlaybackStore(private val db: MusicDb) {
         db.playerStateDao().put(state)
     }
 
+    /**
+     * 按主键批量取歌（队列快照恢复用）：返回顺序**严格按 [ids]**，
+     * 且已自动剔除「已移出曲库 / 文件丢失」的歌（DAO 的 byIds 带过滤条件）。
+     */
+    suspend fun loadSongsByIds(ids: List<Long>): List<Song> {
+        if (ids.isEmpty()) return emptyList()
+        val byId = db.songDao().byIds(ids).associateBy { it.id }
+        return ids.mapNotNull { byId[it]?.toSong() }
+    }
+
     /** 只推进播放进度（进度计时器每几秒一次，单行 UPDATE） */
     suspend fun updatePosition(positionMs: Long, now: Long) {
         db.playerStateDao().updatePosition(positionMs, now)

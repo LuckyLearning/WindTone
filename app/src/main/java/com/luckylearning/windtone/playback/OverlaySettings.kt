@@ -425,6 +425,12 @@ class OverlaySettings(
 
     override fun dynamicThemeEnabled(): Boolean = prefs.dynamicTheme
 
+    override fun setMaterialYou(enabled: Boolean) {
+        settings.setMaterialYou(enabled)
+    }
+
+    override fun materialYouEnabled(): Boolean = prefs.materialYou
+
     /**
      * 外观 / 排版配置改完的统一收尾：通知服务重绘 + 给一次前台预览。
      * 用户改完字号 / 底板 / 行数能**当场**看到效果，不用退到桌面验证。

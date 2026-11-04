@@ -14,6 +14,8 @@ import com.luckylearning.windtone.data.formatByteSize
 import com.luckylearning.windtone.overlay.LyricOverlayBridge
 import com.luckylearning.windtone.overlay.LyricOverlayBus
 import com.luckylearning.windtone.overlay.OverlaySnapshot
+import com.luckylearning.windtone.playback.AudioFocusController
+import com.luckylearning.windtone.playback.FocusLossMode
 import com.luckylearning.windtone.state.LibraryUiState
 import com.luckylearning.windtone.state.PlayerUiState
 import com.luckylearning.windtone.state.UpdateUiState
@@ -66,6 +68,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -243,6 +246,8 @@ internal fun SettingsAppearancePage(
     onThemeMode: (ThemeMode) -> Unit,
     dynamicTheme: Boolean,
     onDynamicTheme: (Boolean) -> Unit,
+    materialYou: Boolean,
+    onMaterialYou: (Boolean) -> Unit,
     onCarMode: (Boolean) -> Unit,
 ) {
     // 车载模式的长说明从副标题搬进弹窗，副标题只留一行摘要
@@ -274,6 +279,18 @@ internal fun SettingsAppearancePage(
         onCheckedChange = onDynamicTheme,
         onReset = resetAction(dynamicTheme != SettingsDefaults.DYNAMIC_THEME) {
             onDynamicTheme(SettingsDefaults.DYNAMIC_THEME)
+        },
+    )
+
+    // Material You（跟随壁纸取色，Android 12+）；与封面取色并存时封面优先。
+    // 优先级在 MusicPlayerTheme 的取色分支里定死：种子色非空一定走封面派生。
+    SwitchRow(
+        title = stringResource(R.string.material_you),
+        subtitle = stringResource(R.string.material_you_sub),
+        checked = materialYou,
+        onCheckedChange = onMaterialYou,
+        onReset = resetAction(materialYou != SettingsDefaults.MATERIAL_YOU) {
+            onMaterialYou(SettingsDefaults.MATERIAL_YOU)
         },
     )
 
@@ -313,6 +330,16 @@ internal fun SettingsAppearancePage(
 }
 
 // ================================================================ 子页：播放
+
+/** 音频焦点丢失策略的档位展示名（顺序与 FocusLossMode 枚举一致） */
+@Composable
+private fun focusLossModeLabel(mode: FocusLossMode): String = stringResource(
+    when (mode) {
+        FocusLossMode.STANDARD -> R.string.focus_loss_standard
+        FocusLossMode.DUCK -> R.string.focus_loss_duck
+        FocusLossMode.KEEP_PLAYING -> R.string.focus_loss_keep
+    },
+)
 
 @Composable
 internal fun SettingsPlaybackPage(
@@ -409,6 +436,28 @@ internal fun SettingsPlaybackPage(
             onSkipSilence(SettingsDefaults.SKIP_SILENCE)
         },
     )
+
+    // 音频焦点丢失策略（竞品借鉴：Salt Player）：导航播报 / 来电时音乐怎么办。
+    // 档位与 FocusLossMode 枚举同序；状态与切换直接走 AudioFocusController
+    // （同进程单例，与 EqSheet 调 TrackVolume 同一先例），不穿透 PlayerUiState。
+    val focusModes = FocusLossMode.entries
+    val focusMode by AudioFocusController.mode.collectAsState()
+    ChoiceRow(
+        title = stringResource(R.string.focus_loss_mode),
+        subtitle = stringResource(R.string.focus_loss_mode_desc),
+        options = focusModes.map { focusLossModeLabel(it) },
+        selectedIndex = focusModes.indexOf(focusMode).coerceAtLeast(0),
+        onSelect = { AudioFocusController.setMode(focusModes[it]) },
+        onReset = resetAction(focusMode.name != SettingsDefaults.FOCUS_LOSS_MODE) {
+            AudioFocusController.setMode(SettingsDefaults.FOCUS_LOSS_MODE.let { m ->
+                runCatching { FocusLossMode.valueOf(m) }.getOrDefault(FocusLossMode.STANDARD)
+            })
+        },
+    )
+
+    // 音效按输出设备自动挂档（竞品借鉴：Salt Player / Symfonium）：
+    // 自包含分区，直接读 Prefs + 引擎（与 BtAutoCarSettingsSection 同先例）
+    DeviceSchemeSettingsSection()
     // H2：片头/片尾固定秒（与上方「跳过静音」无关——那是静音检测）
     SliderRow(
         title = stringResource(
@@ -494,6 +543,9 @@ internal fun SettingsPlaybackPage(
 internal fun SettingsLibraryPage(
     minSongDurationSec: Int,
     onMinSongDurationSec: (Int) -> Unit,
+    /** 扫描黑名单（竞品借鉴：Salt Player）；空集 = 不过滤 */
+    scanBlocklist: Set<String>,
+    onScanBlocklist: (Set<String>) -> Unit,
     onRestoreExcluded: () -> Unit,
     onOpenReport: () -> Unit,
     onOpenDuplicates: () -> Unit,
@@ -521,6 +573,10 @@ internal fun SettingsLibraryPage(
     LocalLibrarySection(
         minSongDurationSec = minSongDurationSec,
         onMinSongDurationSec = onMinSongDurationSec,
+    )
+    ScanBlocklistSection(
+        entries = scanBlocklist,
+        onUpdate = onScanBlocklist,
     )
     DataStorageSection(
         maintenance = maintenance,

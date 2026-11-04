@@ -31,6 +31,8 @@ object AudioInspector {
         val bitsPerSample: Int?,
         val durationMs: Long,
         val sizeBytes: Long,
+        /** 「假无损」检测结果（竞品借鉴：Salt Player）；非无损容器时为 NOT_APPLICABLE */
+        val fakeLossless: FakeLossless.Result? = null,
     ) {
         val sizeText: String get() = formatSize(sizeBytes)
         val durationText: String get() = formatDuration(durationMs)
@@ -92,6 +94,12 @@ object AudioInspector {
                 bitsPerSample = bits,
                 durationMs = durationMs,
                 sizeBytes = song.sizeBytes,
+                // 只在无损容器上花解码代价；有损格式本身不需要「假无损」结论
+                fakeLossless = if (FakeLossless.isLosslessContainer(ext, mime)) {
+                    runCatching { FakeLossless.inspect(context, song.uri, ext, mime) }.getOrNull()
+                } else {
+                    FakeLossless.Result(FakeLossless.Verdict.NOT_APPLICABLE, null, sampleRate)
+                },
             )
         } catch (t: Throwable) {
             Log.w(TAG, "读取音频信息失败: ${song.uri}", t)

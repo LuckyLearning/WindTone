@@ -128,4 +128,8 @@ interface OverlayActions {
     fun previewOverlay()
     fun setDynamicTheme(enabled: Boolean)
     fun dynamicThemeEnabled(): Boolean
+
+    /** Material You：跟随系统壁纸取色（Android 12+）；与封面取色并存时封面优先 */
+    fun setMaterialYou(enabled: Boolean)
+    fun materialYouEnabled(): Boolean
 }

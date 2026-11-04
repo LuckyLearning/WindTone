@@ -733,6 +733,7 @@ fun MainScreen(
                 // 拿到的是一次性快照，开关点了 UI 也不动（用户看起来就是"关不掉"）。
                 // 用本地 state 兜住显示，回调里同步写回。
                 var dynamicThemeOn by remember { mutableStateOf(playerVm.dynamicThemeEnabled()) }
+                var materialYouOn by remember { mutableStateOf(playerVm.materialYouEnabled()) }
                 var autoCheckUpdateOn by remember { mutableStateOf(updateVm.autoCheckUpdateEnabled()) }
                 // 下载线路同样只存在 SharedPreferences 里，用本地 state 兜住显示
                 var downloadRouteOn by remember { mutableStateOf(updateVm.downloadRoute()) }
@@ -742,6 +743,7 @@ fun MainScreen(
                     update = update,
                     themeMode = themeMode,
                     dynamicTheme = dynamicThemeOn,
+                    materialYou = materialYouOn,
                     autoCheckUpdate = autoCheckUpdateOn,
                     crashLogCount = crashLogCount,
                     crashLogText = crashLogText,
@@ -751,6 +753,7 @@ fun MainScreen(
                         crashLogText = null
                     },
                     onDynamicTheme = { dynamicThemeOn = it; playerVm.setDynamicTheme(it) },
+                    onMaterialYou = { materialYouOn = it; playerVm.setMaterialYou(it) },
                     onThemeMode = playerVm::setThemeMode,
                     onCarMode = playerVm::setCarMode,
                     onLyricOverlay = playerVm::setLyricOverlay,
@@ -830,6 +833,8 @@ fun MainScreen(
                     onOpenStats = { showLibraryStats = true },
                     minSongDurationSec = lib.minSongDurationSec(),
                     onMinSongDurationSec = lib::setMinSongDurationSec,
+                    scanBlocklist = lib.scanBlocklist(),
+                    onScanBlocklist = lib::setScanBlocklist,
                     onLoadCrashLog = { crashLogText = settings.crashLogText() },
                     onExportCrashLog = { crashExportLauncher.launch("music-player-crash-${System.currentTimeMillis()}.txt") },
                     onClearCrashLog = {

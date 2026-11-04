@@ -314,6 +314,11 @@ class SettingsRepository(val prefs: Prefs) {
         prefs.dynamicTheme = enabled
     }
 
+    /** Material You 跟随壁纸取色（Android 12+；与封面取色并存时封面优先） */
+    fun setMaterialYou(enabled: Boolean) {
+        prefs.materialYou = enabled
+    }
+
     // ---------------------------------------------------------------- 应用内更新
 
     fun setAutoCheckUpdate(enabled: Boolean) {

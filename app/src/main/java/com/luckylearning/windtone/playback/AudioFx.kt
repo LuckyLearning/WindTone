@@ -7,6 +7,7 @@ import android.media.audiofx.PresetReverb
 import android.media.audiofx.Virtualizer
 import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.data.SettingsDefaults
+import com.luckylearning.windtone.diag.DiagLog
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -258,6 +259,77 @@ object AudioFx {
             snap.bass, snap.virtual, snap.loudness, snap.reverbId, activeSchemeId(p),
         )
         apply(snap.enabled)
+    }
+
+    // ------------------------------------------------------- 音效按设备自动挂档
+
+    /**
+     * 输出设备变化后自动挂档（[DeviceSchemeMonitor] 调用；carMode 下不介入 ——
+     * 车载有自己的音效档案，两套快照互不覆盖）。
+     *
+     * 语义见 [DeviceSchemePolicy.decide]：先还原上一台设备的会话（如有），
+     * 再套新设备的绑定方案；无绑定的设备只还原。
+     */
+    fun applyForDevice(deviceKey: String) {
+        val p = prefs ?: return
+        if (p.carMode) return
+        val decision = DeviceSchemePolicy.decide(
+            bindings = DeviceSchemePolicy.decode(p.deviceSchemeBindings),
+            deviceKey = deviceKey,
+            inProfile = p.deviceStash.isNotEmpty(),
+            currentSchemeId = p.soundSchemeId,
+        )
+        if (decision.restoreFirst) exitDeviceProfile()
+        val schemeId = decision.applySchemeId ?: run {
+            p.deviceSchemeCurrent = ""
+            return
+        }
+        val scheme = SoundSchemes.byId(schemeId) ?: return
+        // 快照基线：只在进第一个会话时拍，连续换设备不会把上一次挂的方案当基线
+        if (p.deviceStash.isEmpty()) {
+            p.deviceStash = SoundStash.encode(
+                enabled = p.eqEnabled,
+                presetId = p.eqPresetId,
+                bandsCsv = p.eqBands,
+                bass = p.eqBassBoost,
+                virtual = p.eqVirtualizer,
+                loudness = p.eqLoudness,
+                reverbId = p.eqReverbId,
+            )
+        }
+        writeSchemeValues(p, scheme)
+        p.soundSchemeId = scheme.id
+        pushValuesToEffects(
+            true, scheme.eqPresetId, null,
+            scheme.bass, scheme.virtual, scheme.loudness, scheme.reverbId, scheme.id,
+        )
+        apply(true)
+        p.deviceSchemeCurrent = deviceKey
+        DiagLog.log("DEVICE_SCHEME", "挂档 $deviceKey → ${scheme.name}")
+    }
+
+    /** 退出设备挂档会话：还原快照（与 [exitCarProfile] 同口径，坏快照不清现状） */
+    fun exitDeviceProfile() {
+        val p = prefs ?: return
+        if (p.deviceStash.isEmpty()) {
+            p.deviceSchemeCurrent = ""
+            return
+        }
+        val snap = SoundStash.decode(p.deviceStash)
+        p.deviceStash = SettingsDefaults.DEVICE_STASH
+        p.deviceSchemeCurrent = ""
+        if (snap == null) return
+        restoreSoundValues(
+            enabled = snap.enabled,
+            presetId = snap.presetId,
+            bandsCsv = snap.bandsCsv,
+            bass = snap.bass,
+            virtual = snap.virtual,
+            loudness = snap.loudness,
+            reverbId = snap.reverbId,
+            schemeId = "",
+        )
+        DiagLog.log("DEVICE_SCHEME", "还原挂档前音效")
     }
 
     /**

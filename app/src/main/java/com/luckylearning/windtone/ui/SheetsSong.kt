@@ -35,6 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.AudioInspector
+import com.luckylearning.windtone.data.FakeLossless
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.ui.theme.glassContainerColor
 
@@ -155,6 +156,16 @@ fun SongInfoSheet(
                     InfoRow(stringResource(R.string.ss_info_bitrate), info.bitrateText)
                     InfoRow(stringResource(R.string.ss_info_duration), info.durationText)
                     InfoRow(stringResource(R.string.ss_info_size), info.sizeText)
+                    // 「假无损」检测（竞品借鉴：Salt Player）：只在无损容器上给结论；
+                    // 有损格式直接不占用这一行（NOT_APPLICABLE 不展示，避免噪声）
+                    info.fakeLossless?.let { fl ->
+                        if (fl.verdict != FakeLossless.Verdict.NOT_APPLICABLE) {
+                            InfoRow(
+                                stringResource(R.string.ss_info_lossless),
+                                fakeLosslessText(fl),
+                            )
+                        }
+                    }
                     info.mime?.let { InfoRow(stringResource(R.string.ss_info_mime), it) }
                     InfoRow(stringResource(R.string.ss_info_path), songDisplayPath(song))
                 }
@@ -162,6 +173,15 @@ fun SongInfoSheet(
             Spacer(Modifier.height(20.dp))
         }
     }
+}
+
+@Composable
+private fun fakeLosslessText(result: FakeLossless.Result): String = when (result.verdict) {
+    FakeLossless.Verdict.LIKELY_LOSSLESS ->
+        stringResource(R.string.ss_lossless_ok, result.cutoffHz ?: 0)
+    FakeLossless.Verdict.SUSPECTED_LOSSY_SOURCE ->
+        stringResource(R.string.ss_lossless_suspect, result.cutoffHz ?: 0)
+    else -> stringResource(R.string.ss_lossless_unknown)
 }
 
 @Composable

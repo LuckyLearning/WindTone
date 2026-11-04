@@ -92,6 +92,9 @@ class PlaybackEngine(
         onExitCar = { setCarMode(false) },
     )
 
+    /** 音效按输出设备自动挂档：设备增删 → AudioFx.applyForDevice */
+    private val deviceSchemeMonitor = DeviceSchemeMonitor(app, prefs)
+
     private val connection = PlaybackConnection(app)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -350,6 +353,8 @@ class PlaybackEngine(
         SceneMode.restoreOnColdStart()
         // G7：按 Prefs 决定是否挂蓝牙音频设备监听（默认关，不耗电）
         btAutoCarMonitor.syncRegistration()
+        // 音效按设备自动挂档：同上，默认关不注册（省电）
+        deviceSchemeMonitor.syncRegistration()
         // 存储卸载：若正在播的曲落在已卸卷上，按 ErrorSkip 同口径跳下一首或停住。
         scope.launch {
             StorageHotplugBus.unmountEvents.collect { volumePath ->
@@ -1134,6 +1139,50 @@ class PlaybackEngine(
     override fun clearQueue() = queueManager.clearQueue()
     override fun shuffleQueueOrder() = queueManager.shuffleQueueOrder()
 
+    // ---------------------------------------------------------------- 多播放队列快照
+
+    /**
+     * 保存当前队列：顺序取界面同源的 [PlayerUiState.queue]（mediaId 就是 stableKey），
+     * 主键经 [SongIndex] 换出来；「当前曲 + 进度」一起存，切回去能接着听。
+     */
+    override fun saveQueueSnapshot(name: String) {
+        val state = _player.value
+        val entries = state.queue
+        if (entries.isEmpty()) return
+        val ids = entries.mapNotNull { index.idOf(it.mediaId) }
+        if (ids.isEmpty()) return
+        val currentIndex = entries.firstOrNull { it.isCurrent }?.index ?: 0
+        val snapshot = QueueSnapshots.Snapshot(
+            name = name.trim(),
+            songIds = ids,
+            index = currentIndex.coerceIn(0, ids.size - 1),
+            positionMs = _progress.value.positionMs.coerceAtLeast(0L),
+            savedAt = System.currentTimeMillis(),
+        )
+        val next = QueueSnapshots.upsert(QueueSnapshots.decode(prefs.queueSnapshots), snapshot)
+        prefs.queueSnapshots = QueueSnapshots.encode(next)
+    }
+
+    /**
+     * 恢复快照：按主键回表（[PlaybackStore.loadSongsByIds] 已过滤已删/丢失的歌），
+     * 再走与平常完全相同的 [playQueue] 路径 —— 队列、随机/循环模式、通知、持久化
+     * 都跟手动播一张歌单一致，不新增第二条起播通道。
+     */
+    override fun restoreQueueSnapshot(name: String) {
+        val snapshot = QueueSnapshots.decode(prefs.queueSnapshots).firstOrNull { it.name == name } ?: return
+        scope.launch {
+            val songs = withContext(Dispatchers.IO) { store.loadSongsByIds(snapshot.songIds) }
+            if (songs.isEmpty()) return@launch
+            queueManager.playQueue(songs, snapshot.index.coerceIn(0, songs.size - 1))
+            if (snapshot.positionMs > 0L) queueManager.seekTo(snapshot.positionMs)
+        }
+    }
+
+    override fun deleteQueueSnapshot(name: String) {
+        val next = QueueSnapshots.remove(QueueSnapshots.decode(prefs.queueSnapshots), name)
+        prefs.queueSnapshots = QueueSnapshots.encode(next)
+    }
+
     // ---------------------------------------------------------------- 速度 / 定时 / 音效
 
     override fun setSpeed(speed: Float) {
@@ -1544,6 +1593,23 @@ class PlaybackEngine(
         btAutoCarMonitor.syncRegistration()
     }
 
+    // ------------------------------------------------- 音效按输出设备自动挂档
+
+    fun setDeviceSchemeEnabled(enabled: Boolean) {
+        prefs.deviceSchemeEnabled = enabled
+        deviceSchemeMonitor.syncRegistration()
+    }
+
+    /** 更新绑定表；开着时立刻按当前设备重新评估（改完马上生效，不用拔插一次耳机） */
+    fun setDeviceSchemeBindingsRaw(raw: String) {
+        prefs.deviceSchemeBindings = raw
+        if (prefs.deviceSchemeEnabled) {
+            // 清会话标记后让监视器重新评估：键未变也会因 current 被清而触发一次
+            prefs.deviceSchemeCurrent = ""
+            deviceSchemeMonitor.syncRegistration()
+        }
+    }
+
 
     // ---------------------------------------------------------------- 悬浮窗设置（转发）
     //
@@ -1646,6 +1712,22 @@ class PlaybackEngine(
     override fun previewOverlay() = overlaySettings.previewOverlay()
     override fun setDynamicTheme(enabled: Boolean) = overlaySettings.setDynamicTheme(enabled)
     override fun dynamicThemeEnabled(): Boolean = overlaySettings.dynamicThemeEnabled()
+
+    /**
+     * Material You 跟随壁纸取色（Android 12+）。
+     *
+     * 与 [themeMode] 同理需要一条流：开关在设置页里点，换肤发生在最外层组合，
+     * 一次性读 prefs 会让用户点完只看到开关变了、界面没变。
+     */
+    private val _materialYou = MutableStateFlow(prefs.materialYou)
+    val materialYouEnabled: StateFlow<Boolean> = _materialYou.asStateFlow()
+
+    override fun setMaterialYou(enabled: Boolean) {
+        overlaySettings.setMaterialYou(enabled)
+        _materialYou.value = enabled
+    }
+
+    override fun materialYouEnabled(): Boolean = _materialYou.value
 
     // ---------------------------------------------------------------- 音频技术信息
 
@@ -1994,7 +2076,8 @@ class PlaybackEngine(
                 // 没歌词时只在「上一首还有」的那一轮跑一次，把残留文案清掉。
                 val hasLyrics = _player.value.lyrics.lines.isNotEmpty()
                 if (hasLyrics || lastHadLyrics) {
-                    runCatching { LockScreenLyricPublisher.publish(c, _player.value, pos) }
+                    // btCarTitle = 车载蓝牙歌词（实验）：同一支发布器顺带改写 AVRCP 的 title
+                    runCatching { LockScreenLyricPublisher.publish(c, _player.value, pos, prefs.btCarLyric) }
                     lastHadLyrics = hasLyrics
                 }
                 // 顺便看一眼服务还在不在（进程被 ROM 杀掉的情况）——带 30 秒节流，

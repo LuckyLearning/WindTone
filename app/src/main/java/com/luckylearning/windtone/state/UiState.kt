@@ -121,6 +121,13 @@ object VirtualPlaylist {
     const val FAVORITES = -3L
     /** 「最近添加」——按歌曲 dateAdded 倒序（扫描入库 / MediaStore DATE_ADDED） */
     const val RECENTLY_ADDED = -4L
+    /** 「从未播放」——智能歌单：曲库里存在但一次都没播过 */
+    const val NEVER_PLAYED = -5L
+    /** 「很久没听」——智能歌单：播过但 [DORMANT_DAYS] 天内没再听 */
+    const val DORMANT = -6L
+
+    /** 「很久没听」的判定天数 */
+    const val DORMANT_DAYS = 30
 }
 
 /**
@@ -136,6 +143,45 @@ fun recentlyAddedSongs(songs: List<Song>, limit: Int = 100): List<Song> {
         .sortedByDescending { it.dateAdded }
         .take(limit)
         .toList()
+}
+
+/**
+ * 「从未播放」虚拟列表：曲库里存在、但 `song_state.playCount` 为 0 的歌。
+ *
+ * 与「最近播放」（有 lastPlayedAt 才进）互补——两个列表加起来覆盖全库，
+ * 用户可以很直观地看到「收藏了这么多，还有多少从没开过口」。纯函数，方便单测。
+ * 顺序沿用曲库当前排序（调用方传入的即已排好），不在此处重排。
+ */
+fun neverPlayedSongs(
+    songs: List<Song>,
+    states: Collection<com.luckylearning.windtone.data.db.SongStateEntity>,
+    limit: Int = 100,
+): List<Song> {
+    if (limit <= 0 || songs.isEmpty()) return emptyList()
+    val played = states.asSequence().filter { it.playCount > 0 }.map { it.songId }.toHashSet()
+    return songs.filter { it.dbId > 0L && it.dbId !in played }.take(limit)
+}
+
+/**
+ * 「很久没听」虚拟列表：播过、但 [days] 天内没有再听过的歌，最久没听的排前面。
+ *
+ * 只看 `song_state.lastPlayedAt`：0（从未播）不算「很久没听」——那归 [neverPlayedSongs]，
+ * 两个智能歌单的口径不重叠。纯函数，方便单测。
+ */
+fun dormantSongs(
+    songs: List<Song>,
+    states: Collection<com.luckylearning.windtone.data.db.SongStateEntity>,
+    nowMs: Long,
+    days: Int = VirtualPlaylist.DORMANT_DAYS,
+    limit: Int = 100,
+): List<Song> {
+    if (limit <= 0 || songs.isEmpty() || days <= 0) return emptyList()
+    val cutoff = nowMs - days * 24L * 60L * 60L * 1000L
+    val lastPlayed = states.filter { it.lastPlayedAt > 0 }.associate { it.songId to it.lastPlayedAt }
+    return songs
+        .filter { it.dbId > 0L && (lastPlayed[it.dbId] ?: 0L) in 1..cutoff }
+        .sortedBy { lastPlayed[it.dbId] ?: 0L }
+        .take(limit)
 }
 
 /**
@@ -182,6 +228,24 @@ fun virtualPlaylistInfo(id: Long, library: LibraryUiState): PlaylistInfo = when 
             AppStrings.s(R.string.vp_most_played).ifEmpty { "最常播放" },
             library.extraMostPlayed.size,
             playlistCoverSongs(library.extraMostPlayed),
+            virtual = true,
+        )
+
+    VirtualPlaylist.NEVER_PLAYED ->
+        PlaylistInfo(
+            id,
+            AppStrings.s(R.string.vp_never_played).ifEmpty { "从未播放" },
+            library.extraNeverPlayed.size,
+            playlistCoverSongs(library.extraNeverPlayed),
+            virtual = true,
+        )
+
+    VirtualPlaylist.DORMANT ->
+        PlaylistInfo(
+            id,
+            AppStrings.s(R.string.vp_dormant).ifEmpty { "很久没听" },
+            library.extraDormant.size,
+            playlistCoverSongs(library.extraDormant),
             virtual = true,
         )
 
@@ -262,6 +326,10 @@ data class LibraryUiState(
     val extraFavorites: List<Song> = emptyList(),
     /** 「最近添加」：按 Song.dateAdded 倒序，最多 100 首 */
     val extraRecentlyAdded: List<Song> = emptyList(),
+    /** 「从未播放」：曲库存在但 playCount=0，最多 100 首 */
+    val extraNeverPlayed: List<Song> = emptyList(),
+    /** 「很久没听」：播过但 30 天内没听，最久没听排前，最多 100 首 */
+    val extraDormant: List<Song> = emptyList(),
     val letterIndex: Map<Char, Int> = emptyMap(),
     val searchHistory: List<String> = emptyList(),
     val playStats: PlayStats = PlayStats(),

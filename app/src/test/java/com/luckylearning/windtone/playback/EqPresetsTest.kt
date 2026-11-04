@@ -62,16 +62,16 @@ class EqPresetsTest {
     }
 
     /**
-     * 两组各 8 个、合计 16 个，且 id / 名字都不重复。
+     * 听感 10（8 + 2 条耳机档案）/ 流派 8、合计 18 个，且 id / 名字都不重复。
      *
      * 数字写死是有意的：预设表是**用户能直接感知**的功能面，
      * 少一个多一个都该在评审时被看见，而不是被 forEach 悄悄放过。
      */
     @Test
     fun `两组各八个预设且 id 与名字唯一`() {
-        assertEquals(8, EqPresets.group(EqPresets.Group.FEEL).size)
+        assertEquals(10, EqPresets.group(EqPresets.Group.FEEL).size)
         assertEquals(8, EqPresets.group(EqPresets.Group.GENRE).size)
-        assertEquals(16, EqPresets.ALL.size)
+        assertEquals(18, EqPresets.ALL.size)
         assertEquals(EqPresets.ALL.size, EqPresets.ALL.map { it.id }.distinct().size)
         assertEquals(EqPresets.ALL.size, EqPresets.ALL.map { it.name }.distinct().size)
     }

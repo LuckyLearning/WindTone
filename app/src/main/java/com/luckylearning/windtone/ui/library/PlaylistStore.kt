@@ -7,6 +7,8 @@ import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.state.PlaylistInfo
 import com.luckylearning.windtone.state.VirtualPlaylist
 import com.luckylearning.windtone.state.playlistCoverSongs
+import com.luckylearning.windtone.state.dormantSongs
+import com.luckylearning.windtone.state.neverPlayedSongs
 import com.luckylearning.windtone.state.recentlyAddedSongs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.update
@@ -72,6 +74,10 @@ internal class PlaylistStore(private val session: LibrarySession) : PlaylistActi
             .toList()
         // 「最近添加」：按歌曲自身 dateAdded（扫描入库时间），不查 song_state
         val recentlyAdded = recentlyAddedSongs(_library.value.songs)
+        // 智能歌单：从未播放 / 很久没听（口径见 UiState.kt 两个纯函数）
+        val allStates = index.allStates()
+        val neverPlayed = neverPlayedSongs(_library.value.songs, allStates)
+        val dormant = dormantSongs(_library.value.songs, allStates, System.currentTimeMillis())
         _library.update {
             it.copy(
                 playlists = infos,
@@ -79,6 +85,8 @@ internal class PlaylistStore(private val session: LibrarySession) : PlaylistActi
                 extraMostPlayed = most,
                 extraFavorites = favorites,
                 extraRecentlyAdded = recentlyAdded,
+                extraNeverPlayed = neverPlayed,
+                extraDormant = dormant,
                 // 虚拟歌单的曲目已经算出来了：「打开我的收藏」这类入口等的就是这一步
                 // （它和曲库装载是两条并行任务，不算完就打开会看到一个空收藏夹）
                 playlistsLoaded = true,
@@ -94,6 +102,8 @@ internal class PlaylistStore(private val session: LibrarySession) : PlaylistActi
                 playlist.virtual && playlist.id == VirtualPlaylist.RECENTLY_ADDED -> _library.value.extraRecentlyAdded
                 playlist.virtual && playlist.id == VirtualPlaylist.MOST_PLAYED -> _library.value.extraMostPlayed
                 playlist.virtual && playlist.id == VirtualPlaylist.FAVORITES -> _library.value.extraFavorites
+                playlist.virtual && playlist.id == VirtualPlaylist.NEVER_PLAYED -> _library.value.extraNeverPlayed
+                playlist.virtual && playlist.id == VirtualPlaylist.DORMANT -> _library.value.extraDormant
                 else -> {
                     val rows = withContext(Dispatchers.IO) { db.playlistDao().songsOf(playlist.id) }
                     val byId = _library.value.songs.associateBy { it.dbId }

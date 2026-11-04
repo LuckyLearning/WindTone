@@ -37,6 +37,16 @@ interface PlayerActions : OverlayActions {
     fun clearQueue()
     /** A4：打乱队列物理顺序（非随机播放模式） */
     fun shuffleQueueOrder()
+
+    // ---- 多播放队列快照（竞品借鉴：Musicolet / Symfonium） ----
+
+    /** 把当前队列（顺序 + 当前曲 + 进度）存成命名快照；同名覆盖 */
+    fun saveQueueSnapshot(name: String)
+
+    /** 恢复命名快照：按主键回表（自动跳过已删除的歌）并起播到保存的位置 */
+    fun restoreQueueSnapshot(name: String)
+
+    fun deleteQueueSnapshot(name: String)
     fun setSpeed(speed: Float)
 
     /** 变调：半音（-12..+12，0 = 原调），见 `playback/Pitch` */

@@ -144,6 +144,9 @@ fun QueueSheet(
                 ) { Text(stringResource(R.string.queue_save_as_playlist)) }
             }
             Spacer(Modifier.height(8.dp))
+            // 多播放队列快照（竞品借鉴：Musicolet / Symfonium）：保存 / 恢复 / 删除
+            QueueSnapshotsSection()
+            Spacer(Modifier.height(4.dp))
             // 固定 420dp 在矮屏（平板横屏 / 车机）会连标题一起越过屏高 70%，
             // 改为「上限 = 屏高 60%」，队列短时按内容收缩。
             LazyColumn(Modifier.heightIn(max = sheetMaxHeight(0.60f))) {

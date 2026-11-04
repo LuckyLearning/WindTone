@@ -207,6 +207,8 @@ fun SettingsScreen(
      */
     themeMode: ThemeMode = SettingsDefaults.THEME_MODE,
     dynamicTheme: Boolean,
+    /** Material You 跟随壁纸取色（Android 12+，默认关） */
+    materialYou: Boolean = false,
     autoCheckUpdate: Boolean,
     downloadRoute: DownloadRoute,
     crashLogCount: Int,
@@ -220,6 +222,8 @@ fun SettingsScreen(
     initialPage: SettingsPage = SettingsPage.ROOT,
     onClose: () -> Unit,
     onDynamicTheme: (Boolean) -> Unit,
+    /** Material You 跟随壁纸取色开关 */
+    onMaterialYou: (Boolean) -> Unit = {},
     /** 明暗模式切换（v1.2.4）：改完立刻换肤，不需要重启 */
     onThemeMode: (ThemeMode) -> Unit = {},
     onCarMode: (Boolean) -> Unit,
@@ -314,6 +318,9 @@ fun SettingsScreen(
     onOpenStats: () -> Unit,
     minSongDurationSec: Int,
     onMinSongDurationSec: (Int) -> Unit,
+    /** 扫描黑名单（规则语义见 ScanBlocklist），空集 = 不过滤 */
+    scanBlocklist: Set<String>,
+    onScanBlocklist: (Set<String>) -> Unit,
     onLoadCrashLog: () -> Unit,
     onExportCrashLog: () -> Unit,
     onClearCrashLog: () -> Unit,
@@ -488,6 +495,8 @@ fun SettingsScreen(
                             onThemeMode = onThemeMode,
                             dynamicTheme = dynamicTheme,
                             onDynamicTheme = onDynamicTheme,
+                            materialYou = materialYou,
+                            onMaterialYou = onMaterialYou,
                             onCarMode = onCarMode,
                         )
 
@@ -556,6 +565,8 @@ fun SettingsScreen(
                         SettingsPage.LIBRARY -> SettingsLibraryPage(
                             minSongDurationSec = minSongDurationSec,
                             onMinSongDurationSec = onMinSongDurationSec,
+                            scanBlocklist = scanBlocklist,
+                            onScanBlocklist = onScanBlocklist,
                             onRestoreExcluded = onRestoreExcluded,
                             onOpenReport = onOpenReport,
                             onOpenDuplicates = onOpenDuplicates,

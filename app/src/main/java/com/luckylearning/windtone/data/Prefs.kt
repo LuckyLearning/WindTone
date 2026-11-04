@@ -6,6 +6,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import com.luckylearning.windtone.playback.FocusLossMode
 import com.luckylearning.windtone.playback.ReplayGainMode
 import com.luckylearning.windtone.R
 import com.luckylearning.windtone.ui.AppStrings
@@ -99,6 +100,9 @@ object SettingsDefaults {
 
     /** 换曲取色默认关：解码+取色抢 CPU/堆；车机主路径是悬浮窗跟词，不是壁纸色 */
     const val DYNAMIC_THEME = false
+
+    /** Material You 跟随壁纸取色（API 31+）默认关：与封面取色互斥，封面取色优先级更高 */
+    const val MATERIAL_YOU = false
     const val CAR_MODE = false
 
     /** G7: bluetooth auto car layout (default off) */
@@ -394,9 +398,36 @@ object SettingsDefaults {
      */
     const val OVERLAY_TEXT_COLOR = 0xFFFFFFFF.toInt()
 
+    /**
+     * 音效方案与播放过渡（v1.1.52）出厂值之前，先落焦点策略默认：
+     * STANDARD = Media3 内建（与历史行为一致）。
+     */
+    const val FOCUS_LOSS_MODE = "STANDARD"
+
+    /**
+     * 音效按输出设备自动挂档出厂值：总开关关、无绑定、不在会话、无快照。
+     * 与车载音效档案（CAR_SCHEME_ID / SOUND_STASH）互相独立、互不覆盖。
+     */
+    const val DEVICE_SCHEME_ENABLED = false
+    const val DEVICE_SCHEME_BINDINGS = ""
+    const val DEVICE_SCHEME_CURRENT = ""
+    const val DEVICE_STASH = ""
+
+    /** 多播放队列快照出厂值：空（没有保存过任何队列） */
+    const val QUEUE_SNAPSHOTS = ""
+
+    /** 车载蓝牙歌词（实验室）：默认关 —— 会改写通知/车机标题，且车机兼容性未知 */
+    const val BT_CAR_LYRIC = false
+
     const val MIN_DURATION_SEC = 60
     const val AUTO_UPDATE = true
     val UPDATE_ROUTE = DownloadRoute.AUTO
+
+    /**
+     * 扫描黑名单出厂名单：**空**（不做任何过滤，行为与旧版一致）。
+     * 管理入口在 设置 → 曲库 →「扫描黑名单」；规则语义见 [ScanBlocklist]。
+     */
+    val SCAN_BLOCKLIST: Set<String> = emptySet()
 
     /** 悬浮窗宽度百分比的合法区间 */
     val OVERLAY_WIDTH_RANGE = 1..100
@@ -784,12 +815,31 @@ class Prefs private constructor(context: Context) {
         }
 
     /** 是否启用「深度扫描」（读取同目录 .lrc 歌词文件） */
-    var deepScanEnabled: Boolean
-        get() = sp.getBoolean(KEY_DEEP_SCAN, false)
+    var deepScanEnabled: Boolean        get() = sp.getBoolean(KEY_DEEP_SCAN, false)
         set(value) {
             sp.edit().putBoolean(KEY_DEEP_SCAN, value).apply()
             ioScope.launch { store.putBoolean(KEY_DEEP_SCAN, value) }
         }
+
+    /**
+     * 扫描黑名单（竞品借鉴：Salt Player「文件夹黑名单」），每行一条规则。
+     *
+     * 规则可以是目录名（`录音`）或路径片段（`DCIM/Camera`），语义见 [ScanBlocklist]。
+     * 存储用换行拼接的字符串 —— SharedPreferences 的 StringSet 在部分 ROM 上会
+     * 返回未拷贝的引用（改了集合等于改了存储），DataStore 又只有 String；换行
+     * 拼接是最不容易踩坑的形态。空行自动忽略。
+     */
+    var scanBlocklist: Set<String>
+    get() = sp.getString(KEY_SCAN_BLOCKLIST, "").orEmpty()
+                .split('\n')
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .toSet()
+    set(value) {
+        val joined = value.map { it.trim() }.filter { it.isNotEmpty() }.distinct().sorted().joinToString("\n")
+        sp.edit().putString(KEY_SCAN_BLOCKLIST, joined).apply()
+        ioScope.launch { store.putString(KEY_SCAN_BLOCKLIST, joined) }
+    }
 
     /**
      * 短音频过滤阈值（秒）。
@@ -871,6 +921,79 @@ class Prefs private constructor(context: Context) {
         set(value) {
             sp.edit().putBoolean(KEY_SKIP_SILENCE, value).apply()
             ioScope.launch { store.putBoolean(KEY_SKIP_SILENCE, value) }
+        }
+
+    /**
+     * 音频焦点丢失策略（竞品借鉴：Salt Player）：
+     * STANDARD（Media3 内建）/ DUCK（瞬时丢失降音量）/ KEEP_PLAYING（继续播）。
+     * 存枚举名，解析失败回退 [SettingsDefaults.FOCUS_LOSS_MODE]；语义见 [FocusLossMode]。。
+     */
+    var focusLossMode: String
+        get() = sp.getString(KEY_FOCUS_LOSS_MODE, SettingsDefaults.FOCUS_LOSS_MODE).orEmpty()
+        set(value) {
+            sp.edit().putString(KEY_FOCUS_LOSS_MODE, value).apply()
+            ioScope.launch { store.putString(KEY_FOCUS_LOSS_MODE, value) }
+        }
+
+    /** 音效按输出设备自动挂档总开关（默认关） */
+    var deviceSchemeEnabled: Boolean
+        get() = sp.getBoolean(KEY_DEVICE_SCHEME_ENABLED, SettingsDefaults.DEVICE_SCHEME_ENABLED)
+        set(value) {
+            sp.edit().putBoolean(KEY_DEVICE_SCHEME_ENABLED, value).apply()
+            ioScope.launch { store.putBoolean(KEY_DEVICE_SCHEME_ENABLED, value) }
+        }
+
+    /**
+     * 设备绑定表（`设备键=方案id` 每行一条，编解码见 DeviceSchemePolicy）。
+     * 设备键粒度：蓝牙按设备名（`bt:xxx`），有线 / USB / 扬声器按类别。
+     */
+    var deviceSchemeBindings: String
+        get() = sp.getString(KEY_DEVICE_SCHEME_BINDINGS, SettingsDefaults.DEVICE_SCHEME_BINDINGS).orEmpty()
+        set(value) {
+            sp.edit().putString(KEY_DEVICE_SCHEME_BINDINGS, value).apply()
+            ioScope.launch { store.putString(KEY_DEVICE_SCHEME_BINDINGS, value) }
+        }
+
+    /** 当前挂档会话的设备键（空 = 不在会话中）；设置页与诊断展示用 */
+    var deviceSchemeCurrent: String
+        get() = sp.getString(KEY_DEVICE_SCHEME_CURRENT, SettingsDefaults.DEVICE_SCHEME_CURRENT).orEmpty()
+        set(value) {
+            sp.edit().putString(KEY_DEVICE_SCHEME_CURRENT, value).apply()
+            ioScope.launch { store.putString(KEY_DEVICE_SCHEME_CURRENT, value) }
+        }
+
+    /**
+     * 挂档前的音效快照（SoundStash 编码，与车载快照同格式但**独立存储** ——
+     * 两套会话互不覆盖：车载档案管 carMode，这里管输出设备切换）。
+     */
+    var deviceStash: String
+        get() = sp.getString(KEY_DEVICE_STASH, SettingsDefaults.DEVICE_STASH).orEmpty()
+        set(value) {
+            sp.edit().putString(KEY_DEVICE_STASH, value).apply()
+            ioScope.launch { store.putString(KEY_DEVICE_STASH, value) }
+        }
+
+    /**
+     * 多播放队列快照（竞品借鉴：Musicolet / Symfonium），编码见 QueueSnapshots。
+     * 每行一个命名队列：`名称\t当前序号\t进度毫秒\t保存时间\tid,id,id`。
+     */
+    var queueSnapshots: String
+        get() = sp.getString(KEY_QUEUE_SNAPSHOTS, SettingsDefaults.QUEUE_SNAPSHOTS).orEmpty()
+        set(value) {
+            sp.edit().putString(KEY_QUEUE_SNAPSHOTS, value).apply()
+            ioScope.launch { store.putString(KEY_QUEUE_SNAPSHOTS, value) }
+        }
+
+    /**
+     * 车载蓝牙歌词（实验，竞品借鉴：Salt Player）：
+     * 把当前歌词行写进 AVRCP 的 TITLE 字段（蓝牙车机只传 title/artist），
+     * 歌名与歌手挤到 artist。默认关 —— 会「占用」通知栏标题，且车机兼容性未知。
+     */
+    var btCarLyric: Boolean
+        get() = sp.getBoolean(KEY_BT_CAR_LYRIC, SettingsDefaults.BT_CAR_LYRIC)
+        set(value) {
+            sp.edit().putBoolean(KEY_BT_CAR_LYRIC, value).apply()
+            ioScope.launch { store.putBoolean(KEY_BT_CAR_LYRIC, value) }
         }
 
     /**
@@ -1841,6 +1964,17 @@ class Prefs private constructor(context: Context) {
         }
 
     /**
+     * Material You：跟随系统壁纸取色（Android 12+ 的 dynamicLight/DarkColorScheme）。
+     * 默认关；与 [dynamicTheme]（封面取色）并存时封面取色优先——种子色非空就走封面派生。
+     */
+    var materialYou: Boolean
+        get() = sp.getBoolean(KEY_MATERIAL_YOU, SettingsDefaults.MATERIAL_YOU)
+        set(value) {
+            sp.edit().putBoolean(KEY_MATERIAL_YOU, value).apply()
+            ioScope.launch { store.putBoolean(KEY_MATERIAL_YOU, value) }
+        }
+
+    /**
      * 车载模式（默认关闭）。
      * 开启后：启动直进播放页；播放页 5 秒无操作收起全部控件只留歌词与进度。
      */
@@ -1995,6 +2129,7 @@ class Prefs private constructor(context: Context) {
         const val KEY_LAST_SCAN_FP = "last_scan_fingerprint"
         const val KEY_LAST_SCAN_AT = "last_scan_at"
         const val KEY_DEEP_SCAN = "deep_scan"
+        const val KEY_SCAN_BLOCKLIST = "scan_blocklist"
         const val KEY_MIN_DURATION_SEC = "min_song_duration_sec"
         /** 旧的**全局**排序键：v1.1.4 起排序按视图各存一份，它只作老数据兼容回落 */
         const val KEY_SORT = "sort"
@@ -2007,6 +2142,13 @@ class Prefs private constructor(context: Context) {
         const val KEY_SPEED = "playback_speed"
         const val KEY_PITCH = "playback_pitch_semitones"
         const val KEY_SKIP_SILENCE = "skip_silence"
+        const val KEY_FOCUS_LOSS_MODE = "focus_loss_mode"
+        const val KEY_DEVICE_SCHEME_ENABLED = "device_scheme_enabled"
+        const val KEY_DEVICE_SCHEME_BINDINGS = "device_scheme_bindings"
+        const val KEY_DEVICE_SCHEME_CURRENT = "device_scheme_current"
+        const val KEY_DEVICE_STASH = "device_stash"
+        const val KEY_QUEUE_SNAPSHOTS = "queue_snapshots"
+        const val KEY_BT_CAR_LYRIC = "bt_car_lyric"
         const val KEY_AUTO_RESUME = "auto_resume_playback"
         const val KEY_AUTO_PLAY_ON_BOOT = "auto_play_on_boot"
 
@@ -2110,6 +2252,7 @@ class Prefs private constructor(context: Context) {
         // ---- 7. 外观与主题 ----
         const val KEY_THEME_MODE = "theme_mode"
         const val KEY_DYNAMIC_THEME = "dynamic_theme"
+        const val KEY_MATERIAL_YOU = "material_you"
         const val KEY_CAR_MODE = "car_mode"
         const val KEY_BT_AUTO_CAR_ENABLED = "bt_auto_car_enabled"
         const val KEY_BT_AUTO_CAR_ANY_DEVICE = "bt_auto_car_any_device"

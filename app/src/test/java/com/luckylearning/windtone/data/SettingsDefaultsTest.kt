@@ -59,6 +59,7 @@ class SettingsDefaultsTest {
         // 外观
         check("themeMode", prefs.themeMode, SettingsDefaults.THEME_MODE)
         check("dynamicTheme", prefs.dynamicTheme, SettingsDefaults.DYNAMIC_THEME)
+        check("materialYou", prefs.materialYou, SettingsDefaults.MATERIAL_YOU)
         check("carMode", prefs.carMode, SettingsDefaults.CAR_MODE)
         check("btAutoCarEnabled", prefs.btAutoCarEnabled, SettingsDefaults.BT_AUTO_CAR_ENABLED)
         check("btAutoCarAnyDevice", prefs.btAutoCarAnyDevice, SettingsDefaults.BT_AUTO_CAR_ANY_DEVICE)
@@ -109,6 +110,14 @@ class SettingsDefaultsTest {
 
         // 音乐库 / 更新
         check("minSongDurationSec", prefs.minSongDurationSec, SettingsDefaults.MIN_DURATION_SEC)
+        check("scanBlocklist", prefs.scanBlocklist, SettingsDefaults.SCAN_BLOCKLIST)
+        check("focusLossMode", prefs.focusLossMode, SettingsDefaults.FOCUS_LOSS_MODE)
+        check("deviceSchemeEnabled", prefs.deviceSchemeEnabled, SettingsDefaults.DEVICE_SCHEME_ENABLED)
+        check("deviceSchemeBindings", prefs.deviceSchemeBindings, SettingsDefaults.DEVICE_SCHEME_BINDINGS)
+        check("deviceSchemeCurrent", prefs.deviceSchemeCurrent, SettingsDefaults.DEVICE_SCHEME_CURRENT)
+        check("deviceStash", prefs.deviceStash, SettingsDefaults.DEVICE_STASH)
+        check("queueSnapshots", prefs.queueSnapshots, SettingsDefaults.QUEUE_SNAPSHOTS)
+        check("btCarLyric", prefs.btCarLyric, SettingsDefaults.BT_CAR_LYRIC)
         check("autoCheckUpdate", prefs.autoCheckUpdate, SettingsDefaults.AUTO_UPDATE)
         check("updateDownloadRoute", prefs.updateDownloadRoute, SettingsDefaults.UPDATE_ROUTE)
 

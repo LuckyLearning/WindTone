@@ -576,6 +576,18 @@ internal fun PlaylistListView(
                 onOpen = lib::openPlaylist,
             )
         }
+        item {
+            PlaylistRowPlay(
+                info = virtualPlaylistInfo(VirtualPlaylist.NEVER_PLAYED, library),
+                onOpen = lib::openPlaylist,
+            )
+        }
+        item {
+            PlaylistRowPlay(
+                info = virtualPlaylistInfo(VirtualPlaylist.DORMANT, library),
+                onOpen = lib::openPlaylist,
+            )
+        }
         if (library.playlists.isEmpty()) {
             item {
                 EmptyHint(stringResource(R.string.pl_empty_title), stringResource(R.string.pl_empty_body), modifier = Modifier.padding(vertical = 30.dp))

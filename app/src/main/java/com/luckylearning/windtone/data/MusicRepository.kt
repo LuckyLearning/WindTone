@@ -58,6 +58,9 @@ class MusicRepository(
             return@withContext LibraryResult(emptyList())
         }
 
+        // 扫描黑名单（设置 → 曲库）：三条链路共用同一份规则
+        val blocklist = prefs.scanBlocklist
+
         // 1) 系统媒体库 —— 仅在「全盘扫描」模式下读取
         var fingerprint = ""
         // 媒体库已收录的「文件名|大小」键。SAF 扫到同一批文件时不必再开一次
@@ -66,7 +69,7 @@ class MusicRepository(
         var mediaStoreKeys: Set<String> = emptySet()
         if (scope == ScanScope.FULL) {
             progress("正在读取系统媒体库…")
-            runCatching { mediaStoreScanner.scan(deepScanEnabled()) }
+            runCatching { mediaStoreScanner.scan(deepScanEnabled(), blocklist) }
                 .onFailure { Log.w(TAG, "媒体库扫描失败", it) }
                 .getOrNull()
                 ?.let { res ->
@@ -88,6 +91,7 @@ class MusicRepository(
                 folderScanner.scan(
                     uri,
                     skipTagRead = { name, size -> "${name.lowercase()}|$size" in mediaStoreKeys },
+                    blocklist = blocklist,
                     onProgress = { n -> progress("已找到 $n 首…") },
                 )
             }
@@ -104,7 +108,9 @@ class MusicRepository(
             val knownPaths = collected.values
                 .mapNotNull { it.path }
                 .mapTo(HashSet()) { it.lowercase() }
-            runCatching { fileScanner.scan(knownPaths = knownPaths) { n -> progress("已找到 $n 首…") } }
+            runCatching {
+                fileScanner.scan(knownPaths = knownPaths, blocklist = blocklist) { n -> progress("已找到 $n 首…") }
+            }
                 .onFailure { Log.w(TAG, "深度扫描失败", it) }
                 .getOrNull()
                 ?.forEach { merge(collected, it) }

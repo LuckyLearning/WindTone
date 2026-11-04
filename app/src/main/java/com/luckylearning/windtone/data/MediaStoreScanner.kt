@@ -22,12 +22,13 @@ class MediaStoreScanner(private val context: Context) {
         val fingerprint: String = "",
     )
 
-    fun scan(deepAccess: Boolean): Result {
+    fun scan(deepAccess: Boolean, blocklist: Set<String> = emptySet()): Result {
         val songs = ArrayList<Song>()
         var skipped = 0
         var newestId = 0L
         var rowCount = 0
         var queryOk = false
+        val blockRules = ScanBlocklist.normalize(blocklist)
 
         val collection = audioCollection()
 
@@ -115,6 +116,9 @@ class MediaStoreScanner(private val context: Context) {
 
                 val uri = ContentUris.withAppendedId(collection, id)
                 val path = if (iData >= 0) c.getString(iData) else null
+                // 黑名单：MediaStore 是摊平的行，没有「目录递归」可剪，只能按路径判定。
+                // 注意指纹口舅不受影响（rowCount 在 continue 之前已计）。
+                if (path != null && ScanBlocklist.blocksPath(path, blockRules)) continue
                 val parentDir = path?.let { File(it).parent }
 
                 var lrcUri: android.net.Uri? = null

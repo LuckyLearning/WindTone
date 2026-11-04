@@ -149,6 +149,7 @@ class MainActivity : ComponentActivity() {
 
             val seed by playerVm.themeSeed.collectAsStateWithLifecycle()
             val themeMode by playerVm.themeMode.collectAsStateWithLifecycle()
+            val materialYou by playerVm.materialYouEnabled.collectAsStateWithLifecycle()
             val playerState by playerVm.player.collectAsStateWithLifecycle()
             // UI v2 阶段三：形态判定的两项事实只在这里取一次，主题根部注入，全 App 共用。
             // 设备识别是静态事实，remember 住避免每次重组都去问 PackageManager。
@@ -157,6 +158,8 @@ class MainActivity : ComponentActivity() {
                 seedColor = if (playerVm.dynamicThemeEnabled()) seed else null,
                 carMode = playerState.carMode,
                 carHardware = carHardware,
+                // Material You：跟随壁纸取色（设置 → 外观，默认关；封面取色优先）
+                materialYou = materialYou,
                 // 明暗模式（设置 → 外观 → 主题模式，v1.2.5）：
                 // 「跟随系统」才去问系统，浅色 / 深色是**越过系统**的明确选择。
                 // 只在这一层决定，子页面一律从 `MaterialTheme.colorScheme` 取色 ——

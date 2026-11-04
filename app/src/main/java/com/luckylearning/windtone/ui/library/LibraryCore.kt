@@ -211,6 +211,17 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
         if (prefs.scanScope != ScanScope.UNSET) scan(false)
     }
 
+    override fun scanBlocklist(): Set<String> = prefs.scanBlocklist
+
+    /**
+     * 更新扫描黑名单并立即重扫：黑名单的意义就在「把已经进库的垃圾请出去」，
+     * 只存不扫会让用户改完规则看不到任何变化。
+     */
+    override fun setScanBlocklist(entries: Set<String>) {
+        prefs.scanBlocklist = entries
+        if (prefs.scanScope != ScanScope.UNSET) scan(false)
+    }
+
     override fun scan(auto: Boolean) {
         if (_library.value.scanning) return
         if (_library.value.scanScope == ScanScope.UNSET) return

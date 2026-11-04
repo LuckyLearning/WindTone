@@ -83,6 +83,13 @@ object TrackVolume {
     /** 当前曲目的响度音量因子（0..1；1 = 无补偿 / 未分析 / 功能关） */
     @Volatile private var loudnessFactor = 1f
 
+    /**
+     * 音频焦点「降音量让行」因子（AudioFocusPolicy.DUCK 档）：
+     * 焦点丢失时所有音量统一再乘它，归还时回 1。乘法叠加
+     * 响度因子 / 淡入淡出斜坡，互不抢 `player.volume` 的写权。
+     */
+    @Volatile private var duckFactor = 1f
+
     /** 正在执行淡出（曲尾斜坡中）；用于挡住 tick 的重复触发 */
     @Volatile private var fadingOut = false
 
@@ -202,6 +209,18 @@ object TrackVolume {
         prefs?.replayGainMode = mode
         refreshState()
         applyLoudnessFor(player?.currentMediaItem?.mediaId)
+        if (!fadingOut && fadeJob == null) setVolumeNow(loudnessFactor)
+    }
+
+    /**
+     * 音频焦点「降音量让行」（[AudioFocusController] 调用）：
+     * true 时所有音量统一再乘 [AudioFocusPolicy.DUCK_VOLUME]，false 恢复。
+     * 若此刻没有淡变斜坡在跑，立即重套基线；有斜坡就让斜坡的下一拍自然带上。
+     */
+    fun setDucked(value: Boolean) {
+        val target = if (value) AudioFocusPolicy.DUCK_VOLUME else 1f
+        if (duckFactor == target) return
+        duckFactor = target
         if (!fadingOut && fadeJob == null) setVolumeNow(loudnessFactor)
     }
 
@@ -394,6 +413,6 @@ object TrackVolume {
     }
 
     private fun setVolumeNow(factor: Float) {
-        runCatching { player?.volume = factor.coerceIn(0f, 1f) }
+        runCatching { player?.volume = (factor * duckFactor).coerceIn(0f, 1f) }
     }
 }

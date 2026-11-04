@@ -1,11 +1,14 @@
 package com.luckylearning.windtone.ui.theme
 
 import android.app.Activity
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
@@ -156,12 +159,22 @@ fun MusicPlayerTheme(
     carMode: Boolean = false,
     /** UI v2 阶段三：设备是否被识别为车机（由 Activity 注入，theme 层不碰业务逻辑）。 */
     carHardware: Boolean = false,
+    /** Material You：跟随系统壁纸取色（Android 12+）；与封面取色并存时封面优先 */
+    materialYou: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    val seed = seedColor?.let { Color(it) }
-    val colors = if (seed != null) deriveScheme(seed, darkTheme) else if (darkTheme) DarkColors else LightColors
-    val view = LocalView.current
     val context = LocalContext.current
+    val seed = seedColor?.let { Color(it) }
+    // 取色优先级：封面取色（种子色非空）> Material You（壁纸）> 手写靛蓝种子色板。
+    // Material You 只在 Android 12+ 存在（dynamicXxxColorScheme），低版本静默回落。
+    val colors = when {
+        seed != null -> deriveScheme(seed, darkTheme)
+        materialYou && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        darkTheme -> DarkColors
+        else -> LightColors
+    }
+    val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             (context as? Activity)?.window?.let { window ->

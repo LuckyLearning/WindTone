@@ -161,6 +161,8 @@ class SettingsScreenTest {
                     onOpenPlayer = onOpenPlayer,
                     minSongDurationSec = 60,
                     onMinSongDurationSec = {},
+                    scanBlocklist = emptySet(),
+                    onScanBlocklist = {},
                     onLoadCrashLog = {},
                     onExportCrashLog = {},
                     onClearCrashLog = {},

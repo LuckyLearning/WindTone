@@ -4,10 +4,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.luckylearning.windtone.R
+import com.luckylearning.windtone.data.Prefs
+import com.luckylearning.windtone.data.SettingsDefaults
+import com.luckylearning.windtone.lyrics.LockScreenLyricPublisher
 
 /**
  * 设置子页：实验室功能（v1.1.80 新增）。
@@ -46,5 +54,26 @@ internal fun SettingsLabPage(
         onClick = onOpenMenuOrder,
         trailing = stringResource(R.string.set_tag_experimental),
         chevron = true,
+    )
+
+    // 车载蓝牙歌词（实验，竞品借鉴：Salt Player）：把歌词写进 AVRCP 的 title。
+    // 自包含读写 Prefs；切换后 invalidate 让下一 tick 立刻重发一次元数据。
+    val context = LocalContext.current
+    val prefs = remember { Prefs(context) }
+    var btLyric by remember { mutableStateOf(prefs.btCarLyric) }
+    SwitchRow(
+        title = stringResource(R.string.bt_car_lyric_title),
+        subtitle = stringResource(R.string.bt_car_lyric_sub),
+        checked = btLyric,
+        onCheckedChange = {
+            btLyric = it
+            prefs.btCarLyric = it
+            LockScreenLyricPublisher.invalidate()
+        },
+        onReset = resetAction(btLyric != SettingsDefaults.BT_CAR_LYRIC) {
+            btLyric = SettingsDefaults.BT_CAR_LYRIC
+            prefs.btCarLyric = SettingsDefaults.BT_CAR_LYRIC
+            LockScreenLyricPublisher.invalidate()
+        },
     )
 }
