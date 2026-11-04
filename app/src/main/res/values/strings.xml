@@ -1729,6 +1729,7 @@ Expired codes refresh automatically. This app is read-only — it never uploads,
     <string name="mp_cover_raw">Cover raw cache: %1$s / %2$s   hits %3$d / misses %4$d (%5$s)</string>
     <string name="mp_cover_disk">Cover disk cache: %1$s · hits %2$d / miss %3$d (%4$s)</string>
     <string name="mp_cover_decode">Cover decode: disk %1$d · source %2$d   produced %3$s (throughput, not resident)   peak one %4$s</string>
+    <string name="mp_cover_inflight">Cover requests: in flight %1$d   abandoned (no waiter left) %2$d</string>
     <string name="mp_library">Library: %1$d tracks</string>
     <string name="mp_bitmap_live">Bitmap live (this process, weak-ref tracked): now %1$s   peak %2$s   created %3$d / %4$s (throughput, not resident)</string>
     <string name="mp_bitmap_read">  Reading: if live ≈ libc malloc above → those tens/hundreds of MB are bitmaps; if much smaller → elsewhere (decoder buffers / Skia / allocator fragmentation)</string>

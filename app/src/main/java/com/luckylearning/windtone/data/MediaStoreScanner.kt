@@ -11,11 +11,23 @@ import java.io.File
 /** 通过系统媒体库快速扫描全部音频 */
 class MediaStoreScanner(private val context: Context) {
 
-    data class Result(val songs: List<Song>, val skippedUnsupported: Int)
+    /**
+     * @param fingerprint 本次全表 query 顺带产出的曲库指纹（最新 _ID : 总行数）。
+     *   扫描结束后不必再单独查一次 MediaStore 来记指纹；查询失败时为空串，
+     *   调用方会回退到独立查询。
+     */
+    data class Result(
+        val songs: List<Song>,
+        val skippedUnsupported: Int,
+        val fingerprint: String = "",
+    )
 
     fun scan(deepAccess: Boolean): Result {
         val songs = ArrayList<Song>()
         var skipped = 0
+        var newestId = 0L
+        var rowCount = 0
+        var queryOk = false
 
         val collection = audioCollection()
 
@@ -47,9 +59,13 @@ class MediaStoreScanner(private val context: Context) {
 
         // 同一个目录里通常有好几首歌：目录列举是一次系统调用，逐首 list 同一目录纯属浪费。
         // 3000 首 / 200 个目录时，这一步从 3000 次降到 200 次（深扫模式下尤其明显）。
-        val dirNamesCache = HashMap<String, List<String>>()
-        fun namesOf(dir: File): List<String> =
-            dirNamesCache.getOrPut(dir.absolutePath) { dir.list()?.toList().orEmpty() }
+        // 只要歌词文件：旧实现把目录下全部文件名（含几百个 mp3）都拿去跑 score，
+        // 深扫时是 O(歌曲数 × 目录文件数)；过滤后候选只剩真正的歌词文件。
+        val lyricNamesCache = HashMap<String, List<String>>()
+        fun lyricNamesOf(dir: File): List<String> =
+            lyricNamesCache.getOrPut(dir.absolutePath) {
+                dir.list()?.filter { LyricsMatcher.isLyricFile(it) }.orEmpty()
+            }
 
         runCatching {
             context.contentResolver.query(
@@ -60,6 +76,7 @@ class MediaStoreScanner(private val context: Context) {
                 MediaStore.Audio.Media.DEFAULT_SORT_ORDER,
             )
         }.getOrNull()?.use { c ->
+            queryOk = true
             val iId = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
             val iTitle = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
             val iArtist = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
@@ -82,6 +99,10 @@ class MediaStoreScanner(private val context: Context) {
 
             while (c.moveToNext()) {
                 val id = c.getLong(iId)
+                // 指纹取的是「查询返回的全部行」，与 App 侧的格式/时长过滤无关 ——
+                // 必须与 fingerprint() 里 `c.count` 的口径一致，否则冷启动节流会误判。
+                rowCount++
+                if (id > newestId) newestId = id
                 val name = c.getString(iName) ?: "track_$id"
                 val mime = c.getString(iMime)
                 val supported = AudioFormats.isSupported(name) || AudioFormats.isSupportedMime(mime)
@@ -100,7 +121,7 @@ class MediaStoreScanner(private val context: Context) {
                 if (deepAccess && parentDir != null) {
                     val base = name.substringBeforeLast('.')
                     val dir = File(parentDir)
-                    val hit = pickBestLyric(namesOf(dir), base)
+                    val hit = LyricsMatcher.pickBest(lyricNamesOf(dir), base)
                     if (hit != null) lrcUri = android.net.Uri.fromFile(File(dir, hit))
                 }
 
@@ -131,12 +152,8 @@ class MediaStoreScanner(private val context: Context) {
             }
         }
 
-        return Result(songs, skipped)
+        return Result(songs, skipped, if (queryOk) formatFingerprint(newestId, rowCount) else "")
     }
-
-    private fun pickBestLyric(names: List<String>, baseName: String): String? =
-        names.mapNotNull { n -> LyricsMatcher.score(n, baseName).takeIf { it >= 0 }?.let { it to n } }
-            .maxByOrNull { it.first }?.second
 
     /**
      * 曲库指纹：`最新一条 _ID : 总条数`。
@@ -161,7 +178,7 @@ class MediaStoreScanner(private val context: Context) {
             "${MediaStore.Audio.Media._ID} DESC",
         )?.use { c ->
             val newest = if (c.moveToFirst()) c.getLong(0) else 0L
-            "$newest:${c.count}"
+            formatFingerprint(newest, c.count)
         }
     }.getOrNull().orEmpty()
 
@@ -176,4 +193,13 @@ class MediaStoreScanner(private val context: Context) {
         } else {
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         }
+
+    companion object {
+        /**
+         * 指纹格式：scan 顺带产出与 fingerprint 独立查询必须逐字一致，否则冷启动节流
+         * 会因为「这次记的值」和「下次查的值」不同永远跳不过去。
+         * 放在 companion 里是为了纯 JVM 单测能直接断言，不必拉 ContentResolver。
+         */
+        internal fun formatFingerprint(newestId: Long, rowCount: Int): String = "$newestId:$rowCount"
+    }
 }

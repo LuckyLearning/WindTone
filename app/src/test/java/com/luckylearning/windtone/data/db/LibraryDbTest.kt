@@ -46,6 +46,29 @@ class LibraryDbTest {
             SongEntity(uri = uri, source = "FOLDER", title = uri.substringAfterLast('/'), folderId = folderId, folderPath = folderPath),
         )
 
+    // ------------------------------------------------- 批量落库（扫描提速）
+
+    @Test
+    fun batchInsertReturnsRowIdsInOrderAndBatchUpdateKeepsIds() = runBlocking {
+        val rows = listOf(
+            SongEntity(uri = "u1", source = "FOLDER", title = "A"),
+            SongEntity(uri = "u2", source = "FOLDER", title = "B"),
+            SongEntity(uri = "u3", source = "FOLDER", title = "C"),
+        )
+        val ids = db.songDao().insertAll(rows)
+        assertEquals(3, ids.size)
+        assertTrue("批量插入应返回合法 rowid", ids.all { it > 0L })
+        assertEquals(3, db.songDao().all().size)
+
+        val updated = rows.zip(ids).map { (row, id) -> row.copy(id = id, title = row.title + "!") }
+        db.songDao().updateAll(updated)
+
+        val stored = db.songDao().all().sortedBy { it.id }
+        assertEquals(listOf("A!", "B!", "C!"), stored.map { it.title })
+        // 主键不变是收藏 / 歌单 / 播放统计不脱钩的根基
+        assertEquals(ids.sorted(), stored.map { it.id })
+    }
+
     // ------------------------------------------------------------------ 级联
 
     @Test

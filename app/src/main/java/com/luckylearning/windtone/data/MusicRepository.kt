@@ -27,6 +27,8 @@ class MusicRepository(
         val songs: List<Song>,
         val skippedUnsupported: Int = 0,
         val withLyrics: Int = 0,
+        /** MediaStore 全表 query 顺带产出的曲库指纹；未跑媒体库（指定目录模式）时为空串 */
+        val fingerprint: String = "",
     )
 
     private val mediaStoreScanner by lazy { MediaStoreScanner(context) }
@@ -57,14 +59,21 @@ class MusicRepository(
         }
 
         // 1) 系统媒体库 —— 仅在「全盘扫描」模式下读取
+        var fingerprint = ""
+        // 媒体库已收录的「文件名|大小」键。SAF 扫到同一批文件时不必再开一次
+        // MediaMetadataRetriever（每个文件一次 fd 打开 + 7~9 次 extractMetadata，
+        // 是整条链路最贵的一步）。指定目录模式下为空集，SAF 仍是唯一元数据来源。
+        var mediaStoreKeys: Set<String> = emptySet()
         if (scope == ScanScope.FULL) {
             progress("正在读取系统媒体库…")
             runCatching { mediaStoreScanner.scan(deepScanEnabled()) }
                 .onFailure { Log.w(TAG, "媒体库扫描失败", it) }
                 .getOrNull()
                 ?.let { res ->
+                    fingerprint = res.fingerprint
                     skipped += res.skippedUnsupported
                     res.songs.forEach { merge(collected, it) }
+                    mediaStoreKeys = collected.keys.toHashSet()
                 }
         }
         val afterMediaStore = collected.size
@@ -75,7 +84,13 @@ class MusicRepository(
             coroutineContext.ensureActive()
             progress("正在扫描导入文件夹 ${index + 1}/${folders.size}…")
             val uri = runCatching { Uri.parse(uriStr) }.getOrNull() ?: return@forEachIndexed
-            runCatching { folderScanner.scan(uri) { n -> progress("已找到 $n 首…") } }
+            runCatching {
+                folderScanner.scan(
+                    uri,
+                    skipTagRead = { name, size -> "${name.lowercase()}|$size" in mediaStoreKeys },
+                    onProgress = { n -> progress("已找到 $n 首…") },
+                )
+            }
                 .onFailure { Log.w(TAG, "文件夹扫描失败: $uriStr", it) }
                 .getOrNull()
                 ?.forEach { merge(collected, it) }
@@ -113,6 +128,7 @@ class MusicRepository(
             songs = songs,
             skippedUnsupported = skipped,
             withLyrics = songs.count { it.lrcUri != null },
+            fingerprint = fingerprint,
         )
     }
 

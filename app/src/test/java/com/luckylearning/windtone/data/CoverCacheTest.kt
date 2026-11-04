@@ -1,10 +1,18 @@
 package com.luckylearning.windtone.data
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * 封面解码尺寸与缓存预算（v1.2.12）。
@@ -183,5 +191,60 @@ class CoverCacheTest {
     @Test
     fun `小部件目标边长经 cachePxFor 仍为 128`() {
         assertEquals(128, CoverRepository.cachePxFor(CoverRepository.WIDGET_COVER_PX))
+    }
+
+    // ------------------------------ 快速下滑：等待者归零即取消（2026-11-04 新增）
+
+    @Test
+    fun `最后一个等待者离开即取消在途解码`() = runBlocking {
+        val deferred = CompletableDeferred<Int>()
+        val abandoned = AtomicInteger()
+        val entry = CoverInFlight(deferred) { abandoned.incrementAndGet() }
+        val waiter = launch { entry.awaitOrNull() }
+        yield(); yield()
+        waiter.cancelAndJoin()
+
+        // 这就是「滚过去的行不再白解、白写盘」的书面证据
+        assertTrue(deferred.isCancelled)
+        assertEquals(1, abandoned.get())
+    }
+
+    @Test
+    fun `还有别的等待者时 一个离开不拖死任务`() = runBlocking {
+        val deferred = CompletableDeferred<Int>()
+        val abandoned = AtomicInteger()
+        val entry = CoverInFlight(deferred) { abandoned.incrementAndGet() }
+        val row = launch { entry.awaitOrNull() }
+        val miniPlayer = async { entry.awaitOrNull() }
+        yield(); yield()
+        row.cancelAndJoin()
+
+        assertFalse(deferred.isCancelled)
+        assertEquals(0, abandoned.get())
+        deferred.complete(42)
+        assertTrue(miniPlayer.await() == 42)
+    }
+
+    @Test
+    fun `任务已完成时 等待者离开不再记放弃`() = runBlocking {
+        val deferred = CompletableDeferred<Int>()
+        val abandoned = AtomicInteger()
+        val entry = CoverInFlight(deferred) { abandoned.incrementAndGet() }
+        deferred.complete(7)
+
+        assertTrue(entry.awaitOrNull() == 7)
+        assertFalse(deferred.isCancelled)
+        assertEquals(0, abandoned.get())
+    }
+
+    @Test
+    fun `解码失败返回占位分支 且不误记放弃`() = runBlocking {
+        val deferred = CompletableDeferred<Int>()
+        val abandoned = AtomicInteger()
+        val entry = CoverInFlight(deferred) { abandoned.incrementAndGet() }
+        deferred.completeExceptionally(IllegalStateException("decode failed"))
+
+        assertNull(entry.awaitOrNull())
+        assertEquals(0, abandoned.get())
     }
 }

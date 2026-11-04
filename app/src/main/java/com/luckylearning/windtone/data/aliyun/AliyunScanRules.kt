@@ -1,6 +1,9 @@
 package com.luckylearning.windtone.data.aliyun
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
@@ -19,6 +22,20 @@ object AliyunScanRules {
 
     /** 最大递归深度：根目录算第 0 层，往下最多进入第 [SCAN_DEPTH] 层 */
     const val SCAN_DEPTH = 2
+
+    /**
+     * 同一层目录的并发列目录上限。
+     * 旧实现是纯串行 BFS，100 个子目录就是 100+ 个串行网络 RTT；并发能把这些等待
+     * 重叠起来。取 4 是保守值：不一次性打满网盘 API（避免限流 / 账号风控），
+     * 又足以盖住常见「一个歌手几十张专辑」的层宽。
+     */
+    const val MAX_PARALLEL_DIRS = 4
+
+    /** 单个目录的列目录结果；失败与成功分开表达，避免把 `Result` 当泛型载荷 */
+    private data class DirResult(
+        val entries: List<AliyunEntry>? = null,
+        val error: String? = null,
+    )
 
     /**
      * 位于 [depth] 层的目录还能不能往下进子目录。
@@ -69,6 +86,9 @@ object AliyunScanRules {
      * [onProgress] 每列完一个目录回调一次（已扫目录数 / 已收文件数）。
      * 协程取消（用户点停止）会在每个目录之间响应。
      *
+     * 同一层的目录按 [MAX_PARALLEL_DIRS] 一组并发列目录，但**归并严格按任务顺序**，
+     * 因此 files / skipped / 进度回调的观感与旧串行实现一致，只是网络等待被重叠。
+     *
      * 返回按 [sortCollected] 排好的文件列表 + 被跳过目录的原因列表。
      */
     suspend fun scan(
@@ -85,37 +105,56 @@ object AliyunScanRules {
 
         while (queue.isNotEmpty()) {
             currentCoroutineContext().ensureActive()
-            val task = queue.removeFirst()
-            val entries = try {
-                listDir(task.fileId)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                skipped += skipReason(task.path, e.message)
-                dirsDone++
-                onProgress(dirsDone, files.size)
-                continue
-            }
-            entries.forEach { entry ->
-                when {
-                    entry.isPlayableAudio -> files += ScanHit(
-                        fileId = entry.fileId,
-                        name = entry.name,
-                        parentPath = task.path,
-                        parentFileId = task.fileId,
-                    )
-                    entry.isDir && canDescend(task.depth) ->
-                        queue.add(
-                            DirTask(
-                                fileId = entry.fileId,
-                                path = if (task.path.isBlank()) entry.name else "${task.path}/${entry.name}",
-                                depth = task.depth + 1,
-                            ),
-                        )
+            // BFS：每轮开始时队列里恰好是「同一层」的全部目录（下一层是本轮归并时才入队的）。
+            val layer = ArrayList<DirTask>(queue.size)
+            while (queue.isNotEmpty()) layer.add(queue.removeFirst())
+
+            for (chunk in layer.chunked(MAX_PARALLEL_DIRS)) {
+                currentCoroutineContext().ensureActive()
+                val results = coroutineScope {
+                    chunk.map { task ->
+                        async {
+                            try {
+                                DirResult(entries = listDir(task.fileId))
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                DirResult(error = e.message)
+                            }
+                        }
+                    }.awaitAll()
+                }
+                // 顺序归并：并发只发生在「取数据」，结果的可见顺序仍是 BFS 队列顺序
+                for (i in chunk.indices) {
+                    val task = chunk[i]
+                    val entries = results[i].entries
+                    if (entries == null) {
+                        skipped += skipReason(task.path, results[i].error)
+                    } else {
+                        for (entry in entries) {
+                            when {
+                                entry.isPlayableAudio -> files += ScanHit(
+                                    fileId = entry.fileId,
+                                    name = entry.name,
+                                    parentPath = task.path,
+                                    parentFileId = task.fileId,
+                                )
+                                entry.isDir && canDescend(task.depth) ->
+                                    queue.add(
+                                        DirTask(
+                                            fileId = entry.fileId,
+                                            path = if (task.path.isBlank()) entry.name
+                                            else "${task.path}/${entry.name}",
+                                            depth = task.depth + 1,
+                                        ),
+                                    )
+                            }
+                        }
+                    }
+                    dirsDone++
+                    onProgress(dirsDone, files.size)
                 }
             }
-            dirsDone++
-            onProgress(dirsDone, files.size)
         }
         return ScanOutcome(sortCollected(files), skipped)
     }

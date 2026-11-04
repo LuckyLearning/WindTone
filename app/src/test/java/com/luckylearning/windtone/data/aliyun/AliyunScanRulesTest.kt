@@ -4,6 +4,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -140,5 +141,33 @@ class AliyunScanRulesTest {
         job.join()
         assertTrue("取消后扫描任务应当以取消告终", job.isCancelled)
         assertEquals(1, calls)
+    }
+
+    @Test
+    fun sameLevelDirectoriesAreConcurrentButMergedInQueueOrder() = runBlocking {
+        var inFlight = 0
+        var peak = 0
+        val lock = Any()
+        val listDir: suspend (String) -> List<AliyunEntry> = { id ->
+            synchronized(lock) {
+                inFlight++
+                if (inFlight > peak) peak = inFlight
+            }
+            delay(20)
+            synchronized(lock) { inFlight-- }
+            if (id == "root") (1..6).map { dir("d$it", "目录$it") }
+            else listOf(audio("${id}_f", "$id.mp3"))
+        }
+
+        val outcome = AliyunScanRules.scan("root", listDir = listDir)
+
+        assertEquals(6, outcome.files.size)
+        // 并发只发生在「取数据」；归并按 BFS 队列顺序，再经 sortCollected 排序，结果可复现
+        assertEquals((1..6).map { "d$it.mp3" }, outcome.files.map { it.name })
+        assertTrue("同层应真的并发，实测峰值 $peak", peak > 1)
+        assertTrue(
+            "并发不得超过上限 ${AliyunScanRules.MAX_PARALLEL_DIRS}（实测 $peak）",
+            peak <= AliyunScanRules.MAX_PARALLEL_DIRS,
+        )
     }
 }

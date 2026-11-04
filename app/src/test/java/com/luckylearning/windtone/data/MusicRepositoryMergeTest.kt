@@ -114,4 +114,14 @@ class MusicRepositoryMergeTest {
         val merged = MusicRepository.mergeSong(song(), song(title = "01_tide", durationMs = 0L))
         assertNull(merged.lrcUri)
     }
+
+    /**
+     * 全盘扫描顺带产出的指纹，与独立 fingerprint() 查询的格式必须逐字一致。
+     * 前者写进 prefs、后者在冷启动查；格式一漂移，10 分钟节流就永远跳不过去。
+     */
+    @Test
+    fun scanFingerprintUsesStandaloneQueryFormat() {
+        assertEquals("0:0", MediaStoreScanner.formatFingerprint(0L, 0))
+        assertEquals("12345:678", MediaStoreScanner.formatFingerprint(12345L, 678))
+    }
 }

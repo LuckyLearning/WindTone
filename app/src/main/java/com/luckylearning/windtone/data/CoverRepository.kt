@@ -13,7 +13,9 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.coroutineContext
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -93,16 +95,31 @@ object CoverRepository {
      *
      * 触发场景很常见 —— 列表现项、底部迷你播放条、播放页副标题会同时请求同一首歌，
      * 旧实现三方各解一次，峰值瞬时翻 3 倍。
+     *
+     * 值从裸 `Deferred` 换成 [CoverInFlight]（带等待者引用计数）：快速下滑时行被
+     * dispose，最后一个等待者离开就把任务本身取消，不必再解完、压缩、写盘。
      */
-    private val inFlight = ConcurrentHashMap<String, Deferred<Bitmap?>>()
+    private val inFlight = ConcurrentHashMap<String, CoverInFlight<Bitmap?>>()
 
     /**
      * 单飞任务的作用域。
      *
-     * **刻意不挂调用方的 Job**：第一个请求方离开（滚出屏幕）时只该取消它自己的等待，
-     * 不该把别的等待者一起拖死。
+     * **不挂调用方的 Job**（多等待者共享，第一个离开不该拖死其它人）；取而代之由
+     * [CoverInFlight] 在「等待者归零」时精确取消 [cover] 里创建的 Deferred。
      */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * 原始封面读取（`MediaMetadataRetriever.setDataSource` + 同目录回退）的并发闸门。
+     *
+     * 冷缓存快速下滑会瞬间堆起十几到几十个阻塞式 MMR，`Dispatchers.IO` 默认可并发
+     * 64 个，eMMC 与 fd 一起被打满，当前屏真正要看的封面反而排在队尾。限到 4 路后，
+     * 被取消的行会在拿许可之前退出（[decodeInto] 的 `ensureActive` 检查点）。
+     */
+    private val rawDispatcher = Dispatchers.IO.limitedParallelism(4)
+
+    /** 因「最后一个等待者离开」而取消的解码次数，诊断包用来证明快速下滑是否变省 */
+    private val abandonedDecodes = AtomicLong()
 
     /**
      * 解码后的位图缓存。
@@ -208,7 +225,8 @@ object CoverRepository {
      * 键为 `stableKey@目标边长`，同一首歌在列表与播放页各缓存一份。
      *
      * 并发语义：同一 `key` 的并发调用共享一次解码（[inFlight]），谁抢到谁去解，
-     * 其余人等结果。等待方被取消不会影响解码本身。
+     * 其余人等结果。**等待者全部离开时任务被取消** —— 快速下滑滚过去的行不再
+     * 白白解码、压缩、写盘；只要还有别的等待者（迷你条 / 播放页）就继续跑。
      */
     suspend fun cover(context: Context, song: Song, targetPx: Int): Bitmap? {
         if (targetPx <= 0) return null
@@ -218,28 +236,50 @@ object CoverRepository {
         val key = "${song.stableKey}@$px"
         bitmapCache.get(key)?.let { return it }
 
-        // 快速路径：已有同键任务在跑，直接等
-        inFlight[key]?.let { return runCatching { it.await() }.getOrNull() }
+        // 快速路径：已有同键任务在跑 / 刚跑完，直接等（已取消的旧任务不复用）
+        inFlight[key]?.let { live ->
+            if (!live.deferred.isCancelled) return live.awaitOrNull()
+            inFlight.remove(key, live)
+        }
 
         val fresh = scope.async(start = CoroutineStart.LAZY) { decodeInto(key, context, song, px) }
-        // 完成后自摘表项；用 remove(key, fresh) 保证不会误删别人的任务
-        fresh.invokeOnCompletion { inFlight.remove(key, fresh) }
+        val entry = CoverInFlight(fresh) { abandonedDecodes.incrementAndGet() }
+        // 完成后自摘表项；用 remove(key, entry) 保证不会误删别人的任务
+        fresh.invokeOnCompletion { inFlight.remove(key, entry) }
 
-        val existing = inFlight.putIfAbsent(key, fresh)
+        val existing = inFlight.putIfAbsent(key, entry)
         if (existing != null) {
             // 抢输了：丢弃自己这个还没启动的任务，改等别人的结果
             fresh.cancel()
-            return runCatching { existing.await() }.getOrNull()
+            return existing.awaitOrNull()
         }
         fresh.start()
-        return runCatching { fresh.await() }.getOrNull()
+        return entry.awaitOrNull()
+    }
+
+    /**
+     * **同步**读内存位图缓存，零 IO、零协程调度。
+     *
+     * 给 Compose 首帧用：`remember` 的初值直接取缓存，命中时不再经历
+     * 「先画占位 → LaunchedEffect 调度 → 再重组画图」这一轮闪烁与开销。
+     * 未命中返回 null，由调用方走 [cover] 异步加载。
+     */
+    fun peek(song: Song, targetPx: Int): Bitmap? {
+        if (targetPx <= 0) return null
+        val px = cachePxFor(targetPx)
+        if (px <= 0) return null
+        return bitmapCache.get("${song.stableKey}@$px")
     }
 
     /** [cover] 的实际加载：磁盘命中 → 原始字节 → 解码 → 写盘。只由单飞任务调用 */
     private suspend fun decodeInto(key: String, context: Context, song: Song, targetPx: Int): Bitmap? {
+        // 检查点：任务可能在排队等 [rawDispatcher] 许可时就被「等待者归零」取消。
+        // 阻塞式 IO / 解码本身不可中断，所以在每段昂贵工作之前先问一次 isActive。
+        coroutineContext.ensureActive()
         val file = diskFile(song, targetPx)
         if (file != null) {
             if (file.exists()) {
+                coroutineContext.ensureActive()
                 val diskOpts = BitmapFactory.Options().apply {
                     inPreferredConfig = Bitmap.Config.RGB_565
                 }
@@ -262,10 +302,14 @@ object CoverRepository {
             }
         }
 
+        coroutineContext.ensureActive()
         val raw = loadRaw(context, song) ?: return null
+        coroutineContext.ensureActive()
         val bmp = withContext(Dispatchers.Default) { decodeScaled(raw, targetPx) } ?: return null
         recordDecode(fromDisk = false, byteCount = bmp.byteCount)
         bitmapCache.put(key, bmp)
+        // 已解出的位图即便此刻被取消也留在内存缓存里有用；但不再做 JPEG 压缩 + 写盘。
+        coroutineContext.ensureActive()
         writeDisk(file, bmp)
         return bmp
     }
@@ -276,7 +320,7 @@ object CoverRepository {
      * 顺序：**内嵌图 → 同目录 folder/cover/AlbumArt.jpg（[FolderCover]）→ 空**。
      * 空结果也会进内存缓存（负缓存），避免同一首歌反复打开 MediaMetadataRetriever / 扫目录。
      */
-    suspend fun loadRaw(context: Context, song: Song): ByteArray? = withContext(Dispatchers.IO) {
+    suspend fun loadRaw(context: Context, song: Song): ByteArray? = withContext(rawDispatcher) {
         val key = song.stableKey
         cache.get(key)?.let { return@withContext it.takeIf { b -> b.isNotEmpty() } }
         val bytes = runCatching {
@@ -498,6 +542,10 @@ object CoverRepository {
         val diskHits: Long = 0L,
         /** 磁盘层未命中（无文件或损坏） */
         val diskMisses: Long = 0L,
+        /** 当前在途解码任务数（导出瞬间的快照） */
+        val inFlightNow: Int = 0,
+        /** 因「最后一个等待者离开（快速下滑滚过）」而被取消的解码次数 */
+        val abandonedDecodes: Long = 0L,
     )
 
     fun stats(): Stats = Stats(
@@ -516,6 +564,8 @@ object CoverRepository {
         peakDecodedBytes = peakDecodedBytes,
         diskHits = diskHits.get(),
         diskMisses = diskMisses.get(),
+        inFlightNow = inFlight.size,
+        abandonedDecodes = abandonedDecodes.get(),
     )
 
     /** 连磁盘一起清（设置页「清空封面缓存」） */
@@ -621,4 +671,40 @@ enum class CoverTrimLevel {
 
     /** 系统内存已经吃紧：连原始字节一起丢 */
     RUNNING_LOW,
+}
+
+/**
+ * 单个在途封面解码任务 + 等待者引用计数。
+ *
+ * 背景：`cover()` 的单飞任务刻意不挂调用方 Job —— 列表现项、迷你条、播放页会同时
+ * 等同一首歌，任何一方滚出屏幕都不该把别人拖死。但旧实现因此走向另一个极端：
+ * **没有人等了，解码、JPEG 压缩、写盘也照跑不误**。快速下滑滚过几百首，就等于
+ * 白解几百张、白写几百个文件，把 IO / Default 线程池与 eMMC 占满。
+ *
+ * 这里用「等待者归零即取消」补上中点：还有人等就继续，一个人都没有就停。
+ * 泛型化是为了能在纯 JVM 单测里用 `CompletableDeferred<Int>` 验证并发语义，
+ * 不必拉起 Android Bitmap / ContentResolver。
+ */
+internal class CoverInFlight<T>(
+    val deferred: Deferred<T>,
+    private val onAbandoned: () -> Unit = {},
+) {
+    private val waiters = AtomicInteger(0)
+
+    /** 等结果；本等待者离开后若无人再等，取消任务本身。 */
+    suspend fun awaitOrNull(): T? {
+        waiters.incrementAndGet()
+        return try {
+            // 吞掉 CancellationException 是刻意的：cover() 对所有调用方都只返回
+            // Bitmap?，让「被取消」与「无封面」在 UI 上走同一条占位分支。
+            runCatching { deferred.await() }.getOrNull()
+        } finally {
+            if (waiters.decrementAndGet() == 0 && deferred.isActive) {
+                // Job.cancel() 返回 Unit，不是「是否成功」的布尔；isActive 已经把
+                // 「已完成 / 已取消」挡在外面，这里直接取消并记一次。
+                deferred.cancel()
+                onAbandoned()
+            }
+        }
+    }
 }

@@ -98,6 +98,8 @@ object MemoryProbe {
                 mb(s.peakDecodedBytes.toLong()),
             ),
         )
+        // 快速下滑有没有「白解」：在途数 / 因等待者归零而取消的次数。
+        appendLine(AppStrings.s(R.string.mp_cover_inflight, s.inFlightNow, s.abandonedDecodes))
         if (librarySongs > 0) appendLine(AppStrings.s(R.string.mp_library, librarySongs))
 
         // 位图账：这是判定「libc malloc 到底是不是位图」的唯一直接证据。

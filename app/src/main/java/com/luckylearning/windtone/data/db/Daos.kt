@@ -71,12 +71,21 @@ interface SongDao {
     @Insert
     suspend fun insert(row: SongEntity): Long
 
+    /**
+     * 批量插入并返回 rowid 列表（顺序与入参一致）。
+     * 扫描落库时用它一次写入全部新歌，再按顺序回填 `Song.dbId`；
+     * 旧实现逐条 `insert` 是 N 次独立 SQL + N 次协程调度。
+     */
     @Insert
-    suspend fun insertAll(rows: List<SongEntity>)
+    suspend fun insertAll(rows: List<SongEntity>): List<Long>
 
     /** 按主键更新（落库时行已存在则走这里，ID 保持不变） */
     @Update
     suspend fun update(row: SongEntity)
+
+    /** 批量更新：与 [insertAll] 配套，扫描落库两条批量 SQL 收口 */
+    @Update
+    suspend fun updateAll(rows: List<SongEntity>)
 
     /**
      * 本轮扫描没有见到的歌：置为「暂不可见」而不是删除。

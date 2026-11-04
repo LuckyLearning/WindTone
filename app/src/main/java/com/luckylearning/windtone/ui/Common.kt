@@ -140,15 +140,22 @@ fun CoverArt(
     // 大屏（车机）上封面尺寸不适合写死 dp，允许调用方传 fillContainer 让父级决定边长；
     // 仍按 400dp 起步，避免父级尺寸尚未测量时解出过小的位图。
     val decodeDp = if (fillContainer && size < 400.dp) 400.dp else size
-    var bitmap by remember(song?.stableKey, decodeDp) { mutableStateOf<Bitmap?>(null) }
+    // 解码尺寸 = 显示尺寸：roundToPx() 已经是物理像素，**不能再乘倍率**。
+    // 旧实现乘 2（= 4 倍面积），播放页封面 803px 会解成 1606px（5.2MB），
+    // 列表 143px 解成 286px。余量只给大图，由 targetPxFor 统一处理。
+    val targetPx = CoverRepository.targetPxFor(with(density) { decodeDp.roundToPx() })
 
-    LaunchedEffect(song?.stableKey, decodeDp) {
-        bitmap = null
+    // 初值直接同步取内存位图缓存：命中时首帧就画图，不再经历
+    // 「先画占位 → LaunchedEffect 调度 → 再重组画图」这一轮闪烁与开销。
+    // 旧实现无条件 `bitmap = null`，快速下滑时每一行都闪一下并多吃一轮重组。
+    var bitmap by remember(song?.stableKey, targetPx) {
+        mutableStateOf(song?.let { CoverRepository.peek(it, targetPx) })
+    }
+
+    LaunchedEffect(song?.stableKey, targetPx) {
         val s = song ?: return@LaunchedEffect
-        // 解码尺寸 = 显示尺寸：roundToPx() 已经是物理像素，**不能再乘倍率**。
-        // 旧实现乘 2（= 4 倍面积），播放页封面 803px 会解成 1606px（5.2MB），
-        // 列表 143px 解成 286px。余量只给大图，由 targetPxFor 统一处理。
-        val targetPx = CoverRepository.targetPxFor(with(density) { decodeDp.roundToPx() })
+        // 首帧已命中缓存就不必再发请求（cover() 也会同步命中，但省一次协程调度与重组）。
+        if (CoverRepository.peek(s, targetPx) != null) return@LaunchedEffect
         bitmap = runCatching { CoverRepository.cover(appContext, s, targetPx) }.getOrNull()
     }
 
@@ -159,10 +166,13 @@ fun CoverArt(
     }
     val sized = if (fillContainer) modifier.fillMaxSize() else modifier.size(size)
     val coverKey = song?.stableKey ?: ""
+    // 占位渐变按 key 是确定的，但 coverBrush() 每次调用都 new 一个 Brush 实例；
+    // 不 remember 会让 background() 每次重组都拿到新对象 → 触发重绘。
+    val coverBrush = remember(coverKey) { AppVisual.coverBrush(coverKey) }
     Box(
         modifier = sized
             .clip(shape)
-            .background(AppVisual.coverBrush(coverKey)),
+            .background(coverBrush),
         contentAlignment = Alignment.Center,
     ) {
         val bmp = bitmap

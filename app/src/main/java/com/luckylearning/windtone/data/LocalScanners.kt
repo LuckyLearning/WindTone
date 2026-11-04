@@ -24,7 +24,17 @@ class FolderScanner(private val context: Context) {
         val lastModified: Long,
     )
 
-    fun scan(treeUri: Uri, readTags: Boolean = true, onProgress: (Int) -> Unit = {}): List<Song> {
+    /**
+     * @param skipTagRead 返回 true 时该文件不读内嵌标签（同名同大小的文件已被媒体库
+     *   收录，标签/时长都在那条记录里，再开一次 MediaMetadataRetriever 是重复劳动）。
+     *   键的构造口径与 `MusicRepository.buildKey` 一致：`文件名小写|字节数`。
+     */
+    fun scan(
+        treeUri: Uri,
+        readTags: Boolean = true,
+        skipTagRead: (String, Long) -> Boolean = { _, _ -> false },
+        onProgress: (Int) -> Unit = {},
+    ): List<Song> {
         // 文件夹视图按「用户选择的目录」分组：整棵子树的歌都归到所选目录名下，
         // 子目录不单独显示（用户在系统选择器里挑哪层，哪层就是一个分组）。
         // 分组键用**解码后的完整文档 ID**（如 primary:Music/华语）而不是叶名——
@@ -41,7 +51,8 @@ class FolderScanner(private val context: Context) {
         var counted = 0
         val batchOk = runCatching {
             val rootDocId = DocumentsContract.getTreeDocumentId(treeUri)
-            rootDocId.isNotBlank() && walkBatch(treeUri, rootDocId, out, readTags, folderLabel, 0) {
+            rootDocId.isNotBlank() &&
+                walkBatch(treeUri, rootDocId, out, readTags, skipTagRead, folderLabel, 0) {
                 counted++
                 if (counted % 5 == 0) onProgress(out.size)
             }
@@ -55,7 +66,7 @@ class FolderScanner(private val context: Context) {
         out.clear()
         val root = runCatching { DocumentFile.fromTreeUri(context, treeUri) }.getOrNull() ?: return emptyList()
         counted = 0
-        walk(root, out, readTags, folderLabel) {
+        walk(root, out, readTags, skipTagRead, folderLabel) {
             counted++
             if (counted % 5 == 0) onProgress(out.size)
         }
@@ -76,6 +87,7 @@ class FolderScanner(private val context: Context) {
         parentDocId: String,
         out: MutableList<Song>,
         readTags: Boolean,
+        skipTagRead: (String, Long) -> Boolean,
         folderLabel: String,
         depth: Int,
         tick: () -> Unit,
@@ -132,6 +144,7 @@ class FolderScanner(private val context: Context) {
                     folderPath = folderLabel,
                     source = SongSource.FOLDER,
                     readTags = readTags,
+                    skipTagRead = skipTagRead,
                     sizeBytes = item.sizeBytes,
                     lastModified = item.lastModified,
                 )
@@ -139,7 +152,7 @@ class FolderScanner(private val context: Context) {
         }
 
         for (dirId in dirs) {
-            if (!walkBatch(treeUri, dirId, out, readTags, folderLabel, depth + 1, tick)) return false
+            if (!walkBatch(treeUri, dirId, out, readTags, skipTagRead, folderLabel, depth + 1, tick)) return false
         }
         return true
     }
@@ -148,6 +161,7 @@ class FolderScanner(private val context: Context) {
         dir: DocumentFile,
         out: MutableList<Song>,
         readTags: Boolean,
+        skipTagRead: (String, Long) -> Boolean,
         folderLabel: String,
         tick: () -> Unit,
     ) {
@@ -182,6 +196,7 @@ class FolderScanner(private val context: Context) {
                     folderPath = folderLabel,
                     source = SongSource.FOLDER,
                     readTags = readTags,
+                    skipTagRead = skipTagRead,
                     sizeBytes = runCatching { audio.length() }.getOrDefault(0L),
                     lastModified = runCatching { audio.lastModified() }.getOrDefault(0L),
                 )
@@ -191,7 +206,7 @@ class FolderScanner(private val context: Context) {
         for (child in children) {
             val childName = child.name ?: continue
             if (child.isDirectory && !childName.startsWith(".")) {
-                walk(child, out, readTags, folderLabel, tick)
+                walk(child, out, readTags, skipTagRead, folderLabel, tick)
             }
         }
     }
@@ -203,11 +218,13 @@ class FolderScanner(private val context: Context) {
         folderPath: String?,
         source: SongSource,
         readTags: Boolean,
+        skipTagRead: (String, Long) -> Boolean,
         sizeBytes: Long,
         lastModified: Long,
     ): Song {
         val base = name.substringBeforeLast('.')
-        val info = if (readTags) MetadataReader.read(context, uri) else null
+        val needTags = readTags && !skipTagRead(name, sizeBytes)
+        val info = if (needTags) MetadataReader.read(context, uri) else null
         return Song(
             id = uri.toString().hashCode().toLong(),
             uri = uri,

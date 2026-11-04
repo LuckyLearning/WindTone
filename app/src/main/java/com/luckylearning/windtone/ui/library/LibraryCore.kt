@@ -21,6 +21,7 @@ import com.luckylearning.windtone.data.ScanScope
 import com.luckylearning.windtone.data.StorageHotplugBus
 import com.luckylearning.windtone.data.SongDeleter
 import com.luckylearning.windtone.data.SortOrder
+import com.luckylearning.windtone.data.db.SongEntity
 import com.luckylearning.windtone.data.db.toEntity
 import com.luckylearning.windtone.data.db.toSong
 import com.luckylearning.windtone.data.derivedFolderPath
@@ -271,7 +272,7 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
             val persisted = withContext(Dispatchers.IO) { persistSongs(result.songs, scanStart) }
             applyLibrary(persisted, result.skippedUnsupported, fromCache = false)
             session.folders.rememberScannedFolders()
-            rememberScanFingerprint()
+            rememberScanFingerprint(result.fingerprint)
             playback.restoreQueueIfNeeded()
             if (!auto && result.songs.isEmpty()) {
                 pushMessage(
@@ -311,9 +312,17 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
         )
     }
 
-    /** 扫描成功后记录指纹与时间，供下次冷启动判断要不要跳过 */
-    private suspend fun rememberScanFingerprint() {
-        val fp = withContext(Dispatchers.IO) { repository.libraryFingerprint() }
+    /**
+     * 扫描成功后记录指纹与时间，供下次冷启动判断要不要跳过。
+     *
+     * 全盘扫描时 MediaStore 那次 query 已经顺带算出了指纹（最新 _ID : 总行数），
+     * 直接用，不再为「记一笔」单独拉一次全表 cursor；指定目录模式（没跑 MediaStore）
+     * 或查询失败时回退到独立查询。
+     */
+    private suspend fun rememberScanFingerprint(fingerprintFromScan: String) {
+        val fp = fingerprintFromScan.ifBlank {
+            withContext(Dispatchers.IO) { repository.libraryFingerprint() }
+        }
         if (fp.isNotBlank()) prefs.lastScanFingerprint = fp
         prefs.lastScanAt = System.currentTimeMillis()
     }
@@ -339,16 +348,38 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
         val out = ArrayList<Song>(raw.size)
 
         db.withTransaction {
-            for (song in raw) {
+            // 批量落库：逐条 insert/update 在 3000 首时是 3000 次独立 SQL 与协程调度，
+            // 虽已在同一事务里省掉 fsync，常数仍可观。这里把新歌 / 旧歌分两组，
+            // 各一次批量调用；Room 的 insertAll 返回 rowid 列表，按顺序回填 dbId。
+            val newRows = ArrayList<SongEntity>()
+            val updateRows = ArrayList<SongEntity>()
+            // raw[i] 的结果主键；-1 表示被 excluded 跳过，不进输出列表
+            val ids = LongArray(raw.size) { -1L }
+            // 「新增行」在 raw 中的位置，顺序与 newRows 严格一致
+            val newPositions = ArrayList<Int>()
+
+            for ((i, song) in raw.withIndex()) {
                 if (song.stableKey in excluded) continue
                 val folderId = song.folderPath?.let { folderIdByDocId[it] }
                 val oldId = existing[song.stableKey]
-                val row = song.toEntity(oldId ?: 0L, folderId).copy(lastSeenAt = scanStart, missingSince = 0L)
-                val id = if (oldId == null) dao.insert(row) else {
-                    dao.update(row)
-                    oldId
+                val row = song.toEntity(oldId ?: 0L, folderId)
+                    .copy(lastSeenAt = scanStart, missingSince = 0L)
+                if (oldId == null) {
+                    newRows.add(row)
+                    newPositions.add(i)
+                } else {
+                    updateRows.add(row)
+                    ids[i] = oldId
                 }
-                out.add(song.copy(dbId = id))
+            }
+
+            val newIds = if (newRows.isEmpty()) emptyList() else dao.insertAll(newRows)
+            newPositions.forEachIndexed { n, pos -> ids[pos] = newIds.getOrElse(n) { 0L } }
+            if (updateRows.isNotEmpty()) dao.updateAll(updateRows)
+
+            for ((i, song) in raw.withIndex()) {
+                if (ids[i] == -1L) continue
+                out.add(song.copy(dbId = ids[i]))
             }
             dao.markMissing(scanStart, now)
             session.folders.refreshFolderCounts()

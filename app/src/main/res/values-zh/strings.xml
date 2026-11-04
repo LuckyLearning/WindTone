@@ -1695,6 +1695,7 @@
     <string name="mp_cover_raw">封面原始缓存：%1$s / %2$s   命中 %3$d / 未命中 %4$d（%5$s）</string>
     <string name="mp_cover_disk">封面磁盘缓存：%1$s · 命中 %2$d / 未中 %3$d（%4$s）</string>
     <string name="mp_cover_decode">封面解码：磁盘 %1$d 次 · 原始 %2$d 次   累计产出 %3$s（吞吐，非常驻）   峰值单张 %4$s</string>
+    <string name="mp_cover_inflight">封面请求：在途 %1$d   已放弃（无等待者）%2$d</string>
     <string name="mp_library">曲库：%1$d 首</string>
     <string name="mp_bitmap_live">位图存活（本进程，弱引用跟踪）：当前 %1$s   峰值 %2$s   累计创建 %3$d 张 / %4$s（吞吐，非常驻）</string>
     <string name="mp_bitmap_read">  判读：当前存活若与上方 libc malloc 同量级 → 那几十上百 MB 就是位图；若远小于它 → 占用在别处（解码器缓冲 / Skia / 分配器碎片）</string>
