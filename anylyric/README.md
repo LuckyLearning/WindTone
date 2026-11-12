@@ -34,6 +34,23 @@ WindTone 的轻量分支：旁听车机上任意播放器**已经发布**的媒�
 
 空窗期的文案也分两种：标题还在动 → 「正在获取歌词…」；标题停住 20 秒仍无行 → 「暂无歌词」。
 
+---
+
+## 权限状态：两个事实，不能混用
+
+`listenerGranted`（系统设置里是否勾选，读 `enabled_notification_listeners`）与
+`listenerConnected`（系统此刻是否已绑定服务）是两件事。只判后者会在「应用关闭后
+重新打开」时误报未授予——系统还没 bind，但权限一直勾着，用户进设置看到的也是勾选态。
+
+| 状态 | 界面 | 动作 |
+|---|---|---|
+| 已授权已连接 | 绿色「已连接」 | 正常显示歌词 |
+| 已授权未绑定 | 琥珀「已授权，正在等待系统连接…」 | 自动 `requestRebind`（5 秒节流）+ 约 10 秒轮询；按钮变「重新连接」 |
+| 未授权 | 红色「未授予」 | 按钮「去开启」直达系统设置 |
+
+因此通常不需要去系统设置里「关掉再打开一次」；系统确实不重绑时（如被 force-stop），
+兜底文案才指向那一步。判因同样分两条：`PERMISSION_LISTENER` / `LISTENER_UNBOUND`。
+
 
 ---
 
@@ -90,6 +107,8 @@ MediaWatchService  (NotificationListenerService，由系统绑定，不自拉活
 - 标题仅在暂停时更新：发布端 AVRCP 门控丢更新
 - 进度多次小幅回跳：发布端进度不自洽（**仅当歌词带时间轴时才报**；L1 逐行流按最后一行定位，与 progress 无关，不应误伤）
 
+另有两条属于**授权侧**，需分开：未勾选（`PERMISSION_LISTENER`，去授权）与勾着但服务未绑定（`LISTENER_UNBOUND`，点重新连接）。
+
 换歌、重播、拖动进度都不计入「进度不稳」：换歌时清零并忽略落到 0 附近的位置，回退超过 5 秒视为用户拖动。
 
 ---
@@ -98,7 +117,7 @@ MediaWatchService  (NotificationListenerService，由系统绑定，不自拉活
 
 | 项 | 结果 |
 |---|---|
-| `:anylyric:testDebugUnitTest` | 46 项通过（LRC 解析 10、伪歌名 10、责任链 8、时钟 6、判因 12） |
+| `:anylyric:testDebugUnitTest` | 54 项通过（LRC 解析 10、伪歌名 10、责任链 8、时钟 6、判因 13、权限列表解析 7） |
 | `:anylyric:lintDebug` | Error 0 |
 | `assembleRelease` | 约 102 KB，运行时依赖仅 `kotlin-stdlib` |
 | 真机 | 手机（HONOR / API 37）已验证 L1 可命中；车机 **未验证** |
