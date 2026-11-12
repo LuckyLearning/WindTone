@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.res.Configuration
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.hardware.display.DisplayManager
 import android.os.Handler
 import android.os.Looper
@@ -22,7 +23,8 @@ import kotlin.math.abs
  * 悬浮层的唯一出入口。
  *
  * 关键约定：
- *  · 默认 `FLAG_NOT_TOUCHABLE`，完全不拦截驾驶操作；只有编辑态才临时打开触摸；
+ *  · 歌词窗默认 `FLAG_NOT_TOUCHABLE`，完全不拦截驾驶操作；只有编辑态才临时打开触摸；
+ *  · **收起把手是独立小窗口**（[CollapseHandle]）：只有那条窄条吃触摸，歌词区照旧穿透；
  *  · 位置存**比例**，拖动时先钳制像素再换算回比例，因此永远不可能把窗口拖出屏幕；
  *  · add / remove / update 全部吞掉异常：车厂 ROM 的窗口策略差异会导致
  *    BadTokenException / SecurityException，不能让悬浮窗把进程带崩。
@@ -37,15 +39,33 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
     private var view: LyricRenderer? = null
     private var params: WindowManager.LayoutParams? = null
 
+    private var handle: CollapseHandle? = null
+    private var handleParams: WindowManager.LayoutParams? = null
+
     private var editable = false
     private var menuOpen = false
     private var playing = true
+
+    /** 收起态：歌词窗被移除，只留左侧把手。 */
+    private var collapsed = false
+
+    /** 歌词窗最后一次的窗口矩形（收起后把手靠它留在原位）。 */
+    private val lastRect = Rect()
 
     private var dragStartX = 0f
     private var dragStartY = 0f
     private var dragOriginX = 0
     private var dragOriginY = 0
     private var dragging = false
+
+    /** 拖角改尺寸：-1 表示没在拖角。0 左上 / 1 右上 / 2 左下 / 3 右下。 */
+    private var resizeCorner = -1
+    private var resizeStartX = 0f
+    private var resizeStartY = 0f
+    private var resizing = false
+    private var resizeW = 0
+    private var resizeH = 0
+    private val resizeOrigin = Rect()
 
     private var hiddenUntil = 0L
     private var attachedDisplayId = Prefs.DEFAULT_DISPLAY_ID
@@ -65,7 +85,7 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
     private val exitEdit = Runnable { setEditable(false) }
 
     private val longPress = Runnable {
-        if (editable && !dragging && !menuOpen) openMenu()
+        if (editable && !dragging && !menuOpen && resizeCorner < 0) openMenu()
     }
 
     private val hideExpired = Runnable {
@@ -82,6 +102,8 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
 
     fun isEditable(): Boolean = editable
 
+    fun isCollapsed(): Boolean = collapsed
+
     fun showContent(primary: String, secondary: String?) =
         show(primary, secondary, LyricRenderer.Mode.CONTENT)
 
@@ -97,6 +119,9 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         lastPrimary = primary
         lastSecondary = secondary
         lastMode = mode
+
+        // 收起态只留把手：内容照记（展开时立刻能用），窗口不建。
+        if (collapsed) return
 
         // 菜单打开期间，播放回调仍会每几百毫秒推一次内容。只更新「待恢复的内容」，
         // 不动当前界面 —— 否则菜单会被下一句歌词顶掉，用户根本点不到。
@@ -122,11 +147,11 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
             setMenuLabels(menuLabels())
             setHint(context.getString(R.string.edit_hint_bar))
             applyStyle(prefs.style())
-            setMaxWidth(maxWidthPx())
             setEditing(editable)
             setContent(primary, secondary, mode)
         }
         renderer.playing = playing
+        applyLayoutLimits(renderer)
         // 在 layout 期间直接改窗口位置不安全，延到下一轮消息再摆
         renderer.sizeListener = { _, _ -> renderer.post { place(update = true) } }
 
@@ -144,12 +169,28 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         params = lp
         attachedDisplayId = prefs.displayId
         renderer.post { place(update = true) }
+        // 窗口叠放顺序按加入顺序：歌词窗贴左边缘时把手会与它重叠，
+        // 被压在下面就点不到了 —— 所以每次重建歌词窗都要把把手重新加一遍（盖在最上面）。
+        if (handle != null) removeHandle()
+        syncHandle()
         return true
     }
 
+    /** 彻底移除：歌词窗与把手一起走（无会话 / 服务断开 / 无歌词时隐藏）。 */
     fun hide() {
-        val current = view ?: return
         handler.removeCallbacks(exitEdit)
+        removeLyric()
+        removeHandle()
+        collapsed = false
+        editable = false
+        menuOpen = false
+        dragging = false
+        resizeCorner = -1
+        resizing = false
+    }
+
+    private fun removeLyric() {
+        val current = view ?: return
         try {
             windowManager?.removeViewImmediate(current)
         } catch (_: Throwable) {
@@ -157,9 +198,160 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         }
         view = null
         params = null
-        editable = false
-        menuOpen = false
-        dragging = false
+    }
+
+    // ---------------------------------------------------------------- 收起 / 展开
+
+    /**
+     * 收起只移除歌词窗，把手留在原位；展开时重新走一次渲染。
+     *
+     * 不落盘：收起是「临时让出屏幕」的动作，重启后应该回到展开态，
+     * 否则用户会以为悬浮窗坏了。
+     */
+    fun setCollapsed(value: Boolean) {
+        if (collapsed == value) return
+
+        if (value) {
+            // 没有把手就没法展开：此时拒绝收起，否则窗口会变成不可恢复。
+            if (!prefs.handleEnabled) return
+            val current = view
+            val lp = params
+            if (current != null && lp != null) {
+                lastRect.set(lp.x, lp.y, lp.x + current.width, lp.y + current.height)
+            }
+            removeLyric()
+            editable = false
+            menuOpen = false
+            // 先置位再建把手：把手初始化的箭头方向读的就是这个状态
+            collapsed = true
+            handle?.collapsed = true
+            ensureHandle()
+            if (handle == null) {
+                // 车厂 ROM 只允许一个 overlay 窗口时，收起了就再也点不开
+                collapsed = false
+                onRequestRender?.invoke()
+                return
+            }
+            placeHandle()
+            return
+        }
+
+        collapsed = false
+        handle?.collapsed = false
+        onRequestRender?.invoke()
+        handle?.post { placeHandle() }
+    }
+
+    /** 换会话时复位收起态：换了播放器还收着，用户会以为歌词彻底没了。 */
+    fun resetCollapsed() {
+        if (!collapsed) return
+        collapsed = false
+        handle?.collapsed = false
+    }
+
+    /** 与设置项的开关同步：关掉时把手立刻消失，开着且有窗口时补上。 */
+    fun syncHandle() {
+        if (!prefs.handleEnabled) {
+            removeHandle()
+            if (collapsed) {
+                // 把手被关掉时不能留一个收起的空窗：直接展开
+                collapsed = false
+                onRequestRender?.invoke()
+            }
+            return
+        }
+        if (view == null && !collapsed) {
+            removeHandle()
+            return
+        }
+        if (editable) {
+            removeHandle()
+            return
+        }
+        ensureHandle()?.let {
+            it.collapsed = collapsed
+            placeHandle()
+        }
+    }
+
+    private fun ensureHandle(): CollapseHandle? {
+        handle?.let { return it }
+        if (!prefs.handleEnabled || editable) return null
+        refreshWindowManager()
+        val h = CollapseHandle(context).apply {
+            collapsed = this@OverlayHost.collapsed
+            // 显式写全限定：这里的 collapsed 有两个同名属性，不写清就是在赌读者理解
+            setOnClickListener { setCollapsed(!this@OverlayHost.collapsed) }
+        }
+        val lp = buildHandleParams()
+        return try {
+            windowManager?.addView(h, lp)
+            handle = h
+            handleParams = lp
+            h
+        } catch (_: Throwable) {
+            // 车厂 ROM 可能只允许一个 overlay 窗口：把手失败不影响歌词显示
+            null
+        }
+    }
+
+    private fun removeHandle() {
+        val current = handle ?: return
+        try {
+            windowManager?.removeViewImmediate(current)
+        } catch (_: Throwable) {
+            // 已失效：忽略
+        }
+        handle = null
+        handleParams = null
+    }
+
+    private fun buildHandleParams(): WindowManager.LayoutParams =
+        WindowManager.LayoutParams(
+            (CollapseHandle.HANDLE_WIDTH_DP * density).toInt(),
+            (CollapseHandle.HANDLE_HEIGHT_DP * density).toInt(),
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            // 可点但不可聚焦：不抢按键焦点，也不挡其它窗口的触摸（只挡自己这一小块）
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = 0
+            y = 0
+        }
+
+    /**
+     * 把手贴歌词窗左缘、竖向居中。
+     *
+     * 左边缘没有空间时贴屏幕左边（此时会与歌词窗左侧内边距重叠一点）—— 宁可压住一点
+     * 留白，也不能把按钮推到屏幕外，那样就再也点不到了。
+     */
+    private fun placeHandle() {
+        val h = handle ?: return
+        val lp = handleParams ?: return
+        val box = frame()
+        val hw = lp.width
+        val hh = lp.height
+        val gap = (HANDLE_GAP_DP * density).toInt()
+
+        val anchorLeft = if (lastRect.width() > 0) lastRect.left else box.left
+        val anchorTop = if (lastRect.height() > 0) lastRect.top else box.top
+        val anchorHeight = if (lastRect.height() > 0) lastRect.height() else box.height
+
+        val maxX = (box.right - hw).coerceAtLeast(box.left)
+        val x = (anchorLeft - hw - gap).coerceIn(box.left, maxX)
+        val maxY = (box.bottom - hh).coerceAtLeast(box.top)
+        val y = (anchorTop + (anchorHeight - hh) / 2).coerceIn(box.top, maxY)
+
+        if (lp.x == x && lp.y == y) return
+        lp.x = x
+        lp.y = y
+        try {
+            windowManager?.updateViewLayout(h, lp)
+        } catch (_: Throwable) {
+            // 窗口已失效：忽略
+        }
     }
 
     /** 临时隐藏（长按菜单「隐藏 10 分钟」），到期后回调上层重新渲染。 */
@@ -179,6 +371,9 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         handler.removeCallbacks(exitEdit)
         val wasMenu = menuOpen
         menuOpen = false
+
+        // 收起态没有歌词窗可编辑：先展开再说
+        if (value && collapsed) setCollapsed(false)
 
         val current = view
         val lp = params
@@ -201,6 +396,8 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         current.setOnTouchListener(if (value) touchListener() else null)
         current.setEditing(value)
         if (value) {
+            // 编辑态收起把手：拖角时它会碍事，而且此时不需要「收起」
+            removeHandle()
             handler.postDelayed(exitEdit, EDIT_TIMEOUT_MS)
         } else {
             // 退出编辑态时可能正停在菜单上：这里必须主动把内容换回来。
@@ -209,6 +406,8 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
             if (wasMenu || current.mode == LyricRenderer.Mode.MENU) {
                 current.setContent(lastPrimary, lastSecondary, lastMode)
             }
+            current.previewSize(0, 0)
+            syncHandle()
             onRequestRender?.invoke()
         }
         current.post { place(update = true) }
@@ -222,11 +421,13 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
             return
         }
         val current = view ?: run {
+            syncHandle()
             onRequestRender?.invoke()
             return
         }
         current.applyStyle(prefs.style())
-        current.setMaxWidth(maxWidthPx())
+        applyLayoutLimits(current)
+        syncHandle()
         current.post { place(update = true) }
     }
 
@@ -317,6 +518,27 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
     private fun maxWidthPx(): Int =
         (frame().width * MAX_WIDTH_RATIO).toInt().coerceAtLeast((120 * density).toInt())
 
+    /**
+     * 把「宽度 / 高度比例」翻译成固定像素后交给渲染器；比例 0 表示自适应。
+     *
+     * 固定尺寸不能小于渲染器算出来的最小可用尺寸，否则字会被裁成半个。
+     */
+    private fun applyLayoutLimits(renderer: LyricRenderer) {
+        val box = frame()
+        val style = prefs.style()
+        val fixedW = if (style.widthRatio > 0f) {
+            (box.width * style.widthRatio).toInt().coerceAtLeast(renderer.minWidthPx())
+        } else {
+            0
+        }
+        val fixedH = if (style.heightRatio > 0f) {
+            (box.height * style.heightRatio).toInt().coerceAtLeast(renderer.minHeightPx())
+        } else {
+            0
+        }
+        renderer.setLayoutLimits(maxWidthPx(), fixedW, fixedH)
+    }
+
     private fun place(update: Boolean) {
         val current = view ?: return
         val lp = params ?: return
@@ -327,7 +549,11 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
 
         val x = OverlayGeometry.originX(box, width, prefs.ratioX(landscape))
         val y = OverlayGeometry.originY(box, height, prefs.ratioY(landscape))
-        if (lp.x == x && lp.y == y) return
+        if (lp.x == x && lp.y == y) {
+            if (width > 0 && height > 0) lastRect.set(x, y, x + width, y + height)
+            placeHandle()
+            return
+        }
 
         lp.x = x
         lp.y = y
@@ -338,6 +564,8 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
                 // 窗口已失效：忽略
             }
         }
+        if (width > 0 && height > 0) lastRect.set(x, y, x + width, y + height)
+        placeHandle()
     }
 
     private fun isLandscape(): Boolean =
@@ -368,6 +596,21 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
                 }
                 if (lp == null) return@OnTouchListener false
 
+                // 角上优先判定「改大小」：四角本来就是给缩放留的，且比拖动更不容易误触
+                val corner = renderer.hitCorner(event.x, event.y)
+                if (corner >= 0) {
+                    resizeCorner = corner
+                    resizing = false
+                    resizeStartX = event.rawX
+                    resizeStartY = event.rawY
+                    resizeOrigin.set(lp.x, lp.y, lp.x + renderer.width, lp.y + renderer.height)
+                    resizeW = renderer.width
+                    resizeH = renderer.height
+                    handler.removeCallbacks(longPress)
+                    handler.removeCallbacks(exitEdit)
+                    return@OnTouchListener true
+                }
+
                 dragStartX = event.rawX
                 dragStartY = event.rawY
                 dragOriginX = lp.x
@@ -381,6 +624,41 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
 
             MotionEvent.ACTION_MOVE -> {
                 if (lp == null || menuOpen) return@OnTouchListener true
+
+                if (resizeCorner >= 0) {
+                    val dx = (event.rawX - resizeStartX).toInt()
+                    val dy = (event.rawY - resizeStartY).toInt()
+                    if (!resizing && (abs(dx) > DRAG_SLOP || abs(dy) > DRAG_SLOP)) resizing = true
+                    if (!resizing) return@OnTouchListener true
+
+                    val box = frame()
+                    val minW = renderer.minWidthPx()
+                    val minH = renderer.minHeightPx()
+                    val originW = resizeOrigin.width()
+                    val originH = resizeOrigin.height()
+                    val leftEdge = resizeCorner == 0 || resizeCorner == 2
+                    val topEdge = resizeCorner <= 1
+
+                    val w = (if (leftEdge) originW - dx else originW + dx)
+                        .coerceIn(minW, box.width.coerceAtLeast(minW))
+                    val h = (if (topEdge) originH - dy else originH + dy)
+                        .coerceIn(minH, box.height.coerceAtLeast(minH))
+                    val x = if (leftEdge) resizeOrigin.left + (originW - w) else resizeOrigin.left
+                    val y = if (topEdge) resizeOrigin.top + (originH - h) else resizeOrigin.top
+
+                    lp.x = x.coerceIn(box.left, (box.right - w).coerceAtLeast(box.left))
+                    lp.y = y.coerceIn(box.top, (box.bottom - h).coerceAtLeast(box.top))
+                    resizeW = w
+                    resizeH = h
+                    renderer.previewSize(w, h)
+                    try {
+                        windowManager?.updateViewLayout(v, lp)
+                    } catch (_: Throwable) {
+                        return@OnTouchListener true
+                    }
+                    return@OnTouchListener true
+                }
+
                 val dx = event.rawX - dragStartX
                 val dy = event.rawY - dragStartY
                 if (!dragging && (abs(dx) > DRAG_SLOP || abs(dy) > DRAG_SLOP)) {
@@ -408,6 +686,18 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
                 handler.removeCallbacks(longPress)
                 if (menuOpen) return@OnTouchListener true
                 if (lp == null) return@OnTouchListener true
+
+                if (resizeCorner >= 0) {
+                    val wasResizing = resizing
+                    resizeCorner = -1
+                    resizing = false
+                    renderer.previewSize(0, 0)
+                    if (wasResizing) persistSize()
+                    handler.removeCallbacks(exitEdit)
+                    handler.postDelayed(exitEdit, EDIT_TIMEOUT_MS)
+                    v.post { place(update = true) }
+                    return@OnTouchListener true
+                }
 
                 if (dragging) {
                     val box = frame()
@@ -437,6 +727,23 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
 
             else -> false
         }
+    }
+
+    /** 把拖出来的像素尺寸换算成比例落盘，并标记为自定义预设。 */
+    private fun persistSize() {
+        val box = frame()
+        if (box.width <= 0 || box.height <= 0 || resizeW <= 0 || resizeH <= 0) return
+        val style = prefs.style()
+        prefs.saveStyle(
+            style.copy(
+                widthRatio = (resizeW.toFloat() / box.width)
+                    .coerceIn(OverlayDefaults.WIDTH_MIN, OverlayDefaults.WIDTH_MAX),
+                heightRatio = (resizeH.toFloat() / box.height)
+                    .coerceIn(OverlayDefaults.HEIGHT_MIN, OverlayDefaults.HEIGHT_MAX),
+                preset = Preset.CUSTOM
+            )
+        )
+        applyStyle()
     }
 
     private fun openMenu() {
@@ -508,6 +815,9 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
 
         /** 拖动判定阈值，避免手抖被当成拖动、误杀长按。 */
         private const val DRAG_SLOP = 8f
+
+        /** 把手与歌词窗左缘的间隙。 */
+        private const val HANDLE_GAP_DP = 4f
 
         private const val LONG_PRESS_MS = 550L
 

@@ -145,6 +145,12 @@ object Probe {
         sb.appendLine("[PROCESS] cachedLogLines=${lines().size} dropped=$dropped")
         sb.appendLine()
 
+        // 资源占用放在窗口之后：先看「有没有在工作」，再看「工作花了多少」。
+        // 车机上「歌词卡顿/发热」这类反馈，先排除是不是本进程在涨内存或空转。
+        sb.appendLine("[RESOURCE]")
+        sb.appendLine(ResourceSampler.sample().detail())
+        sb.appendLine()
+
         sb.appendLine("=== CONCLUSION ===")
         sb.appendLine("code=${diagnosis.code}")
         sb.appendLine("evidence=${diagnosis.evidence}")

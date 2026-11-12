@@ -23,9 +23,58 @@ class OverlayStyleTest {
         assertEquals(OverlayDefaults.SECONDARY_ALPHA, style.secondaryAlpha, 0.001f)
         assertEquals(OverlayDefaults.FADE_MS, style.fadeMs)
         assertEquals(OverlayDefaults.STATE_MARK, style.stateMark)
+        assertEquals(OverlayDefaults.PRIMARY_COLOR, style.primaryColor)
+        assertEquals(OverlayDefaults.SECONDARY_COLOR, style.secondaryColor)
+        assertEquals(OverlayDefaults.BG_COLOR, style.bgColor)
+        assertEquals(OverlayDefaults.WIDTH_RATIO, style.widthRatio, 0.001f)
+        assertEquals(OverlayDefaults.HEIGHT_RATIO, style.heightRatio, 0.001f)
         assertEquals(Preset.GLASS, style.preset)
         assertEquals(Align.START, style.align)
         assertEquals(Secondary.NEXT, style.secondary)
+    }
+
+    /** 默认白字 + 深底：与旧版硬编码的观感一致，升级后不该突然换个样子。 */
+    @Test
+    fun defaultColorsMatchLegacyLook() {
+        assertEquals(0xFFFFFFFF.toInt(), OverlayDefaults.STYLE.primaryColor)
+        assertEquals(0xFFFFFFFF.toInt(), OverlayDefaults.STYLE.secondaryColor)
+        assertEquals(0xFF14161A.toInt(), OverlayDefaults.STYLE.bgColor)
+    }
+
+    /** 0 是「自适应」的哨兵值，不能被 coerceIn 拉成下限，否则默认就变成固定宽度了。 */
+    @Test
+    fun autoSizeStaysAuto() {
+        val safe = OverlayDefaults.sanitize(
+            OverlayStyle(widthRatio = 0f, heightRatio = 0f)
+        )
+        assertEquals(0f, safe.widthRatio, 0.0001f)
+        assertEquals(0f, safe.heightRatio, 0.0001f)
+    }
+
+    @Test
+    fun sizeRatiosAreClamped() {
+        val tiny = OverlayDefaults.sanitize(OverlayStyle(widthRatio = 0.02f, heightRatio = 0.001f))
+        assertEquals(OverlayDefaults.WIDTH_MIN, tiny.widthRatio, 0.0001f)
+        assertEquals(OverlayDefaults.HEIGHT_MIN, tiny.heightRatio, 0.0001f)
+
+        val huge = OverlayDefaults.sanitize(OverlayStyle(widthRatio = 0.99f, heightRatio = 0.9f))
+        assertEquals(OverlayDefaults.WIDTH_MAX, huge.widthRatio, 0.0001f)
+        assertEquals(OverlayDefaults.HEIGHT_MAX, huge.heightRatio, 0.0001f)
+
+        val nan = OverlayDefaults.sanitize(OverlayStyle(widthRatio = Float.NaN))
+        assertEquals(0f, nan.widthRatio, 0.0001f)
+    }
+
+    /** 换预设不能把用户自定义的配色冲掉 —— 那是最容易被当成 bug 的行为。 */
+    @Test
+    fun presetKeepsCustomColors() {
+        val base = OverlayDefaults.STYLE.copy(
+            primaryColor = 0xFF9BE7FF.toInt(),
+            bgColor = 0xFF000000.toInt()
+        )
+        val style = OverlayDefaults.preset(Preset.SOLID, base)
+        assertEquals(0xFF9BE7FF.toInt(), style.primaryColor)
+        assertEquals(0xFF000000.toInt(), style.bgColor)
     }
 
     @Test

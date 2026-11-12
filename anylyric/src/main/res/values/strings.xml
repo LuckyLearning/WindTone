@@ -8,7 +8,7 @@
     <string name="section_status">Status</string>
     <string name="section_permissions">Permissions</string>
     <string name="section_appearance">Appearance</string>
-    <string name="section_position">Position</string>
+    <string name="section_position">Position &amp; size</string>
     <string name="section_display">Display</string>
     <string name="section_probe">Channel probe</string>
 
@@ -22,6 +22,12 @@
     <string name="appearance_align">Alignment</string>
     <string name="appearance_opacity">Background opacity</string>
     <string name="appearance_corner">Corner radius</string>
+    <string name="appearance_color_primary">Current line color</string>
+    <string name="appearance_color_secondary">Other lines color</string>
+    <string name="appearance_color_bg">Background color</string>
+    <string name="appearance_width">Width</string>
+    <string name="appearance_height">Height</string>
+    <string name="appearance_auto">Auto</string>
     <string name="appearance_stroke">Text outline</string>
     <string name="appearance_bold">Bold</string>
     <string name="appearance_fade">Fade on change</string>
@@ -41,12 +47,16 @@
     <string name="secondary_none">Off</string>
 
     <string name="position_grid">Quick position</string>
-    <string name="position_edit_hint">Enter edit mode when the position does not fit</string>
+    <string name="position_edit_hint">Drag to move, drag a corner to resize</string>
     <string name="position_reset">Reset position</string>
-    <string name="position_hint">Long press the overlay to lock it, hide it for 10 minutes, open settings or copy the current line. Position is stored as a ratio, so it survives resolution changes.</string>
+    <string name="position_hint">Long press the overlay to lock it, hide it for 10 minutes, open settings or copy the current line. Position and size are stored as ratios, so they survive resolution changes.</string>
     <string name="position_display">Screen</string>
+    <string name="position_handle">Collapse handle on the left</string>
 
-    <string name="edit_hint_bar">Drag to move · long press for more</string>
+    <string name="handle_collapse">Collapse overlay</string>
+    <string name="handle_expand">Expand overlay</string>
+
+    <string name="edit_hint_bar">Drag to move · corner to resize · long press for more</string>
     <string name="edit_menu_lock">Lock position</string>
     <string name="edit_menu_hide">Hide for 10 minutes</string>
     <string name="edit_menu_settings">Open settings</string>
@@ -98,7 +108,7 @@
 
     <string name="diag_title">Channel probe</string>
     <string name="diag_debug_toggle">Debug logging</string>
-    <string name="diag_debug_hint">Off: nothing is captured and nothing is allocated. On: the probe records what each player exposes.</string>
+    <string name="diag_debug_hint">Off: nothing is captured and nothing is allocated. On: the probe records what each player exposes, plus this app\'s resource usage once a minute.</string>
     <string name="diag_open">Open probe report</string>
     <string name="diag_conclusion">Conclusion</string>
     <string name="diag_evidence">Evidence</string>

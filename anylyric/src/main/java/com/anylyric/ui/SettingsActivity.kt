@@ -28,6 +28,7 @@ import com.anylyric.diag.Probe
 import com.anylyric.overlay.Align
 import com.anylyric.overlay.OverlayDefaults
 import com.anylyric.overlay.OverlayGeometry
+import com.anylyric.overlay.OverlayPalette
 import com.anylyric.overlay.OverlayStyle
 import com.anylyric.overlay.Preset
 import com.anylyric.overlay.Secondary
@@ -39,6 +40,7 @@ import com.anylyric.update.FailureKind
 import com.anylyric.update.Release
 import com.anylyric.update.UpdateChecker
 import java.io.File
+import java.util.Locale
 
 /**
  * 唯一主界面：权限引导、当前状态、外观、位置、探测入口。
@@ -162,10 +164,7 @@ class SettingsActivity : BaseActivity() {
             text = getString(R.string.diag_debug_toggle)
             textSize = 15f
             isChecked = prefs.debugEnabled
-            setOnCheckedChangeListener { _, checked ->
-                prefs.debugEnabled = checked
-                Probe.setEnabled(checked)
-            }
+            setOnCheckedChangeListener { _, checked -> hub.setDebugEnabled(checked) }
         }
         root.addView(
             card(
@@ -247,6 +246,39 @@ class SettingsActivity : BaseActivity() {
                 current = { presetIndex() },
                 onPick = { choosePreset(PRESET_ORDER[it]) }
             )
+        )
+
+        rows += spacer(14)
+        rows += labeledWithReset(
+            getString(R.string.appearance_color_primary),
+            colorRow(
+                colors = OverlayPalette.TEXT,
+                current = { prefs.style().primaryColor },
+                onPick = { color -> editStyle { it.copy(primaryColor = color) } }
+            ),
+            onReset = { editStyle { it.copy(primaryColor = OverlayDefaults.PRIMARY_COLOR) } }
+        )
+
+        rows += spacer(10)
+        rows += labeledWithReset(
+            getString(R.string.appearance_color_secondary),
+            colorRow(
+                colors = OverlayPalette.TEXT,
+                current = { prefs.style().secondaryColor },
+                onPick = { color -> editStyle { it.copy(secondaryColor = color) } }
+            ),
+            onReset = { editStyle { it.copy(secondaryColor = OverlayDefaults.SECONDARY_COLOR) } }
+        )
+
+        rows += spacer(10)
+        rows += labeledWithReset(
+            getString(R.string.appearance_color_bg),
+            colorRow(
+                colors = OverlayPalette.BACKGROUND,
+                current = { prefs.style().bgColor },
+                onPick = { color -> editStyle { it.copy(bgColor = color) } }
+            ),
+            onReset = { editStyle { it.copy(bgColor = OverlayDefaults.BG_COLOR) } }
         )
 
         rows += spacer(14)
@@ -362,8 +394,36 @@ class SettingsActivity : BaseActivity() {
     private fun buildPositionCard(): View {
         editButton = textButton(getString(R.string.display_edit)) { toggleEdit() }
 
-        val rows = ArrayList<View>(8)
+        val rows = ArrayList<View>(12)
         rows += labeled(getString(R.string.position_grid), nineGrid())
+
+        // 宽高也放在这里：它们和位置一样是「窗口框多大」的问题，分到外观里会被当成样式项。
+        rows += spacer(14)
+        rows += stepperRow(
+            label = getString(R.string.appearance_width),
+            value = { ratioLabel(prefs.style().widthRatio) },
+            minus = { stepWidth(-WIDTH_STEP) },
+            plus = { stepWidth(WIDTH_STEP) },
+            reset = { editStyle { it.copy(widthRatio = OverlayDefaults.WIDTH_RATIO) } }
+        )
+        rows += spacer(6)
+        rows += stepperRow(
+            label = getString(R.string.appearance_height),
+            value = { ratioLabel(prefs.style().heightRatio) },
+            minus = { stepHeight(-HEIGHT_STEP) },
+            plus = { stepHeight(HEIGHT_STEP) },
+            reset = { editStyle { it.copy(heightRatio = OverlayDefaults.HEIGHT_RATIO) } }
+        )
+        rows += spacer(6)
+        rows += switchRow(
+            label = getString(R.string.position_handle),
+            current = { prefs.handleEnabled },
+            onChange = { enabled ->
+                prefs.handleEnabled = enabled
+                hub.applyStyle()
+            }
+        )
+
         rows += spacer(10)
         rows += row(
             text(getString(R.string.position_edit_hint), 12f, secondary = true),
@@ -459,6 +519,100 @@ class SettingsActivity : BaseActivity() {
             addView(text(label, 12f, secondary = true).apply { setPadding(0, 0, 0, dp(6)) })
             addView(control)
         }
+
+    /** 带单项「重置」的小标题 + 控件。颜色这类项需要能单独回到默认值。 */
+    private fun labeledWithReset(label: String, control: View, onReset: () -> Unit): View =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(
+                row(
+                    text(label, 12f, secondary = true),
+                    textButton(getString(R.string.appearance_reset_short)) { onReset(); refresh() }
+                )
+            )
+            addView(control)
+        }
+
+    /**
+     * 一排颜色圆点。
+     *
+     * 只给固定色板，不做自由取色器：车机屏在强光下对比度本来就差，
+     * 让用户能调出「灰字灰底」是负体验；何况自绘取色盘在车机触摸屏上很难精准。
+     */
+    private fun colorRow(
+        colors: IntArray,
+        current: () -> Int,
+        onPick: (Int) -> Unit
+    ): View {
+        val holder = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val dots = ArrayList<TextView>(colors.size)
+
+        colors.forEach { color ->
+            val dot = TextView(this).apply {
+                val size = dp(34)
+                layoutParams = LinearLayout.LayoutParams(size, size).apply { marginEnd = dp(10) }
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    onPick(color)
+                    refresh()
+                }
+            }
+            holder.addView(dot)
+            dots += dot
+        }
+
+        uiRefreshers += {
+            val selected = current()
+            colors.forEachIndexed { index, color -> styleDot(dots[index], color, color == selected) }
+        }
+
+        return HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(holder)
+        }
+    }
+
+    private fun styleDot(view: TextView, color: Int, selected: Boolean) {
+        view.background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(color)
+            if (selected) {
+                setStroke(dp(3), colorAccent)
+            } else {
+                setStroke(dp(1), if (isNight) 0x33FFFFFF else 0x22000000)
+            }
+        }
+        view.alpha = if (selected) 1f else 0.88f
+        view.contentDescription = String.format(Locale.US, "#%06X", color and 0xFFFFFF)
+    }
+
+    private fun ratioLabel(value: Float): String =
+        if (value <= 0f) getString(R.string.appearance_auto)
+        else getString(R.string.appearance_percent, (value * 100).toInt().toString())
+
+    /**
+     * 百分比的加减。自适应（0）起步时给一个合理基准值，否则「加」按下去毫无反应，
+     * 用户会以为按钮坏了。
+     */
+    private fun stepWidth(delta: Float) {
+        editStyle {
+            val base = if (it.widthRatio > 0f) it.widthRatio else WIDTH_AUTO_BASE
+            it.copy(
+                widthRatio = (base + delta).coerceIn(OverlayDefaults.WIDTH_MIN, OverlayDefaults.WIDTH_MAX)
+            )
+        }
+    }
+
+    private fun stepHeight(delta: Float) {
+        editStyle {
+            val base = if (it.heightRatio > 0f) it.heightRatio else HEIGHT_AUTO_BASE
+            it.copy(
+                heightRatio = (base + delta)
+                    .coerceIn(OverlayDefaults.HEIGHT_MIN, OverlayDefaults.HEIGHT_MAX)
+            )
+        }
+    }
 
     private fun chipRow(
         options: List<String>,
@@ -1080,6 +1234,12 @@ class SettingsActivity : BaseActivity() {
         private val SECONDARY_ORDER = listOf(
             Secondary.NEXT, Secondary.PREVIOUS, Secondary.TRACK, Secondary.NONE
         )
+
+        /** 从「自适应」起步时的基准比例：宽 60% / 高 14%，都是车机上常见的合理值。 */
+        private const val WIDTH_AUTO_BASE = 0.60f
+        private const val HEIGHT_AUTO_BASE = 0.14f
+        private const val WIDTH_STEP = 0.04f
+        private const val HEIGHT_STEP = 0.02f
 
         /** 首次刷新的延迟：给系统一点绑定时间，免得白跑一轮。 */
         private const val POLL_FIRST_DELAY_MS = 400L

@@ -66,7 +66,7 @@ WindTone 的轻量分支：旁听车机上任意播放器**已经发布**的媒�
 
 ---
 
-## 外观与位置（v0.2）
+## 外观与位置（v0.2.1）
 
 外观收敛为**数据**：`OverlayStyle` 一个不可变数据类，默认值只在 `OverlayDefaults`
 定义一次，每个可调项都能「重置」写回那里。`LyricRenderer` 只负责把参数变成像素。
@@ -79,8 +79,13 @@ WindTone 的轻量分支：旁听车机上任意播放器**已经发布**的媒�
 | 导航态 `NAVI` | 86% | 无 | 1（居中） | 行车中只看一句 |
 
 可调项：字号 14–40sp、行数 1–3、对齐左/中/右、背景不透明度 0–100%、圆角 0–28dp、
-文字描边、加粗、切换淡入 0/120ms、副行内容（下一句 / 上一句 / 歌名·歌手 / 关闭）、
+文字描边、加粗、切换淡入 0/320ms、副行内容（下一句 / 上一句 / 歌名·歌手 / 关闭）、
 播放状态条、无歌词时隐藏。
+
+**配色三项各自可调**（v0.2.1）：当前行颜色、其它行颜色、背景色。只给一组车机上看得清的
+色板（`OverlayPalette`），不做自由取色器——强光下车机屏对比度本来就差，调出灰字灰底
+是负体验。其它行的实际不透明度还会再乘「副行不透明度」；背景色再乘「背景不透明度」。
+**换预设不会冲掉自定义颜色**，只改观感参数。
 
 **位置存比例不存像素**（`xRatio/yRatio ∈ [0,1]`，横竖屏各一套）：
 
@@ -89,10 +94,25 @@ WindTone 的轻量分支：旁听车机上任意播放器**已经发布**的媒�
   用户看到的是「悬浮窗消失了」，无法自查；
 - 九宫格锚点写死 0 / 0.5 / 1 的组合，松手距边 24dp 内自动吸附。
 
+**宽高也可调**（v0.2.1）：`widthRatio / heightRatio` 同样存比例，`0` 表示自适应。
+两种调法 —— 编辑态拖四角（对角固定、实时预览、松手换算成比例落盘），或在设置页用
+「宽度 / 高度」步进（宽 24–98%，高 4–60%）。固定宽度的额外好处是每句歌词不再改变
+窗口尺寸，`requestLayout` 不再牵动窗口重排。
+
 **编辑态**：虚线框 + 四角把手 + 底部提示条，右下角圆形「✓」退出，60 秒无操作自动退出。
 长按弹出四个操作：锁定位置 / 隐藏 10 分钟 / 打开设置 / 复制当前行。菜单是自绘在同一
 个 View 里的，不起 Dialog —— 车机上弹窗会抢焦点，而且部分 ROM 上直接用 application
 context 弹 Dialog 会 `BadTokenException`。
+
+**左侧收起把手**（v0.2.1）：独立小窗口（30×72dp），竖向居中贴歌词窗左缘，点一下收起 /
+展开。拆成独立窗口是必须的——歌词窗默认 `FLAG_NOT_TOUCHABLE`，为了这颗按钮把整窗改成
+可触摸会让歌词区域变成一个挡手的黑洞。把手可随时关掉（设置 → 位置与尺寸）；关掉时
+收起功能同时失效，避免留下一个没法恢复的收起态。
+
+**切换动效**（v0.2.1）：不再改窗口 `alpha`（那会让整块 surface 重新合成，车机上表现为
+掉帧），改为 View 内双缓冲交叉淡入——旧行在前 35% 退干净、新行从 12% 浮上来，两条
+曲线刻意错开以免叠成重影。一个复用的 `ValueAnimator` + `DecelerateInterpolator`，
+提示语 / 菜单 / 编辑态都不淡入。
 
 **空状态**与正文分开：提示语用小一号、约 70% 透明度，第二行补「歌名 · 歌手」，
 不会再出现「取到了没取到看起来一样」。
@@ -150,6 +170,7 @@ MediaWatchService  (NotificationListenerService，由系统绑定，不自拉活
         └─ OverlayHost         TYPE_APPLICATION_OVERLAY，默认 FLAG_NOT_TOUCHABLE
              ├─ OverlayGeometry  比例↔像素、四边钳制、吸附（纯函数，可单测）
              ├─ OverlayStyle     外观参数 + 预设展开 + 范围钳制（唯一真源）
+             ├─ CollapseHandle   左侧收起把手，独立小窗口（只有它吃触摸）
              └─ LyricRenderer    单 View + Canvas；三种形态 CONTENT / PROMPT / MENU
 ```
 
@@ -180,6 +201,18 @@ MediaWatchService  (NotificationListenerService，由系统绑定，不自拉活
 
 另有两条属于**授权侧**，需分开：未勾选（`PERMISSION_LISTENER`，去授权）与勾着但服务未绑定（`LISTENER_UNBOUND`，点重新连接）。
 
+**资源占用**（v0.2.1）：报告里多一段 `[RESOURCE]`，日志里每分钟一条 `[资源]`。数字全部来自本进程可读的接口，不需要任何权限：
+
+| 字段 | 来源 | 用途 |
+|---|---|---|
+| `pss` | `Debug.getMemoryInfo` | 整进程实际占用；PSS 不涨而 Java 堆涨 = 还没被系统回收压力逼着还 |
+| `java` / `native` | `Runtime` / `Debug.getNativeHeapAllocatedSize` | 区分「Kotlin 侧持有」与「原生/图形侧持有」 |
+| `cpu` | `/proc/self/stat` 的 utime+stime 差值 | 区间均值，回答「是不是在空转烧 CPU」 |
+| `threads` / `fd` | `/proc/self/status`、`/proc/self/fd` | 线程或 FD 只增不减 = 泄漏 |
+| `gc` | `Debug.getRuntimeStat("art.gc.gc-count")` | 频繁 GC 会让歌词切句发顿 |
+
+拿不到的值显示 `?`，不显示 `-1` —— 后者会被当成真实数据。
+
 换歌、重播、拖动进度都不计入「进度不稳」：换歌时清零并忽略落到 0 附近的位置，回退超过 5 秒视为用户拖动。
 
 ---
@@ -188,9 +221,9 @@ MediaWatchService  (NotificationListenerService，由系统绑定，不自拉活
 
 | 项 | 结果 |
 |---|---|
-| `:anylyric:testDebugUnitTest` | **81 项**通过（LRC 解析 10、伪歌名 10、责任链 8、时钟 6、判因 14、权限列表解析 7、几何 10、折行 9、样式 7） |
+| `:anylyric:testDebugUnitTest` | **106 项**通过（LRC 解析 10、伪歌名 10、责任链 8、时钟 6、判因 14、权限列表解析 7、几何 10、折行 9、样式 15、更新 8、资源采样 9） |
 | `:anylyric:lintDebug` | Error 0 |
-| `assembleRelease` | 约 **140 KB**，运行时依赖仅 `kotlin-stdlib` |
+| `assembleRelease` | 约 **243 KB**（含矢量图标 + 5 组密度 PNG），运行时依赖仅 `kotlin-stdlib` |
 | 真机 | 手机（HONOR / API 37）已验证 L1 可命中；车机 **未验证** |
 
 未验证项：车机播放器的通道命中率、车厂 ROM 对悬浮窗与通知使用权的策略、多屏行为、

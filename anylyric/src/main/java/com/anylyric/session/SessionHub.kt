@@ -20,6 +20,7 @@ import com.anylyric.data.Permissions
 import com.anylyric.data.Prefs
 import com.anylyric.diag.Probe
 import com.anylyric.diag.ProbeSnapshot
+import com.anylyric.diag.ResourceSampler
 import com.anylyric.lyrics.LyricLine
 import com.anylyric.lyrics.LyricResult
 import com.anylyric.lyrics.LyricsSourceChain
@@ -104,6 +105,7 @@ class SessionHub private constructor(context: Context) {
 
     init {
         Probe.setEnabled(prefs.debugEnabled)
+        if (prefs.debugEnabled) startResourceTicker()
         // 菜单关闭、隐藏到期、换了输出屏幕：都需要上层重新算一遍内容再决定是否重建窗口
         overlay.onRequestRender = { refresh("overlay_event") }
         overlay.onOpenSettings = {
@@ -130,6 +132,32 @@ class SessionHub private constructor(context: Context) {
     fun prefs(): Prefs = prefs
 
     fun overlay(): OverlayHost = overlay
+
+    /**
+     * 调试开关的唯一切换点。
+     *
+     * 打开时立刻排一次资源采样，之后每分钟一条 —— 这组数字回答的是
+     * 「歌词卡顿 / 车机变热，是不是 AnyLyric 在涨内存或空转 CPU」。
+     */
+    fun setDebugEnabled(value: Boolean) {
+        prefs.debugEnabled = value
+        Probe.setEnabled(value)
+        mainHandler.removeCallbacks(resourceTicker)
+        if (value) mainHandler.postDelayed(resourceTicker, RESOURCE_FIRST_DELAY_MS)
+    }
+
+    private val resourceTicker = object : Runnable {
+        override fun run() {
+            if (!Probe.enabled) return
+            Probe.write("资源", ResourceSampler.sample().oneLine())
+            mainHandler.postDelayed(this, RESOURCE_INTERVAL_MS)
+        }
+    }
+
+    private fun startResourceTicker() {
+        mainHandler.removeCallbacks(resourceTicker)
+        mainHandler.postDelayed(resourceTicker, RESOURCE_FIRST_DELAY_MS)
+    }
 
     fun currentStatus(): Status = Status(
         listenerState = listenerState(),
@@ -629,6 +657,7 @@ class SessionHub private constructor(context: Context) {
         positionJumps = 0
         titleOnlyOnPause = false
         lastTitleChangeAt = SystemClock.elapsedRealtime()
+        overlay.resetCollapsed()
     }
 
     private fun detachController() {
@@ -693,6 +722,12 @@ class SessionHub private constructor(context: Context) {
 
         /** 两次主动重绑请求的最小间隔，避开系统对 requestRebind 的频率限制。 */
         private const val REBIND_MIN_INTERVAL_MS = 5_000L
+
+        /** 首条资源采样延迟：启动瞬间的数字虚高（类加载、布局），没参考价值。 */
+        private const val RESOURCE_FIRST_DELAY_MS = 3_000L
+
+        /** 资源采样间隔。一分钟一条，一天 1440 行，日志缓冲 300 行足够回溯两小时。 */
+        private const val RESOURCE_INTERVAL_MS = 60_000L
 
         /**
          * 降级模式的兜底查询间隔。

@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  前景层 = 三行歌词。第一行用青色高亮，表示「正在唱的这一句」，
-  后两行按实际歌词排版做长度递减，避免看起来像普通的列表图标。
-
-  几何：所有顶点都落在自适应图标的安全圆内（中心 54,54、半径 33），
-  这样被裁成圆形 / 圆角方形 / 圆角矩形时都不会切到线条。
+  前景层（重做精致版）= 一张「悬浮歌词卡」。
+  - 圆角玻璃卡：半透明白填充 + 白色描边，直接对应 app 的 GLASS 悬浮窗形态；
+  - 卡内三行歌词：第一行（当前句）青色渐变高亮，后两行按真实排版递减、透明度渐弱；
+  - 左缘小圆点 = 「正在唱的这句」的播放指示。
+  几何全部落在自适应安全圆内（中心 54,54、半径约 36），任意蒙版都不会切到内容。
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
@@ -13,28 +13,51 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
+    <!-- 玻璃卡：半透明白底 + 白色描边 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.08"
+        android:strokeColor="#FFFFFF"
+        android:strokeAlpha="0.50"
+        android:strokeWidth="2.5"
+        android:strokeLineJoin="round"
+        android:pathData="M42,30 H66 A14,14 0 0 1 80,44 V64 A14,14 0 0 1 66,78 H42 A14,14 0 0 1 28,64 V44 A14,14 0 0 1 42,30 Z" />
+
+    <!-- 卡顶玻璃高光 -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeAlpha="0.30"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M38,37 H58" />
+
+    <!-- 当前句播放指示圆点 -->
+    <path
+        android:fillColor="#FF2FD8BC"
+        android:pathData="M30.4,44.5 A2.6,2.6 0 1,1 35.6,44.5 A2.6,2.6 0 1,1 30.4,44.5 Z" />
+
     <!-- 第一行：当前歌词（青色渐变，最长） -->
     <path
-        android:pathData="M32,34 h44 a4,4 0 0 1 4,4 a4,4 0 0 1 -4,4 h-44 a4,4 0 0 1 -4,-4 a4,4 0 0 1 4,-4 z">
+        android:pathData="M41.5,40 H71.5 A4.5,4.5 0 0 1 76,44.5 V44.5 A4.5,4.5 0 0 1 71.5,49 H41.5 A4.5,4.5 0 0 1 37,44.5 V44.5 A4.5,4.5 0 0 1 41.5,40 Z">
         <aapt:attr name="android:fillColor">
             <gradient
                 android:type="linear"
-                android:startX="28"
-                android:startY="38"
-                android:endX="80"
-                android:endY="38"
-                android:startColor="#FF7BF5DC"
-                android:endColor="#FF32D8BD" />
+                android:startX="37"
+                android:startY="44.5"
+                android:endX="76"
+                android:endY="44.5"
+                android:startColor="#FF8EF7DE"
+                android:endColor="#FF2FD8BC" />
         </aapt:attr>
     </path>
 
     <!-- 第二行：下一句（近白） -->
     <path
-        android:fillColor="#D1FFFFFF"
-        android:pathData="M32,48 h44 a4,4 0 0 1 4,4 a4,4 0 0 1 -4,4 h-44 a4,4 0 0 1 -4,-4 a4,4 0 0 1 4,-4 z" />
+        android:fillColor="#E6FFFFFF"
+        android:pathData="M40.5,52 H69.5 A3.5,3.5 0 0 1 73,55.5 V55.5 A3.5,3.5 0 0 1 69.5,59 H40.5 A3.5,3.5 0 0 1 37,55.5 V55.5 A3.5,3.5 0 0 1 40.5,52 Z" />
 
     <!-- 第三行：再下一句，短一截（半透明白） -->
     <path
-        android:fillColor="#78FFFFFF"
-        android:pathData="M32,62 h24 a4,4 0 0 1 4,4 a4,4 0 0 1 -4,4 h-24 a4,4 0 0 1 -4,-4 a4,4 0 0 1 4,-4 z" />
+        android:fillColor="#80FFFFFF"
+        android:pathData="M40.5,62 H56.5 A3.5,3.5 0 0 1 60,65.5 V65.5 A3.5,3.5 0 0 1 56.5,69 H40.5 A3.5,3.5 0 0 1 37,65.5 V65.5 A3.5,3.5 0 0 1 40.5,62 Z" />
 </vector>

@@ -7,7 +7,7 @@
     <string name="section_status">状态</string>
     <string name="section_permissions">权限</string>
     <string name="section_appearance">外观</string>
-    <string name="section_position">位置</string>
+    <string name="section_position">位置与尺寸</string>
     <string name="section_display">显示</string>
     <string name="section_probe">通道探测</string>
 
@@ -21,6 +21,12 @@
     <string name="appearance_align">对齐</string>
     <string name="appearance_opacity">背景不透明度</string>
     <string name="appearance_corner">圆角</string>
+    <string name="appearance_color_primary">当前行颜色</string>
+    <string name="appearance_color_secondary">其它行颜色</string>
+    <string name="appearance_color_bg">背景色</string>
+    <string name="appearance_width">宽度</string>
+    <string name="appearance_height">高度</string>
+    <string name="appearance_auto">自适应</string>
     <string name="appearance_stroke">文字描边</string>
     <string name="appearance_bold">加粗</string>
     <string name="appearance_fade">切换淡入</string>
@@ -40,12 +46,16 @@
     <string name="secondary_none">关闭</string>
 
     <string name="position_grid">快捷位置</string>
-    <string name="position_edit_hint">位置不合适时，进入编辑态拖动</string>
+    <string name="position_edit_hint">位置不合适时，进入编辑态拖动；拖四角可改大小</string>
     <string name="position_reset">恢复默认位置</string>
-    <string name="position_hint">长按悬浮窗可锁定位置、临时隐藏 10 分钟、打开设置或复制当前歌词。位置按比例保存，换分辨率不会跑偏。</string>
+    <string name="position_hint">长按悬浮窗可锁定位置、临时隐藏 10 分钟、打开设置或复制当前歌词。位置与大小都按比例保存，换分辨率不会跑偏。</string>
     <string name="position_display">显示屏幕</string>
+    <string name="position_handle">左侧收起按钮</string>
 
-    <string name="edit_hint_bar">拖动调整位置 · 长按更多</string>
+    <string name="handle_collapse">收起悬浮窗</string>
+    <string name="handle_expand">展开悬浮窗</string>
+
+    <string name="edit_hint_bar">拖动移动 · 拖角改大小 · 长按更多</string>
     <string name="edit_menu_lock">锁定位置</string>
     <string name="edit_menu_hide">隐藏 10 分钟</string>
     <string name="edit_menu_settings">打开设置</string>
@@ -97,7 +107,7 @@
 
     <string name="diag_title">通道探测</string>
     <string name="diag_debug_toggle">调试日志</string>
-    <string name="diag_debug_hint">关闭时不采集、不分配。打开后记录每个播放器到底暴露了什么。</string>
+    <string name="diag_debug_hint">关闭时不采集、不分配。打开后记录每个播放器到底暴露了什么，并每分钟记一次本应用的资源占用。</string>
     <string name="diag_open">查看探测报告</string>
     <string name="diag_conclusion">结论</string>
     <string name="diag_evidence">证据</string>

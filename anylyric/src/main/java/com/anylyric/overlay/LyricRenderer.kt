@@ -1,5 +1,8 @@
 package com.anylyric.overlay
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
@@ -11,6 +14,7 @@ import android.graphics.Typeface
 import android.text.TextPaint
 import android.util.TypedValue
 import android.view.View
+import android.view.animation.DecelerateInterpolator
 
 /**
  * 单 View 绘制悬浮歌词。
@@ -35,6 +39,19 @@ class LyricRenderer(context: Context) : View(context) {
 
     private var style: OverlayStyle = OverlayDefaults.STYLE
     private var maxWidthPx = 0
+
+    /**
+     * 固定宽高（px）。0 表示自适应。
+     *
+     * 由宿主按 `frame × 比例` 算好后传进来 —— View 内部不去读 displayMetrics，
+     * 多屏时那是最初 Display 的尺寸，改字号也不会重算。
+     */
+    private var fixedWidthPx = 0
+    private var fixedHeightPx = 0
+
+    /** 拖角改尺寸期间的临时尺寸，松手后由样式比例接管。 */
+    private var previewW = 0
+    private var previewH = 0
 
     private var primaryText = ""
     private var secondaryText: String? = null
@@ -67,14 +84,29 @@ class LyricRenderer(context: Context) : View(context) {
     private val glyphs = ArrayList<Glyph>(4)
     private val glyphTops = ArrayList<Float>(4)
 
+    /** 交叉淡入用的「上一帧内容」快照。 */
+    private val fadeGlyphs = ArrayList<Glyph>(4)
+    private val fadeTops = ArrayList<Float>(4)
+    private var fadeTop = 0f
+    private var fadeCount = 0
+    private var fadeElapsed = 1f
+
     private var contentWidth = 0f
     private var contentHeight = 0f
+    private var contentTop = 0f
     private var menuItemH = 1f
     private var markGutter = 0f
     private var paddingH = 16f * density
     private var paddingV = 10f * density
 
-    private class Glyph(val text: String, val size: Float, val alpha: Int, val bold: Boolean)
+    /** [secondary] 标记「其它行」：颜色取 style.secondaryColor，不透明度再乘 secondaryAlpha。 */
+    private class Glyph(
+        val text: String,
+        val size: Float,
+        val alpha: Int,
+        val bold: Boolean,
+        val secondary: Boolean = false
+    )
 
     private val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG)
     private val strokePaint = TextPaint(Paint.ANTI_ALIAS_FLAG)
@@ -92,6 +124,14 @@ class LyricRenderer(context: Context) : View(context) {
     private val rect = RectF()
     private val path = Path()
 
+    /**
+     * 交叉淡入动画。
+     *
+     * 刻意**不再**改窗口的 alpha：那会让整块 surface 重新合成，在车机上就是掉帧与卡顿。
+     * 现在只在本 View 里多画一次旧文本，走的是同一张画的两次 drawText，代价可以忽略。
+     */
+    private var fadeAnimator: ValueAnimator? = null
+
     val currentPrimary: String get() = primaryText
 
     fun applyStyle(next: OverlayStyle) {
@@ -100,15 +140,26 @@ class LyricRenderer(context: Context) : View(context) {
     }
 
     /**
-     * 宽度上限由宿主按「屏幕宽 − 安全边距」算出后传入。
-     *
-     * 不在 View 内部读 `displayMetrics.widthPixels`：多屏时那是最初 Display 的宽度，
-     * 改字号后也不会重算，这正是旧实现长文案被裁断的原因。
+     * 宽度上限与固定宽高。宿主每次布局都调一次，值没变时是空操作。
      */
-    fun setMaxWidth(px: Int) {
-        if (px <= 0 || px == maxWidthPx) return
-        maxWidthPx = px
+    fun setLayoutLimits(maxWidth: Int, fixedWidth: Int, fixedHeight: Int) {
+        val nextMax = maxWidth.coerceAtLeast(0)
+        val nextW = fixedWidth.coerceAtLeast(0)
+        val nextH = fixedHeight.coerceAtLeast(0)
+        if (nextMax == maxWidthPx && nextW == fixedWidthPx && nextH == fixedHeightPx) return
+        maxWidthPx = nextMax
+        fixedWidthPx = nextW
+        fixedHeightPx = nextH
         rebuild()
+    }
+
+    /** 拖角过程中的实时尺寸。传 0,0 取消临时尺寸。 */
+    fun previewSize(w: Int, h: Int) {
+        if (w == previewW && h == previewH) return
+        previewW = w.coerceAtLeast(0)
+        previewH = h.coerceAtLeast(0)
+        requestLayout()
+        invalidate()
     }
 
     fun setMenuLabels(labels: List<String>) {
@@ -126,31 +177,82 @@ class LyricRenderer(context: Context) : View(context) {
     fun setEditing(value: Boolean) {
         if (editing == value) return
         editing = value
+        if (!value) stopFade()
         rebuild()
     }
 
     fun setContent(primary: String, secondary: String?, nextMode: Mode) {
         val changed = primary != primaryText || secondary != secondaryText || nextMode != mode
+        if (!changed) return
+
+        // 只有「真歌词换成真歌词」才值得做交叉淡入：提示语、菜单、编辑态都不淡入，
+        // 否则操作过程中界面一直在闪。
+        val crossfade = nextMode == Mode.CONTENT &&
+            mode == Mode.CONTENT &&
+            !editing &&
+            style.fadeMs > 0 &&
+            glyphs.isNotEmpty()
+
+        if (crossfade) snapshotForFade()
         primaryText = primary
         secondaryText = secondary
         mode = nextMode
-        if (!changed) return
         rebuild()
-        fadeIn()
+        if (crossfade) {
+            startFade()
+        } else if (fadeCount > 0) {
+            // 正在淡入时切到菜单/提示：动画立刻收尾，别让旧行的残影压在菜单上
+            stopFade()
+            invalidate()
+        }
     }
 
-    /**
-     * 行切换的淡入。用 View 的 alpha 而不是自己画透明度：合成层做这件事几乎零成本，
-     * 而且不触碰测量与绘制流程。编辑态与菜单不淡入，避免操作时界面在闪。
-     */
-    private fun fadeIn() {
-        if (style.fadeMs <= 0 || editing || mode != Mode.CONTENT || !isAttachedToWindow) {
-            alpha = 1f
-            return
+    // ---------------------------------------------------------------- 交叉淡入
+
+    private fun snapshotForFade() {
+        fadeGlyphs.clear()
+        fadeGlyphs.addAll(glyphs)
+        fadeTops.clear()
+        fadeTops.addAll(glyphTops)
+        fadeTop = contentTop
+        fadeCount = glyphs.size
+    }
+
+    private fun startFade() {
+        val animator = fadeAnimator ?: ValueAnimator().also { fadeAnimator = it }
+        animator.cancel()
+        animator.removeAllListeners()
+        animator.setFloatValues(0f, 1f)
+        animator.duration = style.fadeMs.toLong()
+        animator.interpolator = DecelerateInterpolator()
+        animator.addUpdateListener {
+            fadeElapsed = it.animatedValue as Float
+            invalidate()
         }
-        animate().cancel()
-        alpha = 0.25f
-        animate().alpha(1f).setDuration(style.fadeMs.toLong()).start()
+        animator.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                fadeElapsed = 1f
+                fadeCount = 0
+                fadeGlyphs.clear()
+                fadeTops.clear()
+                invalidate()
+            }
+        })
+        fadeElapsed = 0f
+        animator.start()
+    }
+
+    private fun stopFade() {
+        fadeAnimator?.cancel()
+        fadeCount = 0
+        fadeElapsed = 1f
+        fadeGlyphs.clear()
+        fadeTops.clear()
+    }
+
+    override fun onDetachedFromWindow() {
+        stopFade()
+        super.onDetachedFromWindow()
     }
 
     private fun rebuild() {
@@ -194,7 +296,7 @@ class LyricRenderer(context: Context) : View(context) {
                     val subSize = promptSize * 0.88f
                     val subLines = TextWrap.wrap(sub, limit, 1) { s -> widthOf(s, subSize, false) }
                     for (line in subLines) {
-                        glyphs += Glyph(line, subSize, 135, false)
+                        glyphs += Glyph(line, subSize, 135, false, secondary = true)
                         glyphTops += y
                         y += subSize * 1.45f
                     }
@@ -219,7 +321,8 @@ class LyricRenderer(context: Context) : View(context) {
                     for (line in subLines) {
                         glyphs += Glyph(
                             line, secondarySize,
-                            (style.secondaryAlpha * 255f).toInt().coerceIn(0, 255), false
+                            (style.secondaryAlpha * 255f).toInt().coerceIn(0, 255), false,
+                            secondary = true
                         )
                         glyphTops += y
                         y += secondarySize * 1.45f
@@ -236,15 +339,26 @@ class LyricRenderer(context: Context) : View(context) {
         if (editing && mode == Mode.CONTENT) {
             width = maxOf(width, widthOf(hintText, spToPx(11f), false) + 54f * density)
         }
-        contentWidth = width.coerceAtMost(limit)
+        // 固定宽度时内容区就是「窗口宽 − 左右内边距 − 状态条槽」，文字按 align 在里面排。
+        contentWidth = if (fixedWidthPx > 0) {
+            (fixedWidthPx - paddingH * 2f - markGutter).coerceAtLeast(60f * density)
+        } else {
+            width.coerceAtMost(limit)
+        }
 
         requestLayout()
         invalidate()
     }
 
     private fun contentLimit(): Float {
-        val limitBase = if (maxWidthPx > 0) maxWidthPx.toFloat() - paddingH * 2f else 4000f
-        return (limitBase - markGutter).coerceAtLeast(60f * density)
+        val base = if (fixedWidthPx > 0) {
+            fixedWidthPx.toFloat()
+        } else if (maxWidthPx > 0) {
+            maxWidthPx.toFloat()
+        } else {
+            4000f
+        }
+        return (base - paddingH * 2f - markGutter).coerceAtLeast(60f * density)
     }
 
     private fun widthOf(text: String, size: Float, bold: Boolean): Float {
@@ -278,11 +392,52 @@ class LyricRenderer(context: Context) : View(context) {
         return if (index in glyphs.indices) index else -1
     }
 
+    /**
+     * 四角把手命中判定：0 左上 / 1 右上 / 2 左下 / 3 右下，未命中返回 -1。
+     *
+     * 只在编辑态生效 —— 非编辑态窗口根本不接收触摸。
+     */
+    fun hitCorner(x: Float, y: Float): Int {
+        if (!editing || mode == Mode.MENU) return -1
+        val r = CORNER_TOUCH_DP * density
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val corners = floatArrayOf(0f, 0f, w, 0f, 0f, h, w, h)
+        var best = -1
+        var bestDist = r * r
+        for (i in 0 until 4) {
+            val dx = x - corners[i * 2]
+            val dy = y - corners[i * 2 + 1]
+            val d = dx * dx + dy * dy
+            if (d <= bestDist) {
+                bestDist = d
+                best = i
+            }
+        }
+        return best
+    }
+
+    /** 当前可用窗口的最小尺寸，拖角时用来兜底，避免把自己拖成一条线。 */
+    fun minWidthPx(): Int = (widthOf("字字字", spToPx(style.fontSp), style.bold) + paddingH * 2f + markGutter).toInt()
+
+    fun minHeightPx(): Int = (spToPx(style.fontSp) * 1.38f + paddingV * 2f).toInt()
+
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val hint = if (editing && mode == Mode.CONTENT) hintHeight() else 0f
-        val w = (contentWidth + paddingH * 2f + markGutter).toInt().coerceIn(1, 4000)
-        val h = (contentHeight + paddingV * 2f + hint).toInt().coerceIn(1, 2000)
-        setMeasuredDimension(w, h)
+        val fallbackW = (contentWidth + paddingH * 2f + markGutter).toInt().coerceIn(1, 4000)
+        val fallbackH = (contentHeight + paddingV * 2f + hint).toInt().coerceIn(1, 2000)
+
+        val w = when {
+            previewW > 0 -> previewW
+            fixedWidthPx > 0 -> fixedWidthPx
+            else -> fallbackW
+        }
+        val h = when {
+            previewH > 0 -> previewH
+            fixedHeightPx > 0 -> maxOf(fixedHeightPx, (contentHeight + paddingV * 2f + hint).toInt())
+            else -> fallbackH
+        }
+        setMeasuredDimension(w.coerceIn(1, 4000), h.coerceIn(1, 2000))
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -304,13 +459,33 @@ class LyricRenderer(context: Context) : View(context) {
 
         if (style.opacity > 0.02f) {
             val a = (style.opacity * 255f).toInt().coerceIn(0, 255)
-            bgPaint.color = 0x0014161A or (a shl 24)
+            bgPaint.color = (style.bgColor and 0x00FFFFFF) or (a shl 24)
             rect.set(0f, 0f, w, h)
             canvas.drawRoundRect(rect, radius(), radius(), bgPaint)
         }
 
         drawStateMark(canvas, h)
-        drawGlyphs(canvas)
+
+        // 固定高度时内容垂直居中：只有一行时贴顶会显得整体偏上，尤其在 2~3 行高度里。
+        contentTop = blockTop()
+
+        val fading = fadeCount > 0 && fadeElapsed < 1f
+        if (fading) {
+            // 旧行在前 35% 里退干净，新行从 12% 才开始浮上来。
+            // 两条曲线刻意错开：全程同步交叉会让两句话叠在一起，看起来像重影。
+            val out = (1f - fadeElapsed / 0.35f).coerceIn(0f, 1f)
+            val inn = ((fadeElapsed - 0.12f) / 0.88f).coerceIn(0f, 1f)
+            for (i in 0 until fadeCount) {
+                drawGlyph(canvas, fadeGlyphs[i], fadeTop + fadeTops[i], out)
+            }
+            for (i in glyphs.indices) {
+                drawGlyph(canvas, glyphs[i], contentTop + glyphTops[i], inn)
+            }
+        } else {
+            for (i in glyphs.indices) {
+                drawGlyph(canvas, glyphs[i], contentTop + glyphTops[i], 1f)
+            }
+        }
 
         if (editing) {
             drawEditFrame(canvas, w, h)
@@ -318,29 +493,34 @@ class LyricRenderer(context: Context) : View(context) {
         }
     }
 
-    private fun drawGlyphs(canvas: Canvas) {
+    /** 内容块顶边。自适应高度时就是内边距；固定高度时按可用高度居中。 */
+    private fun blockTop(): Float {
+        val hint = if (editing && mode == Mode.CONTENT) hintHeight() else 0f
+        val usable = height - paddingV * 2f - hint
+        if (usable <= contentHeight || fixedHeightPx <= 0) return paddingV
+        return paddingV + (usable - contentHeight) / 2f
+    }
+
+    private fun drawGlyph(canvas: Canvas, glyph: Glyph, top: Float, alphaScale: Float) {
+        configureText(glyph, alphaScale)
+        val baseline = top - textPaint.fontMetrics.ascent
+        val glyphWidth = widthOf(glyph.text, glyph.size, glyph.bold)
         val baseX = paddingH + markGutter
-        for (i in glyphs.indices) {
-            val glyph = glyphs[i]
-            configureText(glyph)
-            val baseline = paddingV + glyphTops[i] - textPaint.fontMetrics.ascent
-            val glyphWidth = widthOf(glyph.text, glyph.size, glyph.bold)
-            val x = when (style.align) {
-                Align.START -> baseX
-                Align.CENTER -> baseX + (contentWidth - glyphWidth) / 2f
-                Align.END -> baseX + contentWidth - glyphWidth
-            }
-            // 描边先画、填充后画：这是真轮廓，不是把文字偏移复制一遍当阴影。
-            if (style.stroke) canvas.drawText(glyph.text, x, baseline, strokePaint)
-            canvas.drawText(glyph.text, x, baseline, textPaint)
+        val x = when (style.align) {
+            Align.START -> baseX
+            Align.CENTER -> baseX + (contentWidth - glyphWidth) / 2f
+            Align.END -> baseX + contentWidth - glyphWidth
         }
+        // 描边先画、填充后画：这是真轮廓，不是把文字偏移复制一遍当阴影。
+        if (style.stroke) canvas.drawText(glyph.text, x, baseline, strokePaint)
+        canvas.drawText(glyph.text, x, baseline, textPaint)
     }
 
     private fun drawMenu(canvas: Canvas) {
         val baseX = paddingH * 1.4f
         for (i in glyphs.indices) {
             val glyph = glyphs[i]
-            configureText(glyph)
+            configureText(glyph, 1f)
             val fm = textPaint.fontMetrics
             val baseline = paddingV + glyphTops[i] + menuItemH / 2f - (fm.ascent + fm.descent) / 2f
             canvas.drawText(glyph.text, baseX, baseline, textPaint)
@@ -415,18 +595,27 @@ class LyricRenderer(context: Context) : View(context) {
         canvas.drawPath(path, checkPaint)
     }
 
-    private fun configureText(glyph: Glyph) {
+    private fun configureText(glyph: Glyph, alphaScale: Float) {
         val typeface = if (glyph.bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+        val alpha = (glyph.alpha * alphaScale).toInt().coerceIn(0, 255)
+        // 颜色带自己的 alpha 通道时以样式为准：色板都是不透明色，这里只乘 glyph 的 alpha。
+        val base = if (glyph.secondary) style.secondaryColor else style.primaryColor
+
         textPaint.textSize = glyph.size
         textPaint.typeface = typeface
-        textPaint.color = Color.WHITE
-        textPaint.alpha = glyph.alpha
+        textPaint.color = base and 0x00FFFFFF
+        textPaint.alpha = alpha
 
         strokePaint.textSize = glyph.size
         strokePaint.typeface = typeface
         strokePaint.color = Color.BLACK
-        strokePaint.alpha = glyph.alpha
+        strokePaint.alpha = alpha
         strokePaint.style = Paint.Style.STROKE
         strokePaint.strokeWidth = glyph.size * 0.085f
+    }
+
+    private companion object {
+        /** 四角把手的触摸半径。车机手指粗，比视觉半径大得多。 */
+        const val CORNER_TOUCH_DP = 22f
     }
 }

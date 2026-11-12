@@ -35,6 +35,11 @@ class Prefs(context: Context) {
         get() = sp.getInt(KEY_DISPLAY_ID, DEFAULT_DISPLAY_ID)
         set(value) = sp.edit().putInt(KEY_DISPLAY_ID, value).apply()
 
+    /** 左侧收起/展开把手。默认开：没有它就没办法临时让出屏幕中间的位置。 */
+    var handleEnabled: Boolean
+        get() = sp.getBoolean(KEY_HANDLE, true)
+        set(value) = sp.edit().putBoolean(KEY_HANDLE, value).apply()
+
     fun style(): OverlayStyle = OverlayDefaults.sanitize(
         OverlayStyle(
             preset = Preset.of(sp.getString(KEY_PRESET, null)),
@@ -48,7 +53,12 @@ class Prefs(context: Context) {
             align = Align.of(sp.getString(KEY_ALIGN, null)),
             fadeMs = sp.getInt(KEY_FADE, OverlayDefaults.FADE_MS),
             secondary = Secondary.of(sp.getString(KEY_SECONDARY, null)),
-            stateMark = sp.getBoolean(KEY_STATE_MARK, OverlayDefaults.STATE_MARK)
+            stateMark = sp.getBoolean(KEY_STATE_MARK, OverlayDefaults.STATE_MARK),
+            primaryColor = sp.getInt(KEY_PRIMARY_COLOR, OverlayDefaults.PRIMARY_COLOR),
+            secondaryColor = sp.getInt(KEY_SECONDARY_COLOR, OverlayDefaults.SECONDARY_COLOR),
+            bgColor = sp.getInt(KEY_BG_COLOR, OverlayDefaults.BG_COLOR),
+            widthRatio = sp.getFloat(KEY_WIDTH_RATIO, OverlayDefaults.WIDTH_RATIO),
+            heightRatio = sp.getFloat(KEY_HEIGHT_RATIO, OverlayDefaults.HEIGHT_RATIO)
         )
     )
 
@@ -67,6 +77,11 @@ class Prefs(context: Context) {
             .putInt(KEY_FADE, safe.fadeMs)
             .putString(KEY_SECONDARY, safe.secondary.id)
             .putBoolean(KEY_STATE_MARK, safe.stateMark)
+            .putInt(KEY_PRIMARY_COLOR, safe.primaryColor)
+            .putInt(KEY_SECONDARY_COLOR, safe.secondaryColor)
+            .putInt(KEY_BG_COLOR, safe.bgColor)
+            .putFloat(KEY_WIDTH_RATIO, safe.widthRatio)
+            .putFloat(KEY_HEIGHT_RATIO, safe.heightRatio)
             .apply()
     }
 
@@ -114,6 +129,12 @@ class Prefs(context: Context) {
         private const val KEY_FADE = "style_fade_ms"
         private const val KEY_SECONDARY = "style_secondary"
         private const val KEY_STATE_MARK = "style_state_mark"
+        private const val KEY_PRIMARY_COLOR = "style_primary_color"
+        private const val KEY_SECONDARY_COLOR = "style_secondary_color"
+        private const val KEY_BG_COLOR = "style_bg_color"
+        private const val KEY_WIDTH_RATIO = "style_width_ratio"
+        private const val KEY_HEIGHT_RATIO = "style_height_ratio"
+        private const val KEY_HANDLE = "overlay_handle_enabled"
 
         private const val KEY_RATIO_X_PORT = "ratio_x_port"
         private const val KEY_RATIO_Y_PORT = "ratio_y_port"
