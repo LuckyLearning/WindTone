@@ -18,6 +18,7 @@ import com.anylyric.data.Prefs
 import com.anylyric.diag.Probe
 import com.anylyric.diag.ProbeSnapshot
 import com.anylyric.lyrics.LyricLine
+import com.anylyric.lyrics.LyricResult
 import com.anylyric.lyrics.LyricsSourceChain
 import com.anylyric.lyrics.TitleTimeline
 import com.anylyric.lyrics.TitleVerdict
@@ -76,6 +77,18 @@ class SessionHub private constructor(context: Context) {
     private var lastSessionCount = 0
     private var lastPlayingCount = 0
     private var lastMetadataKeys: List<String> = emptyList()
+
+    /** 上次完整 `getActiveSessions()` 的时刻，用于节流 binder 查询。 */
+    private var lastFullQueryAt = 0L
+
+    /** 上一次通知字段的指纹，内容没变就不重算整条链。 */
+    private var lastNotificationSignature: String? = null
+
+    /** TITLE 最近一次变化的时刻，用于区分「还在等第一句」与「这播放器没有歌词通道」。 */
+    private var lastTitleChangeAt = SystemClock.elapsedRealtime()
+
+    /** 上一次真正写进悬浮层的文本，避免同一句反复重绘与重复记日志。 */
+    private var lastRenderedSignature: String? = null
 
     init {
         Probe.setEnabled(prefs.debugEnabled)
@@ -143,7 +156,22 @@ class SessionHub private constructor(context: Context) {
         if (Probe.enabled) {
             Probe.write("通知", "pkg=${sbn.packageName} fields=${fields.keys.joinToString(",")}")
         }
-        refresh("notification")
+
+        // 同一份文本重复推送（播放器每 250ms 刷一次通知）不必重跑责任链
+        val signature = buildString(48) {
+            append(sbn.packageName)
+            for ((key, value) in fields) {
+                append('\u0000').append(key).append('=').append(value)
+            }
+        }
+        if (signature == lastNotificationSignature) return
+        lastNotificationSignature = signature
+
+        val current = controller
+        refresh(
+            if (current == null || current.packageName == sbn.packageName) "notification"
+            else "notification_other"
+        )
     }
 
     fun attach() {
@@ -172,10 +200,25 @@ class SessionHub private constructor(context: Context) {
             return
         }
 
-        val sessions = querySessions()
-        lastSessionCount = sessions.size
-        lastPlayingCount = sessions.count {
-            it.playbackState?.state == PlaybackState.STATE_PLAYING
+        // getActiveSessions 是跨进程调用：播放器每 250ms 推一次状态时若每次都查，
+        // 每句歌词要白跑 3 次 binder。这里只对「可能换应用」的路径做完整查询。
+        val now = SystemClock.elapsedRealtime()
+        val fullQuery = when {
+            controller == null -> true
+            reason == "state" || reason == "metadata" -> now - lastFullQueryAt >= QUERY_MIN_INTERVAL_MS
+            reason == "notification_other" -> now - lastFullQueryAt >= QUERY_FOREIGN_INTERVAL_MS
+            else -> true
+        }
+        val sessions = if (fullQuery) {
+            lastFullQueryAt = now
+            querySessions().also {
+                lastSessionCount = it.size
+                lastPlayingCount = it.count { c ->
+                    c.playbackState?.state == PlaybackState.STATE_PLAYING
+                }
+            }
+        } else {
+            listOfNotNull(controller)
         }
 
         val next = pick(sessions)
@@ -209,20 +252,43 @@ class SessionHub private constructor(context: Context) {
         val artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
         val duration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
         val mediaId = metadata?.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
+        // duration 与 mediaId 都可能为空，补上包名／专辑／音轨作为换歌指纹的兜底。
+        // 包名必须在内：两个应用的元数据同样稀疏时，否则会被当成同一首歌。
+        val identityExtra = buildString(40) {
+            append(active.packageName)
+            append('|')
+            append(metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM).orEmpty())
+            append('|')
+            append(metadata?.getLong(MediaMetadata.METADATA_KEY_TRACK_NUMBER) ?: 0L)
+        }
+
+        if (title != lastTitle) lastTitleChangeAt = now
         lastTitle = title
         lastArtist = artist
 
-        lastVerdict = timeline.record(
-            SystemClock.elapsedRealtime(), title, duration, mediaId, artist
-        )
+        val previousVerdict = lastVerdict
+        lastVerdict = timeline.record(now, title, duration, mediaId, artist, identityExtra)
         if (timeline.consumeIdentityChanged()) {
             titleStream.reset()
             titleOnlyOnPause = false
+            lastTitleChangeAt = now
         }
 
-        if (lastVerdict == TitleVerdict.PSEUDO && !title.isNullOrBlank()) {
+        if (!title.isNullOrBlank()) {
+            // 关键：判定未成立时也要入缓冲。若等判定成立才入，判定前看到的几句
+            // 会被永久丢掉，第一句还得再等一个歌词周期才出现。
             titleStream.onTitleLine(title)
-            if (playState == PlayState.PAUSED) titleOnlyOnPause = true
+            if (lastVerdict == TitleVerdict.PSEUDO && playState == PlayState.PAUSED) {
+                titleOnlyOnPause = true
+            }
+        }
+
+        if (Probe.enabled && lastVerdict != previousVerdict) {
+            Probe.write(
+                "歌词",
+                "verdict=${previousVerdict.name}->${lastVerdict.name} " +
+                    "changes=${timeline.snapshot().size} buf=${titleStream.bufferedCount()}"
+            )
         }
 
         val metadataValues = textValues(metadata)
@@ -256,8 +322,13 @@ class SessionHub private constructor(context: Context) {
             Probe.write(
                 "歌词",
                 "reason=$reason verdict=$lastVerdict hit=${hitSource ?: "none"} " +
-                    "lines=${currentLines.size} " +
-                    "attempts=" + outcome.attempts.joinToString(",") { it.sourceId }
+                    "lines=${currentLines.size} buf=${titleStream.bufferedCount()} " +
+                    "attempts=" + outcome.attempts.joinToString(",") { attempt ->
+                        when (attempt) {
+                            is LyricResult.Hit -> "${attempt.sourceId}:hit"
+                            is LyricResult.Miss -> "${attempt.sourceId}:${attempt.reason}"
+                        }
+                    }
             )
         }
 
@@ -268,19 +339,47 @@ class SessionHub private constructor(context: Context) {
         if (currentLines.isEmpty()) {
             if (prefs.hideWhenNoLyrics) {
                 overlay.hide()
-            } else {
-                overlay.show(appContext.getString(R.string.overlay_no_lyrics), null)
+                return
             }
+            // 标题还在动、只是还没攒够两句 —— 那是「获取中」，不是「没有」。
+            // 把两者分开，用户才不会以为这个播放器不被支持。
+            val waiting = lastVerdict != TitleVerdict.STABLE &&
+                SystemClock.elapsedRealtime() - lastTitleChangeAt <= TITLE_WAIT_TIMEOUT_MS
+            push(
+                appContext.getString(
+                    if (waiting) R.string.overlay_fetching else R.string.overlay_no_lyrics
+                ),
+                if (waiting) lastTitle else null
+            )
             return
         }
 
         val timed = currentLines.all { it.timeMs != null }
         val index = if (timed) clock.locate(currentLines, clock.position()) else currentLines.lastIndex
         val safe = index.coerceIn(0, currentLines.lastIndex)
-        overlay.show(
+        push(
             currentLines[safe].text,
             currentLines.getOrNull(safe + 1)?.text
         )
+    }
+
+    /**
+     * 真正把文本推给悬浮层，并记录推了什么。
+     *
+     * `[渲染]` 这一行是为了回答「歌词已经取到了，为什么屏幕上没有」：它把
+     * 交给 WindowManager 的原文与实际挂载状态一起写下来，取到行却没显示时
+     * 一眼就能区分是「没渲染」还是「渲染了但窗口没挂上」。
+     */
+    private fun push(primary: String, secondary: String?) {
+        overlay.show(primary, secondary)
+        if (!Probe.enabled) return
+        val signature = "$primary\u0000${secondary.orEmpty()}"
+        if (signature == lastRenderedSignature) return
+        lastRenderedSignature = signature
+        val trace = "text=${primary.take(24)} next=${secondary?.take(12) ?: "none"} " +
+            "attached=${overlay.isAttached()} measured=${overlay.isMeasured()}"
+        Probe.lastRender = trace
+        Probe.write("渲染", trace)
     }
 
     private fun publishSnapshot(active: MediaController?, title: String?, duration: Long) {
@@ -360,6 +459,22 @@ class SessionHub private constructor(context: Context) {
         controller?.unregisterCallback(callback)
         controller = next
         next?.registerCallback(callback, mainHandler)
+        if (next == null) return
+
+        // 换会话＝换播放器，判定与行缓冲一律从零开始：
+        // 否则两个元数据同样稀疏的应用会共用指纹，把上一个应用的歌词带过来。
+        timeline.reset()
+        titleStream.reset()
+        lastVerdict = TitleVerdict.UNKNOWN
+        lastTitle = null
+        currentLines = emptyList()
+        hitSource = null
+        // 进度跳变也必须按会话重置：换应用时 position 从 89s 掉到 44s
+        // 是正常的，不能计成 CLOCK_UNSTABLE。
+        lastPosition = 0L
+        positionJumps = 0
+        titleOnlyOnPause = false
+        lastTitleChangeAt = SystemClock.elapsedRealtime()
     }
 
     private fun detachController() {
@@ -395,6 +510,15 @@ class SessionHub private constructor(context: Context) {
     }
 
     companion object {
+        /** 状态／元数据回调里，两次完整会话查询的最小间隔。 */
+        private const val QUERY_MIN_INTERVAL_MS = 1_500L
+
+        /** 与本应用无关的通知（聊天、健康…）触发的查询间隔，防止刷屏设备空转。 */
+        private const val QUERY_FOREIGN_INTERVAL_MS = 5_000L
+
+        /** 标题停下多久还没歌词，就承认这个播放器没有歌词通道。 */
+        private const val TITLE_WAIT_TIMEOUT_MS = 20_000L
+
         @Volatile
         private var instance: SessionHub? = null
 

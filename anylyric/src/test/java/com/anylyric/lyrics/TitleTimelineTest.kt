@@ -22,6 +22,42 @@ class TitleTimelineTest {
         assertEquals(TitleVerdict.PSEUDO, verdict)
     }
 
+    /** 两句就够：要求三句会让首屏白等一个歌词周期。 */
+    @Test
+    fun twoFastChangesAreEnough() {
+        val timeline = TitleTimeline()
+        timeline.record(0, "第一句", 180_000, "m1", "歌手")
+        assertEquals(TitleVerdict.PSEUDO, timeline.record(3_000, "第二句", 180_000, "m1", "歌手"))
+    }
+
+    @Test
+    fun tenSecondsApartStayStable() {
+        val timeline = TitleTimeline()
+        timeline.record(0, "A", 180_000, "m1", "歌手")
+        assertEquals(TitleVerdict.STABLE, timeline.record(10_000, "B", 180_000, "m1", "歌手"))
+    }
+
+    /** 「歌名」→「歌名 - 播放中」是播放器附状态，不是歌词，不能算作证据。 */
+    @Test
+    fun suffixVariantIsNotEvidence() {
+        val timeline = TitleTimeline()
+        timeline.record(0, "普通歌名", 180_000, "m1", "歌手")
+        val verdict = timeline.record(2_000, "普通歌名 - 播放中", 180_000, "m1", "歌手")
+        assertEquals(TitleVerdict.UNKNOWN, verdict)
+        assertEquals(1, timeline.snapshot().size)
+    }
+
+    /** 元数据稀疏的播放器靠 identityExtra（包名／专辑／音轨）区分换歌。 */
+    @Test
+    fun identityExtraSplitsSongs() {
+        val timeline = TitleTimeline()
+        timeline.record(0, "第一句", 0, null, null, "app.a|专辑|1")
+        timeline.record(2_000, "第二句", 0, null, null, "app.a|专辑|2")
+
+        assertTrue(timeline.consumeIdentityChanged())
+        assertEquals(1, timeline.snapshot().size)
+    }
+
     @Test
     fun slowTitleChangesStayStable() {
         val timeline = TitleTimeline(windowMs = 30_000, minChanges = 3, maxMedianGapMs = 6_000)

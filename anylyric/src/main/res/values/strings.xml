@@ -61,7 +61,8 @@
     <string name="diag_section_attempts">Source attempts</string>
     <string name="diag_section_log">Live log</string>
 
-    <string name="overlay_no_lyrics">No lyrics (this player exposes no lyric channel)</string>
+    <string name="overlay_no_lyrics">No lyrics</string>
+    <string name="overlay_fetching">Getting lyrics…</string>
 
     <string name="generic_on">On</string>
     <string name="generic_off">Off</string>

@@ -86,4 +86,32 @@ class LyricsSourceChainTest {
         }
         assertEquals(1, l1.bufferedCount())
     }
+
+    /**
+     * 判定成立那一刻，判定之前已经看到过的行必须整体回填。
+     * 否则首屏要等到「判定成立 + 再攒两句」，用户会以为没歌词。
+     */
+    @Test
+    fun l1BackfillsLinesBufferedBeforeVerdict() {
+        val l1 = L1TitleStreamSource().apply {
+            onTitleLine("第一句")
+            onTitleLine("第二句")
+            onTitleLine("第三句")
+        }
+        // 判定还没成立时不应输出
+        assertTrue(l1.tryResolve(TrackContext(pseudoTitle = false)) is LyricResult.Miss)
+
+        val hit = l1.tryResolve(TrackContext(pseudoTitle = true)) as LyricResult.Hit
+        assertEquals(3, hit.lines.size)
+        assertEquals("第一句", hit.lines.first().text)
+    }
+
+    @Test
+    fun l1DropsSuffixVariantOfTitle() {
+        val l1 = L1TitleStreamSource().apply {
+            onTitleLine("普通歌名")
+            onTitleLine("普通歌名 - 播放中")
+        }
+        assertEquals(1, l1.bufferedCount())
+    }
 }

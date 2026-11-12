@@ -17,15 +17,20 @@ enum class TitleVerdict {
  *
  * 判据（三条同时成立）：
  *  1. 窗口内 TITLE 变化次数 >= [minChanges]；
- *  2. duration / mediaId / artist 未变（变了就是真换歌，不是逐行歌词）；
+ *  2. duration / mediaId / artist / 专辑 / 音轨未变（变了就是真换歌，不是逐行歌词）；
  *  3. 相邻变化间隔的中位数 <= [maxMedianGapMs]（歌词行通常 2~5 秒一句）。
+ *
+ * [minChanges] 定为 **2** 而不是 3：逐行歌词每 3~5 秒一句，要求 3 条意味着判定前
+ * 至少空等 6~15 秒。两条不同标题 + 8 秒内变化，在「曲目指纹未变」的前提下已经
+ * 基本只能是歌词流；真正的误报风险（播放器把播放状态拼进标题）由
+ * [isTrivialVariant] 单独挡掉。
  *
  * 纯逻辑，无 Android 依赖，可直接 JVM 单测。
  */
 class TitleTimeline(
-    private val windowMs: Long = 12_000L,
-    private val minChanges: Int = 3,
-    private val maxMedianGapMs: Long = 6_000L
+    private val windowMs: Long = 15_000L,
+    private val minChanges: Int = 2,
+    private val maxMedianGapMs: Long = 8_000L
 ) {
 
     data class Event(val atMs: Long, val title: String, val identity: String)
@@ -36,19 +41,22 @@ class TitleTimeline(
 
     /**
      * 记录一次元数据回调。返回本次之后的判定。
-     * [mediaId] 允许为空：此时指纹退化为 duration + artist。
+     * [mediaId] 允许为空：此时指纹退化为 duration + artist + [identityExtra]。
+     * [identityExtra] 由调用方补充专辑／音轨等「同一首歌内不变」的字段，用于在
+     * `duration` / `mediaId` 都缺失的播放器上尽量分辨换歌。
      */
     fun record(
         nowMs: Long,
         title: String?,
         durationMs: Long,
         mediaId: String?,
-        artist: String?
+        artist: String?,
+        identityExtra: String = ""
     ): TitleVerdict {
         val normalized = title?.trim().orEmpty()
         if (normalized.isEmpty()) return verdict(nowMs)
 
-        val id = "$durationMs|${mediaId.orEmpty()}|${artist.orEmpty()}"
+        val id = "$durationMs|${mediaId.orEmpty()}|${artist.orEmpty()}|$identityExtra"
         if (identity.isNotEmpty() && id != identity) {
             // 真换歌：清空历史，避免把上一首的歌词行算进本首
             identityChanged = true
@@ -56,7 +64,8 @@ class TitleTimeline(
         }
         identity = id
 
-        if (events.lastOrNull()?.title == normalized) return verdict(nowMs)
+        val last = events.lastOrNull()
+        if (last != null && isTrivialVariant(last.title, normalized)) return verdict(nowMs)
 
         events.addLast(Event(nowMs, normalized, id))
         trim(nowMs)
@@ -92,5 +101,23 @@ class TitleTimeline(
         val gaps = events.zipWithNext { a, b -> b.atMs - a.atMs }.sorted()
         val median = gaps[gaps.size / 2]
         return if (median <= maxMedianGapMs) TitleVerdict.PSEUDO else TitleVerdict.STABLE
+    }
+
+    companion object {
+        /**
+         * 判断第二个标题是否只是第一个的「后缀变体」，例如
+         * `歌名` → `歌名 - 播放中`、`歌名` → `歌名 (Live)`。
+         *
+         * 这类变化是播放器在标题里附带播放状态，不是歌词行。若不排除，
+         * [minChanges] = 2 时两条状态标题就能把判定误推到 PSEUDO，
+         * 于是把歌名当歌词显示。
+         */
+        fun isTrivialVariant(a: String, b: String): Boolean {
+            if (a == b) return true
+            val short = if (a.length <= b.length) a else b
+            val long = if (a.length <= b.length) b else a
+            if (long.length - short.length > 8) return false
+            return long.startsWith(short)
+        }
     }
 }

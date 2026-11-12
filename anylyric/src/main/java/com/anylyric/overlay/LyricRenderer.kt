@@ -6,6 +6,8 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
+import android.text.TextPaint
+import android.text.TextUtils
 import android.view.View
 
 /**
@@ -38,13 +40,13 @@ class LyricRenderer(context: Context) : View(context) {
     private var primarySize = 22f * scaledDensity
     private var secondarySize = primarySize * 0.72f
 
-    private val primaryPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val primaryPaint = TextPaint(TextPaint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         typeface = Typeface.DEFAULT_BOLD
         textSize = primarySize
     }
 
-    private val secondaryPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val secondaryPaint = TextPaint(TextPaint.ANTI_ALIAS_FLAG).apply {
         color = 0xB3FFFFFF.toInt()
         textSize = secondarySize
     }
@@ -62,6 +64,12 @@ class LyricRenderer(context: Context) : View(context) {
     private val paddingV = 10f * density
     private val radius = 12f * density
 
+    /**
+     * 宽度上限：车机屏幕窄，长句（尤其「暂无歌词（该播放器未暴露歌词通道）」这类
+     * 提示语）会一路顶到屏幕外被裁断。这里按屏宽留出边距，超长部分省略号收尾。
+     */
+    private val maxTotalWidth = (resources.displayMetrics.widthPixels * 0.92f).toInt().coerceAtLeast(1)
+
     fun setTextSizeSp(sp: Float) {
         primarySize = sp * scaledDensity
         secondarySize = primarySize * 0.72f
@@ -74,7 +82,8 @@ class LyricRenderer(context: Context) : View(context) {
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val primaryWidth = primaryPaint.measureText(primary)
         val secondaryWidth = secondary?.let { secondaryPaint.measureText(it) } ?: 0f
-        val contentWidth = maxOf(primaryWidth, secondaryWidth)
+        val limit = (maxTotalWidth - paddingH * 2).coerceAtLeast(1f)
+        val contentWidth = minOf(maxOf(primaryWidth, secondaryWidth), limit)
 
         val primaryLine = primarySize * 1.24f
         val secondaryLine = if (secondary.isNullOrEmpty()) 0f else secondarySize * 1.45f
@@ -92,17 +101,23 @@ class LyricRenderer(context: Context) : View(context) {
 
         if (primary.isEmpty()) return
 
+        val available = (width - paddingH * 2).coerceAtLeast(1f)
+        val shown = TextUtils.ellipsize(primary, primaryPaint, available, TextUtils.TruncateAt.END)
+
         // 一行细阴影提升强光下的可读性（不用模糊，车机 GPU 合成代价高）
         val shadowOffset = 1.2f * density
         var baseline = paddingV + primarySize
-        canvas.drawText(primary, paddingH + shadowOffset, baseline + shadowOffset, shadowPaint)
-        canvas.drawText(primary, paddingH, baseline, primaryPaint)
+        canvas.drawText(shown.toString(), paddingH + shadowOffset, baseline + shadowOffset, shadowPaint)
+        canvas.drawText(shown, 0, shown.length, paddingH, baseline, primaryPaint)
 
         val second = secondary
         if (!second.isNullOrEmpty()) {
             baseline += secondarySize * 1.45f
-            canvas.drawText(second, paddingH + shadowOffset, baseline + shadowOffset, shadowPaint)
-            canvas.drawText(second, paddingH, baseline, secondaryPaint)
+            val shownSecond = TextUtils.ellipsize(second, secondaryPaint, available, TextUtils.TruncateAt.END)
+            canvas.drawText(
+                shownSecond.toString(), paddingH + shadowOffset, baseline + shadowOffset, shadowPaint
+            )
+            canvas.drawText(shownSecond, 0, shownSecond.length, paddingH, baseline, secondaryPaint)
         }
     }
 }

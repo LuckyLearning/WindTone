@@ -41,6 +41,10 @@ object Probe {
     @Volatile
     var hitSource: String? = null
 
+    /** 最后一次真正交给 WindowManager 的文本。用于回答「取到歌词了为什么屏幕没有」。 */
+    @Volatile
+    var lastRender: String = "-"
+
     private val startedAt = System.currentTimeMillis()
 
     fun setEnabled(value: Boolean) {
@@ -132,6 +136,7 @@ object Probe {
 
         sb.appendLine("[CLOCK] jumps=${s.positionJumpCount} l1OnlyOnPause=${s.l1OnlyOnPause}")
         sb.appendLine("[WINDOW] attached=${s.viewAttached} measured=${s.viewMeasured} hiddenByRule=${s.hiddenByRule}")
+        sb.appendLine("[RENDER] $lastRender")
         sb.appendLine("[PROCESS] cachedLogLines=${lines().size} dropped=$dropped")
         sb.appendLine()
 
