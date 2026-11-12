@@ -3,6 +3,7 @@ package com.anylyric.session
 import android.app.Notification
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.hardware.display.DisplayManager
 import android.media.MediaMetadata
 import android.media.session.MediaController
@@ -29,7 +30,9 @@ import com.anylyric.lyrics.sources.L0MetadataSource
 import com.anylyric.lyrics.sources.L1TitleStreamSource
 import com.anylyric.lyrics.sources.L2NotificationSource
 import com.anylyric.overlay.OverlayHost
+import com.anylyric.overlay.Secondary
 import com.anylyric.service.MediaWatchService
+import com.anylyric.ui.SettingsActivity
 
 /**
  * 全应用唯一的会话协调器。
@@ -82,6 +85,7 @@ class SessionHub private constructor(context: Context) {
     private var positionJumps = 0
     private var titleOnlyOnPause = false
     private var lastVerdict = TitleVerdict.UNKNOWN
+    private var lastPlayState = PlayState.NONE
     private var lastSessionCount = 0
     private var lastPlayingCount = 0
     private var lastMetadataKeys: List<String> = emptyList()
@@ -100,6 +104,18 @@ class SessionHub private constructor(context: Context) {
 
     init {
         Probe.setEnabled(prefs.debugEnabled)
+        // 菜单关闭、隐藏到期、换了输出屏幕：都需要上层重新算一遍内容再决定是否重建窗口
+        overlay.onRequestRender = { refresh("overlay_event") }
+        overlay.onOpenSettings = {
+            try {
+                appContext.startActivity(
+                    Intent(appContext, SettingsActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            } catch (_: Throwable) {
+                // 车机上少数 ROM 会拦 NEW_TASK 启动：忽略即可，用户仍可从桌面进入
+            }
+        }
     }
 
     private val callback = object : MediaController.Callback() {
@@ -283,8 +299,12 @@ class SessionHub private constructor(context: Context) {
         overlay.hide()
     }
 
-    fun applyTextSize() {
-        overlay.refreshTextSize(prefs.fontSp)
+    /** 样式变更（字号／预设／透明度／行数…）立即生效，不重建窗口。 */
+    fun applyStyle() {
+        overlay.applyStyle()
+        // 「无歌词时隐藏」这类策略属于渲染阶段判定，样式改完必须重算一次。
+        // 没有会话时不重算：否则用户一改样式，屏上会凭空多出一个「暂无歌词」。
+        if (controller != null) render()
     }
 
     @Synchronized
@@ -353,6 +373,7 @@ class SessionHub private constructor(context: Context) {
         val playbackState = active.playbackState
         val metadata = active.metadata
         val playState = mapState(playbackState?.state ?: PlaybackState.STATE_NONE)
+        lastPlayState = playState
         val rawPosition = playbackState?.position ?: -1L
 
         clock.update(rawPosition, playbackState?.playbackSpeed ?: 1f, playState)
@@ -449,6 +470,8 @@ class SessionHub private constructor(context: Context) {
     }
 
     private fun render() {
+        overlay.setPlaying(lastPlayState == PlayState.PLAYING)
+
         if (currentLines.isEmpty()) {
             if (prefs.hideWhenNoLyrics) {
                 overlay.hide()
@@ -462,7 +485,8 @@ class SessionHub private constructor(context: Context) {
                 appContext.getString(
                     if (waiting) R.string.overlay_fetching else R.string.overlay_no_lyrics
                 ),
-                if (waiting) lastTitle else null
+                if (waiting) lastTitle else trackLabel(),
+                prompt = true
             )
             return
         }
@@ -470,11 +494,22 @@ class SessionHub private constructor(context: Context) {
         val timed = currentLines.all { it.timeMs != null }
         val index = if (timed) clock.locate(currentLines, clock.position()) else currentLines.lastIndex
         val safe = index.coerceIn(0, currentLines.lastIndex)
-        push(
-            currentLines[safe].text,
-            currentLines.getOrNull(safe + 1)?.text
-        )
+
+        // 副行按用户选择取：逐行流没有时间轴，只有相邻行或「歌名·歌手」有意义。
+        val secondary = when (prefs.style().secondary) {
+            Secondary.NEXT -> currentLines.getOrNull(safe + 1)?.text
+            Secondary.PREVIOUS -> currentLines.getOrNull(safe - 1)?.text
+            Secondary.TRACK -> trackLabel()
+            Secondary.NONE -> null
+        }
+        push(currentLines[safe].text, secondary, prompt = false)
     }
+
+    private fun trackLabel(): String? = listOfNotNull(lastTitle, lastArtist)
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .joinToString(" · ")
+        .ifBlank { null }
 
     /**
      * 真正把文本推给悬浮层，并记录推了什么。
@@ -483,14 +518,18 @@ class SessionHub private constructor(context: Context) {
      * 交给 WindowManager 的原文与实际挂载状态一起写下来，取到行却没显示时
      * 一眼就能区分是「没渲染」还是「渲染了但窗口没挂上」。
      */
-    private fun push(primary: String, secondary: String?) {
-        overlay.show(primary, secondary)
+    private fun push(primary: String, secondary: String?, prompt: Boolean) {
+        if (prompt) {
+            overlay.showPrompt(primary, secondary)
+        } else {
+            overlay.showContent(primary, secondary)
+        }
         if (!Probe.enabled) return
-        val signature = "$primary\u0000${secondary.orEmpty()}"
+        val signature = "$primary\u0000${secondary.orEmpty()}\u0000$prompt"
         if (signature == lastRenderedSignature) return
         lastRenderedSignature = signature
         val trace = "text=${primary.take(24)} next=${secondary?.take(12) ?: "none"} " +
-            "attached=${overlay.isAttached()} measured=${overlay.isMeasured()}"
+            "prompt=$prompt attached=${overlay.isAttached()} measured=${overlay.isMeasured()}"
         Probe.lastRender = trace
         Probe.write("渲染", trace)
     }

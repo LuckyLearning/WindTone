@@ -3,13 +3,19 @@ package com.anylyric.ui
 import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Intent
+import android.content.res.Configuration
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.hardware.display.DisplayManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
+import android.view.Gravity
 import android.view.View
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Switch
@@ -18,13 +24,20 @@ import com.anylyric.R
 import com.anylyric.data.ListenerState
 import com.anylyric.data.Prefs
 import com.anylyric.diag.Probe
+import com.anylyric.overlay.Align
+import com.anylyric.overlay.OverlayDefaults
+import com.anylyric.overlay.OverlayGeometry
+import com.anylyric.overlay.OverlayStyle
+import com.anylyric.overlay.Preset
+import com.anylyric.overlay.Secondary
 import com.anylyric.service.MediaWatchService
 import com.anylyric.session.SessionHub
 
 /**
- * 唯一主界面：权限引导、当前状态、显示参数、探测入口。
+ * 唯一主界面：权限引导、当前状态、外观、位置、探测入口。
  *
  * 权限全部在这一屏内完成授权与检测 —— 不提示连接电脑、不要求 adb。
+ * 每个可调项右侧或末尾都有「重置」，写回值只取 [OverlayDefaults]。
  */
 class SettingsActivity : BaseActivity() {
 
@@ -38,9 +51,16 @@ class SettingsActivity : BaseActivity() {
     private lateinit var notificationSettingsButton: TextView
     private lateinit var overlayState: TextView
     private lateinit var overlayButton: TextView
-    private lateinit var fontValue: TextView
     private lateinit var editButton: TextView
     private lateinit var debugSwitch: Switch
+
+    /**
+     * 各分区的「刷新自己的显示」回调。
+     *
+     * 设置页是纯代码布局，没有数据绑定；用一个刷新列表比给每个控件都存字段干净，
+     * 也不会因为增删一项就漏掉同步。
+     */
+    private val uiRefreshers = mutableListOf<() -> Unit>()
 
     /** 首次观察到「已授权未绑定」的时刻，用来判断自动恢复是否已经失败。 */
     private var firstUnboundAt = 0L
@@ -48,12 +68,6 @@ class SettingsActivity : BaseActivity() {
     private val pollHandler = Handler(Looper.getMainLooper())
     private var pollTicks = 0
 
-    /**
-     * 空窗期轮询：已授权但系统还没绑上服务时，短时间内反复刷新状态。
-     *
-     * 只读授权列表与内存标志，不查会话、不开线程，代价可以忽略；一旦连上或
-     * 用完次数就停，不会常驻。
-     */
     private val poller = object : Runnable {
         override fun run() {
             refresh()
@@ -74,8 +88,6 @@ class SettingsActivity : BaseActivity() {
     override fun onResume() {
         super.onResume()
         refresh()
-        // 已授权却没连上：先主动请系统重绑，再轮询几秒看结果。
-        // 不做这一步，界面会停在「未授予」，把用户赶到系统设置里关掉再打开一次。
         if (hub.listenerState() != ListenerState.GRANTED && hub.tryRebind()) {
             startPolling(POLL_FIRST_DELAY_MS)
         }
@@ -93,6 +105,8 @@ class SettingsActivity : BaseActivity() {
     }
 
     private fun buildContent(): View {
+        uiRefreshers.clear()
+
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(24), dp(28), dp(24), dp(36))
@@ -105,98 +119,30 @@ class SettingsActivity : BaseActivity() {
             }
         )
 
-        statusBanner = text("", 15f, bold = true)
-        statusLine = text("", 13f, secondary = true).apply {
-            setPadding(0, dp(6), 0, 0)
-        }
-
         root.addView(sectionLabel(getString(R.string.section_status)))
+        statusBanner = text("", 15f, bold = true)
+        statusLine = text("", 13f, secondary = true).apply { setPadding(0, dp(6), 0, 0) }
         root.addView(card(listOf(statusBanner, statusLine)))
 
-        notificationState = text("", 13f, bold = true)
-        notificationButton = textButton(getString(R.string.perm_open)) { onNotificationAction() }
-        // 「系统设置」入口必须常驻：自动重绑在部分 ROM 上无效，手工关开是最后的自救路径，
-        // 不能因为换了个状态就把这个入口藏掉。
-        notificationSettingsButton = textButton(getString(R.string.perm_review)) {
-            openNotificationSettings()
-        }
-        val notificationActions = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.CENTER_VERTICAL
-            addView(notificationButton)
-            addView(notificationSettingsButton)
-        }
-
-        overlayState = text("", 13f, bold = true)
-        overlayButton = textButton(getString(R.string.perm_open)) { openOverlaySettings() }
         root.addView(sectionLabel(getString(R.string.section_permissions)))
-        root.addView(
-            card(
-                listOf(
-                    text(getString(R.string.perm_notification_title), 16f, bold = true),
-                    text(getString(R.string.perm_notification_desc), 13f, secondary = true).apply {
-                        setPadding(0, dp(4), 0, dp(8))
-                    },
-                    row(notificationState, notificationActions),
-                    spacer(16),
-                    text(getString(R.string.perm_overlay_title), 16f, bold = true),
-                    text(getString(R.string.perm_overlay_desc), 13f, secondary = true).apply {
-                        setPadding(0, dp(4), 0, dp(8))
-                    },
-                    row(overlayState, overlayButton)
-                )
-            )
-        )
+        root.addView(buildPermissionCard())
 
-        fontValue = text("", 14f, bold = true).apply {
-            setPadding(dp(8), 0, dp(8), 0)
-        }
-        val fontRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.CENTER_VERTICAL
-            addView(
-                text(getString(R.string.display_font_size), 14f),
-                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            )
-            addView(textButton("−") { changeFont(-2f) })
-            addView(fontValue)
-            addView(textButton("+") { changeFont(2f) })
-        }
+        root.addView(sectionLabel(getString(R.string.section_appearance)))
+        root.addView(buildAppearanceCard())
 
-        editButton = textButton(getString(R.string.display_edit)) { toggleEdit() }
-        val editRow = row(
-            text(getString(R.string.display_edit_hint), 12f, secondary = true),
-            editButton
-        )
+        root.addView(sectionLabel(getString(R.string.section_position)))
+        root.addView(buildPositionCard())
 
-        root.addView(sectionLabel(getString(R.string.section_display)))
-        root.addView(
-            card(
-                listOf(
-                    fontRow,
-                    spacer(6),
-                    editRow,
-                    spacer(2),
-                    textButton(getString(R.string.display_reset)) { resetDisplay() }
-                )
-            )
-        )
-
+        root.addView(sectionLabel(getString(R.string.section_probe)))
         debugSwitch = Switch(this).apply {
             text = getString(R.string.diag_debug_toggle)
             textSize = 15f
             isChecked = prefs.debugEnabled
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
             setOnCheckedChangeListener { _, checked ->
                 prefs.debugEnabled = checked
                 Probe.setEnabled(checked)
             }
         }
-
-        root.addView(sectionLabel(getString(R.string.section_probe)))
         root.addView(
             card(
                 listOf(
@@ -221,6 +167,375 @@ class SettingsActivity : BaseActivity() {
         return ScrollView(this).apply { addView(root) }
     }
 
+    // ---------------------------------------------------------------- 权限
+
+    private fun buildPermissionCard(): View {
+        notificationState = text("", 13f, bold = true)
+        notificationButton = textButton(getString(R.string.perm_open)) { onNotificationAction() }
+        // 「系统设置」入口必须常驻：自动重绑在部分 ROM 上无效，手工关开是最后的自救路径，
+        // 不能因为换了个状态就把这个入口藏掉。
+        notificationSettingsButton = textButton(getString(R.string.perm_review)) {
+            openNotificationSettings()
+        }
+        val notificationActions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(notificationButton)
+            addView(notificationSettingsButton)
+        }
+
+        overlayState = text("", 13f, bold = true)
+        overlayButton = textButton(getString(R.string.perm_open)) { openOverlaySettings() }
+
+        return card(
+            listOf(
+                text(getString(R.string.perm_notification_title), 16f, bold = true),
+                text(getString(R.string.perm_notification_desc), 13f, secondary = true).apply {
+                    setPadding(0, dp(4), 0, dp(8))
+                },
+                row(notificationState, notificationActions),
+                spacer(16),
+                text(getString(R.string.perm_overlay_title), 16f, bold = true),
+                text(getString(R.string.perm_overlay_desc), 13f, secondary = true).apply {
+                    setPadding(0, dp(4), 0, dp(8))
+                },
+                row(overlayState, overlayButton)
+            )
+        )
+    }
+
+    // ---------------------------------------------------------------- 外观
+
+    private fun buildAppearanceCard(): View {
+        val rows = ArrayList<View>(20)
+
+        rows += labeled(
+            getString(R.string.appearance_preset),
+            chipRow(
+                options = listOf(
+                    getString(R.string.preset_stripe),
+                    getString(R.string.preset_glass),
+                    getString(R.string.preset_solid),
+                    getString(R.string.preset_navi)
+                ),
+                current = { presetIndex() },
+                onPick = { choosePreset(PRESET_ORDER[it]) }
+            )
+        )
+
+        rows += spacer(14)
+        rows += stepperRow(
+            label = getString(R.string.appearance_font),
+            value = { getString(R.string.display_font_value, prefs.style().fontSp.toInt().toString()) },
+            minus = { editStyle { it.copy(fontSp = it.fontSp - 2f) } },
+            plus = { editStyle { it.copy(fontSp = it.fontSp + 2f) } },
+            reset = { editStyle { it.copy(fontSp = OverlayDefaults.FONT_SP) } }
+        )
+
+        rows += spacer(10)
+        rows += labeled(
+            getString(R.string.appearance_lines),
+            chipRow(
+                options = listOf("1", "2", "3"),
+                current = { prefs.style().maxLines - 1 },
+                onPick = { index -> editStyle { it.copy(maxLines = index + 1) } }
+            )
+        )
+
+        rows += spacer(12)
+        rows += labeled(
+            getString(R.string.appearance_align),
+            chipRow(
+                options = listOf(
+                    getString(R.string.align_start),
+                    getString(R.string.align_center),
+                    getString(R.string.align_end)
+                ),
+                current = { prefs.style().align.ordinal },
+                onPick = { index -> editStyle { it.copy(align = ALIGN_ORDER[index]) } }
+            )
+        )
+
+        rows += spacer(12)
+        rows += stepperRow(
+            label = getString(R.string.appearance_opacity),
+            value = { getString(R.string.appearance_percent, (prefs.style().opacity * 100).toInt().toString()) },
+            minus = { editStyle { it.copy(opacity = it.opacity - 0.05f) } },
+            plus = { editStyle { it.copy(opacity = it.opacity + 0.05f) } },
+            reset = { editStyle { it.copy(opacity = OverlayDefaults.OPACITY) } }
+        )
+
+        rows += spacer(6)
+        rows += stepperRow(
+            label = getString(R.string.appearance_corner),
+            value = { getString(R.string.appearance_dp, prefs.style().cornerDp.toInt().toString()) },
+            minus = { editStyle { it.copy(cornerDp = it.cornerDp - 2f) } },
+            plus = { editStyle { it.copy(cornerDp = it.cornerDp + 2f) } },
+            reset = { editStyle { it.copy(cornerDp = OverlayDefaults.CORNER_DP) } }
+        )
+
+        rows += spacer(12)
+        rows += labeled(
+            getString(R.string.appearance_secondary),
+            chipRow(
+                options = listOf(
+                    getString(R.string.secondary_next),
+                    getString(R.string.secondary_previous),
+                    getString(R.string.secondary_track),
+                    getString(R.string.secondary_none)
+                ),
+                current = { prefs.style().secondary.ordinal },
+                onPick = { index -> editStyle { it.copy(secondary = SECONDARY_ORDER[index]) } }
+            )
+        )
+
+        rows += spacer(10)
+        rows += switchRow(
+            label = getString(R.string.appearance_stroke),
+            current = { prefs.style().stroke },
+            onChange = { checked -> editStyle { it.copy(stroke = checked) } }
+        )
+        rows += switchRow(
+            label = getString(R.string.appearance_bold),
+            current = { prefs.style().bold },
+            onChange = { checked -> editStyle { it.copy(bold = checked) } }
+        )
+        rows += switchRow(
+            label = getString(R.string.appearance_fade),
+            current = { prefs.style().fadeMs > 0 },
+            onChange = { checked ->
+                editStyle { it.copy(fadeMs = if (checked) OverlayDefaults.FADE_MS else 0) }
+            }
+        )
+        rows += switchRow(
+            label = getString(R.string.appearance_state_mark),
+            current = { prefs.style().stateMark },
+            onChange = { checked -> editStyle { it.copy(stateMark = checked) } }
+        )
+        rows += switchRow(
+            label = getString(R.string.appearance_hide_empty),
+            current = { prefs.hideWhenNoLyrics },
+            onChange = { checked ->
+                prefs.hideWhenNoLyrics = checked
+                hub.applyStyle()
+            }
+        )
+
+        rows += spacer(6)
+        rows += textButton(getString(R.string.appearance_reset)) {
+            prefs.resetStyle()
+            hub.applyStyle()
+            refresh()
+        }
+
+        return card(rows)
+    }
+
+    // ---------------------------------------------------------------- 位置
+
+    private fun buildPositionCard(): View {
+        editButton = textButton(getString(R.string.display_edit)) { toggleEdit() }
+
+        val rows = ArrayList<View>(8)
+        rows += labeled(getString(R.string.position_grid), nineGrid())
+        rows += spacer(10)
+        rows += row(
+            text(getString(R.string.position_edit_hint), 12f, secondary = true),
+            editButton
+        )
+        rows += spacer(6)
+
+        val chooser = displayChooser()
+        if (chooser != null) {
+            rows += chooser
+            rows += spacer(10)
+        }
+
+        rows += textButton(getString(R.string.position_reset)) {
+            hub.overlay().resetPosition()
+            refresh()
+        }
+        rows += text(getString(R.string.position_hint), 12f, secondary = true).apply {
+            setPadding(0, dp(6), 0, 0)
+        }
+
+        return card(rows)
+    }
+
+    private fun nineGrid(): View {
+        val wrapper = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val cells = ArrayList<TextView>(9)
+
+        for (rowIndex in 0..2) {
+            val line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            for (colIndex in 0..2) {
+                val cell = TextView(this).apply {
+                    text = "·"
+                    textSize = 18f
+                    gravity = Gravity.CENTER
+                    isClickable = true
+                    setOnClickListener {
+                        hub.overlay().setAnchor(colIndex, rowIndex)
+                        refresh()
+                    }
+                }
+                line.addView(
+                    cell,
+                    LinearLayout.LayoutParams(0, dp(36), 1f).apply {
+                        marginEnd = dp(6)
+                        bottomMargin = dp(6)
+                    }
+                )
+                cells += cell
+            }
+            wrapper.addView(line)
+        }
+
+        uiRefreshers += {
+            val landscape = isLandscape()
+            val col = OverlayGeometry.nearestAnchor(prefs.ratioX(landscape))
+            val rowIndex = OverlayGeometry.nearestAnchor(prefs.ratioY(landscape))
+            cells.forEachIndexed { index, cell ->
+                styleChip(cell, (index % 3) == col && (index / 3) == rowIndex)
+            }
+        }
+        return wrapper
+    }
+
+    /** 只有真有多块屏幕时才出现，避免手机上多一行没用的设置。 */
+    private fun displayChooser(): View? {
+        val manager = getSystemService(DisplayManager::class.java) ?: return null
+        val displays = try {
+            manager.displays
+        } catch (_: Throwable) {
+            null
+        } ?: return null
+        if (displays.size <= 1) return null
+
+        return labeled(
+            getString(R.string.position_display),
+            chipRow(
+                options = displays.map { it.name ?: it.displayId.toString() },
+                current = { displays.indexOfFirst { it.displayId == prefs.displayId } },
+                onPick = { index ->
+                    prefs.displayId = displays[index].displayId
+                    hub.applyStyle()
+                }
+            )
+        )
+    }
+
+    // ---------------------------------------------------------------- 通用控件
+
+    private fun labeled(label: String, control: View): View =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(text(label, 12f, secondary = true).apply { setPadding(0, 0, 0, dp(6)) })
+            addView(control)
+        }
+
+    private fun chipRow(
+        options: List<String>,
+        current: () -> Int,
+        onPick: (Int) -> Unit
+    ): View {
+        val holder = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val cells = ArrayList<TextView>(options.size)
+
+        options.forEachIndexed { index, label ->
+            val cell = TextView(this).apply {
+                text = label
+                textSize = 13f
+                gravity = Gravity.CENTER
+                val padH = dp(12)
+                val padV = dp(7)
+                setPadding(padH, padV, padH, padV)
+                isClickable = true
+                setOnClickListener {
+                    onPick(index)
+                    refresh()
+                }
+            }
+            holder.addView(
+                cell,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { marginEnd = dp(8) }
+            )
+            cells += cell
+        }
+
+        uiRefreshers += {
+            val selected = current()
+            cells.forEachIndexed { index, cell -> styleChip(cell, index == selected) }
+        }
+
+        return HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(holder)
+        }
+    }
+
+    private fun styleChip(view: TextView, selected: Boolean) {
+        view.background = GradientDrawable().apply {
+            cornerRadius = dp(9).toFloat()
+            setColor(if (selected) colorAccent else chipIdle)
+        }
+        view.setTextColor(
+            when {
+                selected -> Color.WHITE
+                isNight -> 0xFFE2E2E2.toInt()
+                else -> 0xFF2C2C2A.toInt()
+            }
+        )
+    }
+
+    private val chipIdle: Int
+        get() = if (isNight) 0xFF2C2C2C.toInt() else 0xFFE9E9E9.toInt()
+
+    private fun switchRow(
+        label: String,
+        current: () -> Boolean,
+        onChange: (Boolean) -> Unit
+    ): View {
+        val control = Switch(this).apply {
+            isChecked = current()
+            setOnCheckedChangeListener { _, checked ->
+                onChange(checked)
+                refresh()
+            }
+        }
+        uiRefreshers += { if (control.isChecked != current()) control.isChecked = current() }
+        return row(text(label, 14f), control)
+    }
+
+    private fun stepperRow(
+        label: String,
+        value: () -> String,
+        minus: () -> Unit,
+        plus: () -> Unit,
+        reset: () -> Unit
+    ): View {
+        val valueView = text("", 14f, bold = true).apply { setPadding(dp(8), 0, dp(8), 0) }
+        uiRefreshers += { valueView.text = value() }
+
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(
+                text(label, 14f),
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            )
+            addView(textButton("−") { minus(); refresh() })
+            addView(valueView)
+            addView(textButton("+") { plus(); refresh() })
+            addView(textButton(getString(R.string.appearance_reset_short)) { reset(); refresh() })
+        }
+    }
+
+    // ---------------------------------------------------------------- 状态刷新
+
     private fun refresh() {
         val status = hub.currentStatus()
         val listener = status.listenerState
@@ -242,6 +557,7 @@ class SettingsActivity : BaseActivity() {
                 ListenerState.GRANTED_NOT_BOUND ->
                     if (timedOut) R.string.status_listener_unbound_failed
                     else R.string.status_listener_unbound
+
                 ListenerState.NOT_GRANTED -> R.string.status_listener_disconnected
             }
         )
@@ -258,6 +574,7 @@ class SettingsActivity : BaseActivity() {
             ListenerState.GRANTED_NOT_BOUND -> getString(
                 if (timedOut) R.string.perm_unbound_failed_hint else R.string.perm_unbound_hint
             )
+
             ListenerState.GRANTED -> if (status.sessionCount == 0) {
                 getString(R.string.status_no_session)
             } else {
@@ -275,7 +592,7 @@ class SettingsActivity : BaseActivity() {
             if (status.overlayGranted) R.string.perm_review else R.string.perm_open
         )
 
-        fontValue.text = getString(R.string.display_font_value, prefs.fontSp.toInt().toString())
+        uiRefreshers.forEach { it() }
         editButton.text = getString(
             if (hub.overlay().isEditable()) R.string.display_edit_exit
             else R.string.display_edit
@@ -285,12 +602,34 @@ class SettingsActivity : BaseActivity() {
         }
     }
 
+    // ---------------------------------------------------------------- 样式操作
+
+    private fun presetIndex(): Int {
+        val preset = prefs.style().preset
+        return PRESET_ORDER.indexOf(preset).takeIf { it >= 0 } ?: -1
+    }
+
+    private fun choosePreset(preset: Preset) {
+        prefs.saveStyle(OverlayDefaults.preset(preset, prefs.style()))
+        hub.applyStyle()
+        refresh()
+    }
+
     /**
-     * 通知使用权这一行必须区分三态，不能只有「已授予／未授予」。
+     * 改任意一项样式。
      *
-     * 只显示两态时，「勾着但服务没连上」会被说成未授予，用户去系统设置里看到
-     * 明明是勾选状态，只能手动关掉再打开一次 —— 这正是真机反馈的现象。
+     * 改完就把预设标记为 CUSTOM：否则界面还高亮着「玻璃胶囊」，实际参数早已不是它，
+     * 用户下次点同一颗按钮会以为没生效。
      */
+    private fun editStyle(block: (OverlayStyle) -> OverlayStyle) {
+        val next = block(prefs.style())
+        prefs.saveStyle(next.copy(preset = Preset.CUSTOM))
+        hub.applyStyle()
+        refresh()
+    }
+
+    // ---------------------------------------------------------------- 权限交互
+
     private fun applyListenerState(state: ListenerState) {
         notificationState.text = getString(
             when (state) {
@@ -313,15 +652,10 @@ class SettingsActivity : BaseActivity() {
                 ListenerState.NOT_GRANTED -> R.string.perm_open
             }
         )
-        // 已连接时没有可修的，只留「系统设置」；其余两态两个入口都给
-        notificationButton.visibility = if (state == ListenerState.GRANTED) View.GONE else View.VISIBLE
+        notificationButton.visibility =
+            if (state == ListenerState.GRANTED) View.GONE else View.VISIBLE
     }
 
-    /**
-     * 按当前状态决定「去开启」按钮到底做什么。
-     *
-     * 空窗期不再把用户丢进系统设置：先自己请求系统重绑，再轮询几秒。
-     */
     private fun onNotificationAction() {
         when (hub.listenerState()) {
             ListenerState.NOT_GRANTED -> openNotificationSettings()
@@ -331,12 +665,10 @@ class SettingsActivity : BaseActivity() {
                     toast(getString(R.string.perm_rebind_requested))
                     startPolling(POLL_FIRST_DELAY_MS)
                 } else {
-                    // 系统读不到授权列表：只能回落到让用户自己看一眼
                     openNotificationSettings()
                 }
             }
 
-            // 已经正常：这一项提供的是「去看系统设置」，不是修复入口
             ListenerState.GRANTED -> openNotificationSettings()
         }
         refresh()
@@ -355,7 +687,7 @@ class SettingsActivity : BaseActivity() {
     }
 
     private fun toggleEdit() {
-        if (!hub.overlay().isAttached()) {
+        if (!hub.overlay().isEditable() && !hub.overlay().isAttached()) {
             toast(getString(R.string.edit_needs_session))
             return
         }
@@ -365,25 +697,9 @@ class SettingsActivity : BaseActivity() {
         refresh()
     }
 
-    private fun changeFont(delta: Float) {
-        prefs.fontSp = prefs.fontSp + delta
-        hub.applyTextSize()
-        refresh()
-    }
+    private fun isLandscape(): Boolean =
+        resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-    private fun resetDisplay() {
-        prefs.resetPosition()
-        prefs.resetFont()
-        hub.applyTextSize()
-        refresh()
-    }
-
-    /**
-     * 打开系统设置。
-     *
-     * 优先直接落到「本应用的通知使用权详情页」（API 30+）——手工关开是自动重绑失败
-     * 后唯一的自救路径，让用户在一长串应用里翻找毫无必要。失败再退回列表页。
-     */
     private fun openNotificationSettings() {
         val detail = Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS).apply {
             putExtra(
@@ -424,6 +740,14 @@ class SettingsActivity : BaseActivity() {
     }
 
     companion object {
+        private val PRESET_ORDER = listOf(
+            Preset.STRIPE, Preset.GLASS, Preset.SOLID, Preset.NAVI
+        )
+        private val ALIGN_ORDER = listOf(Align.START, Align.CENTER, Align.END)
+        private val SECONDARY_ORDER = listOf(
+            Secondary.NEXT, Secondary.PREVIOUS, Secondary.TRACK, Secondary.NONE
+        )
+
         /** 首次刷新的延迟：给系统一点绑定时间，免得白跑一轮。 */
         private const val POLL_FIRST_DELAY_MS = 400L
 
@@ -433,11 +757,6 @@ class SettingsActivity : BaseActivity() {
         /** 最多轮询次数（约 10 秒）。系统不重绑时不再空转，改为提示手工重开。 */
         private const val MAX_POLL_TICKS = 8
 
-        /**
-         * 「已授权未绑定」等这么久还没恢复，就认定自动重绑在本次无效。
-         *
-         * 必须小于轮询总时长（约 10 秒），否则界面停不到这句结论上。
-         */
         private const val UNBOUND_TIMEOUT_MS = 9_000L
     }
 }

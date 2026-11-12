@@ -7,8 +7,50 @@
 
     <string name="section_status">Status</string>
     <string name="section_permissions">Permissions</string>
+    <string name="section_appearance">Appearance</string>
+    <string name="section_position">Position</string>
     <string name="section_display">Display</string>
     <string name="section_probe">Channel probe</string>
+
+    <string name="appearance_preset">Preset</string>
+    <string name="preset_stripe">Outline only</string>
+    <string name="preset_glass">Glass pill</string>
+    <string name="preset_solid">Solid strip</string>
+    <string name="preset_navi">Navigation</string>
+    <string name="appearance_font">Font size</string>
+    <string name="appearance_lines">Lines</string>
+    <string name="appearance_align">Alignment</string>
+    <string name="appearance_opacity">Background opacity</string>
+    <string name="appearance_corner">Corner radius</string>
+    <string name="appearance_stroke">Text outline</string>
+    <string name="appearance_bold">Bold</string>
+    <string name="appearance_fade">Fade on change</string>
+    <string name="appearance_secondary">Second line</string>
+    <string name="appearance_state_mark">Playback indicator</string>
+    <string name="appearance_hide_empty">Hide when there are no lyrics</string>
+    <string name="appearance_percent">%1$s%%</string>
+    <string name="appearance_dp">%1$s dp</string>
+    <string name="appearance_reset">Reset appearance</string>
+    <string name="appearance_reset_short">Reset</string>
+    <string name="align_start">Left</string>
+    <string name="align_center">Center</string>
+    <string name="align_end">Right</string>
+    <string name="secondary_next">Next line</string>
+    <string name="secondary_previous">Previous line</string>
+    <string name="secondary_track">Title / artist</string>
+    <string name="secondary_none">Off</string>
+
+    <string name="position_grid">Quick position</string>
+    <string name="position_edit_hint">Enter edit mode when the position does not fit</string>
+    <string name="position_reset">Reset position</string>
+    <string name="position_hint">Long press the overlay to lock it, hide it for 10 minutes, open settings or copy the current line. Position is stored as a ratio, so it survives resolution changes.</string>
+    <string name="position_display">Screen</string>
+
+    <string name="edit_hint_bar">Drag to move · long press for more</string>
+    <string name="edit_menu_lock">Lock position</string>
+    <string name="edit_menu_hide">Hide for 10 minutes</string>
+    <string name="edit_menu_settings">Open settings</string>
+    <string name="edit_menu_copy">Copy current line</string>
 
     <string name="perm_notification_title">Notification access</string>
     <string name="perm_notification_desc">Required. Lets AnyLyric read the media session of the player that is already playing.</string>
@@ -39,7 +81,7 @@
     <string name="display_lines">Lines</string>
     <string name="display_position">Position</string>
     <string name="display_edit">Enter edit mode</string>
-    <string name="display_edit_hint">Drag to move, double tap to lock, long press to close.</string>
+    <string name="display_edit_hint">Drag to move, release to snap to an edge, long press for more actions.</string>
     <string name="display_reset">Reset to default</string>
     <string name="display_smaller">Smaller</string>
     <string name="display_larger">Larger</string>
