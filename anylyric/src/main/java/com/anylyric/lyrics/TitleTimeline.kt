@@ -39,6 +39,17 @@ class TitleTimeline(
     private var identityChanged: Boolean = false
 
     /**
+     * 事件集合的版本号。增删事件才 +1。
+     *
+     * 判定函数以前每次回调都重算一遍中位数（`zipWithNext` + `sorted` 两个临时 List）。
+     * 而它只在「事件集合变了」时才会有不同结果 —— 播放器一秒好几个回调，大部分
+     * 时候事件集合一个字都没动，缓存一下就把这整段开销变成一次整数比较。
+     */
+    private var version = 0
+    private var cachedVersion = -1
+    private var cachedVerdict = TitleVerdict.UNKNOWN
+
+    /**
      * 曲目指纹按字段保存，不拼字符串。
      *
      * 拼串版本每秒要构造一次 `"duration|mediaId|artist|extra"`，而这两个判断其实
@@ -76,6 +87,7 @@ class TitleTimeline(
             // 真换歌：清空历史，避免把上一首的歌词行算进本首
             identityChanged = true
             events.clear()
+            version++
         }
         hasIdentity = true
         idDuration = durationMs
@@ -88,6 +100,7 @@ class TitleTimeline(
 
         // 指纹只在真正记一条事件时才拼（换行/换歌是低频事件，不是每次回调）
         events.addLast(Event(nowMs, normalized, identity()))
+        version++
         trim(nowMs)
         return verdict(nowMs)
     }
@@ -101,6 +114,7 @@ class TitleTimeline(
 
     fun reset() {
         events.clear()
+        version++
         hasIdentity = false
         identityChanged = false
     }
@@ -111,13 +125,23 @@ class TitleTimeline(
     fun snapshot(): List<Event> = events.toList()
 
     private fun trim(nowMs: Long) {
+        var removed = false
         while (events.isNotEmpty() && nowMs - events.first().atMs > windowMs) {
             events.removeFirst()
+            removed = true
         }
+        if (removed) version++
     }
 
     private fun verdict(nowMs: Long): TitleVerdict {
         trim(nowMs)
+        if (version == cachedVersion) return cachedVerdict
+        cachedVersion = version
+        cachedVerdict = computeVerdict()
+        return cachedVerdict
+    }
+
+    private fun computeVerdict(): TitleVerdict {
         if (events.size < 2) return TitleVerdict.UNKNOWN
         if (events.size < minChanges) return TitleVerdict.STABLE
 

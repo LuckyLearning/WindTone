@@ -25,6 +25,7 @@ class OverlayStyleTest {
         assertEquals(OverlayDefaults.PRIMARY_COLOR, style.primaryColor)
         assertEquals(OverlayDefaults.SECONDARY_COLOR, style.secondaryColor)
         assertEquals(OverlayDefaults.BG_COLOR, style.bgColor)
+        assertEquals(OverlayDefaults.STROKE_COLOR, style.strokeColor)
         assertEquals(OverlayDefaults.WIDTH_RATIO, style.widthRatio, 0.001f)
         assertEquals(OverlayDefaults.HEIGHT_RATIO, style.heightRatio, 0.001f)
         assertEquals(Preset.GLASS, style.preset)

@@ -7,6 +7,7 @@ import com.anylyric.overlay.OverlayDefaults
 import com.anylyric.overlay.OverlayStyle
 import com.anylyric.overlay.Preset
 import com.anylyric.overlay.Secondary
+import com.anylyric.update.DownloadRoute
 
 /**
  * 全部本地偏好。只有显示参数与调试开关，没有业务数据。
@@ -40,6 +41,11 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_HANDLE, true)
         set(value) = sp.edit().putBoolean(KEY_HANDLE, value).apply()
 
+    /** 更新线路：检查更新与安装包下载共用。默认自动（镜像优先、官方兜底）。 */
+    var updateRoute: DownloadRoute
+        get() = DownloadRoute.of(sp.getString(KEY_UPDATE_ROUTE, null))
+        set(value) = sp.edit().putString(KEY_UPDATE_ROUTE, value.name).apply()
+
     fun style(): OverlayStyle = styleCache ?: OverlayDefaults.sanitize(
         OverlayStyle(
             preset = Preset.of(sp.getString(KEY_PRESET, null)),
@@ -56,6 +62,7 @@ class Prefs(context: Context) {
             primaryColor = sp.getInt(KEY_PRIMARY_COLOR, OverlayDefaults.PRIMARY_COLOR),
             secondaryColor = sp.getInt(KEY_SECONDARY_COLOR, OverlayDefaults.SECONDARY_COLOR),
             bgColor = sp.getInt(KEY_BG_COLOR, OverlayDefaults.BG_COLOR),
+            strokeColor = sp.getInt(KEY_STROKE_COLOR, OverlayDefaults.STROKE_COLOR),
             widthRatio = sp.getFloat(KEY_WIDTH_RATIO, OverlayDefaults.WIDTH_RATIO),
             heightRatio = sp.getFloat(KEY_HEIGHT_RATIO, OverlayDefaults.HEIGHT_RATIO)
         )
@@ -78,6 +85,7 @@ class Prefs(context: Context) {
             .putInt(KEY_PRIMARY_COLOR, safe.primaryColor)
             .putInt(KEY_SECONDARY_COLOR, safe.secondaryColor)
             .putInt(KEY_BG_COLOR, safe.bgColor)
+            .putInt(KEY_STROKE_COLOR, safe.strokeColor)
             .putFloat(KEY_WIDTH_RATIO, safe.widthRatio)
             .putFloat(KEY_HEIGHT_RATIO, safe.heightRatio)
             .apply()
@@ -138,9 +146,11 @@ class Prefs(context: Context) {
         private const val KEY_PRIMARY_COLOR = "style_primary_color"
         private const val KEY_SECONDARY_COLOR = "style_secondary_color"
         private const val KEY_BG_COLOR = "style_bg_color"
+        private const val KEY_STROKE_COLOR = "style_stroke_color"
         private const val KEY_WIDTH_RATIO = "style_width_ratio"
         private const val KEY_HEIGHT_RATIO = "style_height_ratio"
         private const val KEY_HANDLE = "overlay_handle_enabled"
+        private const val KEY_UPDATE_ROUTE = "update_route"
 
         private const val KEY_RATIO_X_PORT = "ratio_x_port"
         private const val KEY_RATIO_Y_PORT = "ratio_y_port"

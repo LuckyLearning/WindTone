@@ -120,9 +120,39 @@ class UpdateCheckerTest {
         assertTrue(candidates.last().startsWith(UpdateChecker.manifestUrl))
         assertTrue(candidates.first().contains("jsdelivr.net"))
         assertTrue(candidates.any { it.contains("ghproxy.net/") })
-        // 3 条 jsDelivr + 2 条 gh 代理 + 官方 raw
-        assertEquals(6, candidates.size)
+        // 3 条 jsDelivr（fastly/gcore/cdn）+ 4 条加速镜像 + 官方 raw
+        assertEquals(8, candidates.size)
         assertEquals(candidates.size, candidates.distinct().size)
+    }
+
+    /**
+     * 指定线路时**只给那一条**。
+     *
+     * 守的是「线路选择必须可解释」：用户手动选了「直连 GitHub」，
+     * 程序却偷偷退回镜像，那这颗开关就是骗人的。
+     */
+    @Test
+    fun `指定线路只给一条候选`() {
+        val direct = UpdateChecker.manifestCandidates(DownloadRoute.DIRECT)
+        assertEquals(1, direct.size)
+        assertTrue(direct[0].startsWith(UpdateChecker.manifestUrl))
+
+        val jsdelivr = UpdateChecker.manifestCandidates(DownloadRoute.JSDELIVR)
+        assertEquals(1, jsdelivr.size)
+        assertTrue(jsdelivr[0].startsWith("https://fastly.jsdelivr.net/gh/"))
+
+        val proxy = UpdateChecker.manifestCandidates(DownloadRoute.GH_PROXY_COM)
+        assertEquals(1, proxy.size)
+        assertTrue(proxy[0].startsWith("https://gh-proxy.com/https://raw.githubusercontent.com/"))
+    }
+
+    @Test
+    fun `线路落盘按名字解析且未知值退回自动`() {
+        assertEquals(DownloadRoute.GH_FAST, DownloadRoute.of("GH_FAST"))
+        assertEquals(DownloadRoute.AUTO, DownloadRoute.of(null))
+        assertEquals(DownloadRoute.AUTO, DownloadRoute.of(""))
+        // 枚举改顺序不该影响已落盘的选择：存的是名字不是序号
+        assertEquals(DownloadRoute.DIRECT, DownloadRoute.of(DownloadRoute.DIRECT.name))
     }
 
     @Test
@@ -145,10 +175,25 @@ class UpdateCheckerTest {
         assertEquals(candidates.size, candidates.distinct().size)
     }
 
+    /** 下载侧与检查侧共用同一套线路，否则「换了线路还是下不动」会非常难解释。 */
+    @Test
+    fun `下载线路与检查线路同源`() {
+        val url = "https://raw.githubusercontent.com/LuckyLearning/Release/main/AnyLyric/x.apk"
+        assertEquals(
+            UpdateChecker.manifestCandidates(DownloadRoute.GHPROXY_NET).size,
+            UpdateChecker.downloadCandidates(url, DownloadRoute.GHPROXY_NET).size
+        )
+        assertEquals(
+            listOf("https://hub.gitmirror.com/$url"),
+            UpdateChecker.downloadCandidates(url, DownloadRoute.GIT_MIRROR)
+        )
+    }
+
     @Test
     fun `非 GitHub 直链不套镜像`() {
         val url = "https://example.com/x.apk"
         assertEquals(listOf(url), UpdateChecker.downloadCandidates(url))
+        assertEquals(listOf(url), UpdateChecker.downloadCandidates(url, DownloadRoute.GH_PROXY_COM))
     }
 
     // ---------------------------------------------------------------- 文案

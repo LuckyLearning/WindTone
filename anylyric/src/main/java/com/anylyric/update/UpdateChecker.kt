@@ -101,9 +101,9 @@ class UpdateException(
  *
  * 为什么不用 API：① 不需要任何鉴权；② raw 是 CDN，不计入每小时的 API 配额。
  *
- * 线路策略（国内车机常连不上 GitHub 官方域名）：`fastly.jsdelivr.net` → `gh-proxy.com`
- * → `ghproxy.net` → 官方 raw。清单只有 1 KB，逐条顺序试，失败即换下一条，
- * 全部失败才报错 —— 不做并行竞速，几十 KB 的代码不值得为此加复杂度。
+ * 线路（见 [DownloadRoute]）：官方 raw 在国内车机上经常连不上，所以默认 [DownloadRoute.AUTO]
+ * 把 jsDelivr 三个节点、四个加速镜像和官方直链全部上齐 —— 检查更新**并行竞速**、
+ * 下载**顺序降级**；用户也可以在某条线路确实更快时手动锁定它。
  *
  * 版本判断**以 versionCode 为准**，清单缺 versionCode 时才退回版本名比较：
  * 光比版本名会出现「装过更高版本名、却看不到较低版本」的死角（WindTone 踩过这个坑）。
@@ -137,6 +137,31 @@ object UpdateChecker {
     /** 单个安装包的下限：真包 100 KB 上下，低于这个数基本是代理返回的错误页 */
     private const val MIN_APK_BYTES = 20L * 1024
 
+    /**
+     * jsDelivr CDN 节点，按国内实测可达性排序。
+     *
+     * 三个节点都上不是「保险起见」：同一时刻它们的边缘节点命中率并不一样，
+     * 竞速时通常只有一两条能在 1 秒内回来。
+     */
+    private val JSDELIVR_HOSTS = listOf(
+        "fastly.jsdelivr.net",
+        "gcore.jsdelivr.net",
+        "cdn.jsdelivr.net",
+    )
+
+    /**
+     * GitHub 加速镜像前缀（把原始地址整串接在后面）。
+     *
+     * 顺序只是「下载时先试谁」：检查更新是并行的，谁快用谁；
+     * 下载是顺序降级的，所以把历史上更稳的放前面。
+     */
+    private val MIRROR_PREFIXES = listOf(
+        "https://gh-proxy.com/",
+        "https://ghproxy.net/",
+        "https://ghfast.top/",
+        "https://hub.gitmirror.com/",
+    )
+
     private val appBase: String
         get() = "https://raw.githubusercontent.com/$OWNER/$REPO/$BRANCH/$APP_DIR"
 
@@ -149,7 +174,7 @@ object UpdateChecker {
     // ------------------------------------------------------------ 检查
 
     /**
-     * 清单的候选线路，按展示顺序给出（实际是并行竞速，顺序只影响日志可读性）。
+     * 清单的候选线路（按展示顺序给出；自动模式下实际是并行竞速，顺序只影响日志可读性）。
      *
      * jsDelivr 走「仓库文件」通道（`cdn.jsdelivr.net/gh/<owner>/<repo>@<branch>/<path>`），
      * 前缀不能简单拼接，必须重排；gh-proxy 一类是「整串 URL 当路径」，直接加前缀。
@@ -157,29 +182,72 @@ object UpdateChecker {
      * 每条都带一个时间戳参数：`@main` 在 CDN 上有缓存，**刚发版时镜像会返回上一版清单**，
      * 表现为「明明发了新版，检查更新却说已是最新」。带 query 让每条线路当新资源回源。
      */
-    internal fun manifestCandidates(): List<String> {
+    internal fun manifestCandidates(route: DownloadRoute = DownloadRoute.AUTO): List<String> {
         val url = "$manifestUrl?t=${System.currentTimeMillis()}"
-        return listOfNotNull(
-            jsdelivr(url, "fastly.jsdelivr.net"),
-            jsdelivr(url, "cdn.jsdelivr.net"),
-            jsdelivr(url, "gcore.jsdelivr.net"),
-            "https://gh-proxy.com/$url",
-            "https://ghproxy.net/$url",
-            url,
-        )
+        return candidatesFor(url, route)
+    }
+
+    /**
+     * 给定原始地址，按线路展开成候选列表。
+     *
+     * 自动模式给全套（镜像在前、官方兜底）；指定线路只给那一条 —— 用户手动选了
+     * 「只用官方」却偷偷退回镜像，会让人以为线路选择没生效。
+     */
+    internal fun candidatesFor(url: String, route: DownloadRoute): List<String> {
+        // 只有 raw 直链才谈得上镜像：别把任意 https 地址也套上代理前缀，
+        // 那会把用户自己的直链改坏（也挡住以后换分发渠道）。
+        val isRaw = url.startsWith("https://raw.githubusercontent.com/", ignoreCase = true)
+        if (!isRaw) return listOf(url)
+
+        val prefix = route.prefix
+        if (prefix == null) {
+            val out = ArrayList<String>(JSDELIVR_HOSTS.size + MIRROR_PREFIXES.size + 1)
+            for (host in JSDELIVR_HOSTS) jsdelivr(url, host)?.let { out.add(it) }
+            for (mirror in MIRROR_PREFIXES) out.add(mirror + url)
+            out.add(url)
+            return out.distinct()
+        }
+        if (prefix.startsWith(JSDELIVR_PREFIX_MARK)) {
+            val host = jsdelivrHost(prefix)
+            return listOfNotNull(jsdelivr(url, host) ?: url)
+        }
+        // 空前缀 = 只走官方直链
+        if (prefix.isEmpty()) return listOf(url)
+        return listOf(prefix + url)
     }
 
     /**
      * 查询最新版本。永不抛异常，失败一律折成 [CheckResult.Failed]。
      *
-     * 与 WindTone 同策略：**多线并行竞速**，不是一条条试。
+     * 自动模式下**多线并行竞速**，不是一条条试：
      *  · 任何一条拿到「有新版本」→ 立刻返回（清单里只会有一个最新版，不必再等）；
      *  · 只拿到「已是最新」→ 继续等其它线路，最后取**版本最高**的那个结论 ——
      *    镜像的旧缓存不会把真正的新版盖掉；
      *  · 全部失败 / 预算耗尽 → 折成 Failed，界面照样能给「打开发布页」兜底。
+     *
+     * 指定线路时只有一条候选，直接跑，不为此起线程池。
      */
-    fun check(currentName: String, currentCode: Int): CheckResult {
-        val candidates = manifestCandidates()
+    fun check(
+        currentName: String,
+        currentCode: Int,
+        route: DownloadRoute = DownloadRoute.AUTO
+    ): CheckResult {
+        val candidates = manifestCandidates(route)
+        if (candidates.size == 1) {
+            return try {
+                attempt(candidates[0], currentName, currentCode)
+            } catch (t: Throwable) {
+                fold(t)
+            }
+        }
+        return race(candidates, currentName, currentCode)
+    }
+
+    private fun race(
+        candidates: List<String>,
+        currentName: String,
+        currentCode: Int
+    ): CheckResult {
         val pool = Executors.newFixedThreadPool(candidates.size) { runnable ->
             Thread(runnable, "anylyric-update-check").apply { isDaemon = true }
         }
@@ -321,9 +389,17 @@ object UpdateChecker {
     /**
      * 下载安装包到 [dir]，返回落盘文件；失败抛 [UpdateException]。
      *
+     * 线路由 [route] 决定（见 [downloadCandidates]）：自动模式顺序降级，某条**报错**才换下一条；
+     * 手动指定时只用那一条，失败即报错 —— 线路选择对用户必须可解释。
+     *
      * @param onProgress (已下载字节, 总字节)，总字节为 0 表示长度未知
      */
-    fun download(release: Release, dir: File, onProgress: (Long, Long) -> Unit = { _, _ -> }): File {
+    fun download(
+        release: Release,
+        dir: File,
+        route: DownloadRoute = DownloadRoute.AUTO,
+        onProgress: (Long, Long) -> Unit = { _, _ -> }
+    ): File {
         if (!dir.exists() && !dir.mkdirs()) {
             throw UpdateException(FailureKind.NETWORK, "cannot create ${dir.absolutePath}")
         }
@@ -335,7 +411,7 @@ object UpdateChecker {
         val target = File(dir, safeName)
 
         var lastError: Throwable? = null
-        for (candidate in downloadCandidates(release.apkUrl)) {
+        for (candidate in downloadCandidates(release.apkUrl, route)) {
             try {
                 val total = downloadOnce(candidate, part, onProgress)
                 verify(part, release, total)
@@ -355,15 +431,17 @@ object UpdateChecker {
         throw lastError ?: UpdateException(FailureKind.NETWORK)
     }
 
-    /** 下载候选线路：镜像优先，官方 raw 最后兜底。 */
-    internal fun downloadCandidates(apkUrl: String): List<String> {
-        val mirrors = mutableListOf<String>()
-        if (apkUrl.startsWith("https://raw.githubusercontent.com/", ignoreCase = true)) {
-            jsdelivr(apkUrl, "fastly.jsdelivr.net")?.let { mirrors.add(it) }
-            jsdelivr(apkUrl, "gcore.jsdelivr.net")?.let { mirrors.add(it) }
-            mirrors.add("https://gh-proxy.com/$apkUrl")
-        }
-        return (mirrors + apkUrl).distinct()
+    /** 下载候选线路：镜像优先，官方 raw 最后兜底；指定线路时只给那一条。 */
+    internal fun downloadCandidates(
+        apkUrl: String,
+        route: DownloadRoute = DownloadRoute.AUTO
+    ): List<String> = candidatesFor(apkUrl, route)
+
+    /** jsDelivr 前缀 → 主机名，认不出时退回 fastly */
+    private fun jsdelivrHost(prefix: String): String = when (prefix.removePrefix(JSDELIVR_PREFIX_MARK)) {
+        "gcore" -> "gcore.jsdelivr.net"
+        "cdn" -> "cdn.jsdelivr.net"
+        else -> "fastly.jsdelivr.net"
     }
 
     /** raw 直链 → jsDelivr 仓库文件链接；不是 raw 直链时返回 null */

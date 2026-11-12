@@ -64,6 +64,7 @@ data class OverlayStyle(
     val primaryColor: Int = OverlayDefaults.PRIMARY_COLOR,
     val secondaryColor: Int = OverlayDefaults.SECONDARY_COLOR,
     val bgColor: Int = OverlayDefaults.BG_COLOR,
+    val strokeColor: Int = OverlayDefaults.STROKE_COLOR,
     val widthRatio: Float = OverlayDefaults.WIDTH_RATIO,
     val heightRatio: Float = OverlayDefaults.HEIGHT_RATIO
 )
@@ -76,7 +77,7 @@ object OverlayDefaults {
     const val BOLD = true
     const val MAX_LINES = 2
     const val LINES_MIN = 1
-    const val LINES_MAX = 3
+    const val LINES_MAX = 4
     const val OPACITY = 0.55f
     const val CORNER_DP = 14f
     const val CORNER_MAX = 28f
@@ -94,6 +95,9 @@ object OverlayDefaults {
 
     /** 背景色。实际不透明度由 [OPACITY] 控制，等于 0 时完全不画底。 */
     const val BG_COLOR = 0xFF14161A.toInt()
+
+    /** 文字描边色。默认纯黑：深底白字时它是最稳的一圈轮廓；浅底下要配深色字，这里也该换。 */
+    const val STROKE_COLOR = 0xFF000000.toInt()
 
     /** 0 = 自适应宽度；非 0 = 占可用区宽度的比例。 */
     const val WIDTH_RATIO = 0f
@@ -124,6 +128,7 @@ object OverlayDefaults {
         primaryColor = PRIMARY_COLOR,
         secondaryColor = SECONDARY_COLOR,
         bgColor = BG_COLOR,
+        strokeColor = STROKE_COLOR,
         widthRatio = WIDTH_RATIO,
         heightRatio = HEIGHT_RATIO
     )
@@ -186,37 +191,4 @@ object OverlayDefaults {
         value > max -> max
         else -> value
     }
-}
-
-/**
- * 可选颜色。刻意只给一组「车机上看得清」的色板，不做自由取色器：
- * 车机屏在阳光下对比度本来就差，让用户调出灰字灰底是负体验。
- */
-object OverlayPalette {
-
-    /** 当前行可选色。末尾那个深色是给浅色背景准备的。 */
-    val TEXT = intArrayOf(
-        0xFFFFFFFF.toInt(), // 纯白
-        0xFFF6EFE0.toInt(), // 暖白
-        0xFF9BE7FF.toInt(), // 冰蓝
-        0xFF7FD1A4.toInt(), // 薄荷
-        0xFFFFD166.toInt(), // 琥珀
-        0xFFFF9E80.toInt(), // 珊瑚
-        0xFFC7A4FF.toInt(), // 薰衣草
-        0xFF111417.toInt()  // 近黑
-    )
-
-    /** 背景可选色。都偏深，浅色只留一个给「白底黑字」。 */
-    val BACKGROUND = intArrayOf(
-        0xFF14161A.toInt(), // 石墨（默认）
-        0xFF000000.toInt(), // 纯黑
-        0xFF1E2A38.toInt(), // 深蓝
-        0xFF2B2118.toInt(), // 深咖
-        0xFF3A2230.toInt(), // 深紫红
-        0xFF0F1B2A.toInt(), // 藏青
-        0xFFF2F0EA.toInt()  // 米白
-    )
-
-    fun textIndexOf(color: Int): Int = TEXT.indexOfFirst { it == color }
-    fun backgroundIndexOf(color: Int): Int = BACKGROUND.indexOfFirst { it == color }
 }

@@ -42,6 +42,14 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
     private var handle: CollapseHandle? = null
     private var handleParams: WindowManager.LayoutParams? = null
 
+    /**
+     * 把手当前是否「塞进歌词窗左侧内衬」。
+     *
+     * 常规情况把手挂在窗外，不与窗口有任何重叠；歌词窗被拖到屏幕最左边时窗外没地方了，
+     * 只能塞进窗口让出的左侧内衬里。这个标记既是布局结果，也是下一次判断的迟滞输入。
+     */
+    private var handleInside = false
+
     private var editable = false
     private var menuOpen = false
 
@@ -309,6 +317,9 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         }
         handle = null
         handleParams = null
+        // 把手没了，内衬也要跟着还回去，否则歌词左侧会永久空一块
+        view?.setLeftInset(0)
+        handleInside = false
     }
 
     private fun buildHandleParams(): WindowManager.LayoutParams =
@@ -327,15 +338,25 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         }
 
     /**
-     * 把手贴歌词窗左缘、竖向居中。
+     * 摆把手：常规挂窗外，贴屏边放不下时塞进歌词窗的左侧内衬。
      *
-     * 左边缘没有空间时贴屏幕左边（此时会与歌词窗左侧内边距重叠一点）—— 宁可压住一点
-     * 留白，也不能把按钮推到屏幕外，那样就再也点不到了。
+     * 「不压歌词」是硬要求，两个位置都要满足：
+     *  · 窗外 —— 与窗口零重叠，最省事；
+     *  · 窗内 —— 让渲染器把文字整体右移一条把手宽（[LyricRenderer.setLeftInset]），
+     *    按钮落在让出来的空白里。
+     * 既不重叠也不出屏，不必让用户在「能点」和「能看」之间二选一。
      */
-    private fun placeHandle() {
-        val h = handle ?: return
-        val lp = handleParams ?: return
-        val box = frame()
+    private fun placeHandle(box: OverlayGeometry.Frame = frame()) {
+        val h = handle
+        val lp = handleParams
+        val renderer = view
+        if (h == null || lp == null) {
+            // 把手不存在（关掉 / 编辑态 / 已收起）：歌词窗不该继续空着那条内衬
+            renderer?.setLeftInset(0)
+            handleInside = false
+            return
+        }
+
         val hw = lp.width
         val hh = lp.height
         val gap = (HANDLE_GAP_DP * density).toInt()
@@ -344,8 +365,21 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         val anchorTop = if (lastRect.height() > 0) lastRect.top else box.top
         val anchorHeight = if (lastRect.height() > 0) lastRect.height() else box.height
 
+        val placement = OverlayGeometry.handlePlacement(
+            frame = box,
+            windowLeft = anchorLeft,
+            handleWidth = hw,
+            gap = gap,
+            inside = handleInside,
+            hysteresis = (HANDLE_HYSTERESIS_DP * density).toInt()
+        )
+        // 先让歌词窗让出内衬，再摆把手：窗口宽度变了会重新布局并再次进到这里，
+        // 第二次算出来的落点才是最终值（迟滞保证不会来回翻）。
+        renderer?.setLeftInset(if (placement.inside) hw + gap else 0)
+        handleInside = placement.inside
+
         val maxX = (box.right - hw).coerceAtLeast(box.left)
-        val x = (anchorLeft - hw - gap).coerceIn(box.left, maxX)
+        val x = placement.x.coerceIn(box.left, maxX)
         val maxY = (box.bottom - hh).coerceAtLeast(box.top)
         val y = (anchorTop + (anchorHeight - hh) / 2).coerceIn(box.top, maxY)
 
@@ -555,7 +589,7 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         val y = OverlayGeometry.originY(box, height, prefs.ratioY(landscape))
         if (lp.x == x && lp.y == y) {
             if (width > 0 && height > 0) lastRect.set(x, y, x + width, y + height)
-            placeHandle()
+            placeHandle(box)
             return
         }
 
@@ -569,7 +603,7 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
             }
         }
         if (width > 0 && height > 0) lastRect.set(x, y, x + width, y + height)
-        placeHandle()
+        placeHandle(box)
     }
 
     private fun isLandscape(): Boolean =
@@ -822,6 +856,14 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
 
         /** 把手与歌词窗左缘的间隙。 */
         private const val HANDLE_GAP_DP = 4f
+
+        /**
+         * 「挂窗外」与「塞窗内」切换的迟滞带宽。
+         *
+         * 塞进窗内会让窗口变宽，而窗口按比例定位时左边缘会跟着左移，判断所用的
+         * `windowLeft` 本身就在变；没有这条带宽就会在两种形态之间来回抖。
+         */
+        private const val HANDLE_HYSTERESIS_DP = 5f
 
         private const val LONG_PRESS_MS = 550L
 

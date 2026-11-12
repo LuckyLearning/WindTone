@@ -19,6 +19,7 @@ import android.view.View
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
 import com.anylyric.R
@@ -28,7 +29,6 @@ import com.anylyric.diag.Probe
 import com.anylyric.overlay.Align
 import com.anylyric.overlay.OverlayDefaults
 import com.anylyric.overlay.OverlayGeometry
-import com.anylyric.overlay.OverlayPalette
 import com.anylyric.overlay.OverlayStyle
 import com.anylyric.overlay.Preset
 import com.anylyric.overlay.Secondary
@@ -36,6 +36,7 @@ import com.anylyric.session.SessionHub
 import com.anylyric.update.ApkInstaller
 import com.anylyric.update.ApkProvider
 import com.anylyric.update.CheckResult
+import com.anylyric.update.DownloadRoute
 import com.anylyric.update.FailureKind
 import com.anylyric.update.Release
 import com.anylyric.update.UpdateChecker
@@ -262,8 +263,8 @@ class SettingsActivity : BaseActivity() {
         rows += labeledWithReset(
             getString(R.string.appearance_color_primary),
             colorRow(
-                colors = OverlayPalette.TEXT,
                 current = { prefs.style().primaryColor },
+                default = OverlayDefaults.PRIMARY_COLOR,
                 onPick = { color -> editStyle { it.copy(primaryColor = color) } }
             ),
             onReset = { editStyle { it.copy(primaryColor = OverlayDefaults.PRIMARY_COLOR) } }
@@ -273,8 +274,8 @@ class SettingsActivity : BaseActivity() {
         rows += labeledWithReset(
             getString(R.string.appearance_color_secondary),
             colorRow(
-                colors = OverlayPalette.TEXT,
                 current = { prefs.style().secondaryColor },
+                default = OverlayDefaults.SECONDARY_COLOR,
                 onPick = { color -> editStyle { it.copy(secondaryColor = color) } }
             ),
             onReset = { editStyle { it.copy(secondaryColor = OverlayDefaults.SECONDARY_COLOR) } }
@@ -284,11 +285,23 @@ class SettingsActivity : BaseActivity() {
         rows += labeledWithReset(
             getString(R.string.appearance_color_bg),
             colorRow(
-                colors = OverlayPalette.BACKGROUND,
                 current = { prefs.style().bgColor },
+                default = OverlayDefaults.BG_COLOR,
                 onPick = { color -> editStyle { it.copy(bgColor = color) } }
             ),
             onReset = { editStyle { it.copy(bgColor = OverlayDefaults.BG_COLOR) } }
+        )
+
+        rows += spacer(10)
+        // 描边色也必须能改：浅底 + 深字的组合下，默认的黑描边会把字糊成一团
+        rows += labeledWithReset(
+            getString(R.string.appearance_color_stroke),
+            colorRow(
+                current = { prefs.style().strokeColor },
+                default = OverlayDefaults.STROKE_COLOR,
+                onPick = { color -> editStyle { it.copy(strokeColor = color) } }
+            ),
+            onReset = { editStyle { it.copy(strokeColor = OverlayDefaults.STROKE_COLOR) } }
         )
 
         rows += spacer(14)
@@ -301,13 +314,15 @@ class SettingsActivity : BaseActivity() {
         )
 
         rows += spacer(10)
-        rows += labeled(
-            getString(R.string.appearance_lines),
-            chipRow(
-                options = listOf("1", "2", "3"),
-                current = { prefs.style().maxLines - 1 },
-                onPick = { index -> editStyle { it.copy(maxLines = index + 1) } }
-            )
+        // 行数用加减而不是 1/2/3 三个选项：用户要的是「能增减」，不是「只能挑三个」。
+        rows += stepperRow(
+            label = getString(R.string.appearance_lines),
+            value = {
+                getString(R.string.appearance_lines_value, prefs.style().maxLines.toString())
+            },
+            minus = { editStyle { it.copy(maxLines = it.maxLines - 1) } },
+            plus = { editStyle { it.copy(maxLines = it.maxLines + 1) } },
+            reset = { editStyle { it.copy(maxLines = OverlayDefaults.MAX_LINES) } }
         )
 
         rows += spacer(12)
@@ -539,42 +554,116 @@ class SettingsActivity : BaseActivity() {
         }
 
     /**
-     * 一排颜色圆点。
+     * 颜色项：当前色 + 十六进制值 + 「自定义颜色」。
      *
-     * 只给固定色板，不做自由取色器：车机屏在强光下对比度本来就差，
-     * 让用户能调出「灰字灰底」是负体验；何况自绘取色盘在车机触摸屏上很难精准。
+     * 刻意**不再摆一排固定色板**：用户要的是任意颜色，十来颗圆点给不出这个自由度，
+     * 还把整屏塞满了。点开取色器拖三根滑杆就能到任意 RGB，车机上比调色盘好点得多。
      */
-    private fun colorRow(
-        colors: IntArray,
-        current: () -> Int,
-        onPick: (Int) -> Unit
-    ): View {
-        val holder = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val dots = ArrayList<TextView>(colors.size)
-
-        colors.forEach { color ->
-            val dot = TextView(this).apply {
-                val size = dp(34)
-                layoutParams = LinearLayout.LayoutParams(size, size).apply { marginEnd = dp(10) }
-                isClickable = true
-                isFocusable = true
-                setOnClickListener {
-                    onPick(color)
-                    refresh()
-                }
-            }
-            holder.addView(dot)
-            dots += dot
+    private fun colorRow(current: () -> Int, default: Int, onPick: (Int) -> Unit): View {
+        val swatch = TextView(this).apply {
+            val size = dp(30)
+            layoutParams = LinearLayout.LayoutParams(size, size).apply { marginEnd = dp(10) }
         }
-
+        val hex = text("", 13f, secondary = true)
+        val custom = textButton(getString(R.string.appearance_color_custom)) {
+            showColorDialog(current(), default, onPick)
+        }
         uiRefreshers += {
-            val selected = current()
-            colors.forEachIndexed { index, color -> styleDot(dots[index], color, color == selected) }
+            val color = current()
+            styleDot(swatch, color, selected = true)
+            hex.text = String.format(Locale.US, "#%06X", color and 0xFFFFFF)
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(swatch)
+            addView(hex, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(custom)
+        }
+    }
+
+    /**
+     * 取色器：色相 / 饱和度 / 亮度三根滑杆 + 实时预览。
+     *
+     * 为什么是 HSV 而不是 RGB 三条：同样是「调到你想要的那个色」，HSV 的色相滑杆
+     * 一条就能扫过整个色环，RGB 得三条一起试。车机上点按次数越少越好。
+     */
+    private fun showColorDialog(initial: Int, default: Int, onPick: (Int) -> Unit) {
+        val hsv = FloatArray(3)
+        Color.colorToHSV(initial, hsv)
+
+        val preview = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(52)
+            ).apply { bottomMargin = dp(8) }
+        }
+        val hex = text("", 13f, bold = true).apply {
+            setPadding(0, 0, 0, dp(4))
         }
 
-        return HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
-            addView(holder)
+        fun render() {
+            val color = Color.HSVToColor(hsv)
+            preview.background = GradientDrawable().apply {
+                cornerRadius = dp(10).toFloat()
+                setColor(color)
+                setStroke(dp(1), if (isNight) 0x44FFFFFF else 0x22000000)
+            }
+            hex.text = String.format(Locale.US, "#%06X", color and 0xFFFFFF)
+        }
+
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(14), dp(22), dp(4))
+        }
+        body.addView(preview)
+        body.addView(hex)
+        body.addView(colorSlider(getString(R.string.color_hue), 360, hsv[0].toInt()) {
+            hsv[0] = it.toFloat()
+            render()
+        })
+        body.addView(colorSlider(getString(R.string.color_saturation), 100, (hsv[1] * 100).toInt()) {
+            hsv[1] = it / 100f
+            render()
+        })
+        body.addView(colorSlider(getString(R.string.color_brightness), 100, (hsv[2] * 100).toInt()) {
+            hsv[2] = it / 100f
+            render()
+        })
+        render()
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.appearance_color_custom).removeSuffix("…"))
+            .setView(body)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setNeutralButton(getString(R.string.color_default)) { _, _ ->
+                onPick(default)
+                refresh()
+            }
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                onPick(Color.HSVToColor(hsv))
+                refresh()
+            }
+            .show()
+    }
+
+    private fun colorSlider(label: String, max: Int, value: Int, onChange: (Int) -> Unit): View {
+        val title = text(label, 12f, secondary = true)
+        val seek = SeekBar(this).apply {
+            this.max = max
+            progress = value.coerceIn(0, max)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    if (fromUser) onChange(progress)
+                }
+
+                override fun onStartTrackingTouch(bar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(bar: SeekBar?) = Unit
+            })
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(title)
+            addView(seek)
         }
     }
 
@@ -736,8 +825,22 @@ class SettingsActivity : BaseActivity() {
             visibility = View.GONE
         }
         updateAction = textButton(getString(R.string.update_check)) { onUpdateAction() }
+        val routeHint = text(getString(prefs.updateRoute.hintRes), 11f, secondary = true).apply {
+            setPadding(0, dp(2), 0, dp(6))
+        }
+        val routeRow = labeled(
+            getString(R.string.update_route),
+            chipRow(
+                options = DownloadRoute.values().map { getString(it.labelRes) },
+                current = { prefs.updateRoute.ordinal },
+                onPick = { index ->
+                    prefs.updateRoute = DownloadRoute.values()[index]
+                    routeHint.text = getString(prefs.updateRoute.hintRes)
+                }
+            )
+        )
 
-        val rows = ArrayList<View>(6)
+        val rows = ArrayList<View>(8)
         rows += text(
             getString(R.string.update_version_line, versionName()),
             14f,
@@ -750,6 +853,9 @@ class SettingsActivity : BaseActivity() {
             updateAction,
             textButton(getString(R.string.update_open_page)) { openReleasePage() }
         )
+        rows += spacer(10)
+        rows += routeRow
+        rows += routeHint
 
         renderUpdate()
         return card(rows)
@@ -775,17 +881,18 @@ class SettingsActivity : BaseActivity() {
 
         val currentName = versionName()
         val currentCode = versionCode()
+        val route = prefs.updateRoute
         val startedAt = SystemClock.elapsedRealtime()
         Thread({
-            val result = UpdateChecker.check(currentName, currentCode)
+            val result = UpdateChecker.check(currentName, currentCode, route)
             val cost = SystemClock.elapsedRealtime() - startedAt
             pollHandler.post {
                 if (isFinishing || isDestroyed) return@post
-                // 车机上没法看 logcat：把「花了多久、命中哪条线路、失败原因」写进报告，
+                // 车机上没法看 logcat：把「花了多久、走的哪条线路、失败原因」写进报告，
                 // 下次贴报告就能直接看出是缓存旧版、DNS 还是超时。
                 Probe.write(
                     "更新",
-                    "检查完成 ${cost}ms " + when (result) {
+                    "检查完成 ${cost}ms route=${route.name} " + when (result) {
                         is CheckResult.Available ->
                             "有新版 ${result.release.version}（code ${result.release.versionCode}）"
                         is CheckResult.UpToDate -> "已是最新 ${result.latestVersion}"
@@ -828,6 +935,7 @@ class SettingsActivity : BaseActivity() {
 
     private fun startDownload() {
         val release = updateRelease ?: return
+        val route = prefs.updateRoute
         updatePhase = UpdatePhase.DOWNLOADING
         updateProgress = 0
         renderUpdate()
@@ -835,7 +943,7 @@ class SettingsActivity : BaseActivity() {
         val dir = ApkProvider.dir(this)
         Thread({
             try {
-                val apk = UpdateChecker.download(release, dir) { done, total ->
+                val apk = UpdateChecker.download(release, dir, route) { done, total ->
                     val percent = if (total > 0) ((done * 100) / total).toInt() else -1
                     // 只在百分比变化时回主线程，别为了几个字节刷爆消息队列
                     if (percent != updateProgress) {
@@ -847,7 +955,7 @@ class SettingsActivity : BaseActivity() {
                     if (isFinishing || isDestroyed) return@post
                     updateApk = apk
                     updatePhase = UpdatePhase.READY
-                    Probe.write("更新", "下载完成 ${apk.name}（${apk.length()} 字节，大小与摘要已校验）")
+                    Probe.write("更新", "下载完成 ${apk.name}（${apk.length()} 字节，大小与摘要已校验，route=${route.name}）")
                     renderUpdate()
                     installDownloaded()
                 }

@@ -56,6 +56,19 @@ class LyricRenderer(context: Context) : View(context) {
     private var primaryText = ""
     private var secondaryText: String? = null
 
+    /**
+     * 左侧内衬（px）。
+     *
+     * 收起把手是一颗独立小窗，正常情况下挂在歌词窗左边、与窗口没有重叠。
+     * 但歌词窗被拖到屏幕最左边时，窗外已经没有位置 —— 把手只能落到窗口范围内。
+     * 这时由宿主把它塞进这条内衬里：文字整体右移一条把手宽，按钮就不会压住歌词。
+     * 0 表示不需要内衬（把手在窗外，或把手被关掉／处于编辑态）。
+     */
+    private var leftInsetPx = 0
+
+    /** 文字起始横坐标：左内边距 + 内衬。 */
+    private val textLeft: Float get() = paddingH + leftInsetPx
+
     var mode: Mode = Mode.CONTENT
         private set
 
@@ -92,12 +105,18 @@ class LyricRenderer(context: Context) : View(context) {
     private var paddingH = 16f * density
     private var paddingV = 10f * density
 
-    /** [secondary] 标记「其它行」：颜色取 style.secondaryColor，不透明度再乘 secondaryAlpha。 */
+    /**
+     * [secondary] 标记「其它行」：颜色取 style.secondaryColor，不透明度再乘 secondaryAlpha。
+     *
+     * [width] 在构造时算好并跟着对象走：绘制时每帧再量一次 `measureText` 是纯浪费，
+     * 而换行 / 换字号都必然重建 Glyph，宽度不会走样。
+     */
     private class Glyph(
         val text: String,
         val size: Float,
         val alpha: Int,
         val bold: Boolean,
+        val width: Float,
         val secondary: Boolean = false
     )
 
@@ -142,6 +161,17 @@ class LyricRenderer(context: Context) : View(context) {
         maxWidthPx = nextMax
         fixedWidthPx = nextW
         fixedHeightPx = nextH
+        rebuild()
+    }
+
+    /**
+     * 左侧内衬。宿主在摆把手时决定是否要让出这条宽度；值没变时是空操作，
+     * 因此可以每次布局都调一次。
+     */
+    fun setLeftInset(px: Int) {
+        val next = px.coerceAtLeast(0)
+        if (next == leftInsetPx) return
+        leftInsetPx = next
         rebuild()
     }
 
@@ -271,7 +301,7 @@ class LyricRenderer(context: Context) : View(context) {
                 val size = primarySize * 0.86f
                 menuItemH = size * 2.1f
                 for (label in menuLabels) {
-                    glyphs += Glyph(label, size, 235, false)
+                    glyphs += glyph(label, size, 235, false)
                     glyphTops += y
                     y += menuItemH
                 }
@@ -283,7 +313,7 @@ class LyricRenderer(context: Context) : View(context) {
                 }
                 val gap = promptSize * 1.42f
                 for (line in lines) {
-                    glyphs += Glyph(line, promptSize, 185, false)
+                    glyphs += glyph(line, promptSize, 185, false)
                     glyphTops += y
                     y += gap
                 }
@@ -292,7 +322,7 @@ class LyricRenderer(context: Context) : View(context) {
                     val subSize = promptSize * 0.88f
                     val subLines = TextWrap.wrap(sub, limit, 1) { s -> widthOf(s, subSize, false) }
                     for (line in subLines) {
-                        glyphs += Glyph(line, subSize, 135, false, secondary = true)
+                        glyphs += glyph(line, subSize, 135, false, secondary = true)
                         glyphTops += y
                         y += subSize * 1.45f
                     }
@@ -304,7 +334,7 @@ class LyricRenderer(context: Context) : View(context) {
                     widthOf(s, primarySize, style.bold)
                 }
                 for (line in lines) {
-                    glyphs += Glyph(line, primarySize, 255, style.bold)
+                    glyphs += glyph(line, primarySize, 255, style.bold)
                     glyphTops += y
                     y += primarySize * 1.38f
                 }
@@ -315,7 +345,7 @@ class LyricRenderer(context: Context) : View(context) {
                         widthOf(s, secondarySize, false)
                     }
                     for (line in subLines) {
-                        glyphs += Glyph(
+                        glyphs += glyph(
                             line, secondarySize,
                             (style.secondaryAlpha * 255f).toInt().coerceIn(0, 255), false,
                             secondary = true
@@ -329,15 +359,15 @@ class LyricRenderer(context: Context) : View(context) {
 
         contentHeight = y
 
-        var width = glyphs.maxOfOrNull { widthOf(it.text, it.size, it.bold) } ?: 0f
+        var width = glyphs.maxOfOrNull { it.width } ?: 0f
         // 最小宽度：四个字。避免「我」这样的单字歌词变成一个孤零零的小方块。
         width = maxOf(width, widthOf("字字字字", primarySize, style.bold))
         if (editing && mode == Mode.CONTENT) {
             width = maxOf(width, widthOf(hintText, spToPx(11f), false) + 54f * density)
         }
-        // 固定宽度时内容区就是「窗口宽 − 左右内边距」，文字按 align 在里面排。
+        // 固定宽度时内容区就是「窗口宽 − 左右内边距 − 左内衬」，文字按 align 在里面排。
         contentWidth = if (fixedWidthPx > 0) {
-            (fixedWidthPx - paddingH * 2f).coerceAtLeast(60f * density)
+            (fixedWidthPx - paddingH * 2f - leftInsetPx).coerceAtLeast(60f * density)
         } else {
             width.coerceAtMost(limit)
         }
@@ -345,6 +375,14 @@ class LyricRenderer(context: Context) : View(context) {
         requestLayout()
         invalidate()
     }
+
+    private fun glyph(
+        text: String,
+        size: Float,
+        alpha: Int,
+        bold: Boolean,
+        secondary: Boolean = false
+    ): Glyph = Glyph(text, size, alpha, bold, widthOf(text, size, bold), secondary)
 
     private fun contentLimit(): Float {
         val base = if (fixedWidthPx > 0) {
@@ -354,7 +392,7 @@ class LyricRenderer(context: Context) : View(context) {
         } else {
             4000f
         }
-        return (base - paddingH * 2f).coerceAtLeast(60f * density)
+        return (base - paddingH * 2f - leftInsetPx).coerceAtLeast(60f * density)
     }
 
     private fun widthOf(text: String, size: Float, bold: Boolean): Float {
@@ -414,13 +452,14 @@ class LyricRenderer(context: Context) : View(context) {
     }
 
     /** 当前可用窗口的最小尺寸，拖角时用来兜底，避免把自己拖成一条线。 */
-    fun minWidthPx(): Int = (widthOf("字字字", spToPx(style.fontSp), style.bold) + paddingH * 2f).toInt()
+    fun minWidthPx(): Int =
+        (widthOf("字字字", spToPx(style.fontSp), style.bold) + paddingH * 2f + leftInsetPx).toInt()
 
     fun minHeightPx(): Int = (spToPx(style.fontSp) * 1.38f + paddingV * 2f).toInt()
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val hint = if (editing && mode == Mode.CONTENT) hintHeight() else 0f
-        val fallbackW = (contentWidth + paddingH * 2f).toInt().coerceIn(1, 4000)
+        val fallbackW = (contentWidth + paddingH * 2f + leftInsetPx).toInt().coerceIn(1, 4000)
         val fallbackH = (contentHeight + paddingV * 2f + hint).toInt().coerceIn(1, 2000)
 
         val w = when {
@@ -498,8 +537,8 @@ class LyricRenderer(context: Context) : View(context) {
     private fun drawGlyph(canvas: Canvas, glyph: Glyph, top: Float, alphaScale: Float) {
         configureText(glyph, alphaScale)
         val baseline = top - textPaint.fontMetrics.ascent
-        val glyphWidth = widthOf(glyph.text, glyph.size, glyph.bold)
-        val baseX = paddingH
+        val glyphWidth = glyph.width
+        val baseX = textLeft
         val x = when (style.align) {
             Align.START -> baseX
             Align.CENTER -> baseX + (contentWidth - glyphWidth) / 2f
@@ -511,7 +550,7 @@ class LyricRenderer(context: Context) : View(context) {
     }
 
     private fun drawMenu(canvas: Canvas) {
-        val baseX = paddingH * 1.4f
+        val baseX = textLeft * 1.4f
         for (i in glyphs.indices) {
             val glyph = glyphs[i]
             configureText(glyph, 1f)
@@ -557,7 +596,7 @@ class LyricRenderer(context: Context) : View(context) {
         hintPaint.color = 0xCCFFFFFF.toInt()
         val fm = hintPaint.fontMetrics
         val baseline = top + barH / 2f - (fm.ascent + fm.descent) / 2f
-        canvas.drawText(hintText, paddingH, baseline, hintPaint)
+        canvas.drawText(hintText, textLeft, baseline, hintPaint)
 
         val cx = doneCx()
         val cy = top + barH / 2f
@@ -591,7 +630,7 @@ class LyricRenderer(context: Context) : View(context) {
 
         strokePaint.textSize = glyph.size
         strokePaint.typeface = typeface
-        strokePaint.color = Color.BLACK
+        strokePaint.color = style.strokeColor
         strokePaint.alpha = alpha
         strokePaint.style = Paint.Style.STROKE
         strokePaint.strokeWidth = glyph.size * 0.085f

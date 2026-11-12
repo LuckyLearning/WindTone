@@ -74,6 +74,18 @@ class SessionHub private constructor(context: Context) {
     /** packageName -> 通知文本字段。只在内存，不落盘。 */
     private val notificationTexts = HashMap<String, Map<String, String>>()
 
+    /**
+     * packageName -> 上一次通知的**原始** 5 个文本字段（未 trim）。
+     *
+     * 存在的唯一目的是「零分配地判断这条通知有没有变」：播放器每 250ms 刷一条通知，
+     * 内容一模一样。以前每条都要建 HashMap、拼指纹串、再判等一次 —— 那些对象最后全进 GC。
+     * 现在只把 5 个 `CharSequence` 读进一个复用数组，逐字段 `TextUtils.equals` 比完就结束。
+     */
+    private val lastNotificationFields = HashMap<String, Array<CharSequence?>>()
+
+    /** 复用数组：只在主线程写，不需要同步 */
+    private val fieldBuffer = arrayOfNulls<CharSequence>(FIELD_KEYS.size + 1)
+
     private var controller: MediaController? = null
     private var listenerConnected = false
 
@@ -96,9 +108,6 @@ class SessionHub private constructor(context: Context) {
     /** 上次完整 `getActiveSessions()` 的时刻，用于节流 binder 查询。 */
     private var lastFullQueryAt = 0L
 
-    /** 上一次通知字段的指纹，内容没变就不重算整条链。 */
-    private var lastNotificationSignature: String? = null
-
     /**
      * 责任链的输入指纹（逐字段比较，不再拼字符串）。
      *
@@ -119,8 +128,10 @@ class SessionHub private constructor(context: Context) {
     private var keyVerdict: TitleVerdict? = null
     private var keyTextsHash = 0
 
-    /** `identityExtra` 的缓存：包名/专辑/音轨都没变就复用，免得每次刷新拼一次字符串。 */
-    private var identityExtraKey = ""
+    /** `identityExtra` 的缓存：包名/专辑/音轨三者逐字段比较，都没变就复用上次拼好的串。 */
+    private var identityPkg: String? = null
+    private var identityAlbum: String? = null
+    private var identityTrack = Long.MIN_VALUE
     private var identityExtraValue = ""
 
     /** 上一次推给悬浮层的文本，同一句不重复走渲染。 */
@@ -147,6 +158,30 @@ class SessionHub private constructor(context: Context) {
     /** 定时歌词的自驱动 tick 是否已排上。 */
     private var tickScheduled = false
 
+    /**
+     * 回调里拿到的元数据与播放状态。
+     *
+     * `MediaController.getMetadata()` / `getPlaybackState()` 每次都是**跨进程调用**，
+     * 而且会把整个 Bundle 重新反序列化一遍 —— 播放器把整段歌词塞进元数据时，
+     * 每次刷新都等于搬运几 KB。而这两个回调本来就把最新对象送到手上了，直接用即可。
+     * `valid=false` 时（刚换会话、回调还没来）才退回主动查询。
+     */
+    private var callbackMetadata: MediaMetadata? = null
+    private var callbackMetadataValid = false
+    private var callbackState: PlaybackState? = null
+    private var callbackStateValid = false
+
+    /**
+     * 上一次喂给 [clock] 的原始进度 / 状态 / 倍速。
+     *
+     * 读缓存之后同一个进度会被反复看到。若每次都拿它重新锚定时钟，
+     * `anchorAt` 会被不断刷新到「现在」，外推就永远等于原值 —— 表现为歌词卡住不动。
+     * 只在值真的变化时才锚定。
+     */
+    private var clockRawPosition = Long.MIN_VALUE
+    private var clockRawState = PlayState.NONE
+    private var clockRawSpeed = Float.MIN_VALUE
+
     /** TITLE 最近一次变化的时刻，用于区分「还在等第一句」与「这播放器没有歌词通道」。 */
     private var lastTitleChangeAt = SystemClock.elapsedRealtime()
 
@@ -171,8 +206,19 @@ class SessionHub private constructor(context: Context) {
     }
 
     private val callback = object : MediaController.Callback() {
-        override fun onMetadataChanged(metadata: MediaMetadata?) = requestRefresh(REASON_METADATA)
-        override fun onPlaybackStateChanged(state: PlaybackState?) = requestRefresh(REASON_STATE)
+        override fun onMetadataChanged(metadata: MediaMetadata?) {
+            // 回调给的对象就是最新的：留一份，省掉每次刷新一次跨进程查询
+            callbackMetadata = metadata
+            callbackMetadataValid = true
+            requestRefresh(REASON_METADATA)
+        }
+
+        override fun onPlaybackStateChanged(state: PlaybackState?) {
+            callbackState = state
+            callbackStateValid = true
+            requestRefresh(REASON_STATE)
+        }
+
         override fun onSessionDestroyed() {
             detachController()
             requestRefresh("session_destroyed")
@@ -325,7 +371,7 @@ class SessionHub private constructor(context: Context) {
         setCurrentLines(emptyList())
         hitSource = null
         keyValid = false
-        lastNotificationSignature = null
+        lastNotificationFields.clear()
         stopLineTick()
         overlay.hide()
         syncPermissionFacts()
@@ -358,22 +404,35 @@ class SessionHub private constructor(context: Context) {
         val notification = sbn.notification ?: return
         val extras = notification.extras ?: return
 
+        // 第二道闸：内容没变就直接结束。
+        // 这一层挡的是「同一条通知反复重发」——播放器每 250ms 刷一次进度时最常见，
+        // 内容一个字都不差。以前每条都要建 HashMap + 拼指纹串，白白喂给 GC。
+        if (!captureFields(extras, notification.tickerText, lastNotificationFields[pkg])) {
+            Perf.onSkip()
+            return
+        }
+        lastNotificationFields[pkg] = fieldBuffer.copyOf()
+        // 上限是硬边界：设备上装几十个会发通知的应用时，这两张表不该无限长。
+        // 必须一起清 —— 只清一张会让「上次内容」与「当前内容」对不上，
+        // 之后每条通知都被判成「变了」，白白多跑一遍刷新。
+        // 键以 lastNotificationFields 为准：连一条文本都没有的通知也会在那张表里留位置。
+        if (lastNotificationFields.size > MAX_NOTIFICATION_PACKAGES) {
+            notificationTexts.clear()
+            lastNotificationFields.clear()
+        }
+
         val fields = HashMap<String, String>(5)
-        capture(extras, Notification.EXTRA_TITLE, fields)
-        capture(extras, Notification.EXTRA_TEXT, fields)
-        capture(extras, Notification.EXTRA_SUB_TEXT, fields)
-        // 展开态正文：部分播放器的桌面歌词会写进这里，可能多行
-        capture(extras, Notification.EXTRA_BIG_TEXT, fields)
+        for (i in FIELD_KEYS.indices) {
+            val value = fieldBuffer[i]?.toString()?.trim()
+            if (!value.isNullOrEmpty()) fields[FIELD_KEYS[i]] = value
+        }
         // tickerText 不是 extras 常量，是 Notification 上的字段
-        notification.tickerText?.toString()?.trim()
-            ?.takeIf { it.isNotEmpty() }
-            ?.let { fields["android.tickerText"] = it }
+        val ticker = fieldBuffer[FIELD_KEYS.size]?.toString()?.trim()
+        if (!ticker.isNullOrEmpty()) fields[KEY_TICKER] = ticker
 
         if (fields.isEmpty()) {
             notificationTexts.remove(pkg)
         } else {
-            // 上限是硬边界：设备上装几十个会发通知的应用时，这张表不该无限长
-            if (notificationTexts.size >= MAX_NOTIFICATION_PACKAGES) notificationTexts.clear()
             notificationTexts[pkg] = fields
         }
 
@@ -386,18 +445,36 @@ class SessionHub private constructor(context: Context) {
             return
         }
 
-        // 同一份文本重复推送（播放器每 250ms 刷一次通知）不必重跑责任链
-        val signature = buildString(48) {
-            append(pkg)
-            for ((key, value) in fields) {
-                append('\u0000').append(key).append('=').append(value)
-            }
-        }
-        if (signature == lastNotificationSignature) return
-        lastNotificationSignature = signature
-
         requestRefresh(REASON_NOTIFICATION)
     }
+
+    /**
+     * 把 5 个通知文本字段读进 [fieldBuffer]，返回「与 [previous] 相比是否有变化」。
+     *
+     * 全过程**不分配对象**：`getCharSequence` 拿到的是播放器那边已有的 CharSequence，
+     * `TextUtils.equals` 逐字符比较、不构造 String。只有确认变了之后才去做 trim 与建表 ——
+     * 那才是少数情况。
+     *
+     * @param previous 上一条同一包名的通知字段；`null` 表示第一次见到这个包
+     */
+    private fun captureFields(
+        extras: android.os.Bundle,
+        ticker: CharSequence?,
+        previous: Array<CharSequence?>?
+    ): Boolean {
+        var changed = previous == null
+        for (i in FIELD_KEYS.indices) {
+            val value = extras.getCharSequence(FIELD_KEYS[i])
+            fieldBuffer[i] = value
+            if (!changed && !equalsText(value, previous!![i])) changed = true
+        }
+        fieldBuffer[FIELD_KEYS.size] = ticker
+        if (!changed && !equalsText(ticker, previous!![FIELD_KEYS.size])) changed = true
+        return changed
+    }
+
+    private fun equalsText(a: CharSequence?, b: CharSequence?): Boolean =
+        android.text.TextUtils.equals(a, b)
 
     /**
      * 外来通知触发的会话重挑间隔。
@@ -496,7 +573,10 @@ class SessionHub private constructor(context: Context) {
         // 只有「可能换应用」的路径才值得查：无会话、通知类事件、播放状态发生跳变，
         // 其余情况直接沿用当前控制器。
         val now = SystemClock.elapsedRealtime()
-        val cachedState = mapState(controller?.playbackState?.state ?: PlaybackState.STATE_NONE)
+        // 播放状态优先用回调送来的那一份：`getPlaybackState()` 是本方法里最贵的几次
+        // 跨进程调用之一，而回调本来就会把同一个对象递到手上。
+        val knownState = if (callbackStateValid) callbackState else controller?.playbackState
+        val cachedState = mapState(knownState?.state ?: PlaybackState.STATE_NONE)
         val fullQuery = when {
             controller == null -> true
             reason == REASON_NOTIFICATION_OTHER -> now - lastFullQueryAt >= foreignQueryInterval()
@@ -550,13 +630,25 @@ class SessionHub private constructor(context: Context) {
             return
         }
 
-        val playbackState = active.playbackState
-        val metadata = active.metadata
+        // 两处都优先取回调缓存：换会话时 [bind] 已经把缓存清掉，这里自然退回主动查询。
+        val playbackState = if (callbackStateValid) callbackState else active.playbackState
+        val metadata = if (callbackMetadataValid) callbackMetadata else active.metadata
         val playState = mapState(playbackState?.state ?: PlaybackState.STATE_NONE)
         lastPlayState = playState
         val rawPosition = playbackState?.position ?: -1L
+        val rawSpeed = playbackState?.playbackSpeed ?: 1f
 
-        clock.update(rawPosition, playbackState?.playbackSpeed ?: 1f, playState)
+        // 只有「确实变了」才重新锚定时钟。读缓存后同一个进度会被反复看到，
+        // 若每次都锚定，外推永远等于原值 —— 歌词会卡在当前句不动。
+        if (rawPosition != clockRawPosition ||
+            playState != clockRawState ||
+            rawSpeed != clockRawSpeed
+        ) {
+            clockRawPosition = rawPosition
+            clockRawState = playState
+            clockRawSpeed = rawSpeed
+            clock.update(rawPosition, rawSpeed, playState)
+        }
         observePosition(rawPosition, playState)
 
         val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
@@ -679,14 +771,18 @@ class SessionHub private constructor(context: Context) {
 
     /** 换歌指纹的附加位：duration / mediaId 都缺失时，靠包名 + 专辑 + 音轨兜底。 */
     private fun identityExtra(active: MediaController, metadata: MediaMetadata?): String {
-        val album = metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM).orEmpty()
-        val track = metadata?.getLong(MediaMetadata.METADATA_KEY_TRACK_NUMBER) ?: 0L
-        // 每首歌内这三个字段都不变，拼一次就够；按原样每秒拼一次只是给 GC 添活。
-        val key = active.packageName + '|' + album + '|' + track
-        if (key == identityExtraKey) return identityExtraValue
-        identityExtraKey = key
-        identityExtraValue = key
-        return key
+        val pkg = active.packageName
+        val album = metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM)
+        val track = metadata?.getLong(MediaMetadata.METADATA_KEY_TRACK_NUMBER) ?: -1L
+        // 逐字段比较，不先拼串：这几个值每首歌内都不变，每秒为它们拼一次串只是给 GC 添活。
+        if (pkg == identityPkg && album == identityAlbum && track == identityTrack) {
+            return identityExtraValue
+        }
+        identityPkg = pkg
+        identityAlbum = album
+        identityTrack = track
+        identityExtraValue = "$pkg|${album.orEmpty()}|$track"
+        return identityExtraValue
     }
 
     /**
@@ -942,6 +1038,9 @@ class SessionHub private constructor(context: Context) {
         controller?.unregisterCallback(callback)
         controller = next
         next?.registerCallback(callback, mainHandler)
+        // 缓存属于上一个会话：不清掉的话，新会话的第一帧会拿旧播放器的事实去渲染 ——
+        // 表现就是换播放器后先闪一下上一首的歌词。
+        invalidateSessionCaches()
         if (next == null) return
 
         // 换会话＝换播放器，判定与行缓冲一律从零开始：
@@ -958,7 +1057,6 @@ class SessionHub private constructor(context: Context) {
         lastPushedSecondary = null
         lastPushedPrompt = false
         labelCache = null
-        identityExtraKey = ""
         stopLineTick()
         // 进度跳变也必须按会话重置：换应用时 position 从 89s 掉到 44s
         // 是正常的，不能计成 CLOCK_UNSTABLE。
@@ -972,6 +1070,23 @@ class SessionHub private constructor(context: Context) {
     private fun detachController() {
         controller?.unregisterCallback(callback)
         controller = null
+        invalidateSessionCaches()
+    }
+
+    /**
+     * 清掉「只对当前会话有效」的缓存：回调送来的元数据/状态、时钟锚点、换歌附加指纹。
+     *
+     * 换会话或断开时必须清 —— 这些值的生命周期就是「一个会话」。
+     */
+    private fun invalidateSessionCaches() {
+        callbackMetadata = null
+        callbackMetadataValid = false
+        callbackState = null
+        callbackStateValid = false
+        clockRawPosition = Long.MIN_VALUE
+        clockRawState = PlayState.NONE
+        clockRawSpeed = Float.MIN_VALUE
+        identityPkg = null
     }
 
     /**
@@ -994,15 +1109,6 @@ class SessionHub private constructor(context: Context) {
         if (position < RESTART_NEAR_ZERO_MS) return
         positionJumps++
         if (Probe.enabled) Probe.write("时钟", "backward ${previous}->$position")
-    }
-
-    private fun capture(
-        extras: android.os.Bundle,
-        key: String,
-        out: MutableMap<String, String>
-    ) {
-        val text = extras.getCharSequence(key)?.toString()?.trim()
-        if (!text.isNullOrEmpty()) out[key] = text
     }
 
     private fun mapState(state: Int): PlayState = when (state) {
@@ -1037,6 +1143,21 @@ class SessionHub private constructor(context: Context) {
 
         /** 通知文本表最多记几个包：设备上会发通知的应用可能几十个，不能无限长。 */
         private const val MAX_NOTIFICATION_PACKAGES = 16
+
+        /**
+         * 关注的通知文本字段。前四项来自 extras，最后一项 tickerText 挂在 Notification 上，
+         * 所以 [fieldBuffer] 的长度是 size + 1。
+         */
+        private val FIELD_KEYS = arrayOf(
+            Notification.EXTRA_TITLE,
+            Notification.EXTRA_TEXT,
+            Notification.EXTRA_SUB_TEXT,
+            // 展开态正文：部分播放器的桌面歌词会写进这里，可能多行
+            Notification.EXTRA_BIG_TEXT
+        )
+
+        /** tickerText 的键名（不是 extras 常量，自己定一个） */
+        private const val KEY_TICKER = "android.tickerText"
 
         /** 标题停下多久还没歌词，就承认这个播放器没有歌词通道。 */
         private const val TITLE_WAIT_TIMEOUT_MS = 20_000L

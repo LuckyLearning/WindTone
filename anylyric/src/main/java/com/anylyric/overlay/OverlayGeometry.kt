@@ -80,6 +80,44 @@ object OverlayGeometry {
         else -> origin
     }
 
+    /**
+     * 收起把手的落点。
+     *
+     * @param inside 当前是否已处于「塞进歌词窗」的形态；传入上一次的结果，用于迟滞
+     * @param x 把手的左上角横坐标
+     *
+     * 两种形态：
+     *  · **挂在窗外**（常规）：贴歌词窗左缘外侧，不与窗口有任何重叠；
+     *  · **塞进窗内**（歌词窗已经贴到屏幕左边、外侧放不下）：落进渲染器让出的左侧内衬里，
+     *    仍然不压字 —— 宁可让歌词整体右移一条把手宽，也不能把按钮盖在字上，
+     *    更不能把按钮推到屏幕外点不到。
+     *
+     * 迟滞窗口是必须的：塞进去会让窗口变宽，窗口按比例定位又会左移半个内衬宽，
+     * 于是「放不放得下」的判断值本身会跟着变。没有迟滞就会在两种形态之间来回抖，
+     * 表现为悬浮窗每次刷新都跳一下。
+     */
+    fun handlePlacement(
+        frame: Frame,
+        windowLeft: Int,
+        handleWidth: Int,
+        gap: Int,
+        inside: Boolean,
+        hysteresis: Int
+    ): HandlePlacement {
+        val outside = windowLeft - handleWidth - gap
+        val nextInside = if (inside) {
+            // 已经塞进去了：要退出来，必须有明确的富余量，不能卡在边界上
+            outside < frame.left + hysteresis
+        } else {
+            outside < frame.left - hysteresis
+        }
+        val x = if (nextInside) windowLeft + gap / 2 else outside
+        return HandlePlacement(nextInside, x)
+    }
+
+    /** 把手落点：是否塞进歌词窗 + 横坐标。 */
+    data class HandlePlacement(val inside: Boolean, val x: Int)
+
     /** 九宫格锚点：0 → 左/上，1 → 中，2 → 右/下。 */
     fun anchorRatio(index: Int): Float = when {
         index <= 0 -> 0f

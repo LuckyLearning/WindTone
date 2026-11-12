@@ -104,4 +104,76 @@ class OverlayGeometryTest {
         assertEquals(1, OverlayGeometry.nearestAnchor(0.5f))
         assertEquals(2, OverlayGeometry.nearestAnchor(0.9f))
     }
+
+    // ---------------------------------------------------------------- 收起把手
+
+    /**
+     * 把手放得下就挂窗外 —— 与歌词窗零重叠，这是最常见也最简单的形态。
+     */
+    @Test
+    fun handleStaysOutsideWhenThereIsRoom() {
+        val box = frame()
+        val placement = OverlayGeometry.handlePlacement(
+            frame = box,
+            windowLeft = 500,
+            handleWidth = 60,
+            gap = 8,
+            inside = false,
+            hysteresis = 10
+        )
+        assertEquals(false, placement.inside)
+        assertEquals(500 - 60 - 8, placement.x)
+    }
+
+    /**
+     * 歌词窗贴到屏幕左边时，窗外放不下 —— 必须塞进窗内，而不是盖在歌词上。
+     *
+     * 这是现场反馈的那一条：「左侧收起按钮压着歌词」。
+     */
+    @Test
+    fun handleGoesInsideWhenWindowHugsLeftEdge() {
+        val box = frame()
+        val placement = OverlayGeometry.handlePlacement(
+            frame = box,
+            windowLeft = box.left,
+            handleWidth = 60,
+            gap = 8,
+            inside = false,
+            hysteresis = 10
+        )
+        assertEquals(true, placement.inside)
+        // 落在窗口左边缘的让位区内，不会跑到窗口左边外面去
+        assertEquals(box.left + 4, placement.x)
+    }
+
+    /**
+     * 迟滞：已经在窗内时，只有明确有富余才退回去。
+     *
+     * 没有这道带宽，窗口宽度一变就会在两种形态间来回翻，屏幕上看到的是连续跳动。
+     */
+    @Test
+    fun handleHysteresisPreventsFlapping() {
+        val box = frame()
+        // 刚好卡在边界上（窗外只差 2px）：窗内状态不该立刻退出
+        val stay = OverlayGeometry.handlePlacement(
+            frame = box,
+            windowLeft = box.left + 60 + 8 - 2,
+            handleWidth = 60,
+            gap = 8,
+            inside = true,
+            hysteresis = 10
+        )
+        assertEquals(true, stay.inside)
+
+        // 富余超过迟滞带宽才退回窗外
+        val leave = OverlayGeometry.handlePlacement(
+            frame = box,
+            windowLeft = box.left + 60 + 8 + 20,
+            handleWidth = 60,
+            gap = 8,
+            inside = true,
+            hysteresis = 10
+        )
+        assertEquals(false, leave.inside)
+    }
 }
