@@ -369,7 +369,6 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
 
     fun setEditable(value: Boolean) {
         handler.removeCallbacks(exitEdit)
-        val wasMenu = menuOpen
         menuOpen = false
 
         // 收起态没有歌词窗可编辑：先展开再说
@@ -385,31 +384,32 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         }
 
         lp.flags = flagsFor(value)
+        if (!value) {
+            // 退出编辑态不能只靠 updateViewLayout 改 flags —— 车机上出现过「改完 flags
+            // 输入通道仍是可触摸」，结果整块歌词区域继续吃掉点击。直接把窗口拆了重建：
+            // 新窗口添加时就带 NOT_TOUCHABLE，走的是完整的窗口添加流程，比改 flag 可靠。
+            // 内容不用另存：重建时 addView 会拿 lastPrimary/lastSecondary 重新铺一遍。
+            editable = false
+            current.setOnTouchListener(null)
+            removeLyric()
+            removeHandle()
+            collapsed = false
+            onRequestRender?.invoke()
+            return
+        }
+
         try {
             windowManager?.updateViewLayout(current, lp)
         } catch (_: Throwable) {
             // 更新失败就保持原状：贸然把 editable 置真会留下「能点但拦不到触摸」的错位状态
             return
         }
-
-        editable = value
-        current.setOnTouchListener(if (value) touchListener() else null)
-        current.setEditing(value)
-        if (value) {
-            // 编辑态收起把手：拖角时它会碍事，而且此时不需要「收起」
-            removeHandle()
-            handler.postDelayed(exitEdit, EDIT_TIMEOUT_MS)
-        } else {
-            // 退出编辑态时可能正停在菜单上：这里必须主动把内容换回来。
-            // 仅靠回调上层是不够的 —— 内容没变时 show() 会走「无变化直接返回」的快路径，
-            // 结果就是留下一个「看得见但点不动」的菜单。
-            if (wasMenu || current.mode == LyricRenderer.Mode.MENU) {
-                current.setContent(lastPrimary, lastSecondary, lastMode)
-            }
-            current.previewSize(0, 0)
-            syncHandle()
-            onRequestRender?.invoke()
-        }
+        editable = true
+        current.setOnTouchListener(touchListener())
+        current.setEditing(true)
+        // 编辑态收起把手：拖角时它会碍事，而且此时不需要「收起」
+        removeHandle()
+        handler.postDelayed(exitEdit, EDIT_TIMEOUT_MS)
         current.post { place(update = true) }
     }
 
@@ -450,7 +450,11 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         return if (editableMode) {
             base or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
         } else {
-            base or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            // 非编辑态两颗都挂上。NOT_TOUCHABLE 已经足够，但车厂 ROM 里出现过
+            // 「只认 NOT_TOUCH_MODAL、仍按可触摸窗口走输入分发」的版本；同时挂上无副作用，
+            // 少一个「歌词挡着点不到下面」的现场。
+            base or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
         }
     }
 
@@ -821,8 +825,15 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
 
         private const val LONG_PRESS_MS = 550L
 
-        /** 编辑态无操作自动退出：不退出会一直挡着触摸，用户会以为屏幕坏了。 */
-        private const val EDIT_TIMEOUT_MS = 60_000L
+        /**
+         * 编辑态无操作自动退出。
+         *
+         * 编辑态是**唯一**会吃触摸的状态（拖位置、拖四角、点「完成」都靠它），
+         * 所以这个值等价于「用户最多被挡多久」。原来 60 秒：调完尺寸顺手去导航上点一下，
+         * 正好落在歌词框里就点不动，而且还要再等半分钟 —— 现场反馈就是「悬浮窗挡点击」。
+         * 缩到 12 秒，且每次抬手都会重新计时（见 touchListener）。
+         */
+        private const val EDIT_TIMEOUT_MS = 12_000L
 
         private const val HIDE_FOR_MS = 10 * 60 * 1000L
     }

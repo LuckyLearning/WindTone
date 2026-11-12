@@ -112,11 +112,28 @@ class UpdateCheckerTest {
     // ---------------------------------------------------------------- 线路
 
     @Test
-    fun `清单线路镜像在前官方兜底`() {
+    fun `清单线路镜像在前官方兜底且带破缓存时间戳`() {
         val candidates = UpdateChecker.manifestCandidates()
-        assertEquals(UpdateChecker.manifestUrl, candidates.last())
+        // 每条都带 query：镜像对 @main 有缓存，刚发版时会返回上一版清单，
+        // 客户端就会说「已是最新」—— 现场反馈的「检查不到」正是这一条。
+        assertTrue(candidates.all { it.contains("?t=") })
+        assertTrue(candidates.last().startsWith(UpdateChecker.manifestUrl))
         assertTrue(candidates.first().contains("jsdelivr.net"))
+        assertTrue(candidates.any { it.contains("ghproxy.net/") })
+        // 3 条 jsDelivr + 2 条 gh 代理 + 官方 raw
+        assertEquals(6, candidates.size)
         assertEquals(candidates.size, candidates.distinct().size)
+    }
+
+    @Test
+    fun `清单版本比本机低时显示本机版本`() {
+        // 镜像的旧缓存：别让 0.2.2 的设备看到「已是最新（0.2.1）」
+        val result = UpdateChecker.parseManifest(
+            manifest("0.2.1", 3),
+            "0.2.2",
+            4
+        )
+        assertEquals(CheckResult.UpToDate("0.2.2"), result)
     }
 
     @Test

@@ -124,6 +124,16 @@ class SettingsActivity : BaseActivity() {
         pollHandler.removeCallbacks(poller)
     }
 
+    override fun onStop() {
+        super.onStop()
+        // 编辑态是唯一吃触摸的状态。用户从设置页离开（回桌面、切导航）时若还停在编辑态，
+        // 那段窗口会继续拦截落在歌词框里的点击，现场看起来就是「悬浮窗挡着点不动」。
+        // 旋转重建属于同一次操作，不该打断正在调的尺寸，这里跳过。
+        if (!isChangingConfigurations && hub.overlay().isEditable()) {
+            hub.overlay().setEditable(false)
+        }
+    }
+
     private fun startPolling(firstDelayMs: Long) {
         pollTicks = 0
         pollHandler.removeCallbacks(poller)
@@ -770,10 +780,24 @@ class SettingsActivity : BaseActivity() {
 
         val currentName = versionName()
         val currentCode = versionCode()
+        val startedAt = SystemClock.elapsedRealtime()
         Thread({
             val result = UpdateChecker.check(currentName, currentCode)
+            val cost = SystemClock.elapsedRealtime() - startedAt
             pollHandler.post {
                 if (isFinishing || isDestroyed) return@post
+                // 车机上没法看 logcat：把「花了多久、命中哪条线路、失败原因」写进报告，
+                // 下次贴报告就能直接看出是缓存旧版、DNS 还是超时。
+                Probe.write(
+                    "更新",
+                    "检查完成 ${cost}ms " + when (result) {
+                        is CheckResult.Available ->
+                            "有新版 ${result.release.version}（code ${result.release.versionCode}）"
+                        is CheckResult.UpToDate -> "已是最新 ${result.latestVersion}"
+                        is CheckResult.Failed ->
+                            "失败 ${result.kind} http=${result.httpCode} ${result.detail}"
+                    }
+                )
                 applyCheckResult(result)
             }
         }, "anylyric-update-check").start()

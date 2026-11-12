@@ -8,6 +8,10 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
+import java.util.concurrent.Callable
+import java.util.concurrent.ExecutorCompletionService
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * 公共分发仓库（`LuckyLearning/Release`）中 `AnyLyric/latest.json` 描述的某个版本。
@@ -117,9 +121,18 @@ object UpdateChecker {
     /** 用户代理标识，方便在仓库/CDN 侧区分来源 */
     private const val USER_AGENT = "AnyLyric-Android"
 
-    private const val CONNECT_TIMEOUT_MS = 6_000
-    private const val READ_TIMEOUT_MS = 15_000
+    private const val CONNECT_TIMEOUT_MS = 5_000
+    private const val READ_TIMEOUT_MS = 8_000
     private const val DOWNLOAD_READ_TIMEOUT_MS = 60_000
+
+    /**
+     * 多线路并行竞速的总预算。
+     *
+     * 清单只有 1 KB，正常 1 秒内就回来。预算存在的意义是「别让最慢的一条拖住界面」：
+     * 改成竞速之前是串行、每条 6 秒连接 + 15 秒读超时，四条线路最坏要等 40 秒以上，
+     * 用户看到的就是「一直正在检查 / 点了没反应」。
+     */
+    private const val CHECK_BUDGET_MS = 10_000L
 
     /** 单个安装包的下限：真包 100 KB 上下，低于这个数基本是代理返回的错误页 */
     private const val MIN_APK_BYTES = 20L * 1024
@@ -136,17 +149,22 @@ object UpdateChecker {
     // ------------------------------------------------------------ 检查
 
     /**
-     * 清单的候选线路，按尝试顺序。
+     * 清单的候选线路，按展示顺序给出（实际是并行竞速，顺序只影响日志可读性）。
      *
      * jsDelivr 走「仓库文件」通道（`cdn.jsdelivr.net/gh/<owner>/<repo>@<branch>/<path>`），
      * 前缀不能简单拼接，必须重排；gh-proxy 一类是「整串 URL 当路径」，直接加前缀。
+     *
+     * 每条都带一个时间戳参数：`@main` 在 CDN 上有缓存，**刚发版时镜像会返回上一版清单**，
+     * 表现为「明明发了新版，检查更新却说已是最新」。带 query 让每条线路当新资源回源。
      */
     internal fun manifestCandidates(): List<String> {
-        val url = manifestUrl
+        val url = "$manifestUrl?t=${System.currentTimeMillis()}"
         return listOfNotNull(
             jsdelivr(url, "fastly.jsdelivr.net"),
+            jsdelivr(url, "cdn.jsdelivr.net"),
             jsdelivr(url, "gcore.jsdelivr.net"),
             "https://gh-proxy.com/$url",
+            "https://ghproxy.net/$url",
             url,
         )
     }
@@ -154,24 +172,79 @@ object UpdateChecker {
     /**
      * 查询最新版本。永不抛异常，失败一律折成 [CheckResult.Failed]。
      *
-     * 某条线路拿到的是**坏数据**（镜像错误页、半截 JSON）时继续试下一条，
-     * 不把「代理坏了」当成本软件的结论。
+     * 与 WindTone 同策略：**多线并行竞速**，不是一条条试。
+     *  · 任何一条拿到「有新版本」→ 立刻返回（清单里只会有一个最新版，不必再等）；
+     *  · 只拿到「已是最新」→ 继续等其它线路，最后取**版本最高**的那个结论 ——
+     *    镜像的旧缓存不会把真正的新版盖掉；
+     *  · 全部失败 / 预算耗尽 → 折成 Failed，界面照样能给「打开发布页」兜底。
      */
     fun check(currentName: String, currentCode: Int): CheckResult {
-        var last: CheckResult.Failed? = null
-        for (candidate in manifestCandidates()) {
-            try {
-                val body = httpGetText(candidate)
-                when (val result = parseManifest(body, currentName, currentCode)) {
-                    is CheckResult.Failed -> last = result
-                    else -> return result
-                }
-            } catch (t: Throwable) {
-                last = fold(t)
-            }
+        val candidates = manifestCandidates()
+        val pool = Executors.newFixedThreadPool(candidates.size) { runnable ->
+            Thread(runnable, "anylyric-update-check").apply { isDaemon = true }
         }
-        return last ?: CheckResult.Failed(FailureKind.NETWORK)
+        try {
+            val ecs = ExecutorCompletionService<CheckResult>(pool)
+            candidates.forEach { url ->
+                ecs.submit(Callable { attempt(url, currentName, currentCode) })
+            }
+
+            var best: CheckResult.UpToDate? = null
+            var lastFailure: CheckResult.Failed? = null
+            var finished = 0
+            val deadline = System.nanoTime() + CHECK_BUDGET_MS * 1_000_000L
+
+            while (finished < candidates.size) {
+                val leftMs = (deadline - System.nanoTime()) / 1_000_000L
+                if (leftMs <= 0) break
+                val future = ecs.poll(leftMs, TimeUnit.MILLISECONDS) ?: break
+                finished++
+                val result = try {
+                    future.get()
+                } catch (t: Throwable) {
+                    fold(t.cause ?: t)
+                }
+                when (result) {
+                    is CheckResult.Available -> return result
+
+                    is CheckResult.UpToDate -> {
+                        val previous = best
+                        if (previous == null ||
+                            compareVersions(result.latestVersion, previous.latestVersion) > 0
+                        ) {
+                            best = result
+                        }
+                    }
+
+                    is CheckResult.Failed -> lastFailure = result
+                }
+            }
+            return best ?: lastFailure ?: CheckResult.Failed(FailureKind.TIMEOUT)
+        } finally {
+            // 竞速结束其它线路就没意义了：中断它们，别让超时线程在后台挂着
+            pool.shutdownNow()
+        }
     }
+
+    /** 单条线路拉清单。失败折成 Failed，并把命中的域名带进 detail —— 车机报告里能看出来是哪条挂了。 */
+    private fun attempt(url: String, currentName: String, currentCode: Int): CheckResult =
+        try {
+            parseManifest(httpGetText(url), currentName, currentCode)
+        } catch (t: Throwable) {
+            val failed = fold(t)
+            failed.copy(
+                detail = listOf(hostOf(url), failed.detail)
+                    .filter { it.isNotBlank() }
+                    .joinToString(" ")
+            )
+        }
+
+    private fun hostOf(url: String): String =
+        try {
+            URL(url).host.orEmpty()
+        } catch (_: Throwable) {
+            ""
+        }
 
     /**
      * 解析清单并给出结论。纯函数，可单测。
@@ -198,7 +271,12 @@ object UpdateChecker {
         } else {
             compareVersions(version, currentName) > 0
         }
-        if (!newer) return CheckResult.UpToDate(version)
+        if (!newer) {
+            // 清单版本不高于本机：可能是镜像的旧缓存，也可能本机装的是更新的构建。
+            // 一律展示两者中较高的那个，避免出现「已是最新（0.2.1）」而设备上明明装着 0.2.2。
+            val shown = if (compareVersions(version, currentName) > 0) version else currentName
+            return CheckResult.UpToDate(shown)
+        }
 
         // 版本目录名就是清单里的 tag（`scripts/gen-release-manifest.py --tag v<版本>`），
         // 缺 tag 时按同一规则补：`v0.1.1`，**不是** GitHub tag 的 `anylyric-v0.1.1`。
