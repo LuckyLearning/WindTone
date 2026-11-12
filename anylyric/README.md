@@ -159,8 +159,10 @@ https://raw.githubusercontent.com/LuckyLearning/Release/main/AnyLyric/latest.jso
   新版。总预算 10 秒，超时就用已拿到的结论。
   改之前是串行、每条 6 秒连接 + 15 秒读超时，最坏要等 40 秒以上，用户只会觉得「点了没反应」。
   手动锁定单条线路时不竞速、直接跑（只起一个线程）；
-- **每条线路都带 `?t=<时间戳>`**：`@main` 在 CDN 上有缓存，刚发版时镜像会返回上一版清单，
-  表现为「明明发了新版，检查更新却说已是最新」；
+- ⚠️ **jsDelivr 对 `@main` 的缓存不认 query 参数**：清单 URL 上加 `?t=<时间戳>` 也绕不过 CDN
+  缓存（这是 v0.2.3「明明发了新版却说已是最新」的真凶，只加时间戳并不解决）。现在的对策是
+  「多线路并行 + 取最高版本」，让官方 raw 与各镜像互相校正；发版后几分钟内镜像仍可能返回旧清单，
+  属正常现象，不是检查逻辑坏了；
 - 清单版本比本机低时，界面显示**本机版本**，不出现「已是最新（比自己还低）」；
 - 下载后三层校验：长度下限 + `PK` 头、清单声明的大小、SHA-256。镜像线路越多越需要摘要这层；
 - 安装包经自带的 `ApkProvider`（`content://<applicationId>.apkfiles/…`）交给系统安装器，
@@ -320,9 +322,9 @@ MediaWatchService  (NotificationListenerService，由系统绑定，不自拉活
 
 | 项 | 结果 |
 |---|---|
-| `:anylyric:testDebugUnitTest` | **129 项**通过（LRC 解析 10、伪歌名判定 11、责任链 8、时钟 6、判因 14、权限列表解析 7、几何 10、折行 9、样式 11、更新 15、资源采样 7、行推进 tick 11、L0 缓存 6、工作量计数 4） |
+| `:anylyric:testDebugUnitTest` | **135 项**通过（LRC 解析 10、伪歌名判定 11、责任链 8、时钟 6、判因 14、权限列表解析 7、几何 13、折行 9、样式 11、更新 18、资源采样 7、行推进 tick 11、L0 缓存 6、工作量计数 4） |
 | `:anylyric:lintDebug` | Error 0（Warning 95，均为既有项） |
-| `assembleRelease` | 约 **243 KB**（含矢量图标 + 5 组密度 PNG），运行时依赖仅 `kotlin-stdlib` |
+| `assembleRelease` | 约 **252 KB**（含矢量图标 + 5 组密度 PNG），运行时依赖仅 `kotlin-stdlib` |
 | 真机 | 手机（HONOR / API 37）已验证 L1 可命中；车机 **未验证** |
 
 未验证项：车机播放器的通道命中率、车厂 ROM 对悬浮窗与通知使用权的策略、多屏行为、
