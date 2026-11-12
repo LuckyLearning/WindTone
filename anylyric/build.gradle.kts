@@ -41,6 +41,26 @@ val configuredKeystore = signingValue("keystorePath", "WINDTONE_KEYSTORE", "stor
     ?.let { rootProject.file(it) }
 val keystoreFile: File = listOfNotNull(configuredKeystore, defaultKeystore).firstOrNull { it.exists() }
     ?: configuredKeystore ?: defaultKeystore
+/**
+ * 显式给出 keystore 类型：JKS 与 PKCS12 的差别只在文件头魔数。
+ *
+ * 不指定时 AGP 走 JDK 默认（Java 9+ 为 PKCS12）；一旦密钥文件其实是 JKS 格式，
+ * 就会抛 `Tag number over 30 is not supported` —— JKS 头 FE ED 被当成 ASN.1 的
+ * tag 30（0xFE 的低 5 位 = 30）解析，报错完全看不出跟「格式」有关，
+ * 排查时会误以为是 secret 内容坏了。这里按魔数自行判定，两种格式都能签。
+ */
+val keystoreStoreType: String = signingValue("keystoreType", "WINDTONE_KEYSTORE_TYPE", "storeType")
+    ?: run {
+        val head = try {
+            keystoreFile.inputStream().use { s -> ByteArray(4).also { s.read(it) } }
+        } catch (_: Throwable) {
+            ByteArray(0)
+        }
+        val isJks = head.size == 4 &&
+            head[0] == 0xFE.toByte() && head[1] == 0xED.toByte() &&
+            head[2] == 0xFE.toByte() && head[3] == 0xED.toByte()
+        if (isJks) "JKS" else "PKCS12"
+    }
 val keystoreStorePassword = signingValue("keystorePassword", "WINDTONE_STORE_PASSWORD", "storePassword")
 val keystoreKeyAlias = signingValue("keyAlias", "WINDTONE_KEY_ALIAS", "keyAlias")
 val keystoreKeyPassword = signingValue("keyPassword", "WINDTONE_KEY_PASSWORD", "keyPassword")
@@ -63,6 +83,7 @@ android {
         if (keystoreFile.exists() && keystoreStorePassword != null) {
             create("release") {
                 storeFile = keystoreFile
+                storeType = keystoreStoreType
                 storePassword = keystoreStorePassword
                 keyAlias = keystoreKeyAlias
                 keyPassword = keystoreKeyPassword

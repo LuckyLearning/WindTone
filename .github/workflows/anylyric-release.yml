@@ -105,15 +105,29 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            printf '%s' "$KEYSTORE_BASE64" | openssl base64 -d > "$RUNNER_TEMP/anylyric-release.jks"
-            echo "path=$RUNNER_TEMP/anylyric-release.jks" >> "$GITHUB_OUTPUT"
-            echo "::notice::已载入仓库签名密钥"
-          else
-            echo "path=" >> "$GITHUB_OUTPUT"
+          if [ -z "$KEYSTORE_BASE64" ]; then
             echo "::error::未配置 secret KEYSTORE_BASE64 —— 无签名包无法覆盖安装，发版中止"
             exit 1
           fi
+          JKS="$RUNNER_TEMP/anylyric-release.jks"
+          # 解码命令与 android-release.yml 完全一致（那条已经在实际发版里验证过）。
+          # 刻意不用 `openssl base64 -d`：遇到非法字符它会**静默跳过**，
+          # 把「解不出来」变成「解出一个坏文件」，最后只在签名阶段报
+          # `Tag number over 30 is not supported`，看不出根因在解码。
+          # GNU base64 -d 会对非法输入直接失败，错在哪一眼可见。
+          echo "$KEYSTORE_BASE64" | base64 -d > "$JKS"
+          SIZE=$(stat -c%s "$JKS")
+          MAGIC=$(od -An -tx1 -N4 "$JKS" | tr -d ' \n')
+          echo "解码结果：${SIZE} 字节，文件头 ${MAGIC}"
+          case "$MAGIC" in
+            feedfeed*)          echo "格式：JKS" ;;
+            3081*|3082*|30*)    echo "格式：PKCS12(DER)" ;;
+            *)
+              echo "::error::解码后不是 keystore（文件头 $MAGIC，${SIZE} 字节）—— 请重新生成 secret KEYSTORE_BASE64"
+              exit 1 ;;
+          esac
+          echo "path=$JKS" >> "$GITHUB_OUTPUT"
+          echo "::notice::已载入仓库签名密钥（${SIZE} 字节）"
 
       # ---------------------------------------------------------------- 质量闸
       # 与 WindTone「发版不跑单测」不同：:anylyric 的 JVM 单测只有几十项、
