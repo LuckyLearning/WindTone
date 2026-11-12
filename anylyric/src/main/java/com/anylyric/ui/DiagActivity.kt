@@ -19,6 +19,7 @@ import com.anylyric.R
 import com.anylyric.diag.DiagCode
 import com.anylyric.diag.DiagRules
 import com.anylyric.diag.Probe
+import com.anylyric.session.SessionHub
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -130,8 +131,18 @@ class DiagActivity : BaseActivity() {
     }
 
     private fun render() {
+        // 未连接时不跑责任链，快照里的权限字段不会自己刷新；这里每秒同步一次，
+        // 免得报告把「已授权未绑定」和「没授权」混为一谈。
+        SessionHub.get(this).syncPermissionFacts()
+
         val diagnosis = DiagRules.evaluate(Probe.snapshot)
-        conclusionText.setTextColor(if (diagnosis.code == DiagCode.OK) colorOk else colorBad)
+        conclusionText.setTextColor(
+            when (diagnosis.code) {
+                DiagCode.OK -> colorOk
+                DiagCode.LISTENER_UNBOUND -> colorWarn
+                else -> colorBad
+            }
+        )
         conclusionText.text = describe(diagnosis.code)
         evidenceText.text = getString(R.string.diag_evidence_label, diagnosis.evidence)
 
@@ -143,6 +154,7 @@ class DiagActivity : BaseActivity() {
 
     private fun describe(code: DiagCode): String = when (code) {
         DiagCode.PERMISSION_LISTENER -> getString(R.string.diag_code_permission_listener)
+        DiagCode.LISTENER_UNBOUND -> getString(R.string.diag_code_listener_unbound)
         DiagCode.PERMISSION_OVERLAY -> getString(R.string.diag_code_permission_overlay)
         DiagCode.NO_SESSION -> getString(R.string.diag_code_no_session)
         DiagCode.SESSION_INACTIVE -> getString(R.string.diag_code_session_inactive)

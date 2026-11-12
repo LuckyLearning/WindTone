@@ -92,7 +92,10 @@ object Probe {
         sb.appendLine()
 
         sb.appendLine("[PERMISSION]")
-        sb.appendLine("  listenerConnected=${s.listenerConnected} canDrawOverlays=${s.overlayGranted}")
+        sb.appendLine(
+            "  listenerGranted=${s.listenerGranted} listenerConnected=${s.listenerConnected} " +
+                "canDrawOverlays=${s.overlayGranted}"
+        )
         sb.appendLine()
 
         sb.appendLine("[SESSION]")

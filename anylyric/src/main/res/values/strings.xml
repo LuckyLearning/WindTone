@@ -16,10 +16,15 @@
     <string name="perm_overlay_desc">Required. Used only to draw the lyric overlay.</string>
     <string name="perm_granted">Granted</string>
     <string name="perm_missing">Not granted</string>
+    <string name="perm_state_unbound">Granted, not yet connected</string>
     <string name="perm_open">Open settings</string>
+    <string name="perm_retry">Reconnect</string>
+    <string name="perm_review">System settings</string>
+    <string name="perm_rebind_requested">Asked the system to reconnect…</string>
 
     <string name="status_listener_connected">Notification access connected</string>
-    <string name="status_listener_disconnected">Notification access disconnected — lyrics unavailable</string>
+    <string name="status_listener_unbound">Notification access granted — waiting for the system to connect…</string>
+    <string name="status_listener_disconnected">Notification access not granted — lyrics unavailable</string>
     <string name="status_no_session">No active player</string>
     <string name="status_session">Now: %1$s — %2$s</string>
     <string name="status_channel">Channel: %1$s</string>
@@ -71,6 +76,7 @@
     <string name="settings_version">Version %1$s</string>
     <string name="settings_about">Plays no audio, requests no audio focus, controls nothing, reads no files, uses no network.</string>
     <string name="perm_required_hint">Both permissions are required. Grant them on this screen — no computer needed.</string>
+    <string name="perm_unbound_hint">The permission is already ticked; the system just has not bound the service yet. It usually recovers within seconds. If it never does, toggle the switch off and on in system settings.</string>
     <string name="display_font_value">%1$s sp</string>
     <string name="display_edit_exit">Exit edit mode</string>
     <string name="edit_needs_session">Start playback first, then enter edit mode.</string>
@@ -78,7 +84,8 @@
     <string name="edit_exited">Edit mode off: touches pass through.</string>
     <string name="diag_evidence_label">Evidence: %1$s</string>
 
-    <string name="diag_code_permission_listener">Notification access is not connected. Grant it in system settings, then come back.</string>
+    <string name="diag_code_permission_listener">Notification access is not granted. Tick AnyLyric in system settings, then come back.</string>
+    <string name="diag_code_listener_unbound">Notification access is ticked, but the system has not bound the service yet. Tap Reconnect; if that fails, toggle the switch off and on in system settings.</string>
     <string name="diag_code_permission_overlay">Overlay permission is missing. Grant the display-over-other-apps permission.</string>
     <string name="diag_code_no_session">No app is publishing a media session. Start playback in the car player or a third-party player.</string>
     <string name="diag_code_session_inactive">A media session exists but is not playing. Press play in that app.</string>

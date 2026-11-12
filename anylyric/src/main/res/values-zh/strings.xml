@@ -15,10 +15,15 @@
     <string name="perm_overlay_desc">必需。只用于绘制歌词悬浮层。</string>
     <string name="perm_granted">已授予</string>
     <string name="perm_missing">未授予</string>
+    <string name="perm_state_unbound">已授权，系统尚未连接</string>
     <string name="perm_open">去开启</string>
+    <string name="perm_retry">重新连接</string>
+    <string name="perm_review">系统设置</string>
+    <string name="perm_rebind_requested">已请求系统重新连接…</string>
 
     <string name="status_listener_connected">通知使用权已连接</string>
-    <string name="status_listener_disconnected">通知使用权已断开，歌词暂不可用</string>
+    <string name="status_listener_unbound">通知使用权已授予，正在等待系统连接…</string>
+    <string name="status_listener_disconnected">通知使用权未授予，歌词暂不可用</string>
     <string name="status_no_session">当前没有正在播放的应用</string>
     <string name="status_session">正在播放：%1$s — %2$s</string>
     <string name="status_channel">通道：%1$s</string>
@@ -70,6 +75,7 @@
     <string name="settings_version">版本 %1$s</string>
     <string name="settings_about">不播放声音、不申请音频焦点、不控制播放、不读文件、不联网。</string>
     <string name="perm_required_hint">两项权限都是必需的，都能在这一屏里完成授权，不需要连电脑。</string>
+    <string name="perm_unbound_hint">权限是勾选状态，只是系统还没把服务绑上。通常几秒内自动恢复；一直连不上时，再到系统设置里关掉再打开一次。</string>
     <string name="display_font_value">%1$s 磅</string>
     <string name="display_edit_exit">退出编辑态</string>
     <string name="edit_needs_session">先播放音乐，再进入编辑态。</string>
@@ -77,7 +83,8 @@
     <string name="edit_exited">已退出编辑态：触摸重新穿透。</string>
     <string name="diag_evidence_label">证据：%1$s</string>
 
-    <string name="diag_code_permission_listener">通知使用权未连接。请在系统设置里授予后返回本页。</string>
+    <string name="diag_code_permission_listener">通知使用权未授予。请在系统设置里勾选 AnyLyric 后返回本页。</string>
+    <string name="diag_code_listener_unbound">通知使用权是勾选状态，系统还没把服务绑上。点「重新连接」通常即可恢复；仍不行时在系统设置里关掉再打开一次。</string>
     <string name="diag_code_permission_overlay">缺少悬浮窗权限。请授予「显示在其他应用上层」。</string>
     <string name="diag_code_no_session">没有任何应用在发布媒体会话。请先在车机自带播放器或第三方播放器里开始播放。</string>
     <string name="diag_code_session_inactive">存在媒体会话但未在播放。请到那个应用里点播放。</string>

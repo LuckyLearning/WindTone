@@ -33,6 +33,7 @@ abstract class BaseActivity : Activity() {
         get() = if (isNight) 0xFF1F1F1F.toInt() else 0xFFF4F4F4.toInt()
 
     protected val colorOk: Int = 0xFF1D9E75.toInt()
+    protected val colorWarn: Int = 0xFFB07D18.toInt()
     protected val colorBad: Int = 0xFFD85A30.toInt()
 
     protected fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()

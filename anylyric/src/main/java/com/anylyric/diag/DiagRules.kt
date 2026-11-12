@@ -3,6 +3,13 @@ package com.anylyric.diag
 /** 一次探测的事实快照。由 Android 层填充，判因规则只读它。 */
 data class ProbeSnapshot(
     val listenerConnected: Boolean = false,
+    /**
+     * 系统设置里是否勾选了通知使用权。
+     *
+     * 必须与 [listenerConnected] 分开：前者是「用户授权了」，后者是「系统此刻绑上了」。
+     * 进程被回收后重新打开，前者为 true、后者为 false —— 那是空窗期，不是没授权。
+     */
+    val listenerGranted: Boolean = true,
     val overlayGranted: Boolean = false,
     val sessionCount: Int = 0,
     val playingCount: Int = 0,
@@ -26,6 +33,7 @@ data class ProbeSnapshot(
 
 enum class DiagCode {
     PERMISSION_LISTENER,
+    LISTENER_UNBOUND,
     PERMISSION_OVERLAY,
     NO_SESSION,
     SESSION_INACTIVE,
@@ -50,8 +58,12 @@ data class Diagnosis(val code: DiagCode, val evidence: String)
 object DiagRules {
 
     fun evaluate(s: ProbeSnapshot): Diagnosis = when {
+        !s.listenerGranted ->
+            Diagnosis(DiagCode.PERMISSION_LISTENER, "listenerGranted=false")
+
+        // 勾着却没连上：不是用户没授权，别把他赶去系统设置里「关掉再打开」。
         !s.listenerConnected ->
-            Diagnosis(DiagCode.PERMISSION_LISTENER, "listenerConnected=false")
+            Diagnosis(DiagCode.LISTENER_UNBOUND, "granted=true, connected=false")
 
         !s.overlayGranted ->
             Diagnosis(DiagCode.PERMISSION_OVERLAY, "canDrawOverlays=false")

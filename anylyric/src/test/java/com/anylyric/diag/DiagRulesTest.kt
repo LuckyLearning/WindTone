@@ -17,8 +17,24 @@ class DiagRulesTest {
 
     @Test
     fun missingNotificationAccessComesFirst() {
-        val diagnosis = DiagRules.evaluate(ok().copy(listenerConnected = false))
+        val diagnosis = DiagRules.evaluate(
+            ok().copy(listenerGranted = false, listenerConnected = false)
+        )
         assertEquals(DiagCode.PERMISSION_LISTENER, diagnosis.code)
+    }
+
+    /**
+     * 勾着但服务没连上，是「空窗期」而不是「没授权」。
+     *
+     * 真机反馈：应用关闭后重新打开，设置页显示未授予，进去看却是勾选状态。
+     * 判因若也混为一谈，就会把用户赶去系统设置里做无意义的关开动作。
+     */
+    @Test
+    fun grantedButUnboundIsItsOwnDiagnosis() {
+        val diagnosis = DiagRules.evaluate(
+            ok().copy(listenerGranted = true, listenerConnected = false)
+        )
+        assertEquals(DiagCode.LISTENER_UNBOUND, diagnosis.code)
     }
 
     @Test

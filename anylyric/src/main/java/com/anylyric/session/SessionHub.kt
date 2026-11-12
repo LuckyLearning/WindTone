@@ -14,6 +14,8 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.service.notification.StatusBarNotification
 import com.anylyric.R
+import com.anylyric.data.ListenerState
+import com.anylyric.data.Permissions
 import com.anylyric.data.Prefs
 import com.anylyric.diag.Probe
 import com.anylyric.diag.ProbeSnapshot
@@ -39,7 +41,7 @@ import com.anylyric.service.MediaWatchService
 class SessionHub private constructor(context: Context) {
 
     data class Status(
-        val listenerConnected: Boolean,
+        val listenerState: ListenerState,
         val overlayGranted: Boolean,
         val sessionCount: Int,
         val playingCount: Int,
@@ -47,7 +49,10 @@ class SessionHub private constructor(context: Context) {
         val artist: String?,
         val hitSource: String?,
         val verdict: TitleVerdict
-    )
+    ) {
+        /** 服务真的连上了才算可用；「已授权未绑定」不能当作可用。 */
+        val listenerConnected: Boolean get() = listenerState == ListenerState.GRANTED
+    }
 
     private val appContext = context.applicationContext
     private val prefs = Prefs(appContext)
@@ -65,6 +70,9 @@ class SessionHub private constructor(context: Context) {
 
     private var controller: MediaController? = null
     private var listenerConnected = false
+
+    /** 上次向系统请求重绑的时刻，用于节流（系统自身对 requestRebind 有频率限制）。 */
+    private var lastRebindAt = 0L
 
     private var currentLines: List<LyricLine> = emptyList()
     private var hitSource: String? = null
@@ -108,7 +116,7 @@ class SessionHub private constructor(context: Context) {
     fun overlay(): OverlayHost = overlay
 
     fun currentStatus(): Status = Status(
-        listenerConnected = listenerConnected,
+        listenerState = listenerState(),
         overlayGranted = Settings.canDrawOverlays(appContext),
         sessionCount = lastSessionCount,
         playingCount = lastPlayingCount,
@@ -117,6 +125,57 @@ class SessionHub private constructor(context: Context) {
         hitSource = hitSource,
         verdict = lastVerdict
     )
+
+    /**
+     * 「权限是否授予」与「服务是否已连接」分开判。
+     *
+     * 只读系统保存的授权列表，不产生副作用，界面可以随时调。
+     */
+    fun listenerState(): ListenerState {
+        if (listenerConnected) return ListenerState.GRANTED
+        return when (Permissions.isListenerGranted(appContext)) {
+            true -> ListenerState.GRANTED_NOT_BOUND
+            else -> ListenerState.NOT_GRANTED
+        }
+    }
+
+    /**
+     * 已授权却没连上时，主动请求系统重新绑定，免去「去设置里关掉再打开一次」。
+     *
+     * 返回 true 表示当前要么已连接、要么请求已发出（等待系统回应）；返回 false
+     * 表示确实没有授权，此时唯一出路是让用户去授权。
+     */
+    fun tryRebind(force: Boolean = false): Boolean {
+        if (listenerConnected) return true
+        if (Permissions.isListenerGranted(appContext) != true) return false
+        val now = SystemClock.elapsedRealtime()
+        // 首次必须真的发出去：lastRebindAt 为 0 时不能因为「开机才几秒」被节流掉
+        if (!force && lastRebindAt != 0L && now - lastRebindAt < REBIND_MIN_INTERVAL_MS) {
+            return true
+        }
+        lastRebindAt = now
+        Permissions.requestRebind(appContext)
+        if (Probe.enabled) Probe.write("权限", "requestRebind force=$force")
+        return true
+    }
+
+    /**
+     * 只刷新「权限两项事实」，不动会话与歌词。
+     *
+     * 未连接时 [refresh] 会提前返回，快照里的权限字段就会停在旧值；诊断页因此
+     * 每秒同步一次，保证报告与实际状态一致（否则会把「已授权未绑定」显示成别的）。
+     */
+    fun syncPermissionFacts() {
+        val granted = Permissions.isListenerGranted(appContext) == true
+        if (Probe.snapshot.listenerGranted != granted ||
+            Probe.snapshot.listenerConnected != listenerConnected
+        ) {
+            Probe.snapshot = Probe.snapshot.copy(
+                listenerGranted = granted,
+                listenerConnected = listenerConnected
+            )
+        }
+    }
 
     fun onListenerConnected() {
         listenerConnected = true
@@ -131,6 +190,7 @@ class SessionHub private constructor(context: Context) {
         currentLines = emptyList()
         hitSource = null
         overlay.hide()
+        syncPermissionFacts()
     }
 
     fun onNotificationPosted(sbn: StatusBarNotification?) {
@@ -196,6 +256,10 @@ class SessionHub private constructor(context: Context) {
         }
 
         if (!listenerConnected) {
+            // 已授权却没连上，多半是进程被系统回收后重新打开的空窗期，不是没授权。
+            // 这里直接请求系统重绑，避免用户被引导去「关掉再打开一次」。
+            syncPermissionFacts()
+            tryRebind()
             overlay.hide()
             return
         }
@@ -388,6 +452,7 @@ class SessionHub private constructor(context: Context) {
     private fun publishSnapshot(active: MediaController?, title: String?, duration: Long) {
         Probe.snapshot = ProbeSnapshot(
             listenerConnected = listenerConnected,
+            listenerGranted = Permissions.isListenerGranted(appContext) == true,
             overlayGranted = Settings.canDrawOverlays(appContext),
             sessionCount = lastSessionCount,
             playingCount = lastPlayingCount,
@@ -540,6 +605,9 @@ class SessionHub private constructor(context: Context) {
 
         /** 位置落到这个值以下视为换歌／重播，不是回跳。 */
         private const val RESTART_NEAR_ZERO_MS = 2_000L
+
+        /** 两次主动重绑请求的最小间隔，避开系统对 requestRebind 的频率限制。 */
+        private const val REBIND_MIN_INTERVAL_MS = 5_000L
 
         @Volatile
         private var instance: SessionHub? = null
