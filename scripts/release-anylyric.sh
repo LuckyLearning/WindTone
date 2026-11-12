@@ -198,7 +198,16 @@ print(d.get("status"), d.get("conclusion"))
   done
 
   echo "→ 核对公共仓库 AnyLyric/latest.json ..."
+  # 只看 raw 会误判：raw 走 Fastly CDN，仓库更新后仍可能返回上一版（实测滞后几十秒甚至更久，
+  # 2026-11-12 发 0.2.3 时就报了一次假失败）。所以以 GitHub API（读的是仓库本体）为准，
+  # raw 只作为「顺便确认 CDN 也跟上了」的附加检查。
   RAW="https://raw.githubusercontent.com/$PUBLIC_SLUG/main/AnyLyric/latest.json"
+  api_manifest_version() {
+    [[ -n "$TOKEN" ]] || return 1
+    curl -s -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github.raw" \
+      "https://api.github.com/repos/$PUBLIC_SLUG/contents/AnyLyric/latest.json?ref=main" 2>/dev/null \
+      | grep -o '"version": *"[0-9.]*"' | head -1 | grep -o '[0-9][0-9.]*' || true
+  }
   for attempt in 1 2 3 4 5; do
     GOT="$(curl -fsSL "$RAW?nocache=$(date +%s)-$attempt" 2>/dev/null \
       | grep -o '"version": *"[0-9.]*"' | head -1 | grep -o '[0-9][0-9.]*' || true)"
@@ -206,7 +215,12 @@ print(d.get("status"), d.get("conclusion"))
       echo "✓ 公共仓库已更新：AnyLyric v$NEW_NAME（$RAW）"
       exit 0
     fi
-    echo "  远端仍是 ${GOT:-未知}，$((attempt * 3))s 后重查 ..."
+    IN_REPO="$(api_manifest_version || true)"
+    if [[ "$IN_REPO" == "$NEW_NAME" ]]; then
+      echo "✓ 公共仓库已更新：AnyLyric v$NEW_NAME（API 已确认；raw 侧 CDN 仍缓存 ${GOT:-旧版}，属正常滞后）"
+      exit 0
+    fi
+    echo "  raw=${GOT:-未知} 仓库=${IN_REPO:-未知}，$((attempt * 3))s 后重查 ..."
     sleep $((attempt * 3))
   done
   echo "✗ 公共仓库 latest.json 未指向 v$NEW_NAME —— 请检查 $PUBLIC_SLUG" >&2
