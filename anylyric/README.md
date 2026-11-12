@@ -83,11 +83,14 @@ MediaWatchService  (NotificationListenerService，由系统绑定，不自拉活
 
 **不需要连接电脑、不需要开发者选项、不需要 USB 调试。**
 
-自动判因按「权限 → 会话 → 通道 → 时钟 → 窗口」顺序给出第一条结论。其中三条会明确标注为**播放器侧事实**，不当成本应用故障：
+自动判因按「权限 → 会话 → 通道 → 时钟 → 窗口」顺序给出第一条结论。其中四条会明确标注为**播放器侧事实**，不当成本应用故障：
 
 - 会话数为 0：播放器未发布 MediaSession
 - 三通道全未命中：播放器未暴露任何歌词通道
 - 标题仅在暂停时更新：发布端 AVRCP 门控丢更新
+- 进度多次小幅回跳：发布端进度不自洽（**仅当歌词带时间轴时才报**；L1 逐行流按最后一行定位，与 progress 无关，不应误伤）
+
+换歌、重播、拖动进度都不计入「进度不稳」：换歌时清零并忽略落到 0 附近的位置，回退超过 5 秒视为用户拖动。
 
 ---
 
@@ -95,7 +98,7 @@ MediaWatchService  (NotificationListenerService，由系统绑定，不自拉活
 
 | 项 | 结果 |
 |---|---|
-| `:anylyric:testDebugUnitTest` | 45 项通过（LRC 解析 10、伪歌名 10、责任链 8、时钟 6、判因 11） |
+| `:anylyric:testDebugUnitTest` | 46 项通过（LRC 解析 10、伪歌名 10、责任链 8、时钟 6、判因 12） |
 | `:anylyric:lintDebug` | Error 0 |
 | `assembleRelease` | 约 102 KB，运行时依赖仅 `kotlin-stdlib` |
 | 真机 | 手机（HONOR / API 37）已验证 L1 可命中；车机 **未验证** |

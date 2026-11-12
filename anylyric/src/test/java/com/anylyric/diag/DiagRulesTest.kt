@@ -55,8 +55,22 @@ class DiagRulesTest {
 
     @Test
     fun unstablePositionIsDetected() {
-        val diagnosis = DiagRules.evaluate(ok().copy(positionJumpCount = 5))
+        val diagnosis = DiagRules.evaluate(
+            ok().copy(positionJumpCount = 5, timedLyrics = true)
+        )
         assertEquals(DiagCode.CLOCK_UNSTABLE, diagnosis.code)
+    }
+
+    /**
+     * 逐行推送的歌词按最后一行定位，与 progress 无关。
+     * 此时报 CLOCK_UNSTABLE 只会误导用户去怀疑播放器。
+     */
+    @Test
+    fun untimedLyricsIgnoresPositionJumps() {
+        val diagnosis = DiagRules.evaluate(
+            ok().copy(positionJumpCount = 9, timedLyrics = false)
+        )
+        assertEquals(DiagCode.OK, diagnosis.code)
     }
 
     @Test

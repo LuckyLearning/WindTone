@@ -134,7 +134,7 @@ object Probe {
         }
         sb.appendLine()
 
-        sb.appendLine("[CLOCK] jumps=${s.positionJumpCount} l1OnlyOnPause=${s.l1OnlyOnPause}")
+        sb.appendLine("[CLOCK] jumps=${s.positionJumpCount} timed=${s.timedLyrics} l1OnlyOnPause=${s.l1OnlyOnPause}")
         sb.appendLine("[WINDOW] attached=${s.viewAttached} measured=${s.viewMeasured} hiddenByRule=${s.hiddenByRule}")
         sb.appendLine("[RENDER] $lastRender")
         sb.appendLine("[PROCESS] cachedLogLines=${lines().size} dropped=$dropped")

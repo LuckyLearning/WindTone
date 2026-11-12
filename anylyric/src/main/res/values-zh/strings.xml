@@ -83,7 +83,7 @@
     <string name="diag_code_session_inactive">存在媒体会话但未在播放。请到那个应用里点播放。</string>
     <string name="diag_code_avrcp_gate">该播放器只在暂停时更新标题。这是发布端的 AVRCP 限制，不是 AnyLyric 的问题。</string>
     <string name="diag_code_no_channel">该播放器完全没有暴露歌词通道。AnyLyric 本身没有故障，需要另加来源才能显示歌词。</string>
-    <string name="diag_code_clock_unstable">播放器上报的进度不稳定，歌词可能漂移，原因在发布端。</string>
+    <string name="diag_code_clock_unstable">播放器上报的进度出现多次小幅回跳，带时间轴的歌词可能对不齐；原因在发布端。</string>
     <string name="diag_code_overlay_not_attached">悬浮层没有挂上。请检查悬浮窗权限后重试。</string>
     <string name="diag_code_overlay_not_measured">悬浮层已挂上但没有尺寸，多半是布局问题。</string>
     <string name="diag_code_hidden_by_rule">被显隐规则主动隐藏，例如导航在前台。</string>

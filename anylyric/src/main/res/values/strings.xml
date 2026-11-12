@@ -84,7 +84,7 @@
     <string name="diag_code_session_inactive">A media session exists but is not playing. Press play in that app.</string>
     <string name="diag_code_avrcp_gate">The player updates the title only while paused. This is a publishing-side AVRCP limitation, not an AnyLyric bug.</string>
     <string name="diag_code_no_channel">This player exposes no lyric channel at all. Nothing is wrong with AnyLyric; another source would be needed.</string>
-    <string name="diag_code_clock_unstable">The player reports an unstable playback position. Lyrics may drift; the cause is on the publishing side.</string>
+    <string name="diag_code_clock_unstable">The player reports a position that repeatedly jumps back a little. Timed lyrics may drift; the cause is on the publishing side.</string>
     <string name="diag_code_overlay_not_attached">The overlay was not attached. Check the overlay permission and try again.</string>
     <string name="diag_code_overlay_not_measured">The overlay is attached but has no size. Likely a layout problem.</string>
     <string name="diag_code_hidden_by_rule">Hidden on purpose by the visibility rule, for example when navigation is in front.</string>

@@ -15,6 +15,8 @@ data class ProbeSnapshot(
     val hitSource: String? = null,
     val l1OnlyOnPause: Boolean = false,
     val positionJumpCount: Int = 0,
+    /** 当前歌词是否带时间轴。只有带时间轴时，进度回跳才会真的让歌词对不齐。 */
+    val timedLyrics: Boolean = false,
     val viewAttached: Boolean = false,
     val viewMeasured: Boolean = false,
     val hiddenByRule: Boolean = false,
@@ -66,8 +68,10 @@ object DiagRules {
         s.hitSource == null ->
             Diagnosis(DiagCode.NO_CHANNEL, "keys=${s.metadataKeys.size}, hit=none")
 
-        s.positionJumpCount > 2 ->
-            Diagnosis(DiagCode.CLOCK_UNSTABLE, "positionJumps=${s.positionJumpCount}")
+        // 只有「带时间轴的歌词」才受进度回跳影响；L1 逐行推送按最后一行定位，
+        // 与 progress 无关，报 CLOCK_UNSTABLE 是误伤（真机第一版即如此）。
+        s.positionJumpCount > 2 && s.timedLyrics ->
+            Diagnosis(DiagCode.CLOCK_UNSTABLE, "jumps=${s.positionJumpCount}, timed=true")
 
         !s.viewAttached ->
             Diagnosis(DiagCode.OVERLAY_NOT_ATTACHED, "viewAttached=false")

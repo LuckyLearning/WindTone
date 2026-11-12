@@ -246,7 +246,7 @@ class SessionHub private constructor(context: Context) {
         val rawPosition = playbackState?.position ?: -1L
 
         clock.update(rawPosition, playbackState?.playbackSpeed ?: 1f, playState)
-        detectJump(rawPosition)
+        observePosition(rawPosition, playState)
 
         val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
         val artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
@@ -272,6 +272,9 @@ class SessionHub private constructor(context: Context) {
             titleStream.reset()
             titleOnlyOnPause = false
             lastTitleChangeAt = now
+            // 换歌必然伴随 position 归零／重置，不能计成进度不稳
+            lastPosition = 0L
+            positionJumps = 0
         }
 
         if (!title.isNullOrBlank()) {
@@ -397,6 +400,7 @@ class SessionHub private constructor(context: Context) {
             hitSource = hitSource,
             l1OnlyOnPause = titleOnlyOnPause,
             positionJumpCount = positionJumps,
+            timedLyrics = currentLines.isNotEmpty() && currentLines.all { it.timeMs != null },
             viewAttached = overlay.isAttached(),
             viewMeasured = overlay.isMeasured(),
             hiddenByRule = false,
@@ -482,14 +486,26 @@ class SessionHub private constructor(context: Context) {
         controller = null
     }
 
-    /** 位置明显倒退（>1.5s）计一次跳变，用于判因 CLOCK_UNSTABLE。 */
-    private fun detectJump(position: Long) {
+    /**
+     * 进度回跳统计，只用于判因 CLOCK_UNSTABLE。
+     *
+     * 三类回跳都**不是**「播放器不稳」，必须排除，否则换歌、重播、拖进度会把报告
+     * 刷成 CLOCK_UNSTABLE（真机第一版就出现了「有时提示不稳定」）：
+     *  · 换歌 / 重播 —— position 落到 0 附近，且换歌时已在 identity 变化处清零；
+     *  · 用户拖动进度 —— 回退幅度通常远超 5 秒；
+     *  · 暂停 / 缓冲 —— 位置本来就不推进。
+     * 剩下的小幅回跳才是发布端进度不自洽。
+     */
+    private fun observePosition(position: Long, playState: PlayState) {
         if (position < 0) return
-        if (lastPosition > 0 && position + 1_500 < lastPosition) {
-            positionJumps++
-            if (Probe.enabled) Probe.write("时钟", "position jump ${lastPosition}->$position")
-        }
+        val previous = lastPosition
         lastPosition = position
+        if (previous <= 0 || playState != PlayState.PLAYING) return
+        val backwards = previous - position
+        if (backwards <= 0 || backwards > POSITION_JITTER_MAX_MS) return
+        if (position < RESTART_NEAR_ZERO_MS) return
+        positionJumps++
+        if (Probe.enabled) Probe.write("时钟", "backward ${previous}->$position")
     }
 
     private fun capture(
@@ -518,6 +534,12 @@ class SessionHub private constructor(context: Context) {
 
         /** 标题停下多久还没歌词，就承认这个播放器没有歌词通道。 */
         private const val TITLE_WAIT_TIMEOUT_MS = 20_000L
+
+        /** 回跳幅度超过这个值视为用户拖动进度，不计入「进度不稳」。 */
+        private const val POSITION_JITTER_MAX_MS = 5_000L
+
+        /** 位置落到这个值以下视为换歌／重播，不是回跳。 */
+        private const val RESTART_NEAR_ZERO_MS = 2_000L
 
         @Volatile
         private var instance: SessionHub? = null
