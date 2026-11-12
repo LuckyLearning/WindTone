@@ -163,8 +163,9 @@ export JAVA_HOME="C:/Users/stu_l/.jdks/openjdk-21.0.2"
 
 ```
 MediaWatchService  (NotificationListenerService，由系统绑定，不自拉活)
-   └─ SessionHub          会话发现 / 选主 / 回调注册 / 通知文本采集
+   └─ SessionHub          会话发现 / 选主 / 回调注册 / 通知文本采集 / 事件合并与短路
         ├─ SessionClock        进度外推 + 行定位（二分）
+        ├─ LyricTick          定时歌词的行边界节奏（纯函数，可单测）
         ├─ TitleTimeline       伪歌名判定（变化频率 + 曲目指纹）
         ├─ LyricsSourceChain   L0 → L1 → L2，保留全部尝试记录
         └─ OverlayHost         TYPE_APPLICATION_OVERLAY，默认 FLAG_NOT_TOUCHABLE
@@ -213,7 +214,42 @@ MediaWatchService  (NotificationListenerService，由系统绑定，不自拉活
 
 拿不到的值显示 `?`，不显示 `-1` —— 后者会被当成真实数据。
 
+**工作量计数器**（本次）：报告里新增 `[WORK]` 段，日志里每分钟的 `[资源]` 行尾部带增量
+（`+refresh / +chain / +skip / +render / +tick`）。单个 `cpu=%` 分不清「事件太多」还是
+「某段代码太贵」，两个数字并排才好判：一起涨是事件量放大，只有 CPU 涨是单点开销。
+
 换歌、重播、拖动进度都不计入「进度不稳」：换歌时清零并忽略落到 0 附近的位置，回退超过 5 秒视为用户拖动。
+
+---
+
+## 性能：事件量放大（真机报告驱动的改造）
+
+第一份真机报告（HONOR / API 37，`cpu=17~21%`、`java=85MB`）里最刺眼的是这一串：
+
+```
+[通知] +265s496 pkg=com.github.metacubex.clash.meta
+[歌词] +265s498 reason=notification_other … hit=L0 lines=27
+…每秒一条，持续整首歌
+```
+
+代理类应用每秒发一条通知，而**每条通知都会跑一遍完整歌词链**（读元数据 → 解析 27 行
+歌词 → 重算诊断快照 → 推悬浮层，结果每次都一模一样）。也就是说责任链被当成了 1Hz 轮询。
+四处改动：
+
+| 改动 | 做法 | 效果 |
+|---|---|---|
+| 外来通知短路 | 非当前会话包名的通知只更新文本表；会话没换就直接返回 | 链路的触发源从「所有通知」收窄到「真正相关的通知」 |
+| 事件合并 | 同一帧内的 `state`/`metadata`/`notification` 回调并成一次刷新，按「根因 > 通知 > 元数据 > 状态」保留原因 | 一次换句连发 3~5 个回调时只算一次 |
+| 输入指纹 | 责任链只在「会话 + 元数据对象 + 标题/歌手/时长/媒体号 + 判定 + 通知文本」变化时重跑 | 渲染照旧（进度在推进），解析不再重复 |
+| L0 解析缓存 | 按「键名 + 长度 + hashCode」记住解析结果 | 同一段歌词反复问也只解析一次 |
+
+同时修掉两处会随时间恶化的开销：
+
+- **`ValueAnimator` 更新监听器只增不减**：每换一句多挂一个 update 回调，放一小时能挂上千个，
+  之后每帧被上千个 lambda 各调一次 `invalidate`。现在 `cancel()` 前先摘干净（顺序也有讲究：
+  先摘监听器再 `cancel`，否则上一轮的 `onAnimationEnd` 会把新拍的淡入快照清掉）。
+- **定时歌词不再靠别人的通知心跳**：`LyricTick` 按「下一行还有多久」排一次定时器（≤1 秒），
+  自己推进当前行。之前通知安静下来歌词就停在那句，通知一多又变成每秒全量重算 —— 两头都不对。
 
 ---
 
@@ -221,8 +257,8 @@ MediaWatchService  (NotificationListenerService，由系统绑定，不自拉活
 
 | 项 | 结果 |
 |---|---|
-| `:anylyric:testDebugUnitTest` | **106 项**通过（LRC 解析 10、伪歌名 10、责任链 8、时钟 6、判因 14、权限列表解析 7、几何 10、折行 9、样式 15、更新 8、资源采样 9） |
-| `:anylyric:lintDebug` | Error 0 |
+| `:anylyric:testDebugUnitTest` | **124 项**通过（LRC 解析 10、伪歌名 10、责任链 8、时钟 6、判因 14、权限列表解析 7、几何 10、折行 9、样式 15、更新 8、资源采样 9、行推进 tick 9、L0 缓存 6、工作量计数 3） |
+| `:anylyric:lintDebug` | Error 0（Warning 95，均为既有项） |
 | `assembleRelease` | 约 **243 KB**（含矢量图标 + 5 组密度 PNG），运行时依赖仅 `kotlin-stdlib` |
 | 真机 | 手机（HONOR / API 37）已验证 L1 可命中；车机 **未验证** |
 

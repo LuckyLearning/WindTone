@@ -220,8 +220,13 @@ class LyricRenderer(context: Context) : View(context) {
 
     private fun startFade() {
         val animator = fadeAnimator ?: ValueAnimator().also { fadeAnimator = it }
-        animator.cancel()
+        // 先摘监听器再 cancel：cancel 会同步回调上一轮的 onAnimationEnd，而那个回调会
+        // 清空 fade 快照 —— 顺序反了的话，上一轮还没放完时紧跟着换行就没有淡入了。
+        // 另外两类监听器都要清：只清 end/cancel 不清 update 的话，每换一句就多挂一个
+        // 更新回调（放一小时歌挂上千个），之后每一帧都被上千个 lambda 各调一次 invalidate。
         animator.removeAllListeners()
+        animator.removeAllUpdateListeners()
+        animator.cancel()
         animator.setFloatValues(0f, 1f)
         animator.duration = style.fadeMs.toLong()
         animator.interpolator = DecelerateInterpolator()

@@ -69,6 +69,8 @@ object Probe {
     fun clear() {
         log.clear()
         dropped = 0
+        // 计数器一起归零，否则「清空后」的第一分钟增量会算出负数
+        Perf.reset()
     }
 
     @Synchronized
@@ -149,6 +151,10 @@ object Probe {
         // 车机上「歌词卡顿/发热」这类反馈，先排除是不是本进程在涨内存或空转。
         sb.appendLine("[RESOURCE]")
         sb.appendLine(ResourceSampler.sample().detail())
+        sb.appendLine()
+
+        // 工作量紧跟在资源后面：cpu 高但工作量低 = 单点开销；两者一起高 = 事件量放大。
+        sb.appendLine("[WORK] ${Perf.oneLine()}")
         sb.appendLine()
 
         sb.appendLine("=== CONCLUSION ===")

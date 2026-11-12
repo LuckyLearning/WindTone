@@ -18,11 +18,13 @@ import com.anylyric.R
 import com.anylyric.data.ListenerState
 import com.anylyric.data.Permissions
 import com.anylyric.data.Prefs
+import com.anylyric.diag.Perf
 import com.anylyric.diag.Probe
 import com.anylyric.diag.ProbeSnapshot
 import com.anylyric.diag.ResourceSampler
 import com.anylyric.lyrics.LyricLine
 import com.anylyric.lyrics.LyricResult
+import com.anylyric.lyrics.LyricTick
 import com.anylyric.lyrics.LyricsSourceChain
 import com.anylyric.lyrics.TitleTimeline
 import com.anylyric.lyrics.TitleVerdict
@@ -97,6 +99,25 @@ class SessionHub private constructor(context: Context) {
     /** 上一次通知字段的指纹，内容没变就不重算整条链。 */
     private var lastNotificationSignature: String? = null
 
+    /**
+     * 上一次责任链的输入指纹。
+     *
+     * 责任链的产物只取决于「哪个会话 + 元数据对象 + 标题/歌手/时长/媒体号 + 判定 + 通知文本」。
+     * 这些东西都没变时，重跑一遍解析不可能得到不同结果 —— 而真机上元数据与状态回调
+     * 一秒能来好几个，全量重跑就是拿轮询冒充事件驱动。
+     */
+    private var lastInputKey: String? = null
+
+    /** 刷新合并：同一帧内的多个回调只跑一次全量刷新。 */
+    private var refreshScheduled = false
+    private var pendingReason: String? = null
+
+    /** 上一次为「外来通知」重挑会话的时刻，与播放状态相关（见 [foreignQueryInterval]）。 */
+    private var lastForeignPickAt = 0L
+
+    /** 定时歌词的自驱动 tick 是否已排上。 */
+    private var tickScheduled = false
+
     /** TITLE 最近一次变化的时刻，用于区分「还在等第一句」与「这播放器没有歌词通道」。 */
     private var lastTitleChangeAt = SystemClock.elapsedRealtime()
 
@@ -107,7 +128,7 @@ class SessionHub private constructor(context: Context) {
         Probe.setEnabled(prefs.debugEnabled)
         if (prefs.debugEnabled) startResourceTicker()
         // 菜单关闭、隐藏到期、换了输出屏幕：都需要上层重新算一遍内容再决定是否重建窗口
-        overlay.onRequestRender = { refresh("overlay_event") }
+        overlay.onRequestRender = { requestRefresh(REASON_UI) }
         overlay.onOpenSettings = {
             try {
                 appContext.startActivity(
@@ -121,11 +142,11 @@ class SessionHub private constructor(context: Context) {
     }
 
     private val callback = object : MediaController.Callback() {
-        override fun onMetadataChanged(metadata: MediaMetadata?) = refresh("metadata")
-        override fun onPlaybackStateChanged(state: PlaybackState?) = refresh("state")
+        override fun onMetadataChanged(metadata: MediaMetadata?) = requestRefresh(REASON_METADATA)
+        override fun onPlaybackStateChanged(state: PlaybackState?) = requestRefresh(REASON_STATE)
         override fun onSessionDestroyed() {
             detachController()
-            refresh("session_destroyed")
+            requestRefresh("session_destroyed")
         }
     }
 
@@ -143,13 +164,17 @@ class SessionHub private constructor(context: Context) {
         prefs.debugEnabled = value
         Probe.setEnabled(value)
         mainHandler.removeCallbacks(resourceTicker)
+        // 计数器跟着一起归零：否则「开启后的第一分钟增量」里混着开启前的事件
+        if (value) Perf.reset()
         if (value) mainHandler.postDelayed(resourceTicker, RESOURCE_FIRST_DELAY_MS)
     }
 
     private val resourceTicker = object : Runnable {
         override fun run() {
             if (!Probe.enabled) return
-            Probe.write("资源", ResourceSampler.sample().oneLine())
+            // 资源行后面挂工作量增量：单看 cpu=% 分不清是「事件太多」还是「某段代码太贵」，
+            // 两个数字并排才好判 —— 一起涨是事件量，只有 CPU 涨是单点开销。
+            Probe.write("资源", ResourceSampler.sample().oneLine() + " | " + Perf.sinceLast())
             mainHandler.postDelayed(this, RESOURCE_INTERVAL_MS)
         }
     }
@@ -234,7 +259,7 @@ class SessionHub private constructor(context: Context) {
     private val degradedTicker = object : Runnable {
         override fun run() {
             if (!degraded) return
-            refresh("degraded_tick")
+            requestRefresh("degraded_tick")
             if (degraded) mainHandler.postDelayed(this, DEGRADED_INTERVAL_MS)
         }
     }
@@ -259,7 +284,7 @@ class SessionHub private constructor(context: Context) {
         listenerConnected = true
         stopDegraded()
         if (Probe.enabled) Probe.write("权限", "listenerConnected=true")
-        refresh("listener_connected")
+        requestRefresh("listener_connected")
     }
 
     fun onListenerDisconnected() {
@@ -268,6 +293,9 @@ class SessionHub private constructor(context: Context) {
         detachController()
         currentLines = emptyList()
         hitSource = null
+        lastInputKey = null
+        lastNotificationSignature = null
+        stopLineTick()
         overlay.hide()
         syncPermissionFacts()
         // 权限还勾着却被系统解绑（内存紧张回收、系统重启服务）：再要一次绑定，
@@ -310,18 +338,43 @@ class SessionHub private constructor(context: Context) {
         lastNotificationSignature = signature
 
         val current = controller
-        refresh(
-            if (current == null || current.packageName == sbn.packageName) "notification"
-            else "notification_other"
-        )
+        if (current != null && current.packageName != sbn.packageName) {
+            // 与本应用无关的通知。**这是本应用最容易被自己拖死的一处**：
+            // 代理、应用商店这类应用每秒发一条通知，之前每条都会跑一遍全量刷新，
+            // 实测稳定吃掉 17% CPU。这里只做「会话可能变了吗」这一次判断，且节流。
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastForeignPickAt < foreignQueryInterval()) {
+                Perf.onSkip()
+                return
+            }
+            lastForeignPickAt = now
+            requestRefresh(REASON_NOTIFICATION_OTHER)
+            return
+        }
+
+        requestRefresh(REASON_NOTIFICATION)
     }
 
+    /**
+     * 外来通知触发的会话重挑间隔。
+     *
+     * 当前会话还在放时 5 秒一次就够 —— 换播放器必然先有暂停（那时立刻放开限制），
+     * 或者新播放器自己播起来，两者都会在几秒内被下一次查询看到。当前会话已经不在
+     * 播放时缩短到 1 秒：那才是「用户刚点了另一个应用」的真实场景。
+     */
+    private fun foreignQueryInterval(): Long =
+        if (lastPlayState == PlayState.PLAYING) QUERY_FOREIGN_INTERVAL_MS
+        else QUERY_FOREIGN_ACTIVE_MS
+
     fun attach() {
-        refresh("attach")
+        requestRefresh("attach")
     }
 
     fun detach() {
         mainHandler.removeCallbacksAndMessages(null)
+        refreshScheduled = false
+        pendingReason = null
+        tickScheduled = false
         degraded = false
         detachController()
         overlay.hide()
@@ -335,17 +388,55 @@ class SessionHub private constructor(context: Context) {
         if (controller != null) render()
     }
 
-    @Synchronized
-    private fun refresh(reason: String) {
+    /**
+     * 事件合并入口。
+     *
+     * 播放器换一句歌词会连发 `state` + `metadata` 两三个回调（真机上一帧内能到 5 个），
+     * 外部应用的通知又是每秒一条。每个回调都直接跑全量刷新，等于把责任链当轮询用。
+     * 这里把同一帧内的多次请求并成一次，并保留信息量最大的那个原因便于判因。
+     */
+    private fun requestRefresh(reason: String) {
         if (Looper.myLooper() != Looper.getMainLooper()) {
-            mainHandler.post { refresh(reason) }
+            mainHandler.post { requestRefresh(reason) }
             return
         }
+        pendingReason = mergeReason(pendingReason, reason)
+        if (refreshScheduled) return
+        refreshScheduled = true
+        mainHandler.post {
+            refreshScheduled = false
+            val next = pendingReason ?: reason
+            pendingReason = null
+            refreshNow(next)
+        }
+    }
+
+    /**
+     * 原因合并：换会话 / 换歌这类「根因」不能被一串 `state` 回调盖掉。
+     *
+     * 顺序按「谁更能解释这次变化」排：根因 > 本应用通知 > 元数据 > 状态 > 外来通知。
+     */
+    private fun mergeReason(current: String?, next: String): String {
+        if (current == null) return next
+        return if (rankReason(next) > rankReason(current)) next else current
+    }
+
+    private fun rankReason(reason: String): Int = when (reason) {
+        REASON_STATE, REASON_METADATA -> 1
+        REASON_NOTIFICATION_OTHER -> 0
+        REASON_NOTIFICATION -> 2
+        else -> 3
+    }
+
+    /** 全量重算：会话 → 状态 → 责任链 → 渲染。只在事件合并之后、主线程上跑。 */
+    private fun refreshNow(reason: String) {
+        Perf.onRefresh()
 
         if (!listenerConnected) {
             syncPermissionFacts()
             if (Permissions.isListenerGranted(appContext) != true) {
                 // 真的没授权：任何查询都会被系统拒绝
+                stopLineTick()
                 overlay.hide()
                 return
             }
@@ -358,13 +449,16 @@ class SessionHub private constructor(context: Context) {
             stopDegraded()
         }
 
-        // getActiveSessions 是跨进程调用：播放器每 250ms 推一次状态时若每次都查，
-        // 每句歌词要白跑 3 次 binder。这里只对「可能换应用」的路径做完整查询。
+        // getActiveSessions 是跨进程调用，且会把每个会话的元数据整包搬过来。
+        // 只有「可能换应用」的路径才值得查：无会话、通知类事件、播放状态发生跳变，
+        // 其余情况直接沿用当前控制器。
         val now = SystemClock.elapsedRealtime()
+        val cachedState = mapState(controller?.playbackState?.state ?: PlaybackState.STATE_NONE)
         val fullQuery = when {
             controller == null -> true
-            reason == "state" || reason == "metadata" -> now - lastFullQueryAt >= QUERY_MIN_INTERVAL_MS
-            reason == "notification_other" -> now - lastFullQueryAt >= QUERY_FOREIGN_INTERVAL_MS
+            reason == REASON_NOTIFICATION_OTHER -> now - lastFullQueryAt >= foreignQueryInterval()
+            reason == REASON_STATE || reason == REASON_METADATA || reason == REASON_NOTIFICATION ->
+                cachedState != lastPlayState || now - lastFullQueryAt >= QUERY_MIN_INTERVAL_MS
             else -> true
         }
         val sessions = if (fullQuery) {
@@ -379,12 +473,22 @@ class SessionHub private constructor(context: Context) {
             listOfNotNull(controller)
         }
 
+        val previousToken = controller?.sessionToken
         val next = pick(sessions)
-        if (next?.sessionToken != controller?.sessionToken) {
+        val sessionChanged = next?.sessionToken != previousToken
+        if (sessionChanged) {
             bind(next)
             if (Probe.enabled) {
                 Probe.write("会话", "bind=${next?.packageName ?: "none"} reason=$reason")
             }
+        }
+
+        // 外来通知短路：会话没换，这次通知对歌词没有任何影响。
+        // 走进下面的流程意味着重新读元数据、重解析歌词、重绘、重算诊断快照 ——
+        // 而结果必然一模一样，白白烧掉一次 CPU。
+        if (!sessionChanged && reason == REASON_NOTIFICATION_OTHER) {
+            Perf.onSkip()
+            return
         }
 
         val active = controller
@@ -393,6 +497,8 @@ class SessionHub private constructor(context: Context) {
             hitSource = null
             lastTitle = null
             lastArtist = null
+            lastInputKey = null
+            stopLineTick()
             overlay.hide()
             publishSnapshot(null, null, 0L)
             return
@@ -411,22 +517,13 @@ class SessionHub private constructor(context: Context) {
         val artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
         val duration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
         val mediaId = metadata?.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
-        // duration 与 mediaId 都可能为空，补上包名／专辑／音轨作为换歌指纹的兜底。
-        // 包名必须在内：两个应用的元数据同样稀疏时，否则会被当成同一首歌。
-        val identityExtra = buildString(40) {
-            append(active.packageName)
-            append('|')
-            append(metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM).orEmpty())
-            append('|')
-            append(metadata?.getLong(MediaMetadata.METADATA_KEY_TRACK_NUMBER) ?: 0L)
-        }
 
         if (title != lastTitle) lastTitleChangeAt = now
         lastTitle = title
         lastArtist = artist
 
         val previousVerdict = lastVerdict
-        lastVerdict = timeline.record(now, title, duration, mediaId, artist, identityExtra)
+        lastVerdict = timeline.record(now, title, duration, mediaId, artist, identityExtra(active, metadata))
         if (timeline.consumeIdentityChanged()) {
             titleStream.reset()
             titleOnlyOnPause = false
@@ -453,51 +550,90 @@ class SessionHub private constructor(context: Context) {
             )
         }
 
-        val metadataValues = textValues(metadata)
-        lastMetadataKeys = metadataValues.keys.toList()
+        // 责任链只在这些输入真的变了时才重跑。元数据用对象身份判等：播放器换了内容
+        // 必然是一个新对象（跨 binder 反序列化出来的），同一对象则内容必然相同。
+        val activeTexts = notificationTexts[active.packageName].orEmpty()
+        val inputKey = buildString(112) {
+            append(active.packageName).append('\u0001')
+            append(System.identityHashCode(metadata)).append('\u0001')
+            append(title).append('\u0001')
+            append(artist).append('\u0001')
+            append(duration).append('\u0001')
+            append(mediaId).append('\u0001')
+            append(lastVerdict.name).append('\u0001')
+            append(activeTexts.hashCode())
+        }
+        val inputsChanged = inputKey != lastInputKey
 
-        val trackContext = TrackContext(
-            packageName = active.packageName,
-            title = title,
-            artist = artist,
-            durationMs = duration,
-            mediaId = mediaId,
-            metadata = metadataValues,
-            notificationTexts = notificationTexts[active.packageName].orEmpty(),
-            pseudoTitle = lastVerdict == TitleVerdict.PSEUDO,
-            titleLine = title
-        )
+        if (inputsChanged) {
+            lastInputKey = inputKey
+            Perf.onChain()
 
-        val outcome = chain.resolve(trackContext)
-        hitSource = outcome.hit?.sourceId
-        currentLines = outcome.hit?.lines.orEmpty()
+            val metadataValues = textValues(metadata)
+            lastMetadataKeys = metadataValues.keys.toList()
 
-        Probe.attempts = outcome.attempts
-        Probe.metadataPreview = metadataValues.mapValues { preview(it.value) }
-        Probe.notificationFields = notificationTexts[active.packageName].orEmpty()
-        Probe.titleEvents = timeline.snapshot()
-        Probe.hitSource = hitSource
+            val trackContext = TrackContext(
+                packageName = active.packageName,
+                title = title,
+                artist = artist,
+                durationMs = duration,
+                mediaId = mediaId,
+                metadata = metadataValues,
+                notificationTexts = activeTexts,
+                pseudoTitle = lastVerdict == TitleVerdict.PSEUDO,
+                titleLine = title
+            )
+
+            // 实测耗时才写进日志：L0 命中时这里是「解析一整段歌词」的真实成本，
+            // 有缓存之后应当稳定在 0~1ms。数字比「感觉快了」可靠。
+            val startedAt = SystemClock.elapsedRealtimeNanos()
+            val outcome = chain.resolve(trackContext)
+            val costMs = (SystemClock.elapsedRealtimeNanos() - startedAt) / 1_000_000
+            hitSource = outcome.hit?.sourceId
+            currentLines = outcome.hit?.lines.orEmpty()
+
+            if (Probe.enabled) {
+                Probe.attempts = outcome.attempts
+                Probe.metadataPreview = metadataValues.mapValues { preview(it.value) }
+                Probe.notificationFields = activeTexts
+                Probe.titleEvents = timeline.snapshot()
+                Probe.hitSource = hitSource
+                Probe.write(
+                    "歌词",
+                    "reason=$reason verdict=$lastVerdict hit=${hitSource ?: "none"} " +
+                        "lines=${currentLines.size} buf=${titleStream.bufferedCount()} " +
+                        "cost=${costMs}ms " +
+                        "attempts=" + outcome.attempts.joinToString(",") { attempt ->
+                            when (attempt) {
+                                is LyricResult.Hit -> "${attempt.sourceId}:hit"
+                                is LyricResult.Miss -> "${attempt.sourceId}:${attempt.reason}"
+                            }
+                        }
+                )
+            }
+        }
 
         publishSnapshot(active, title, duration)
 
-        if (Probe.enabled) {
-            Probe.write(
-                "歌词",
-                "reason=$reason verdict=$lastVerdict hit=${hitSource ?: "none"} " +
-                    "lines=${currentLines.size} buf=${titleStream.bufferedCount()} " +
-                    "attempts=" + outcome.attempts.joinToString(",") { attempt ->
-                        when (attempt) {
-                            is LyricResult.Hit -> "${attempt.sourceId}:hit"
-                            is LyricResult.Miss -> "${attempt.sourceId}:${attempt.reason}"
-                        }
-                    }
-            )
-        }
-
+        // 渲染每次都走：即使输入没变，进度也在推进，当前行可能已经该换了。
+        // 这一步只是二分定位 + 一次 setText（内容没变时悬浮层内部会再挡一层），
+        // 与重跑解析完全不是一个量级。
         render()
+        scheduleLineTick()
     }
 
+    /** 换歌指纹的附加位：duration / mediaId 都缺失时，靠包名 + 专辑 + 音轨兜底。 */
+    private fun identityExtra(active: MediaController, metadata: MediaMetadata?): String =
+        buildString(40) {
+            append(active.packageName)
+            append('|')
+            append(metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM).orEmpty())
+            append('|')
+            append(metadata?.getLong(MediaMetadata.METADATA_KEY_TRACK_NUMBER) ?: 0L)
+        }
+
     private fun render() {
+        Perf.onRender()
         overlay.setPlaying(lastPlayState == PlayState.PLAYING)
 
         if (currentLines.isEmpty()) {
@@ -531,6 +667,42 @@ class SessionHub private constructor(context: Context) {
             Secondary.NONE -> null
         }
         push(currentLines[safe].text, secondary, prompt = false)
+    }
+
+    // ------------------------------------------------------------ 定时歌词的自我推进
+
+    /**
+     * 行推进定时器。
+     *
+     * 带时间轴的歌词只会在「有人问现在到哪了」时才换行。之前那个「有人」其实是别的
+     * 应用发通知 —— 通知一停，歌词就卡在某一句；而通知一来，整条责任链又被重跑一遍。
+     * 现在改成按行边界自己唤醒：间隔最长 1 秒，一次只做二分定位 + 一次 setText。
+     */
+    private val lineTicker = object : Runnable {
+        override fun run() {
+            tickScheduled = false
+            if (currentLines.isEmpty()) return
+            Perf.onTick()
+            // 只重新定位并推文本，不碰责任链：链的输入没有变化，重跑只会得到同样的行。
+            render()
+            scheduleLineTick()
+        }
+    }
+
+    private fun scheduleLineTick() {
+        if (tickScheduled) return
+        // 暂停时进度不动，行也不会换：定时器排上只会凭空唤醒。
+        // 播放恢复时一定伴随一次状态回调，那时会重新排。
+        if (lastPlayState != PlayState.PLAYING) return
+        val delay = LyricTick.nextDelayMs(currentLines, clock.position())
+        if (delay < 0) return
+        tickScheduled = true
+        mainHandler.postDelayed(lineTicker, delay)
+    }
+
+    private fun stopLineTick() {
+        mainHandler.removeCallbacks(lineTicker)
+        tickScheduled = false
     }
 
     private fun trackLabel(): String? = listOfNotNull(lastTitle, lastArtist)
@@ -596,12 +768,23 @@ class SessionHub private constructor(context: Context) {
     /**
      * 只取文本类字段。故意不解码 Bitmap：封面位图跨进程传输是车机 OOM 的常见来源，
      * 而本应用根本不需要封面。键名仍然全量保留，供探测报告展示。
+     *
+     * 两个细节是性能相关的：
+     *  · 不再用 `getString(key)` 兜底 —— 位图键会走到它，白白触发一次类型告警；
+     *  · `getText` 已经返回 String 时不再 `toString()` —— 歌词正文可能好几 KB，
+     *    每秒复制一遍就是在给 GC 添活。
      */
     private fun textValues(metadata: MediaMetadata?): Map<String, Any?> {
         if (metadata == null) return emptyMap()
-        val values = HashMap<String, Any?>(metadata.keySet().size)
-        for (key in metadata.keySet()) {
-            values[key] = metadata.getText(key)?.toString() ?: metadata.getString(key)
+        val keys = metadata.keySet()
+        val values = HashMap<String, Any?>(keys.size)
+        for (key in keys) {
+            val text = metadata.getText(key)
+            values[key] = when {
+                text == null -> null
+                text is String -> text
+                else -> text.toString()
+            }
         }
         return values
     }
@@ -651,6 +834,9 @@ class SessionHub private constructor(context: Context) {
         lastTitle = null
         currentLines = emptyList()
         hitSource = null
+        lastInputKey = null
+        lastRenderedSignature = null
+        stopLineTick()
         // 进度跳变也必须按会话重置：换应用时 position 从 89s 掉到 44s
         // 是正常的，不能计成 CLOCK_UNSTABLE。
         lastPosition = 0L
@@ -705,11 +891,26 @@ class SessionHub private constructor(context: Context) {
     }
 
     companion object {
-        /** 状态／元数据回调里，两次完整会话查询的最小间隔。 */
-        private const val QUERY_MIN_INTERVAL_MS = 1_500L
+        /** 刷新原因。用常量而不是散落的字面量：合并与限流都靠它判优先级。 */
+        private const val REASON_STATE = "state"
+        private const val REASON_METADATA = "metadata"
+        private const val REASON_NOTIFICATION = "notification"
+        private const val REASON_NOTIFICATION_OTHER = "notification_other"
+        private const val REASON_UI = "overlay_event"
 
-        /** 与本应用无关的通知（聊天、健康…）触发的查询间隔，防止刷屏设备空转。 */
+        /** 状态／元数据回调里，两次完整会话查询的最小间隔。 */
+        private const val QUERY_MIN_INTERVAL_MS = 3_000L
+
+        /** 当前会话正在播放时，外来通知触发的会话重挑间隔：防止刷屏设备空转。 */
         private const val QUERY_FOREIGN_INTERVAL_MS = 5_000L
+
+        /**
+         * 当前会话已不在播放时，外来通知触发的会话重挑间隔。
+         *
+         * 这个更短是有原因的：用户点了另一个播放器，旧会话会先暂停，然后新播放器才发通知。
+         * 5 秒的间隔会让悬浮窗有 5 秒显示着已经停掉的旧歌词。
+         */
+        private const val QUERY_FOREIGN_ACTIVE_MS = 1_000L
 
         /** 标题停下多久还没歌词，就承认这个播放器没有歌词通道。 */
         private const val TITLE_WAIT_TIMEOUT_MS = 20_000L
