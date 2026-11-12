@@ -56,6 +56,10 @@ abstract class BaseActivity : Activity() {
         textSize = 14f
         setTextColor(colorAccent)
         setPadding(dp(10), dp(8), dp(10), dp(8))
+        // 触摸目标抬到 40dp：车机上手指落点粗，纯文字高度（约 33dp）容易点偏，
+        // 「点了没反应」里有一部分其实是没点中。视觉上仍是文字按钮。
+        minHeight = dp(40)
+        gravity = Gravity.CENTER_VERTICAL
         isClickable = true
         isFocusable = true
         setOnClickListener { onClick() }

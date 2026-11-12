@@ -1,7 +1,8 @@
 package com.anylyric.ui
 
-import android.content.ActivityNotFoundException
-import android.content.ComponentName
+import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
@@ -30,8 +31,14 @@ import com.anylyric.overlay.OverlayGeometry
 import com.anylyric.overlay.OverlayStyle
 import com.anylyric.overlay.Preset
 import com.anylyric.overlay.Secondary
-import com.anylyric.service.MediaWatchService
 import com.anylyric.session.SessionHub
+import com.anylyric.update.ApkInstaller
+import com.anylyric.update.ApkProvider
+import com.anylyric.update.CheckResult
+import com.anylyric.update.FailureKind
+import com.anylyric.update.Release
+import com.anylyric.update.UpdateChecker
+import java.io.File
 
 /**
  * 唯一主界面：权限引导、当前状态、外观、位置、探测入口。
@@ -53,6 +60,23 @@ class SettingsActivity : BaseActivity() {
     private lateinit var overlayButton: TextView
     private lateinit var editButton: TextView
     private lateinit var debugSwitch: Switch
+
+    // ---------------------------------------------------------------- 更新
+    private lateinit var updateState: TextView
+    private lateinit var updateNotes: TextView
+    private lateinit var updateAction: TextView
+
+    /** 更新流程当前处在哪一步。界面与按钮文案都由它推导，避免多处各存一份状态。 */
+    private enum class UpdatePhase { IDLE, CHECKING, UP_TO_DATE, AVAILABLE, DOWNLOADING, READY, FAILED, DOWNLOAD_FAILED }
+
+    private var updatePhase = UpdatePhase.IDLE
+    private var updateMessage = ""
+
+    /** 下载线程写、主线程读 */
+    @Volatile
+    private var updateProgress = -1
+    private var updateRelease: Release? = null
+    private var updateApk: File? = null
 
     /**
      * 各分区的「刷新自己的显示」回调。
@@ -157,12 +181,14 @@ class SettingsActivity : BaseActivity() {
             )
         )
 
+        root.addView(sectionLabel(getString(R.string.section_about)))
+        root.addView(buildUpdateCard())
+
         root.addView(
-            text(getString(R.string.settings_version, versionName()), 12f, secondary = true).apply {
-                setPadding(0, dp(10), 0, dp(4))
+            text(getString(R.string.settings_about), 12f, secondary = true).apply {
+                setPadding(dp(4), dp(6), 0, dp(4))
             }
         )
-        root.addView(text(getString(R.string.settings_about), 12f, secondary = true))
 
         return ScrollView(this).apply { addView(root) }
     }
@@ -534,6 +560,236 @@ class SettingsActivity : BaseActivity() {
         }
     }
 
+    // ---------------------------------------------------------------- 关于与更新
+    //
+    // 更新源是公共分发仓库里的**静态文件**（`LuckyLearning/Release` 下的 `AnyLyric/latest.json`），
+    // 不走 GitHub API：不需要鉴权，raw 是 CDN，也不占每小时 60 次的 API 配额。
+    //
+    // 检查与下载都在工作线程跑，结果回主线程。失败一律翻译成「能照着做」的一句话，
+    // 同时写进探测报告 —— 车机上没法看 logcat，屏幕里能自证才有意义。
+    //
+    // 只有「检查更新 / 下载」会联网。歌词链路仍然不联网、不读文件，这是一期就定死的边界。
+
+    private fun buildUpdateCard(): View {
+        updateState = text("", 13f, secondary = true).apply { setPadding(0, dp(6), 0, dp(2)) }
+        updateNotes = text("", 12f, secondary = true).apply {
+            setPadding(0, dp(8), 0, dp(2))
+            visibility = View.GONE
+        }
+        updateAction = textButton(getString(R.string.update_check)) { onUpdateAction() }
+
+        val rows = ArrayList<View>(6)
+        rows += text(
+            getString(R.string.update_version_line, versionName(), versionCode()),
+            14f,
+            bold = true
+        )
+        rows += updateState
+        rows += updateNotes
+        rows += spacer(2)
+        rows += row(
+            updateAction,
+            textButton(getString(R.string.update_open_page)) { openReleasePage() }
+        )
+
+        renderUpdate()
+        return card(rows)
+    }
+
+    private fun onUpdateAction() {
+        when (updatePhase) {
+            UpdatePhase.AVAILABLE -> startDownload()
+            UpdatePhase.READY -> installDownloaded()
+            UpdatePhase.CHECKING -> toast(getString(R.string.update_checking))
+            UpdatePhase.DOWNLOADING -> toast(getString(R.string.update_downloading_unknown))
+            else -> startCheck()
+        }
+    }
+
+    private fun startCheck() {
+        updatePhase = UpdatePhase.CHECKING
+        updateMessage = ""
+        updateProgress = -1
+        updateRelease = null
+        updateApk = null
+        renderUpdate()
+
+        val currentName = versionName()
+        val currentCode = versionCode()
+        Thread({
+            val result = UpdateChecker.check(currentName, currentCode)
+            pollHandler.post {
+                if (isFinishing || isDestroyed) return@post
+                applyCheckResult(result)
+            }
+        }, "anylyric-update-check").start()
+    }
+
+    private fun applyCheckResult(result: CheckResult) {
+        when (result) {
+            is CheckResult.Available -> {
+                updateRelease = result.release
+                updatePhase = UpdatePhase.AVAILABLE
+                updateMessage = ""
+                Probe.write(
+                    "更新",
+                    "发现新版本 ${result.release.version}（code ${result.release.versionCode}，" +
+                        "${result.release.apkName}）"
+                )
+            }
+
+            is CheckResult.UpToDate -> {
+                updatePhase = UpdatePhase.UP_TO_DATE
+                updateMessage = result.latestVersion
+                Probe.write("更新", "已是最新（${result.latestVersion}）")
+            }
+
+            is CheckResult.Failed -> {
+                updatePhase = UpdatePhase.FAILED
+                updateMessage = failureText(result.kind, result.httpCode)
+                Probe.write("更新", "检查失败 ${result.kind} ${result.httpCode} ${result.detail}")
+            }
+        }
+        renderUpdate()
+    }
+
+    private fun startDownload() {
+        val release = updateRelease ?: return
+        updatePhase = UpdatePhase.DOWNLOADING
+        updateProgress = 0
+        renderUpdate()
+
+        val dir = ApkProvider.dir(this)
+        Thread({
+            try {
+                val apk = UpdateChecker.download(release, dir) { done, total ->
+                    val percent = if (total > 0) ((done * 100) / total).toInt() else -1
+                    // 只在百分比变化时回主线程，别为了几个字节刷爆消息队列
+                    if (percent != updateProgress) {
+                        updateProgress = percent
+                        pollHandler.post { if (!isFinishing && !isDestroyed) renderUpdate() }
+                    }
+                }
+                pollHandler.post {
+                    if (isFinishing || isDestroyed) return@post
+                    updateApk = apk
+                    updatePhase = UpdatePhase.READY
+                    Probe.write("更新", "下载完成 ${apk.name}（${apk.length()} 字节，大小与摘要已校验）")
+                    renderUpdate()
+                    installDownloaded()
+                }
+            } catch (t: Throwable) {
+                val kind = (t as? com.anylyric.update.UpdateException)?.kind ?: FailureKind.NETWORK
+                pollHandler.post {
+                    if (isFinishing || isDestroyed) return@post
+                    updatePhase = UpdatePhase.DOWNLOAD_FAILED
+                    updateMessage = failureText(kind, 0)
+                    Probe.write("更新", "下载失败 $kind ${t.message}")
+                    renderUpdate()
+                }
+            }
+        }, "anylyric-update-download").start()
+    }
+
+    /**
+     * 拉起系统安装器。
+     *
+     * 「安装未知应用」是 Android 8 起必须由用户手动开一次的独立开关，
+     * 没开时系统会静默拒掉安装 —— 所以先查、先把用户送到授权页，不要等他点完再失败。
+     */
+    private fun installDownloaded() {
+        val apk = updateApk ?: return
+        if (!ApkInstaller.canInstall(this)) {
+            toast(getString(R.string.update_allow_install))
+            try {
+                startActivity(ApkInstaller.unknownSourcesIntent(this))
+            } catch (t: Throwable) {
+                Probe.write("更新", "打不开「安装未知应用」页 ${t.javaClass.simpleName}")
+            }
+            return
+        }
+        ApkInstaller.install(this, apk).onFailure { t ->
+            Probe.write("更新", "拉起安装器失败 ${t.javaClass.simpleName} ${t.message}")
+            toast(getString(R.string.update_install_failed, t.javaClass.simpleName))
+        }
+    }
+
+    private fun openReleasePage() {
+        val url = UpdateChecker.releasePageUrl
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        } catch (t: Throwable) {
+            // 车机常没有浏览器：那就把地址复制到剪贴板，用户至少能带走
+            Probe.write("更新", "打不开发布页 ${t.javaClass.simpleName}")
+            copyToClipboard(url)
+        }
+    }
+
+    private fun renderUpdate() {
+        if (!::updateState.isInitialized) return
+
+        val notes = updateRelease?.notes.orEmpty()
+        updateNotes.visibility = if (notes.isNotBlank()) View.VISIBLE else View.GONE
+        updateNotes.text = notes
+
+        updateState.text = when (updatePhase) {
+            UpdatePhase.IDLE -> getString(R.string.update_check)
+            UpdatePhase.CHECKING -> getString(R.string.update_checking)
+            UpdatePhase.UP_TO_DATE -> getString(R.string.update_up_to_date, updateMessage)
+            UpdatePhase.AVAILABLE ->
+                getString(R.string.update_available, updateRelease?.version.orEmpty())
+
+            UpdatePhase.DOWNLOADING ->
+                if (updateProgress >= 0) getString(R.string.update_downloading, updateProgress)
+                else getString(R.string.update_downloading_unknown)
+
+            UpdatePhase.READY ->
+                getString(
+                    R.string.update_install_ready,
+                    UpdateChecker.formatSize(updateApk?.length() ?: 0L)
+                )
+
+            UpdatePhase.FAILED -> getString(R.string.update_check_failed, updateMessage)
+            UpdatePhase.DOWNLOAD_FAILED -> getString(R.string.update_download_failed, updateMessage)
+        }
+        updateState.setTextColor(
+            when (updatePhase) {
+                UpdatePhase.UP_TO_DATE, UpdatePhase.READY -> colorOk
+                UpdatePhase.AVAILABLE -> colorAccent
+                UpdatePhase.FAILED, UpdatePhase.DOWNLOAD_FAILED -> colorBad
+                else -> colorSecondaryText
+            }
+        )
+
+        val busy = updatePhase == UpdatePhase.CHECKING || updatePhase == UpdatePhase.DOWNLOADING
+        updateAction.text = getString(
+            when (updatePhase) {
+                UpdatePhase.AVAILABLE -> R.string.update_download
+                UpdatePhase.READY -> R.string.update_install
+                UpdatePhase.CHECKING -> R.string.update_checking
+                UpdatePhase.DOWNLOADING -> R.string.update_downloading_unknown
+                else -> R.string.update_check
+            }
+        )
+        updateAction.isEnabled = !busy
+        updateAction.alpha = if (busy) 0.45f else 1f
+    }
+
+    /** 失败类别 → 用户能看懂的一句话。 */
+    private fun failureText(kind: FailureKind, httpCode: Int): String = when (kind) {
+        FailureKind.DNS -> getString(R.string.update_reason_dns)
+        FailureKind.TIMEOUT -> getString(R.string.update_reason_timeout)
+        FailureKind.HTTP ->
+            if (httpCode > 0) getString(R.string.update_reason_http, httpCode)
+            else getString(R.string.update_reason_network)
+
+        FailureKind.NOT_FOUND -> getString(R.string.update_reason_not_found)
+        FailureKind.BAD_MANIFEST -> getString(R.string.update_reason_bad_manifest)
+        FailureKind.NO_APK -> getString(R.string.update_reason_no_apk)
+        FailureKind.VERIFY -> getString(R.string.update_reason_verify)
+        FailureKind.NETWORK -> getString(R.string.update_reason_network)
+    }
+
     // ---------------------------------------------------------------- 状态刷新
 
     private fun refresh() {
@@ -593,6 +849,7 @@ class SettingsActivity : BaseActivity() {
         )
 
         uiRefreshers.forEach { it() }
+        renderUpdate()
         editButton.text = getString(
             if (hub.overlay().isEditable()) R.string.display_edit_exit
             else R.string.display_edit
@@ -700,43 +957,119 @@ class SettingsActivity : BaseActivity() {
     private fun isLandscape(): Boolean =
         resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
+    // ---------------------------------------------------------------- 打开系统设置
+    //
+    // 2026-11-12 真机反馈：「去开启」和「系统设置」两个按钮点了都没反应。
+    // 根因链有两层，第二层才是真凶：
+    //   ① 老写法 tryStart 把异常全吞成 false，失败原因当场就丢了；
+    //   ② 5f2d207 为了「少让用户翻列表」，把
+    //      Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS 排到了第一位。
+    //      这台荣耀设备上该 action **有注册的 Activity，但页面打不开**，而且
+    //      startActivity 既不抛异常也不返回失败 —— 代码认为成功就 return，
+    //      永远走不到后面的列表页。首版用的是列表页，所以一直是好的。
+    //      「什么都没打开」且不弹失败说明，正是这个静默失败的样子。
+    //   ⇒ **不要再让 DETAIL 页排第一**：它失败得太安静，既检测不到也没法兜底。
+    //
+    // 现在：
+    //  · 列表页（首版验证可用）永远排第一，后面才是应用详情页与设置首页；
+    //  · 点击先给一句 toast —— 让用户能区分「点击没生效」和「跳转被拒」；
+    //  · 全部抛异常才弹对话框，逐条列出真实原因，可一键复制；
+    //  · 对话框里直接写出该设备的**手工路径**。
+    // 仍然不依赖 adb：失败原因就显示在这块屏幕上。
+
     private fun openNotificationSettings() {
-        val detail = Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS).apply {
-            putExtra(
-                Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
-                ComponentName(this@SettingsActivity, MediaWatchService::class.java)
-            )
-        }
-        if (tryStart(detail)) return
-        if (tryStart(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))) return
-        if (tryStart(Intent(Settings.ACTION_SETTINGS))) return
-        toast(getString(R.string.perm_required_hint))
+        openSystemSettings(
+            candidates = listOf(
+                "通知使用权列表" to Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS),
+                "应用详情页" to appDetailsIntent(),
+                "设置首页" to Intent(Settings.ACTION_SETTINGS)
+            ),
+            manualHint = getString(R.string.perm_notification_manual)
+        )
     }
 
     private fun openOverlaySettings() {
-        val direct = Intent(
-            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-            Uri.parse("package:$packageName")
+        openSystemSettings(
+            candidates = listOf(
+                "悬浮窗权限页" to Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName")
+                ),
+                "特殊应用权限列表" to Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION),
+                "应用详情页" to appDetailsIntent(),
+                "设置首页" to Intent(Settings.ACTION_SETTINGS)
+            ),
+            manualHint = getString(R.string.perm_overlay_manual)
         )
-        if (tryStart(direct)) return
-        if (tryStart(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))) return
-        if (tryStart(Intent(Settings.ACTION_SETTINGS))) return
-        toast(getString(R.string.perm_required_hint))
     }
 
-    private fun tryStart(intent: Intent): Boolean = try {
-        startActivity(intent)
-        true
-    } catch (_: ActivityNotFoundException) {
-        false
-    } catch (_: Throwable) {
-        false
+    private fun appDetailsIntent(): Intent =
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+
+    /**
+     * 逐个尝试候选设置页；全部抛异常时把失败明细摆到用户面前。
+     *
+     * 两条经验写在这里，避免以后又"优化"回去：
+     *  · **不用** resolveActivity 做前置门禁：包可见性、ROM 裁剪、动态组件都会让它
+     *    与真实结果不一致，唯一可判的是 startActivity 有没有抛异常。
+     *  · **startActivity 不抛异常也不代表页面真能打开**（DETAIL 页就是这么坑的），
+     *    所以候选顺序只按真机实测结果排，不按"理论上体验更好"排。
+     */
+    private fun openSystemSettings(
+        candidates: List<Pair<String, Intent>>,
+        manualHint: String
+    ) {
+        toast(getString(R.string.perm_opening_settings))
+        val failures = StringBuilder()
+        for ((label, intent) in candidates) {
+            try {
+                startActivity(intent)
+                Probe.write("设置跳转", "$label 已启动（${intent.action}）")
+                return
+            } catch (t: Throwable) {
+                val reason = t.javaClass.simpleName + (t.message?.let { "：$it" } ?: "")
+                failures.append("· ").append(label).append(" → ").append(reason).append('\n')
+                Probe.write("设置跳转", "$label 失败 $reason")
+            }
+        }
+
+        val detail = failures.toString().trim().ifBlank { getString(R.string.perm_open_failed_none) }
+        val body = getString(R.string.perm_open_failed_body, manualHint, detail)
+        Probe.write("设置跳转", "全部候选失败，改为屏幕内说明")
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.perm_open_failed_title))
+            .setMessage(body)
+            .setPositiveButton(android.R.string.ok, null)
+            .setNeutralButton(getString(R.string.perm_copy_detail)) { _, _ ->
+                copyToClipboard(body)
+            }
+            .show()
+    }
+
+    private fun copyToClipboard(value: String) {
+        try {
+            val cm = getSystemService(ClipboardManager::class.java)
+            cm?.setPrimaryClip(
+                ClipData.newPlainText(getString(R.string.perm_copy_label), value)
+            )
+            toast(getString(R.string.perm_copied))
+        } catch (t: Throwable) {
+            Probe.write("设置跳转", "复制失败 ${t.javaClass.simpleName}")
+            toast(getString(R.string.perm_copy_failed))
+        }
     }
 
     private fun versionName(): String = try {
         packageManager.getPackageInfo(packageName, 0).versionName ?: "-"
     } catch (_: Throwable) {
         "-"
+    }
+
+    /** 安装包的 versionCode。更新判断以它为准，避免只看版本名带来的「看不见较低版本」死角。 */
+    private fun versionCode(): Int = try {
+        packageManager.getPackageInfo(packageName, 0).longVersionCode.toInt()
+    } catch (_: Throwable) {
+        0
     }
 
     companion object {

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  AnyLyric 图标背景层。
+  与 WindTone 的 #5B4BE0 同一紫色家族，但压暗并做成斜向渐变，
+  两个图标并排时像同一套设计语言，又不会认错。
+  右上角叠一层柔光，避免大面积纯色在车机屏幕上显得发闷。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path android:pathData="M0,0 h108 v108 h-108 z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="0"
+                android:startY="0"
+                android:endX="108"
+                android:endY="108"
+                android:startColor="#FF6E5BFF"
+                android:endColor="#FF2A1C6E" />
+        </aapt:attr>
+    </path>
+
+    <path android:pathData="M0,0 h108 v108 h-108 z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="84"
+                android:centerY="20"
+                android:gradientRadius="62"
+                android:startColor="#3DFFFFFF"
+                android:endColor="#00FFFFFF" />
+        </aapt:attr>
+    </path>
+</vector>

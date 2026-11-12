@@ -14,12 +14,21 @@
 #        notes.md
 #        checksums.txt
 #      v1.1.29/ …
+#    AnyLyric/                ← 同一个脚本发布多个软件，靠 APP_DIR 区分
+#      latest.json
+#      v0.1.0/
+#        AnyLyric-v0.1.0.apk
 #
-#  由 .github/workflows/android-release.yml 在打 tag 时调用；
+#  由 .github/workflows/android-release.yml（APP_DIR=WindTone）与
+#  .github/workflows/anylyric-release.yml（APP_DIR=AnyLyric）在打 tag 时调用；
 #  本地也能手动跑（需要环境变量 RELEASE_REPO_TOKEN）。
 #
+#  ⚠️ 公共仓库每次都是「孤立提交 + force push 覆盖」，两条流水线并发会互相吞掉
+#  对方的版本目录。所以两个 workflow 的发布 job 共用 concurrency group
+#  `public-release-repo`（cancel-in-progress: false）串行执行。
+#
 #  用法：
-#    VERSION=1.1.30 CODE=40 NOTES_PATH=/tmp/body.md DIST_DIR=dist \
+#    VERSION=1.1.30 CODE=40 NOTES_PATH=/tmp/body.md DIST_DIR=dist MIN_SDK=24 \
 #    RELEASE_REPO_TOKEN=github_pat_xxx bash scripts/publish-release-repo.sh
 # ===================================================================
 set -euo pipefail
@@ -32,6 +41,7 @@ NOTES_PATH="${NOTES_PATH:?缺少 NOTES_PATH（Release 说明文件）}"
 DIST_DIR="${DIST_DIR:-$ROOT/dist}"
 PUBLIC_SLUG="${PUBLIC_SLUG:-LuckyLearning/Release}"
 APP_DIR="${APP_DIR:-WindTone}"
+MIN_SDK="${MIN_SDK:-24}"
 KEEP="${KEEP:-5}"
 TOKEN="${RELEASE_REPO_TOKEN:-}"
 
@@ -88,13 +98,14 @@ python3 "$ROOT/scripts/gen-release-manifest.py" \
   --version "$VERSION" \
   --code "$CODE" \
   --tag "v$VERSION" \
+  --min-sdk "$MIN_SDK" \
   --published "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --notes "$NOTES_PATH"
 
 # 公共仓库只做「当前 5 个版本的快照」，不让历史二进制一直堆在 git 里：
 # 每次用一个孤立提交覆盖 main（force push），仓库体积恒定在 ~5 个版本。
 cd "$REPO"
-git config user.name "WindTone Release Bot"
+git config user.name "$APP_DIR Release Bot"
 git config user.email "release-bot@users.noreply.github.com"
 git checkout -q --orphan snapshot
 git add -A

@@ -26,6 +26,11 @@ concurrency:
 jobs:
   release:
     name: Build & Release
+    # 公共仓库是「孤立提交 + force push 快照」的写入方式，与 AnyLyric 发布 job 并发会互相覆盖。
+    # 两个 workflow 共用这个 group，保证同一时刻只有一个在写公共仓库。
+    concurrency:
+      group: public-release-repo
+      cancel-in-progress: false
     # 固定镜像：ubuntu-latest 将于 2026-10-19 迁移到 Ubuntu 26，避免构建环境被静默替换
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -230,6 +235,8 @@ jobs:
           CODE: ${{ steps.ver.outputs.code }}
           NOTES_PATH: ${{ steps.notes.outputs.path }}
           DIST_DIR: dist
+          # latest.json 里要写对最低系统版本（WindTone 24 / AnyLyric 31）
+          MIN_SDK: '24'
         run: |
           if [ -z "$RELEASE_REPO_TOKEN" ]; then
             echo "::error::未配置 secret RELEASE_REPO_TOKEN —— 公共仓库没有本次版本，应用内更新会停在旧版本"

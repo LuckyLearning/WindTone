@@ -2,7 +2,7 @@
 
 WindTone 的轻量分支：旁听车机上任意播放器**已经发布**的媒体会话，把播放器自己暴露的歌词画到悬浮层。
 
-**它不是播放器** —— 不播放声音、不申请音频焦点、不控制播放、不读文件、不联网。
+**它不是播放器** —— 不播放声音、不申请音频焦点、不控制播放、不读文件。网络**只**用于应用内更新。
 
 - 包名：`com.anylyric`（与 `:app` 不同，可同机共存）
 - 平台：Android 12+（`minSdk = 31`）
@@ -20,7 +20,8 @@ WindTone 的轻量分支：旁听车机上任意播放器**已经发布**的媒�
 | L1 | `TITLE` 逐行推送 | 曲目指纹（包名 / duration / mediaId / artist / 专辑 / 音轨）不变而 `TITLE` 在 8 秒内变化 ≥2 次 → 判定「伪歌名」，切逐行模式 |
 | L2 | 媒体通知文本 | 含 LRC 特征则解析；或多行正文且已判定伪歌名时作为逐行流 |
 
-**不实现**：L3 本地 `.lrc`、L4 在线／无障碍。二者只在 `LyricsSource` 接口上预留挂载点，**不写实现、不申请存储与网络权限**。
+**不实现**：L3 本地 `.lrc`、L4 在线／无障碍。二者只在 `LyricsSource` 接口上预留挂载点，**不写实现**。
+`INTERNET` 权限只给「检查更新」用，歌词链路始终不联网、不读本地文件。
 
 因此多数普通播放器会显示「暂无歌词」——这是**一期预期结果，不是缺陷**。一期验收标准是通道探测报告，不是歌词覆盖率。
 
@@ -98,6 +99,30 @@ context 弹 Dialog 会 `BadTokenException`。
 
 ---
 
+## 应用内更新（v0.2.0）
+
+更新读**公共分发仓库的静态文件**，不碰 GitHub API（无需鉴权，raw 还是 CDN，不占 API 配额）：
+
+```
+https://raw.githubusercontent.com/LuckyLearning/Release/main/AnyLyric/latest.json
+…/AnyLyric/v0.2.0/AnyLyric-v0.2.0.apk
+```
+
+- **按 `versionCode` 判断新旧**，清单缺 `versionCode` 才退回版本名比较 —— 只比版本名会有
+  「装过更高版本名、看不到较低版本」的死角；
+- 线路 `fastly.jsdelivr → gcore.jsdelivr → gh-proxy → 官方 raw` 依次尝试；某条返回坏数据
+  （镜像错误页、半截 JSON）继续试下一条，不把「代理坏了」当成本软件的结论；
+- 下载后三层校验：长度下限 + `PK` 头、清单声明的大小、SHA-256。镜像线路越多越需要摘要这层；
+- 安装包经自带的 `ApkProvider`（`content://<applicationId>.apkfiles/…`）交给系统安装器，
+  **不引 AndroidX**（FileProvider 在 androidx.core 里，为一个功能引整库不划算）；
+  同时带 `FLAG_GRANT_READ_URI_PERMISSION` 与 `clipData`，否则部分 ROM 的安装器读不到文件；
+- 「安装未知应用」没开时先把用户送到授权页，而不是等他点完再失败；
+- 失败一律在**设置页里**显示成人话并写进探测报告 `[更新]` 段 —— 车机上不看 adb 也能自查。
+
+检查与下载都在工作线程，结果回主线程；进度只在百分比变化时刷界面。
+
+---
+
 ## 构建
 
 ```bash
@@ -110,7 +135,7 @@ export JAVA_HOME="C:/Users/stu_l/.jdks/openjdk-21.0.2"
 ./gradlew :anylyric:lintDebug
 ```
 
-产物：`anylyric/build/outputs/apk/release/AnyLyric-v<版本>.apk`（release 约 100 KB）。
+产物：`anylyric/build/outputs/apk/release/AnyLyric-v<版本>.apk`（release 约 180 KB）。
 
 ---
 

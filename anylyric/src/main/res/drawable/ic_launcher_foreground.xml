@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  前景层 = 三行歌词。第一行用青色高亮，表示「正在唱的这一句」，
+  后两行按实际歌词排版做长度递减，避免看起来像普通的列表图标。
+
+  几何：所有顶点都落在自适应图标的安全圆内（中心 54,54、半径 33），
+  这样被裁成圆形 / 圆角方形 / 圆角矩形时都不会切到线条。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 第一行：当前歌词（青色渐变，最长） -->
+    <path
+        android:pathData="M32,34 h44 a4,4 0 0 1 4,4 a4,4 0 0 1 -4,4 h-44 a4,4 0 0 1 -4,-4 a4,4 0 0 1 4,-4 z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="28"
+                android:startY="38"
+                android:endX="80"
+                android:endY="38"
+                android:startColor="#FF7BF5DC"
+                android:endColor="#FF32D8BD" />
+        </aapt:attr>
+    </path>
+
+    <!-- 第二行：下一句（近白） -->
+    <path
+        android:fillColor="#D1FFFFFF"
+        android:pathData="M32,48 h44 a4,4 0 0 1 4,4 a4,4 0 0 1 -4,4 h-44 a4,4 0 0 1 -4,-4 a4,4 0 0 1 4,-4 z" />
+
+    <!-- 第三行：再下一句，短一截（半透明白） -->
+    <path
+        android:fillColor="#78FFFFFF"
+        android:pathData="M32,62 h24 a4,4 0 0 1 4,4 a4,4 0 0 1 -4,4 h-24 a4,4 0 0 1 -4,-4 a4,4 0 0 1 4,-4 z" />
+</vector>

@@ -6,7 +6,7 @@
 用法：
   python3 scripts/gen-release-manifest.py \
       --root build/publish/Release --app-dir WindTone \
-      --version 1.1.30 --code 40 --tag v1.1.30 \
+      --version 1.1.30 --code 40 --tag v1.1.30 --min-sdk 24 \
       --published 2026-10-19T04:10:00Z --notes /tmp/notes.md
 """
 import argparse
@@ -22,6 +22,7 @@ ABI_ORDER = ["arm64-v8a", "armeabi-v7a", "x86_64", "x86", "universal"]
 # 新增软件时只在这里加一行，其它全由脚本推导。
 APP_DISPLAY = {
     "WindTone": ("听风 WindTone", "Android 本地音乐播放器"),
+    "AnyLyric": ("AnyLyric", "车机歌词悬浮窗（旁听媒体会话）"),
 }
 
 
@@ -49,6 +50,8 @@ def main():
     ap.add_argument("--tag", required=True)
     ap.add_argument("--published", required=True)
     ap.add_argument("--notes", required=True)
+    # 不同软件的最低系统版本不同（WindTone 24 / AnyLyric 31），必须由调用方给出
+    ap.add_argument("--min-sdk", type=int, default=24)
     args = ap.parse_args()
 
     app_root = os.path.join(args.root, args.app_dir)
@@ -86,7 +89,7 @@ def main():
         "versionCode": int(args.code),
         "tag": args.tag,
         "publishedAt": args.published,
-        "minSdk": 24,
+        "minSdk": args.min_sdk,
         "notes": notes,
         "assets": assets,
     }
@@ -129,7 +132,7 @@ Release/
 
 ## 下载
 
-每个版本目录下按 CPU 架构分 4 个包：
+每个版本目录下按 CPU 架构分 4 个包（轻量应用如 `AnyLyric` 只有一个通用包，不分架构）：
 
 | 安装包 | 适用设备 |
 |---|---|

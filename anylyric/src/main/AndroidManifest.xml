@@ -2,14 +2,45 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!--
-      只申请两项权限：悬浮窗 + 通知使用权（后者是 service 上的 BIND 权限，
-      在系统「通知使用权」列表里授权，不是 uses-permission）。
-      一期不申请存储、网络、无障碍、蓝牙 —— 因为不读文件、不联网、不抓界面。
+      权限只有四项，各自都有明确用途：
+      · SYSTEM_ALERT_WINDOW —— 悬浮窗本体；
+      · 通知使用权 —— service 上的 BIND 权限，在系统「通知使用权」列表里授权，不是 uses-permission；
+      · INTERNET —— **只用于应用内更新**（读公共仓库的 latest.json、下载安装包）。
+        歌词仍然不联网、不读本地文件，这是产品一期就定死的边界；
+      · REQUEST_INSTALL_PACKAGES —— 下载完新版本后拉起系统安装器。
+      不申请存储、无障碍、蓝牙、读取日志等任何其它权限。
     -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!--
+      Android 11+ 的包可见性：不声明这些 action，resolveActivity()/queryIntentActivities()
+      对系统设置页一律返回 null，连「到底有没有这个页面」都判断不出来。
+      只声明需要用到的几个，不申请宽泛可见性。
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.settings.NOTIFICATION_LISTENER_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.NOTIFICATION_LISTENER_DETAIL_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.action.MANAGE_OVERLAY_PERMISSION" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.APPLICATION_DETAILS_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.SETTINGS" />
+        </intent>
+    </queries>
 
     <application
         android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.AnyLyric">
@@ -28,6 +59,18 @@
             android:name=".ui.DiagActivity"
             android:exported="false"
             android:label="@string/diag_title" />
+
+        <!--
+          给系统安装器发安装包 URI。exported=false + grantUriPermissions=true：
+          只有本应用显式授权的那个 URI 可读，目录内其它文件不暴露。
+          authorities 用 ${applicationId} 而不是写死 —— debug 包带 .debug 后缀，
+          写死会和正式包撞车，导致第二个包装不上。
+        -->
+        <provider
+            android:name=".update.ApkProvider"
+            android:authorities="${applicationId}.apkfiles"
+            android:exported="false"
+            android:grantUriPermissions="true" />
 
         <!--
           exported 必须为 true 且带 BIND_NOTIFICATION_LISTENER_SERVICE 权限：

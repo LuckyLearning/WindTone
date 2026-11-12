@@ -14,10 +14,12 @@ plugins {
 
 /**
  * AnyLyric 自己的版本号。
- * 与 WindTone 的 1.2.x 主版本线**互不干涉**；首发版本待用户主动要求发版时再定。
+ * 与 WindTone 的 1.2.x 主线**互不干涉**，只递增第三位（0.2.x）。
+ * 首个公开发布 0.2.0：外观/定位重做、应用内更新都在这一版；车上那批测试包是 0.1.0，
+ * 留出版本差，好让「检查更新 → 下载并安装」这条链路能当场验证。
  */
-val anyLyricVersionName = "0.1.0"
-val anyLyricVersionCode = 1
+val anyLyricVersionName = "0.2.0"
+val anyLyricVersionCode = 2
 
 /**
  * 签名沿用 WindTone 的同一套密钥（同一开发者、同一分发渠道）。
@@ -140,4 +142,7 @@ androidComponents {
 dependencies {
     // 运行时不引任何第三方库 —— 见文件头约束。
     testImplementation(libs.junit)
+    // 仅测试用：JVM 单测跑的是 android.jar 的空壳，org.json 在 isReturnDefaultValues 下
+    // 只会返回默认值，清单解析就断言不了。引一份真实实现只进测试 classpath，不进 APK。
+    testImplementation("org.json:json:20240303")
 }
