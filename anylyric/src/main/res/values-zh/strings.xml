@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AnyLyric</string>
+
+    <string name="settings_subtitle">显示车机上「正在播放的那个播放器」自己暴露的歌词。不播放声音、不控制播放、不读任何文件。</string>
+
+    <string name="section_status">状态</string>
+    <string name="section_permissions">权限</string>
+    <string name="section_display">显示</string>
+    <string name="section_probe">通道探测</string>
+
+    <string name="perm_notification_title">通知使用权</string>
+    <string name="perm_notification_desc">必需。让 AnyLyric 读取「已经在播放」的那个播放器的媒体会话。</string>
+    <string name="perm_overlay_title">显示在其他应用上层</string>
+    <string name="perm_overlay_desc">必需。只用于绘制歌词悬浮层。</string>
+    <string name="perm_granted">已授予</string>
+    <string name="perm_missing">未授予</string>
+    <string name="perm_open">去开启</string>
+
+    <string name="status_listener_connected">通知使用权已连接</string>
+    <string name="status_listener_disconnected">通知使用权已断开，歌词暂不可用</string>
+    <string name="status_no_session">当前没有正在播放的应用</string>
+    <string name="status_session">正在播放：%1$s — %2$s</string>
+    <string name="status_channel">通道：%1$s</string>
+
+    <string name="channel_none">无</string>
+    <string name="channel_l0">L0 元数据键</string>
+    <string name="channel_l1">L1 逐行标题流</string>
+    <string name="channel_l2">L2 通知文本</string>
+
+    <string name="display_font_size">字号</string>
+    <string name="display_lines">行数</string>
+    <string name="display_position">位置</string>
+    <string name="display_edit">进入编辑态</string>
+    <string name="display_edit_hint">拖动移动，双击锁定，长按关闭。</string>
+    <string name="display_reset">恢复默认</string>
+    <string name="display_smaller">更小</string>
+    <string name="display_larger">更大</string>
+
+    <string name="diag_title">通道探测</string>
+    <string name="diag_debug_toggle">调试日志</string>
+    <string name="diag_debug_hint">关闭时不采集、不分配。打开后记录每个播放器到底暴露了什么。</string>
+    <string name="diag_open">查看探测报告</string>
+    <string name="diag_conclusion">结论</string>
+    <string name="diag_evidence">证据</string>
+    <string name="diag_next_step">下一步</string>
+    <string name="diag_share">分享</string>
+    <string name="diag_copy">复制</string>
+    <string name="diag_save">保存到本机</string>
+    <string name="diag_clear">清空</string>
+    <string name="diag_empty">打开调试日志，然后在别的应用里放一首歌。</string>
+    <string name="diag_saved">已保存到下载目录：%1$s</string>
+    <string name="diag_save_failed">报告保存失败。</string>
+    <string name="diag_copied">报告已复制。</string>
+    <string name="diag_no_target">没有可接收文件的应用，请改用「复制」。</string>
+    <string name="diag_section_session">会话</string>
+    <string name="diag_section_keys">元数据键</string>
+    <string name="diag_section_notification">通知字段</string>
+    <string name="diag_section_title_timeline">标题变化时间线</string>
+    <string name="diag_section_attempts">来源尝试结果</string>
+    <string name="diag_section_log">实时日志</string>
+
+    <string name="overlay_no_lyrics">暂无歌词（该播放器未暴露歌词通道）</string>
+
+    <string name="generic_on">开</string>
+    <string name="generic_off">关</string>
+    <string name="generic_back">返回</string>
+
+    <string name="settings_version">版本 %1$s</string>
+    <string name="settings_about">不播放声音、不申请音频焦点、不控制播放、不读文件、不联网。</string>
+    <string name="perm_required_hint">两项权限都是必需的，都能在这一屏里完成授权，不需要连电脑。</string>
+    <string name="display_font_value">%1$s 磅</string>
+    <string name="display_edit_exit">退出编辑态</string>
+    <string name="edit_needs_session">先播放音乐，再进入编辑态。</string>
+    <string name="edit_entered">已进入编辑态：拖动即可移动。</string>
+    <string name="edit_exited">已退出编辑态：触摸重新穿透。</string>
+    <string name="diag_evidence_label">证据：%1$s</string>
+
+    <string name="diag_code_permission_listener">通知使用权未连接。请在系统设置里授予后返回本页。</string>
+    <string name="diag_code_permission_overlay">缺少悬浮窗权限。请授予「显示在其他应用上层」。</string>
+    <string name="diag_code_no_session">没有任何应用在发布媒体会话。请先在车机自带播放器或第三方播放器里开始播放。</string>
+    <string name="diag_code_session_inactive">存在媒体会话但未在播放。请到那个应用里点播放。</string>
+    <string name="diag_code_avrcp_gate">该播放器只在暂停时更新标题。这是发布端的 AVRCP 限制，不是 AnyLyric 的问题。</string>
+    <string name="diag_code_no_channel">该播放器完全没有暴露歌词通道。AnyLyric 本身没有故障，需要另加来源才能显示歌词。</string>
+    <string name="diag_code_clock_unstable">播放器上报的进度不稳定，歌词可能漂移，原因在发布端。</string>
+    <string name="diag_code_overlay_not_attached">悬浮层没有挂上。请检查悬浮窗权限后重试。</string>
+    <string name="diag_code_overlay_not_measured">悬浮层已挂上但没有尺寸，多半是布局问题。</string>
+    <string name="diag_code_hidden_by_rule">被显隐规则主动隐藏，例如导航在前台。</string>
+    <string name="diag_code_ok">工作正常，歌词正在从 %1$s 获取。</string>
+</resources>

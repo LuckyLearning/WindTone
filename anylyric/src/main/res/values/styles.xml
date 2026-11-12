@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 直接用平台 Material 主题：不引 AppCompat，与 :app 的取舍一致。 -->
+<resources>
+    <style name="Theme.AnyLyric" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:colorAccent">#185FA5</item>
+        <item name="android:windowBackground">#FFFFFF</item>
+        <item name="android:statusBarColor">#FFFFFF</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

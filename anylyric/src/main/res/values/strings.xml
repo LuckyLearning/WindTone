@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 英文兜底：每条都必须在这里出现，否则英文设备会 NotFoundException。 -->
+<resources>
+    <string name="app_name">AnyLyric</string>
+
+    <string name="settings_subtitle">Shows lyrics exposed by the player already running on this car. Plays no audio, controls nothing, reads no files.</string>
+
+    <string name="section_status">Status</string>
+    <string name="section_permissions">Permissions</string>
+    <string name="section_display">Display</string>
+    <string name="section_probe">Channel probe</string>
+
+    <string name="perm_notification_title">Notification access</string>
+    <string name="perm_notification_desc">Required. Lets AnyLyric read the media session of the player that is already playing.</string>
+    <string name="perm_overlay_title">Display over other apps</string>
+    <string name="perm_overlay_desc">Required. Used only to draw the lyric overlay.</string>
+    <string name="perm_granted">Granted</string>
+    <string name="perm_missing">Not granted</string>
+    <string name="perm_open">Open settings</string>
+
+    <string name="status_listener_connected">Notification access connected</string>
+    <string name="status_listener_disconnected">Notification access disconnected — lyrics unavailable</string>
+    <string name="status_no_session">No active player</string>
+    <string name="status_session">Now: %1$s — %2$s</string>
+    <string name="status_channel">Channel: %1$s</string>
+
+    <string name="channel_none">none</string>
+    <string name="channel_l0">L0 metadata key</string>
+    <string name="channel_l1">L1 title stream</string>
+    <string name="channel_l2">L2 notification text</string>
+
+    <string name="display_font_size">Font size</string>
+    <string name="display_lines">Lines</string>
+    <string name="display_position">Position</string>
+    <string name="display_edit">Enter edit mode</string>
+    <string name="display_edit_hint">Drag to move, double tap to lock, long press to close.</string>
+    <string name="display_reset">Reset to default</string>
+    <string name="display_smaller">Smaller</string>
+    <string name="display_larger">Larger</string>
+
+    <string name="diag_title">Channel probe</string>
+    <string name="diag_debug_toggle">Debug logging</string>
+    <string name="diag_debug_hint">Off: nothing is captured and nothing is allocated. On: the probe records what each player exposes.</string>
+    <string name="diag_open">Open probe report</string>
+    <string name="diag_conclusion">Conclusion</string>
+    <string name="diag_evidence">Evidence</string>
+    <string name="diag_next_step">Next step</string>
+    <string name="diag_share">Share</string>
+    <string name="diag_copy">Copy</string>
+    <string name="diag_save">Save to device</string>
+    <string name="diag_clear">Clear</string>
+    <string name="diag_empty">Turn on debug logging, then play something in another app.</string>
+    <string name="diag_saved">Saved to Downloads: %1$s</string>
+    <string name="diag_save_failed">Could not save the report.</string>
+    <string name="diag_copied">Report copied.</string>
+    <string name="diag_no_target">No app can receive the file. Use Copy instead.</string>
+    <string name="diag_section_session">Session</string>
+    <string name="diag_section_keys">Metadata keys</string>
+    <string name="diag_section_notification">Notification fields</string>
+    <string name="diag_section_title_timeline">Title timeline</string>
+    <string name="diag_section_attempts">Source attempts</string>
+    <string name="diag_section_log">Live log</string>
+
+    <string name="overlay_no_lyrics">No lyrics (this player exposes no lyric channel)</string>
+
+    <string name="generic_on">On</string>
+    <string name="generic_off">Off</string>
+    <string name="generic_back">Back</string>
+
+    <string name="settings_version">Version %1$s</string>
+    <string name="settings_about">Plays no audio, requests no audio focus, controls nothing, reads no files, uses no network.</string>
+    <string name="perm_required_hint">Both permissions are required. Grant them on this screen — no computer needed.</string>
+    <string name="display_font_value">%1$s sp</string>
+    <string name="display_edit_exit">Exit edit mode</string>
+    <string name="edit_needs_session">Start playback first, then enter edit mode.</string>
+    <string name="edit_entered">Edit mode on: drag to move.</string>
+    <string name="edit_exited">Edit mode off: touches pass through.</string>
+    <string name="diag_evidence_label">Evidence: %1$s</string>
+
+    <string name="diag_code_permission_listener">Notification access is not connected. Grant it in system settings, then come back.</string>
+    <string name="diag_code_permission_overlay">Overlay permission is missing. Grant the display-over-other-apps permission.</string>
+    <string name="diag_code_no_session">No app is publishing a media session. Start playback in the car player or a third-party player.</string>
+    <string name="diag_code_session_inactive">A media session exists but is not playing. Press play in that app.</string>
+    <string name="diag_code_avrcp_gate">The player updates the title only while paused. This is a publishing-side AVRCP limitation, not an AnyLyric bug.</string>
+    <string name="diag_code_no_channel">This player exposes no lyric channel at all. Nothing is wrong with AnyLyric; another source would be needed.</string>
+    <string name="diag_code_clock_unstable">The player reports an unstable playback position. Lyrics may drift; the cause is on the publishing side.</string>
+    <string name="diag_code_overlay_not_attached">The overlay was not attached. Check the overlay permission and try again.</string>
+    <string name="diag_code_overlay_not_measured">The overlay is attached but has no size. Likely a layout problem.</string>
+    <string name="diag_code_hidden_by_rule">Hidden on purpose by the visibility rule, for example when navigation is in front.</string>
+    <string name="diag_code_ok">Working as designed. Lyrics are being taken from %1$s.</string>
+</resources>

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      只申请两项权限：悬浮窗 + 通知使用权（后者是 service 上的 BIND 权限，
+      在系统「通知使用权」列表里授权，不是 uses-permission）。
+      一期不申请存储、网络、无障碍、蓝牙 —— 因为不读文件、不联网、不抓界面。
+    -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <application
+        android:allowBackup="false"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.AnyLyric">
+
+        <activity
+            android:name=".ui.SettingsActivity"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".ui.DiagActivity"
+            android:exported="false"
+            android:label="@string/diag_title" />
+
+        <!--
+          exported 必须为 true 且带 BIND_NOTIFICATION_LISTENER_SERVICE 权限：
+          系统（而非第三方应用）用它来绑定本服务，用户授权后才生效。
+          Android 12 起 exported 必须显式声明，故此处写明。
+        -->
+        <service
+            android:name=".service.MediaWatchService"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>
