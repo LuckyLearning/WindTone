@@ -185,12 +185,15 @@ class SessionHub private constructor(context: Context) {
 
     fun onListenerDisconnected() {
         listenerConnected = false
-        if (Probe.enabled) Probe.write("权限", "listenerConnected=false")
+        if (Probe.enabled) Probe.write("权限", "listenerDisconnected")
         detachController()
         currentLines = emptyList()
         hitSource = null
         overlay.hide()
         syncPermissionFacts()
+        // 权限还勾着却被系统解绑（内存紧张回收、系统重启服务）：再要一次绑定，
+        // 免得悬浮窗就此消失、只能等用户重新打开应用。已授权才会真的发请求。
+        tryRebind()
     }
 
     fun onNotificationPosted(sbn: StatusBarNotification?) {
