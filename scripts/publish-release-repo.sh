@@ -112,11 +112,20 @@ git add -A
 git commit -q -m "release: $APP_DIR v$VERSION (code $CODE)"
 
 echo "→ 推送公共仓库 ..."
-if ! git -c credential.helper= push -f origin snapshot:main >/dev/null 2>&1; then
-  echo "✗ 推送失败。常见原因：公共仓库 main 开了分支保护（本脚本用「快照覆盖」方式发布，需要允许 force push）。" >&2
-  echo "  处理：仓库 Settings → Branches 关掉 main 的保护，或改为普通提交模式。" >&2
+# 不吞推送的报错：2026-11-12 首次 AnyLyric 发版就栽在这 —— push 的真实原因是
+# RELEASE_REPO_TOKEN 失效（401），但输出被丢进 /dev/null，脚本只剩一句
+# 「大概是分支保护」，排查方向直接被带偏。现在原样打印 git 的报错。
+PUSH_LOG="$(mktemp)"
+if ! git -c credential.helper= push -f origin snapshot:main >"$PUSH_LOG" 2>&1; then
+  echo "✗ 推送公共仓库失败，git 原始输出：" >&2
+  sed 's/^/    /' "$PUSH_LOG" >&2
+  echo "  常见原因：" >&2
+  echo "   1) RELEASE_REPO_TOKEN 失效（Bad credentials / 401 / 403）—— 换新 token 后更新仓库 secret；" >&2
+  echo "   2) 公共仓库 main 开了分支保护（本脚本用「快照覆盖」发布，需要允许 force push）。" >&2
+  rm -f "$PUSH_LOG" 2>/dev/null || true
   exit 1
 fi
+rm -f "$PUSH_LOG" 2>/dev/null || true
 
 # 推后实查：公共仓库的 latest.json 必须已经指向本次版本（CDN 有缓存，带随机参数）
 RAW="https://raw.githubusercontent.com/$PUBLIC_SLUG/main/$APP_DIR/latest.json"
