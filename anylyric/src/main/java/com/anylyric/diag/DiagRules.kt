@@ -61,12 +61,14 @@ object DiagRules {
         !s.listenerGranted ->
             Diagnosis(DiagCode.PERMISSION_LISTENER, "listenerGranted=false")
 
-        // 勾着却没连上：不是用户没授权，别把他赶去系统设置里「关掉再打开」。
-        !s.listenerConnected ->
-            Diagnosis(DiagCode.LISTENER_UNBOUND, "granted=true, connected=false")
-
         !s.overlayGranted ->
             Diagnosis(DiagCode.PERMISSION_OVERLAY, "canDrawOverlays=false")
+
+        // 已授权但服务未绑定：getActiveSessions 的权限边界是授权列表，L0/L1 与进度
+        // 照常可用，缺的只有 L2 与推送事件。所以只有「连不上 且 也没拿到歌词」才算
+        // 授权侧问题；已经拿到歌词就是降级可用，报故障反而是误伤。
+        !s.listenerConnected && s.hitSource == null ->
+            Diagnosis(DiagCode.LISTENER_UNBOUND, "granted=true, connected=false, hit=none")
 
         s.sessionCount == 0 ->
             Diagnosis(DiagCode.NO_SESSION, "sessions=0")
@@ -95,6 +97,10 @@ object DiagRules {
             Diagnosis(DiagCode.HIDDEN_BY_RULE, "hiddenByRule=true")
 
         else ->
-            Diagnosis(DiagCode.OK, "hit=${s.hitSource}")
+            Diagnosis(
+                DiagCode.OK,
+                if (s.listenerConnected) "hit=${s.hitSource}"
+                else "hit=${s.hitSource}, degraded=true"
+            )
     }
 }

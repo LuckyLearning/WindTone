@@ -1,6 +1,7 @@
 package com.anylyric.diag
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DiagRulesTest {
@@ -32,9 +33,25 @@ class DiagRulesTest {
     @Test
     fun grantedButUnboundIsItsOwnDiagnosis() {
         val diagnosis = DiagRules.evaluate(
-            ok().copy(listenerGranted = true, listenerConnected = false)
+            ok().copy(listenerGranted = true, listenerConnected = false, hitSource = null)
         )
         assertEquals(DiagCode.LISTENER_UNBOUND, diagnosis.code)
+    }
+
+    /**
+     * 服务没绑上，但歌词照样取到了 —— 这是降级可用，不是故障。
+     *
+     * `getActiveSessions` 的权限边界是授权列表，不要求服务实例已连接，因此 L0/L1
+     * 在未绑定状态下仍能工作；此时报 LISTENER_UNBOUND 会把正常状态说成坏的。
+     */
+    @Test
+    fun unboundButLyricsArrivedIsDegradedOk() {
+        val diagnosis = DiagRules.evaluate(
+            ok().copy(listenerGranted = true, listenerConnected = false)
+        )
+        assertEquals(DiagCode.OK, diagnosis.code)
+        // 证据里要留下 degraded，否则报告看起来与「一切正常」无异，掩盖服务未绑定
+        assertTrue(diagnosis.evidence.contains("degraded"))
     }
 
     @Test

@@ -1,11 +1,13 @@
 package com.anylyric.ui
 
 import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.view.View
 import android.widget.LinearLayout
@@ -16,6 +18,7 @@ import com.anylyric.R
 import com.anylyric.data.ListenerState
 import com.anylyric.data.Prefs
 import com.anylyric.diag.Probe
+import com.anylyric.service.MediaWatchService
 import com.anylyric.session.SessionHub
 
 /**
@@ -32,10 +35,15 @@ class SettingsActivity : BaseActivity() {
     private lateinit var statusLine: TextView
     private lateinit var notificationState: TextView
     private lateinit var notificationButton: TextView
+    private lateinit var notificationSettingsButton: TextView
     private lateinit var overlayState: TextView
+    private lateinit var overlayButton: TextView
     private lateinit var fontValue: TextView
     private lateinit var editButton: TextView
     private lateinit var debugSwitch: Switch
+
+    /** 首次观察到「已授权未绑定」的时刻，用来判断自动恢复是否已经失败。 */
+    private var firstUnboundAt = 0L
 
     private val pollHandler = Handler(Looper.getMainLooper())
     private var pollTicks = 0
@@ -107,7 +115,20 @@ class SettingsActivity : BaseActivity() {
 
         notificationState = text("", 13f, bold = true)
         notificationButton = textButton(getString(R.string.perm_open)) { onNotificationAction() }
+        // 「系统设置」入口必须常驻：自动重绑在部分 ROM 上无效，手工关开是最后的自救路径，
+        // 不能因为换了个状态就把这个入口藏掉。
+        notificationSettingsButton = textButton(getString(R.string.perm_review)) {
+            openNotificationSettings()
+        }
+        val notificationActions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            addView(notificationButton)
+            addView(notificationSettingsButton)
+        }
+
         overlayState = text("", 13f, bold = true)
+        overlayButton = textButton(getString(R.string.perm_open)) { openOverlaySettings() }
         root.addView(sectionLabel(getString(R.string.section_permissions)))
         root.addView(
             card(
@@ -116,16 +137,13 @@ class SettingsActivity : BaseActivity() {
                     text(getString(R.string.perm_notification_desc), 13f, secondary = true).apply {
                         setPadding(0, dp(4), 0, dp(8))
                     },
-                    row(notificationState, notificationButton),
+                    row(notificationState, notificationActions),
                     spacer(16),
                     text(getString(R.string.perm_overlay_title), 16f, bold = true),
                     text(getString(R.string.perm_overlay_desc), 13f, secondary = true).apply {
                         setPadding(0, dp(4), 0, dp(8))
                     },
-                    row(
-                        overlayState,
-                        textButton(getString(R.string.perm_open)) { openOverlaySettings() }
-                    )
+                    row(overlayState, overlayButton)
                 )
             )
         )
@@ -207,24 +225,39 @@ class SettingsActivity : BaseActivity() {
         val status = hub.currentStatus()
         val listener = status.listenerState
 
+        // 「已授权未绑定」超过时限仍未恢复 → 自动重绑在这台机器上不奏效，
+        // 继续显示「正在等待」只会让人干等，必须改指手工关开。
+        if (listener == ListenerState.GRANTED_NOT_BOUND) {
+            if (firstUnboundAt == 0L) firstUnboundAt = SystemClock.elapsedRealtime()
+        } else {
+            firstUnboundAt = 0L
+        }
+        val timedOut = listener == ListenerState.GRANTED_NOT_BOUND &&
+            firstUnboundAt != 0L &&
+            SystemClock.elapsedRealtime() - firstUnboundAt >= UNBOUND_TIMEOUT_MS
+
         statusBanner.text = getString(
             when (listener) {
                 ListenerState.GRANTED -> R.string.status_listener_connected
-                ListenerState.GRANTED_NOT_BOUND -> R.string.status_listener_unbound
+                ListenerState.GRANTED_NOT_BOUND ->
+                    if (timedOut) R.string.status_listener_unbound_failed
+                    else R.string.status_listener_unbound
                 ListenerState.NOT_GRANTED -> R.string.status_listener_disconnected
             }
         )
         statusBanner.setTextColor(
             when (listener) {
                 ListenerState.GRANTED -> colorOk
-                ListenerState.GRANTED_NOT_BOUND -> colorWarn
+                ListenerState.GRANTED_NOT_BOUND -> if (timedOut) colorBad else colorWarn
                 ListenerState.NOT_GRANTED -> colorBad
             }
         )
 
         statusLine.text = when (listener) {
             ListenerState.NOT_GRANTED -> getString(R.string.perm_required_hint)
-            ListenerState.GRANTED_NOT_BOUND -> getString(R.string.perm_unbound_hint)
+            ListenerState.GRANTED_NOT_BOUND -> getString(
+                if (timedOut) R.string.perm_unbound_failed_hint else R.string.perm_unbound_hint
+            )
             ListenerState.GRANTED -> if (status.sessionCount == 0) {
                 getString(R.string.status_no_session)
             } else {
@@ -238,6 +271,9 @@ class SettingsActivity : BaseActivity() {
 
         applyListenerState(listener)
         applyPermissionState(overlayState, status.overlayGranted)
+        overlayButton.text = getString(
+            if (status.overlayGranted) R.string.perm_review else R.string.perm_open
+        )
 
         fontValue.text = getString(R.string.display_font_value, prefs.fontSp.toInt().toString())
         editButton.text = getString(
@@ -277,6 +313,8 @@ class SettingsActivity : BaseActivity() {
                 ListenerState.NOT_GRANTED -> R.string.perm_open
             }
         )
+        // 已连接时没有可修的，只留「系统设置」；其余两态两个入口都给
+        notificationButton.visibility = if (state == ListenerState.GRANTED) View.GONE else View.VISIBLE
     }
 
     /**
@@ -340,31 +378,43 @@ class SettingsActivity : BaseActivity() {
         refresh()
     }
 
+    /**
+     * 打开系统设置。
+     *
+     * 优先直接落到「本应用的通知使用权详情页」（API 30+）——手工关开是自动重绑失败
+     * 后唯一的自救路径，让用户在一长串应用里翻找毫无必要。失败再退回列表页。
+     */
     private fun openNotificationSettings() {
-        try {
-            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-        } catch (_: ActivityNotFoundException) {
-            startActivity(Intent(Settings.ACTION_SETTINGS))
-        } catch (_: Throwable) {
-            toast(getString(R.string.perm_required_hint))
+        val detail = Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS).apply {
+            putExtra(
+                Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
+                ComponentName(this@SettingsActivity, MediaWatchService::class.java)
+            )
         }
+        if (tryStart(detail)) return
+        if (tryStart(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))) return
+        if (tryStart(Intent(Settings.ACTION_SETTINGS))) return
+        toast(getString(R.string.perm_required_hint))
     }
 
     private fun openOverlaySettings() {
-        try {
-            startActivity(
-                Intent(
-                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:$packageName")
-                )
-            )
-        } catch (_: Throwable) {
-            try {
-                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))
-            } catch (_: Throwable) {
-                toast(getString(R.string.perm_required_hint))
-            }
-        }
+        val direct = Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:$packageName")
+        )
+        if (tryStart(direct)) return
+        if (tryStart(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))) return
+        if (tryStart(Intent(Settings.ACTION_SETTINGS))) return
+        toast(getString(R.string.perm_required_hint))
+    }
+
+    private fun tryStart(intent: Intent): Boolean = try {
+        startActivity(intent)
+        true
+    } catch (_: ActivityNotFoundException) {
+        false
+    } catch (_: Throwable) {
+        false
     }
 
     private fun versionName(): String = try {
@@ -382,5 +432,12 @@ class SettingsActivity : BaseActivity() {
 
         /** 最多轮询次数（约 10 秒）。系统不重绑时不再空转，改为提示手工重开。 */
         private const val MAX_POLL_TICKS = 8
+
+        /**
+         * 「已授权未绑定」等这么久还没恢复，就认定自动重绑在本次无效。
+         *
+         * 必须小于轮询总时长（约 10 秒），否则界面停不到这句结论上。
+         */
+        private const val UNBOUND_TIMEOUT_MS = 9_000L
     }
 }

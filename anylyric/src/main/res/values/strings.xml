@@ -24,6 +24,7 @@
 
     <string name="status_listener_connected">Notification access connected</string>
     <string name="status_listener_unbound">Notification access granted — waiting for the system to connect…</string>
+    <string name="status_listener_unbound_failed">Granted, but the system did not reconnect</string>
     <string name="status_listener_disconnected">Notification access not granted — lyrics unavailable</string>
     <string name="status_no_session">No active player</string>
     <string name="status_session">Now: %1$s — %2$s</string>
@@ -76,7 +77,8 @@
     <string name="settings_version">Version %1$s</string>
     <string name="settings_about">Plays no audio, requests no audio focus, controls nothing, reads no files, uses no network.</string>
     <string name="perm_required_hint">Both permissions are required. Grant them on this screen — no computer needed.</string>
-    <string name="perm_unbound_hint">The permission is already ticked; the system just has not bound the service yet. It usually recovers within seconds. If it never does, toggle the switch off and on in system settings.</string>
+    <string name="perm_unbound_hint">The permission is already ticked; the system just has not bound the service yet. It usually recovers within seconds, and lyrics keep working meanwhile. If it never does, tap System settings and toggle the switch off and on.</string>
+    <string name="perm_unbound_failed_hint">Automatic reconnect did not take effect on this device. Tap System settings, open AnyLyric\'s notification access page and toggle it off and on — this is a system-level stall, not a missing permission.</string>
     <string name="display_font_value">%1$s sp</string>
     <string name="display_edit_exit">Exit edit mode</string>
     <string name="edit_needs_session">Start playback first, then enter edit mode.</string>

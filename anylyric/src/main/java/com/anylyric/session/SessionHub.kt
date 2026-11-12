@@ -177,8 +177,43 @@ class SessionHub private constructor(context: Context) {
         }
     }
 
+    /** 已授权但服务未绑定时为 true：靠低频查询代偿缺失的推送事件。 */
+    private var degraded = false
+
+    /**
+     * 降级模式下的低频兜底查询。
+     *
+     * 正常路径由 `onNotificationPosted` 与 `MediaController` 回调驱动；服务没绑上时
+     * 这两个事件源都不存在，只能自己定期查一次活动会话，否则界面会永远停在空状态。
+     * 只在降级期间运行，服务一连上就停。
+     */
+    private val degradedTicker = object : Runnable {
+        override fun run() {
+            if (!degraded) return
+            refresh("degraded_tick")
+            if (degraded) mainHandler.postDelayed(this, DEGRADED_INTERVAL_MS)
+        }
+    }
+
+    private fun startDegraded() {
+        if (degraded) return
+        degraded = true
+        if (Probe.enabled) Probe.write("权限", "degraded=true（已授权未绑定，改走低频查询）")
+        mainHandler.postDelayed(degradedTicker, DEGRADED_INTERVAL_MS)
+        // 进降级时再要一次重绑，能连上就自动退出
+        tryRebind()
+    }
+
+    private fun stopDegraded() {
+        if (!degraded) return
+        degraded = false
+        mainHandler.removeCallbacks(degradedTicker)
+        if (Probe.enabled) Probe.write("权限", "degraded=false（服务已连接）")
+    }
+
     fun onListenerConnected() {
         listenerConnected = true
+        stopDegraded()
         if (Probe.enabled) Probe.write("权限", "listenerConnected=true")
         refresh("listener_connected")
     }
@@ -243,6 +278,7 @@ class SessionHub private constructor(context: Context) {
 
     fun detach() {
         mainHandler.removeCallbacksAndMessages(null)
+        degraded = false
         detachController()
         overlay.hide()
     }
@@ -259,12 +295,19 @@ class SessionHub private constructor(context: Context) {
         }
 
         if (!listenerConnected) {
-            // 已授权却没连上，多半是进程被系统回收后重新打开的空窗期，不是没授权。
-            // 这里直接请求系统重绑，避免用户被引导去「关掉再打开一次」。
             syncPermissionFacts()
-            tryRebind()
-            overlay.hide()
-            return
+            if (Permissions.isListenerGranted(appContext) != true) {
+                // 真的没授权：任何查询都会被系统拒绝
+                overlay.hide()
+                return
+            }
+            // 已授权但系统没把服务绑上，**不是「不能用」**：
+            // getActiveSessions 的权限边界是授权列表，不要求服务实例已连接；
+            // MediaController 的回调走 MediaSession 自己的 binder。因此 L0/L1 与进度
+            // 照常工作，缺的只有 L2（通知文本）与推送事件 —— 进入降级模式继续干活。
+            startDegraded()
+        } else {
+            stopDegraded()
         }
 
         // getActiveSessions 是跨进程调用：播放器每 250ms 推一次状态时若每次都查，
@@ -611,6 +654,14 @@ class SessionHub private constructor(context: Context) {
 
         /** 两次主动重绑请求的最小间隔，避开系统对 requestRebind 的频率限制。 */
         private const val REBIND_MIN_INTERVAL_MS = 5_000L
+
+        /**
+         * 降级模式的兜底查询间隔。
+         *
+         * 只在这个期间跑：服务一旦被系统绑上就停。8 秒一次 binder 查询比等推送重得多，
+         * 但比「整个功能不可用」划算，且不会随播放器刷新频率放大。
+         */
+        private const val DEGRADED_INTERVAL_MS = 8_000L
 
         @Volatile
         private var instance: SessionHub? = null

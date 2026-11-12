@@ -92,9 +92,11 @@ object Probe {
         sb.appendLine()
 
         sb.appendLine("[PERMISSION]")
+        // degraded = 授权在、服务没绑，靠低频查询代偿；此时功能可用但不是最佳状态
+        val degraded = s.listenerGranted && !s.listenerConnected
         sb.appendLine(
             "  listenerGranted=${s.listenerGranted} listenerConnected=${s.listenerConnected} " +
-                "canDrawOverlays=${s.overlayGranted}"
+                "degraded=$degraded canDrawOverlays=${s.overlayGranted}"
         )
         sb.appendLine()
 
