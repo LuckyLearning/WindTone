@@ -61,7 +61,6 @@ data class OverlayStyle(
     val align: Align = Align.START,
     val fadeMs: Int = OverlayDefaults.FADE_MS,
     val secondary: Secondary = Secondary.NEXT,
-    val stateMark: Boolean = OverlayDefaults.STATE_MARK,
     val primaryColor: Int = OverlayDefaults.PRIMARY_COLOR,
     val secondaryColor: Int = OverlayDefaults.SECONDARY_COLOR,
     val bgColor: Int = OverlayDefaults.BG_COLOR,
@@ -86,7 +85,6 @@ object OverlayDefaults {
     const val SECONDARY_ALPHA_MIN = 0.2f
     const val FADE_MS = 180
     const val FADE_MAX = 320
-    const val STATE_MARK = true
 
     /** 当前行（正在唱的那句）颜色。 */
     const val PRIMARY_COLOR = 0xFFFFFFFF.toInt()
@@ -123,7 +121,6 @@ object OverlayDefaults {
         align = Align.START,
         fadeMs = FADE_MS,
         secondary = Secondary.NEXT,
-        stateMark = STATE_MARK,
         primaryColor = PRIMARY_COLOR,
         secondaryColor = SECONDARY_COLOR,
         bgColor = BG_COLOR,
@@ -141,26 +138,26 @@ object OverlayDefaults {
         Preset.STRIPE -> base.copy(
             preset = preset, opacity = 0f, cornerDp = 0f, stroke = true,
             maxLines = 2, secondaryAlpha = 0.85f, align = Align.START,
-            stateMark = false, fadeMs = FADE_MS
+            fadeMs = FADE_MS
         )
 
         Preset.GLASS -> base.copy(
             preset = preset, opacity = 0.55f, cornerDp = 14f, stroke = false,
             maxLines = 2, secondaryAlpha = 0.58f, align = Align.START,
-            stateMark = true, fadeMs = FADE_MS
+            fadeMs = FADE_MS
         )
 
         Preset.SOLID -> base.copy(
             preset = preset, opacity = 0.86f, cornerDp = 8f, stroke = false,
             maxLines = 2, secondaryAlpha = 0.70f, align = Align.START,
-            stateMark = true, fadeMs = FADE_MS
+            fadeMs = FADE_MS
         )
 
         // 导航态：只留一句，居中，行数固定 1 —— 行车中多一行都是干扰。
         Preset.NAVI -> base.copy(
             preset = preset, opacity = 0.86f, cornerDp = 20f, stroke = false,
             maxLines = 1, secondaryAlpha = 0.70f, align = Align.CENTER,
-            stateMark = false, fadeMs = 160
+            fadeMs = 160
         )
 
         Preset.CUSTOM -> base.copy(preset = preset)

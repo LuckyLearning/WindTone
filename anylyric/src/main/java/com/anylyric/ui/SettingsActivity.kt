@@ -376,11 +376,6 @@ class SettingsActivity : BaseActivity() {
             }
         )
         rows += switchRow(
-            label = getString(R.string.appearance_state_mark),
-            current = { prefs.style().stateMark },
-            onChange = { checked -> editStyle { it.copy(stateMark = checked) } }
-        )
-        rows += switchRow(
             label = getString(R.string.appearance_hide_empty),
             current = { prefs.hideWhenNoLyrics },
             onChange = { checked ->
@@ -744,7 +739,7 @@ class SettingsActivity : BaseActivity() {
 
         val rows = ArrayList<View>(6)
         rows += text(
-            getString(R.string.update_version_line, versionName(), versionCode()),
+            getString(R.string.update_version_line, versionName()),
             14f,
             bold = true
         )

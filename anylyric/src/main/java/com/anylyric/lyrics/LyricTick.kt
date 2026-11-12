@@ -30,13 +30,20 @@ object LyricTick {
      *  · 进度非法（发布端给了 `PLAYBACK_POSITION_UNKNOWN`）；
      *  · 已经停在最后一行（再来也不会有变化）。
      */
-    fun nextDelayMs(lines: List<LyricLine>, posMs: Long): Long {
+    fun nextDelayMs(lines: List<LyricLine>, posMs: Long, timed: Boolean = isTimed(lines)): Long {
         if (lines.isEmpty() || posMs < 0L) return -1L
         // 逐行流没有时间轴：任何时刻定位结果都是最后一行，定时器只会白转
-        if (lines.any { it.timeMs == null }) return -1L
+        if (!timed) return -1L
 
         val next = lines.firstOrNull { (it.timeMs ?: 0L) > posMs } ?: return -1L
         val distance = (next.timeMs ?: 0L) - posMs
         return (distance + MARGIN_MS).coerceIn(MIN_DELAY_MS, MAX_DELAY_MS)
+    }
+
+    /** 全表只带时间轴才算「定时歌词」。放在这里，调用方不必自己扫一遍。 */
+    fun isTimed(lines: List<LyricLine>): Boolean {
+        if (lines.isEmpty()) return false
+        for (line in lines) if (line.timeMs == null) return false
+        return true
     }
 }

@@ -22,7 +22,6 @@ class OverlayStyleTest {
         assertEquals(OverlayDefaults.CORNER_DP, style.cornerDp, 0.001f)
         assertEquals(OverlayDefaults.SECONDARY_ALPHA, style.secondaryAlpha, 0.001f)
         assertEquals(OverlayDefaults.FADE_MS, style.fadeMs)
-        assertEquals(OverlayDefaults.STATE_MARK, style.stateMark)
         assertEquals(OverlayDefaults.PRIMARY_COLOR, style.primaryColor)
         assertEquals(OverlayDefaults.SECONDARY_COLOR, style.secondaryColor)
         assertEquals(OverlayDefaults.BG_COLOR, style.bgColor)
@@ -113,7 +112,6 @@ class OverlayStyleTest {
         val style = OverlayDefaults.preset(Preset.STRIPE, OverlayDefaults.STYLE)
         assertEquals(0f, style.opacity, 0.001f)
         assertTrue(style.stroke)
-        assertFalse(style.stateMark)
         assertEquals(Preset.STRIPE, style.preset)
     }
 

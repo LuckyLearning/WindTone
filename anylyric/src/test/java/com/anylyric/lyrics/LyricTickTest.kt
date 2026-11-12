@@ -27,6 +27,20 @@ class LyricTickTest {
         assertEquals(-1L, LyricTick.nextDelayMs(lines, 0L))
     }
 
+    /** 调用方已经算过「是否全带时间轴」时直接传进来：省掉一次全表扫描。 */
+    @Test
+    fun timedFlagIsTrusted() {
+        assertEquals(-1L, LyricTick.nextDelayMs(timed(0, 1_000), 0L, timed = false))
+        assertEquals(1_000L, LyricTick.nextDelayMs(timed(0, 5_000), 0L, timed = true))
+    }
+
+    @Test
+    fun isTimedDetectsMixedLists() {
+        assertTrue(LyricTick.isTimed(timed(0, 1_000)))
+        org.junit.Assert.assertFalse(LyricTick.isTimed(listOf(LyricLine(0, "A"), LyricLine(null, "B"))))
+        org.junit.Assert.assertFalse(LyricTick.isTimed(emptyList()))
+    }
+
     /** 发布端给了 PLAYBACK_POSITION_UNKNOWN（-1）时不能排定时器。 */
     @Test
     fun unknownPositionNeedsNoTick() {

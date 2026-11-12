@@ -40,7 +40,7 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_HANDLE, true)
         set(value) = sp.edit().putBoolean(KEY_HANDLE, value).apply()
 
-    fun style(): OverlayStyle = OverlayDefaults.sanitize(
+    fun style(): OverlayStyle = styleCache ?: OverlayDefaults.sanitize(
         OverlayStyle(
             preset = Preset.of(sp.getString(KEY_PRESET, null)),
             fontSp = sp.getFloat(KEY_FONT, OverlayDefaults.FONT_SP),
@@ -53,14 +53,13 @@ class Prefs(context: Context) {
             align = Align.of(sp.getString(KEY_ALIGN, null)),
             fadeMs = sp.getInt(KEY_FADE, OverlayDefaults.FADE_MS),
             secondary = Secondary.of(sp.getString(KEY_SECONDARY, null)),
-            stateMark = sp.getBoolean(KEY_STATE_MARK, OverlayDefaults.STATE_MARK),
             primaryColor = sp.getInt(KEY_PRIMARY_COLOR, OverlayDefaults.PRIMARY_COLOR),
             secondaryColor = sp.getInt(KEY_SECONDARY_COLOR, OverlayDefaults.SECONDARY_COLOR),
             bgColor = sp.getInt(KEY_BG_COLOR, OverlayDefaults.BG_COLOR),
             widthRatio = sp.getFloat(KEY_WIDTH_RATIO, OverlayDefaults.WIDTH_RATIO),
             heightRatio = sp.getFloat(KEY_HEIGHT_RATIO, OverlayDefaults.HEIGHT_RATIO)
         )
-    )
+    ).also { styleCache = it }
 
     fun saveStyle(style: OverlayStyle) {
         val safe = OverlayDefaults.sanitize(style)
@@ -76,13 +75,13 @@ class Prefs(context: Context) {
             .putString(KEY_ALIGN, safe.align.id)
             .putInt(KEY_FADE, safe.fadeMs)
             .putString(KEY_SECONDARY, safe.secondary.id)
-            .putBoolean(KEY_STATE_MARK, safe.stateMark)
             .putInt(KEY_PRIMARY_COLOR, safe.primaryColor)
             .putInt(KEY_SECONDARY_COLOR, safe.secondaryColor)
             .putInt(KEY_BG_COLOR, safe.bgColor)
             .putFloat(KEY_WIDTH_RATIO, safe.widthRatio)
             .putFloat(KEY_HEIGHT_RATIO, safe.heightRatio)
             .apply()
+        styleCache = null
     }
 
     fun resetStyle() {
@@ -112,6 +111,14 @@ class Prefs(context: Context) {
     }
 
     companion object {
+        /**
+         * 样式缓存：读一次要碰 16 个 key，而渲染、设置页每一行、每次刷新都会读。
+         * 写入口只有 [saveStyle]，写完就失效。放在 companion 里是因为服务与设置页
+         * 各持有一个 Prefs 实例，缓存必须共用同一份，否则一边改了另一边看不到。
+         */
+        @Volatile
+        private var styleCache: OverlayStyle? = null
+
         private const val NAME = "anylyric"
         private const val KEY_DEBUG = "debug_enabled"
         private const val KEY_HIDE_NO_LYRICS = "hide_when_no_lyrics"
@@ -128,7 +135,6 @@ class Prefs(context: Context) {
         private const val KEY_ALIGN = "style_align"
         private const val KEY_FADE = "style_fade_ms"
         private const val KEY_SECONDARY = "style_secondary"
-        private const val KEY_STATE_MARK = "style_state_mark"
         private const val KEY_PRIMARY_COLOR = "style_primary_color"
         private const val KEY_SECONDARY_COLOR = "style_secondary_color"
         private const val KEY_BG_COLOR = "style_bg_color"

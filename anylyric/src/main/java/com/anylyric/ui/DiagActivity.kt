@@ -43,7 +43,9 @@ class DiagActivity : BaseActivity() {
     private val ticker = object : Runnable {
         override fun run() {
             render()
-            handler.postDelayed(this, REFRESH_MS)
+            // 调试关着时不做任何轮询：这一页本来就没有数据可刷，每秒重建一次报告
+            // 只是让车机白转。开关打开后重新进入本页（或在设置里打开再返回）即可恢复。
+            if (Probe.enabled) handler.postDelayed(this, REFRESH_MS)
         }
     }
 
@@ -131,6 +133,16 @@ class DiagActivity : BaseActivity() {
     }
 
     private fun render() {
+        if (!Probe.enabled) {
+            // 关着调试时整页不采集：连「现在有没有授权」都不去问系统。
+            // 与其拿一份永远不更新的旧事实编结论，不如老实说没开。
+            conclusionText.setTextColor(colorWarn)
+            conclusionText.text = getString(R.string.diag_debug_off)
+            evidenceText.text = getString(R.string.diag_debug_off_hint)
+            reportText.text = getString(R.string.diag_debug_off_report)
+            return
+        }
+
         // 未连接时不跑责任链，快照里的权限字段不会自己刷新；这里每秒同步一次，
         // 免得报告把「已授权未绑定」和「没授权」混为一谈。
         SessionHub.get(this).syncPermissionFacts()
@@ -221,6 +233,6 @@ class DiagActivity : BaseActivity() {
     }
 
     private companion object {
-        const val REFRESH_MS = 1000L
+        const val REFRESH_MS = 2000L
     }
 }

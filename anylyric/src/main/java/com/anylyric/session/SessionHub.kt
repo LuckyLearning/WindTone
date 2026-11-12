@@ -100,13 +100,42 @@ class SessionHub private constructor(context: Context) {
     private var lastNotificationSignature: String? = null
 
     /**
-     * 上一次责任链的输入指纹。
+     * 责任链的输入指纹（逐字段比较，不再拼字符串）。
      *
-     * 责任链的产物只取决于「哪个会话 + 元数据对象 + 标题/歌手/时长/媒体号 + 判定 + 通知文本」。
+     * 责任链的产物只取决于「哪个会话 + 元数据内容 + 标题/歌手/时长/媒体号 + 判定 + 通知文本」。
      * 这些东西都没变时，重跑一遍解析不可能得到不同结果 —— 而真机上元数据与状态回调
      * 一秒能来好几个，全量重跑就是拿轮询冒充事件驱动。
+     *
+     * 元数据用**内容指纹**而不是对象身份：有的播放器每次回调都新建一个 `MediaMetadata`
+     * （跨 binder 反序列化的必然结果），按身份判等会让指纹永远「变了」。
      */
-    private var lastInputKey: String? = null
+    private var keyValid = false
+    private var keyController: MediaController? = null
+    private var keyMetaSig = 0
+    private var keyTitle: String? = null
+    private var keyArtist: String? = null
+    private var keyDuration = Long.MIN_VALUE
+    private var keyMediaId: String? = null
+    private var keyVerdict: TitleVerdict? = null
+    private var keyTextsHash = 0
+
+    /** `identityExtra` 的缓存：包名/专辑/音轨都没变就复用，免得每次刷新拼一次字符串。 */
+    private var identityExtraKey = ""
+    private var identityExtraValue = ""
+
+    /** 上一次推给悬浮层的文本，同一句不重复走渲染。 */
+    private var lastPushedPrimary: String? = null
+    private var lastPushedSecondary: String? = null
+    private var lastPushedPrompt = false
+
+    /** `trackLabel()` 的缓存，随标题/歌手变化失效。 */
+    private var labelCache: String? = null
+
+    /** 当前歌词是否全带时间轴。换歌时算一次，逐行流不必每次全表扫描。 */
+    private var currentLinesTimed = false
+
+    /** 上一次渲染时定位到的行号，用于让定时器「行没换就别重绘」。 */
+    private var lastLineIndex = -1
 
     /** 刷新合并：同一帧内的多个回调只跑一次全量刷新。 */
     private var refreshScheduled = false
@@ -235,6 +264,8 @@ class SessionHub private constructor(context: Context) {
      * 每秒同步一次，保证报告与实际状态一致（否则会把「已授权未绑定」显示成别的）。
      */
     fun syncPermissionFacts() {
+        // 调试关掉时快照根本没人看，也不必为它做一次跨进程查询
+        if (!Probe.enabled) return
         val granted = Permissions.isListenerGranted(appContext) == true
         if (Probe.snapshot.listenerGranted != granted ||
             Probe.snapshot.listenerConnected != listenerConnected
@@ -291,9 +322,9 @@ class SessionHub private constructor(context: Context) {
         listenerConnected = false
         if (Probe.enabled) Probe.write("权限", "listenerDisconnected")
         detachController()
-        currentLines = emptyList()
+        setCurrentLines(emptyList())
         hitSource = null
-        lastInputKey = null
+        keyValid = false
         lastNotificationSignature = null
         stopLineTick()
         overlay.hide()
@@ -305,7 +336,25 @@ class SessionHub private constructor(context: Context) {
 
     fun onNotificationPosted(sbn: StatusBarNotification?) {
         if (sbn == null) return
-        if (sbn.packageName == appContext.packageName) return
+        val pkg = sbn.packageName
+        if (pkg == appContext.packageName) return
+
+        val current = controller
+        // 「与本应用无关」= 有会话但不是这个包，或者根本没有会话。
+        val foreign = current == null || current.packageName != pkg
+
+        // 先判节流，再碰 extras。**这是本应用最容易被自己拖死的一处**：
+        // 代理、应用商店这类应用每秒发一条通知，之前每条都要拆 extras、拼指纹、
+        // 再跑一遍全量刷新，实测稳定吃掉 17% CPU。节流窗口内连解析都不做。
+        val now = SystemClock.elapsedRealtime()
+        if (foreign) {
+            if (now - lastForeignPickAt < foreignQueryInterval()) {
+                Perf.onSkip()
+                return
+            }
+            lastForeignPickAt = now
+        }
+
         val notification = sbn.notification ?: return
         val extras = notification.extras ?: return
 
@@ -320,37 +369,32 @@ class SessionHub private constructor(context: Context) {
             ?.takeIf { it.isNotEmpty() }
             ?.let { fields["android.tickerText"] = it }
 
-        if (fields.isEmpty()) notificationTexts.remove(sbn.packageName)
-        else notificationTexts[sbn.packageName] = fields
+        if (fields.isEmpty()) {
+            notificationTexts.remove(pkg)
+        } else {
+            // 上限是硬边界：设备上装几十个会发通知的应用时，这张表不该无限长
+            if (notificationTexts.size >= MAX_NOTIFICATION_PACKAGES) notificationTexts.clear()
+            notificationTexts[pkg] = fields
+        }
 
         if (Probe.enabled) {
-            Probe.write("通知", "pkg=${sbn.packageName} fields=${fields.keys.joinToString(",")}")
+            Probe.write("通知", "pkg=$pkg fields=${fields.keys.joinToString(",")}")
+        }
+
+        if (foreign) {
+            requestRefresh(REASON_NOTIFICATION_OTHER)
+            return
         }
 
         // 同一份文本重复推送（播放器每 250ms 刷一次通知）不必重跑责任链
         val signature = buildString(48) {
-            append(sbn.packageName)
+            append(pkg)
             for ((key, value) in fields) {
                 append('\u0000').append(key).append('=').append(value)
             }
         }
         if (signature == lastNotificationSignature) return
         lastNotificationSignature = signature
-
-        val current = controller
-        if (current != null && current.packageName != sbn.packageName) {
-            // 与本应用无关的通知。**这是本应用最容易被自己拖死的一处**：
-            // 代理、应用商店这类应用每秒发一条通知，之前每条都会跑一遍全量刷新，
-            // 实测稳定吃掉 17% CPU。这里只做「会话可能变了吗」这一次判断，且节流。
-            val now = SystemClock.elapsedRealtime()
-            if (now - lastForeignPickAt < foreignQueryInterval()) {
-                Perf.onSkip()
-                return
-            }
-            lastForeignPickAt = now
-            requestRefresh(REASON_NOTIFICATION_OTHER)
-            return
-        }
 
         requestRefresh(REASON_NOTIFICATION)
     }
@@ -433,7 +477,6 @@ class SessionHub private constructor(context: Context) {
         Perf.onRefresh()
 
         if (!listenerConnected) {
-            syncPermissionFacts()
             if (Permissions.isListenerGranted(appContext) != true) {
                 // 真的没授权：任何查询都会被系统拒绝
                 stopLineTick()
@@ -461,7 +504,9 @@ class SessionHub private constructor(context: Context) {
                 cachedState != lastPlayState || now - lastFullQueryAt >= QUERY_MIN_INTERVAL_MS
             else -> true
         }
-        val sessions = if (fullQuery) {
+        // 不查会话时直接用当前控制器，不再包一层 listOfNotNull —— 那是每次刷新
+        // 一两个临时 List，一秒好几个，最后全进 GC。
+        val sessions: List<MediaController>? = if (fullQuery) {
             lastFullQueryAt = now
             querySessions().also {
                 lastSessionCount = it.size
@@ -470,11 +515,11 @@ class SessionHub private constructor(context: Context) {
                 }
             }
         } else {
-            listOfNotNull(controller)
+            null
         }
 
         val previousToken = controller?.sessionToken
-        val next = pick(sessions)
+        val next = if (sessions != null) pick(sessions) else controller
         val sessionChanged = next?.sessionToken != previousToken
         if (sessionChanged) {
             bind(next)
@@ -493,11 +538,12 @@ class SessionHub private constructor(context: Context) {
 
         val active = controller
         if (active == null) {
-            currentLines = emptyList()
+            setCurrentLines(emptyList())
             hitSource = null
             lastTitle = null
             lastArtist = null
-            lastInputKey = null
+            labelCache = null
+            keyValid = false
             stopLineTick()
             overlay.hide()
             publishSnapshot(null, null, 0L)
@@ -518,6 +564,7 @@ class SessionHub private constructor(context: Context) {
         val duration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
         val mediaId = metadata?.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
 
+        if (title != lastTitle || artist != lastArtist) labelCache = null
         if (title != lastTitle) lastTitleChangeAt = now
         lastTitle = title
         lastArtist = artist
@@ -550,23 +597,31 @@ class SessionHub private constructor(context: Context) {
             )
         }
 
-        // 责任链只在这些输入真的变了时才重跑。元数据用对象身份判等：播放器换了内容
-        // 必然是一个新对象（跨 binder 反序列化出来的），同一对象则内容必然相同。
+        // 责任链只在这些输入真的变了时才重跑。元数据比的是**内容指纹**而不是对象身份：
+        // 有的播放器每次回调都新建一个 MediaMetadata，按身份判等会让指纹永远「变了」，
+        // 于是每个回调都重跑一遍解析 —— 正是真机上 CPU 被吃掉的那条路。
         val activeTexts = notificationTexts[active.packageName].orEmpty()
-        val inputKey = buildString(112) {
-            append(active.packageName).append('\u0001')
-            append(System.identityHashCode(metadata)).append('\u0001')
-            append(title).append('\u0001')
-            append(artist).append('\u0001')
-            append(duration).append('\u0001')
-            append(mediaId).append('\u0001')
-            append(lastVerdict.name).append('\u0001')
-            append(activeTexts.hashCode())
-        }
-        val inputsChanged = inputKey != lastInputKey
+        val metaSig = metadataSignature(metadata)
+        val inputsChanged = !keyValid ||
+            keyController !== active ||
+            keyMetaSig != metaSig ||
+            keyTitle != title ||
+            keyArtist != artist ||
+            keyDuration != duration ||
+            keyMediaId != mediaId ||
+            keyVerdict != lastVerdict ||
+            keyTextsHash != activeTexts.hashCode()
 
         if (inputsChanged) {
-            lastInputKey = inputKey
+            keyValid = true
+            keyController = active
+            keyMetaSig = metaSig
+            keyTitle = title
+            keyArtist = artist
+            keyDuration = duration
+            keyMediaId = mediaId
+            keyVerdict = lastVerdict
+            keyTextsHash = activeTexts.hashCode()
             Perf.onChain()
 
             val metadataValues = textValues(metadata)
@@ -590,7 +645,7 @@ class SessionHub private constructor(context: Context) {
             val outcome = chain.resolve(trackContext)
             val costMs = (SystemClock.elapsedRealtimeNanos() - startedAt) / 1_000_000
             hitSource = outcome.hit?.sourceId
-            currentLines = outcome.hit?.lines.orEmpty()
+            setCurrentLines(outcome.hit?.lines.orEmpty())
 
             if (Probe.enabled) {
                 Probe.attempts = outcome.attempts
@@ -623,18 +678,51 @@ class SessionHub private constructor(context: Context) {
     }
 
     /** 换歌指纹的附加位：duration / mediaId 都缺失时，靠包名 + 专辑 + 音轨兜底。 */
-    private fun identityExtra(active: MediaController, metadata: MediaMetadata?): String =
-        buildString(40) {
-            append(active.packageName)
-            append('|')
-            append(metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM).orEmpty())
-            append('|')
-            append(metadata?.getLong(MediaMetadata.METADATA_KEY_TRACK_NUMBER) ?: 0L)
+    private fun identityExtra(active: MediaController, metadata: MediaMetadata?): String {
+        val album = metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM).orEmpty()
+        val track = metadata?.getLong(MediaMetadata.METADATA_KEY_TRACK_NUMBER) ?: 0L
+        // 每首歌内这三个字段都不变，拼一次就够；按原样每秒拼一次只是给 GC 添活。
+        val key = active.packageName + '|' + album + '|' + track
+        if (key == identityExtraKey) return identityExtraValue
+        identityExtraKey = key
+        identityExtraValue = key
+        return key
+    }
+
+    /**
+     * 元数据内容指纹。
+     *
+     * 比对象身份可靠：跨 binder 的 `MediaMetadata` 每次回调都是新对象，按身份判等会让
+     * 「输入变了」恒为真，责任链就成了 1Hz 轮询。这里只看内容 —— 键名 + 文本值，
+     * 字符串的 hashCode 首次算完即缓存，之后是 O(1)。
+     */
+    private fun metadataSignature(metadata: MediaMetadata?): Int {
+        if (metadata == null) return 0
+        var hash = 1
+        for (key in metadata.keySet()) {
+            hash = 31 * hash + key.hashCode()
+            val text = metadata.getText(key) ?: continue
+            hash = 31 * hash + text.hashCode()
         }
+        return hash
+    }
+
+    /** 换歌词列表的唯一入口：顺带把「是否全带时间轴」算一次，别再每次渲染全表扫。 */
+    private fun setCurrentLines(lines: List<LyricLine>) {
+        currentLines = lines
+        lastLineIndex = -1
+        var timed = lines.isNotEmpty()
+        for (line in lines) {
+            if (line.timeMs == null) {
+                timed = false
+                break
+            }
+        }
+        currentLinesTimed = timed
+    }
 
     private fun render() {
         Perf.onRender()
-        overlay.setPlaying(lastPlayState == PlayState.PLAYING)
 
         if (currentLines.isEmpty()) {
             if (prefs.hideWhenNoLyrics) {
@@ -655,9 +743,10 @@ class SessionHub private constructor(context: Context) {
             return
         }
 
-        val timed = currentLines.all { it.timeMs != null }
-        val index = if (timed) clock.locate(currentLines, clock.position()) else currentLines.lastIndex
+        val index = if (currentLinesTimed) clock.locate(currentLines, clock.position())
+        else currentLines.lastIndex
         val safe = index.coerceIn(0, currentLines.lastIndex)
+        lastLineIndex = safe
 
         // 副行按用户选择取：逐行流没有时间轴，只有相邻行或「歌名·歌手」有意义。
         val secondary = when (prefs.style().secondary) {
@@ -683,10 +772,19 @@ class SessionHub private constructor(context: Context) {
             tickScheduled = false
             if (currentLines.isEmpty()) return
             Perf.onTick()
+            // 行没换就什么都不做：二分结果与上次相同，重绘只会白跑一次绘制。
             // 只重新定位并推文本，不碰责任链：链的输入没有变化，重跑只会得到同样的行。
-            render()
+            if (currentIndex() != lastLineIndex) render()
             scheduleLineTick()
         }
+    }
+
+    /** 当前应该显示的行号（与 [render] 的定位规则一致）。 */
+    private fun currentIndex(): Int {
+        if (currentLines.isEmpty()) return -1
+        val index = if (currentLinesTimed) clock.locate(currentLines, clock.position())
+        else currentLines.lastIndex
+        return index.coerceIn(0, currentLines.lastIndex)
     }
 
     private fun scheduleLineTick() {
@@ -694,7 +792,7 @@ class SessionHub private constructor(context: Context) {
         // 暂停时进度不动，行也不会换：定时器排上只会凭空唤醒。
         // 播放恢复时一定伴随一次状态回调，那时会重新排。
         if (lastPlayState != PlayState.PLAYING) return
-        val delay = LyricTick.nextDelayMs(currentLines, clock.position())
+        val delay = LyricTick.nextDelayMs(currentLines, clock.position(), currentLinesTimed)
         if (delay < 0) return
         tickScheduled = true
         mainHandler.postDelayed(lineTicker, delay)
@@ -705,11 +803,12 @@ class SessionHub private constructor(context: Context) {
         tickScheduled = false
     }
 
-    private fun trackLabel(): String? = listOfNotNull(lastTitle, lastArtist)
+    private fun trackLabel(): String? = labelCache ?: listOfNotNull(lastTitle, lastArtist)
         .map { it.trim() }
         .filter { it.isNotEmpty() }
         .joinToString(" · ")
         .ifBlank { null }
+        .also { labelCache = it }
 
     /**
      * 真正把文本推给悬浮层，并记录推了什么。
@@ -719,6 +818,18 @@ class SessionHub private constructor(context: Context) {
      * 一眼就能区分是「没渲染」还是「渲染了但窗口没挂上」。
      */
     private fun push(primary: String, secondary: String?, prompt: Boolean) {
+        // 同一句反复推是最常见的情况（播放器状态回调比歌词变化频繁得多）：
+        // 在这里挡掉，连悬浮层入口都不必进。
+        // 只在「窗口还挂着」时跳过：窗口被收起／退出编辑／隐藏到期后 view 已经没了，
+        // 这时候跳过推送就再没人去建窗口 —— 表现是「歌词永远不回来了」。
+        if (overlay.hasWindow() &&
+            primary == lastPushedPrimary && secondary == lastPushedSecondary &&
+            prompt == lastPushedPrompt
+        ) return
+        lastPushedPrimary = primary
+        lastPushedSecondary = secondary
+        lastPushedPrompt = prompt
+
         if (prompt) {
             overlay.showPrompt(primary, secondary)
         } else {
@@ -734,7 +845,14 @@ class SessionHub private constructor(context: Context) {
         Probe.write("渲染", trace)
     }
 
+    /**
+     * 诊断快照。
+     *
+     * **只在调试开启时构建**：它要问系统两件事（通知使用权、悬浮窗权限）再查一次显示器，
+     * 前两个都是跨进程调用。关着调试还每秒算一遍，纯属拿用户的车机做慈善。
+     */
     private fun publishSnapshot(active: MediaController?, title: String?, duration: Long) {
+        if (!Probe.enabled) return
         Probe.snapshot = ProbeSnapshot(
             listenerConnected = listenerConnected,
             listenerGranted = Permissions.isListenerGranted(appContext) == true,
@@ -750,7 +868,7 @@ class SessionHub private constructor(context: Context) {
             hitSource = hitSource,
             l1OnlyOnPause = titleOnlyOnPause,
             positionJumpCount = positionJumps,
-            timedLyrics = currentLines.isNotEmpty() && currentLines.all { it.timeMs != null },
+            timedLyrics = currentLinesTimed,
             viewAttached = overlay.isAttached(),
             viewMeasured = overlay.isMeasured(),
             hiddenByRule = false,
@@ -832,10 +950,15 @@ class SessionHub private constructor(context: Context) {
         titleStream.reset()
         lastVerdict = TitleVerdict.UNKNOWN
         lastTitle = null
-        currentLines = emptyList()
+        setCurrentLines(emptyList())
         hitSource = null
-        lastInputKey = null
+        keyValid = false
         lastRenderedSignature = null
+        lastPushedPrimary = null
+        lastPushedSecondary = null
+        lastPushedPrompt = false
+        labelCache = null
+        identityExtraKey = ""
         stopLineTick()
         // 进度跳变也必须按会话重置：换应用时 position 从 89s 掉到 44s
         // 是正常的，不能计成 CLOCK_UNSTABLE。
@@ -911,6 +1034,9 @@ class SessionHub private constructor(context: Context) {
          * 5 秒的间隔会让悬浮窗有 5 秒显示着已经停掉的旧歌词。
          */
         private const val QUERY_FOREIGN_ACTIVE_MS = 1_000L
+
+        /** 通知文本表最多记几个包：设备上会发通知的应用可能几十个，不能无限长。 */
+        private const val MAX_NOTIFICATION_PACKAGES = 16
 
         /** 标题停下多久还没歌词，就承认这个播放器没有歌词通道。 */
         private const val TITLE_WAIT_TIMEOUT_MS = 20_000L

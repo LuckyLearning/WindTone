@@ -9,7 +9,8 @@ package com.anylyric.diag
  * 就是靠这个对出来的（代理类应用每秒一条通知，把歌词链当 1Hz 轮询在跑）。
  *
  * 只做计数，不做计时：计数器本身的开销必须是「一个 int 自增」，否则观测手段自己
- * 就成了性能问题。
+ * 就成了性能问题。**调试关着时连自增都不做**：这些方法会被每一条外来通知、每一次
+ * 刷新、每一帧调到，关掉调试后计数只会在内存里烂掉。
  */
 object Perf {
 
@@ -40,23 +41,23 @@ object Perf {
     private var markTick = 0
 
     fun onRefresh() {
-        refresh++
+        if (Probe.enabled) refresh++
     }
 
     fun onChain() {
-        chain++
+        if (Probe.enabled) chain++
     }
 
     fun onSkip() {
-        skip++
+        if (Probe.enabled) skip++
     }
 
     fun onRender() {
-        render++
+        if (Probe.enabled) render++
     }
 
     fun onTick() {
-        tick++
+        if (Probe.enabled) tick++
     }
 
     /** 累计值，进报告。 */

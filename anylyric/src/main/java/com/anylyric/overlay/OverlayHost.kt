@@ -44,7 +44,6 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
 
     private var editable = false
     private var menuOpen = false
-    private var playing = true
 
     /** 收起态：歌词窗被移除，只留左侧把手。 */
     private var collapsed = false
@@ -95,6 +94,14 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
 
     fun isAttached(): Boolean = view?.isAttachedToWindow == true
 
+    /**
+     * 歌词窗当前是否存在。
+     *
+     * 上层用它决定「同一句能不能跳过推送」：窗口被移除（收起、退出编辑、隐藏到期）
+     * 之后 view 为 null，这时候跳过推送就再也没人去建窗口了。
+     */
+    fun hasWindow(): Boolean = view != null
+
     fun isMeasured(): Boolean {
         val v = view ?: return false
         return v.width > 0 && v.height > 0
@@ -132,7 +139,6 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
             addView(primary, secondary, mode)
             return
         }
-        current.playing = playing
         // 内容没变就不重绘、不重新排位置：播放器每 250ms 推一次状态，
         // 每句歌词能触发三四次刷新，白跑一次 layout 就是白烧一次车机 GPU。
         if (!changed) return
@@ -150,7 +156,6 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
             setEditing(editable)
             setContent(primary, secondary, mode)
         }
-        renderer.playing = playing
         applyLayoutLimits(renderer)
         // 在 layout 期间直接改窗口位置不安全，延到下一轮消息再摆
         renderer.sizeListener = { _, _ -> renderer.post { place(update = true) } }
@@ -360,11 +365,6 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         hide()
         handler.removeCallbacks(hideExpired)
         handler.postDelayed(hideExpired, durationMs)
-    }
-
-    fun setPlaying(value: Boolean) {
-        playing = value
-        view?.playing = value
     }
 
     fun setEditable(value: Boolean) {

@@ -14,11 +14,30 @@ import org.junit.Test
  */
 class PerfTest {
 
+    // 计数器只在调试开启时工作（关着时不该有任何监控开销），测试里必须先打开。
     @Before
-    fun setUp() = Perf.reset()
+    fun setUp() {
+        Probe.setEnabled(true)
+        Perf.reset()
+    }
 
     @After
-    fun tearDown() = Perf.reset()
+    fun tearDown() {
+        Perf.reset()
+        Probe.setEnabled(false)
+    }
+
+    /** 调试关着时计数器必须一动不动 —— 这正是「关掉调试就不监控」的那道门。 */
+    @Test
+    fun countersStaySilentWhenDebugOff() {
+        Probe.setEnabled(false)
+        Perf.onRefresh()
+        Perf.onChain()
+        Perf.onSkip()
+        Perf.onRender()
+        Perf.onTick()
+        assertEquals("refresh=0 chain=0 skip=0 render=0 tick=0", Perf.oneLine())
+    }
 
     @Test
     fun deltaCountsOnlyNewWork() {

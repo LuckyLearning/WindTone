@@ -36,8 +36,19 @@ class TitleTimeline(
     data class Event(val atMs: Long, val title: String, val identity: String)
 
     private val events = ArrayDeque<Event>()
-    private var identity: String = ""
     private var identityChanged: Boolean = false
+
+    /**
+     * 曲目指纹按字段保存，不拼字符串。
+     *
+     * 拼串版本每秒要构造一次 `"duration|mediaId|artist|extra"`，而这两个判断其实
+     * 只是一组空值安全的比较 —— 真机上元数据回调一秒能来好几次，白拼的串最后全进 GC。
+     */
+    private var hasIdentity = false
+    private var idDuration: Long = 0L
+    private var idMediaId: String? = null
+    private var idArtist: String? = null
+    private var idExtra: String = ""
 
     /**
      * 记录一次元数据回调。返回本次之后的判定。
@@ -56,18 +67,27 @@ class TitleTimeline(
         val normalized = title?.trim().orEmpty()
         if (normalized.isEmpty()) return verdict(nowMs)
 
-        val id = "$durationMs|${mediaId.orEmpty()}|${artist.orEmpty()}|$identityExtra"
-        if (identity.isNotEmpty() && id != identity) {
+        val sameTrack = hasIdentity &&
+            idDuration == durationMs &&
+            idMediaId == mediaId &&
+            idArtist == artist &&
+            idExtra == identityExtra
+        if (hasIdentity && !sameTrack) {
             // 真换歌：清空历史，避免把上一首的歌词行算进本首
             identityChanged = true
             events.clear()
         }
-        identity = id
+        hasIdentity = true
+        idDuration = durationMs
+        idMediaId = mediaId
+        idArtist = artist
+        idExtra = identityExtra
 
         val last = events.lastOrNull()
         if (last != null && isTrivialVariant(last.title, normalized)) return verdict(nowMs)
 
-        events.addLast(Event(nowMs, normalized, id))
+        // 指纹只在真正记一条事件时才拼（换行/换歌是低频事件，不是每次回调）
+        events.addLast(Event(nowMs, normalized, identity()))
         trim(nowMs)
         return verdict(nowMs)
     }
@@ -81,9 +101,12 @@ class TitleTimeline(
 
     fun reset() {
         events.clear()
-        identity = ""
+        hasIdentity = false
         identityChanged = false
     }
+
+    private fun identity(): String =
+        "$idDuration|${idMediaId.orEmpty()}|${idArtist.orEmpty()}|$idExtra"
 
     fun snapshot(): List<Event> = events.toList()
 

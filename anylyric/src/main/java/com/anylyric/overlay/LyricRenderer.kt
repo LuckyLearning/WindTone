@@ -62,12 +62,6 @@ class LyricRenderer(context: Context) : View(context) {
     var editing: Boolean = false
         private set
 
-    var playing: Boolean = true
-        set(value) {
-            if (field == value) return
-            field = value
-            invalidate()
-        }
 
     private var menuLabels: List<String> = emptyList()
     private var hintText: String = ""
@@ -95,7 +89,6 @@ class LyricRenderer(context: Context) : View(context) {
     private var contentHeight = 0f
     private var contentTop = 0f
     private var menuItemH = 1f
-    private var markGutter = 0f
     private var paddingH = 16f * density
     private var paddingV = 10f * density
 
@@ -114,7 +107,6 @@ class LyricRenderer(context: Context) : View(context) {
     private val measureBold = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.DEFAULT_BOLD }
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val dashPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val markPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val handlePaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val doneBgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -268,7 +260,6 @@ class LyricRenderer(context: Context) : View(context) {
         val promptSize = primarySize * 0.74f
         paddingH = 16f * density
         paddingV = 10f * density
-        markGutter = if (style.stateMark && mode == Mode.CONTENT) 10f * density else 0f
 
         val limit = contentLimit()
         glyphs.clear()
@@ -344,9 +335,9 @@ class LyricRenderer(context: Context) : View(context) {
         if (editing && mode == Mode.CONTENT) {
             width = maxOf(width, widthOf(hintText, spToPx(11f), false) + 54f * density)
         }
-        // 固定宽度时内容区就是「窗口宽 − 左右内边距 − 状态条槽」，文字按 align 在里面排。
+        // 固定宽度时内容区就是「窗口宽 − 左右内边距」，文字按 align 在里面排。
         contentWidth = if (fixedWidthPx > 0) {
-            (fixedWidthPx - paddingH * 2f - markGutter).coerceAtLeast(60f * density)
+            (fixedWidthPx - paddingH * 2f).coerceAtLeast(60f * density)
         } else {
             width.coerceAtMost(limit)
         }
@@ -363,7 +354,7 @@ class LyricRenderer(context: Context) : View(context) {
         } else {
             4000f
         }
-        return (base - paddingH * 2f - markGutter).coerceAtLeast(60f * density)
+        return (base - paddingH * 2f).coerceAtLeast(60f * density)
     }
 
     private fun widthOf(text: String, size: Float, bold: Boolean): Float {
@@ -423,13 +414,13 @@ class LyricRenderer(context: Context) : View(context) {
     }
 
     /** 当前可用窗口的最小尺寸，拖角时用来兜底，避免把自己拖成一条线。 */
-    fun minWidthPx(): Int = (widthOf("字字字", spToPx(style.fontSp), style.bold) + paddingH * 2f + markGutter).toInt()
+    fun minWidthPx(): Int = (widthOf("字字字", spToPx(style.fontSp), style.bold) + paddingH * 2f).toInt()
 
     fun minHeightPx(): Int = (spToPx(style.fontSp) * 1.38f + paddingV * 2f).toInt()
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val hint = if (editing && mode == Mode.CONTENT) hintHeight() else 0f
-        val fallbackW = (contentWidth + paddingH * 2f + markGutter).toInt().coerceIn(1, 4000)
+        val fallbackW = (contentWidth + paddingH * 2f).toInt().coerceIn(1, 4000)
         val fallbackH = (contentHeight + paddingV * 2f + hint).toInt().coerceIn(1, 2000)
 
         val w = when {
@@ -468,8 +459,6 @@ class LyricRenderer(context: Context) : View(context) {
             rect.set(0f, 0f, w, h)
             canvas.drawRoundRect(rect, radius(), radius(), bgPaint)
         }
-
-        drawStateMark(canvas, h)
 
         // 固定高度时内容垂直居中：只有一行时贴顶会显得整体偏上，尤其在 2~3 行高度里。
         contentTop = blockTop()
@@ -510,7 +499,7 @@ class LyricRenderer(context: Context) : View(context) {
         configureText(glyph, alphaScale)
         val baseline = top - textPaint.fontMetrics.ascent
         val glyphWidth = widthOf(glyph.text, glyph.size, glyph.bold)
-        val baseX = paddingH + markGutter
+        val baseX = paddingH
         val x = when (style.align) {
             Align.START -> baseX
             Align.CENTER -> baseX + (contentWidth - glyphWidth) / 2f
@@ -536,17 +525,6 @@ class LyricRenderer(context: Context) : View(context) {
                 canvas.drawRect(paddingH, y, width - paddingH, y + 1f * density, dividerPaint)
             }
         }
-    }
-
-    private fun drawStateMark(canvas: Canvas, h: Float) {
-        if (!style.stateMark || mode != Mode.CONTENT) return
-        val barW = 3f * density
-        val left = paddingH
-        val top = paddingV * 0.7f
-        val bottom = h - paddingV * 0.7f - (if (editing) hintHeight() else 0f)
-        markPaint.color = if (playing) 0xFF7FD1A4.toInt() else 0x55FFFFFF
-        rect.set(left, top, left + barW, bottom)
-        canvas.drawRoundRect(rect, barW / 2f, barW / 2f, markPaint)
     }
 
     private fun drawEditFrame(canvas: Canvas, w: Float, h: Float) {

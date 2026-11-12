@@ -32,7 +32,6 @@
     <string name="appearance_bold">Bold</string>
     <string name="appearance_fade">Fade on change</string>
     <string name="appearance_secondary">Second line</string>
-    <string name="appearance_state_mark">Playback indicator</string>
     <string name="appearance_hide_empty">Hide when there are no lyrics</string>
     <string name="appearance_percent">%1$s%%</string>
     <string name="appearance_dp">%1$s dp</string>
@@ -139,7 +138,7 @@
     <string name="settings_version">Version %1$s</string>
     <string name="settings_about">Plays no audio, requests no audio focus, controls nothing, reads no files. Network is used only to check for updates.</string>
     <string name="section_about">About &amp; updates</string>
-    <string name="update_version_line">Version %1$s (code %2$d)</string>
+    <string name="update_version_line">Version %1$s</string>
     <string name="update_check">Check for updates</string>
     <string name="update_checking">Checking…</string>
     <string name="update_up_to_date">Up to date (%1$s)</string>
@@ -173,6 +172,9 @@
     <string name="edit_entered">Edit mode on: drag to move.</string>
     <string name="edit_exited">Edit mode off: touches pass through.</string>
     <string name="diag_evidence_label">Evidence: %1$s</string>
+    <string name="diag_debug_off">Debug log is off</string>
+    <string name="diag_debug_off_hint">Nothing is collected while debug is off — no sampling, no bookkeeping, no extra calls. Turn it on in Settings → Debug to get live state, source attempts and resource usage here.</string>
+    <string name="diag_debug_off_report">Live probe data is disabled.\n\nTurn on Settings → Debug, then come back to this page.</string>
 
     <string name="diag_code_permission_listener">Notification access is not granted. Tick AnyLyric in system settings, then come back.</string>
     <string name="diag_code_listener_unbound">Notification access is ticked, but the system has not bound the service yet. Tap Reconnect; if that fails, toggle the switch off and on in system settings.</string>

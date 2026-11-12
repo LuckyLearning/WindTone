@@ -31,7 +31,6 @@
     <string name="appearance_bold">加粗</string>
     <string name="appearance_fade">切换淡入</string>
     <string name="appearance_secondary">副行内容</string>
-    <string name="appearance_state_mark">播放状态条</string>
     <string name="appearance_hide_empty">无歌词时直接隐藏</string>
     <string name="appearance_percent">%1$s%%</string>
     <string name="appearance_dp">%1$s dp</string>
@@ -138,7 +137,7 @@
     <string name="settings_version">版本 %1$s</string>
     <string name="settings_about">不播放声音、不申请音频焦点、不控制播放、不读文件；只有检查更新时才联网。</string>
     <string name="section_about">关于与更新</string>
-    <string name="update_version_line">版本 %1$s（编号 %2$d）</string>
+    <string name="update_version_line">版本 %1$s</string>
     <string name="update_check">检查更新</string>
     <string name="update_checking">正在检查更新…</string>
     <string name="update_up_to_date">已是最新（%1$s）</string>
@@ -172,6 +171,9 @@
     <string name="edit_entered">已进入编辑态：拖动即可移动。</string>
     <string name="edit_exited">已退出编辑态：触摸重新穿透。</string>
     <string name="diag_evidence_label">证据：%1$s</string>
+    <string name="diag_debug_off">调试日志未开启</string>
+    <string name="diag_debug_off_hint">关闭期间不做任何采集：不采样、不计数、不多发一次跨进程查询。到「设置 → 调试」打开后，本页才会显示实时状态、逐层通道尝试与资源占用。</string>
+    <string name="diag_debug_off_report">调试日志未开启，没有可展示的实时数据。\n\n到「设置 → 调试」打开后再回到本页。</string>
 
     <string name="diag_code_permission_listener">通知使用权未授予。请在系统设置里勾选 AnyLyric 后返回本页。</string>
     <string name="diag_code_listener_unbound">通知使用权是勾选状态，系统还没把服务绑上。点「重新连接」通常即可恢复；仍不行时在系统设置里关掉再打开一次。</string>
