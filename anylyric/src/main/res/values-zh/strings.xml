@@ -9,7 +9,7 @@
 
     <string name="section_autostart">开机与后台</string>
     <string name="autostart_boot">开机自启</string>
-    <string name="autostart_boot_hint">开机后主动请求系统绑定通知使用权。不少车机重启后迟迟不绑或干脆忘绑，表现是「开机后歌词一直不出现，打开一次应用才好」。默认关闭。</string>
+    <string name="autostart_boot_hint">开机后在后台启动：请求系统绑定通知使用权，并让悬浮窗直接出现（显示「等待播放」），开机结果看得见。不少车机重启后迟迟不绑或干脆忘绑，表现是「开机后歌词一直不出现，打开一次应用才好」。默认关闭。</string>
     <string name="autostart_keepalive">后台保活（电池优化白名单）</string>
     <string name="autostart_keepalive_hint">申请让系统不再对 AnyLyric 做电池优化，开关状态以系统实际结果为准；关闭需要到系统设置里撤销。</string>
     <string name="section_probe">通道探测</string>
@@ -90,6 +90,8 @@
     <string name="status_listener_unbound">通知使用权已授予，正在等待系统连接…</string>
     <string name="status_listener_unbound_failed">已授权，但系统没有自动恢复连接</string>
     <string name="status_listener_disconnected">通知使用权未授予，歌词暂不可用</string>
+    <string name="overlay_standby">AnyLyric 已启动，等待播放</string>
+    <string name="status_title_is_lyric">TITLE 是歌词（伪歌名）</string>
     <string name="status_no_session">当前没有正在播放的应用</string>
     <string name="status_session">正在播放：%1$s — %2$s</string>
     <string name="status_channel">通道：%1$s</string>

@@ -33,6 +33,7 @@ import com.anylyric.lyrics.sources.L0MetadataSource
 import com.anylyric.lyrics.sources.L1TitleStreamSource
 import com.anylyric.lyrics.sources.L2NotificationSource
 import com.anylyric.overlay.OverlayHost
+import com.anylyric.service.BootPolicy
 import com.anylyric.service.MediaWatchService
 import com.anylyric.ui.SettingsActivity
 
@@ -53,7 +54,10 @@ class SessionHub private constructor(context: Context) {
         val title: String?,
         val artist: String?,
         val hitSource: String?,
-        val verdict: TitleVerdict
+        val verdict: TitleVerdict,
+
+        /** TITLE 与歌词行相同：播放器在拿 TITLE 推歌词，不能当歌名展示。 */
+        val titleIsLyric: Boolean = false
     ) {
         /** 服务真的连上了才算可用；「已授权未绑定」不能当作可用。 */
         val listenerConnected: Boolean get() = listenerState == ListenerState.GRANTED
@@ -298,7 +302,8 @@ class SessionHub private constructor(context: Context) {
         title = lastTitle,
         artist = lastArtist,
         hitSource = hitSource,
-        verdict = lastVerdict
+        verdict = lastVerdict,
+        titleIsLyric = titleIsLyric()
     )
 
     /**
@@ -393,6 +398,28 @@ class SessionHub private constructor(context: Context) {
         stopDegraded()
         if (Probe.enabled) Probe.write("权限", "listenerConnected=true")
         requestRefresh("listener_connected")
+        maybeBootStandby()
+    }
+
+    /**
+     * 开机自启的另一半：不只是把服务绑回来，还要让悬浮窗**真的出现在屏上**。
+     *
+     * 没有这一步，车机开机后就算服务活了，也要等用户播放音乐才有任何可见反馈，
+     * 看起来就像「没启动」。刚开机 [BOOT_STANDBY_WINDOW_MS] 内（且开关打开）
+     * 补一条待播提示；如果刷新已经画了真歌词或「暂无歌词」，就不重复盖一条。
+     * [SystemClock.elapsedRealtime] 就是本次开机的时长，不需要任何状态文件。
+     */
+    private fun maybeBootStandby() {
+        if (!BootPolicy.shouldShowStandby(
+                SystemClock.elapsedRealtime(), prefs.bootAutostart, BOOT_STANDBY_WINDOW_MS
+            )
+        ) return
+        mainHandler.postDelayed({
+            if (!overlay.hasWindow()) {
+                overlay.showPrompt(appContext.getString(R.string.overlay_standby), emptyList())
+                if (Probe.enabled) Probe.write("渲染", "boot standby prompt shown")
+            }
+        }, BOOT_STANDBY_DELAY_MS)
     }
 
     fun onListenerDisconnected() {
@@ -998,7 +1025,25 @@ class SessionHub private constructor(context: Context) {
      * 「歌曲名和歌手取错了，现在是歌词」就是这条路。此时标题直接不显示。
      */
     private fun titleForOverlay(): String? =
-        if (lastVerdict == TitleVerdict.PSEUDO) null else trackLabel()
+        if (lastVerdict == TitleVerdict.PSEUDO || titleIsLyric()) null else trackLabel()
+
+    /**
+     * 标题文本是否与当前歌词行完全相同。
+     *
+     * TitleTimeline 的 PSEUDO 判定需要两条以上样本且窗口 15s —— 逐行推歌词的播放器
+     * 在「换歌后的头几秒」（UNKNOWN）和「长间奏」（相邻间隔被拉大后可能翻回 STABLE）
+     * 会漏网，标题就闪出一句歌词（0.2.7 真机仍见「歌曲名取成歌词」）。补一道强信号：
+     * TITLE 与任何一条已知歌词行相同，无论判定是什么都不当标题用。真正的歌名恰好
+     * 与某句歌词相同的情况存在，但远比「标题变歌词」少见，且误伤的后果只是少一个标题。
+     */
+    private fun titleIsLyric(): Boolean {
+        val candidate = lastTitle?.trim() ?: return false
+        if (candidate.isEmpty()) return false
+        for (line in currentLines) {
+            if (line.text.trim() == candidate) return true
+        }
+        return false
+    }
 
     /**
      * 真正把文本推给悬浮层，并记录推了什么。
@@ -1252,6 +1297,12 @@ class SessionHub private constructor(context: Context) {
 
         /** 通知文本表最多记几个包：设备上会发通知的应用可能几十个，不能无限长。 */
         private const val MAX_NOTIFICATION_PACKAGES = 16
+
+        /** 开机后这段时间内连接成功，才补「待播」悬浮窗；再晚就不算「刚开机」。 */
+        private const val BOOT_STANDBY_WINDOW_MS = 120_000L
+
+        /** 待播提示延后一拍：让开机后的第一次刷新先跑，有真歌词就不盖提示。 */
+        private const val BOOT_STANDBY_DELAY_MS = 800L
 
         /**
          * 一次给渲染器准备几条上下文行。

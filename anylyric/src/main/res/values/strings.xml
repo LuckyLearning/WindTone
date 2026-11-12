@@ -10,7 +10,7 @@
 
     <string name="section_autostart">Autostart &amp; keep-alive</string>
     <string name="autostart_boot">Start on boot</string>
-    <string name="autostart_boot_hint">After boot, ask the system to rebind the notification listener right away. Some car units delay or drop the binding, which shows up as “no lyrics until the app is opened once”. Off by default.</string>
+    <string name="autostart_boot_hint">After boot, start AnyLyric in the background: ask the system to rebind the notification listener, and show the overlay right away (“waiting for playback”) so the boot result is visible. Some car units delay or drop the binding, which shows up as “no lyrics until the app is opened once”. Off by default.</string>
     <string name="autostart_keepalive">Keep alive (battery optimization)</string>
     <string name="autostart_keepalive_hint">Ask the system to skip battery optimization for AnyLyric. The switch reflects the real system state; turning it off is done on the system page.</string>
     <string name="section_probe">Channel probe</string>
@@ -91,6 +91,8 @@
     <string name="status_listener_unbound">Notification access granted — waiting for the system to connect…</string>
     <string name="status_listener_unbound_failed">Granted, but the system did not reconnect</string>
     <string name="status_listener_disconnected">Notification access not granted — lyrics unavailable</string>
+    <string name="overlay_standby">AnyLyric is running — waiting for playback</string>
+    <string name="status_title_is_lyric">TITLE is lyrics (pseudo title)</string>
     <string name="status_no_session">No active player</string>
     <string name="status_session">Now: %1$s — %2$s</string>
     <string name="status_channel">Channel: %1$s</string>

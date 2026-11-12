@@ -34,4 +34,21 @@ class BootPolicyTest {
         assertFalse(BootPolicy.shouldRebind("android.intent.action.MY_PACKAGE_REPLACED", enabled = true))
         assertFalse(BootPolicy.shouldRebind("", enabled = true))
     }
+
+    @Test
+    fun `standby prompt shows only within boot window with switch on`() {
+        val window = 120_000L
+        assertTrue(BootPolicy.shouldShowStandby(0L, enabled = true, windowMs = window))
+        assertTrue(BootPolicy.shouldShowStandby(119_999L, enabled = true, windowMs = window))
+        // 窗口边界恰好等于 window 也算刚开机（服务通常在开机后几十秒内连上）
+        assertTrue(BootPolicy.shouldShowStandby(window, enabled = true, windowMs = window))
+        // 超过窗口期才连上：不算刚开机，不凭空冒悬浮窗
+        assertFalse(BootPolicy.shouldShowStandby(window + 1, enabled = true, windowMs = window))
+        assertFalse(BootPolicy.shouldShowStandby(600_000L, enabled = true, windowMs = window))
+    }
+
+    @Test
+    fun `standby prompt respects the switch`() {
+        assertFalse(BootPolicy.shouldShowStandby(10_000L, enabled = false, windowMs = 120_000L))
+    }
 }

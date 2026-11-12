@@ -99,6 +99,12 @@ WindTone 的轻量分支：旁听车机上任意播放器**已经发布**的媒�
 「歌曲名和歌手信息取错了，现在是歌词」）。现在 PSEUDO 期间标题直接不显示，判定恢复
 STABLE（真换歌）后标题回来。
 
+0.2.7 真机（HONOR / com.salt.music）仍见「歌曲名取成歌词」，补了一道**强信号**：
+TITLE 文本与任何一条已知歌词行完全相同 → 无论判定是什么都不当标题。这是为了堵两个漏网：
+换歌后的头几秒判定还是 UNKNOWN（PSEUDO 要两条以上样本），以及长间奏把中位间隔拉大后
+判定可能翻回 STABLE —— 这两个窗口里 TITLE 都是歌词。设置页「正在播放」也同步：
+TITLE 与歌词相同时显示「TITLE 是歌词（伪歌名）」而不是那句话本身。
+
 **副行锚点与回退**（v0.2.7）：无时间轴的行集由来源显式给出「当前行是第几行」
 （`LyricResult.Hit.currentLineIndex`）—— L2 的多行通知第一行才是当前句，旧实现一律取末行，
 等于把下一句当当前句画；L1 缓冲末行才是当前句。当前行之后凑不出任何行时（逐行流的常态）
@@ -370,6 +376,10 @@ MediaWatchService  (NotificationListenerService，由系统绑定，不自拉活
   通知使用权，表现是「开机后歌词一直不出现，打开一次应用才好」。判定抽成
   `BootPolicy` 纯函数并配单测；receiver 必须 `exported="true"`（false 时系统广播不送达，
   这条经验来自 WindTone 车机真机）。
+- **开机后台启动，让悬浮窗出现**（0.2.7.1）：服务绑回来只是第一步，没有音乐时屏上毫无
+  动静，用户无从判断自启是否生效。现在刚开机的窗口期内（`elapsedRealtime ≤ 2 分钟`，
+  无需状态文件）连接成功且屏上还没有悬浮窗时，画一条「AnyLyric 已启动，等待播放」；
+  播放开始后正常歌词接管。
 - **后台保活**：申请电池优化白名单（`ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`），
   个别 ROM 裁掉该 action 时退回应用详情页。开关状态以系统实际结果为准（`onResume` 刷新）；
   白名单没有可编程的撤销通道，关闭要去系统设置。
@@ -393,7 +403,7 @@ MediaWatchService  (NotificationListenerService，由系统绑定，不自拉活
 
 | 项 | 结果 |
 |---|---|
-| `:anylyric:testDebugUnitTest` | **147 项**通过（LRC 解析 10、伪歌名判定 11、责任链 10、时钟 6、判因 14、权限列表解析 7、几何 10、折行 9、行预算 7、样式 11、开机策略 4、更新 18、资源采样 7、行推进 tick 11、L0 缓存 6、工作量计数 4） |
+| `:anylyric:testDebugUnitTest` | **149 项**通过（LRC 解析 10、伪歌名判定 11、责任链 10、时钟 6、判因 14、权限列表解析 7、几何 10、折行 9、行预算 7、样式 11、开机策略 6、更新 18、资源采样 7、行推进 tick 11、L0 缓存 6、工作量计数 4） |
 | `:anylyric:lintDebug` | Error 0（Warning 73，均为既有项或预期项） |
 | `assembleRelease` | 约 **262 KB**（含矢量图标 + 5 组密度 PNG），运行时依赖仅 `kotlin-stdlib` |
 | 真机 | 手机（HONOR / API 37）已验证 L1 可命中；车机 **未验证** |

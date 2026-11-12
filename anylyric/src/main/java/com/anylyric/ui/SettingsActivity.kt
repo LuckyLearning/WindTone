@@ -1278,9 +1278,16 @@ class SettingsActivity : BaseActivity() {
             ListenerState.GRANTED -> if (status.sessionCount == 0) {
                 getString(R.string.status_no_session)
             } else {
+                // TITLE 与歌词行相同时（伪歌名漏网 / 判定尚未成立）不能把歌词当歌名展示，
+                // 明说「TITLE 被播放器当歌词用」比展示一句歌词诚实。
+                val titleText = if (status.titleIsLyric) {
+                    getString(R.string.status_title_is_lyric)
+                } else {
+                    status.title ?: "-"
+                }
                 getString(
                     R.string.status_session,
-                    status.title ?: "-",
+                    titleText,
                     status.artist ?: "-"
                 ) + "\n" + getString(R.string.status_channel, channelLabel(status.hitSource))
             }
