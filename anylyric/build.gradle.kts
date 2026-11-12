@@ -17,8 +17,8 @@ plugins {
  * 与 WindTone 的 1.2.x 主线**互不干涉**，只递增第三位（0.2.x）。
  * 0.2.1：颜色自定义 / 宽高自由调整 / 左侧收起把手 / 切换动效重做 / 资源占用入调试日志。
  */
-val anyLyricVersionName = "0.2.6"
-val anyLyricVersionCode = 8
+val anyLyricVersionName = "0.2.7"
+val anyLyricVersionCode = 9
 
 /**
  * 签名沿用 WindTone 的同一套密钥（同一开发者、同一分发渠道）。
