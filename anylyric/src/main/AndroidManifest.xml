@@ -13,6 +13,15 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!--
+      两项自启相关（0.2.7，用户拍板放开旧的「不申请电池白名单」边界）：
+      · RECEIVE_BOOT_COMPLETED —— 收开机广播，配合设置里的「开机自启」开关主动
+        requestRebind（不少车机重启后迟迟不绑通知使用权）；
+      · REQUEST_IGNORE_BATTERY_OPTIMIZATIONS —— 「后台保活」开关弹系统白名单弹窗。
+        都是用户在设置里主动打开才生效，默认零打扰。
+    -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!--
       Android 11+ 的包可见性：不声明这些 action，resolveActivity()/queryIntentActivities()
@@ -86,5 +95,20 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+
+        <!--
+          exported 必须是 true：BOOT_COMPLETED 的发送方是系统进程，
+          写成 false 时系统广播根本不会送达，表现就是「开关打开了但开机没反应」。
+          （这条经验来自 WindTone 车机真机。）
+        -->
+        <receiver
+            android:name=".service.BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

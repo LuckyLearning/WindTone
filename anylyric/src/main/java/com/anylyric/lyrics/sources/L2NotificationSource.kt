@@ -33,7 +33,8 @@ class L2NotificationSource : LyricsSource {
                     .map { it.trim() }
                     .filter { it.isNotEmpty() }
                 if (parts.size >= 2) {
-                    return LyricResult.Hit(id, parts.map { LyricLine(null, it) })
+                    // 第一行是当前句，后面是接下来的行（逐行流播放器的通知惯例）。
+                    return LyricResult.Hit(id, parts.map { LyricLine(null, it) }, currentLineIndex = 0)
                 }
             }
         }

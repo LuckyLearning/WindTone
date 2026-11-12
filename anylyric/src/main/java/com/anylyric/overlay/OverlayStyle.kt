@@ -30,22 +30,6 @@ enum class Align(val id: String) {
     }
 }
 
-/**
- * 副行内容策略：取当前行的下一行还是上一行。
- *
- * 只保留「相邻歌词行」这一种语义 —— 歌名/歌手已经独立成标题行（[TitlePos]），
- * 再让副行去重复显示它是同一种信息摆两处。
- */
-enum class Secondary(val id: String) {
-    NEXT("next"),
-    PREVIOUS("previous"),
-    NONE("none");
-
-    companion object {
-        fun of(id: String?): Secondary = values().firstOrNull { it.id == id } ?: NEXT
-    }
-}
-
 /** 标题行（歌名 · 歌手）在歌词块的上方还是下方。 */
 enum class TitlePos(val id: String) {
     TOP("top"),
@@ -79,7 +63,6 @@ data class OverlayStyle(
     val secondaryAlpha: Float = OverlayDefaults.SECONDARY_ALPHA,
     val align: Align = Align.START,
     val fadeMs: Int = OverlayDefaults.FADE_MS,
-    val secondary: Secondary = Secondary.NEXT,
     val primaryColor: Int = OverlayDefaults.PRIMARY_COLOR,
     val secondaryColor: Int = OverlayDefaults.SECONDARY_COLOR,
     val bgColor: Int = OverlayDefaults.BG_COLOR,
@@ -160,7 +143,6 @@ object OverlayDefaults {
         secondaryAlpha = SECONDARY_ALPHA,
         align = Align.START,
         fadeMs = FADE_MS,
-        secondary = Secondary.NEXT,
         primaryColor = PRIMARY_COLOR,
         secondaryColor = SECONDARY_COLOR,
         bgColor = BG_COLOR,

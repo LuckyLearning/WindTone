@@ -40,6 +40,7 @@ class L1TitleStreamSource(private val capacity: Int = 200) : LyricsSource {
     override fun tryResolve(ctx: TrackContext): LyricResult {
         if (!ctx.pseudoTitle) return LyricResult.Miss(id, "stable_title")
         if (lines.size < 2) return LyricResult.Miss(id, "too_few_lines")
-        return LyricResult.Hit(id, lines.map { LyricLine(null, it) })
+        // 缓冲是「历史行 + 当前行在末尾」：后面还没有可看的行。
+        return LyricResult.Hit(id, lines.map { LyricLine(null, it) }, currentLineIndex = lines.lastIndex)
     }
 }

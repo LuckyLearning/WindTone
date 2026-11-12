@@ -6,7 +6,6 @@ import com.anylyric.overlay.Align
 import com.anylyric.overlay.OverlayDefaults
 import com.anylyric.overlay.OverlayStyle
 import com.anylyric.overlay.Preset
-import com.anylyric.overlay.Secondary
 import com.anylyric.overlay.TitlePos
 import com.anylyric.update.DownloadRoute
 
@@ -47,6 +46,16 @@ class Prefs(context: Context) {
         get() = DownloadRoute.of(sp.getString(KEY_UPDATE_ROUTE, null))
         set(value) = sp.edit().putString(KEY_UPDATE_ROUTE, value.name).apply()
 
+    /**
+     * 开机自启：开机广播到达后主动请求系统绑定通知使用权。
+     *
+     * 通知使用权本身重启后仍然有效，但不少车机 ROM 要么延迟绑定、要么干脆忘记绑 ——
+     * 表现是「开机后歌词一直不出现」。打开此开关后由我们自己补一脚。
+     */
+    var bootAutostart: Boolean
+        get() = sp.getBoolean(KEY_BOOT_AUTOSTART, false)
+        set(value) = sp.edit().putBoolean(KEY_BOOT_AUTOSTART, value).apply()
+
     fun style(): OverlayStyle = styleCache ?: OverlayDefaults.sanitize(
         OverlayStyle(
             preset = Preset.of(sp.getString(KEY_PRESET, null)),
@@ -59,7 +68,6 @@ class Prefs(context: Context) {
             secondaryAlpha = sp.getFloat(KEY_SECONDARY_ALPHA, OverlayDefaults.SECONDARY_ALPHA),
             align = Align.of(sp.getString(KEY_ALIGN, null)),
             fadeMs = sp.getInt(KEY_FADE, OverlayDefaults.FADE_MS),
-            secondary = Secondary.of(sp.getString(KEY_SECONDARY, null)),
             primaryColor = sp.getInt(KEY_PRIMARY_COLOR, OverlayDefaults.PRIMARY_COLOR),
             secondaryColor = sp.getInt(KEY_SECONDARY_COLOR, OverlayDefaults.SECONDARY_COLOR),
             bgColor = sp.getInt(KEY_BG_COLOR, OverlayDefaults.BG_COLOR),
@@ -86,7 +94,6 @@ class Prefs(context: Context) {
             .putFloat(KEY_SECONDARY_ALPHA, safe.secondaryAlpha)
             .putString(KEY_ALIGN, safe.align.id)
             .putInt(KEY_FADE, safe.fadeMs)
-            .putString(KEY_SECONDARY, safe.secondary.id)
             .putInt(KEY_PRIMARY_COLOR, safe.primaryColor)
             .putInt(KEY_SECONDARY_COLOR, safe.secondaryColor)
             .putInt(KEY_BG_COLOR, safe.bgColor)
@@ -151,7 +158,6 @@ class Prefs(context: Context) {
         private const val KEY_SECONDARY_ALPHA = "style_secondary_alpha"
         private const val KEY_ALIGN = "style_align"
         private const val KEY_FADE = "style_fade_ms"
-        private const val KEY_SECONDARY = "style_secondary"
         private const val KEY_PRIMARY_COLOR = "style_primary_color"
         private const val KEY_SECONDARY_COLOR = "style_secondary_color"
         private const val KEY_BG_COLOR = "style_bg_color"
@@ -164,6 +170,7 @@ class Prefs(context: Context) {
         private const val KEY_TITLE_POS = "style_title_pos"
         private const val KEY_HANDLE = "overlay_handle_enabled"
         private const val KEY_UPDATE_ROUTE = "update_route"
+        private const val KEY_BOOT_AUTOSTART = "boot_autostart"
 
         private const val KEY_RATIO_X_PORT = "ratio_x_port"
         private const val KEY_RATIO_Y_PORT = "ratio_y_port"

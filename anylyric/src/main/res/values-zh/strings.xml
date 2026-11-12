@@ -6,6 +6,12 @@
 
     <string name="section_status">状态</string>
     <string name="section_appearance">外观</string>
+
+    <string name="section_autostart">开机与后台</string>
+    <string name="autostart_boot">开机自启</string>
+    <string name="autostart_boot_hint">开机后主动请求系统绑定通知使用权。不少车机重启后迟迟不绑或干脆忘绑，表现是「开机后歌词一直不出现，打开一次应用才好」。默认关闭。</string>
+    <string name="autostart_keepalive">后台保活（电池优化白名单）</string>
+    <string name="autostart_keepalive_hint">申请让系统不再对 AnyLyric 做电池优化，开关状态以系统实际结果为准；关闭需要到系统设置里撤销。</string>
     <string name="section_probe">通道探测</string>
 
     <string name="appearance_preset">预设</string>
@@ -34,7 +40,6 @@
     <string name="appearance_stroke">文字描边</string>
     <string name="appearance_bold">加粗</string>
     <string name="appearance_fade">切换淡入</string>
-    <string name="appearance_secondary">副行内容</string>
     <string name="appearance_hide_empty">无歌词时直接隐藏</string>
     <string name="appearance_percent">%1$s%%</string>
     <string name="appearance_dp">%1$s dp</string>
@@ -43,9 +48,6 @@
     <string name="align_start">左</string>
     <string name="align_center">中</string>
     <string name="align_end">右</string>
-    <string name="secondary_next">下一句</string>
-    <string name="secondary_previous">上一句</string>
-    <string name="secondary_none">关闭</string>
 
     <string name="position_edit_hint">位置不合适时，进入编辑态拖动；拖四角可改大小</string>
     <string name="position_reset">恢复默认位置与大小</string>
@@ -165,7 +167,6 @@
     <string name="section_behavior">行为</string>
     <string name="appearance_lines_hint">歌词总行数。当前句折行优先，剩下的预算才给后续行。</string>
     <string name="appearance_stroke_hint">给文字描一圈细边。背景偏亮时基本必开。</string>
-    <string name="appearance_secondary_hint">行数预算够时，会连续显示后面几句，而不只是紧邻的一句。</string>
     <string name="appearance_hide_empty_hint">取不到歌词时什么都不画；关掉则显示一行「暂无歌词」。</string>
     <string name="position_handle_hint">左边缘的小把手，点一下收起或展开悬浮窗。</string>
     <string name="title_show">显示歌名与歌手</string>

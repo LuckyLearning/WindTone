@@ -33,7 +33,6 @@ import com.anylyric.lyrics.sources.L0MetadataSource
 import com.anylyric.lyrics.sources.L1TitleStreamSource
 import com.anylyric.lyrics.sources.L2NotificationSource
 import com.anylyric.overlay.OverlayHost
-import com.anylyric.overlay.Secondary
 import com.anylyric.service.MediaWatchService
 import com.anylyric.ui.SettingsActivity
 
@@ -93,6 +92,14 @@ class SessionHub private constructor(context: Context) {
     private var lastRebindAt = 0L
 
     private var currentLines: List<LyricLine> = emptyList()
+
+    /**
+     * 无时间轴行集里「当前行」的锚点。-1 表示取最后一行（L1 缓冲的形态）。
+     *
+     * 由命中的来源显式给出（见 [LyricResult.Hit.currentLineIndex]）：L2 的多行通知
+     * 第一行才是当前句，旧实现一律取末行，等于把下一句当当前句画。
+     */
+    private var currentAnchorIndex = -1
     private var hitSource: String? = null
     private var lastTitle: String? = null
     private var lastArtist: String? = null
@@ -144,10 +151,9 @@ class SessionHub private constructor(context: Context) {
      * 上下文行的缓存。
      *
      * `render()` 每个状态回调都会跑一遍（一秒好几次），而真正换行一秒才一次。
-     * 每次为新的一句重新建一个 List 纯属喂 GC —— 行号、策略、歌词表三者都没变时直接复用。
+     * 每次为新的一句重新建一个 List 纯属喂 GC —— 行号、歌词表都没变时直接复用。
      */
     private var ctxIndex = -1
-    private var ctxKind: Secondary? = null
     private var ctxRef: List<LyricLine>? = null
     private var ctxResult: List<String> = emptyList()
 
@@ -523,7 +529,9 @@ class SessionHub private constructor(context: Context) {
         tickScheduled = false
         degraded = false
         detachController()
-        overlay.hide()
+        // 服务销毁用 release 而不是 hide：连 OverlayHost 自己的回调（隐藏到期等）
+        // 一起摘掉，否则残留的 hiddenUntil 会把下一次会话的歌词卡在「隐藏期内」。
+        overlay.release()
     }
 
     /** 样式变更（字号／预设／透明度／行数…）立即生效，不重建窗口。 */
@@ -757,7 +765,7 @@ class SessionHub private constructor(context: Context) {
             val outcome = chain.resolve(trackContext)
             val costMs = (SystemClock.elapsedRealtimeNanos() - startedAt) / 1_000_000
             hitSource = outcome.hit?.sourceId
-            setCurrentLines(outcome.hit?.lines.orEmpty())
+            setCurrentLines(outcome.hit?.lines.orEmpty(), outcome.hit?.currentLineIndex ?: -1)
 
             if (Probe.enabled) {
                 Probe.attempts = outcome.attempts
@@ -849,8 +857,9 @@ class SessionHub private constructor(context: Context) {
     }
 
     /** 换歌词列表的唯一入口：顺带把「是否全带时间轴」算一次，别再每次渲染全表扫。 */
-    private fun setCurrentLines(lines: List<LyricLine>) {
+    private fun setCurrentLines(lines: List<LyricLine>, anchorIndex: Int = -1) {
         currentLines = lines
+        currentAnchorIndex = anchorIndex
         lastLineIndex = -1
         var timed = lines.isNotEmpty()
         for (line in lines) {
@@ -878,49 +887,49 @@ class SessionHub private constructor(context: Context) {
                 appContext.getString(
                     if (waiting) R.string.overlay_fetching else R.string.overlay_no_lyrics
                 ),
-                listOfNotNull(trackLabel()),
+                listOfNotNull(titleForOverlay()),
                 null,
                 prompt = true
             )
             return
         }
 
-        val index = if (currentLinesTimed) clock.locate(currentLines, clock.position())
-        else currentLines.lastIndex
+        val index = if (currentLinesTimed) {
+            clock.locate(currentLines, clock.position())
+        } else {
+            currentAnchorIndex.takeIf { it >= 0 } ?: currentLines.lastIndex
+        }
         val safe = index.coerceIn(0, currentLines.lastIndex)
         lastLineIndex = safe
 
         // 副行是一**组**相邻行：用户把行数调到 3、4 时要看到更多歌词，
         // 只给一条文本的话预算再多也只有两行可画（0.2.5 及以前的真实表现）。
-        val secondary = contextLines(safe, prefs.style().secondary)
-        push(currentLines[safe].text, secondary, trackLabel(), prompt = false)
+        push(currentLines[safe].text, contextLines(safe), titleForOverlay(), prompt = false)
     }
 
     /**
-     * 取当前行前后最多 [CONTEXT_MAX] 行的文本，按显示顺序。
+     * 取当前行之后最多 [CONTEXT_MAX] 行的文本，按显示顺序；后面没有行时回退取前面的行。
+     *
+     * 「回退」是为了逐行流（L1/L2）：这种来源没有时间轴，「下一句」要么不存在
+     * （L1 缓冲里只有历史），要么只在两行通知里凑出一句。当前行之后凑不出任何行时，
+     * 用前面的行补位 —— 上下文行本来就是给「行数预算」填空的，方向不是用户可感知的承诺。
      *
      * 行数预算由渲染器按 `maxLines` 分配：这里只管「能拿到哪些行」，
      * 拿多了渲染器会丢掉，拿少了就会出现「4 行窗口只有 2 行字」。
      */
-    private fun contextLines(index: Int, kind: Secondary): List<String> {
-        if (index == ctxIndex && kind == ctxKind && currentLines === ctxRef) return ctxResult
+    private fun contextLines(index: Int): List<String> {
+        if (index == ctxIndex && currentLines === ctxRef) return ctxResult
         val out = ArrayList<String>(CONTEXT_MAX)
-        when (kind) {
-            // 紧邻的一行排在最前：这样「下一行」就是紧接着当前句往下读
-            Secondary.NEXT ->
-                for (step in 1..CONTEXT_MAX) {
-                    out += currentLines.getOrNull(index + step)?.text ?: break
-                }
-
-            Secondary.PREVIOUS ->
-                for (step in 1..CONTEXT_MAX) {
-                    out += currentLines.getOrNull(index - step)?.text ?: break
-                }
-
-            Secondary.NONE -> Unit
+        for (step in 1..CONTEXT_MAX) {
+            out += currentLines.getOrNull(index + step)?.text ?: break
+        }
+        if (out.isEmpty()) {
+            for (step in 1..CONTEXT_MAX) {
+                val previous = currentLines.getOrNull(index - step) ?: break
+                if (previous.text.isNotBlank()) out += previous.text
+            }
         }
         ctxIndex = index
-        ctxKind = kind
         ctxRef = currentLines
         ctxResult = out
         return out
@@ -950,8 +959,11 @@ class SessionHub private constructor(context: Context) {
     /** 当前应该显示的行号（与 [render] 的定位规则一致）。 */
     private fun currentIndex(): Int {
         if (currentLines.isEmpty()) return -1
-        val index = if (currentLinesTimed) clock.locate(currentLines, clock.position())
-        else currentLines.lastIndex
+        val index = if (currentLinesTimed) {
+            clock.locate(currentLines, clock.position())
+        } else {
+            currentAnchorIndex.takeIf { it >= 0 } ?: currentLines.lastIndex
+        }
         return index.coerceIn(0, currentLines.lastIndex)
     }
 
@@ -977,6 +989,16 @@ class SessionHub private constructor(context: Context) {
         .joinToString(" · ")
         .ifBlank { null }
         .also { labelCache = it }
+
+    /**
+     * 悬浮窗标题行的内容。
+     *
+     * 伪歌名（PSEUDO）判定成立时，元数据 TITLE 本身就是播放器逐行推来的**歌词**，
+     * 拿它当「歌名 · 歌手」显示，标题行就会跟着歌词一起滚 —— 真机 0.2.6 的反馈
+     * 「歌曲名和歌手取错了，现在是歌词」就是这条路。此时标题直接不显示。
+     */
+    private fun titleForOverlay(): String? =
+        if (lastVerdict == TitleVerdict.PSEUDO) null else trackLabel()
 
     /**
      * 真正把文本推给悬浮层，并记录推了什么。

@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.Settings
 import android.view.Gravity
@@ -29,7 +30,6 @@ import com.anylyric.overlay.Align
 import com.anylyric.overlay.OverlayDefaults
 import com.anylyric.overlay.OverlayStyle
 import com.anylyric.overlay.Preset
-import com.anylyric.overlay.Secondary
 import com.anylyric.overlay.TitlePos
 import com.anylyric.session.SessionHub
 import com.anylyric.update.ApkInstaller
@@ -43,7 +43,7 @@ import java.io.File
 import java.util.Locale
 
 /**
- * 唯一主界面：状态与权限、悬浮窗、外观、颜色、标题、行为、诊断、关于与更新。
+ * 唯一主界面：状态与权限、悬浮窗、外观、颜色、标题、行为、开机与后台、诊断、关于与更新。
  *
  * 三条设计约束（0.2.6 重排时定下）：
  *  · 分区卡片**自带标题**，不用浮在卡片外的分区标签 —— 双栏时标签会和内容错位；
@@ -166,6 +166,7 @@ class SettingsActivity : BaseActivity() {
         val colors = buildColorCard()
         val title = buildTitleCard()
         val behavior = buildBehaviorCard()
+        val keepAlive = buildKeepAliveCard()
         val diag = buildDiagCard()
         val update = buildUpdateCard()
 
@@ -174,7 +175,7 @@ class SettingsActivity : BaseActivity() {
             val left = column()
             listOf(status, window, look, colors).forEach { left.addView(it) }
             val right = column()
-            listOf(title, behavior, diag, update).forEach { right.addView(it) }
+            listOf(title, behavior, keepAlive, diag, update).forEach { right.addView(it) }
             root.addView(
                 LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
@@ -187,7 +188,7 @@ class SettingsActivity : BaseActivity() {
                 }
             )
         } else {
-            listOf(status, window, look, colors, title, behavior, diag, update).forEach {
+            listOf(status, window, look, colors, title, behavior, keepAlive, diag, update).forEach {
                 root.addView(it)
             }
         }
@@ -545,20 +546,6 @@ class SettingsActivity : BaseActivity() {
     private fun buildBehaviorCard(): View {
         val rows = ArrayList<View>(8)
 
-        rows += labeled(
-            getString(R.string.appearance_secondary),
-            chipRow(
-                options = listOf(
-                    getString(R.string.secondary_next),
-                    getString(R.string.secondary_previous),
-                    getString(R.string.secondary_none)
-                ),
-                current = { prefs.style().secondary.ordinal },
-                onPick = { index -> editStyle { it.copy(secondary = SECONDARY_ORDER[index]) } }
-            )
-        )
-        rows += hint(getString(R.string.appearance_secondary_hint))
-        rows += divider()
         rows += switchRow(
             label = getString(R.string.appearance_fade),
             hintText = null,
@@ -578,6 +565,69 @@ class SettingsActivity : BaseActivity() {
         )
 
         return cardSection(getString(R.string.section_behavior), null, rows)
+    }
+
+    // ---------------------------------------------------------------- 开机与后台
+
+    /**
+     * 开机自启 + 后台保活。
+     *
+     * 两项都默认关闭：通知使用权多数 ROM 重启后会自动恢复，白名单也有副作用
+     * （常驻后台省不了多少电反而容易被用户当成流氓行为）。这里只提供入口，
+     * 状态永远以系统为准 —— 开关只是「申请」按钮，不是权威事实。
+     */
+    private fun buildKeepAliveCard(): View {
+        val rows = ArrayList<View>(6)
+
+        rows += switchRow(
+            label = getString(R.string.autostart_boot),
+            hintText = getString(R.string.autostart_boot_hint),
+            current = { prefs.bootAutostart },
+            onChange = { checked -> prefs.bootAutostart = checked }
+        )
+        rows += divider()
+        rows += switchRow(
+            label = getString(R.string.autostart_keepalive),
+            hintText = getString(R.string.autostart_keepalive_hint),
+            current = { batteryIgnoring() },
+            onChange = { checked ->
+                // 只处理「打开」：白名单没有可编程的撤销通道，关掉时引导用户去系统设置
+                if (checked && !batteryIgnoring()) requestIgnoreBatteryOptimizations()
+            }
+        )
+
+        return cardSection(getString(R.string.section_autostart), null, rows)
+    }
+
+    /** 本应用是否已在电池优化白名单里。ROM 裁掉该服务时按「不在」处理。 */
+    private fun batteryIgnoring(): Boolean = try {
+        getSystemService(PowerManager::class.java)
+            ?.isIgnoringBatteryOptimizations(packageName) ?: false
+    } catch (_: Throwable) {
+        false
+    }
+
+    private fun requestIgnoreBatteryOptimizations() {
+        val request = Intent(
+            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+            Uri.parse("package:$packageName")
+        )
+        try {
+            startActivity(request)
+            return
+        } catch (_: Throwable) {
+            // 个别 ROM 裁掉了这个 action：退回应用详情页，用户自己找「电池」入口
+        }
+        try {
+            startActivity(
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:$packageName")
+                )
+            )
+        } catch (_: Throwable) {
+            // 连详情页都没有：什么都不做，开关会被 refresh 复位成真实状态
+        }
     }
 
     // ---------------------------------------------------------------- 诊断
@@ -1051,6 +1101,9 @@ class SettingsActivity : BaseActivity() {
         renderUpdate()
 
         val dir = ApkProvider.dir(this)
+        // 长跑资源（0.2.7）：安装包目录只增不清。旧安装包的使命（被安装器读一次）
+        // 早就结束了，留着只会把 cacheDir 越养越大 —— 每次开始下载新版本前清一次。
+        dir.listFiles()?.forEach { it.delete() }
         Thread({
             try {
                 val apk = UpdateChecker.download(release, dir, route) { done, total ->
@@ -1476,7 +1529,6 @@ class SettingsActivity : BaseActivity() {
             Preset.STRIPE, Preset.GLASS, Preset.SOLID, Preset.NAVI
         )
         private val ALIGN_ORDER = listOf(Align.START, Align.CENTER, Align.END)
-        private val SECONDARY_ORDER = listOf(Secondary.NEXT, Secondary.PREVIOUS, Secondary.NONE)
 
         /** 从「自适应」起步时的基准比例：宽 60% / 高 14%，都是车机上常见的合理值。 */
         private const val WIDTH_AUTO_BASE = 0.60f

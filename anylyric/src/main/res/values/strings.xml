@@ -7,6 +7,12 @@
 
     <string name="section_status">Status</string>
     <string name="section_appearance">Appearance</string>
+
+    <string name="section_autostart">Autostart &amp; keep-alive</string>
+    <string name="autostart_boot">Start on boot</string>
+    <string name="autostart_boot_hint">After boot, ask the system to rebind the notification listener right away. Some car units delay or drop the binding, which shows up as “no lyrics until the app is opened once”. Off by default.</string>
+    <string name="autostart_keepalive">Keep alive (battery optimization)</string>
+    <string name="autostart_keepalive_hint">Ask the system to skip battery optimization for AnyLyric. The switch reflects the real system state; turning it off is done on the system page.</string>
     <string name="section_probe">Channel probe</string>
 
     <string name="appearance_preset">Preset</string>
@@ -35,7 +41,6 @@
     <string name="appearance_stroke">Text outline</string>
     <string name="appearance_bold">Bold</string>
     <string name="appearance_fade">Fade on change</string>
-    <string name="appearance_secondary">Second line</string>
     <string name="appearance_hide_empty">Hide when there are no lyrics</string>
     <string name="appearance_percent">%1$s%%</string>
     <string name="appearance_dp">%1$s dp</string>
@@ -44,9 +49,6 @@
     <string name="align_start">Left</string>
     <string name="align_center">Center</string>
     <string name="align_end">Right</string>
-    <string name="secondary_next">Next line</string>
-    <string name="secondary_previous">Previous line</string>
-    <string name="secondary_none">Off</string>
 
     <string name="position_edit_hint">Drag to move, drag a corner to resize</string>
     <string name="position_reset">Reset position &amp; size</string>
@@ -166,7 +168,6 @@
     <string name="section_behavior">Behavior</string>
     <string name="appearance_lines_hint">Total lyric lines. The current line wraps first; whatever budget is left goes to the following lines.</string>
     <string name="appearance_stroke_hint">Draw a thin outline around the text. Almost required on a bright background.</string>
-    <string name="appearance_secondary_hint">When the line budget allows, several following lines are shown instead of just the next one.</string>
     <string name="appearance_hide_empty_hint">Draw nothing when no lyrics are available. Off shows a small “No lyrics” note instead.</string>
     <string name="position_handle_hint">A small tab on the left edge. Tap it to collapse or expand the overlay.</string>
     <string name="title_show">Show song title</string>

@@ -39,8 +39,39 @@ class LyricsSourceChainTest {
         assertEquals("L1", outcome.hit?.sourceId)
         assertEquals(2, outcome.hit?.lines?.size)
         assertNull(outcome.hit?.lines?.get(0)?.timeMs)
+        // L1 缓冲是「历史 + 当前行在末尾」：锚点指向最后一行
+        assertEquals(1, outcome.hit?.currentLineIndex)
         // L0 先试过，留下一条 miss 记录
         assertEquals(2, outcome.attempts.size)
+    }
+
+    /** 0.2.7：L2 多行通知第一行才是当前句 —— 旧实现一律取末行，等于把下一句当当前句画。 */
+    @Test
+    fun l2MultilineAnchorsAtFirstLine() {
+        val source = L2NotificationSource()
+        val ctx = TrackContext(
+            pseudoTitle = true,
+            notificationTexts = mapOf("android.text" to "当前句\n下一句")
+        )
+        val result = source.tryResolve(ctx)
+
+        assertTrue(result is LyricResult.Hit)
+        result as LyricResult.Hit
+        assertEquals(2, result.lines.size)
+        assertEquals(0, result.currentLineIndex)
+        assertEquals("当前句", result.lines[0].text)
+    }
+
+    /** L2 的 LRC 形态带完整时间轴，交给时钟定位，锚点保持 -1。 */
+    @Test
+    fun l2LrcHitHasNoExplicitAnchor() {
+        val ctx = TrackContext(
+            notificationTexts = mapOf("android.text" to "[00:01.00]a\n[00:02.00]b")
+        )
+        val result = L2NotificationSource().tryResolve(ctx)
+
+        assertTrue(result is LyricResult.Hit)
+        assertEquals(-1, (result as LyricResult.Hit).currentLineIndex)
     }
 
     @Test

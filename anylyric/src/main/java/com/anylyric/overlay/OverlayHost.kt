@@ -231,6 +231,20 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         resizing = false
     }
 
+    /**
+     * 服务销毁时的彻底收尾（0.2.7）：在 [hide] 之外把 Handler 上的所有回调摘干净，
+     * 并复位「隐藏到期」时间戳。
+     *
+     * `hideExpired` 若被清掉而 `hiddenUntil` 还留着旧值，下一次服务起来后
+     * `show()` 会一直命中「隐藏期内」直接返回 —— 表现是歌词永远不再出现。
+     * 两个动作必须绑在一起。
+     */
+    fun release() {
+        hide()
+        handler.removeCallbacksAndMessages(null)
+        hiddenUntil = 0L
+    }
+
     private fun removeLyric() {
         val current = view ?: return
         try {

@@ -29,7 +29,15 @@ sealed interface LyricResult {
     data class Hit(
         override val sourceId: String,
         val lines: List<LyricLine>,
-        override val costMs: Long = 0L
+        override val costMs: Long = 0L,
+        /**
+         * 无时间轴的行集里「当前行」是第几行；-1 表示取最后一行。
+         *
+         * 0.2.7 起必须显式给：L1 缓冲是「历史 + 当前行在末尾」，而 L2 的多行通知
+         * 恰好相反 —— 第一行才是当前行、后面是接下来的行。旧实现一律取末行，
+         * L2 上等于把「下一句」当成当前句画出来，副行也因此永远凑不齐。
+         */
+        val currentLineIndex: Int = -1
     ) : LyricResult
 
     data class Miss(

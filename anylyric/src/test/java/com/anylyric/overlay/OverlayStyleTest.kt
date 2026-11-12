@@ -30,7 +30,6 @@ class OverlayStyleTest {
         assertEquals(OverlayDefaults.HEIGHT_RATIO, style.heightRatio, 0.001f)
         assertEquals(Preset.GLASS, style.preset)
         assertEquals(Align.START, style.align)
-        assertEquals(Secondary.NEXT, style.secondary)
         assertEquals(OverlayDefaults.TITLE_ENABLED, style.titleEnabled)
         assertEquals(OverlayDefaults.TITLE_FONT_SP, style.titleFontSp, 0.001f)
         assertEquals(OverlayDefaults.TITLE_COLOR, style.titleColor)
@@ -134,13 +133,16 @@ class OverlayStyleTest {
         assertEquals(Preset.NAVI, style.preset)
     }
 
-    /** 换预设只该改观感，不能把用户调好的字号与副行策略一起重置。 */
+    /** 换预设只该改观感，不能把用户调好的字号与颜色一起重置。 */
     @Test
-    fun presetKeepsFontSizeAndSecondaryChoice() {
-        val base = OverlayDefaults.STYLE.copy(fontSp = 34f, secondary = Secondary.PREVIOUS)
+    fun presetKeepsFontSizeAndColors() {
+        val base = OverlayDefaults.STYLE.copy(
+            fontSp = 34f,
+            primaryColor = 0xFF123456.toInt()
+        )
         val style = OverlayDefaults.preset(Preset.SOLID, base)
         assertEquals(34f, style.fontSp, 0.001f)
-        assertEquals(Secondary.PREVIOUS, style.secondary)
+        assertEquals(0xFF123456.toInt(), style.primaryColor)
     }
 
     @Test
@@ -149,9 +151,7 @@ class OverlayStyleTest {
         assertEquals(Preset.GLASS, Preset.of(null))
         assertEquals(Preset.GLASS, Preset.of("nonsense"))
         assertEquals(Align.END, Align.of("end"))
-        assertEquals(Secondary.PREVIOUS, Secondary.of("previous"))
-        // 0.2.6 删掉了「歌名 · 歌手」这一档（它已经独立成标题行），旧值退回默认
-        assertEquals(Secondary.NEXT, Secondary.of("track"))
-        assertEquals(Secondary.NEXT, Secondary.of(null))
+        assertEquals(TitlePos.BOTTOM, TitlePos.of("bottom"))
+        assertEquals(TitlePos.TOP, TitlePos.of(null))
     }
 }
