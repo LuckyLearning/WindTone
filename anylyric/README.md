@@ -359,7 +359,7 @@ MediaWatchService  (NotificationListenerService，由系统绑定，不自拉活
 |---|---|
 | `:anylyric:testDebugUnitTest` | **141 项**通过（LRC 解析 10、伪歌名判定 11、责任链 8、时钟 6、判因 14、权限列表解析 7、几何 10、折行 9、行预算 7、样式 11、更新 18、资源采样 7、行推进 tick 11、L0 缓存 6、工作量计数 4） |
 | `:anylyric:lintDebug` | Error 0（Warning 72，均为既有项） |
-| `assembleRelease` | 约 **256 KB**（含矢量图标 + 5 组密度 PNG），运行时依赖仅 `kotlin-stdlib` |
+| `assembleRelease` | 约 **261 KB**（含矢量图标 + 5 组密度 PNG），运行时依赖仅 `kotlin-stdlib` |
 | 真机 | 手机（HONOR / API 37）已验证 L1 可命中；车机 **未验证** |
 
 未验证项：车机播放器的通道命中率、车厂 ROM 对悬浮窗与通知使用权的策略、多屏行为、

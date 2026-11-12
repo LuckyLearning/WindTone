@@ -36,7 +36,7 @@ enum class Align(val id: String) {
  * 只保留「相邻歌词行」这一种语义 —— 歌名/歌手已经独立成标题行（[TitlePos]），
  * 再让副行去重复显示它是同一种信息摆两处。
  */
-enum class Secondary(val id: String?) {
+enum class Secondary(val id: String) {
     NEXT("next"),
     PREVIOUS("previous"),
     NONE("none");
