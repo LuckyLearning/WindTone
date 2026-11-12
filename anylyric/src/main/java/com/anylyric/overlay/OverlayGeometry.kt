@@ -117,18 +117,4 @@ object OverlayGeometry {
 
     /** 把手落点：是否塞进歌词窗 + 横坐标。 */
     data class HandlePlacement(val inside: Boolean, val x: Int)
-
-    /** 九宫格锚点：0 → 左/上，1 → 中，2 → 右/下。 */
-    fun anchorRatio(index: Int): Float = when {
-        index <= 0 -> 0f
-        index == 1 -> 0.5f
-        else -> 1f
-    }
-
-    /** 由比例反推最近的锚点序号，用于界面高亮。 */
-    fun nearestAnchor(ratio: Float): Int = when {
-        ratio <= 0.25f -> 0
-        ratio < 0.75f -> 1
-        else -> 2
-    }
 }

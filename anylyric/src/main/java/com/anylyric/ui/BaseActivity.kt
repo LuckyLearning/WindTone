@@ -16,6 +16,10 @@ import android.widget.Toast
  * 刻意不引 AppCompat / Material：只用平台控件 + 代码布局，保持零第三方依赖。
  * 颜色按当前 uiMode 手工取两套，理由与项目既有约定一致——车机的明暗判定不可靠，
  * 这里只需要「深底浅字 / 浅底深字」两套足够对比度的配色。
+ *
+ * 0.2.6 起这套工具承担「设置页的视觉规范」：卡片、分区、步进器、胶囊、开关行都只在这里
+ * 定义一次，页面本身只负责摆放。改观感不必碰页面代码，也就不容易出现
+ * 「同一个控件在两处长得不一样」。
  */
 abstract class BaseActivity : Activity() {
 
@@ -26,11 +30,19 @@ abstract class BaseActivity : Activity() {
     protected val colorAccent: Int
         get() = if (isNight) 0xFF85B7EB.toInt() else 0xFF185FA5.toInt()
 
+    /** 主按钮底色：比 accent 更实，作为一屏里唯一的「主操作」。 */
+    protected val colorAccentStrong: Int
+        get() = if (isNight) 0xFF2C6EA8.toInt() else 0xFF185FA5.toInt()
+
     protected val colorSecondaryText: Int
         get() = if (isNight) 0xFFB0B0B0.toInt() else 0xFF5F5E5A.toInt()
 
     protected val colorCard: Int
-        get() = if (isNight) 0xFF1F1F1F.toInt() else 0xFFF4F4F4.toInt()
+        get() = if (isNight) 0xFF1F1F1F.toInt() else 0xFFF5F5F4.toInt()
+
+    /** 卡片描边。纯色块在车机的低对比屏上会糊成一片，一条极淡的边能把层次拉回来。 */
+    protected val colorCardStroke: Int
+        get() = if (isNight) 0x1FFFFFFF else 0x14000000
 
     protected val colorOk: Int = 0xFF1D9E75.toInt()
     protected val colorWarn: Int = 0xFFB07D18.toInt()
@@ -51,15 +63,28 @@ abstract class BaseActivity : Activity() {
         if (secondary) setTextColor(colorSecondaryText)
     }
 
+    /** 文字按钮。触摸目标抬到 40dp：车机上手指落点粗，纯文字高度容易点偏。 */
     protected fun textButton(label: String, onClick: () -> Unit): TextView = TextView(this).apply {
         text = label
         textSize = 14f
         setTextColor(colorAccent)
         setPadding(dp(10), dp(8), dp(10), dp(8))
-        // 触摸目标抬到 40dp：车机上手指落点粗，纯文字高度（约 33dp）容易点偏，
-        // 「点了没反应」里有一部分其实是没点中。视觉上仍是文字按钮。
         minHeight = dp(40)
         gravity = Gravity.CENTER_VERTICAL
+        isClickable = true
+        isFocusable = true
+        setOnClickListener { onClick() }
+    }
+
+    /** 主操作按钮：实心底 + 白字。一屏只该出现一个。 */
+    protected fun primaryButton(label: String, onClick: () -> Unit): TextView = TextView(this).apply {
+        text = label
+        textSize = 15f
+        setTypeface(typeface, Typeface.BOLD)
+        setTextColor(0xFFFFFFFF.toInt())
+        gravity = Gravity.CENTER
+        minHeight = dp(46)
+        background = pill(colorAccentStrong, dp(12).toFloat())
         isClickable = true
         isFocusable = true
         setOnClickListener { onClick() }
@@ -69,10 +94,11 @@ abstract class BaseActivity : Activity() {
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = GradientDrawable().apply {
-                cornerRadius = dp(14).toFloat()
+                cornerRadius = dp(16).toFloat()
                 setColor(colorCard)
+                setStroke(dp(1).coerceAtLeast(1), colorCardStroke)
             }
-            setPadding(dp(16), dp(14), dp(16), dp(14))
+            setPadding(dp(16), dp(16), dp(16), dp(16))
             children.forEach { addView(it) }
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -80,22 +106,76 @@ abstract class BaseActivity : Activity() {
             ).apply { bottomMargin = dp(bottomMarginDp) }
         }
 
+    /**
+     * 带标题的分区卡片。
+     *
+     * 标题放进卡片里而不是浮在卡片上方：一次滚动能看到「这块是什么」，
+     * 双栏布局时也不会出现「标题在左栏、内容在两栏」的错位。
+     */
+    protected fun cardSection(
+        title: String,
+        subtitle: String?,
+        rows: List<View>
+    ): LinearLayout {
+        val children = ArrayList<View>(rows.size + 3)
+        children += text(title, 16f, bold = true)
+        if (!subtitle.isNullOrBlank()) {
+            children += text(subtitle, 12f, secondary = true).apply {
+                setPadding(0, dp(3), 0, dp(2))
+            }
+        }
+        children += spacer(if (subtitle.isNullOrBlank()) 8 else 12)
+        children += rows
+        return card(children)
+    }
+
+    /**
+     * 左右分栏的一行。
+     *
+     * 两侧都用显式 LayoutParams(MATCH_PARENT)：父容器若是 wrap_content，带 weight 的
+     * 子控件在部分 ROM 的第 1 次测量里会算成 0 宽，界面直接空白 —— 这类布局塌陷
+     * 在真机上很难复现，只能从写法上先堵住。
+     */
     protected fun row(left: View, right: View): LinearLayout =
         LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             addView(left, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             addView(right)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
         }
-
-    protected fun sectionLabel(value: String): TextView = text(value, 12f, bold = true).apply {
-        setPadding(dp(4), dp(16), 0, dp(8))
-        setTextColor(colorSecondaryText)
-    }
 
     protected fun spacer(heightDp: Int): View = View(this).apply {
         layoutParams = LinearLayout.LayoutParams(1, dp(heightDp))
     }
+
+    /** 一条极淡的分隔线，用来切分同一张卡片里的不同小节。 */
+    protected fun divider(topMarginDp: Int = 12, bottomMarginDp: Int = 12): View =
+        View(this).apply {
+            setBackgroundColor(colorCardStroke)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(1).coerceAtLeast(1)
+            ).apply {
+                topMargin = dp(topMarginDp)
+                bottomMargin = dp(bottomMarginDp)
+            }
+        }
+
+    /** 小字说明。默认挂在控件下方，行距略松，长句也能读。 */
+    protected fun hint(value: String): TextView = text(value, 11.5f, secondary = true).apply {
+        setPadding(0, dp(4), 0, 0)
+    }
+
+    protected fun pill(color: Int, radiusPx: Float, strokeColor: Int? = null): GradientDrawable =
+        GradientDrawable().apply {
+            cornerRadius = radiusPx
+            setColor(color)
+            if (strokeColor != null) setStroke(dp(1).coerceAtLeast(1), strokeColor)
+        }
 
     protected fun toast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()

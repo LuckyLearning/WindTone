@@ -30,15 +30,29 @@ enum class Align(val id: String) {
     }
 }
 
-/** 副行内容策略。逐行流没有时间轴，副行取相邻行才有意义。 */
-enum class Secondary(val id: String) {
+/**
+ * 副行内容策略：取当前行的下一行还是上一行。
+ *
+ * 只保留「相邻歌词行」这一种语义 —— 歌名/歌手已经独立成标题行（[TitlePos]），
+ * 再让副行去重复显示它是同一种信息摆两处。
+ */
+enum class Secondary(val id: String?) {
     NEXT("next"),
     PREVIOUS("previous"),
-    TRACK("track"),
     NONE("none");
 
     companion object {
         fun of(id: String?): Secondary = values().firstOrNull { it.id == id } ?: NEXT
+    }
+}
+
+/** 标题行（歌名 · 歌手）在歌词块的上方还是下方。 */
+enum class TitlePos(val id: String) {
+    TOP("top"),
+    BOTTOM("bottom");
+
+    companion object {
+        fun of(id: String?): TitlePos = values().firstOrNull { it.id == id } ?: TOP
     }
 }
 
@@ -48,6 +62,11 @@ enum class Secondary(val id: String) {
  *
  * 宽高都存「占可用区的比例」而不是像素，理由与位置一致：车机与手机分辨率差两三倍，
  * 存像素在另一台机器上不是过宽就是被裁。
+ *
+ * @param maxLines 歌词总行数上限（含当前行折出来的行与副行）。1~4，默认 2。
+ * @param titleEnabled 标题行（歌名 · 歌手）是否显示。
+ * @param titleFontSp 标题行字号。**独立于正文**：标题通常要小一号才不抢注意力。
+ * @param titlePos 标题压在歌词块上方（TOP）还是下方（BOTTOM）。
  */
 data class OverlayStyle(
     val preset: Preset = Preset.GLASS,
@@ -66,7 +85,11 @@ data class OverlayStyle(
     val bgColor: Int = OverlayDefaults.BG_COLOR,
     val strokeColor: Int = OverlayDefaults.STROKE_COLOR,
     val widthRatio: Float = OverlayDefaults.WIDTH_RATIO,
-    val heightRatio: Float = OverlayDefaults.HEIGHT_RATIO
+    val heightRatio: Float = OverlayDefaults.HEIGHT_RATIO,
+    val titleEnabled: Boolean = OverlayDefaults.TITLE_ENABLED,
+    val titleFontSp: Float = OverlayDefaults.TITLE_FONT_SP,
+    val titleColor: Int = OverlayDefaults.TITLE_COLOR,
+    val titlePos: TitlePos = OverlayDefaults.TITLE_POS
 )
 
 object OverlayDefaults {
@@ -99,6 +122,19 @@ object OverlayDefaults {
     /** 文字描边色。默认纯黑：深底白字时它是最稳的一圈轮廓；浅底下要配深色字，这里也该换。 */
     const val STROKE_COLOR = 0xFF000000.toInt()
 
+    /**
+     * 标题行（歌名 · 歌手）。默认开：用户反馈「不知道现在放的是哪首」是常态，
+     * 而它只占一条小字的位置。
+     */
+    const val TITLE_ENABLED = true
+    const val TITLE_FONT_SP = 13f
+    const val TITLE_FONT_MIN = 9f
+    const val TITLE_FONT_MAX = 28f
+
+    /** 标题默认不抢正文的视觉重量：白但偏灰一档。 */
+    const val TITLE_COLOR = 0xFFE4E4E4.toInt()
+    val TITLE_POS = TitlePos.TOP
+
     /** 0 = 自适应宽度；非 0 = 占可用区宽度的比例。 */
     const val WIDTH_RATIO = 0f
     const val WIDTH_MIN = 0.24f
@@ -130,7 +166,11 @@ object OverlayDefaults {
         bgColor = BG_COLOR,
         strokeColor = STROKE_COLOR,
         widthRatio = WIDTH_RATIO,
-        heightRatio = HEIGHT_RATIO
+        heightRatio = HEIGHT_RATIO,
+        titleEnabled = TITLE_ENABLED,
+        titleFontSp = TITLE_FONT_SP,
+        titleColor = TITLE_COLOR,
+        titlePos = TITLE_POS
     )
 
     /**
@@ -181,7 +221,8 @@ object OverlayDefaults {
         secondaryAlpha = style.secondaryAlpha.coerceIn(SECONDARY_ALPHA_MIN, 1f),
         fadeMs = style.fadeMs.coerceIn(0, FADE_MAX),
         widthRatio = ratioOrAuto(style.widthRatio, WIDTH_MIN, WIDTH_MAX),
-        heightRatio = ratioOrAuto(style.heightRatio, HEIGHT_MIN, HEIGHT_MAX)
+        heightRatio = ratioOrAuto(style.heightRatio, HEIGHT_MIN, HEIGHT_MAX),
+        titleFontSp = style.titleFontSp.coerceIn(TITLE_FONT_MIN, TITLE_FONT_MAX)
     )
 
     /** 0（或负数/NaN）保持 0 表示自适应；其余夹到 [min, max]。 */

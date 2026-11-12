@@ -136,8 +136,20 @@ class SessionHub private constructor(context: Context) {
 
     /** 上一次推给悬浮层的文本，同一句不重复走渲染。 */
     private var lastPushedPrimary: String? = null
-    private var lastPushedSecondary: String? = null
+    private var lastPushedSecondary: List<String> = emptyList()
+    private var lastPushedTitle: String? = null
     private var lastPushedPrompt = false
+
+    /**
+     * 上下文行的缓存。
+     *
+     * `render()` 每个状态回调都会跑一遍（一秒好几次），而真正换行一秒才一次。
+     * 每次为新的一句重新建一个 List 纯属喂 GC —— 行号、策略、歌词表三者都没变时直接复用。
+     */
+    private var ctxIndex = -1
+    private var ctxKind: Secondary? = null
+    private var ctxRef: List<LyricLine>? = null
+    private var ctxResult: List<String> = emptyList()
 
     /** `trackLabel()` 的缓存，随标题/歌手变化失效。 */
     private var labelCache: String? = null
@@ -151,6 +163,19 @@ class SessionHub private constructor(context: Context) {
     /** 刷新合并：同一帧内的多个回调只跑一次全量刷新。 */
     private var refreshScheduled = false
     private var pendingReason: String? = null
+
+    /**
+     * 合并后真正执行刷新的任务。
+     *
+     * 复用一个实例：事件量最大的时候一秒能有好几次 `requestRefresh`，
+     * 每次都 new 一个 lambda 只是给 GC 送料。它只读 [pendingReason]，没有额外状态。
+     */
+    private val refreshTask = Runnable {
+        refreshScheduled = false
+        val next = pendingReason ?: REASON_UI
+        pendingReason = null
+        refreshNow(next)
+    }
 
     /** 上一次为「外来通知」重挑会话的时刻，与播放状态相关（见 [foreignQueryInterval]）。 */
     private var lastForeignPickAt = 0L
@@ -186,7 +211,7 @@ class SessionHub private constructor(context: Context) {
     private var lastTitleChangeAt = SystemClock.elapsedRealtime()
 
     /** 上一次真正写进悬浮层的文本，避免同一句反复重绘与重复记日志。 */
-    private var lastRenderedSignature: String? = null
+    private var lastRenderedSignature = Int.MIN_VALUE
 
     init {
         Probe.setEnabled(prefs.debugEnabled)
@@ -524,12 +549,7 @@ class SessionHub private constructor(context: Context) {
         pendingReason = mergeReason(pendingReason, reason)
         if (refreshScheduled) return
         refreshScheduled = true
-        mainHandler.post {
-            refreshScheduled = false
-            val next = pendingReason ?: reason
-            pendingReason = null
-            refreshNow(next)
-        }
+        mainHandler.post(refreshTask)
     }
 
     /**
@@ -702,7 +722,7 @@ class SessionHub private constructor(context: Context) {
             keyDuration != duration ||
             keyMediaId != mediaId ||
             keyVerdict != lastVerdict ||
-            keyTextsHash != activeTexts.hashCode()
+            keyTextsHash != textsHash(activeTexts)
 
         if (inputsChanged) {
             keyValid = true
@@ -713,7 +733,7 @@ class SessionHub private constructor(context: Context) {
             keyDuration = duration
             keyMediaId = mediaId
             keyVerdict = lastVerdict
-            keyTextsHash = activeTexts.hashCode()
+            keyTextsHash = textsHash(activeTexts)
             Perf.onChain()
 
             val metadataValues = textValues(metadata)
@@ -791,16 +811,41 @@ class SessionHub private constructor(context: Context) {
      * 比对象身份可靠：跨 binder 的 `MediaMetadata` 每次回调都是新对象，按身份判等会让
      * 「输入变了」恒为真，责任链就成了 1Hz 轮询。这里只看内容 —— 键名 + 文本值，
      * 字符串的 hashCode 首次算完即缓存，之后是 O(1)。
+     *
+     * 0.2.6 补了一层对象身份缓存：回调缓存生效后，同一个对象会被刷新反复看到，
+     * 而算一次指纹要遍历整个 keySet。同一个实例的内容不可能变（MediaMetadata 是不可变快照）。
      */
+    private var metaSigSource: MediaMetadata? = null
+    private var metaSigValue = 0
+
     private fun metadataSignature(metadata: MediaMetadata?): Int {
         if (metadata == null) return 0
+        if (metadata === metaSigSource) return metaSigValue
         var hash = 1
         for (key in metadata.keySet()) {
             hash = 31 * hash + key.hashCode()
             val text = metadata.getText(key) ?: continue
             hash = 31 * hash + text.hashCode()
         }
+        metaSigSource = metadata
+        metaSigValue = hash
         return hash
+    }
+
+    /**
+     * 通知文本表的内容哈希。
+     *
+     * 同一个包的表只在通知真的变了时才会被替换成新实例，因此也可以按身份缓存 ——
+     * 否则每次刷新都要遍历一遍 5 个 entry 算哈希。
+     */
+    private var textsHashSource: Map<String, String>? = null
+    private var textsHashValue = 0
+
+    private fun textsHash(texts: Map<String, String>): Int {
+        if (texts === textsHashSource) return textsHashValue
+        textsHashSource = texts
+        textsHashValue = texts.hashCode()
+        return textsHashValue
     }
 
     /** 换歌词列表的唯一入口：顺带把「是否全带时间轴」算一次，别再每次渲染全表扫。 */
@@ -833,7 +878,8 @@ class SessionHub private constructor(context: Context) {
                 appContext.getString(
                     if (waiting) R.string.overlay_fetching else R.string.overlay_no_lyrics
                 ),
-                if (waiting) lastTitle else trackLabel(),
+                listOfNotNull(trackLabel()),
+                null,
                 prompt = true
             )
             return
@@ -844,14 +890,40 @@ class SessionHub private constructor(context: Context) {
         val safe = index.coerceIn(0, currentLines.lastIndex)
         lastLineIndex = safe
 
-        // 副行按用户选择取：逐行流没有时间轴，只有相邻行或「歌名·歌手」有意义。
-        val secondary = when (prefs.style().secondary) {
-            Secondary.NEXT -> currentLines.getOrNull(safe + 1)?.text
-            Secondary.PREVIOUS -> currentLines.getOrNull(safe - 1)?.text
-            Secondary.TRACK -> trackLabel()
-            Secondary.NONE -> null
+        // 副行是一**组**相邻行：用户把行数调到 3、4 时要看到更多歌词，
+        // 只给一条文本的话预算再多也只有两行可画（0.2.5 及以前的真实表现）。
+        val secondary = contextLines(safe, prefs.style().secondary)
+        push(currentLines[safe].text, secondary, trackLabel(), prompt = false)
+    }
+
+    /**
+     * 取当前行前后最多 [CONTEXT_MAX] 行的文本，按显示顺序。
+     *
+     * 行数预算由渲染器按 `maxLines` 分配：这里只管「能拿到哪些行」，
+     * 拿多了渲染器会丢掉，拿少了就会出现「4 行窗口只有 2 行字」。
+     */
+    private fun contextLines(index: Int, kind: Secondary): List<String> {
+        if (index == ctxIndex && kind == ctxKind && currentLines === ctxRef) return ctxResult
+        val out = ArrayList<String>(CONTEXT_MAX)
+        when (kind) {
+            // 紧邻的一行排在最前：这样「下一行」就是紧接着当前句往下读
+            Secondary.NEXT ->
+                for (step in 1..CONTEXT_MAX) {
+                    out += currentLines.getOrNull(index + step)?.text ?: break
+                }
+
+            Secondary.PREVIOUS ->
+                for (step in 1..CONTEXT_MAX) {
+                    out += currentLines.getOrNull(index - step)?.text ?: break
+                }
+
+            Secondary.NONE -> Unit
         }
-        push(currentLines[safe].text, secondary, prompt = false)
+        ctxIndex = index
+        ctxKind = kind
+        ctxRef = currentLines
+        ctxResult = out
+        return out
     }
 
     // ------------------------------------------------------------ 定时歌词的自我推进
@@ -913,30 +985,38 @@ class SessionHub private constructor(context: Context) {
      * 交给 WindowManager 的原文与实际挂载状态一起写下来，取到行却没显示时
      * 一眼就能区分是「没渲染」还是「渲染了但窗口没挂上」。
      */
-    private fun push(primary: String, secondary: String?, prompt: Boolean) {
+    private fun push(
+        primary: String,
+        secondary: List<String>,
+        title: String?,
+        prompt: Boolean
+    ) {
         // 同一句反复推是最常见的情况（播放器状态回调比歌词变化频繁得多）：
         // 在这里挡掉，连悬浮层入口都不必进。
         // 只在「窗口还挂着」时跳过：窗口被收起／退出编辑／隐藏到期后 view 已经没了，
         // 这时候跳过推送就再没人去建窗口 —— 表现是「歌词永远不回来了」。
         if (overlay.hasWindow() &&
             primary == lastPushedPrimary && secondary == lastPushedSecondary &&
-            prompt == lastPushedPrompt
+            title == lastPushedTitle && prompt == lastPushedPrompt
         ) return
         lastPushedPrimary = primary
         lastPushedSecondary = secondary
+        lastPushedTitle = title
         lastPushedPrompt = prompt
 
         if (prompt) {
             overlay.showPrompt(primary, secondary)
         } else {
-            overlay.showContent(primary, secondary)
+            overlay.showContent(primary, secondary, title)
         }
         if (!Probe.enabled) return
-        val signature = "$primary\u0000${secondary.orEmpty()}\u0000$prompt"
-        if (signature == lastRenderedSignature) return
-        lastRenderedSignature = signature
-        val trace = "text=${primary.take(24)} next=${secondary?.take(12) ?: "none"} " +
-            "prompt=$prompt attached=${overlay.isAttached()} measured=${overlay.isMeasured()}"
+        if (secondary.hashCode() * 31 + primary.hashCode() + title.hashCode() ==
+            lastRenderedSignature
+        ) return
+        lastRenderedSignature = secondary.hashCode() * 31 + primary.hashCode() + title.hashCode()
+        val trace = "text=${primary.take(24)} context=${secondary.size} " +
+            "title=${title?.take(12) ?: "none"} prompt=$prompt " +
+            "attached=${overlay.isAttached()} measured=${overlay.isMeasured()}"
         Probe.lastRender = trace
         Probe.write("渲染", trace)
     }
@@ -1052,10 +1132,14 @@ class SessionHub private constructor(context: Context) {
         setCurrentLines(emptyList())
         hitSource = null
         keyValid = false
-        lastRenderedSignature = null
+        lastRenderedSignature = Int.MIN_VALUE
         lastPushedPrimary = null
-        lastPushedSecondary = null
+        lastPushedSecondary = emptyList()
+        lastPushedTitle = null
         lastPushedPrompt = false
+        ctxRef = null
+        ctxIndex = -1
+        ctxResult = emptyList()
         labelCache = null
         stopLineTick()
         // 进度跳变也必须按会话重置：换应用时 position 从 89s 掉到 44s
@@ -1087,6 +1171,9 @@ class SessionHub private constructor(context: Context) {
         clockRawState = PlayState.NONE
         clockRawSpeed = Float.MIN_VALUE
         identityPkg = null
+        // 指纹缓存也属于「上一个会话的事实」，不清会把旧元数据的哈希带过来
+        metaSigSource = null
+        textsHashSource = null
     }
 
     /**
@@ -1143,6 +1230,14 @@ class SessionHub private constructor(context: Context) {
 
         /** 通知文本表最多记几个包：设备上会发通知的应用可能几十个，不能无限长。 */
         private const val MAX_NOTIFICATION_PACKAGES = 16
+
+        /**
+         * 一次给渲染器准备几条上下文行。
+         *
+         * 行数上限是 4（当前行至少占 1 行），所以 3 条足够填满；再多渲染器也会按预算丢掉，
+         * 那只是白建 String。
+         */
+        private const val CONTEXT_MAX = 3
 
         /**
          * 关注的通知文本字段。前四项来自 extras，最后一项 tickerText 挂在 Notification 上，

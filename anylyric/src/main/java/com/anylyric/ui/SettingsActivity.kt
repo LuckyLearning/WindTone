@@ -4,7 +4,6 @@ import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
-import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.hardware.display.DisplayManager
@@ -28,10 +27,10 @@ import com.anylyric.data.Prefs
 import com.anylyric.diag.Probe
 import com.anylyric.overlay.Align
 import com.anylyric.overlay.OverlayDefaults
-import com.anylyric.overlay.OverlayGeometry
 import com.anylyric.overlay.OverlayStyle
 import com.anylyric.overlay.Preset
 import com.anylyric.overlay.Secondary
+import com.anylyric.overlay.TitlePos
 import com.anylyric.session.SessionHub
 import com.anylyric.update.ApkInstaller
 import com.anylyric.update.ApkProvider
@@ -44,23 +43,30 @@ import java.io.File
 import java.util.Locale
 
 /**
- * 唯一主界面：权限引导、当前状态、外观、位置、探测入口。
+ * 唯一主界面：状态与权限、悬浮窗、外观、颜色、标题、行为、诊断、关于与更新。
+ *
+ * 三条设计约束（0.2.6 重排时定下）：
+ *  · 分区卡片**自带标题**，不用浮在卡片外的分区标签 —— 双栏时标签会和内容错位；
+ *  · 一屏只有一个主操作（进入编辑态），其余都是文字按钮或胶囊，视觉上不抢；
+ *  · 每个可调项都能单独恢复默认，重置只在「已经改过」时出现，平时不占视线。
  *
  * 权限全部在这一屏内完成授权与检测 —— 不提示连接电脑、不要求 adb。
- * 每个可调项右侧或末尾都有「重置」，写回值只取 [OverlayDefaults]。
  */
 class SettingsActivity : BaseActivity() {
 
     private lateinit var hub: SessionHub
     private lateinit var prefs: Prefs
 
+    // ---------------------------------------------------------------- 状态与权限
     private lateinit var statusBanner: TextView
     private lateinit var statusLine: TextView
     private lateinit var notificationState: TextView
     private lateinit var notificationButton: TextView
     private lateinit var notificationSettingsButton: TextView
+    private lateinit var notificationDesc: TextView
     private lateinit var overlayState: TextView
     private lateinit var overlayButton: TextView
+    private lateinit var overlayDesc: TextView
     private lateinit var editButton: TextView
     private lateinit var debugSwitch: Switch
 
@@ -141,71 +147,106 @@ class SettingsActivity : BaseActivity() {
         pollHandler.postDelayed(poller, firstDelayMs)
     }
 
+    // ---------------------------------------------------------------- 页面骨架
+
     private fun buildContent(): View {
         uiRefreshers.clear()
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(28), dp(24), dp(36))
+            setPadding(dp(18), dp(20), dp(18), dp(32))
         }
 
-        root.addView(text(getString(R.string.app_name), 28f, bold = true))
-        root.addView(
-            text(getString(R.string.settings_subtitle), 13f, secondary = true).apply {
-                setPadding(0, dp(6), 0, dp(4))
-            }
-        )
+        root.addView(header())
 
-        root.addView(sectionLabel(getString(R.string.section_status)))
-        statusBanner = text("", 15f, bold = true)
-        statusLine = text("", 13f, secondary = true).apply { setPadding(0, dp(6), 0, 0) }
-        root.addView(card(listOf(statusBanner, statusLine)))
+        // 先把每张卡片建出来（同一段 View 只能有一个父容器），再决定单栏还是双栏。
+        val status = buildStatusCard()
+        val window = buildWindowCard()
+        val look = buildLookCard()
+        val colors = buildColorCard()
+        val title = buildTitleCard()
+        val behavior = buildBehaviorCard()
+        val diag = buildDiagCard()
+        val update = buildUpdateCard()
 
-        root.addView(sectionLabel(getString(R.string.section_permissions)))
-        root.addView(buildPermissionCard())
-
-        root.addView(sectionLabel(getString(R.string.section_appearance)))
-        root.addView(buildAppearanceCard())
-
-        root.addView(sectionLabel(getString(R.string.section_position)))
-        root.addView(buildPositionCard())
-
-        root.addView(sectionLabel(getString(R.string.section_probe)))
-        debugSwitch = Switch(this).apply {
-            text = getString(R.string.diag_debug_toggle)
-            textSize = 15f
-            isChecked = prefs.debugEnabled
-            setOnCheckedChangeListener { _, checked -> hub.setDebugEnabled(checked) }
-        }
-        root.addView(
-            card(
-                listOf(
-                    debugSwitch,
-                    text(getString(R.string.diag_debug_hint), 12f, secondary = true).apply {
-                        setPadding(0, dp(4), 0, dp(4))
-                    },
-                    textButton(getString(R.string.diag_open)) {
-                        startActivity(Intent(this@SettingsActivity, DiagActivity::class.java))
-                    }
-                )
+        if (isWide()) {
+            // 车机横屏：两栏能少滚一半。左栏是「窗在哪、长什么样」，右栏是「写什么、怎么更新」。
+            val left = column()
+            listOf(status, window, look, colors).forEach { left.addView(it) }
+            val right = column()
+            listOf(title, behavior, diag, update).forEach { right.addView(it) }
+            root.addView(
+                LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    addView(left, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) })
+                    addView(right, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(6) })
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    )
+                }
             )
-        )
-
-        root.addView(sectionLabel(getString(R.string.section_about)))
-        root.addView(buildUpdateCard())
+        } else {
+            listOf(status, window, look, colors, title, behavior, diag, update).forEach {
+                root.addView(it)
+            }
+        }
 
         root.addView(
-            text(getString(R.string.settings_about), 12f, secondary = true).apply {
-                setPadding(dp(4), dp(6), 0, dp(4))
+            text(getString(R.string.settings_about), 11.5f, secondary = true).apply {
+                setPadding(dp(6), dp(6), dp(6), dp(6))
             }
         )
 
-        return ScrollView(this).apply { addView(root) }
+        return ScrollView(this).apply {
+            isFillViewport = true
+            addView(root)
+        }
     }
 
-    // ---------------------------------------------------------------- 权限
+    private fun column(): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+    }
 
-    private fun buildPermissionCard(): View {
+    private fun isWide(): Boolean = resources.configuration.screenWidthDp >= WIDE_SCREEN_DP
+
+    private fun header(): View = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(4), 0, dp(4), dp(16))
+        addView(
+            LinearLayout(this@SettingsActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(
+                    text(getString(R.string.app_name), 26f, bold = true),
+                    LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                )
+                addView(
+                    text(getString(R.string.settings_version, versionName()), 11.5f, secondary = true)
+                        .apply {
+                            background = pill(chipIdle, dp(9).toFloat())
+                            setPadding(dp(10), dp(4), dp(10), dp(4))
+                        }
+                )
+            },
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+        addView(
+            text(getString(R.string.settings_subtitle), 12f, secondary = true).apply {
+                setPadding(0, dp(7), 0, 0)
+            }
+        )
+    }
+
+    // ---------------------------------------------------------------- 状态与权限
+
+    private fun buildStatusCard(): View {
+        statusBanner = text("", 15f, bold = true)
+        statusLine = text("", 12f, secondary = true).apply { setPadding(0, dp(4), 0, 0) }
+
         notificationState = text("", 13f, bold = true)
         notificationButton = textButton(getString(R.string.perm_open)) { onNotificationAction() }
         // 「系统设置」入口必须常驻：自动重绑在部分 ROM 上无效，手工关开是最后的自救路径，
@@ -213,230 +254,61 @@ class SettingsActivity : BaseActivity() {
         notificationSettingsButton = textButton(getString(R.string.perm_review)) {
             openNotificationSettings()
         }
-        val notificationActions = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            addView(notificationButton)
-            addView(notificationSettingsButton)
-        }
 
         overlayState = text("", 13f, bold = true)
         overlayButton = textButton(getString(R.string.perm_open)) { openOverlaySettings() }
 
-        return card(
-            listOf(
-                text(getString(R.string.perm_notification_title), 16f, bold = true),
-                text(getString(R.string.perm_notification_desc), 13f, secondary = true).apply {
-                    setPadding(0, dp(4), 0, dp(8))
-                },
-                row(notificationState, notificationActions),
-                spacer(16),
-                text(getString(R.string.perm_overlay_title), 16f, bold = true),
-                text(getString(R.string.perm_overlay_desc), 13f, secondary = true).apply {
-                    setPadding(0, dp(4), 0, dp(8))
-                },
-                row(overlayState, overlayButton)
-            )
-        )
+        // 说明只在「还没授权」时出现：已经给过权限的人不需要再读一遍理由，
+        // 而第一次进来的人必须知道这两项是干什么的。
+        notificationDesc = text(getString(R.string.perm_notification_desc), 11.5f, secondary = true)
+            .apply { setPadding(0, dp(3), 0, dp(2)) }
+        overlayDesc = text(getString(R.string.perm_overlay_desc), 11.5f, secondary = true)
+            .apply { setPadding(0, dp(3), 0, dp(2)) }
+
+        return cardSection(getString(R.string.section_status), null, listOf(
+            statusBanner,
+            statusLine,
+            divider(14, 12),
+            text(getString(R.string.perm_notification_title), 14f),
+            notificationDesc,
+            row(notificationState, notificationButton),
+            notificationSettingsButton,
+            divider(10, 10),
+            text(getString(R.string.perm_overlay_title), 14f),
+            overlayDesc,
+            row(overlayState, overlayButton)
+        ))
     }
 
-    // ---------------------------------------------------------------- 外观
+    // ---------------------------------------------------------------- 悬浮窗
 
-    private fun buildAppearanceCard(): View {
-        val rows = ArrayList<View>(20)
-
-        rows += labeled(
-            getString(R.string.appearance_preset),
-            chipRow(
-                options = listOf(
-                    getString(R.string.preset_stripe),
-                    getString(R.string.preset_glass),
-                    getString(R.string.preset_solid),
-                    getString(R.string.preset_navi)
-                ),
-                current = { presetIndex() },
-                onPick = { choosePreset(PRESET_ORDER[it]) }
-            )
-        )
-
-        rows += spacer(14)
-        rows += labeledWithReset(
-            getString(R.string.appearance_color_primary),
-            colorRow(
-                current = { prefs.style().primaryColor },
-                default = OverlayDefaults.PRIMARY_COLOR,
-                onPick = { color -> editStyle { it.copy(primaryColor = color) } }
-            ),
-            onReset = { editStyle { it.copy(primaryColor = OverlayDefaults.PRIMARY_COLOR) } }
-        )
-
-        rows += spacer(10)
-        rows += labeledWithReset(
-            getString(R.string.appearance_color_secondary),
-            colorRow(
-                current = { prefs.style().secondaryColor },
-                default = OverlayDefaults.SECONDARY_COLOR,
-                onPick = { color -> editStyle { it.copy(secondaryColor = color) } }
-            ),
-            onReset = { editStyle { it.copy(secondaryColor = OverlayDefaults.SECONDARY_COLOR) } }
-        )
-
-        rows += spacer(10)
-        rows += labeledWithReset(
-            getString(R.string.appearance_color_bg),
-            colorRow(
-                current = { prefs.style().bgColor },
-                default = OverlayDefaults.BG_COLOR,
-                onPick = { color -> editStyle { it.copy(bgColor = color) } }
-            ),
-            onReset = { editStyle { it.copy(bgColor = OverlayDefaults.BG_COLOR) } }
-        )
-
-        rows += spacer(10)
-        // 描边色也必须能改：浅底 + 深字的组合下，默认的黑描边会把字糊成一团
-        rows += labeledWithReset(
-            getString(R.string.appearance_color_stroke),
-            colorRow(
-                current = { prefs.style().strokeColor },
-                default = OverlayDefaults.STROKE_COLOR,
-                onPick = { color -> editStyle { it.copy(strokeColor = color) } }
-            ),
-            onReset = { editStyle { it.copy(strokeColor = OverlayDefaults.STROKE_COLOR) } }
-        )
-
-        rows += spacer(14)
-        rows += stepperRow(
-            label = getString(R.string.appearance_font),
-            value = { getString(R.string.display_font_value, prefs.style().fontSp.toInt().toString()) },
-            minus = { editStyle { it.copy(fontSp = it.fontSp - 2f) } },
-            plus = { editStyle { it.copy(fontSp = it.fontSp + 2f) } },
-            reset = { editStyle { it.copy(fontSp = OverlayDefaults.FONT_SP) } }
-        )
-
-        rows += spacer(10)
-        // 行数用加减而不是 1/2/3 三个选项：用户要的是「能增减」，不是「只能挑三个」。
-        rows += stepperRow(
-            label = getString(R.string.appearance_lines),
-            value = {
-                getString(R.string.appearance_lines_value, prefs.style().maxLines.toString())
-            },
-            minus = { editStyle { it.copy(maxLines = it.maxLines - 1) } },
-            plus = { editStyle { it.copy(maxLines = it.maxLines + 1) } },
-            reset = { editStyle { it.copy(maxLines = OverlayDefaults.MAX_LINES) } }
-        )
-
-        rows += spacer(12)
-        rows += labeled(
-            getString(R.string.appearance_align),
-            chipRow(
-                options = listOf(
-                    getString(R.string.align_start),
-                    getString(R.string.align_center),
-                    getString(R.string.align_end)
-                ),
-                current = { prefs.style().align.ordinal },
-                onPick = { index -> editStyle { it.copy(align = ALIGN_ORDER[index]) } }
-            )
-        )
-
-        rows += spacer(12)
-        rows += stepperRow(
-            label = getString(R.string.appearance_opacity),
-            value = { getString(R.string.appearance_percent, (prefs.style().opacity * 100).toInt().toString()) },
-            minus = { editStyle { it.copy(opacity = it.opacity - 0.05f) } },
-            plus = { editStyle { it.copy(opacity = it.opacity + 0.05f) } },
-            reset = { editStyle { it.copy(opacity = OverlayDefaults.OPACITY) } }
-        )
-
-        rows += spacer(6)
-        rows += stepperRow(
-            label = getString(R.string.appearance_corner),
-            value = { getString(R.string.appearance_dp, prefs.style().cornerDp.toInt().toString()) },
-            minus = { editStyle { it.copy(cornerDp = it.cornerDp - 2f) } },
-            plus = { editStyle { it.copy(cornerDp = it.cornerDp + 2f) } },
-            reset = { editStyle { it.copy(cornerDp = OverlayDefaults.CORNER_DP) } }
-        )
-
-        rows += spacer(12)
-        rows += labeled(
-            getString(R.string.appearance_secondary),
-            chipRow(
-                options = listOf(
-                    getString(R.string.secondary_next),
-                    getString(R.string.secondary_previous),
-                    getString(R.string.secondary_track),
-                    getString(R.string.secondary_none)
-                ),
-                current = { prefs.style().secondary.ordinal },
-                onPick = { index -> editStyle { it.copy(secondary = SECONDARY_ORDER[index]) } }
-            )
-        )
-
-        rows += spacer(10)
-        rows += switchRow(
-            label = getString(R.string.appearance_stroke),
-            current = { prefs.style().stroke },
-            onChange = { checked -> editStyle { it.copy(stroke = checked) } }
-        )
-        rows += switchRow(
-            label = getString(R.string.appearance_bold),
-            current = { prefs.style().bold },
-            onChange = { checked -> editStyle { it.copy(bold = checked) } }
-        )
-        rows += switchRow(
-            label = getString(R.string.appearance_fade),
-            current = { prefs.style().fadeMs > 0 },
-            onChange = { checked ->
-                editStyle { it.copy(fadeMs = if (checked) OverlayDefaults.FADE_MS else 0) }
-            }
-        )
-        rows += switchRow(
-            label = getString(R.string.appearance_hide_empty),
-            current = { prefs.hideWhenNoLyrics },
-            onChange = { checked ->
-                prefs.hideWhenNoLyrics = checked
-                hub.applyStyle()
-            }
-        )
-
-        rows += spacer(6)
-        rows += textButton(getString(R.string.appearance_reset)) {
-            prefs.resetStyle()
-            hub.applyStyle()
-            refresh()
-        }
-
-        return card(rows)
-    }
-
-    // ---------------------------------------------------------------- 位置
-
-    private fun buildPositionCard(): View {
-        editButton = textButton(getString(R.string.display_edit)) { toggleEdit() }
+    private fun buildWindowCard(): View {
+        editButton = primaryButton(getString(R.string.display_edit)) { toggleEdit() }
 
         val rows = ArrayList<View>(12)
-        rows += labeled(getString(R.string.position_grid), nineGrid())
-
-        // 宽高也放在这里：它们和位置一样是「窗口框多大」的问题，分到外观里会被当成样式项。
-        rows += spacer(14)
+        rows += editButton
+        rows += hint(getString(R.string.position_edit_hint))
+        rows += spacer(12)
         rows += stepperRow(
             label = getString(R.string.appearance_width),
             value = { ratioLabel(prefs.style().widthRatio) },
+            isDefault = { prefs.style().widthRatio <= 0f },
             minus = { stepWidth(-WIDTH_STEP) },
             plus = { stepWidth(WIDTH_STEP) },
             reset = { editStyle { it.copy(widthRatio = OverlayDefaults.WIDTH_RATIO) } }
         )
-        rows += spacer(6)
         rows += stepperRow(
             label = getString(R.string.appearance_height),
             value = { ratioLabel(prefs.style().heightRatio) },
+            isDefault = { prefs.style().heightRatio <= 0f },
             minus = { stepHeight(-HEIGHT_STEP) },
             plus = { stepHeight(HEIGHT_STEP) },
             reset = { editStyle { it.copy(heightRatio = OverlayDefaults.HEIGHT_RATIO) } }
         )
-        rows += spacer(6)
+        rows += divider()
         rows += switchRow(
             label = getString(R.string.position_handle),
+            hintText = getString(R.string.position_handle_hint),
             current = { prefs.handleEnabled },
             onChange = { enabled ->
                 prefs.handleEnabled = enabled
@@ -444,68 +316,17 @@ class SettingsActivity : BaseActivity() {
             }
         )
 
-        rows += spacer(10)
-        rows += row(
-            text(getString(R.string.position_edit_hint), 12f, secondary = true),
-            editButton
-        )
-        rows += spacer(6)
-
         val chooser = displayChooser()
         if (chooser != null) {
+            rows += divider()
             rows += chooser
-            rows += spacer(10)
         }
 
-        rows += textButton(getString(R.string.position_reset)) {
-            hub.overlay().resetPosition()
-            refresh()
-        }
-        rows += text(getString(R.string.position_hint), 12f, secondary = true).apply {
-            setPadding(0, dp(6), 0, 0)
-        }
+        rows += divider()
+        rows += textButton(getString(R.string.position_reset)) { resetWindow() }
+        rows += hint(getString(R.string.position_hint))
 
-        return card(rows)
-    }
-
-    private fun nineGrid(): View {
-        val wrapper = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val cells = ArrayList<TextView>(9)
-
-        for (rowIndex in 0..2) {
-            val line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            for (colIndex in 0..2) {
-                val cell = TextView(this).apply {
-                    text = "·"
-                    textSize = 18f
-                    gravity = Gravity.CENTER
-                    isClickable = true
-                    setOnClickListener {
-                        hub.overlay().setAnchor(colIndex, rowIndex)
-                        refresh()
-                    }
-                }
-                line.addView(
-                    cell,
-                    LinearLayout.LayoutParams(0, dp(36), 1f).apply {
-                        marginEnd = dp(6)
-                        bottomMargin = dp(6)
-                    }
-                )
-                cells += cell
-            }
-            wrapper.addView(line)
-        }
-
-        uiRefreshers += {
-            val landscape = isLandscape()
-            val col = OverlayGeometry.nearestAnchor(prefs.ratioX(landscape))
-            val rowIndex = OverlayGeometry.nearestAnchor(prefs.ratioY(landscape))
-            cells.forEachIndexed { index, cell ->
-                styleChip(cell, (index % 3) == col && (index / 3) == rowIndex)
-            }
-        }
-        return wrapper
+        return cardSection(getString(R.string.section_window), null, rows)
     }
 
     /** 只有真有多块屏幕时才出现，避免手机上多一行没用的设置。 */
@@ -531,6 +352,254 @@ class SettingsActivity : BaseActivity() {
         )
     }
 
+    private fun resetWindow() {
+        hub.overlay().resetPosition()
+        editStyle {
+            it.copy(
+                widthRatio = OverlayDefaults.WIDTH_RATIO,
+                heightRatio = OverlayDefaults.HEIGHT_RATIO
+            )
+        }
+        refresh()
+    }
+
+    // ---------------------------------------------------------------- 外观
+
+    private fun buildLookCard(): View {
+        val rows = ArrayList<View>(16)
+
+        rows += labeled(
+            getString(R.string.appearance_preset),
+            chipRow(
+                options = listOf(
+                    getString(R.string.preset_stripe),
+                    getString(R.string.preset_glass),
+                    getString(R.string.preset_solid),
+                    getString(R.string.preset_navi)
+                ),
+                current = { presetIndex() },
+                onPick = { choosePreset(PRESET_ORDER[it]) }
+            )
+        )
+
+        rows += spacer(12)
+        rows += stepperRow(
+            label = getString(R.string.appearance_font),
+            value = { getString(R.string.display_font_value, prefs.style().fontSp.toInt().toString()) },
+            isDefault = { prefs.style().fontSp == OverlayDefaults.FONT_SP },
+            minus = { editStyle { it.copy(fontSp = it.fontSp - 2f) } },
+            plus = { editStyle { it.copy(fontSp = it.fontSp + 2f) } },
+            reset = { editStyle { it.copy(fontSp = OverlayDefaults.FONT_SP) } }
+        )
+        // 行数是**歌词总行数**：当前行折行也算在内，副行按剩余预算往下铺。
+        rows += stepperRow(
+            label = getString(R.string.appearance_lines),
+            value = { getString(R.string.appearance_lines_value, prefs.style().maxLines.toString()) },
+            isDefault = { prefs.style().maxLines == OverlayDefaults.MAX_LINES },
+            minus = { editStyle { it.copy(maxLines = it.maxLines - 1) } },
+            plus = { editStyle { it.copy(maxLines = it.maxLines + 1) } },
+            reset = { editStyle { it.copy(maxLines = OverlayDefaults.MAX_LINES) } }
+        )
+        rows += hint(getString(R.string.appearance_lines_hint))
+
+        rows += spacer(12)
+        rows += labeled(
+            getString(R.string.appearance_align),
+            chipRow(
+                options = listOf(
+                    getString(R.string.align_start),
+                    getString(R.string.align_center),
+                    getString(R.string.align_end)
+                ),
+                current = { prefs.style().align.ordinal },
+                onPick = { index -> editStyle { it.copy(align = ALIGN_ORDER[index]) } }
+            )
+        )
+
+        rows += spacer(6)
+        rows += stepperRow(
+            label = getString(R.string.appearance_opacity),
+            value = { getString(R.string.appearance_percent, (prefs.style().opacity * 100).toInt().toString()) },
+            isDefault = { prefs.style().opacity == OverlayDefaults.OPACITY },
+            minus = { editStyle { it.copy(opacity = it.opacity - 0.05f) } },
+            plus = { editStyle { it.copy(opacity = it.opacity + 0.05f) } },
+            reset = { editStyle { it.copy(opacity = OverlayDefaults.OPACITY) } }
+        )
+        rows += stepperRow(
+            label = getString(R.string.appearance_corner),
+            value = { getString(R.string.appearance_dp, prefs.style().cornerDp.toInt().toString()) },
+            isDefault = { prefs.style().cornerDp == OverlayDefaults.CORNER_DP },
+            minus = { editStyle { it.copy(cornerDp = it.cornerDp - 2f) } },
+            plus = { editStyle { it.copy(cornerDp = it.cornerDp + 2f) } },
+            reset = { editStyle { it.copy(cornerDp = OverlayDefaults.CORNER_DP) } }
+        )
+
+        rows += divider()
+        rows += switchRow(
+            label = getString(R.string.appearance_bold),
+            hintText = null,
+            current = { prefs.style().bold },
+            onChange = { checked -> editStyle { it.copy(bold = checked) } }
+        )
+        rows += switchRow(
+            label = getString(R.string.appearance_stroke),
+            hintText = getString(R.string.appearance_stroke_hint),
+            current = { prefs.style().stroke },
+            onChange = { checked -> editStyle { it.copy(stroke = checked) } }
+        )
+
+        rows += divider()
+        rows += textButton(getString(R.string.appearance_reset)) {
+            prefs.resetStyle()
+            hub.applyStyle()
+            refresh()
+        }
+
+        return cardSection(getString(R.string.section_appearance), null, rows)
+    }
+
+    // ---------------------------------------------------------------- 颜色
+
+    private fun buildColorCard(): View {
+        val rows = ArrayList<View>(8)
+
+        // 四项颜色都走同一套「色块 + 十六进制 + 点开取色器」，不再摆一排固定色板。
+        rows += colorRow(
+            getString(R.string.appearance_color_primary),
+            current = { prefs.style().primaryColor },
+            default = OverlayDefaults.PRIMARY_COLOR,
+            onPick = { color -> editStyle { it.copy(primaryColor = color) } }
+        )
+        rows += colorRow(
+            getString(R.string.appearance_color_secondary),
+            current = { prefs.style().secondaryColor },
+            default = OverlayDefaults.SECONDARY_COLOR,
+            onPick = { color -> editStyle { it.copy(secondaryColor = color) } }
+        )
+        rows += colorRow(
+            getString(R.string.appearance_color_bg),
+            current = { prefs.style().bgColor },
+            default = OverlayDefaults.BG_COLOR,
+            onPick = { color -> editStyle { it.copy(bgColor = color) } }
+        )
+        rows += colorRow(
+            getString(R.string.appearance_color_stroke),
+            current = { prefs.style().strokeColor },
+            default = OverlayDefaults.STROKE_COLOR,
+            onPick = { color -> editStyle { it.copy(strokeColor = color) } }
+        )
+
+        return cardSection(
+            getString(R.string.section_colors),
+            getString(R.string.section_colors_hint),
+            rows
+        )
+    }
+
+    // ---------------------------------------------------------------- 标题
+
+    private fun buildTitleCard(): View {
+        val rows = ArrayList<View>(8)
+
+        rows += switchRow(
+            label = getString(R.string.title_show),
+            hintText = getString(R.string.title_show_hint),
+            current = { prefs.style().titleEnabled },
+            onChange = { checked -> editStyle { it.copy(titleEnabled = checked) } }
+        )
+        rows += divider()
+        rows += labeled(
+            getString(R.string.title_position),
+            chipRow(
+                options = listOf(
+                    getString(R.string.title_pos_top),
+                    getString(R.string.title_pos_bottom)
+                ),
+                current = { if (prefs.style().titlePos == TitlePos.TOP) 0 else 1 },
+                onPick = { index ->
+                    editStyle { it.copy(titlePos = if (index == 0) TitlePos.TOP else TitlePos.BOTTOM) }
+                }
+            )
+        )
+        rows += spacer(6)
+        rows += stepperRow(
+            label = getString(R.string.title_font),
+            value = { getString(R.string.display_font_value, prefs.style().titleFontSp.toInt().toString()) },
+            isDefault = { prefs.style().titleFontSp == OverlayDefaults.TITLE_FONT_SP },
+            minus = { editStyle { it.copy(titleFontSp = it.titleFontSp - 1f) } },
+            plus = { editStyle { it.copy(titleFontSp = it.titleFontSp + 1f) } },
+            reset = { editStyle { it.copy(titleFontSp = OverlayDefaults.TITLE_FONT_SP) } }
+        )
+        rows += colorRow(
+            getString(R.string.title_color),
+            current = { prefs.style().titleColor },
+            default = OverlayDefaults.TITLE_COLOR,
+            onPick = { color -> editStyle { it.copy(titleColor = color) } }
+        )
+
+        return cardSection(getString(R.string.section_title), null, rows)
+    }
+
+    // ---------------------------------------------------------------- 行为
+
+    private fun buildBehaviorCard(): View {
+        val rows = ArrayList<View>(8)
+
+        rows += labeled(
+            getString(R.string.appearance_secondary),
+            chipRow(
+                options = listOf(
+                    getString(R.string.secondary_next),
+                    getString(R.string.secondary_previous),
+                    getString(R.string.secondary_none)
+                ),
+                current = { prefs.style().secondary.ordinal },
+                onPick = { index -> editStyle { it.copy(secondary = SECONDARY_ORDER[index]) } }
+            )
+        )
+        rows += hint(getString(R.string.appearance_secondary_hint))
+        rows += divider()
+        rows += switchRow(
+            label = getString(R.string.appearance_fade),
+            hintText = null,
+            current = { prefs.style().fadeMs > 0 },
+            onChange = { checked ->
+                editStyle { it.copy(fadeMs = if (checked) OverlayDefaults.FADE_MS else 0) }
+            }
+        )
+        rows += switchRow(
+            label = getString(R.string.appearance_hide_empty),
+            hintText = getString(R.string.appearance_hide_empty_hint),
+            current = { prefs.hideWhenNoLyrics },
+            onChange = { checked ->
+                prefs.hideWhenNoLyrics = checked
+                hub.applyStyle()
+            }
+        )
+
+        return cardSection(getString(R.string.section_behavior), null, rows)
+    }
+
+    // ---------------------------------------------------------------- 诊断
+
+    private fun buildDiagCard(): View {
+        debugSwitch = Switch(this).apply {
+            text = getString(R.string.diag_debug_toggle)
+            textSize = 15f
+            isChecked = prefs.debugEnabled
+            minHeight = dp(44)
+            setOnCheckedChangeListener { _, checked -> hub.setDebugEnabled(checked) }
+        }
+        return cardSection(getString(R.string.section_probe), null, listOf(
+            debugSwitch,
+            hint(getString(R.string.diag_debug_hint)),
+            spacer(6),
+            textButton(getString(R.string.diag_open)) {
+                startActivity(Intent(this@SettingsActivity, DiagActivity::class.java))
+            }
+        ))
+    }
+
     // ---------------------------------------------------------------- 通用控件
 
     private fun labeled(label: String, control: View): View =
@@ -538,48 +607,211 @@ class SettingsActivity : BaseActivity() {
             orientation = LinearLayout.VERTICAL
             addView(text(label, 12f, secondary = true).apply { setPadding(0, 0, 0, dp(6)) })
             addView(control)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
         }
 
-    /** 带单项「重置」的小标题 + 控件。颜色这类项需要能单独回到默认值。 */
-    private fun labeledWithReset(label: String, control: View, onReset: () -> Unit): View =
-        LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(
-                row(
-                    text(label, 12f, secondary = true),
-                    textButton(getString(R.string.appearance_reset_short)) { onReset(); refresh() }
-                )
-            )
-            addView(control)
+    private fun stepButton(symbol: String, action: () -> Unit): TextView = TextView(this).apply {
+        text = symbol
+        textSize = 18f
+        gravity = Gravity.CENTER
+        minWidth = dp(38)
+        minHeight = dp(38)
+        setTextColor(if (isNight) 0xFFE6E6E6.toInt() else 0xFF2C2C2A.toInt())
+        isClickable = true
+        isFocusable = true
+        setOnClickListener {
+            action()
+            refresh()
         }
+    }
 
     /**
-     * 颜色项：当前色 + 十六进制值 + 「自定义颜色」。
+     * 加减步进行：`标签 … [− 值 +] 重置`。
      *
-     * 刻意**不再摆一排固定色板**：用户要的是任意颜色，十来颗圆点给不出这个自由度，
-     * 还把整屏塞满了。点开取色器拖三根滑杆就能到任意 RGB，车机上比调色盘好点得多。
+     * 重置只在「已经偏离默认」时出现（INVISIBLE 占位，避免整行跳动）：
+     * 默认状态下满屏的「重置」只会让人以为每一项都得动一下。
      */
-    private fun colorRow(current: () -> Int, default: Int, onPick: (Int) -> Unit): View {
-        val swatch = TextView(this).apply {
-            val size = dp(30)
-            layoutParams = LinearLayout.LayoutParams(size, size).apply { marginEnd = dp(10) }
+    private fun stepperRow(
+        label: String,
+        value: () -> String,
+        isDefault: () -> Boolean,
+        minus: () -> Unit,
+        plus: () -> Unit,
+        reset: () -> Unit
+    ): View {
+        val valueView = text("", 14f, bold = true).apply {
+            gravity = Gravity.CENTER
+            minWidth = dp(52)
+            minHeight = dp(38)
         }
-        val hex = text("", 13f, secondary = true)
-        val custom = textButton(getString(R.string.appearance_color_custom)) {
-            showColorDialog(current(), default, onPick)
+        val pillView = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = pill(chipIdle, dp(10).toFloat())
+            addView(stepButton("−", minus))
+            addView(valueView)
+            addView(stepButton("+", plus))
         }
+        val resetView = textButton(getString(R.string.appearance_reset_short)) {
+            reset()
+            refresh()
+        }
+
         uiRefreshers += {
-            val color = current()
-            styleDot(swatch, color, selected = true)
-            hex.text = String.format(Locale.US, "#%06X", color and 0xFFFFFF)
+            valueView.text = value()
+            resetView.visibility = if (isDefault()) View.INVISIBLE else View.VISIBLE
         }
+
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            addView(swatch)
-            addView(hex, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            addView(custom)
+            setPadding(0, dp(3), 0, dp(3))
+            addView(
+                text(label, 14f),
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            )
+            addView(pillView)
+            addView(resetView)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
         }
+    }
+
+    private fun switchRow(
+        label: String,
+        hintText: String?,
+        current: () -> Boolean,
+        onChange: (Boolean) -> Unit
+    ): View {
+        val control = Switch(this).apply {
+            isChecked = current()
+            minHeight = dp(40)
+            setOnCheckedChangeListener { _, checked ->
+                onChange(checked)
+                refresh()
+            }
+        }
+        uiRefreshers += { if (control.isChecked != current()) control.isChecked = current() }
+
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(4), 0, dp(4))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            addView(row(text(label, 14f), control))
+            if (!hintText.isNullOrBlank()) {
+                addView(
+                    text(hintText, 11.5f, secondary = true).apply {
+                        setPadding(0, 0, dp(8), dp(2))
+                    }
+                )
+            }
+        }
+    }
+
+    private fun chipRow(
+        options: List<String>,
+        current: () -> Int,
+        onPick: (Int) -> Unit
+    ): View {
+        val holder = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val cells = ArrayList<TextView>(options.size)
+
+        options.forEachIndexed { index, label ->
+            val cell = TextView(this).apply {
+                text = label
+                textSize = 13f
+                gravity = Gravity.CENTER
+                val padH = dp(13)
+                val padV = dp(8)
+                setPadding(padH, padV, padH, padV)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    onPick(index)
+                    refresh()
+                }
+            }
+            holder.addView(
+                cell,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { marginEnd = dp(8) }
+            )
+            cells += cell
+        }
+
+        uiRefreshers += {
+            val selected = current()
+            cells.forEachIndexed { index, cell -> styleChip(cell, index == selected) }
+        }
+
+        return HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(holder)
+        }
+    }
+
+    private fun styleChip(view: TextView, selected: Boolean) {
+        view.background = pill(
+            if (selected) colorAccent else chipIdle,
+            dp(10).toFloat()
+        )
+        view.setTextColor(
+            when {
+                selected -> Color.WHITE
+                isNight -> 0xFFE2E2E2.toInt()
+                else -> 0xFF2C2C2A.toInt()
+            }
+        )
+    }
+
+    /**
+     * 颜色项：色块 + 名称 + 十六进制，整行可点。
+     *
+     * 把「可点区域」从一个小小的文字按钮扩到整行，车机上少点偏一半。
+     */
+    private fun colorRow(
+        label: String,
+        current: () -> Int,
+        default: Int,
+        onPick: (Int) -> Unit
+    ): View {
+        val swatch = View(this).apply {
+            val size = dp(24)
+            layoutParams = LinearLayout.LayoutParams(size, size).apply { marginEnd = dp(10) }
+        }
+        val hex = text("", 12f, secondary = true)
+
+        val holder = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = dp(46)
+            isClickable = true
+            isFocusable = true
+            addView(swatch)
+            addView(
+                text(label, 14f),
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            )
+            addView(hex)
+            setOnClickListener { showColorDialog(current(), default, onPick) }
+        }
+
+        uiRefreshers += {
+            val color = current()
+            swatch.background = pill(color, dp(7).toFloat(), colorCardStroke)
+            hex.text = String.format(Locale.US, "#%06X", color and 0xFFFFFF)
+        }
+        return holder
     }
 
     /**
@@ -597,17 +829,11 @@ class SettingsActivity : BaseActivity() {
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(52)
             ).apply { bottomMargin = dp(8) }
         }
-        val hex = text("", 13f, bold = true).apply {
-            setPadding(0, 0, 0, dp(4))
-        }
+        val hex = text("", 13f, bold = true).apply { setPadding(0, 0, 0, dp(4)) }
 
         fun render() {
             val color = Color.HSVToColor(hsv)
-            preview.background = GradientDrawable().apply {
-                cornerRadius = dp(10).toFloat()
-                setColor(color)
-                setStroke(dp(1), if (isNight) 0x44FFFFFF else 0x22000000)
-            }
+            preview.background = pill(color, dp(10).toFloat(), colorCardStroke)
             hex.text = String.format(Locale.US, "#%06X", color and 0xFFFFFF)
         }
 
@@ -667,20 +893,6 @@ class SettingsActivity : BaseActivity() {
         }
     }
 
-    private fun styleDot(view: TextView, color: Int, selected: Boolean) {
-        view.background = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
-            setColor(color)
-            if (selected) {
-                setStroke(dp(3), colorAccent)
-            } else {
-                setStroke(dp(1), if (isNight) 0x33FFFFFF else 0x22000000)
-            }
-        }
-        view.alpha = if (selected) 1f else 0.88f
-        view.contentDescription = String.format(Locale.US, "#%06X", color and 0xFFFFFF)
-    }
-
     private fun ratioLabel(value: Float): String =
         if (value <= 0f) getString(R.string.appearance_auto)
         else getString(R.string.appearance_percent, (value * 100).toInt().toString())
@@ -708,105 +920,8 @@ class SettingsActivity : BaseActivity() {
         }
     }
 
-    private fun chipRow(
-        options: List<String>,
-        current: () -> Int,
-        onPick: (Int) -> Unit
-    ): View {
-        val holder = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val cells = ArrayList<TextView>(options.size)
-
-        options.forEachIndexed { index, label ->
-            val cell = TextView(this).apply {
-                text = label
-                textSize = 13f
-                gravity = Gravity.CENTER
-                val padH = dp(12)
-                val padV = dp(7)
-                setPadding(padH, padV, padH, padV)
-                isClickable = true
-                setOnClickListener {
-                    onPick(index)
-                    refresh()
-                }
-            }
-            holder.addView(
-                cell,
-                LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { marginEnd = dp(8) }
-            )
-            cells += cell
-        }
-
-        uiRefreshers += {
-            val selected = current()
-            cells.forEachIndexed { index, cell -> styleChip(cell, index == selected) }
-        }
-
-        return HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
-            addView(holder)
-        }
-    }
-
-    private fun styleChip(view: TextView, selected: Boolean) {
-        view.background = GradientDrawable().apply {
-            cornerRadius = dp(9).toFloat()
-            setColor(if (selected) colorAccent else chipIdle)
-        }
-        view.setTextColor(
-            when {
-                selected -> Color.WHITE
-                isNight -> 0xFFE2E2E2.toInt()
-                else -> 0xFF2C2C2A.toInt()
-            }
-        )
-    }
-
     private val chipIdle: Int
         get() = if (isNight) 0xFF2C2C2C.toInt() else 0xFFE9E9E9.toInt()
-
-    private fun switchRow(
-        label: String,
-        current: () -> Boolean,
-        onChange: (Boolean) -> Unit
-    ): View {
-        val control = Switch(this).apply {
-            isChecked = current()
-            setOnCheckedChangeListener { _, checked ->
-                onChange(checked)
-                refresh()
-            }
-        }
-        uiRefreshers += { if (control.isChecked != current()) control.isChecked = current() }
-        return row(text(label, 14f), control)
-    }
-
-    private fun stepperRow(
-        label: String,
-        value: () -> String,
-        minus: () -> Unit,
-        plus: () -> Unit,
-        reset: () -> Unit
-    ): View {
-        val valueView = text("", 14f, bold = true).apply { setPadding(dp(8), 0, dp(8), 0) }
-        uiRefreshers += { valueView.text = value() }
-
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            addView(
-                text(label, 14f),
-                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            )
-            addView(textButton("−") { minus(); refresh() })
-            addView(valueView)
-            addView(textButton("+") { plus(); refresh() })
-            addView(textButton(getString(R.string.appearance_reset_short)) { reset(); refresh() })
-        }
-    }
 
     // ---------------------------------------------------------------- 关于与更新
     //
@@ -819,14 +934,14 @@ class SettingsActivity : BaseActivity() {
     // 只有「检查更新 / 下载」会联网。歌词链路仍然不联网、不读文件，这是一期就定死的边界。
 
     private fun buildUpdateCard(): View {
-        updateState = text("", 13f, secondary = true).apply { setPadding(0, dp(6), 0, dp(2)) }
+        updateState = text("", 13f, secondary = true).apply { setPadding(0, dp(8), 0, dp(2)) }
         updateNotes = text("", 12f, secondary = true).apply {
             setPadding(0, dp(8), 0, dp(2))
             visibility = View.GONE
         }
         updateAction = textButton(getString(R.string.update_check)) { onUpdateAction() }
         val routeHint = text(getString(prefs.updateRoute.hintRes), 11f, secondary = true).apply {
-            setPadding(0, dp(2), 0, dp(6))
+            setPadding(0, dp(2), 0, 0)
         }
         val routeRow = labeled(
             getString(R.string.update_route),
@@ -840,25 +955,20 @@ class SettingsActivity : BaseActivity() {
             )
         )
 
-        val rows = ArrayList<View>(8)
-        rows += text(
-            getString(R.string.update_version_line, versionName()),
-            14f,
-            bold = true
-        )
+        val rows = ArrayList<View>(10)
+        rows += text(getString(R.string.update_version_line, versionName()), 14f, bold = true)
         rows += updateState
         rows += updateNotes
-        rows += spacer(2)
         rows += row(
             updateAction,
             textButton(getString(R.string.update_open_page)) { openReleasePage() }
         )
-        rows += spacer(10)
+        rows += divider()
         rows += routeRow
         rows += routeHint
 
         renderUpdate()
-        return card(rows)
+        return cardSection(getString(R.string.section_about), null, rows)
     }
 
     private fun onUpdateAction() {
@@ -1125,6 +1235,8 @@ class SettingsActivity : BaseActivity() {
 
         applyListenerState(listener)
         applyPermissionState(overlayState, status.overlayGranted)
+        notificationDesc.visibility = if (listener == ListenerState.GRANTED) View.GONE else View.VISIBLE
+        overlayDesc.visibility = if (status.overlayGranted) View.GONE else View.VISIBLE
         overlayButton.text = getString(
             if (status.overlayGranted) R.string.perm_review else R.string.perm_open
         )
@@ -1135,6 +1247,15 @@ class SettingsActivity : BaseActivity() {
             if (hub.overlay().isEditable()) R.string.display_edit_exit
             else R.string.display_edit
         )
+        // 只在状态真的变了时换底色：refresh 会被轮询反复调到，每次新建一个 Drawable 只是喂 GC
+        val editing = hub.overlay().isEditable()
+        if (editButton.tag != editing) {
+            editButton.tag = editing
+            editButton.background = pill(
+                if (editing) colorWarn else colorAccentStrong,
+                dp(12).toFloat()
+            )
+        }
         if (debugSwitch.isChecked != prefs.debugEnabled) {
             debugSwitch.isChecked = prefs.debugEnabled
         }
@@ -1234,9 +1355,6 @@ class SettingsActivity : BaseActivity() {
         toast(getString(if (next) R.string.edit_entered else R.string.edit_exited))
         refresh()
     }
-
-    private fun isLandscape(): Boolean =
-        resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     // ---------------------------------------------------------------- 打开系统设置
     //
@@ -1358,15 +1476,16 @@ class SettingsActivity : BaseActivity() {
             Preset.STRIPE, Preset.GLASS, Preset.SOLID, Preset.NAVI
         )
         private val ALIGN_ORDER = listOf(Align.START, Align.CENTER, Align.END)
-        private val SECONDARY_ORDER = listOf(
-            Secondary.NEXT, Secondary.PREVIOUS, Secondary.TRACK, Secondary.NONE
-        )
+        private val SECONDARY_ORDER = listOf(Secondary.NEXT, Secondary.PREVIOUS, Secondary.NONE)
 
         /** 从「自适应」起步时的基准比例：宽 60% / 高 14%，都是车机上常见的合理值。 */
         private const val WIDTH_AUTO_BASE = 0.60f
         private const val HEIGHT_AUTO_BASE = 0.14f
         private const val WIDTH_STEP = 0.04f
         private const val HEIGHT_STEP = 0.02f
+
+        /** 超过这个宽度就摆双栏。车机横屏（约 640dp+）受益最大，手机竖屏仍是单栏。 */
+        private const val WIDE_SCREEN_DP = 600
 
         /** 首次刷新的延迟：给系统一点绑定时间，免得白跑一轮。 */
         private const val POLL_FIRST_DELAY_MS = 400L

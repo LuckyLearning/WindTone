@@ -7,6 +7,7 @@ import com.anylyric.overlay.OverlayDefaults
 import com.anylyric.overlay.OverlayStyle
 import com.anylyric.overlay.Preset
 import com.anylyric.overlay.Secondary
+import com.anylyric.overlay.TitlePos
 import com.anylyric.update.DownloadRoute
 
 /**
@@ -64,7 +65,11 @@ class Prefs(context: Context) {
             bgColor = sp.getInt(KEY_BG_COLOR, OverlayDefaults.BG_COLOR),
             strokeColor = sp.getInt(KEY_STROKE_COLOR, OverlayDefaults.STROKE_COLOR),
             widthRatio = sp.getFloat(KEY_WIDTH_RATIO, OverlayDefaults.WIDTH_RATIO),
-            heightRatio = sp.getFloat(KEY_HEIGHT_RATIO, OverlayDefaults.HEIGHT_RATIO)
+            heightRatio = sp.getFloat(KEY_HEIGHT_RATIO, OverlayDefaults.HEIGHT_RATIO),
+            titleEnabled = sp.getBoolean(KEY_TITLE_ENABLED, OverlayDefaults.TITLE_ENABLED),
+            titleFontSp = sp.getFloat(KEY_TITLE_FONT, OverlayDefaults.TITLE_FONT_SP),
+            titleColor = sp.getInt(KEY_TITLE_COLOR, OverlayDefaults.TITLE_COLOR),
+            titlePos = TitlePos.of(sp.getString(KEY_TITLE_POS, null))
         )
     ).also { styleCache = it }
 
@@ -88,6 +93,10 @@ class Prefs(context: Context) {
             .putInt(KEY_STROKE_COLOR, safe.strokeColor)
             .putFloat(KEY_WIDTH_RATIO, safe.widthRatio)
             .putFloat(KEY_HEIGHT_RATIO, safe.heightRatio)
+            .putBoolean(KEY_TITLE_ENABLED, safe.titleEnabled)
+            .putFloat(KEY_TITLE_FONT, safe.titleFontSp)
+            .putInt(KEY_TITLE_COLOR, safe.titleColor)
+            .putString(KEY_TITLE_POS, safe.titlePos.id)
             .apply()
         styleCache = null
     }
@@ -149,6 +158,10 @@ class Prefs(context: Context) {
         private const val KEY_STROKE_COLOR = "style_stroke_color"
         private const val KEY_WIDTH_RATIO = "style_width_ratio"
         private const val KEY_HEIGHT_RATIO = "style_height_ratio"
+        private const val KEY_TITLE_ENABLED = "style_title_enabled"
+        private const val KEY_TITLE_FONT = "style_title_font_sp"
+        private const val KEY_TITLE_COLOR = "style_title_color"
+        private const val KEY_TITLE_POS = "style_title_pos"
         private const val KEY_HANDLE = "overlay_handle_enabled"
         private const val KEY_UPDATE_ROUTE = "update_route"
 

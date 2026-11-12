@@ -73,9 +73,6 @@ object Probe {
         Perf.reset()
     }
 
-    @Synchronized
-    fun droppedCount(): Int = dropped
-
     /** 设备内可读的完整报告：九段事实 + 自动判因。 */
     fun buildReport(): String {
         val s = snapshot

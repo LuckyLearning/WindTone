@@ -74,14 +74,31 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
     private var resizeH = 0
     private val resizeOrigin = Rect()
 
+    /**
+     * 按下瞬间的可用矩形。
+     *
+     * 拖动与拖角过程中屏幕范围不会变（方向变了系统会先发 CANCEL），
+     * 而在 MOVE 里每秒查六十次 `currentWindowMetrics` + insets 纯属白花 —— 按下时算一次即可。
+     */
+    private var dragFrame = OverlayGeometry.Frame(0, 0, 0, 0)
+
     private var hiddenUntil = 0L
     private var attachedDisplayId = Prefs.DEFAULT_DISPLAY_ID
 
     private var lastPrimary = ""
-    private var lastSecondary: String? = null
+    private var lastSecondary: List<String> = emptyList()
+    private var lastTitle: String? = null
     private var lastMode = LyricRenderer.Mode.CONTENT
 
     private val handler = Handler(Looper.getMainLooper())
+
+    /**
+     * 复用的「排一次重新布局」任务。
+     *
+     * 每句歌词都会走一次，以前每走一次就 new 一个 Runnable；复用同一个没有副作用
+     * （同一个 Looper 队列里本来就只会有一个待执行实例）。
+     */
+    private val placeTask = Runnable { place(update = true) }
 
     /** 上层重渲染入口：菜单关闭、隐藏到期、编辑态需要重建窗口时回调。 */
     var onRequestRender: (() -> Unit)? = null
@@ -117,22 +134,29 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
 
     fun isEditable(): Boolean = editable
 
-    fun isCollapsed(): Boolean = collapsed
-
-    fun showContent(primary: String, secondary: String?) =
-        show(primary, secondary, LyricRenderer.Mode.CONTENT)
+    fun showContent(primary: String, secondary: List<String>, title: String?) =
+        show(primary, secondary, title, LyricRenderer.Mode.CONTENT)
 
     /** 空状态提示：小一号、降透明度，和真歌词区分开。 */
-    fun showPrompt(primary: String, secondary: String?) =
-        show(primary, secondary, LyricRenderer.Mode.PROMPT)
+    fun showPrompt(primary: String, secondary: List<String>) =
+        show(primary, secondary, null, LyricRenderer.Mode.PROMPT)
 
-    private fun show(primary: String, secondary: String?, mode: LyricRenderer.Mode) {
+    private fun show(
+        primary: String,
+        secondary: List<String>,
+        title: String?,
+        mode: LyricRenderer.Mode
+    ) {
         // 「隐藏 10 分钟」期间的任何刷新都不该把窗口又拉回来
         if (SystemClock.elapsedRealtime() < hiddenUntil) return
 
-        val changed = primary != lastPrimary || secondary != lastSecondary || mode != lastMode
+        val changed = primary != lastPrimary ||
+            secondary != lastSecondary ||
+            title != lastTitle ||
+            mode != lastMode
         lastPrimary = primary
         lastSecondary = secondary
+        lastTitle = title
         lastMode = mode
 
         // 收起态只留把手：内容照记（展开时立刻能用），窗口不建。
@@ -144,17 +168,22 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
 
         val current = view
         if (current == null) {
-            addView(primary, secondary, mode)
+            addView(primary, secondary, title, mode)
             return
         }
         // 内容没变就不重绘、不重新排位置：播放器每 250ms 推一次状态，
         // 每句歌词能触发三四次刷新，白跑一次 layout 就是白烧一次车机 GPU。
         if (!changed) return
-        current.setContent(primary, secondary, mode)
-        current.post { place(update = true) }
+        current.setContent(primary, secondary, title, mode)
+        current.post(placeTask)
     }
 
-    private fun addView(primary: String, secondary: String?, mode: LyricRenderer.Mode): Boolean {
+    private fun addView(
+        primary: String,
+        secondary: List<String>,
+        title: String?,
+        mode: LyricRenderer.Mode
+    ): Boolean {
         refreshWindowManager()
 
         val renderer = LyricRenderer(context).apply {
@@ -162,11 +191,11 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
             setHint(context.getString(R.string.edit_hint_bar))
             applyStyle(prefs.style())
             setEditing(editable)
-            setContent(primary, secondary, mode)
+            setContent(primary, secondary, title, mode)
         }
         applyLayoutLimits(renderer)
         // 在 layout 期间直接改窗口位置不安全，延到下一轮消息再摆
-        renderer.sizeListener = { _, _ -> renderer.post { place(update = true) } }
+        renderer.sizeListener = { _, _ -> renderer.post(placeTask) }
 
         val lp = buildParams()
         val added = try {
@@ -181,7 +210,7 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         view = renderer
         params = lp
         attachedDisplayId = prefs.displayId
-        renderer.post { place(update = true) }
+        renderer.post(placeTask)
         // 窗口叠放顺序按加入顺序：歌词窗贴左边缘时把手会与它重叠，
         // 被压在下面就点不到了 —— 所以每次重建歌词窗都要把把手重新加一遍（盖在最上面）。
         if (handle != null) removeHandle()
@@ -444,7 +473,7 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         // 编辑态收起把手：拖角时它会碍事，而且此时不需要「收起」
         removeHandle()
         handler.postDelayed(exitEdit, EDIT_TIMEOUT_MS)
-        current.post { place(update = true) }
+        current.post(placeTask)
     }
 
     /** 样式变更后重算尺寸与位置。同一次调用里也负责「换了输出屏幕就重建窗口」。 */
@@ -462,16 +491,7 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         current.applyStyle(prefs.style())
         applyLayoutLimits(current)
         syncHandle()
-        current.post { place(update = true) }
-    }
-
-    fun setAnchor(col: Int, row: Int) {
-        prefs.setRatio(
-            OverlayGeometry.anchorRatio(col),
-            OverlayGeometry.anchorRatio(row),
-            isLandscape()
-        )
-        place(update = true)
+        current.post(placeTask)
     }
 
     fun resetPosition() {
@@ -553,13 +573,15 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         return OverlayGeometry.frame(width, height, left, top, right, bottom, pad)
     }
 
-    private fun maxWidthPx(): Int =
-        (frame().width * MAX_WIDTH_RATIO).toInt().coerceAtLeast((120 * density).toInt())
+    private fun maxWidthPx(box: OverlayGeometry.Frame): Int =
+        (box.width * MAX_WIDTH_RATIO).toInt().coerceAtLeast((120 * density).toInt())
 
     /**
      * 把「宽度 / 高度比例」翻译成固定像素后交给渲染器；比例 0 表示自适应。
      *
      * 固定尺寸不能小于渲染器算出来的最小可用尺寸，否则字会被裁成半个。
+     * 可用矩形只查一次并往下传：`currentWindowMetrics` 里带 insets 计算，
+     * 一次布局里连查两遍纯属白花。
      */
     private fun applyLayoutLimits(renderer: LyricRenderer) {
         val box = frame()
@@ -574,7 +596,7 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         } else {
             0
         }
-        renderer.setLayoutLimits(maxWidthPx(), fixedW, fixedH)
+        renderer.setLayoutLimits(maxWidthPx(box), fixedW, fixedH)
     }
 
     private fun place(update: Boolean) {
@@ -654,6 +676,7 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
                 dragOriginX = lp.x
                 dragOriginY = lp.y
                 dragging = false
+                dragFrame = frame()
                 handler.removeCallbacks(longPress)
                 handler.postDelayed(longPress, LONG_PRESS_MS)
                 handler.removeCallbacks(exitEdit)
@@ -669,7 +692,7 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
                     if (!resizing && (abs(dx) > DRAG_SLOP || abs(dy) > DRAG_SLOP)) resizing = true
                     if (!resizing) return@OnTouchListener true
 
-                    val box = frame()
+                    val box = dragFrame
                     val minW = renderer.minWidthPx()
                     val minH = renderer.minHeightPx()
                     val originW = resizeOrigin.width()
@@ -705,7 +728,7 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
                 }
                 if (!dragging) return@OnTouchListener true
 
-                val box = frame()
+                val box = dragFrame
                 lp.x = OverlayGeometry.clampOrigin(
                     dragOriginX + dx.toInt(), box.left, box.width - v.width
                 )
@@ -733,7 +756,7 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
                     if (wasResizing) persistSize()
                     handler.removeCallbacks(exitEdit)
                     handler.postDelayed(exitEdit, EDIT_TIMEOUT_MS)
-                    v.post { place(update = true) }
+                    v.post(placeTask)
                     return@OnTouchListener true
                 }
 
@@ -789,17 +812,17 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         if (!editable) return
         menuOpen = true
         handler.removeCallbacks(exitEdit)
-        renderer.setContent(renderer.currentPrimary, null, LyricRenderer.Mode.MENU)
-        renderer.post { place(update = true) }
+        renderer.setContent(renderer.currentPrimary, emptyList(), null, LyricRenderer.Mode.MENU)
+        renderer.post(placeTask)
     }
 
     private fun closeMenu() {
         menuOpen = false
         val renderer = view ?: return
-        renderer.setContent(lastPrimary, lastSecondary, lastMode)
+        renderer.setContent(lastPrimary, lastSecondary, lastTitle, lastMode)
         handler.removeCallbacks(exitEdit)
         handler.postDelayed(exitEdit, EDIT_TIMEOUT_MS)
-        renderer.post { place(update = true) }
+        renderer.post(placeTask)
     }
 
     private fun handleMenu(index: Int) {

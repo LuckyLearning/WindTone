@@ -31,6 +31,10 @@ class OverlayStyleTest {
         assertEquals(Preset.GLASS, style.preset)
         assertEquals(Align.START, style.align)
         assertEquals(Secondary.NEXT, style.secondary)
+        assertEquals(OverlayDefaults.TITLE_ENABLED, style.titleEnabled)
+        assertEquals(OverlayDefaults.TITLE_FONT_SP, style.titleFontSp, 0.001f)
+        assertEquals(OverlayDefaults.TITLE_COLOR, style.titleColor)
+        assertEquals(OverlayDefaults.TITLE_POS, style.titlePos)
     }
 
     /** 默认白字 + 深底：与旧版硬编码的观感一致，升级后不该突然换个样子。 */
@@ -85,7 +89,8 @@ class OverlayStyleTest {
             opacity = -5f,
             cornerDp = 100f,
             secondaryAlpha = 0f,
-            fadeMs = 9999
+            fadeMs = 9999,
+            titleFontSp = 500f
         )
         val safe = OverlayDefaults.sanitize(bad)
         assertEquals(OverlayDefaults.FONT_MAX, safe.fontSp, 0.001f)
@@ -94,18 +99,23 @@ class OverlayStyleTest {
         assertEquals(OverlayDefaults.CORNER_MAX, safe.cornerDp, 0.001f)
         assertEquals(OverlayDefaults.SECONDARY_ALPHA_MIN, safe.secondaryAlpha, 0.001f)
         assertEquals(OverlayDefaults.FADE_MAX, safe.fadeMs)
+        assertEquals(OverlayDefaults.TITLE_FONT_MAX, safe.titleFontSp, 0.001f)
     }
 
     @Test
     fun sanitizeRaisesTooSmallValues() {
         val safe = OverlayDefaults.sanitize(
-            OverlayStyle(fontSp = 2f, maxLines = 0, opacity = 0f, cornerDp = -4f, fadeMs = -1)
+            OverlayStyle(
+                fontSp = 2f, maxLines = 0, opacity = 0f, cornerDp = -4f, fadeMs = -1,
+                titleFontSp = 1f
+            )
         )
         assertEquals(OverlayDefaults.FONT_MIN, safe.fontSp, 0.001f)
         assertEquals(OverlayDefaults.LINES_MIN, safe.maxLines)
         assertEquals(0f, safe.opacity, 0.001f)
         assertEquals(0f, safe.cornerDp, 0.001f)
         assertEquals(0, safe.fadeMs)
+        assertEquals(OverlayDefaults.TITLE_FONT_MIN, safe.titleFontSp, 0.001f)
     }
 
     @Test
@@ -139,7 +149,9 @@ class OverlayStyleTest {
         assertEquals(Preset.GLASS, Preset.of(null))
         assertEquals(Preset.GLASS, Preset.of("nonsense"))
         assertEquals(Align.END, Align.of("end"))
-        assertEquals(Secondary.TRACK, Secondary.of("track"))
+        assertEquals(Secondary.PREVIOUS, Secondary.of("previous"))
+        // 0.2.6 删掉了「歌名 · 歌手」这一档（它已经独立成标题行），旧值退回默认
+        assertEquals(Secondary.NEXT, Secondary.of("track"))
         assertEquals(Secondary.NEXT, Secondary.of(null))
     }
 }

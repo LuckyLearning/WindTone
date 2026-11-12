@@ -6,10 +6,7 @@
     <string name="settings_subtitle">Shows lyrics exposed by the player already running on this car. Plays no audio, controls nothing, reads no files.</string>
 
     <string name="section_status">Status</string>
-    <string name="section_permissions">Permissions</string>
     <string name="section_appearance">Appearance</string>
-    <string name="section_position">Position &amp; size</string>
-    <string name="section_display">Display</string>
     <string name="section_probe">Channel probe</string>
 
     <string name="appearance_preset">Preset</string>
@@ -49,12 +46,10 @@
     <string name="align_end">Right</string>
     <string name="secondary_next">Next line</string>
     <string name="secondary_previous">Previous line</string>
-    <string name="secondary_track">Title / artist</string>
     <string name="secondary_none">Off</string>
 
-    <string name="position_grid">Quick position</string>
     <string name="position_edit_hint">Drag to move, drag a corner to resize</string>
-    <string name="position_reset">Reset position</string>
+    <string name="position_reset">Reset position &amp; size</string>
     <string name="position_hint">Long press the overlay to lock it, hide it for 10 minutes, open settings or copy the current line. Position and size are stored as ratios, so they survive resolution changes.</string>
     <string name="position_display">Screen</string>
     <string name="position_handle">Collapse handle on the left</string>
@@ -103,44 +98,25 @@
     <string name="channel_l1">L1 title stream</string>
     <string name="channel_l2">L2 notification text</string>
 
-    <string name="display_font_size">Font size</string>
-    <string name="display_lines">Lines</string>
-    <string name="display_position">Position</string>
     <string name="display_edit">Enter edit mode</string>
-    <string name="display_edit_hint">Drag to move, release to snap to an edge, long press for more actions.</string>
-    <string name="display_reset">Reset to default</string>
-    <string name="display_smaller">Smaller</string>
-    <string name="display_larger">Larger</string>
 
     <string name="diag_title">Channel probe</string>
     <string name="diag_debug_toggle">Debug logging</string>
     <string name="diag_debug_hint">Off: nothing is captured and nothing is allocated. On: the probe records what each player exposes, plus this app\'s resource usage once a minute.</string>
     <string name="diag_open">Open probe report</string>
     <string name="diag_conclusion">Conclusion</string>
-    <string name="diag_evidence">Evidence</string>
-    <string name="diag_next_step">Next step</string>
     <string name="diag_share">Share</string>
     <string name="diag_copy">Copy</string>
     <string name="diag_save">Save to device</string>
     <string name="diag_clear">Clear</string>
-    <string name="diag_empty">Turn on debug logging, then play something in another app.</string>
     <string name="diag_saved">Saved to Downloads: %1$s</string>
     <string name="diag_save_failed">Could not save the report.</string>
     <string name="diag_copied">Report copied.</string>
     <string name="diag_no_target">No app can receive the file. Use Copy instead.</string>
-    <string name="diag_section_session">Session</string>
-    <string name="diag_section_keys">Metadata keys</string>
-    <string name="diag_section_notification">Notification fields</string>
-    <string name="diag_section_title_timeline">Title timeline</string>
-    <string name="diag_section_attempts">Source attempts</string>
-    <string name="diag_section_log">Live log</string>
 
     <string name="overlay_no_lyrics">No lyrics</string>
     <string name="overlay_fetching">Getting lyrics…</string>
 
-    <string name="generic_on">On</string>
-    <string name="generic_off">Off</string>
-    <string name="generic_back">Back</string>
 
     <string name="settings_version">Version %1$s</string>
     <string name="settings_about">Plays no audio, requests no audio focus, controls nothing, reads no files. Network is used only to check for updates.</string>
@@ -162,13 +138,11 @@
     <string name="update_download">Download &amp; install</string>
     <string name="update_downloading">Downloading %1$d%%</string>
     <string name="update_downloading_unknown">Downloading…</string>
-    <string name="update_verifying">Verifying the package…</string>
     <string name="update_download_failed">Download failed: %1$s</string>
     <string name="update_install">Install now</string>
     <string name="update_install_ready">Package ready (%1$s)</string>
     <string name="update_allow_install">Allow installing unknown apps first</string>
     <string name="update_install_failed">Cannot open the installer: %1$s</string>
-    <string name="update_notes_title">What\'s new</string>
     <string name="update_open_page">Open release page</string>
     <string name="update_route">Update route</string>
     <string name="route_auto">Auto</string>
@@ -185,6 +159,23 @@
     <string name="route_gh_fast_hint">Acceleration node. Availability varies with the network in use.</string>
     <string name="route_git_mirror">gitmirror</string>
     <string name="route_git_mirror_hint">Mirror node. Usually slower, often reachable when other lines fail.</string>
+    <string name="section_window">Overlay window</string>
+    <string name="section_colors">Colors</string>
+    <string name="section_colors_hint">Tap any row to pick a color. Each one has its own default.</string>
+    <string name="section_title">Title</string>
+    <string name="section_behavior">Behavior</string>
+    <string name="appearance_lines_hint">Total lyric lines. The current line wraps first; whatever budget is left goes to the following lines.</string>
+    <string name="appearance_stroke_hint">Draw a thin outline around the text. Almost required on a bright background.</string>
+    <string name="appearance_secondary_hint">When the line budget allows, several following lines are shown instead of just the next one.</string>
+    <string name="appearance_hide_empty_hint">Draw nothing when no lyrics are available. Off shows a small “No lyrics” note instead.</string>
+    <string name="position_handle_hint">A small tab on the left edge. Tap it to collapse or expand the overlay.</string>
+    <string name="title_show">Show song title</string>
+    <string name="title_show_hint">“Song · Artist”, centered above or below the lyrics.</string>
+    <string name="title_position">Position</string>
+    <string name="title_pos_top">Above lyrics</string>
+    <string name="title_pos_bottom">Below lyrics</string>
+    <string name="title_font">Title size</string>
+    <string name="title_color">Title color</string>
     <string name="perm_required_hint">Both permissions are required. Grant them on this screen — no computer needed.</string>
     <string name="perm_unbound_hint">The permission is already ticked; the system just has not bound the service yet. It usually recovers within seconds, and lyrics keep working meanwhile. If it never does, tap System settings and toggle the switch off and on.</string>
     <string name="perm_unbound_failed_hint">Automatic reconnect did not take effect on this device. Tap System settings, open AnyLyric\'s notification access page and toggle it off and on — this is a system-level stall, not a missing permission.</string>

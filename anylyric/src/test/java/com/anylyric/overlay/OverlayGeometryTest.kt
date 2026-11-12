@@ -94,17 +94,6 @@ class OverlayGeometryTest {
         assertEquals(box.left + 300, OverlayGeometry.snap(box.left + 300, box.left, span, 60))
     }
 
-    @Test
-    fun anchorGridMapping() {
-        assertEquals(0f, OverlayGeometry.anchorRatio(0), 0.0001f)
-        assertEquals(0.5f, OverlayGeometry.anchorRatio(1), 0.0001f)
-        assertEquals(1f, OverlayGeometry.anchorRatio(2), 0.0001f)
-
-        assertEquals(0, OverlayGeometry.nearestAnchor(0.1f))
-        assertEquals(1, OverlayGeometry.nearestAnchor(0.5f))
-        assertEquals(2, OverlayGeometry.nearestAnchor(0.9f))
-    }
-
     // ---------------------------------------------------------------- 收起把手
 
     /**

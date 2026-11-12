@@ -5,10 +5,7 @@
     <string name="settings_subtitle">显示车机上「正在播放的那个播放器」自己暴露的歌词。不播放声音、不控制播放、不读任何文件。</string>
 
     <string name="section_status">状态</string>
-    <string name="section_permissions">权限</string>
     <string name="section_appearance">外观</string>
-    <string name="section_position">位置与尺寸</string>
-    <string name="section_display">显示</string>
     <string name="section_probe">通道探测</string>
 
     <string name="appearance_preset">预设</string>
@@ -48,12 +45,10 @@
     <string name="align_end">右</string>
     <string name="secondary_next">下一句</string>
     <string name="secondary_previous">上一句</string>
-    <string name="secondary_track">歌名 · 歌手</string>
     <string name="secondary_none">关闭</string>
 
-    <string name="position_grid">快捷位置</string>
     <string name="position_edit_hint">位置不合适时，进入编辑态拖动；拖四角可改大小</string>
-    <string name="position_reset">恢复默认位置</string>
+    <string name="position_reset">恢复默认位置与大小</string>
     <string name="position_hint">长按悬浮窗可锁定位置、临时隐藏 10 分钟、打开设置或复制当前歌词。位置与大小都按比例保存，换分辨率不会跑偏。</string>
     <string name="position_display">显示屏幕</string>
     <string name="position_handle">左侧收起按钮</string>
@@ -102,44 +97,25 @@
     <string name="channel_l1">L1 逐行标题流</string>
     <string name="channel_l2">L2 通知文本</string>
 
-    <string name="display_font_size">字号</string>
-    <string name="display_lines">行数</string>
-    <string name="display_position">位置</string>
     <string name="display_edit">进入编辑态</string>
-    <string name="display_edit_hint">拖动移动，松手吸附边缘，长按打开更多操作。</string>
-    <string name="display_reset">恢复默认</string>
-    <string name="display_smaller">更小</string>
-    <string name="display_larger">更大</string>
 
     <string name="diag_title">通道探测</string>
     <string name="diag_debug_toggle">调试日志</string>
     <string name="diag_debug_hint">关闭时不采集、不分配。打开后记录每个播放器到底暴露了什么，并每分钟记一次本应用的资源占用。</string>
     <string name="diag_open">查看探测报告</string>
     <string name="diag_conclusion">结论</string>
-    <string name="diag_evidence">证据</string>
-    <string name="diag_next_step">下一步</string>
     <string name="diag_share">分享</string>
     <string name="diag_copy">复制</string>
     <string name="diag_save">保存到本机</string>
     <string name="diag_clear">清空</string>
-    <string name="diag_empty">打开调试日志，然后在别的应用里放一首歌。</string>
     <string name="diag_saved">已保存到下载目录：%1$s</string>
     <string name="diag_save_failed">报告保存失败。</string>
     <string name="diag_copied">报告已复制。</string>
     <string name="diag_no_target">没有可接收文件的应用，请改用「复制」。</string>
-    <string name="diag_section_session">会话</string>
-    <string name="diag_section_keys">元数据键</string>
-    <string name="diag_section_notification">通知字段</string>
-    <string name="diag_section_title_timeline">标题变化时间线</string>
-    <string name="diag_section_attempts">来源尝试结果</string>
-    <string name="diag_section_log">实时日志</string>
 
     <string name="overlay_no_lyrics">暂无歌词</string>
     <string name="overlay_fetching">正在获取歌词…</string>
 
-    <string name="generic_on">开</string>
-    <string name="generic_off">关</string>
-    <string name="generic_back">返回</string>
 
     <string name="settings_version">版本 %1$s</string>
     <string name="settings_about">不播放声音、不申请音频焦点、不控制播放、不读文件；只有检查更新时才联网。</string>
@@ -161,13 +137,11 @@
     <string name="update_download">下载并安装</string>
     <string name="update_downloading">正在下载 %1$d%%</string>
     <string name="update_downloading_unknown">正在下载…</string>
-    <string name="update_verifying">正在校验安装包…</string>
     <string name="update_download_failed">下载失败：%1$s</string>
     <string name="update_install">立即安装</string>
     <string name="update_install_ready">安装包已就绪（%1$s）</string>
     <string name="update_allow_install">请先允许「安装未知应用」</string>
     <string name="update_install_failed">无法打开安装器：%1$s</string>
-    <string name="update_notes_title">更新内容</string>
     <string name="update_open_page">打开发布页</string>
     <string name="update_route">更新线路</string>
     <string name="route_auto">自动</string>
@@ -184,6 +158,23 @@
     <string name="route_gh_fast_hint">加速节点。可用性随所用网络变化。</string>
     <string name="route_git_mirror">gitmirror</string>
     <string name="route_git_mirror_hint">镜像节点。通常更慢，但别的线路不通时往往能连上。</string>
+    <string name="section_window">悬浮窗</string>
+    <string name="section_colors">颜色</string>
+    <string name="section_colors_hint">点任意一行都能取色，四项各自可单独恢复默认。</string>
+    <string name="section_title">标题</string>
+    <string name="section_behavior">行为</string>
+    <string name="appearance_lines_hint">歌词总行数。当前句折行优先，剩下的预算才给后续行。</string>
+    <string name="appearance_stroke_hint">给文字描一圈细边。背景偏亮时基本必开。</string>
+    <string name="appearance_secondary_hint">行数预算够时，会连续显示后面几句，而不只是紧邻的一句。</string>
+    <string name="appearance_hide_empty_hint">取不到歌词时什么都不画；关掉则显示一行「暂无歌词」。</string>
+    <string name="position_handle_hint">左边缘的小把手，点一下收起或展开悬浮窗。</string>
+    <string name="title_show">显示歌名与歌手</string>
+    <string name="title_show_hint">「歌名 · 歌手」居中显示在歌词上方或下方。</string>
+    <string name="title_position">位置</string>
+    <string name="title_pos_top">歌词上方</string>
+    <string name="title_pos_bottom">歌词下方</string>
+    <string name="title_font">标题字号</string>
+    <string name="title_color">标题颜色</string>
     <string name="perm_required_hint">两项权限都是必需的，都能在这一屏里完成授权，不需要连电脑。</string>
     <string name="perm_unbound_hint">权限是勾选状态，只是系统还没把服务绑上。通常几秒内自动恢复，歌词此时仍可正常获取；一直连不上时，点「系统设置」把开关关掉再打开一次。</string>
     <string name="perm_unbound_failed_hint">自动重连在这台设备上没有生效。点「系统设置」，进到 AnyLyric 的通知使用权页，把开关关掉再打开一次 —— 这是系统层面的卡顿，不是权限缺失。</string>

@@ -12,6 +12,7 @@ import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.text.TextPaint
+import android.text.TextUtils
 import android.util.TypedValue
 import android.view.View
 import android.view.animation.DecelerateInterpolator
@@ -54,7 +55,28 @@ class LyricRenderer(context: Context) : View(context) {
     private var previewH = 0
 
     private var primaryText = ""
-    private var secondaryText: String? = null
+
+    /**
+     * 副行（上下文行）文本。
+     *
+     * 以前只有**一条** String，所以「行数 = 4」时最多也就能画出「当前行 + 下一行」两行 ——
+     * 用户反馈的「副行内容有问题，只能显示 2 行歌词」就是这里：预算给了 4 行，
+     * 却只有 1 条文本可填。现在由上层给一组相邻行，渲染器按
+     * `maxLines` 的总预算往下铺，折行用掉几行就少画几行上下文。
+     */
+    private val secondaryLines = ArrayList<String>(CONTEXT_MAX)
+
+    /** 标题行（歌名 · 歌手）。null 表示不显示。 */
+    private var titleText: String? = null
+
+    /** 标题行最终画出来的文本（按可用宽度做过省略），在 [rebuild] 里算好。 */
+    private var titleLine: String? = null
+    private var titleSize = 0f
+    private var titleBlockH = 0f
+
+    /** 标题占掉的上/下高度（含与歌词的间隙）。 */
+    private var chromeTop = 0f
+    private var chromeBottom = 0f
 
     /**
      * 左侧内衬（px）。
@@ -131,6 +153,24 @@ class LyricRenderer(context: Context) : View(context) {
     private val doneBgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val checkPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val hintPaint = TextPaint(Paint.ANTI_ALIAS_FLAG)
+    private val titlePaint = TextPaint(Paint.ANTI_ALIAS_FLAG)
+
+    /**
+     * 标题描边专用画笔。
+     *
+     * 不复用正文的 [strokePaint]：那个画笔在 `configureText` 里逐字改 textAlign 之外的
+     * 全部属性，共用会让「标题把居中带进正文」这种错位重现，而且很难查。
+     */
+    private val titleStrokePaint = TextPaint(Paint.ANTI_ALIAS_FLAG)
+
+    /**
+     * 编辑态虚线的 PathEffect。
+     *
+     * 以前在 `drawEditFrame` 里每帧 new 一个：编辑态一拖角就是每秒几十个对象，
+     * 而且 PathEffect 一变 Paint 就要重新走一遍 native 侧的准备。间隔只跟 density 有关，
+     * 建 View 时算一次就够。
+     */
+    private val dashEffect = DashPathEffect(floatArrayOf(6f * density, 4f * density), 0f)
 
     private val rect = RectF()
     private val path = Path()
@@ -203,8 +243,15 @@ class LyricRenderer(context: Context) : View(context) {
         rebuild()
     }
 
-    fun setContent(primary: String, secondary: String?, nextMode: Mode) {
-        val changed = primary != primaryText || secondary != secondaryText || nextMode != mode
+    /**
+     * @param secondary 副行文本，按显示顺序。条数不受限，[rebuild] 按行数预算截断
+     * @param title 标题行（歌名 · 歌手）；null 或空串表示这帧没有标题
+     */
+    fun setContent(primary: String, secondary: List<String>, title: String?, nextMode: Mode) {
+        val changed = primary != primaryText ||
+            secondary != secondaryLines ||
+            title != titleText ||
+            nextMode != mode
         if (!changed) return
 
         // 只有「真歌词换成真歌词」才值得做交叉淡入：提示语、菜单、编辑态都不淡入，
@@ -217,7 +264,9 @@ class LyricRenderer(context: Context) : View(context) {
 
         if (crossfade) snapshotForFade()
         primaryText = primary
-        secondaryText = secondary
+        secondaryLines.clear()
+        secondaryLines.addAll(secondary)
+        titleText = title
         mode = nextMode
         rebuild()
         if (crossfade) {
@@ -295,6 +344,20 @@ class LyricRenderer(context: Context) : View(context) {
         glyphs.clear()
         glyphTops.clear()
 
+        // 标题：菜单态一律不画（那是一张操作列表，标题会看成菜单项）
+        titleSize = spToPx(style.titleFontSp)
+        titleLine = if (style.titleEnabled && mode != Mode.MENU) {
+            titleText?.trim()?.takeIf { it.isNotEmpty() }?.let { ellipsizeTitle(it, limit) }
+        } else {
+            null
+        }
+        titleBlockH = if (titleLine != null) titleSize * 1.45f else 0f
+        val titleGap = if (titleLine != null) TITLE_GAP_DP * density else 0f
+        val showTitle = titleLine != null
+        chromeTop = if (showTitle && style.titlePos == TitlePos.TOP) titleBlockH + titleGap else 0f
+        chromeBottom =
+            if (showTitle && style.titlePos == TitlePos.BOTTOM) titleBlockH + titleGap else 0f
+
         var y = 0f
         when (mode) {
             Mode.MENU -> {
@@ -317,7 +380,7 @@ class LyricRenderer(context: Context) : View(context) {
                     glyphTops += y
                     y += gap
                 }
-                val sub = secondaryText
+                val sub = secondaryLines.firstOrNull()
                 if (!sub.isNullOrBlank() && lines.size < 2) {
                     val subSize = promptSize * 0.88f
                     val subLines = TextWrap.wrap(sub, limit, 1) { s -> widthOf(s, subSize, false) }
@@ -330,28 +393,24 @@ class LyricRenderer(context: Context) : View(context) {
             }
 
             Mode.CONTENT -> {
-                val lines = TextWrap.wrap(primaryText, limit, style.maxLines) { s ->
-                    widthOf(s, primarySize, style.bold)
-                }
-                for (line in lines) {
-                    glyphs += glyph(line, primarySize, 255, style.bold)
-                    glyphTops += y
-                    y += primarySize * 1.38f
-                }
-                val remaining = style.maxLines - lines.size
-                val sub = secondaryText
-                if (remaining >= 1 && !sub.isNullOrBlank()) {
-                    val subLines = TextWrap.wrap(sub, limit, remaining) { s ->
-                        widthOf(s, secondarySize, false)
+                // 当前行可以先占满预算（长句折成 3 行是合理的），剩下的才留给上下文行；
+                // 上下文行是一**组**，按剩余预算逐条铺 —— 只铺一条就是「永远只有两行」的老 bug。
+                val rows = LinePlan.build(primaryText, secondaryLines, style.maxLines) { text, lines, sub ->
+                    val size = if (sub) secondarySize else primarySize
+                    TextWrap.wrap(text, limit, lines) { s ->
+                        widthOf(s, size, !sub && style.bold)
                     }
-                    for (line in subLines) {
-                        glyphs += glyph(
-                            line, secondarySize,
-                            (style.secondaryAlpha * 255f).toInt().coerceIn(0, 255), false,
-                            secondary = true
-                        )
+                }
+                val subAlpha = (style.secondaryAlpha * 255f).toInt().coerceIn(0, 255)
+                for (row in rows) {
+                    if (row.secondary) {
+                        glyphs += glyph(row.text, secondarySize, subAlpha, false, secondary = true)
                         glyphTops += y
                         y += secondarySize * 1.45f
+                    } else {
+                        glyphs += glyph(row.text, primarySize, 255, style.bold)
+                        glyphTops += y
+                        y += primarySize * 1.38f
                     }
                 }
             }
@@ -362,6 +421,8 @@ class LyricRenderer(context: Context) : View(context) {
         var width = glyphs.maxOfOrNull { it.width } ?: 0f
         // 最小宽度：四个字。避免「我」这样的单字歌词变成一个孤零零的小方块。
         width = maxOf(width, widthOf("字字字字", primarySize, style.bold))
+        // 标题也要能完整占满一行，否则窗口会被歌词挤窄、标题被省略成「歌名…」
+        titleLine?.let { width = maxOf(width, measureTitle(it)) }
         if (editing && mode == Mode.CONTENT) {
             width = maxOf(width, widthOf(hintText, spToPx(11f), false) + 54f * density)
         }
@@ -374,6 +435,20 @@ class LyricRenderer(context: Context) : View(context) {
 
         requestLayout()
         invalidate()
+    }
+
+    /** 标题按可用宽度截断：宁可「歌名 · 歌…」也不要让窗口为了它整块变宽。 */
+    private fun ellipsizeTitle(text: String, maxWidth: Float): String {
+        titlePaint.textSize = titleSize
+        titlePaint.typeface = Typeface.DEFAULT
+        if (titlePaint.measureText(text) <= maxWidth) return text
+        return TextUtils.ellipsize(text, titlePaint, maxWidth, TextUtils.TruncateAt.END).toString()
+    }
+
+    private fun measureTitle(text: String): Float {
+        titlePaint.textSize = titleSize
+        titlePaint.typeface = Typeface.DEFAULT
+        return titlePaint.measureText(text)
     }
 
     private fun glyph(
@@ -436,12 +511,12 @@ class LyricRenderer(context: Context) : View(context) {
         val r = CORNER_TOUCH_DP * density
         val w = width.toFloat()
         val h = height.toFloat()
-        val corners = floatArrayOf(0f, 0f, w, 0f, 0f, h, w, h)
         var best = -1
         var bestDist = r * r
+        // 直接用角标算坐标，不再每次按下都 new 一个 floatArrayOf(8 项)
         for (i in 0 until 4) {
-            val dx = x - corners[i * 2]
-            val dy = y - corners[i * 2 + 1]
+            val dx = x - if (i % 2 == 0) 0f else w
+            val dy = y - if (i < 2) 0f else h
             val d = dx * dx + dy * dy
             if (d <= bestDist) {
                 bestDist = d
@@ -455,12 +530,14 @@ class LyricRenderer(context: Context) : View(context) {
     fun minWidthPx(): Int =
         (widthOf("字字字", spToPx(style.fontSp), style.bold) + paddingH * 2f + leftInsetPx).toInt()
 
-    fun minHeightPx(): Int = (spToPx(style.fontSp) * 1.38f + paddingV * 2f).toInt()
+    fun minHeightPx(): Int =
+        (spToPx(style.fontSp) * 1.38f + chromeTop + chromeBottom + paddingV * 2f).toInt()
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val hint = if (editing && mode == Mode.CONTENT) hintHeight() else 0f
+        val chrome = chromeTop + chromeBottom
         val fallbackW = (contentWidth + paddingH * 2f + leftInsetPx).toInt().coerceIn(1, 4000)
-        val fallbackH = (contentHeight + paddingV * 2f + hint).toInt().coerceIn(1, 2000)
+        val fallbackH = (contentHeight + chrome + paddingV * 2f + hint).toInt().coerceIn(1, 2000)
 
         val w = when {
             previewW > 0 -> previewW
@@ -469,7 +546,9 @@ class LyricRenderer(context: Context) : View(context) {
         }
         val h = when {
             previewH > 0 -> previewH
-            fixedHeightPx > 0 -> maxOf(fixedHeightPx, (contentHeight + paddingV * 2f + hint).toInt())
+            fixedHeightPx > 0 ->
+                maxOf(fixedHeightPx, (contentHeight + chrome + paddingV * 2f + hint).toInt())
+
             else -> fallbackH
         }
         setMeasuredDimension(w.coerceIn(1, 4000), h.coerceIn(1, 2000))
@@ -502,6 +581,8 @@ class LyricRenderer(context: Context) : View(context) {
         // 固定高度时内容垂直居中：只有一行时贴顶会显得整体偏上，尤其在 2~3 行高度里。
         contentTop = blockTop()
 
+        drawTitle(canvas, w, h)
+
         val fading = fadeCount > 0 && fadeElapsed < 1f
         if (fading) {
             // 旧行在前 35% 里退干净，新行从 12% 才开始浮上来。
@@ -529,9 +610,46 @@ class LyricRenderer(context: Context) : View(context) {
     /** 内容块顶边。自适应高度时就是内边距；固定高度时按可用高度居中。 */
     private fun blockTop(): Float {
         val hint = if (editing && mode == Mode.CONTENT) hintHeight() else 0f
-        val usable = height - paddingV * 2f - hint
-        if (usable <= contentHeight || fixedHeightPx <= 0) return paddingV
-        return paddingV + (usable - contentHeight) / 2f
+        val usable = height - paddingV * 2f - hint - chromeTop - chromeBottom
+        if (usable <= contentHeight || fixedHeightPx <= 0) return paddingV + chromeTop
+        return paddingV + chromeTop + (usable - contentHeight) / 2f
+    }
+
+    /**
+     * 标题行：`歌名 · 歌手`，永远居中，字号与颜色独立于正文。
+     *
+     * 为什么单独一个绘制函数而不是塞进 [glyphs]：
+     *  · 它不参与交叉淡入（换歌时淡入的是歌词，标题一跳到底反而更清楚）；
+     *  · 它有自己的字号与颜色，混进 Glyph 只会让「这一行是什么」更难分辨；
+     *  · 它不占 [OverlayStyle.maxLines] 的歌词行预算 —— 用户要的是「4 行歌词」，
+     *    不该因为开了标题就少一行。
+     */
+    private fun drawTitle(canvas: Canvas, w: Float, h: Float) {
+        val line = titleLine ?: return
+        val hint = if (editing && mode == Mode.CONTENT) hintHeight() else 0f
+        val top = if (style.titlePos == TitlePos.TOP) {
+            paddingV
+        } else {
+            h - paddingV - hint - titleBlockH
+        }
+
+        titlePaint.textSize = titleSize
+        titlePaint.typeface = Typeface.DEFAULT
+        titlePaint.textAlign = Paint.Align.CENTER
+        titlePaint.color = style.titleColor
+        val baseline = top - titlePaint.fontMetrics.ascent
+        val cx = paddingH + leftInsetPx + contentWidth / 2f
+
+        if (style.stroke) {
+            titleStrokePaint.textSize = titleSize
+            titleStrokePaint.typeface = Typeface.DEFAULT
+            titleStrokePaint.textAlign = Paint.Align.CENTER
+            titleStrokePaint.color = style.strokeColor
+            titleStrokePaint.style = Paint.Style.STROKE
+            titleStrokePaint.strokeWidth = titleSize * 0.085f
+            canvas.drawText(line, cx, baseline, titleStrokePaint)
+        }
+        canvas.drawText(line, cx, baseline, titlePaint)
     }
 
     private fun drawGlyph(canvas: Canvas, glyph: Glyph, top: Float, alphaScale: Float) {
@@ -571,7 +689,7 @@ class LyricRenderer(context: Context) : View(context) {
         dashPaint.color = 0x99FFFFFF.toInt()
         dashPaint.style = Paint.Style.STROKE
         dashPaint.strokeWidth = 1.2f * density
-        dashPaint.pathEffect = DashPathEffect(floatArrayOf(6f * density, 4f * density), 0f)
+        dashPaint.pathEffect = dashEffect
         rect.set(inset, inset, w - inset, h - inset)
         canvas.drawRoundRect(rect, radius(), radius(), dashPaint)
 
@@ -639,5 +757,11 @@ class LyricRenderer(context: Context) : View(context) {
     private companion object {
         /** 四角把手的触摸半径。车机手指粗，比视觉半径大得多。 */
         const val CORNER_TOUCH_DP = 22f
+
+        /** 标题与歌词之间的间隙。固定 dp：标题字号改了间隙不该跟着翻倍。 */
+        const val TITLE_GAP_DP = 6f
+
+        /** 上下文行最多收几条。行数上限是 4，再多的行渲染器也会按预算丢掉。 */
+        const val CONTEXT_MAX = 3
     }
 }
