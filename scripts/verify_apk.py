@@ -16,6 +16,7 @@
 #    python scripts/verify_apk.py v1.1.54            # 默认仓库 LuckyLearning/WindTone
 #    python scripts/verify_apk.py v1.1.54 Owner/Repo
 #    python scripts/verify_apk.py v1.1.54 Owner/Repo arm64-v8a
+#    python scripts/verify_apk.py anylyric-v0.2.8    # AnyLyric 同样适用（自动剥离 anylyric-v 前缀取版本串）
 #
 #  退出码：0 = 全通过；1 = 验签失败 / 版本串不符 / 下载失败
 # ===================================================================
@@ -112,7 +113,13 @@ def main():
     tag = sys.argv[1]
     repo = sys.argv[2] if len(sys.argv) > 2 else "LuckyLearning/WindTone"
     target = sys.argv[3] if len(sys.argv) > 3 else "universal"
-    expect = tag[1:] if tag.startswith("v") else tag
+    # tag 可能是 WindTone 的 v1.2.x，也可能是 AnyLyric 的 anylyric-v0.2.x
+    if tag.startswith("anylyric-v"):
+        expect = tag[len("anylyric-v"):]
+    elif tag.startswith("v"):
+        expect = tag[1:]
+    else:
+        expect = tag
 
     token = read_token()
     cache = os.path.join(tempfile.gettempdir(), f"wt_{tag}.apk")
