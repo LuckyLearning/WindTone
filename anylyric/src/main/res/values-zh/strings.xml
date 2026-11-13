@@ -10,6 +10,8 @@
     <string name="section_autostart">开机与后台</string>
     <string name="autostart_boot">开机自启</string>
     <string name="autostart_boot_hint">开机后在后台启动：请求系统绑定通知使用权，并让悬浮窗直接出现（显示「等待播放」），开机结果看得见。不少车机重启后迟迟不绑或干脆忘绑，表现是「开机后歌词一直不出现，打开一次应用才好」。默认关闭。</string>
+    <string name="autostart_watchdog">定期自检重绑</string>
+    <string name="autostart_watchdog_hint">每 15 分钟检查一次心跳，服务被静默杀掉时请求系统重新绑定。部分车机会在后台直接杀掉服务且不回调。默认关闭：不常驻、不持锁。</string>
     <string name="autostart_keepalive">后台保活（电池优化白名单）</string>
     <string name="autostart_keepalive_hint">申请让系统不再对 AnyLyric 做电池优化，开关状态以系统实际结果为准；关闭需要到系统设置里撤销。</string>
     <string name="section_probe">通道探测</string>
@@ -43,6 +45,8 @@
     <string name="appearance_hide_empty">无歌词时直接隐藏</string>
     <string name="appearance_percent">%1$s%%</string>
     <string name="appearance_dp">%1$s dp</string>
+    <string name="appearance_line_offset">向右错位</string>
+    <string name="appearance_line_offset_hint">上下文行整体右移，形成阶梯感；只在左对齐下生效。</string>
     <string name="appearance_reset">恢复外观默认</string>
     <string name="appearance_reset_short">重置</string>
     <string name="align_start">左</string>
@@ -98,6 +102,8 @@
 
     <string name="channel_none">无</string>
     <string name="channel_l0">L0 元数据键</string>
+    <string name="channel_l0b">播放状态扩展</string>
+    <string name="channel_online">在线补词</string>
     <string name="channel_l1">L1 逐行标题流</string>
     <string name="channel_l2">L2 通知文本</string>
 
@@ -170,6 +176,8 @@
     <string name="appearance_lines_hint">歌词总行数。当前句折行优先，剩下的预算才给后续行。</string>
     <string name="appearance_stroke_hint">给文字描一圈细边。背景偏亮时基本必开。</string>
     <string name="appearance_hide_empty_hint">取不到歌词时什么都不画；关掉则显示一行「暂无歌词」。</string>
+    <string name="behavior_online_lyrics">在线补词</string>
+    <string name="behavior_online_lyrics_hint">本地通道全部取不到时，按歌名与歌手去在线歌词库找一份。这是歌词链路里唯一的联网出口。默认关闭。</string>
     <string name="position_handle_hint">左边缘的小把手，点一下收起或展开悬浮窗。</string>
     <string name="title_show">显示歌名与歌手</string>
     <string name="title_show_hint">「歌名 · 歌手」居中显示在歌词上方或下方。</string>

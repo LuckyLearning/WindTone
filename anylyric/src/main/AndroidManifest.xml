@@ -110,5 +110,15 @@
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
             </intent-filter>
         </receiver>
+
+        <!--
+          静默掉线看门狗：默认关闭，用户在「开机与后台」里打开后由 JobScheduler
+          每 15 分钟唤醒一次，心跳过期才 requestRebind。不常驻、不持锁。
+          BIND_JOB_SERVICE 是系统绑定 JobService 所需的权限。
+        -->
+        <service
+            android:name=".service.WatchdogJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
     </application>
 </manifest>

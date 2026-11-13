@@ -62,6 +62,13 @@ data class OverlayStyle(
     val stroke: Boolean = OverlayDefaults.STROKE,
     val secondaryAlpha: Float = OverlayDefaults.SECONDARY_ALPHA,
     val align: Align = Align.START,
+    /**
+     * 上下文行相对当前行向右错开的距离（dp），0 表示不错位。
+     *
+     * 这是纯观感项：只在 [Align.START] 下生效（居中/右对齐时错位会让整块文字歪掉），
+     * 渲染器会把它夹在内容宽内，不会因为错位把字顶出窗口。
+     */
+    val lineOffsetDp: Float = OverlayDefaults.LINE_OFFSET_DP,
     val fadeMs: Int = OverlayDefaults.FADE_MS,
     val primaryColor: Int = OverlayDefaults.PRIMARY_COLOR,
     val secondaryColor: Int = OverlayDefaults.SECONDARY_COLOR,
@@ -90,6 +97,10 @@ object OverlayDefaults {
     const val STROKE = false
     const val SECONDARY_ALPHA = 0.58f
     const val SECONDARY_ALPHA_MIN = 0.2f
+
+    /** 上下文行向右错位的默认值 / 上限（dp）。默认不错位。 */
+    const val LINE_OFFSET_DP = 0f
+    const val LINE_OFFSET_MAX = 48f
     const val FADE_MS = 180
     const val FADE_MAX = 320
 
@@ -142,6 +153,7 @@ object OverlayDefaults {
         stroke = STROKE,
         secondaryAlpha = SECONDARY_ALPHA,
         align = Align.START,
+        lineOffsetDp = LINE_OFFSET_DP,
         fadeMs = FADE_MS,
         primaryColor = PRIMARY_COLOR,
         secondaryColor = SECONDARY_COLOR,
@@ -201,6 +213,7 @@ object OverlayDefaults {
         opacity = style.opacity.coerceIn(0f, 1f),
         cornerDp = style.cornerDp.coerceIn(0f, CORNER_MAX),
         secondaryAlpha = style.secondaryAlpha.coerceIn(SECONDARY_ALPHA_MIN, 1f),
+        lineOffsetDp = style.lineOffsetDp.coerceIn(0f, LINE_OFFSET_MAX),
         fadeMs = style.fadeMs.coerceIn(0, FADE_MAX),
         widthRatio = ratioOrAuto(style.widthRatio, WIDTH_MIN, WIDTH_MAX),
         heightRatio = ratioOrAuto(style.heightRatio, HEIGHT_MIN, HEIGHT_MAX),

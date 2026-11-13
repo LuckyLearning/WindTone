@@ -31,6 +31,7 @@ import com.anylyric.overlay.OverlayDefaults
 import com.anylyric.overlay.OverlayStyle
 import com.anylyric.overlay.Preset
 import com.anylyric.overlay.TitlePos
+import com.anylyric.service.ServiceWatchdog
 import com.anylyric.session.SessionHub
 import com.anylyric.update.ApkInstaller
 import com.anylyric.update.ApkProvider
@@ -434,6 +435,19 @@ class SettingsActivity : BaseActivity() {
             plus = { editStyle { it.copy(cornerDp = it.cornerDp + 2f) } },
             reset = { editStyle { it.copy(cornerDp = OverlayDefaults.CORNER_DP) } }
         )
+        // 上下间距之外再给一个「左右错位」：下一句整体右移，形成阶梯感。
+        // 只在左对齐下生效，居中/右对齐时渲染器会忽略它。
+        rows += stepperRow(
+            label = getString(R.string.appearance_line_offset),
+            value = {
+                getString(R.string.appearance_dp, prefs.style().lineOffsetDp.toInt().toString())
+            },
+            isDefault = { prefs.style().lineOffsetDp == OverlayDefaults.LINE_OFFSET_DP },
+            minus = { editStyle { it.copy(lineOffsetDp = it.lineOffsetDp - 4f) } },
+            plus = { editStyle { it.copy(lineOffsetDp = it.lineOffsetDp + 4f) } },
+            reset = { editStyle { it.copy(lineOffsetDp = OverlayDefaults.LINE_OFFSET_DP) } }
+        )
+        rows += hint(getString(R.string.appearance_line_offset_hint))
 
         rows += divider()
         rows += switchRow(
@@ -563,6 +577,17 @@ class SettingsActivity : BaseActivity() {
                 hub.applyStyle()
             }
         )
+        rows += divider()
+        // 在线补词默认关闭：打开后本地通道全 miss 才会联网找一份（歌词链路里唯一的联网出口）。
+        rows += switchRow(
+            label = getString(R.string.behavior_online_lyrics),
+            hintText = getString(R.string.behavior_online_lyrics_hint),
+            current = { prefs.onlineLyrics },
+            onChange = { checked ->
+                prefs.onlineLyrics = checked
+                hub.onOnlineLyricsChanged()
+            }
+        )
 
         return cardSection(getString(R.string.section_behavior), null, rows)
     }
@@ -593,6 +618,17 @@ class SettingsActivity : BaseActivity() {
             onChange = { checked ->
                 // 只处理「打开」：白名单没有可编程的撤销通道，关掉时引导用户去系统设置
                 if (checked && !batteryIgnoring()) requestIgnoreBatteryOptimizations()
+            }
+        )
+        rows += divider()
+        // 看门狗：只负责「服务被静默杀掉后重新绑定」，不常驻、不持锁。
+        rows += switchRow(
+            label = getString(R.string.autostart_watchdog),
+            hintText = getString(R.string.autostart_watchdog_hint),
+            current = { prefs.watchdogEnabled },
+            onChange = { checked ->
+                prefs.watchdogEnabled = checked
+                ServiceWatchdog.sync(this)
             }
         )
 
@@ -1400,8 +1436,10 @@ class SettingsActivity : BaseActivity() {
 
     private fun channelLabel(source: String?): String = when (source) {
         "L0" -> getString(R.string.channel_l0)
+        "L0b" -> getString(R.string.channel_l0b)
         "L1" -> getString(R.string.channel_l1)
         "L2" -> getString(R.string.channel_l2)
+        "ONLINE" -> getString(R.string.channel_online)
         else -> getString(R.string.channel_none)
     }
 

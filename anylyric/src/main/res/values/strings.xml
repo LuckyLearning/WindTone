@@ -11,6 +11,8 @@
     <string name="section_autostart">Autostart &amp; keep-alive</string>
     <string name="autostart_boot">Start on boot</string>
     <string name="autostart_boot_hint">After boot, start AnyLyric in the background: ask the system to rebind the notification listener, and show the overlay right away (“waiting for playback”) so the boot result is visible. Some car units delay or drop the binding, which shows up as “no lyrics until the app is opened once”. Off by default.</string>
+    <string name="autostart_watchdog">Periodic rebind check</string>
+    <string name="autostart_watchdog_hint">Every 15 minutes, check a heartbeat and ask the system to rebind if the listener silently died. Some car ROMs kill background services without notifying the app. Off by default; no foreground service and no wake locks.</string>
     <string name="autostart_keepalive">Keep alive (battery optimization)</string>
     <string name="autostart_keepalive_hint">Ask the system to skip battery optimization for AnyLyric. The switch reflects the real system state; turning it off is done on the system page.</string>
     <string name="section_probe">Channel probe</string>
@@ -44,6 +46,8 @@
     <string name="appearance_hide_empty">Hide when there are no lyrics</string>
     <string name="appearance_percent">%1$s%%</string>
     <string name="appearance_dp">%1$s dp</string>
+    <string name="appearance_line_offset">Line offset</string>
+    <string name="appearance_line_offset_hint">Shift context lines to the right to form a staircase. Left alignment only.</string>
     <string name="appearance_reset">Reset appearance</string>
     <string name="appearance_reset_short">Reset</string>
     <string name="align_start">Left</string>
@@ -99,6 +103,8 @@
 
     <string name="channel_none">none</string>
     <string name="channel_l0">L0 metadata key</string>
+    <string name="channel_l0b">Playback state extras</string>
+    <string name="channel_online">Online lookup</string>
     <string name="channel_l1">L1 title stream</string>
     <string name="channel_l2">L2 notification text</string>
 
@@ -171,6 +177,8 @@
     <string name="appearance_lines_hint">Total lyric lines. The current line wraps first; whatever budget is left goes to the following lines.</string>
     <string name="appearance_stroke_hint">Draw a thin outline around the text. Almost required on a bright background.</string>
     <string name="appearance_hide_empty_hint">Draw nothing when no lyrics are available. Off shows a small “No lyrics” note instead.</string>
+    <string name="behavior_online_lyrics">Online lyrics fallback</string>
+    <string name="behavior_online_lyrics_hint">When every local channel misses, look the song up online by title and artist. This is the only path that lets the lyrics chain use the network. Off by default.</string>
     <string name="position_handle_hint">A small tab on the left edge. Tap it to collapse or expand the overlay.</string>
     <string name="title_show">Show song title</string>
     <string name="title_show_hint">“Song · Artist”, centered above or below the lyrics.</string>

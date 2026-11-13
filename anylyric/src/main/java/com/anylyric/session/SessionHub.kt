@@ -27,8 +27,10 @@ import com.anylyric.lyrics.LyricResult
 import com.anylyric.lyrics.LyricTick
 import com.anylyric.lyrics.LyricsSourceChain
 import com.anylyric.lyrics.TitleTimeline
+import com.anylyric.lyrics.online.OnlineLyricsFetcher
 import com.anylyric.lyrics.TitleVerdict
 import com.anylyric.lyrics.TrackContext
+import com.anylyric.lyrics.sources.ExtrasSource
 import com.anylyric.lyrics.sources.L0MetadataSource
 import com.anylyric.lyrics.sources.L1TitleStreamSource
 import com.anylyric.lyrics.sources.L2NotificationSource
@@ -70,7 +72,7 @@ class SessionHub private constructor(context: Context) {
     private val timeline = TitleTimeline()
     private val titleStream = L1TitleStreamSource()
     private val chain = LyricsSourceChain(
-        listOf(L0MetadataSource(), titleStream, L2NotificationSource())
+        listOf(L0MetadataSource(), ExtrasSource(), titleStream, L2NotificationSource())
     )
     private val overlay = OverlayHost(appContext, prefs)
 
@@ -96,6 +98,12 @@ class SessionHub private constructor(context: Context) {
     private var lastRebindAt = 0L
 
     private var currentLines: List<LyricLine> = emptyList()
+
+    /** 在线补词的结果；只在本地通道全 miss 时使用。 */
+    private var onlineLines: List<LyricLine> = emptyList()
+
+    /** 已经为本首歌发起过在线请求的键，避免每次刷新都重复请求。 */
+    private var onlineRequestedKey: String? = null
 
     /**
      * 无时间轴行集里「当前行」的锚点。-1 表示取最后一行（L1 缓冲的形态）。
@@ -138,6 +146,14 @@ class SessionHub private constructor(context: Context) {
     private var keyMediaId: String? = null
     private var keyVerdict: TitleVerdict? = null
     private var keyTextsHash = 0
+
+    /**
+     * `PlaybackState.extras` 里歌词字段的指纹。
+     *
+     * 必须进输入指纹：BYD 这类播放器把歌词放在 extras，且**逐行变化**。如果只看
+     * 元数据/通知，责任链永远不会因为「歌词换了一句」而重跑，滚动窗口就卡在第一句。
+     */
+    private var keyExtrasSig = 0
 
     /** `identityExtra` 的缓存：包名/专辑/音轨三者逐字段比较，都没变就复用上次拼好的串。 */
     private var identityPkg: String? = null
@@ -396,6 +412,8 @@ class SessionHub private constructor(context: Context) {
     fun onListenerConnected() {
         listenerConnected = true
         stopDegraded()
+        // 刚连上是看门狗最需要的事实：必须立刻落盘，不能等 5 分钟的节流窗口。
+        prefs.markAlive(force = true)
         if (Probe.enabled) Probe.write("权限", "listenerConnected=true")
         requestRefresh("listener_connected")
         maybeBootStandby()
@@ -442,6 +460,10 @@ class SessionHub private constructor(context: Context) {
         if (sbn == null) return
         val pkg = sbn.packageName
         if (pkg == appContext.packageName) return
+
+        // 能收到通知回调 = 服务活着。心跳顺带在这里更新（内部 5 分钟节流），
+        // 空转时也能证明「没掉线」，避免看门狗把正常常驻误判成掉线反复重绑。
+        prefs.markAlive()
 
         val current = controller
         // 「与本应用无关」= 有会话但不是这个包，或者根本没有会话。
@@ -556,6 +578,9 @@ class SessionHub private constructor(context: Context) {
         tickScheduled = false
         degraded = false
         detachController()
+        // 在线结果跟着服务生命周期释放；缓存本身有界（64 首），留着避免重绑后来回重抓。
+        onlineLines = emptyList()
+        onlineRequestedKey = null
         // 服务销毁用 release 而不是 hide：连 OverlayHost 自己的回调（隐藏到期等）
         // 一起摘掉，否则残留的 hiddenUntil 会把下一次会话的歌词卡在「隐藏期内」。
         overlay.release()
@@ -622,6 +647,9 @@ class SessionHub private constructor(context: Context) {
             startDegraded()
         } else {
             stopDegraded()
+            // 只有「真连上」才记心跳：降级模式下进程活着但服务没绑，看门狗本来就该重绑。
+            // 这里写盘由 Prefs 内部节流（5 分钟一次），刷新频率再高也不会放大写放大。
+            prefs.markAlive()
         }
 
         // getActiveSessions 是跨进程调用，且会把每个会话的元数据整包搬过来。
@@ -708,10 +736,19 @@ class SessionHub private constructor(context: Context) {
 
         val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
         val artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
-        val duration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
+        val rawDuration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
+        // 有的播放器把时长按「秒」上报（240 而不是 240000）。不到 10 秒的音乐不存在，
+        // 这个量级只可能是单位错了 —— 不修正时进度会被夹在开头、行推进永远停在第一句。
+        val duration = if (rawDuration in 1..9_999L) rawDuration * 1_000L else rawDuration
         val mediaId = metadata?.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
 
-        if (title != lastTitle || artist != lastArtist) labelCache = null
+        if (title != lastTitle || artist != lastArtist) {
+            labelCache = null
+            // 换歌：上一首的在线结果必须立刻作废，否则新歌开头几秒会闪出旧歌词。
+            onlineLines = emptyList()
+            onlineRequestedKey = null
+            hitSource = null
+        }
         if (title != lastTitle) lastTitleChangeAt = now
         lastTitle = title
         lastArtist = artist
@@ -749,6 +786,7 @@ class SessionHub private constructor(context: Context) {
         // 于是每个回调都重跑一遍解析 —— 正是真机上 CPU 被吃掉的那条路。
         val activeTexts = notificationTexts[active.packageName].orEmpty()
         val metaSig = metadataSignature(metadata)
+        val extrasSig = extrasSignature(playbackState)
         val inputsChanged = !keyValid ||
             keyController !== active ||
             keyMetaSig != metaSig ||
@@ -757,7 +795,8 @@ class SessionHub private constructor(context: Context) {
             keyDuration != duration ||
             keyMediaId != mediaId ||
             keyVerdict != lastVerdict ||
-            keyTextsHash != textsHash(activeTexts)
+            keyTextsHash != textsHash(activeTexts) ||
+            keyExtrasSig != extrasSig
 
         if (inputsChanged) {
             keyValid = true
@@ -769,6 +808,7 @@ class SessionHub private constructor(context: Context) {
             keyMediaId = mediaId
             keyVerdict = lastVerdict
             keyTextsHash = textsHash(activeTexts)
+            keyExtrasSig = extrasSig
             Perf.onChain()
 
             val metadataValues = textValues(metadata)
@@ -782,6 +822,9 @@ class SessionHub private constructor(context: Context) {
                 mediaId = mediaId,
                 metadata = metadataValues,
                 notificationTexts = activeTexts,
+                // 只在输入真的变了时才建表：BYD 的 lrc_line_* 每换一句都会走到这里，
+                // 但每秒多次的进度刷新不会，成本被输入指纹挡在前面。
+                playbackExtras = extrasTextValues(playbackState),
                 pseudoTitle = lastVerdict == TitleVerdict.PSEUDO,
                 titleLine = title
             )
@@ -791,8 +834,21 @@ class SessionHub private constructor(context: Context) {
             val startedAt = SystemClock.elapsedRealtimeNanos()
             val outcome = chain.resolve(trackContext)
             val costMs = (SystemClock.elapsedRealtimeNanos() - startedAt) / 1_000_000
-            hitSource = outcome.hit?.sourceId
-            setCurrentLines(outcome.hit?.lines.orEmpty(), outcome.hit?.currentLineIndex ?: -1)
+            val hit = outcome.hit
+            if (hit != null) {
+                onlineLines = emptyList()
+                hitSource = hit.sourceId
+                setCurrentLines(hit.lines, hit.currentLineIndex)
+            } else if (onlineLines.isNotEmpty()) {
+                // 本地全 miss，但上一轮在线补词已拿到结果：继续用。
+                // 否则每次刷新都会把它清掉，在线模式等于失效。
+                hitSource = ONLINE_SOURCE
+                setCurrentLines(onlineLines, -1)
+            } else {
+                hitSource = null
+                setCurrentLines(emptyList())
+            }
+            if (hit == null) maybeRequestOnline(title, artist, duration)
 
             if (Probe.enabled) {
                 Probe.attempts = outcome.attempts
@@ -868,6 +924,64 @@ class SessionHub private constructor(context: Context) {
     }
 
     /**
+     * `PlaybackState.extras` 的歌词字段指纹。
+     *
+     * 按对象身份缓存：回调缓存生效后，同一个 `PlaybackState` 会被刷新反复看到。
+     * 值只取 4 个键的 hashCode / length —— 不建表、不 toString，逐行驱动的热路径上零分配。
+     */
+    private var extrasSigSource: PlaybackState? = null
+    private var extrasSigValue = Int.MIN_VALUE
+
+    private fun extrasSignature(state: PlaybackState?): Int {
+        if (state == null) return 0
+        if (state === extrasSigSource) return extrasSigValue
+        val extras = try {
+            state.extras
+        } catch (_: Throwable) {
+            null
+        }
+        if (extras == null) {
+            extrasSigSource = state
+            extrasSigValue = 0
+            return 0
+        }
+        var hash = 1
+        for (key in EXTRA_LYRIC_KEYS) {
+            val value = extras.getCharSequence(key)
+            // String.hashCode 首次算完即缓存；Spannable 之类没重写 hashCode（是身份哈希），
+            // 不转成文本会让指纹每次都「变了」，责任链退回 1Hz 轮询。
+            val text = when (val v = value) {
+                null -> null
+                is String -> v
+                else -> v.toString()
+            }
+            hash = 31 * hash + key.hashCode()
+            hash = 31 * hash + (text?.hashCode() ?: 0)
+            hash = 31 * hash + (text?.length ?: 0)
+        }
+        extrasSigSource = state
+        extrasSigValue = hash
+        return hash
+    }
+
+    /** 只把 4 个歌词键读成文本表；没有就返回空表，不分配 HashMap。 */
+    private fun extrasTextValues(state: PlaybackState?): Map<String, String> {
+        val extras = try {
+            state?.extras
+        } catch (_: Throwable) {
+            null
+        } ?: return emptyMap()
+        var out: HashMap<String, String>? = null
+        for (key in EXTRA_LYRIC_KEYS) {
+            val text = extras.getCharSequence(key)?.toString()?.trim()
+            if (text.isNullOrEmpty()) continue
+            if (out == null) out = HashMap(EXTRA_LYRIC_KEYS.size)
+            out[key] = text
+        }
+        return out ?: emptyMap()
+    }
+
+    /**
      * 通知文本表的内容哈希。
      *
      * 同一个包的表只在通知真的变了时才会被替换成新实例，因此也可以按身份缓存 ——
@@ -932,6 +1046,57 @@ class SessionHub private constructor(context: Context) {
         // 副行是一**组**相邻行：用户把行数调到 3、4 时要看到更多歌词，
         // 只给一条文本的话预算再多也只有两行可画（0.2.5 及以前的真实表现）。
         push(currentLines[safe].text, contextLines(safe), titleForOverlay(), prompt = false)
+    }
+
+    /**
+     * 本地全 miss 且开关打开时，异步请求一次在线歌词。
+     *
+     * 同一首歌只请求一次（[onlineRequestedKey] 去重）。结果在主线程回调，
+     * 回来后会重新核对「还是不是当前这首歌」——换歌后到达的旧结果直接丢弃。
+     * 如果期间本地通道已经命中，也不覆盖：本地歌词一定比在线匹配更准。
+     */
+    private fun maybeRequestOnline(title: String?, artist: String?, durationMs: Long) {
+        if (!prefs.onlineLyrics) return
+        val cleanTitle = title?.trim().orEmpty()
+        if (cleanTitle.isEmpty()) return
+        val cleanArtist = artist?.trim().orEmpty()
+        val key = "$cleanTitle\u0000$cleanArtist"
+        if (key == onlineRequestedKey) return
+        onlineRequestedKey = key
+        if (Probe.enabled) Probe.write("歌词", "online request: $cleanTitle / $cleanArtist")
+
+        OnlineLyricsFetcher.request(cleanTitle, cleanArtist, durationMs) { lines ->
+            // 已在主线程回调
+            if (!prefs.onlineLyrics) return@request
+            if (lastTitle?.trim().orEmpty() != cleanTitle) return@request
+            if (lastArtist?.trim().orEmpty() != cleanArtist) return@request
+            if (hitSource != null) {
+                if (Probe.enabled) {
+                    Probe.write("歌词", "online result ignored (local hit=$hitSource)")
+                }
+                return@request
+            }
+            onlineLines = lines
+            setCurrentLines(lines, -1)
+            hitSource = ONLINE_SOURCE
+            render()
+            scheduleLineTick()
+            if (Probe.enabled) Probe.write("歌词", "online hit lines=${lines.size}")
+        }
+    }
+
+    /** 设置页切换在线补词时调用：关掉要立刻释放缓存与已显示的结果。 */
+    fun onOnlineLyricsChanged() {
+        if (!prefs.onlineLyrics) {
+            onlineLines = emptyList()
+            onlineRequestedKey = null
+            OnlineLyricsFetcher.clear()
+            hitSource = null
+        }
+        // 强制下一轮重跑责任链：否则关掉开关后，旧的在线歌词会一直留在屏上
+        // （输入没变时责任链被指纹短路，currentLines 不会被重新计算）。
+        keyValid = false
+        requestRefresh("online_switch")
     }
 
     /**
@@ -1175,7 +1340,17 @@ class SessionHub private constructor(context: Context) {
         val playing = sessions.filter {
             it.playbackState?.state == PlaybackState.STATE_PLAYING
         }
-        val pool = playing.ifEmpty { sessions }
+        val pool = if (playing.isNotEmpty()) {
+            playing
+        } else {
+            // 没有「正在播放」的会话时，优先有标题的那个：车载上常有空壳会话
+            // （导航语音、残留会话）把真正暂停中的播放器挤掉。
+            // 只在兜底分支读 metadata —— 正常播放时不为每个会话多付一次跨进程调用。
+            val titled = sessions.filter {
+                !it.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).isNullOrBlank()
+            }
+            titled.ifEmpty { sessions }
+        }
         return pool.maxByOrNull {
             it.playbackState?.lastPositionUpdateTime ?: 0L
         }
@@ -1281,6 +1456,9 @@ class SessionHub private constructor(context: Context) {
         private const val REASON_NOTIFICATION_OTHER = "notification_other"
         private const val REASON_UI = "overlay_event"
 
+        /** 在线补词的来源标识（进探测报告与状态卡）。 */
+        private const val ONLINE_SOURCE = "ONLINE"
+
         /** 状态／元数据回调里，两次完整会话查询的最小间隔。 */
         private const val QUERY_MIN_INTERVAL_MS = 3_000L
 
@@ -1326,6 +1504,16 @@ class SessionHub private constructor(context: Context) {
 
         /** tickerText 的键名（不是 extras 常量，自己定一个） */
         private const val KEY_TICKER = "android.tickerText"
+
+        /**
+         * `PlaybackState.extras` 里关注的歌词键。
+         *
+         * `lyrics` 是整段 LRC；`lrc_line_1~3` 是滚动窗口（第 1 行是当前句），
+         * BYD 车机走的就是后者。两个都读，谁有内容用谁。
+         */
+        private val EXTRA_LYRIC_KEYS = arrayOf(
+            "lyrics", "lrc_line_1", "lrc_line_2", "lrc_line_3"
+        )
 
         /** 标题停下多久还没歌词，就承认这个播放器没有歌词通道。 */
         private const val TITLE_WAIT_TIMEOUT_MS = 20_000L

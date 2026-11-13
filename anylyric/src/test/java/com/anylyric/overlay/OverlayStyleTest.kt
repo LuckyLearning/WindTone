@@ -34,6 +34,7 @@ class OverlayStyleTest {
         assertEquals(OverlayDefaults.TITLE_FONT_SP, style.titleFontSp, 0.001f)
         assertEquals(OverlayDefaults.TITLE_COLOR, style.titleColor)
         assertEquals(OverlayDefaults.TITLE_POS, style.titlePos)
+        assertEquals(OverlayDefaults.LINE_OFFSET_DP, style.lineOffsetDp, 0.001f)
     }
 
     /** 默认白字 + 深底：与旧版硬编码的观感一致，升级后不该突然换个样子。 */
@@ -88,6 +89,7 @@ class OverlayStyleTest {
             opacity = -5f,
             cornerDp = 100f,
             secondaryAlpha = 0f,
+            lineOffsetDp = 999f,
             fadeMs = 9999,
             titleFontSp = 500f
         )
@@ -99,20 +101,22 @@ class OverlayStyleTest {
         assertEquals(OverlayDefaults.SECONDARY_ALPHA_MIN, safe.secondaryAlpha, 0.001f)
         assertEquals(OverlayDefaults.FADE_MAX, safe.fadeMs)
         assertEquals(OverlayDefaults.TITLE_FONT_MAX, safe.titleFontSp, 0.001f)
+        assertEquals(OverlayDefaults.LINE_OFFSET_MAX, safe.lineOffsetDp, 0.001f)
     }
 
     @Test
     fun sanitizeRaisesTooSmallValues() {
         val safe = OverlayDefaults.sanitize(
             OverlayStyle(
-                fontSp = 2f, maxLines = 0, opacity = 0f, cornerDp = -4f, fadeMs = -1,
-                titleFontSp = 1f
+                fontSp = 2f, maxLines = 0, opacity = 0f, cornerDp = -4f, lineOffsetDp = -10f,
+                fadeMs = -1, titleFontSp = 1f
             )
         )
         assertEquals(OverlayDefaults.FONT_MIN, safe.fontSp, 0.001f)
         assertEquals(OverlayDefaults.LINES_MIN, safe.maxLines)
         assertEquals(0f, safe.opacity, 0.001f)
         assertEquals(0f, safe.cornerDp, 0.001f)
+        assertEquals(0f, safe.lineOffsetDp, 0.001f)
         assertEquals(0, safe.fadeMs)
         assertEquals(OverlayDefaults.TITLE_FONT_MIN, safe.titleFontSp, 0.001f)
     }

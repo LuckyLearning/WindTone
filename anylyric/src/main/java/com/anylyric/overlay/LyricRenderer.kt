@@ -418,7 +418,11 @@ class LyricRenderer(context: Context) : View(context) {
 
         contentHeight = y
 
-        var width = glyphs.maxOfOrNull { it.width } ?: 0f
+        // 错位只在左对齐下生效；上下文行整体右移，宽度也要跟着算进来，否则自适应时会被裁。
+        val lineOffsetPx = if (style.align == Align.START) style.lineOffsetDp * density else 0f
+        var width = glyphs.maxOfOrNull {
+            it.width + if (it.secondary) lineOffsetPx else 0f
+        } ?: 0f
         // 最小宽度：四个字。避免「我」这样的单字歌词变成一个孤零零的小方块。
         width = maxOf(width, widthOf("字字字字", primarySize, style.bold))
         // 标题也要能完整占满一行，否则窗口会被歌词挤窄、标题被省略成「歌名…」
@@ -657,11 +661,16 @@ class LyricRenderer(context: Context) : View(context) {
         val baseline = top - textPaint.fontMetrics.ascent
         val glyphWidth = glyph.width
         val baseX = textLeft
-        val x = when (style.align) {
-            Align.START -> baseX
+        val offset =
+            if (glyph.secondary && style.align == Align.START) style.lineOffsetDp * density else 0f
+        val rawX = when (style.align) {
+            Align.START -> baseX + offset
             Align.CENTER -> baseX + (contentWidth - glyphWidth) / 2f
             Align.END -> baseX + contentWidth - glyphWidth
         }
+        // 错位不能把字顶出内容区：固定宽度 + 长句时，右移量被夹回去。
+        val maxX = (baseX + contentWidth - glyphWidth).coerceAtLeast(baseX)
+        val x = rawX.coerceIn(baseX, maxX)
         // 描边先画、填充后画：这是真轮廓，不是把文字偏移复制一遍当阴影。
         if (style.stroke) canvas.drawText(glyph.text, x, baseline, strokePaint)
         canvas.drawText(glyph.text, x, baseline, textPaint)

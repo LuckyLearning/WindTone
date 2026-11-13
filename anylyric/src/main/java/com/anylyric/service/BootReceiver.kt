@@ -24,6 +24,9 @@ import com.anylyric.data.Prefs
 class BootReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
+        // 先同步看门狗任务：它有自己的开关，与「开机自启」无关。
+        // setPersisted 通常能跨重启存活，这里只是兜一层（开关关闭时是 cancel）。
+        ServiceWatchdog.sync(context)
         if (!BootPolicy.shouldRebind(intent.action, Prefs(context).bootAutostart)) return
         runCatching {
             NotificationListenerService.requestRebind(

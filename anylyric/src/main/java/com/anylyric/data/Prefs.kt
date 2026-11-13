@@ -56,6 +56,45 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_BOOT_AUTOSTART, false)
         set(value) = sp.edit().putBoolean(KEY_BOOT_AUTOSTART, value).apply()
 
+    /**
+     * 静默掉线看门狗：每 15 分钟检查一次心跳，过期就 requestRebind。
+     *
+     * 默认关闭。通知使用权被 ROM 省电策略杀掉时不一定回调 onListenerDisconnected，
+     * 表现是「歌词忽然不动了，打开一次应用才好」——这个开关就是为这种场景准备的。
+     */
+    var watchdogEnabled: Boolean
+        get() = sp.getBoolean(KEY_WATCHDOG, false)
+        set(value) = sp.edit().putBoolean(KEY_WATCHDOG, value).apply()
+
+    /**
+     * 在线补词（默认关闭）。
+     *
+     * 打开后，本地三个通道全 miss 时才按「歌名 + 歌手」去在线歌词库找一份；
+     * 歌词链路因此会联网 —— 这是用户显式打开才生效的可选能力，默认零联网。
+     */
+    var onlineLyrics: Boolean
+        get() = sp.getBoolean(KEY_ONLINE_LYRICS, false)
+        set(value) = sp.edit().putBoolean(KEY_ONLINE_LYRICS, value).apply()
+
+    /** 最近一次「确认服务活着」的心跳时间，供看门狗判断是否掉线。 */
+    var lastAliveAt: Long
+        get() = sp.getLong(KEY_LAST_ALIVE, 0L)
+        private set(value) = sp.edit().putLong(KEY_LAST_ALIVE, value).apply()
+
+    /** 进程内心跳节流：最多 [ALIVE_WRITE_INTERVAL_MS] 写一次盘。 */
+    private var aliveWrittenAt = 0L
+
+    /**
+     * 记录心跳。[force] 用于「刚连上」这种必须落盘的时刻。
+     *
+     * 刷新一秒可能来好几次，每次都写 SharedPreferences 是纯浪费 —— 进程内先挡一道。
+     */
+    fun markAlive(nowMs: Long = System.currentTimeMillis(), force: Boolean = false) {
+        if (!force && nowMs - aliveWrittenAt < ALIVE_WRITE_INTERVAL_MS) return
+        aliveWrittenAt = nowMs
+        lastAliveAt = nowMs
+    }
+
     fun style(): OverlayStyle = styleCache ?: OverlayDefaults.sanitize(
         OverlayStyle(
             preset = Preset.of(sp.getString(KEY_PRESET, null)),
@@ -67,6 +106,7 @@ class Prefs(context: Context) {
             stroke = sp.getBoolean(KEY_STROKE, OverlayDefaults.STROKE),
             secondaryAlpha = sp.getFloat(KEY_SECONDARY_ALPHA, OverlayDefaults.SECONDARY_ALPHA),
             align = Align.of(sp.getString(KEY_ALIGN, null)),
+            lineOffsetDp = sp.getFloat(KEY_LINE_OFFSET, OverlayDefaults.LINE_OFFSET_DP),
             fadeMs = sp.getInt(KEY_FADE, OverlayDefaults.FADE_MS),
             primaryColor = sp.getInt(KEY_PRIMARY_COLOR, OverlayDefaults.PRIMARY_COLOR),
             secondaryColor = sp.getInt(KEY_SECONDARY_COLOR, OverlayDefaults.SECONDARY_COLOR),
@@ -93,6 +133,7 @@ class Prefs(context: Context) {
             .putBoolean(KEY_STROKE, safe.stroke)
             .putFloat(KEY_SECONDARY_ALPHA, safe.secondaryAlpha)
             .putString(KEY_ALIGN, safe.align.id)
+            .putFloat(KEY_LINE_OFFSET, safe.lineOffsetDp)
             .putInt(KEY_FADE, safe.fadeMs)
             .putInt(KEY_PRIMARY_COLOR, safe.primaryColor)
             .putInt(KEY_SECONDARY_COLOR, safe.secondaryColor)
@@ -157,6 +198,7 @@ class Prefs(context: Context) {
         private const val KEY_STROKE = "style_stroke"
         private const val KEY_SECONDARY_ALPHA = "style_secondary_alpha"
         private const val KEY_ALIGN = "style_align"
+        private const val KEY_LINE_OFFSET = "style_line_offset_dp"
         private const val KEY_FADE = "style_fade_ms"
         private const val KEY_PRIMARY_COLOR = "style_primary_color"
         private const val KEY_SECONDARY_COLOR = "style_secondary_color"
@@ -171,6 +213,12 @@ class Prefs(context: Context) {
         private const val KEY_HANDLE = "overlay_handle_enabled"
         private const val KEY_UPDATE_ROUTE = "update_route"
         private const val KEY_BOOT_AUTOSTART = "boot_autostart"
+        private const val KEY_WATCHDOG = "watchdog_enabled"
+        private const val KEY_ONLINE_LYRICS = "online_lyrics_enabled"
+        private const val KEY_LAST_ALIVE = "last_alive_at"
+
+        /** 心跳落盘间隔：看门狗的过期阈值是 20 分钟，5 分钟一次足够，且写盘量很小。 */
+        private const val ALIVE_WRITE_INTERVAL_MS = 5 * 60_000L
 
         private const val KEY_RATIO_X_PORT = "ratio_x_port"
         private const val KEY_RATIO_Y_PORT = "ratio_y_port"

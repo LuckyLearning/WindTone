@@ -16,6 +16,13 @@ data class TrackContext(
     val metadata: Map<String, Any?> = emptyMap(),
     /** 媒体通知 extras 里的文本字段（android.title / android.text / tickerText …） */
     val notificationTexts: Map<String, String> = emptyMap(),
+    /**
+     * `PlaybackState.extras` 里的歌词相关文本字段。
+     *
+     * 部分车机 / 播放器不把歌词放进 `MediaMetadata`，而是塞进播放状态：
+     * BYD 的 `lyrics` / `lrc_line_1~3` 就是典型。旧实现完全没有读这一块。
+     */
+    val playbackExtras: Map<String, String> = emptyMap(),
     /** 是否已判定为「伪歌名」（TITLE 被当作歌词逐行推送） */
     val pseudoTitle: Boolean = false,
     /** 最近一次 TITLE 原文，L1 用于把当前行纳入缓冲 */

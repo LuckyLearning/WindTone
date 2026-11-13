@@ -3,6 +3,7 @@ package com.anylyric.lyrics.sources
 import com.anylyric.lyrics.LrcParser
 import com.anylyric.lyrics.LyricLine
 import com.anylyric.lyrics.LyricResult
+import com.anylyric.lyrics.LyricsJson
 import com.anylyric.lyrics.LyricsSource
 import com.anylyric.lyrics.TrackContext
 
@@ -41,6 +42,7 @@ class L0MetadataSource : LyricsSource {
             sawStringValue = true
             if (!isLyricKey(key) && !LrcParser.looksLikeLrc(text)) continue
 
+            // 缓存键用**原文**：同一段文本反复回调时，连「是不是 JSON」都不用再判。
             val lines = parseCached(key, text)
             if (lines.size >= 2) return LyricResult.Hit(id, lines)
         }
@@ -52,7 +54,9 @@ class L0MetadataSource : LyricsSource {
             append(key).append('#').append(text.length).append('#').append(text.hashCode())
         }
         if (cacheKey == cachedKey) return cachedLines
-        val lines = LrcParser.parse(text)
+        // 少数播放器把歌词包在 JSON 里（{"lyrics": "..."}）；解包后仍是原文缓存。
+        val raw = LyricsJson.unwrap(text) ?: ""
+        val lines = LrcParser.parse(raw)
         parseCount++
         cachedKey = cacheKey
         cachedLines = lines

@@ -18,6 +18,8 @@ class MediaWatchService : NotificationListenerService() {
     override fun onCreate() {
         super.onCreate()
         SessionHub.get(this)
+        // 服务被系统拉起来时顺带确认一次看门狗任务是否已注册（开关关闭时是 cancel）。
+        ServiceWatchdog.sync(this)
     }
 
     override fun onListenerConnected() {
