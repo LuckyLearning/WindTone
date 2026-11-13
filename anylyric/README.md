@@ -513,8 +513,16 @@ AccessibilityEvent(TYPE_WINDOW_STATE_CHANGED)
 | 条件 | 行为 |
 |---|---|
 | 有 `WRITE_SECURE_SETTINGS`（adb 授予） | 开机、打开设置页时自动把服务名写回 `enabled_accessibility_services`，恢复后 toast 提示 |
-| 没有该权限（绝大多数设备） | **不假装能做到**：只在设置页显示「未开启 / 已授权但未连接」，点击直达系统页 |
+| 没有该权限（绝大多数设备） | **不假装能做到**：只在设置页显示「未开启 / 已授权但未连接」（**用警示色**），点击直达系统页 |
 | 用户从没开过 | 不做任何自动恢复（替没开过的人做主是越权） |
+
+想让它真的自动恢复，一条命令即可（`WRITE_SECURE_SETTINGS` 带 `development` 标志，adb 可以授予）：
+
+```bash
+adb shell pm grant com.anylyric android.permission.WRITE_SECURE_SETTINGS
+```
+
+授予后无需 root、无需重装；升级或重启后无障碍被 ROM 关掉时会自动写回。
 
 写回只**追加**本服务，绝不覆盖用户已有的其它无障碍服务（写坏一条会让读屏软件整段失效，
 所以拼接逻辑 `appendService` 抽成纯函数并单独上单测）。
@@ -551,6 +559,28 @@ AccessibilityEvent(TYPE_WINDOW_STATE_CHANGED)
 
 > 判据：`events` 必须含 **32**（`TYPE_WINDOW_STATE_CHANGED`）。不含 = 订阅没生效；
 > 含 32 但 `foreground` 仍是 `unknown` = 系统没派发，或用户从未切过应用。
+
+### 0.2.15 修掉的「打开应用后一直没有歌词」
+
+`SessionHub.attach()` **从未被任何地方调用**（grep 不到调用点），而「服务起来时主动拉一次会话」
+正是写在它里面的。
+
+更麻烦的是：degraded 轮询（通知服务没绑时的 8 秒兜底查询）**是在第一次 `refreshNow` 之后才启动的**。
+于是形成死循环：
+
+```
+没有首次 refresh → 不进入 degraded → 不轮询 → 永远等不到事件 → 没有歌词
+```
+
+之前之所以「有时能用」，是因为用户碰巧进出过一次设置页：`OverlayHost.setSuppressed(false)`
+在没有窗口时会调 `onRequestRender`，间接触发了一次 refresh。这不是设计，是巧合。
+
+现在两处都补上：
+
+- `SessionHub.init` 末尾投一次 `refresh("init")`（投到主线程下一轮，避免构造期重入）；
+- `MediaWatchService.onCreate` 显式调 `attach()`，恢复它本来该有的语义。
+
+判据：报告里 `[SESSION] sessions=0`，但设备上确实在放歌 —— 就是这条链路没跑起来。
 
 ## 设置页结构（v0.2.11）
 

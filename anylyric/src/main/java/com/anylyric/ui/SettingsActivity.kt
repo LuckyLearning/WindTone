@@ -762,6 +762,11 @@ class SettingsActivity : BaseActivity() {
                         else -> getString(R.string.hide_apps_access_on)
                     }
                 },
+                // 未连接就是「这个功能现在完全不起作用」，必须比普通文字更扎眼
+                valueColor = {
+                    if (accessibilityGranted() && ForegroundApps.serviceConnected) null
+                    else colorBad
+                },
                 onClick = { openAccessibilitySettings() }
             )
         )
@@ -783,6 +788,7 @@ class SettingsActivity : BaseActivity() {
     private fun clickableValueRow(
         label: String,
         value: () -> String,
+        valueColor: (() -> Int?)? = null,
         onClick: () -> Unit
     ): View {
         // 值占剩余宽度并允许两行：权限那一行的文案很长（「未开启 —— 点击去系统设置开启」），
@@ -814,7 +820,12 @@ class SettingsActivity : BaseActivity() {
                 LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             )
         }
-        uiRefreshers += { valueView.text = value() }
+        uiRefreshers += {
+            valueView.text = value()
+            // 需要警示时染色（例如无障碍没开）：这行的状态如果和普通文字一个颜色，
+            // 用户根本不会注意到「按应用隐藏其实早就失效了」。
+            valueView.setTextColor(valueColor?.invoke() ?: colorSecondaryText)
+        }
         return container
     }
 

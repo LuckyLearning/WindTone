@@ -293,6 +293,15 @@ class SessionHub private constructor(context: Context) {
         // 前台包名变化一次也没触发过重算，表现就是「勾了名单却不隐藏」。
         ForegroundApps.addListener(foregroundListener)
         applyHideState()
+
+        // 首次拉取必须由这里发起。
+        //
+        // attach() 是死方法（没有任何调用点），而 degraded 轮询又是在**第一次 refreshNow
+        // 之后**才启动的 —— 之前的表现是：进程被杀后重启、通知服务没绑，就永远等不到
+        // 第一个事件，也就永远没有歌词；只有当用户碰巧进出一次设置页
+        // （OverlayHost.setSuppressed(false) 触发 onRequestRender）才会活过来。
+        // 投到主线程下一轮：构造期间不能重入 refresh。
+        mainHandler.post { requestRefresh("init") }
     }
 
     private val callback = object : MediaController.Callback() {

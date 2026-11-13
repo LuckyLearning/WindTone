@@ -17,7 +17,10 @@ class MediaWatchService : NotificationListenerService() {
 
     override fun onCreate() {
         super.onCreate()
-        SessionHub.get(this)
+        // attach() 以前没有任何调用点，等于「服务起来时主动拉一次会话」这条链路从没生效过。
+        // 现在补上：进程被杀后重启、通知服务又没绑（degraded）时，靠它作为第一个触发点；
+        // SessionHub 的 init 也投了一次，两处都幂等（requestRefresh 会合并）。
+        SessionHub.get(this).attach()
         // 服务被系统拉起来时顺带确认一次看门狗任务是否已注册（开关关闭时是 cancel）。
         ServiceWatchdog.sync(this)
         // BYD 车机：标准会话稀疏时，靠第三方媒体控制 SDK 补真实歌名/歌手/歌词。
