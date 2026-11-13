@@ -99,6 +99,7 @@
     <string name="perm_granted">已授予</string>
     <string name="perm_missing">未授予</string>
     <string name="perm_state_unbound">已授权，系统尚未连接</string>
+    <string name="perm_state_degraded_ok">已授权 · 降级运行</string>
     <string name="perm_open">去开启</string>
     <string name="perm_retry">重新连接</string>
     <string name="perm_review">系统设置</string>
@@ -117,6 +118,7 @@
 
     <string name="status_listener_connected">通知使用权已连接</string>
     <string name="status_listener_unbound">通知使用权已授予，正在等待系统连接…</string>
+    <string name="status_listener_degraded_ok">已授权 · 降级运行（歌词正常）</string>
     <string name="status_listener_unbound_failed">已授权，但系统没有自动恢复连接</string>
     <string name="status_listener_disconnected">通知使用权未授予，歌词暂不可用</string>
     <string name="overlay_standby">AnyLyric 已启动，等待播放</string>
@@ -213,6 +215,8 @@
     <string name="title_color">标题颜色</string>
     <string name="perm_required_hint">两项权限都是必需的，都能在这一屏里完成授权，不需要连电脑。</string>
     <string name="perm_unbound_hint">权限是勾选状态，只是系统还没把服务绑上。通常几秒内自动恢复，歌词此时仍可正常获取；一直连不上时，点「系统设置」把开关关掉再打开一次。</string>
+    <string name="perm_unbound_working_hint">通知使用权已授权，系统暂未绑定服务。当前靠低频查询获取媒体会话，歌词照常显示；能连上时会自动切回推送模式。不用管它。</string>
+    <string name="a11y_auto_restored">已自动恢复无障碍服务</string>
     <string name="perm_unbound_failed_hint">自动重连在这台设备上没有生效。点「系统设置」，进到 AnyLyric 的通知使用权页，把开关关掉再打开一次 —— 这是系统层面的卡顿，不是权限缺失。</string>
     <string name="display_font_value">%1$s 磅</string>
     <string name="display_edit_exit">退出编辑态</string>

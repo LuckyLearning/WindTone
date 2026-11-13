@@ -42,6 +42,19 @@ class Prefs(context: Context) {
         set(value) = sp.edit().putBoolean(KEY_HIDE_BY_APP, value).apply()
 
     /**
+     * 用户是否**曾经**开启过无障碍服务。
+     *
+     * 只为一件事存在：判断「服务从没开过」还是「开过、后来被系统关掉了」。
+     * 前者不该替他做主（自动恢复等于越过用户决定），后者才值得尝试写回 ——
+     * 而且写回还需要 `WRITE_SECURE_SETTINGS`，绝大多数设备根本没有。
+     *
+     * 由两处置位：打开「按应用隐藏」开关时、服务成功连接时。
+     */
+    var accessibilityRequested: Boolean
+        get() = sp.getBoolean(KEY_A11Y_REQUESTED, false)
+        set(value) = sp.edit().putBoolean(KEY_A11Y_REQUESTED, value).apply()
+
+    /**
      * 命中即隐藏悬浮窗的应用包名。
      *
      * 缓存理由：每次前台切换都要读一次（无障碍事件驱动，低频但不该白读），
@@ -228,6 +241,7 @@ class Prefs(context: Context) {
         private const val KEY_HIDE_NO_LYRICS = "hide_when_no_lyrics"
         private const val KEY_HIDE_BY_APP = "hide_by_app_enabled"
         private const val KEY_HIDDEN_APPS = "hidden_apps"
+        private const val KEY_A11Y_REQUESTED = "a11y_requested"
         private const val KEY_DISPLAY_ID = "display_id"
 
         private const val KEY_PRESET = "style_preset"

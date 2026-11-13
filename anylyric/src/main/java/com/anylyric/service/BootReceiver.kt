@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.service.notification.NotificationListenerService
+import com.anylyric.accessibility.AccessibilityWatchdog
 import com.anylyric.data.Prefs
 
 /**
@@ -27,6 +28,9 @@ class BootReceiver : BroadcastReceiver() {
         // 先同步看门狗任务：它有自己的开关，与「开机自启」无关。
         // setPersisted 通常能跨重启存活，这里只是兜一层（开关关闭时是 cancel）。
         ServiceWatchdog.sync(context)
+        // 无障碍服务在部分 ROM（HONOR/MagicOS）更新应用后会被关掉；开过机就试一次写回。
+        // 没有 WRITE_SECURE_SETTINGS 时内部直接返回 false，不做任何事。
+        AccessibilityWatchdog.tryAutoRestore(context)
         if (!BootPolicy.shouldRebind(intent.action, Prefs(context).bootAutostart)) return
         runCatching {
             NotificationListenerService.requestRebind(

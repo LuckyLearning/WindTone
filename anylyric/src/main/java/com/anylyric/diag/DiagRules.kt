@@ -53,6 +53,9 @@ data class ProbeSnapshot(
      *  · [a11yConnected] —— 无障碍服务是否真的连着（勾了不等于在跑）。
      */
     val a11yConnected: Boolean = false,
+    /** 系统设置里是否勾着无障碍服务。`false` + `a11yConnected=true` 不可能同时出现；
+     *  `true` + `a11yConnected=false` = 勾着但服务被杀（等系统重连即可）。 */
+    val a11yGranted: Boolean = false,
     /** 无障碍服务实际订阅的事件类型位掩码；32（`TYPE_WINDOW_STATE_CHANGED`）缺失 = 订阅没生效。 */
     val a11yEventTypes: Int = 0,
     val hideByAppEnabled: Boolean = false,
@@ -117,7 +120,7 @@ object DiagRules {
         s.hideByAppEnabled && !s.a11yConnected ->
             Diagnosis(
                 DiagCode.A11Y_DISCONNECTED,
-                "hideByApp=true, hiddenApps=${s.hiddenAppCount}, a11yConnected=false"
+                "hideByApp=true, granted=${s.a11yGranted}, hiddenApps=${s.hiddenAppCount}"
             )
 
         s.sessionCount == 0 ->

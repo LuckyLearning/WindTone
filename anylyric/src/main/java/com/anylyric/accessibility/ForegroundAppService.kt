@@ -91,6 +91,9 @@ class ForegroundAppService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         ForegroundApps.serviceConnected = true
+        // 连上过一次 = 用户确实开过这个服务。记下来，以后系统把它关掉时
+        // AccessibilityWatchdog 才有依据去尝试自动写回（否则等于替没开过的人做主）。
+        runCatching { prefs.accessibilityRequested = true }
         // XML 里已经声明过一次订阅面，这里**再设一遍**：真机上见过 ROM 覆盖或
         // 资源解析导致 `accessibilityEventTypes` 没生效的情况 —— 那时服务是连着的
         // （a11yConnected=true）却一个窗口事件都收不到，探针表现正是 foreground=unknown。

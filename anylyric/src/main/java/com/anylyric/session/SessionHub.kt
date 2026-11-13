@@ -15,6 +15,7 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.service.notification.StatusBarNotification
 import com.anylyric.R
+import com.anylyric.accessibility.AccessibilityWatchdog
 import com.anylyric.accessibility.ForegroundApps
 import com.anylyric.accessibility.overlayHiddenFor
 import com.anylyric.data.ListenerState
@@ -1536,6 +1537,7 @@ class SessionHub private constructor(context: Context) {
             // 用户开了「无歌词时隐藏」且当前确实没有歌词行 → 窗口是被这条规则收掉的。
             hiddenByRule = prefs.hideWhenNoLyrics && currentLines.isEmpty(),
             a11yConnected = ForegroundApps.serviceConnected,
+            a11yGranted = AccessibilityWatchdog.isGranted(appContext),
             a11yEventTypes = ForegroundApps.serviceEventTypes,
             hideByAppEnabled = prefs.hideByAppEnabled,
             hiddenAppCount = prefs.hiddenApps.size,

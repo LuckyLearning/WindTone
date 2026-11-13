@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!--
       权限只有四项，各自都有明确用途：
@@ -28,6 +29,15 @@
     -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!--
+      仅声明、默认不授予（signature 级，普通安装拿不到，adb `pm grant` 才能给）。
+      唯一用途：HONOR/MagicOS 在应用更新后会把无障碍服务关掉，有它才能自动写回。
+      没有它时功能完全不受影响，只是变成「引导用户手动重开」。声明在这里是为了让
+      愿意用 adb 的用户有一条自动恢复的路，而不是每次升级都要手动补。
+    -->
+    <uses-permission
+        android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
 
     <!--
       Android 11+ 的包可见性：不声明这些 action，resolveActivity()/queryIntentActivities()

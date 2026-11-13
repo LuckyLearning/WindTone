@@ -100,6 +100,7 @@
     <string name="perm_granted">Granted</string>
     <string name="perm_missing">Not granted</string>
     <string name="perm_state_unbound">Granted, not yet connected</string>
+    <string name="perm_state_degraded_ok">Granted · degraded mode</string>
     <string name="perm_open">Open settings</string>
     <string name="perm_retry">Reconnect</string>
     <string name="perm_review">System settings</string>
@@ -118,6 +119,7 @@
 
     <string name="status_listener_connected">Notification access connected</string>
     <string name="status_listener_unbound">Notification access granted — waiting for the system to connect…</string>
+    <string name="status_listener_degraded_ok">Granted · degraded mode (lyrics working)</string>
     <string name="status_listener_unbound_failed">Granted, but the system did not reconnect</string>
     <string name="status_listener_disconnected">Notification access not granted — lyrics unavailable</string>
     <string name="overlay_standby">AnyLyric is running — waiting for playback</string>
@@ -214,6 +216,8 @@
     <string name="title_color">Title color</string>
     <string name="perm_required_hint">Both permissions are required. Grant them on this screen — no computer needed.</string>
     <string name="perm_unbound_hint">The permission is already ticked; the system just has not bound the service yet. It usually recovers within seconds, and lyrics keep working meanwhile. If it never does, tap System settings and toggle the switch off and on.</string>
+    <string name="perm_unbound_working_hint">Notification access is granted but the system has not bound the service. AnyLyric is polling media sessions at a low rate instead, and lyrics work normally; it switches back to push automatically once connected. No action needed.</string>
+    <string name="a11y_auto_restored">Accessibility service restored automatically</string>
     <string name="perm_unbound_failed_hint">Automatic reconnect did not take effect on this device. Tap System settings, open AnyLyric\'s notification access page and toggle it off and on — this is a system-level stall, not a missing permission.</string>
     <string name="display_font_value">%1$s sp</string>
     <string name="display_edit_exit">Exit edit mode</string>

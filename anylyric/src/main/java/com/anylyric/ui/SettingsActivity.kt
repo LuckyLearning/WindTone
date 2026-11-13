@@ -38,7 +38,7 @@ import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
 import com.anylyric.R
-import com.anylyric.accessibility.ForegroundAppService
+import com.anylyric.accessibility.AccessibilityWatchdog
 import com.anylyric.accessibility.ForegroundApps
 import com.anylyric.data.ListenerState
 import com.anylyric.data.Prefs
@@ -139,7 +139,13 @@ class SettingsActivity : BaseActivity() {
     override fun onResume() {
         super.onResume()
         // 用户可能刚从系统设置开了无障碍回来：缓存必须失效，否则要等一会儿才变色。
-        a11yGrantedCheckedAt = 0L
+        AccessibilityWatchdog.invalidate()
+        // 无障碍被系统关掉时（HONOR/MagicOS 更新应用后的常见行为），有写权限就顺手恢复。
+        // 没有权限时内部直接返回 false —— 不弹窗、不引导，绝不假装能做到。
+        if (AccessibilityWatchdog.tryAutoRestore(this)) {
+            AccessibilityWatchdog.invalidate()
+            toast(getString(R.string.a11y_auto_restored))
+        }
         refresh()
         if (hub.listenerState() != ListenerState.GRANTED && hub.tryRebind()) {
             startPolling(POLL_FIRST_DELAY_MS)
@@ -705,6 +711,8 @@ class SettingsActivity : BaseActivity() {
             current = { prefs.hideByAppEnabled },
             onChange = { checked ->
                 prefs.hideByAppEnabled = checked
+                // 用户主动开过 → 以后被系统关掉时才有依据尝试自动写回
+                if (checked) prefs.accessibilityRequested = true
                 hub.refreshHideByApp()
                 // 只提醒、不自动跳转：用户可能想先把名单勾好再一起去开权限。
                 // 但必须说清楚，否则表现就是「勾了、也开了，却完全不生效」。
@@ -813,33 +821,10 @@ class SettingsActivity : BaseActivity() {
     /**
      * 无障碍服务是否已在系统设置里被勾选（只说明「勾过」，不代表此刻连着）。
      *
-     * 带 1.5 秒缓存：状态卡每秒刷一次，而读 `Settings.Secure` 是一次 Binder 调用 ——
-     * 每个刷新周期都去问系统，纯属白花。只在这个开关上引用了这个判定，缓存是安全的：
-     * 用户从系统设置回来会走 `onResume`，那里强制失效。
+     * 缓存与失效都在 [AccessibilityWatchdog] 里做：状态卡每秒刷一次，
+     * 而读 `Settings.Secure` 是一次 Binder 调用 —— 每个刷新周期都去问系统纯属白花。
      */
-    private fun accessibilityGranted(): Boolean {
-        val now = SystemClock.elapsedRealtime()
-        if (a11yGrantedCheckedAt != 0L && now - a11yGrantedCheckedAt < A11Y_GRANTED_CACHE_MS) {
-            return a11yGrantedCache
-        }
-        a11yGrantedCache = readAccessibilityGranted()
-        a11yGrantedCheckedAt = now
-        return a11yGrantedCache
-    }
-
-    private fun readAccessibilityGranted(): Boolean = try {
-        val className = ForegroundAppService::class.java.name
-        val enabled = Settings.Secure.getString(
-            contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        )
-        enabled?.split(':')?.any { it.contains(packageName) && it.contains(className) } == true
-    } catch (_: Throwable) {
-        false
-    }
-
-    private var a11yGrantedCache = false
-    private var a11yGrantedCheckedAt = 0L
+    private fun accessibilityGranted(): Boolean = AccessibilityWatchdog.isGranted(this)
 
     /**
      * 打开系统的无障碍页面。
@@ -1872,12 +1857,20 @@ class SettingsActivity : BaseActivity() {
             firstUnboundAt != 0L &&
             SystemClock.elapsedRealtime() - firstUnboundAt >= UNBOUND_TIMEOUT_MS
 
+        // 「已授权未绑定」不等于不能用：getActiveSessions 的边界是授权列表，不要求服务实例连着。
+        // 已经拿到歌词时，这一状态就是**降级运行**（通知推送换成了低频查询），
+        // 再显示成黄色「正在等待系统连接」只会让人以为坏了。
+        val degradedWorking = listener == ListenerState.GRANTED_NOT_BOUND &&
+            status.hitSource != null
+
         statusBanner.text = getString(
             when (listener) {
                 ListenerState.GRANTED -> R.string.status_listener_connected
-                ListenerState.GRANTED_NOT_BOUND ->
-                    if (timedOut) R.string.status_listener_unbound_failed
-                    else R.string.status_listener_unbound
+                ListenerState.GRANTED_NOT_BOUND -> when {
+                    degradedWorking -> R.string.status_listener_degraded_ok
+                    timedOut -> R.string.status_listener_unbound_failed
+                    else -> R.string.status_listener_unbound
+                }
 
                 ListenerState.NOT_GRANTED -> R.string.status_listener_disconnected
             }
@@ -1885,7 +1878,12 @@ class SettingsActivity : BaseActivity() {
         statusBanner.setTextColor(
             when (listener) {
                 ListenerState.GRANTED -> colorOk
-                ListenerState.GRANTED_NOT_BOUND -> if (timedOut) colorBad else colorWarn
+                ListenerState.GRANTED_NOT_BOUND -> when {
+                    degradedWorking -> colorOk
+                    timedOut -> colorBad
+                    else -> colorWarn
+                }
+
                 ListenerState.NOT_GRANTED -> colorBad
             }
         )
@@ -1893,7 +1891,11 @@ class SettingsActivity : BaseActivity() {
         statusLine.text = when (listener) {
             ListenerState.NOT_GRANTED -> getString(R.string.perm_required_hint)
             ListenerState.GRANTED_NOT_BOUND -> getString(
-                if (timedOut) R.string.perm_unbound_failed_hint else R.string.perm_unbound_hint
+                when {
+                    degradedWorking -> R.string.perm_unbound_working_hint
+                    timedOut -> R.string.perm_unbound_failed_hint
+                    else -> R.string.perm_unbound_hint
+                }
             )
 
             ListenerState.GRANTED -> if (status.sessionCount == 0) {
@@ -1914,9 +1916,10 @@ class SettingsActivity : BaseActivity() {
             }
         }
 
-        applyListenerState(listener)
+        applyListenerState(listener, degradedWorking)
         applyPermissionState(overlayState, status.overlayGranted)
-        notificationDesc.visibility = if (listener == ListenerState.GRANTED) View.GONE else View.VISIBLE
+        notificationDesc.visibility =
+            if (listener == ListenerState.GRANTED || degradedWorking) View.GONE else View.VISIBLE
         overlayDesc.visibility = if (status.overlayGranted) View.GONE else View.VISIBLE
         overlayButton.text = getString(
             if (status.overlayGranted) R.string.perm_review else R.string.perm_open
@@ -1970,26 +1973,36 @@ class SettingsActivity : BaseActivity() {
 
     // ---------------------------------------------------------------- 权限交互
 
-    private fun applyListenerState(state: ListenerState) {
+    /**
+     * 通知使用权那一行的状态。
+     *
+     * [degradedWorking] 为真时是「已授权、服务未绑，但歌词照常出」——
+     * 这是**正常工作状态**（降级运行），不能染成警告色，否则用户会一遍遍去系统设置里
+     * 关开那个开关，而那里显示的本来就是「已开启」。
+     */
+    private fun applyListenerState(state: ListenerState, degradedWorking: Boolean) {
         notificationState.text = getString(
-            when (state) {
-                ListenerState.GRANTED -> R.string.perm_granted
-                ListenerState.GRANTED_NOT_BOUND -> R.string.perm_state_unbound
-                ListenerState.NOT_GRANTED -> R.string.perm_missing
+            when {
+                state == ListenerState.GRANTED -> R.string.perm_granted
+                degradedWorking -> R.string.perm_state_degraded_ok
+                state == ListenerState.GRANTED_NOT_BOUND -> R.string.perm_state_unbound
+                else -> R.string.perm_missing
             }
         )
         notificationState.setTextColor(
-            when (state) {
-                ListenerState.GRANTED -> colorOk
-                ListenerState.GRANTED_NOT_BOUND -> colorWarn
-                ListenerState.NOT_GRANTED -> colorBad
+            when {
+                state == ListenerState.GRANTED -> colorOk
+                degradedWorking -> colorOk
+                state == ListenerState.GRANTED_NOT_BOUND -> colorWarn
+                else -> colorBad
             }
         )
         notificationButton.text = getString(
-            when (state) {
-                ListenerState.GRANTED -> R.string.perm_review
-                ListenerState.GRANTED_NOT_BOUND -> R.string.perm_retry
-                ListenerState.NOT_GRANTED -> R.string.perm_open
+            when {
+                state == ListenerState.GRANTED -> R.string.perm_review
+                degradedWorking -> R.string.perm_retry
+                state == ListenerState.GRANTED_NOT_BOUND -> R.string.perm_retry
+                else -> R.string.perm_open
             }
         )
         notificationButton.visibility =
@@ -2163,9 +2176,6 @@ class SettingsActivity : BaseActivity() {
 
         /** 应用列表图标缓存条数：够来回滚，又不会在车机小内存里常驻十几 MB。 */
         private const val ICON_CACHE_SIZE = 48
-
-        /** 无障碍授权状态的缓存窗口。状态卡每秒刷一次，Binder 调用不该跟着每秒走。 */
-        private const val A11Y_GRANTED_CACHE_MS = 1_500L
         private val ALIGN_ORDER = listOf(Align.START, Align.CENTER, Align.END)
 
         /** 从「自适应」起步时的基准比例：宽 60% / 高 14%，都是车机上常见的合理值。 */
