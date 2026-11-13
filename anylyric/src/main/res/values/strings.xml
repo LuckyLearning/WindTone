@@ -15,6 +15,25 @@
     <string name="autostart_watchdog_hint">Every 15 minutes, check a heartbeat and ask the system to rebind if the listener silently died. Some car ROMs kill background services without notifying the app. Off by default; no foreground service and no wake locks.</string>
     <string name="autostart_keepalive">Keep alive (battery optimization)</string>
     <string name="autostart_keepalive_hint">Ask the system to skip battery optimization for AnyLyric. The switch reflects the real system state; turning it off is done on the system page.</string>
+
+    <!-- 按应用隐藏（0.2.11）：无障碍服务只读窗口切换的包名，不读屏幕内容。 -->
+    <string name="section_hide_apps">Hide in apps</string>
+    <string name="hide_apps_enable">Hide overlay in selected apps</string>
+    <string name="hide_apps_enable_hint">When one of the selected apps comes to the foreground, both the lyrics and the collapse handle step aside; leaving the app brings them back in the state you left them. AnyLyric’s own pages always hide the overlay. Requires the accessibility service below.</string>
+    <string name="hide_apps_pick">Apps to hide in</string>
+    <string name="hide_apps_pick_value">%1$s selected</string>
+    <string name="hide_apps_pick_none">None selected</string>
+    <string name="hide_apps_access">Accessibility service</string>
+    <string name="hide_apps_access_off">Not enabled — tap to open system settings</string>
+    <string name="hide_apps_access_on">Enabled</string>
+    <string name="hide_apps_access_stale">Enabled but not connected — tap to reopen system settings</string>
+    <string name="hide_apps_need_accessibility">Also turn on the accessibility service below, or nothing will be hidden.</string>
+    <string name="hide_apps_dialog_title">Hide overlay in</string>
+    <string name="hide_apps_search">Search apps</string>
+    <string name="hide_apps_add_package">Add “%1$s”</string>
+    <string name="hide_apps_close">Done</string>
+    <string name="a11y_service_label">AnyLyric foreground detection</string>
+    <string name="a11y_service_description">Tells AnyLyric which app is in the foreground, so the lyrics overlay can step aside in the apps you choose. It only reads the package name when windows switch — never screen content, never your input.</string>
     <string name="section_probe">Channel probe</string>
 
     <string name="appearance_preset">Preset</string>
@@ -86,6 +105,7 @@
     <string name="perm_open_failed_none">(none)</string>
     <string name="perm_notification_manual">Settings → Notification access → find AnyLyric in the list (alphabetical, near the top) and turn the switch on</string>
     <string name="perm_overlay_manual">Settings → Apps → Special app access → Display over other apps → find AnyLyric and turn the switch on</string>
+    <string name="perm_accessibility_manual">Settings → Accessibility → Downloaded apps → AnyLyric → turn “AnyLyric foreground detection” on</string>
     <string name="perm_copy_detail">Copy details</string>
     <string name="perm_copied">Copied</string>
     <string name="perm_copy_failed">Couldn\'t copy</string>
@@ -210,6 +230,7 @@
     <string name="diag_code_clock_unstable">The player reports a position that repeatedly jumps back a little. Timed lyrics may drift; the cause is on the publishing side.</string>
     <string name="diag_code_overlay_not_attached">The overlay was not attached. Check the overlay permission and try again.</string>
     <string name="diag_code_overlay_not_measured">The overlay is attached but has no size. Likely a layout problem.</string>
-    <string name="diag_code_hidden_by_rule">Hidden on purpose by the visibility rule, for example when navigation is in front.</string>
+    <string name="diag_code_hidden_by_rule">“Hide when no lyrics” is on and there is nothing to show, so the overlay is hidden on purpose.</string>
+    <string name="diag_code_hidden_by_app">Hidden by app: the current foreground app is in your hide list, so the overlay steps aside. Expected behavior; it comes back when you leave that app.</string>
     <string name="diag_code_ok">Working as designed. Lyrics are being taken from %1$s.</string>
 </resources>

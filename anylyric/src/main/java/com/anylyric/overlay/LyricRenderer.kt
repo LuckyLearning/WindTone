@@ -192,6 +192,18 @@ class LyricRenderer(context: Context) : View(context) {
     private var collapsed = false
 
     /**
+     * 「按应用隐藏」造成的临时不绘制（0.2.11）。
+     *
+     * 与 [collapsed] **互相独立**：用户收起是主动态，按应用隐藏是环境态。
+     * 两者叠加时必须各记各的 —— 否则在名单应用里退出后，用户原本收起的状态会被
+     * 一起清掉（表现为「回来一看歌词自己展开了」）。
+     */
+    private var suppressed = false
+
+    /** 真正决定「画不画」的唯一判据。 */
+    private val hidden: Boolean get() = collapsed || suppressed
+
+    /**
      * 收起期间内容是否变过。
      *
      * 没变过 = 展开时字形还是对的，只需重绘（`invalidate`），不用重新测量/折行；
@@ -267,14 +279,40 @@ class LyricRenderer(context: Context) : View(context) {
      */
     fun setCollapsed(value: Boolean) {
         if (collapsed == value) return
+        val wasHidden = hidden
         collapsed = value
-        if (value) {
+        applyHiddenTransition(wasHidden)
+    }
+
+    /**
+     * 按应用隐藏：命中名单时临时不绘制，退出该应用后自动恢复。
+     *
+     * 走和收起同一条路（不拆窗口、只画空一次），所以**显隐都不掉帧**。
+     * 与用户收起互不覆盖：本方法只动 [suppressed]。
+     */
+    fun setSuppressed(value: Boolean) {
+        if (suppressed == value) return
+        val wasHidden = hidden
+        suppressed = value
+        applyHiddenTransition(wasHidden)
+    }
+
+    /**
+     * 「可见 ↔ 不可见」的过渡只做一次。
+     *
+     * 两个状态（收起 / 按应用隐藏）各自动手时，只要合并后的结果没变就什么都不做 ——
+     * 例如用户收起状态下切进名单应用，此时本来就没画，不必再清一次屏。
+     */
+    private fun applyHiddenTransition(wasHidden: Boolean) {
+        val nowHidden = hidden
+        if (nowHidden == wasHidden) return
+        if (nowHidden) {
             stopFade()
             collapsedDirty = false
             // 必须主动 invalidate：不可见状态靠「不画」清 surface，得先触发一次绘制。
             invalidate()
         } else {
-            // 收起期间没换句就直接重绘，省掉一次折行 + requestLayout。
+            // 隐藏期间没换句就直接重绘，省掉一次折行 + requestLayout。
             if (collapsedDirty) rebuild() else invalidate()
             collapsedDirty = false
         }
@@ -285,8 +323,8 @@ class LyricRenderer(context: Context) : View(context) {
      * @param title 标题行（歌名 · 歌手）；null 或空串表示这帧没有标题
      */
     fun setContent(primary: String, secondary: List<String>, title: String?, nextMode: Mode) {
-        if (collapsed) {
-            // 收起时只记内容，不重建、不触发淡入；展开时按 dirty 决定要不要 rebuild。
+        if (hidden) {
+            // 收起 / 按应用隐藏期间只记内容，不重建、不触发淡入；恢复时按 dirty 决定要不要 rebuild。
             val dirty = primary != primaryText ||
                 secondary != secondaryLines ||
                 title != titleText ||
@@ -617,8 +655,8 @@ class LyricRenderer(context: Context) : View(context) {
     }
 
     override fun onDraw(canvas: Canvas) {
-        // 收起态：什么都不画。主动 invalidate 过一次，窗口 surface 已被清成透明。
-        if (collapsed) return
+        // 收起态 / 按应用隐藏：什么都不画。主动 invalidate 过一次，窗口 surface 已被清成透明。
+        if (hidden) return
         val w = width.toFloat()
         val h = height.toFloat()
 

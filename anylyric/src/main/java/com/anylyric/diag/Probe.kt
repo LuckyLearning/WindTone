@@ -140,6 +140,16 @@ object Probe {
 
         sb.appendLine("[CLOCK] jumps=${s.positionJumpCount} timed=${s.timedLyrics} l1OnlyOnPause=${s.l1OnlyOnPause}")
         sb.appendLine("[WINDOW] attached=${s.viewAttached} measured=${s.viewMeasured} hiddenByRule=${s.hiddenByRule}")
+        // 按应用隐藏紧跟窗口：两者合起来回答「窗口为什么什么都没画」。
+        // 名字选对了却不隐藏，通常是 a11yConnected=false（勾了但服务没跑）或 foreground 报的不是那个包。
+        sb.appendLine(
+            "[HIDE] a11yConnected=${s.a11yConnected} enabled=${s.hideByAppEnabled} " +
+                "hiddenApps=${s.hiddenAppCount}"
+        )
+        sb.appendLine(
+            "  foreground=${s.foregroundPkg ?: "unknown"} inList=${s.foregroundHidden} " +
+                "suppressed=${s.overlaySuppressed}"
+        )
         sb.appendLine("[RENDER] $lastRender")
         sb.appendLine("[PROCESS] cachedLogLines=${lines().size} dropped=$dropped")
         sb.appendLine()

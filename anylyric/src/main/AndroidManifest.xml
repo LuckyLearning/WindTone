@@ -8,7 +8,13 @@
       · INTERNET —— **只用于应用内更新**（读公共仓库的 latest.json、下载安装包）。
         歌词仍然不联网、不读本地文件，这是产品一期就定死的边界；
       · REQUEST_INSTALL_PACKAGES —— 下载完新版本后拉起系统安装器。
-      不申请存储、无障碍、蓝牙、读取日志等任何其它权限。
+      不申请存储、蓝牙、读取日志等任何其它权限。
+
+      0.2.11 起多了一个**无障碍服务**（.accessibility.ForegroundAppService），但它不是
+      uses-permission、也不是默认生效的：只有用户主动去系统「辅助功能」里打开后，
+      「按应用隐藏悬浮窗」才会工作；关闭时该服务根本不会被系统绑定。
+      订阅面只有窗口切换事件，canRetrieveWindowContent=false —— 读不到屏幕内容。
+      这是与 WindTone 同款的实现取舍，写在这里是为了不让下一个人误以为它是白捡的。
     -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.INTERNET" />
@@ -43,6 +49,19 @@
         </intent>
         <intent>
             <action android:name="android.settings.SETTINGS" />
+        </intent>
+        <!-- 无障碍设置页：不声明时 resolveActivity() 恒为 null，「去开启」按钮点了没反应。 -->
+        <intent>
+            <action android:name="android.settings.ACCESSIBILITY_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.ACCESSIBILITY_DETAILS_SETTINGS" />
+        </intent>
+        <!-- 应用选择器要枚举「有桌面入口的应用」。Android 11+ 不声明时
+             queryIntentActivities 只返回本应用自己的那一两个，列表会空得像坏了。 -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
         </intent>
         <!-- BYD 第三方媒体控制 SDK：不声明包可见性时 resolveService 恒为 null，
              连「这台车机上有没有这个服务」都判断不出来。 -->
@@ -126,5 +145,24 @@
             android:name=".service.WatchdogJobService"
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <!--
+          前台应用检测（0.2.11，「按应用隐藏悬浮窗」）：只在用户主动去系统
+          「辅助功能」里开启后才工作。订阅面见 res/xml/foreground_app_service.xml，
+          只收窗口切换事件、canRetrieveWindowContent=false（读不到屏幕内容）。
+          BIND_ACCESSIBILITY_SERVICE 是系统绑定所必需，写错会绑不上。
+        -->
+        <service
+            android:name=".accessibility.ForegroundAppService"
+            android:exported="true"
+            android:label="@string/a11y_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/foreground_app_service" />
+        </service>
     </application>
 </manifest>

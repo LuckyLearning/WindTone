@@ -31,6 +31,45 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_HIDE_NO_LYRICS, false)
         set(value) = sp.edit().putBoolean(KEY_HIDE_NO_LYRICS, value).apply()
 
+    /**
+     * 「按应用隐藏」总开关。默认关闭 —— 关闭时无障碍事件一次早退，连包名都不解析。
+     *
+     * 单独一个开关而不是「名单非空即生效」：用户可能想临时停用（排查时、换车机时），
+     * 又不想把辛苦勾好的名单清空。
+     */
+    var hideByAppEnabled: Boolean
+        get() = sp.getBoolean(KEY_HIDE_BY_APP, false)
+        set(value) = sp.edit().putBoolean(KEY_HIDE_BY_APP, value).apply()
+
+    /**
+     * 命中即隐藏悬浮窗的应用包名。
+     *
+     * 缓存理由：每次前台切换都要读一次（无障碍事件驱动，低频但不该白读），
+     * 而 `getStringSet` 每次返回的集合必须复制后才能安全使用 —— 缓存住副本，
+     * 读路径就完全无分配。任何写入都同步刷新缓存。
+     */
+    var hiddenApps: Set<String>
+        get() = hiddenAppsCache ?: synchronized(hiddenAppsLock) {
+            hiddenAppsCache ?: run {
+                val stored = sp.getStringSet(KEY_HIDDEN_APPS, null)
+                val copy = if (stored.isNullOrEmpty()) emptySet() else LinkedHashSet(stored)
+                hiddenAppsCache = copy
+                copy
+            }
+        }
+        set(value) = synchronized(hiddenAppsLock) {
+            val copy = LinkedHashSet(value)
+            hiddenAppsCache = copy
+            sp.edit().putStringSet(KEY_HIDDEN_APPS, copy).apply()
+        }
+
+    private var hiddenAppsCache: Set<String>? = null
+    private val hiddenAppsLock = Any()
+
+    /** 名单是否真的要参与判定（开关开着且至少勾了一个应用）。 */
+    val hideByAppActive: Boolean
+        get() = hideByAppEnabled && hiddenApps.isNotEmpty()
+
     /** 悬浮层输出到哪块屏幕。默认主屏。 */
     var displayId: Int
         get() = sp.getInt(KEY_DISPLAY_ID, DEFAULT_DISPLAY_ID)
@@ -187,6 +226,8 @@ class Prefs(context: Context) {
         private const val NAME = "anylyric"
         private const val KEY_DEBUG = "debug_enabled"
         private const val KEY_HIDE_NO_LYRICS = "hide_when_no_lyrics"
+        private const val KEY_HIDE_BY_APP = "hide_by_app_enabled"
+        private const val KEY_HIDDEN_APPS = "hidden_apps"
         private const val KEY_DISPLAY_ID = "display_id"
 
         private const val KEY_PRESET = "style_preset"

@@ -4,7 +4,11 @@ import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.hardware.display.DisplayManager
 import android.net.Uri
@@ -14,15 +18,28 @@ import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.Settings
+import android.text.Editable
+import android.text.InputType
+import android.text.TextUtils
+import android.text.TextWatcher
+import android.util.LruCache
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
+import android.widget.BaseAdapter
+import android.widget.CheckBox
+import android.widget.EditText
 import android.widget.HorizontalScrollView
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ListView
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
 import com.anylyric.R
+import com.anylyric.accessibility.ForegroundAppService
+import com.anylyric.accessibility.ForegroundApps
 import com.anylyric.data.ListenerState
 import com.anylyric.data.Prefs
 import com.anylyric.diag.Probe
@@ -121,6 +138,8 @@ class SettingsActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
+        // 用户可能刚从系统设置开了无障碍回来：缓存必须失效，否则要等一会儿才变色。
+        a11yGrantedCheckedAt = 0L
         refresh()
         if (hub.listenerState() != ListenerState.GRANTED && hub.tryRebind()) {
             startPolling(POLL_FIRST_DELAY_MS)
@@ -168,6 +187,7 @@ class SettingsActivity : BaseActivity() {
         val title = buildTitleCard()
         val behavior = buildBehaviorCard()
         val keepAlive = buildKeepAliveCard()
+        val hideApps = buildHideAppsCard()
         val diag = buildDiagCard()
         val update = buildUpdateCard()
 
@@ -176,7 +196,7 @@ class SettingsActivity : BaseActivity() {
             val left = column()
             listOf(status, window, look, colors).forEach { left.addView(it) }
             val right = column()
-            listOf(title, behavior, keepAlive, diag, update).forEach { right.addView(it) }
+            listOf(title, behavior, keepAlive, hideApps, diag, update).forEach { right.addView(it) }
             root.addView(
                 LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
@@ -189,9 +209,8 @@ class SettingsActivity : BaseActivity() {
                 }
             )
         } else {
-            listOf(status, window, look, colors, title, behavior, keepAlive, diag, update).forEach {
-                root.addView(it)
-            }
+            listOf(status, window, look, colors, title, behavior, keepAlive, hideApps, diag, update)
+                .forEach { root.addView(it) }
         }
 
         root.addView(
@@ -666,6 +685,404 @@ class SettingsActivity : BaseActivity() {
         )
 
         return cardSection(getString(R.string.section_autostart), null, rows)
+    }
+
+    // ---------------------------------------------------------------- 按应用隐藏
+
+    /**
+     * 按应用隐藏（0.2.11）。
+     *
+     * 三行：总开关 → 选择应用 → 无障碍服务状态。
+     * 开关关掉时后两行整组 GONE —— 它们此刻完全无效，显示出来只会让人以为「设了没用」
+     * （与「标题」「描边」两张卡的联动显隐同一套约定）。
+     */
+    private fun buildHideAppsCard(): View {
+        val rows = ArrayList<View>(4)
+
+        rows += switchRow(
+            label = getString(R.string.hide_apps_enable),
+            hintText = getString(R.string.hide_apps_enable_hint),
+            current = { prefs.hideByAppEnabled },
+            onChange = { checked ->
+                prefs.hideByAppEnabled = checked
+                hub.refreshHideByApp()
+                // 只提醒、不自动跳转：用户可能想先把名单勾好再一起去开权限。
+                // 但必须说清楚，否则表现就是「勾了、也开了，却完全不生效」。
+                if (checked && !accessibilityGranted()) {
+                    toast(getString(R.string.hide_apps_need_accessibility))
+                }
+            }
+        )
+
+        val detail = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+        detail.addView(divider())
+        detail.addView(
+            clickableValueRow(
+                label = getString(R.string.hide_apps_pick),
+                value = {
+                    val count = prefs.hiddenApps.size
+                    if (count == 0) getString(R.string.hide_apps_pick_none)
+                    else getString(R.string.hide_apps_pick_value, count.toString())
+                },
+                onClick = { showHideAppsDialog() }
+            )
+        )
+        detail.addView(divider())
+        detail.addView(
+            clickableValueRow(
+                label = getString(R.string.hide_apps_access),
+                value = {
+                    when {
+                        !accessibilityGranted() -> getString(R.string.hide_apps_access_off)
+                        !ForegroundApps.serviceConnected -> getString(R.string.hide_apps_access_stale)
+                        else -> getString(R.string.hide_apps_access_on)
+                    }
+                },
+                onClick = { openAccessibilitySettings() }
+            )
+        )
+        rows += detail
+
+        uiRefreshers += {
+            val visible = prefs.hideByAppEnabled
+            detail.visibility = if (visible) View.VISIBLE else View.GONE
+        }
+
+        return cardSection(getString(R.string.section_hide_apps), null, rows)
+    }
+
+    /**
+     * 「标签 …… 值」的可点行：整行都是触摸目标，值随状态刷新。
+     *
+     * 值用 secondary 色、标签用主色 —— 车机上扫一眼就能分出「这是什么」与「现在怎样」。
+     */
+    private fun clickableValueRow(
+        label: String,
+        value: () -> String,
+        onClick: () -> Unit
+    ): View {
+        // 值占剩余宽度并允许两行：权限那一行的文案很长（「未开启 —— 点击去系统设置开启」），
+        // 双栏下车机卡片只有 300dp 左右，挤成一行会把左边的标签压没。
+        val valueView = text(value(), 12.5f, secondary = true).apply {
+            maxLines = 2
+            gravity = Gravity.END
+        }
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = dp(48)
+            isClickable = true
+            isFocusable = true
+            // 带 weight 的行必须显式 MATCH_PARENT：父容器若按 wrap_content 首测，
+            // 部分 ROM 会把权重子项算成 0 宽，整行直接空白（项目里踩过这个坑）。
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            // 触摸反馈：没有它，车机上按下去完全没反应，用户会以为点了没生效
+            setOnClickListener {
+                onClick()
+                refresh()
+            }
+            addView(text(label, 14f))
+            addView(
+                valueView,
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            )
+        }
+        uiRefreshers += { valueView.text = value() }
+        return container
+    }
+
+    /**
+     * 无障碍服务是否已在系统设置里被勾选（只说明「勾过」，不代表此刻连着）。
+     *
+     * 带 1.5 秒缓存：状态卡每秒刷一次，而读 `Settings.Secure` 是一次 Binder 调用 ——
+     * 每个刷新周期都去问系统，纯属白花。只在这个开关上引用了这个判定，缓存是安全的：
+     * 用户从系统设置回来会走 `onResume`，那里强制失效。
+     */
+    private fun accessibilityGranted(): Boolean {
+        val now = SystemClock.elapsedRealtime()
+        if (a11yGrantedCheckedAt != 0L && now - a11yGrantedCheckedAt < A11Y_GRANTED_CACHE_MS) {
+            return a11yGrantedCache
+        }
+        a11yGrantedCache = readAccessibilityGranted()
+        a11yGrantedCheckedAt = now
+        return a11yGrantedCache
+    }
+
+    private fun readAccessibilityGranted(): Boolean = try {
+        val className = ForegroundAppService::class.java.name
+        val enabled = Settings.Secure.getString(
+            contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        )
+        enabled?.split(':')?.any { it.contains(packageName) && it.contains(className) } == true
+    } catch (_: Throwable) {
+        false
+    }
+
+    private var a11yGrantedCache = false
+    private var a11yGrantedCheckedAt = 0L
+
+    /**
+     * 打开系统的无障碍页面。
+     *
+     * 走通用的 [openSystemSettings]：**列表页排第一**，详情页不排进来 ——
+     * 2026-11-12 真机教训（见该文件「打开系统设置」段）：`ACTION_ACCESSIBILITY_DETAILS_SETTINGS`
+     * 这类 DETAIL 页在部分 ROM 上「有页面、startActivity 不抛异常，但什么都没打开」，
+     * 失败得极其安静，一旦排第一就再也走不到能用的兜底。
+     */
+    private fun openAccessibilitySettings() {
+        openSystemSettings(
+            candidates = listOf(
+                "无障碍列表" to Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS),
+                "应用详情页" to appDetailsIntent(),
+                "设置首页" to Intent(Settings.ACTION_SETTINGS)
+            ),
+            manualHint = getString(R.string.perm_accessibility_manual)
+        )
+    }
+
+    // ---------------------------------------------------------------- 应用选择对话框
+
+    /** 应用列表条目。label 只用于显示，pkg 才是身份。 */
+    private data class AppEntry(val pkg: String, val label: String)
+
+    /**
+     * 「在哪些应用里隐藏」选择器。
+     *
+     * 三条真机经验（来自 WindTone 同名对话框）：
+     *  1. **名单里已有、但不是可启动应用**的包必须列出来 —— 车机上有些「影像 / 桌面挂件」
+     *     不注册 LAUNCHER 入口，从列表里根本点不到；不显示就永远取消不掉。
+     *  2. **允许直接粘包名**：列表里找不到时，输入完整包名即可添加（排障时最省事）。
+     *  3. 勾选**即时生效**，不设「保存」：用户在桌面与设置之间来回切着试，
+     *     多点一次确认只会让人以为没生效。
+     *
+     * 列表在后台线程枚举：车机装几百个应用时，`queryIntentActivities` 放主线程会卡住输入。
+     */
+    private fun showHideAppsDialog() {
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(4), dp(16), 0)
+        }
+
+        val search = EditText(this).apply {
+            hint = getString(R.string.hide_apps_search)
+            textSize = 14f
+            setSingleLine()
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        root.addView(
+            search,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        val list = ListView(this).apply {
+            divider = null
+            dividerHeight = 0
+        }
+        // 高度取屏高一半（封顶 420dp）：车机横屏本来就不高，给太多会把标题和搜索框顶掉。
+        val listHeight = (resources.displayMetrics.heightPixels * 0.5f).toInt()
+            .coerceAtMost(dp(420))
+        root.addView(
+            list,
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, listHeight)
+        )
+
+        val adapter = HideAppsAdapter()
+        list.adapter = adapter
+
+        var all: List<AppEntry> = emptyList()
+
+        fun refilter() {
+            val query = search.text?.toString()?.trim().orEmpty()
+            val filtered = if (query.isEmpty()) {
+                all
+            } else {
+                all.filter {
+                    it.label.contains(query, ignoreCase = true) ||
+                        it.pkg.contains(query, ignoreCase = true)
+                }
+            }
+            adapter.submit(filtered, manualPackageCandidate(query, all))
+        }
+
+        search.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) = refilter()
+        })
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.hide_apps_dialog_title))
+            .setView(root)
+            .setPositiveButton(getString(R.string.hide_apps_close), null)
+            // 关掉对话框后刷新卡片上的「已选 N 个」：勾选是即时生效的，汇总要跟上。
+            // 界面已经销毁时不再碰 View（例如用户点了通知栏的返回、Activity 先走了）。
+            .setOnDismissListener { if (!isFinishing && !isDestroyed) refresh() }
+            .show()
+
+        loadLaunchableApps { entries ->
+            if (isFinishing) return@loadLaunchableApps
+            all = entries
+            refilter()
+        }
+    }
+
+    /** 后台枚举可启动应用，并补上「名单里已有但不可启动」的包。 */
+    private fun loadLaunchableApps(onLoaded: (List<AppEntry>) -> Unit) {
+        val appContext = applicationContext
+        Thread({
+            val pm = appContext.packageManager
+            val main = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            val launchable = runCatching {
+                pm.queryIntentActivities(main, 0)
+                    .asSequence()
+                    .mapNotNull { it.activityInfo?.applicationInfo }
+                    .distinctBy { it.packageName }
+                    // 自己不进列表：AnyLyric 的页面始终隐藏悬浮窗，不需要也不该让用户勾自己。
+                    .filter { it.packageName != appContext.packageName }
+                    .map { info ->
+                        val label = runCatching { pm.getApplicationLabel(info).toString() }
+                            .getOrDefault(info.packageName)
+                        AppEntry(info.packageName, label)
+                    }
+                    .sortedBy { it.label.lowercase(Locale.getDefault()) }
+                    .toList()
+            }.getOrDefault(emptyList())
+
+            val known = launchable.mapTo(HashSet()) { it.pkg }
+            val extra = prefs.hiddenApps.asSequence()
+                .filter { it !in known }
+                .map { pkg ->
+                    val label = runCatching {
+                        pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+                    }.getOrDefault(pkg)
+                    AppEntry(pkg, label)
+                }
+                .sortedBy { it.label }
+                .toList()
+
+            val merged = launchable + extra
+            runOnUiThread { onLoaded(merged) }
+        }, "anylyric-hide-apps").apply { isDaemon = true }.start()
+    }
+
+    /** 搜索串看起来像包名、且列表里没有 → 允许直接添加。 */
+    private fun manualPackageCandidate(query: String, all: List<AppEntry>): String? {
+        if (query.length < 5 || query.count { it == '.' } < 2) return null
+        if (query.any { it.isWhitespace() }) return null
+        if (!query.all { it.isLetterOrDigit() || it == '.' || it == '_' }) return null
+        return if (all.any { it.pkg.equals(query, ignoreCase = true) }) null else query
+    }
+
+    private fun toggleHiddenApp(pkg: String) {
+        val current = prefs.hiddenApps
+        prefs.hiddenApps = if (pkg in current) current - pkg else current + pkg
+        hub.refreshHideByApp()
+    }
+
+    /**
+     * 应用列表适配器。
+     *
+     * 图标走 [LruCache]：一次滚动最多同时看到七八行，缓存 48 个足够来回翻，
+     * 又不会像「全量缓存几百个图标」那样在车机的小内存里常驻十几 MB。
+     */
+    private inner class HideAppsAdapter : BaseAdapter() {
+        private var items: List<AppEntry> = emptyList()
+        private var manualPkg: String? = null
+        private val iconCache = LruCache<String, Drawable>(ICON_CACHE_SIZE)
+
+        fun submit(list: List<AppEntry>, manual: String?) {
+            items = list
+            manualPkg = manual
+            notifyDataSetChanged()
+        }
+
+        /** 手动包名那条占第 0 位，其余整体后移一位。 */
+        private fun offset(): Int = if (manualPkg != null) 1 else 0
+
+        override fun getCount(): Int = items.size + offset()
+
+        override fun getItem(position: Int): Any? = items.getOrNull(position - offset())
+
+        override fun getItemId(position: Int): Long = position.toLong()
+
+        override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
+            val row = (convertView as? LinearLayout) ?: buildRow()
+            val icon = row.getChildAt(0) as ImageView
+            val label = row.getChildAt(1) as TextView
+            val check = row.getChildAt(2) as CheckBox
+
+            val manual = manualPkg
+            if (manual != null && position == 0) {
+                icon.setImageDrawable(null)
+                label.text = getString(R.string.hide_apps_add_package, manual)
+                check.isChecked = manual in prefs.hiddenApps
+                row.setOnClickListener {
+                    toggleHiddenApp(manual)
+                    notifyDataSetChanged()
+                }
+                return row
+            }
+
+            val item = items.getOrNull(position - offset()) ?: return row
+            label.text = item.label
+            check.isChecked = item.pkg in prefs.hiddenApps
+            icon.setImageDrawable(iconFor(item.pkg))
+            row.setOnClickListener {
+                toggleHiddenApp(item.pkg)
+                notifyDataSetChanged()
+            }
+            return row
+        }
+
+        private fun buildRow(): LinearLayout = LinearLayout(this@SettingsActivity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = dp(52)
+            setPadding(dp(2), dp(2), dp(2), dp(2))
+            addView(
+                ImageView(this@SettingsActivity),
+                LinearLayout.LayoutParams(dp(32), dp(32))
+            )
+            addView(
+                TextView(this@SettingsActivity).apply {
+                    textSize = 15f
+                    maxLines = 1
+                    ellipsize = TextUtils.TruncateAt.END
+                    setPadding(dp(12), 0, dp(8), 0)
+                },
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            )
+            addView(CheckBox(this@SettingsActivity).apply {
+                // 整行可点：勾选框自己不再接管点击，否则会出现「点字没反应、点框才有」。
+                isClickable = false
+                isFocusable = false
+            })
+        }
+
+        /** 图标按 32dp 重新画一张：直接用原始图标（常见 192px）会在列表里白占几 MB。 */
+        private fun iconFor(pkg: String): Drawable? {
+            iconCache.get(pkg)?.let { return it }
+            val size = dp(32)
+            val source = runCatching { packageManager.getApplicationIcon(pkg) }.getOrNull()
+                ?: return null
+            val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            source.setBounds(0, 0, size, size)
+            source.draw(Canvas(bitmap))
+            return BitmapDrawable(resources, bitmap).also { iconCache.put(pkg, it) }
+        }
     }
 
     /** 本应用是否已在电池优化白名单里。ROM 裁掉该服务时按「不在」处理。 */
@@ -1496,6 +1913,8 @@ class SettingsActivity : BaseActivity() {
         }
         val next = !hub.overlay().isEditable()
         hub.overlay().setEditable(next)
+        // 设置页本身会让悬浮窗让位；进编辑态必须立刻把窗口放回来，否则用户拖的是空气。
+        hub.refreshHideState()
         toast(getString(if (next) R.string.edit_entered else R.string.edit_exited))
         refresh()
     }
@@ -1619,6 +2038,12 @@ class SettingsActivity : BaseActivity() {
         private val PRESET_ORDER = listOf(
             Preset.STRIPE, Preset.GLASS, Preset.SOLID, Preset.NAVI
         )
+
+        /** 应用列表图标缓存条数：够来回滚，又不会在车机小内存里常驻十几 MB。 */
+        private const val ICON_CACHE_SIZE = 48
+
+        /** 无障碍授权状态的缓存窗口。状态卡每秒刷一次，Binder 调用不该跟着每秒走。 */
+        private const val A11Y_GRANTED_CACHE_MS = 1_500L
         private val ALIGN_ORDER = listOf(Align.START, Align.CENTER, Align.END)
 
         /** 从「自适应」起步时的基准比例：宽 60% / 高 14%，都是车机上常见的合理值。 */

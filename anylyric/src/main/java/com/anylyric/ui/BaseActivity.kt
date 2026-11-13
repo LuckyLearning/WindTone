@@ -9,6 +9,7 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import com.anylyric.session.SessionHub
 
 /**
  * 两个界面的共用排版工具。
@@ -22,6 +23,25 @@ import android.widget.Toast
  * 「同一个控件在两处长得不一样」。
  */
 abstract class BaseActivity : Activity() {
+
+    /**
+     * 本应用界面在屏期间，让悬浮窗让位（0.2.11「按应用隐藏」的零权限那一半）。
+     *
+     * 为什么放在基类、用 onStart/onStop 而不是 onResume/onPause：
+     *  · 基类一处写清，将来新加页面不会漏；
+     *  · onStart/onStop 覆盖「被系统对话框盖住但界面还在」的情况 ——
+     *    用户点开权限页再回来时，悬浮窗不该在中间那一下冒出来；
+     *  · 用计数而不是布尔，避免「设置 → 诊断」两页交接时闪一下。
+     */
+    override fun onStart() {
+        super.onStart()
+        SessionHub.get(this).setOwnUiVisible(true)
+    }
+
+    override fun onStop() {
+        SessionHub.get(this).setOwnUiVisible(false)
+        super.onStop()
+    }
 
     protected val isNight: Boolean
         get() = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==

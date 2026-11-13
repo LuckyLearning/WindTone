@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  前台应用检测的订阅面（「按应用隐藏悬浮窗」用）。
+
+  只订阅一件事：typeWindowStateChanged（窗口状态变化，即「切到了哪个应用」）。
+  · 不订阅内容变化（typeWindowContentChanged）、不订阅滚动/点击/文本；
+  · canRetrieveWindowContent=false —— 本服务**拿不到屏幕上的任何内容**，
+    只从事件里读一个 packageName。这是权限最小化的硬约束，改动前请先想清楚。
+  · notificationTimeout=100：系统合并同类事件的窗口，防止快速切换时刷爆回调。
+
+  isAccessibilityTool（API 31+）：本服务确实是为「不遮挡用户要看的内容」服务的辅助能力。
+  声明为 true 后，Android 13+ 不会把它当成可疑服务反复提示或自动关闭。
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:canRetrieveWindowContent="false"
+    android:description="@string/a11y_service_description"
+    android:isAccessibilityTool="true"
+    android:notificationTimeout="100" />

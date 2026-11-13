@@ -27,6 +27,23 @@ data class ProbeSnapshot(
     val viewAttached: Boolean = false,
     val viewMeasured: Boolean = false,
     val hiddenByRule: Boolean = false,
+
+    /**
+     * 按应用隐藏（0.2.11）。
+     *
+     * 这四个字段合起来能回答真机上最常见的那句「怎么不显示了」：
+     *  · [foregroundPkg] —— 事件到底有没有来、来的是哪个包；
+     *  · [foregroundHidden] —— 它是否命中名单（名字选对了没有）；
+     *  · [overlaySuppressed] —— 悬浮窗此刻是不是正在让位；
+     *  · [a11yConnected] —— 无障碍服务是否真的连着（勾了不等于在跑）。
+     */
+    val a11yConnected: Boolean = false,
+    val hideByAppEnabled: Boolean = false,
+    val hiddenAppCount: Int = 0,
+    val foregroundPkg: String? = null,
+    val foregroundHidden: Boolean = false,
+    val overlaySuppressed: Boolean = false,
+
     val displayCount: Int = 1,
     val fontScale: Float = 1f
 )
@@ -43,6 +60,9 @@ enum class DiagCode {
     OVERLAY_NOT_ATTACHED,
     OVERLAY_NOT_MEASURED,
     HIDDEN_BY_RULE,
+
+    /** 按应用隐藏生效中：这是用户自己设的，不是故障。 */
+    HIDDEN_BY_APP,
     OK
 }
 
@@ -86,6 +106,15 @@ object DiagRules {
         // 与 progress 无关，报 CLOCK_UNSTABLE 是误伤（真机第一版即如此）。
         s.positionJumpCount > 2 && s.timedLyrics ->
             Diagnosis(DiagCode.CLOCK_UNSTABLE, "jumps=${s.positionJumpCount}, timed=true")
+
+        // 按应用隐藏：窗口还在（viewAttached 仍为 true），只是按用户设置不画。
+        // 排在「窗口没挂上」之前 —— 这一条能解释「什么都没显示」，正是用户想问的。
+        s.overlaySuppressed ->
+            Diagnosis(
+                DiagCode.HIDDEN_BY_APP,
+                "suppressed=true, foreground=${s.foregroundPkg ?: "unknown"}, " +
+                    "inList=${s.foregroundHidden}"
+            )
 
         !s.viewAttached ->
             Diagnosis(DiagCode.OVERLAY_NOT_ATTACHED, "viewAttached=false")

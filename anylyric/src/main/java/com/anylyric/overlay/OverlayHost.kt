@@ -56,6 +56,13 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
     /** 收起态：歌词窗被移除，只留左侧把手。 */
     private var collapsed = false
 
+    /**
+     * 按应用隐藏的临时态（0.2.11）：命中名单时歌词与把手一起不显示。
+     *
+     * 与 [collapsed] 独立：用户收起是主动态，这里跟着前台应用走。恢复时只清本字段。
+     */
+    private var suppressed = false
+
     /** 歌词窗最后一次的窗口矩形（收起后把手靠它留在原位）。 */
     private val lastRect = Rect()
 
@@ -159,8 +166,10 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         lastTitle = title
         lastMode = mode
 
-        // 收起态保留窗口但不绘制：内容照记到 View（不重建），展开时直接重画。
-        if (collapsed) {
+        // 收起态 / 按应用隐藏：窗口与 View 都保留，只让渲染器不画。
+        // 内容照记到 View（不重建），恢复时直接重画 —— 隐藏期间不能把窗口又建出来，
+        // 否则在名单应用里会闪一下歌词。
+        if (collapsed || suppressed) {
             view?.setContent(primary, secondary, title, mode)
             return
         }
@@ -248,6 +257,9 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         hide()
         handler.removeCallbacksAndMessages(null)
         hiddenUntil = 0L
+        // 按应用隐藏是环境态：服务销毁后必须复位，否则下次起来若恰好没有前台事件
+        // （服务启动瞬间就停在名单应用里），悬浮窗会一直不显示。
+        suppressed = false
     }
 
     private fun removeLyric() {
@@ -271,6 +283,8 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
      */
     fun setCollapsed(value: Boolean) {
         if (collapsed == value) return
+        // 按应用隐藏期间没有把手可点，也不该被上层顺手收起 —— 恢复后状态会错乱。
+        if (value && suppressed) return
 
         if (value) {
             // 没有把手就没法展开：此时拒绝收起，否则窗口会变成不可恢复。
@@ -321,6 +335,53 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         view?.setCollapsed(false)
     }
 
+    // ---------------------------------------------------------------- 按应用隐藏
+
+    /**
+     * 「当前前台应用在隐藏名单里」：临时不画，**连左侧把手一起撤掉**（0.2.11）。
+     *
+     * 为什么连把手也撤：用户勾选这些应用就是为了「屏幕上什么都别挡」——
+     * 视频、360 影像、导航这些界面上，一颗 24dp 的把手也照样压着画面。
+     *
+     * 三条实现约定：
+     *  1. **不拆窗口**：只让渲染器停止绘制（复用收起那套「画空一次」），显隐都不掉帧；
+     *  2. **不动用户收起态**：本方法只管 [suppressed]，恢复后用户原来收着的还收着；
+     *  3. **不落盘**：这是环境态，进程重启后由前台事件重新判定。
+     */
+    fun setSuppressed(value: Boolean) {
+        if (suppressed == value) return
+        suppressed = value
+
+        if (value) {
+            // 记下最后一帧位置：恢复时把手要摆回原处，不能因为隐藏期间没窗口就跑到默认位。
+            val current = view
+            val lp = params
+            if (current != null && lp != null) {
+                lastRect.set(lp.x, lp.y, lp.x + current.width, lp.y + current.height)
+            }
+            menuOpen = false
+            // 编辑态必须**真正**退出（走 setEditable，而不是只改字段）：
+            // 那扇窗口此刻仍挂在屏幕上，只清 editable 不摘触摸监听的话，
+            // 被遮挡的应用上会有一块区域继续吃掉点击 —— 用户看到的是「点了没反应」。
+            // 代价是这一次会拆窗重建，但「编辑态下切进名单应用」本身就是边缘场景。
+            if (editable) setEditable(false)
+            view?.setSuppressed(true)
+            removeHandle()
+            return
+        }
+
+        view?.setSuppressed(false)
+        if (view == null) {
+            // 隐藏期间窗口被移除了（例如「隐藏 10 分钟」到期前就销毁了服务）：
+            // 让上层重推一次，由 show 决定是否重建窗口。
+            onRequestRender?.invoke()
+        }
+        // 收起态由 setCollapsed 自己维护，这里只负责把把手补回来（收起态也照样要把手）。
+        syncHandle()
+    }
+
+    fun isSuppressed(): Boolean = suppressed
+
     /** 与设置项的开关同步：关掉时把手立刻消失，开着且有窗口时补上。 */
     fun syncHandle() {
         if (!prefs.handleEnabled) {
@@ -331,6 +392,11 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
                 view?.setCollapsed(false)
                 onRequestRender?.invoke()
             }
+            return
+        }
+        // 按应用隐藏期间一颗把手都不留：用户勾这些应用就是为了「什么都别挡」。
+        if (suppressed) {
+            removeHandle()
             return
         }
         if (view == null && !collapsed) {
@@ -349,7 +415,7 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
 
     private fun ensureHandle(): CollapseHandle? {
         handle?.let { return it }
-        if (!prefs.handleEnabled || editable) return null
+        if (!prefs.handleEnabled || editable || suppressed) return null
         refreshWindowManager()
         val h = CollapseHandle(context).apply {
             collapsed = this@OverlayHost.collapsed

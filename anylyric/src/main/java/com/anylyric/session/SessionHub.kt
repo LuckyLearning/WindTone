@@ -15,6 +15,8 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.service.notification.StatusBarNotification
 import com.anylyric.R
+import com.anylyric.accessibility.ForegroundApps
+import com.anylyric.accessibility.overlayHiddenFor
 import com.anylyric.data.ListenerState
 import com.anylyric.data.Permissions
 import com.anylyric.data.Prefs
@@ -75,6 +77,17 @@ class SessionHub private constructor(context: Context) {
         listOf(L0MetadataSource(), ExtrasSource(), titleStream, L2NotificationSource())
     )
     private val overlay = OverlayHost(appContext, prefs)
+
+    /**
+     * 本应用自己的界面当前有几个在屏上（≥1 即让悬浮窗让位）。
+     *
+     * 用计数而不是布尔：设置页 → 诊断页这种「先 onStart 新的、后 onStop 旧的」顺序下，
+     * 布尔会先置 true 再被旧的 onStop 置 false，悬浮窗就在两页之间闪一下。
+     */
+    private var ownUiCount = 0
+
+    /** 前台应用变化：只重算一次隐藏态，不做任何其它事。 */
+    private val foregroundListener: (String?) -> Unit = { applyHideState() }
 
     /** packageName -> 通知文本字段。只在内存，不落盘。 */
     private val notificationTexts = HashMap<String, Map<String, String>>()
@@ -632,6 +645,10 @@ class SessionHub private constructor(context: Context) {
         else QUERY_FOREIGN_ACTIVE_MS
 
     fun attach() {
+        // 前台包名可能在本服务起来之前就已经报过了（无障碍服务先被系统拉起），
+        // 所以注册完立刻按当前值重算一次，别等下一次应用切换。
+        ForegroundApps.addListener(foregroundListener)
+        applyHideState()
         requestRefresh("attach")
     }
 
@@ -656,6 +673,68 @@ class SessionHub private constructor(context: Context) {
         // 服务销毁用 release 而不是 hide：连 OverlayHost 自己的回调（隐藏到期等）
         // 一起摘掉，否则残留的 hiddenUntil 会把下一次会话的歌词卡在「隐藏期内」。
         overlay.release()
+        // 监听也要摘：否则服务重启前残留的前台事件仍会来改（已不存在的）窗口状态。
+        ForegroundApps.removeListener(foregroundListener)
+    }
+
+    // ---------------------------------------------------------------- 按应用隐藏
+
+    /**
+     * 本应用界面进出屏（由 [com.anylyric.ui.BaseActivity] 的 onStart/onStop 驱动）。
+     *
+     * 这一条**不需要任何权限**：自己的设置页、诊断页本来就该让出屏幕 ——
+     * 悬浮窗压在上面时，滑块和开关根本点不到。
+     */
+    fun setOwnUiVisible(visible: Boolean) {
+        ownUiCount = if (visible) ownUiCount + 1 else (ownUiCount - 1).coerceAtLeast(0)
+        applyHideState()
+    }
+
+    /**
+     * 隐藏名单或开关变了：立刻重算，不用等下一次前台切换。
+     *
+     * 关掉开关时顺手清掉残留包名 —— 否则下次打开会先按旧包名藏一下。
+     */
+    fun refreshHideByApp() {
+        if (!prefs.hideByAppEnabled) ForegroundApps.reset()
+        applyHideState()
+    }
+
+    /**
+     * 两个来源取「或」：本应用界面可见，或当前前台命中名单。
+     *
+     * 合成一个布尔再交给 [OverlayHost.setSuppressed]，是为了让窗口层只有一个
+     * 「临时隐藏」状态 —— 两个来源各自撤销时不会互相把对方的状态覆盖掉。
+     */
+    private fun applyHideState() {
+        // 编辑态例外：用户正在设置页里拖位置、调大小，这时把窗口藏起来等于让人对着空气操作。
+        // 名单命中仍然优先（[byApp] 不看编辑态）—— 用户既然勾了「这些应用里别挡」，
+        // 编辑态也不该成为例外。
+        val byOwnUi = ownUiCount > 0 && !overlay.isEditable()
+        val byApp = prefs.hideByAppActive &&
+            overlayHiddenFor(ForegroundApps.currentPkg, prefs.hiddenApps)
+        val hide = byOwnUi || byApp
+        // 两个来源叠加时结果常常不变（例如已在名单应用里，又点开了自己的设置页）：
+        // 结果没变就什么都不做，连一次窗口 API 调用都不发。
+        if (overlay.isSuppressed() == hide) return
+        overlay.setSuppressed(hide)
+        // 真机上「该隐藏却没隐藏」时，这条日志能直接回答「事件有没有来、命中的是谁」。
+        // 先判开关再拼串：Probe.write 内部虽然也会早退，但那是在参数已经拼好之后。
+        if (Probe.enabled) {
+            Probe.write(
+                "隐藏",
+                if (hide) {
+                    "悬浮窗让位（自身界面=$byOwnUi 名单命中=$byApp 前台=${ForegroundApps.currentPkg}）"
+                } else {
+                    "悬浮窗恢复（前台=${ForegroundApps.currentPkg ?: "-"}）"
+                }
+            )
+        }
+    }
+
+    /** 编辑态进出后重算一次：进入编辑要显示窗口，退出编辑要恢复原判定。 */
+    fun refreshHideState() {
+        applyHideState()
     }
 
     /** 样式变更（字号／预设／透明度／行数…）立即生效，不重建窗口。 */
@@ -1441,7 +1520,16 @@ class SessionHub private constructor(context: Context) {
             timedLyrics = currentLinesTimed,
             viewAttached = overlay.isAttached(),
             viewMeasured = overlay.isMeasured(),
-            hiddenByRule = false,
+            // 这条以前写死 false（等于报告里永远说「没按规则隐藏」）。按真实语义填：
+            // 用户开了「无歌词时隐藏」且当前确实没有歌词行 → 窗口是被这条规则收掉的。
+            hiddenByRule = prefs.hideWhenNoLyrics && currentLines.isEmpty(),
+            a11yConnected = ForegroundApps.serviceConnected,
+            hideByAppEnabled = prefs.hideByAppEnabled,
+            hiddenAppCount = prefs.hiddenApps.size,
+            foregroundPkg = ForegroundApps.currentPkg,
+            foregroundHidden = prefs.hideByAppActive &&
+                overlayHiddenFor(ForegroundApps.currentPkg, prefs.hiddenApps),
+            overlaySuppressed = overlay.isSuppressed(),
             displayCount = displayCount(),
             fontScale = appContext.resources.configuration.fontScale
         )
