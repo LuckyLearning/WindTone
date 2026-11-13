@@ -44,6 +44,12 @@
         <intent>
             <action android:name="android.settings.SETTINGS" />
         </intent>
+        <!-- BYD 第三方媒体控制 SDK：不声明包可见性时 resolveService 恒为 null，
+             连「这台车机上有没有这个服务」都判断不出来。 -->
+        <package android:name="com.byd.mediacontroller" />
+        <intent>
+            <action android:name="com.byd.mediacontroller.thirdapp.controller" />
+        </intent>
     </queries>
 
     <application

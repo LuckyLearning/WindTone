@@ -26,6 +26,22 @@ WindTone 的轻量分支：旁听车机上任意播放器**已经发布**的媒�
 
 因此多数普通播放器会显示「暂无歌词」——这是**一期预期结果，不是缺陷**。一期验收标准是通道探测报告，不是歌词覆盖率。
 
+### 歌名 / 歌手：稳定获取
+
+真机上「时不时取不到歌名」有两个来源：只读 `TITLE` / `ARTIST`（不少播放器只填 `DISPLAY_TITLE` /
+`ALBUM_ARTIST` / `DISPLAY_SUBTITLE`），以及换歌 / 切前后台的一瞬间元数据为空、上一次值被直接覆盖。
+
+现在的取值顺序：
+
+1. **标准元数据多键兜底**：`TITLE` → `DISPLAY_TITLE`；`ARTIST` → `ALBUM_ARTIST` → `DISPLAY_SUBTITLE`。
+2. **粘住上次非空值**：新值为空时保留上一次展示值；只有换歌（mediaId / duration / album / track
+   变化）或会话切换才清空。换歌瞬间不会再出现标题消失。
+3. **BYD 兜底**：BYD 车机标准会话常常很稀疏，绑定 `com.byd.mediacontroller` 的第三方 SDK
+   （只读 Bundle，不调播放控制），拿媒体中心的真实 TITLE / ARTIST / LYRICS。仅在 BYD 系包名生效，
+   避免切到别的播放器后沿用上一首的歌名。
+4. **伪歌名判定仍看原始 TITLE**：展示值会被粘住或替换成 BYD 的歌名，拿它判定就丢了「一行一变」
+   的特征；原始 TITLE 与歌词行相同则展示层隐藏标题。
+
 ### 首屏延迟的两条硬约束（v0.1.1）
 
 1. **缓冲必须早于判定**：每次 TITLE 变化就进 L1 缓冲，不等判定成立。否则判定前看到的
@@ -424,9 +440,9 @@ MediaWatchService  (NotificationListenerService，由系统绑定，不自拉活
 
 | 项 | 结果 |
 |---|---|
-| `:anylyric:testDebugUnitTest` | **176 项**通过（LRC 解析 10、伪歌名判定 11、责任链 10、时钟 6、判因 14、权限列表解析 7、几何 10、折行 9、行预算 7、样式 11、开机策略 6、更新 18、资源采样 7、行推进 tick 11、L0 缓存 6、工作量计数 4、JSON 解包 7、播放状态扩展 7、看门狗 6、在线解析 7） |
+| `:anylyric:testDebugUnitTest` | **180 项**通过（LRC 解析 10、伪歌名判定 11、责任链 10、时钟 6、判因 14、权限列表解析 7、几何 10、折行 9、行预算 7、样式 11、开机策略 6、更新 18、资源采样 7、行推进 tick 11、L0 缓存 6、工作量计数 4、JSON 解包 7、播放状态扩展 7、看门狗 6、在线解析 7、歌名解析 4） |
 | `:anylyric:lintDebug` | Error 0（Warning 73，均为既有项或预期项） |
-| `assembleRelease` | 约 **276 KB**（含矢量图标 + 5 组密度 PNG），运行时依赖仅 `kotlin-stdlib` |
+| `assembleRelease` | 约 **282 KB**（含矢量图标 + 5 组密度 PNG），运行时依赖仅 `kotlin-stdlib` |
 | 真机 | 手机（HONOR / API 37）已验证 L1 可命中；车机 **未验证** |
 
 未验证项：车机播放器的通道命中率、车厂 ROM 对悬浮窗与通知使用权的策略、多屏行为、

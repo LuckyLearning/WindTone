@@ -113,8 +113,25 @@ class SessionHub private constructor(context: Context) {
      */
     private var currentAnchorIndex = -1
     private var hitSource: String? = null
+
+    /** 展示用标题 / 歌手：多键兜底 + 粘住上一次非空值。 */
     private var lastTitle: String? = null
     private var lastArtist: String? = null
+
+    /** 原始 TITLE：伪歌名判定与逐行流必须看它，不能看粘住后的展示值。 */
+    private var lastRawTitle: String? = null
+
+    /** 粘住的上一次非空展示值：换歌瞬间元数据为空时不至于标题消失。 */
+    private var stickyTitle: String? = null
+    private var stickyArtist: String? = null
+
+    /** BYD 第三方媒体控制 SDK 的兜底元数据（仅 BYD 车机会有）。 */
+    private var externalTitle: String? = null
+    private var externalArtist: String? = null
+    private var externalLyrics: String? = null
+
+    /** 上次的换歌指纹：同一会话内 mediaId/duration/album/track 变了才算换歌。 */
+    private var lastIdentity: String? = null
     private var lastPosition = 0L
     private var positionJumps = 0
     private var titleOnlyOnPause = false
@@ -456,6 +473,53 @@ class SessionHub private constructor(context: Context) {
         tryRebind()
     }
 
+    /**
+     * BYD 第三方媒体控制 SDK 推来的元数据（主线程）。
+     *
+     * 车机上标准 MediaSession 常常很稀疏，BYD 自己的媒体中心才拿得到真实歌名 / 歌手 / 歌词。
+     * 这里只作为**兜底源**：标准 TITLE 为空或是歌词（伪歌名）时才采用，正常播放器不会被它覆盖。
+     */
+    fun onBydMetadata(
+        title: String?,
+        artist: String?,
+        album: String?,
+        durationMs: Long,
+        lyrics: String?
+    ) {
+        if (Probe.enabled) {
+            Probe.write(
+                "会话",
+                "byd metadata title=$title artist=$artist album=$album dur=$durationMs"
+            )
+        }
+        var changed = false
+        val cleanTitle = title?.trim()?.takeIf { it.isNotEmpty() }
+        if (cleanTitle != null && cleanTitle != externalTitle) {
+            externalTitle = cleanTitle
+            // 换歌：旧的外部歌词作废；新歌词会随同一个 bundle 一起到。
+            externalLyrics = null
+            stickyTitle = null
+            stickyArtist = null
+            onlineLines = emptyList()
+            onlineRequestedKey = null
+            changed = true
+        }
+        val cleanArtist = artist?.trim()?.takeIf { it.isNotEmpty() }
+        if (cleanArtist != null && cleanArtist != externalArtist) {
+            externalArtist = cleanArtist
+            changed = true
+        }
+        val cleanLyrics = lyrics?.takeIf { it.isNotBlank() }
+        if (cleanLyrics != null && cleanLyrics != externalLyrics) {
+            externalLyrics = cleanLyrics
+            changed = true
+        }
+        if (!changed) return
+        // 外部源变了：标题 / 歌词都可能来自它，强制下一轮重跑责任链。
+        keyValid = false
+        requestRefresh("byd_metadata")
+    }
+
     fun onNotificationPosted(sbn: StatusBarNotification?) {
         if (sbn == null) return
         val pkg = sbn.packageName
@@ -581,6 +645,14 @@ class SessionHub private constructor(context: Context) {
         // 在线结果跟着服务生命周期释放；缓存本身有界（64 首），留着避免重绑后来回重抓。
         onlineLines = emptyList()
         onlineRequestedKey = null
+        // BYD 外部源也一起清掉：服务销毁后它不再可信，重绑时会重新推。
+        externalTitle = null
+        externalArtist = null
+        externalLyrics = null
+        stickyTitle = null
+        stickyArtist = null
+        lastRawTitle = null
+        lastIdentity = null
         // 服务销毁用 release 而不是 hide：连 OverlayHost 自己的回调（隐藏到期等）
         // 一起摘掉，否则残留的 hiddenUntil 会把下一次会话的歌词卡在「隐藏期内」。
         overlay.release()
@@ -705,6 +777,10 @@ class SessionHub private constructor(context: Context) {
             hitSource = null
             lastTitle = null
             lastArtist = null
+            lastRawTitle = null
+            stickyTitle = null
+            stickyArtist = null
+            lastIdentity = null
             labelCache = null
             keyValid = false
             stopLineTick()
@@ -734,27 +810,47 @@ class SessionHub private constructor(context: Context) {
         }
         observePosition(rawPosition, playState)
 
-        val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
-        val artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
+        // 标准元数据不止 TITLE / ARTIST：车机上不少播放器只填 DISPLAY_TITLE /
+        // ALBUM_ARTIST / DISPLAY_SUBTITLE，只认前两个就会「时不时取不到」。
+        val standardTitle = TitleResolver.firstNonBlank(
+            metadata?.getString(MediaMetadata.METADATA_KEY_TITLE),
+            metadata?.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
+        )
+        val standardArtist = TitleResolver.firstNonBlank(
+            metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST),
+            metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST),
+            metadata?.getString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE)
+        )
         val rawDuration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
         // 有的播放器把时长按「秒」上报（240 而不是 240000）。不到 10 秒的音乐不存在，
         // 这个量级只可能是单位错了 —— 不修正时进度会被夹在开头、行推进永远停在第一句。
         val duration = if (rawDuration in 1..9_999L) rawDuration * 1_000L else rawDuration
         val mediaId = metadata?.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
 
-        if (title != lastTitle || artist != lastArtist) {
-            labelCache = null
-            // 换歌：上一首的在线结果必须立刻作废，否则新歌开头几秒会闪出旧歌词。
-            onlineLines = emptyList()
-            onlineRequestedKey = null
-            hitSource = null
+        // 换歌判定：同一会话内 mediaId / duration / album / track 变了才清掉粘住的标题。
+        val identity = identityExtra(active, metadata)
+        if (identity != lastIdentity) {
+            lastIdentity = identity
+            stickyTitle = null
+            stickyArtist = null
+            externalLyrics = null
         }
-        if (title != lastTitle) lastTitleChangeAt = now
-        lastTitle = title
-        lastArtist = artist
+
+        // BYD 兜底值只对 BYD 系包名生效：切到别的播放器后，上一首的 BYD 歌名不能沿用到它身上。
+        val useExternal = isBydPackage(active.packageName)
+        val externalT = externalTitle.takeIf { useExternal }
+        val externalA = externalArtist.takeIf { useExternal }
+
+        // 伪歌名判定与逐行流必须看**原始 TITLE**：展示标题会被粘住或替换成 BYD 的真实歌名，
+        // 拿它去判定的话「一行一变」这个关键特征就没了。
+        val rawTitle = standardTitle ?: externalT
+        val rawArtist = standardArtist ?: externalA
+
+        if (rawTitle != lastRawTitle) lastTitleChangeAt = now
+        lastRawTitle = rawTitle
 
         val previousVerdict = lastVerdict
-        lastVerdict = timeline.record(now, title, duration, mediaId, artist, identityExtra(active, metadata))
+        lastVerdict = timeline.record(now, rawTitle, duration, mediaId, rawArtist, identity)
         if (timeline.consumeIdentityChanged()) {
             titleStream.reset()
             titleOnlyOnPause = false
@@ -764,14 +860,56 @@ class SessionHub private constructor(context: Context) {
             positionJumps = 0
         }
 
-        if (!title.isNullOrBlank()) {
+        if (!rawTitle.isNullOrBlank()) {
             // 关键：判定未成立时也要入缓冲。若等判定成立才入，判定前看到的几句
             // 会被永久丢掉，第一句还得再等一个歌词周期才出现。
-            titleStream.onTitleLine(title)
+            titleStream.onTitleLine(rawTitle)
             if (lastVerdict == TitleVerdict.PSEUDO && playState == PlayState.PAUSED) {
                 titleOnlyOnPause = true
             }
         }
+
+        // 展示标题：原始 TITLE 为空或是歌词（伪歌名）时，优先用 BYD 外部源的真实歌名；
+        // 仍然取不到就保留上一次非空值（粘住），别让换歌 / 切前后台的瞬间标题消失。
+        val standardIsLyric = TitleResolver.isLyricTitle(standardTitle, currentLines)
+        val preferExternal = standardTitle.isNullOrBlank() ||
+            standardIsLyric ||
+            lastVerdict == TitleVerdict.PSEUDO
+        val chosenTitle = if (preferExternal) {
+            TitleResolver.firstNonBlank(externalT)
+                ?: if (standardIsLyric) null else standardTitle
+        } else {
+            standardTitle
+        }
+        if (!chosenTitle.isNullOrBlank()) stickyTitle = chosenTitle
+        // 明确判定「原始 TITLE 就是歌词」且没有外部真实歌名时，宁可空着也不回落到上一首的旧标题。
+        val displayTitle = when {
+            !chosenTitle.isNullOrBlank() -> chosenTitle
+            standardIsLyric -> null
+            else -> stickyTitle
+        }
+
+        val chosenArtist = if (preferExternal) {
+            TitleResolver.firstNonBlank(externalA) ?: standardArtist
+        } else {
+            standardArtist
+        }
+        if (!chosenArtist.isNullOrBlank()) stickyArtist = chosenArtist
+        val displayArtist = when {
+            !chosenArtist.isNullOrBlank() -> chosenArtist
+            standardIsLyric -> null
+            else -> stickyArtist
+        }
+
+        if (displayTitle != lastTitle || displayArtist != lastArtist) {
+            labelCache = null
+            // 换歌：上一首的在线结果必须立刻作废，否则新歌开头几秒会闪出旧歌词。
+            onlineLines = emptyList()
+            onlineRequestedKey = null
+            hitSource = null
+        }
+        lastTitle = displayTitle
+        lastArtist = displayArtist
 
         if (Probe.enabled && lastVerdict != previousVerdict) {
             Probe.write(
@@ -790,8 +928,8 @@ class SessionHub private constructor(context: Context) {
         val inputsChanged = !keyValid ||
             keyController !== active ||
             keyMetaSig != metaSig ||
-            keyTitle != title ||
-            keyArtist != artist ||
+            keyTitle != rawTitle ||
+            keyArtist != rawArtist ||
             keyDuration != duration ||
             keyMediaId != mediaId ||
             keyVerdict != lastVerdict ||
@@ -802,8 +940,8 @@ class SessionHub private constructor(context: Context) {
             keyValid = true
             keyController = active
             keyMetaSig = metaSig
-            keyTitle = title
-            keyArtist = artist
+            keyTitle = rawTitle
+            keyArtist = rawArtist
             keyDuration = duration
             keyMediaId = mediaId
             keyVerdict = lastVerdict
@@ -816,17 +954,17 @@ class SessionHub private constructor(context: Context) {
 
             val trackContext = TrackContext(
                 packageName = active.packageName,
-                title = title,
-                artist = artist,
+                title = rawTitle,
+                artist = rawArtist,
                 durationMs = duration,
                 mediaId = mediaId,
                 metadata = metadataValues,
                 notificationTexts = activeTexts,
                 // 只在输入真的变了时才建表：BYD 的 lrc_line_* 每换一句都会走到这里，
                 // 但每秒多次的进度刷新不会，成本被输入指纹挡在前面。
-                playbackExtras = extrasTextValues(playbackState),
+                playbackExtras = buildPlaybackExtras(playbackState, active.packageName),
                 pseudoTitle = lastVerdict == TitleVerdict.PSEUDO,
-                titleLine = title
+                titleLine = rawTitle
             )
 
             // 实测耗时才写进日志：L0 命中时这里是「解析一整段歌词」的真实成本，
@@ -848,7 +986,8 @@ class SessionHub private constructor(context: Context) {
                 hitSource = null
                 setCurrentLines(emptyList())
             }
-            if (hit == null) maybeRequestOnline(title, artist, duration)
+            // 在线匹配用**展示用**歌名/歌手：它才是用户看到的真实曲目信息。
+            if (hit == null) maybeRequestOnline(displayTitle, displayArtist, duration)
 
             if (Probe.enabled) {
                 Probe.attempts = outcome.attempts
@@ -871,7 +1010,7 @@ class SessionHub private constructor(context: Context) {
             }
         }
 
-        publishSnapshot(active, title, duration)
+        publishSnapshot(active, displayTitle, duration)
 
         // 渲染每次都走：即使输入没变，进度也在推进，当前行可能已经该换了。
         // 这一步只是二分定位 + 一次 setText（内容没变时悬浮层内部会再挡一层），
@@ -962,6 +1101,24 @@ class SessionHub private constructor(context: Context) {
         extrasSigSource = state
         extrasSigValue = hash
         return hash
+    }
+
+    /** 当前会话是否属于 BYD 系（媒体中心 / BYD 自带播放器）。 */
+    private fun isBydPackage(pkg: String?): Boolean {
+        val name = pkg?.lowercase() ?: return false
+        return name.contains("byd") || name.contains("mediacenter") || name.contains("dilink")
+    }
+
+    /** 标准 extras + BYD 外部歌词合并；外部歌词作为 `lyrics` 键参与 L0b。 */
+    private fun buildPlaybackExtras(state: PlaybackState?, pkg: String?): Map<String, String> {
+        val external = externalLyrics.takeIf { isBydPackage(pkg) }
+        if (external.isNullOrBlank()) return extrasTextValues(state)
+        val base = extrasTextValues(state)
+        val merged = HashMap<String, String>(base.size + 1)
+        merged.putAll(base)
+        // 外部源更可信：整段歌词优先用 BYD 的。
+        merged["lyrics"] = external
+        return merged
     }
 
     /** 只把 4 个歌词键读成文本表；没有就返回空表，不分配 HashMap。 */
@@ -1189,8 +1346,13 @@ class SessionHub private constructor(context: Context) {
      * 拿它当「歌名 · 歌手」显示，标题行就会跟着歌词一起滚 —— 真机 0.2.6 的反馈
      * 「歌曲名和歌手取错了，现在是歌词」就是这条路。此时标题直接不显示。
      */
-    private fun titleForOverlay(): String? =
-        if (lastVerdict == TitleVerdict.PSEUDO || titleIsLyric()) null else trackLabel()
+    private fun titleForOverlay(): String? {
+        // lastTitle 已经是「解析后」的展示值（可能是 BYD 外部源的真实歌名）。
+        // 是否隐藏只看它本身是不是歌词行，不能再按 PSEUDO 一刀切 ——
+        // 否则 BYD 兜底拿到的真实歌名会被一起盖掉。
+        if (titleIsLyric()) return null
+        return trackLabel()
+    }
 
     /**
      * 标题文本是否与当前歌词行完全相同。

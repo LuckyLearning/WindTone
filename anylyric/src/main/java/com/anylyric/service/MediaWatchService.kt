@@ -20,6 +20,9 @@ class MediaWatchService : NotificationListenerService() {
         SessionHub.get(this)
         // 服务被系统拉起来时顺带确认一次看门狗任务是否已注册（开关关闭时是 cancel）。
         ServiceWatchdog.sync(this)
+        // BYD 车机：标准会话稀疏时，靠第三方媒体控制 SDK 补真实歌名/歌手/歌词。
+        // 非 BYD 设备或服务不可绑时内部静默跳过，不产生任何副作用。
+        BydMediaController.start(this)
     }
 
     override fun onListenerConnected() {
@@ -39,6 +42,7 @@ class MediaWatchService : NotificationListenerService() {
 
     override fun onDestroy() {
         SessionHub.get(this).detach()
+        BydMediaController.stop()
         super.onDestroy()
     }
 }
