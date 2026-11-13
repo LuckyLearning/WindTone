@@ -159,8 +159,11 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         lastTitle = title
         lastMode = mode
 
-        // 收起态只留把手：内容照记（展开时立刻能用），窗口不建。
-        if (collapsed) return
+        // 收起态保留窗口但不绘制：内容照记到 View（不重建），展开时直接重画。
+        if (collapsed) {
+            view?.setContent(primary, secondary, title, mode)
+            return
+        }
 
         // 菜单打开期间，播放回调仍会每几百毫秒推一次内容。只更新「待恢复的内容」，
         // 不动当前界面 —— 否则菜单会被下一句歌词顶掉，用户根本点不到。
@@ -210,6 +213,8 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         view = renderer
         params = lp
         attachedDisplayId = prefs.displayId
+        // 兜底：极端时序下（收起态又走到 addView）新 View 也应是收起态。
+        if (collapsed) renderer.setCollapsed(true)
         renderer.post(placeTask)
         // 窗口叠放顺序按加入顺序：歌词窗贴左边缘时把手会与它重叠，
         // 被压在下面就点不到了 —— 所以每次重建歌词窗都要把把手重新加一遍（盖在最上面）。
@@ -275,16 +280,19 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
             if (current != null && lp != null) {
                 lastRect.set(lp.x, lp.y, lp.x + current.width, lp.y + current.height)
             }
-            removeLyric()
             editable = false
             menuOpen = false
             // 先置位再建把手：把手初始化的箭头方向读的就是这个状态
             collapsed = true
+            // 不拆窗口：只让渲染器停止绘制并主动重绘一次，surface 清成透明。
+            // 拆窗口再 addView 会闪一帧，这正是「收起/展开卡顿」的根源。
+            view?.setCollapsed(true)
             handle?.collapsed = true
             ensureHandle()
             if (handle == null) {
                 // 车厂 ROM 只允许一个 overlay 窗口时，收起了就再也点不开
                 collapsed = false
+                view?.setCollapsed(false)
                 onRequestRender?.invoke()
                 return
             }
@@ -294,7 +302,14 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
 
         collapsed = false
         handle?.collapsed = false
-        onRequestRender?.invoke()
+        val current = view
+        if (current != null) {
+            // 原地展开：只重建一次内容并重绘，不新建 View、不重新 addView。
+            current.setCollapsed(false)
+            current.post(placeTask)
+        } else {
+            onRequestRender?.invoke()
+        }
         handle?.post { placeHandle() }
     }
 
@@ -303,6 +318,7 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         if (!collapsed) return
         collapsed = false
         handle?.collapsed = false
+        view?.setCollapsed(false)
     }
 
     /** 与设置项的开关同步：关掉时把手立刻消失，开着且有窗口时补上。 */
@@ -312,6 +328,7 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
             if (collapsed) {
                 // 把手被关掉时不能留一个收起的空窗：直接展开
                 collapsed = false
+                view?.setCollapsed(false)
                 onRequestRender?.invoke()
             }
             return

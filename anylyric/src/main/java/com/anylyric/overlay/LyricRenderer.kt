@@ -183,6 +183,22 @@ class LyricRenderer(context: Context) : View(context) {
      */
     private var fadeAnimator: ValueAnimator? = null
 
+    /**
+     * 收起态：窗口与 View 都保留，只让 [onDraw] 直接返回。
+     *
+     * 收起/展开以前是「移除窗口 → 重新 addView」，一拆一建必然闪一帧；
+     * 现在改成画空 + 重绘一次，window surface 会清成透明，但不需要重建任何东西。
+     */
+    private var collapsed = false
+
+    /**
+     * 收起期间内容是否变过。
+     *
+     * 没变过 = 展开时字形还是对的，只需重绘（`invalidate`），不用重新测量/折行；
+     * 变过才需要 [rebuild]。收起→展开这种「看一眼就收回去」的操作因此几乎零开销。
+     */
+    private var collapsedDirty = false
+
     val currentPrimary: String get() = primaryText
 
     fun applyStyle(next: OverlayStyle) {
@@ -244,10 +260,45 @@ class LyricRenderer(context: Context) : View(context) {
     }
 
     /**
+     * 收起 / 展开（不拆窗口）。
+     *
+     * 收起时停掉淡入并主动重绘一次：[onDraw] 立刻返回，窗口 surface 被清成透明，
+     * 旧歌词不会滞留在屏幕上。展开时只重建一次内容，不需要重新 `addView`。
+     */
+    fun setCollapsed(value: Boolean) {
+        if (collapsed == value) return
+        collapsed = value
+        if (value) {
+            stopFade()
+            collapsedDirty = false
+            // 必须主动 invalidate：不可见状态靠「不画」清 surface，得先触发一次绘制。
+            invalidate()
+        } else {
+            // 收起期间没换句就直接重绘，省掉一次折行 + requestLayout。
+            if (collapsedDirty) rebuild() else invalidate()
+            collapsedDirty = false
+        }
+    }
+
+    /**
      * @param secondary 副行文本，按显示顺序。条数不受限，[rebuild] 按行数预算截断
      * @param title 标题行（歌名 · 歌手）；null 或空串表示这帧没有标题
      */
     fun setContent(primary: String, secondary: List<String>, title: String?, nextMode: Mode) {
+        if (collapsed) {
+            // 收起时只记内容，不重建、不触发淡入；展开时按 dirty 决定要不要 rebuild。
+            val dirty = primary != primaryText ||
+                secondary != secondaryLines ||
+                title != titleText ||
+                nextMode != mode
+            primaryText = primary
+            secondaryLines.clear()
+            secondaryLines.addAll(secondary)
+            titleText = title
+            mode = nextMode
+            if (dirty) collapsedDirty = true
+            return
+        }
         val changed = primary != primaryText ||
             secondary != secondaryLines ||
             title != titleText ||
@@ -439,6 +490,8 @@ class LyricRenderer(context: Context) : View(context) {
 
         requestLayout()
         invalidate()
+        // 字形已经按最新内容重建过：收起期间攒下的 dirty 一并清掉。
+        collapsedDirty = false
     }
 
     /** 标题按可用宽度截断：宁可「歌名 · 歌…」也不要让窗口为了它整块变宽。 */
@@ -564,6 +617,8 @@ class LyricRenderer(context: Context) : View(context) {
     }
 
     override fun onDraw(canvas: Canvas) {
+        // 收起态：什么都不画。主动 invalidate 过一次，窗口 surface 已被清成透明。
+        if (collapsed) return
         val w = width.toFloat()
         val h = height.toFloat()
 
