@@ -807,15 +807,28 @@ class SettingsActivity : BaseActivity() {
         current: () -> Boolean,
         onChange: (Boolean) -> Unit
     ): View {
+        // 程序化同步开关时不能回调 onChange：Android 的 setChecked 也会触发监听。
+        // 否则 refresh 里「把控件对齐真实值」会被当成用户操作 → editStyle → preset 被标成
+        // CUSTOM。真机表现就是「点了预设、悬浮窗样式变了，但选中态没留住，要再点一次」。
+        var syncing = false
         val control = Switch(this).apply {
             isChecked = current()
             minHeight = dp(40)
             setOnCheckedChangeListener { _, checked ->
-                onChange(checked)
-                refresh()
+                if (!syncing) {
+                    onChange(checked)
+                    refresh()
+                }
             }
         }
-        uiRefreshers += { if (control.isChecked != current()) control.isChecked = current() }
+        uiRefreshers += {
+            val target = current()
+            if (control.isChecked != target) {
+                syncing = true
+                control.isChecked = target
+                syncing = false
+            }
+        }
 
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
