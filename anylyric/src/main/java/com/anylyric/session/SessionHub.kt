@@ -150,6 +150,15 @@ class SessionHub private constructor(context: Context) {
     private var positionJumps = 0
     private var titleOnlyOnPause = false
     private var lastVerdict = TitleVerdict.UNKNOWN
+
+    /**
+     * 已确认「逐行歌词流」的播放器包名（跨歌记忆，只在进程内）。
+     *
+     * 换歌时用它直接 latch PSEUDO，省掉「再等两次 TITLE 变化」。这条对长前奏的歌
+     * 尤其重要：前奏 40 秒的歌，旧逻辑要等到第二句（前奏 + 两句）才有歌词。
+     * 只认包名、不落盘：换播放器就重新判定，不会把别人的结论套过来。
+     */
+    private val pseudoPackages = LinkedHashSet<String>()
     private var lastPlayState = PlayState.NONE
     private var lastSessionCount = 0
     private var lastPlayingCount = 0
@@ -798,6 +807,15 @@ class SessionHub private constructor(context: Context) {
         else -> 3
     }
 
+    /** 记住「这个播放器会逐行推送歌词」。容量有上限，最旧的先出。 */
+    private fun rememberPseudoPackage(pkg: String) {
+        if (pkg in pseudoPackages) return
+        if (pseudoPackages.size >= MAX_PSEUDO_PACKAGES) {
+            pseudoPackages.remove(pseudoPackages.first())
+        }
+        pseudoPackages += pkg
+    }
+
     /** 全量重算：会话 → 状态 → 责任链 → 渲染。只在事件合并之后、主线程上跑。 */
     private fun refreshNow(reason: String) {
         Perf.onRefresh()
@@ -955,6 +973,19 @@ class SessionHub private constructor(context: Context) {
             // 换歌必然伴随 position 归零／重置，不能计成进度不稳
             lastPosition = 0L
             positionJumps = 0
+            // 跨歌记忆：这个播放器以前确认过在往 TITLE 里写歌词 → 直接进入歌词模式。
+            // 否则每换一首都要重新等「两次 TITLE 变化」，长前奏的歌光等就几十秒，
+            // 用户体感是「这应用对这首歌根本没歌词」。
+            val pkg = controller?.packageName
+            if (pkg != null && pkg in pseudoPackages) {
+                timeline.latchPseudo()
+                lastVerdict = TitleVerdict.PSEUDO
+            }
+        }
+
+        // 确认是逐行歌词流之后记住这个播放器，供下一首直接 latch
+        if (lastVerdict == TitleVerdict.PSEUDO) {
+            controller?.packageName?.let { rememberPseudoPackage(it) }
         }
 
         if (!rawTitle.isNullOrBlank()) {
@@ -1276,8 +1307,14 @@ class SessionHub private constructor(context: Context) {
             }
             // 标题还在动、只是还没攒够两句 —— 那是「获取中」，不是「没有」。
             // 把两者分开，用户才不会以为这个播放器不被支持。
+            //
+            // 只要**还在播放**且没判定成「稳定歌名」，就一直是「获取中」：
+            // 很多歌前奏 40 秒以上，期间 TITLE 一个字都不变（还是歌名），
+            // 旧逻辑 20 秒后就翻成「暂无歌词」，等第一句来了又跳回歌词 ——
+            // 用户看到的是「先说不支持、过一会儿又有了」。
             val waiting = lastVerdict != TitleVerdict.STABLE &&
-                SystemClock.elapsedRealtime() - lastTitleChangeAt <= TITLE_WAIT_TIMEOUT_MS
+                (lastPlayState == PlayState.PLAYING ||
+                    SystemClock.elapsedRealtime() - lastTitleChangeAt <= TITLE_WAIT_TIMEOUT_MS)
             push(
                 appContext.getString(
                     if (waiting) R.string.overlay_fetching else R.string.overlay_no_lyrics
@@ -1792,6 +1829,9 @@ class SessionHub private constructor(context: Context) {
 
         /** 标题停下多久还没歌词，就承认这个播放器没有歌词通道。 */
         private const val TITLE_WAIT_TIMEOUT_MS = 20_000L
+
+        /** 跨歌记忆的容量上限：正常用户不会装那么多播放器。 */
+        private const val MAX_PSEUDO_PACKAGES = 16
 
         /** 回跳幅度超过这个值视为用户拖动进度，不计入「进度不稳」。 */
         private const val POSITION_JITTER_MAX_MS = 5_000L

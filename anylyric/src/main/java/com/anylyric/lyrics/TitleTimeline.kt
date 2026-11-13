@@ -25,12 +25,20 @@ enum class TitleVerdict {
  * 基本只能是歌词流；真正的误报风险（播放器把播放状态拼进标题）由
  * [isTrivialVariant] 单独挡掉。
  *
+ * 0.2.16 两处放宽，都是真机反馈逼出来的：
+ *  · 间隔上限 8s → 12s：慢歌／古风曲每句 8~12 秒很常见，旧阈值让它们**永远**判不出，
+ *    L1 通道直接失效（表现是「这首歌就是没有歌词」）；
+ *  · 窗口 15s → 24s：配合上一项，保证两条 12 秒间隔的事件能同时留在窗口里。
+ *
+ * 一旦判定 PSEUDO 就**粘住**（[pseudoLatched]），不再随窗口滚动退回 STABLE ——
+ * 否则一首歌里遇到一段长过门，判定会掉回「稳定歌名」，歌词在中途整段消失。
+ *
  * 纯逻辑，无 Android 依赖，可直接 JVM 单测。
  */
 class TitleTimeline(
-    private val windowMs: Long = 15_000L,
+    private val windowMs: Long = 24_000L,
     private val minChanges: Int = 2,
-    private val maxMedianGapMs: Long = 8_000L
+    private val maxMedianGapMs: Long = 12_000L
 ) {
 
     data class Event(val atMs: Long, val title: String, val identity: String)
@@ -48,6 +56,15 @@ class TitleTimeline(
     private var version = 0
     private var cachedVersion = -1
     private var cachedVerdict = TitleVerdict.UNKNOWN
+
+    /**
+     * 是否已经确认过「伪歌名」。
+     *
+     * 一旦确认就粘住，直到换歌或 [reset]：判定原本是「按当前窗口重算」的，
+     * 一首歌里只要遇到一段长过门（前后句隔 15 秒以上），窗口一滚动中位数就超限，
+     * 判定会掉回 STABLE —— 表现是唱到一半歌词突然整段消失，过几秒又回来。
+     */
+    private var pseudoLatched = false
 
     /**
      * 曲目指纹按字段保存，不拼字符串。
@@ -87,6 +104,8 @@ class TitleTimeline(
             // 真换歌：清空历史，避免把上一首的歌词行算进本首
             identityChanged = true
             events.clear()
+            // 新歌必须重新判定：上一首是逐行歌词，不代表这一首也是
+            pseudoLatched = false
             version++
         }
         hasIdentity = true
@@ -112,11 +131,25 @@ class TitleTimeline(
         return changed
     }
 
+    /**
+     * 跳过判定直接锁存 PSEUDO。
+     *
+     * 跨歌记忆用：同一个播放器已经证明过它在往 TITLE 里写歌词，下一首不必再从
+     * 「两句判定」等起 —— 前奏一结束、第一句送到就能显示，而不是再等一句。
+     * 换歌或 [reset] 时会自动解锁，所以「同一播放器换了首不带歌词的歌」不会误锁。
+     */
+    fun latchPseudo() {
+        if (pseudoLatched) return
+        pseudoLatched = true
+        version++
+    }
+
     fun reset() {
         events.clear()
         version++
         hasIdentity = false
         identityChanged = false
+        pseudoLatched = false
     }
 
     private fun identity(): String =
@@ -142,12 +175,16 @@ class TitleTimeline(
     }
 
     private fun computeVerdict(): TitleVerdict {
+        // 已经确认过就不再重算：长过门、慢段落不该让歌词中途消失
+        if (pseudoLatched) return TitleVerdict.PSEUDO
         if (events.size < 2) return TitleVerdict.UNKNOWN
         if (events.size < minChanges) return TitleVerdict.STABLE
 
         val gaps = events.zipWithNext { a, b -> b.atMs - a.atMs }.sorted()
         val median = gaps[gaps.size / 2]
-        return if (median <= maxMedianGapMs) TitleVerdict.PSEUDO else TitleVerdict.STABLE
+        if (median > maxMedianGapMs) return TitleVerdict.STABLE
+        pseudoLatched = true
+        return TitleVerdict.PSEUDO
     }
 
     companion object {

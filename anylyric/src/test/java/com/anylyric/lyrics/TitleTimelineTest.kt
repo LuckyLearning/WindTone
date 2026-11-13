@@ -30,11 +30,50 @@ class TitleTimelineTest {
         assertEquals(TitleVerdict.PSEUDO, timeline.record(3_000, "第二句", 180_000, "m1", "歌手"))
     }
 
+    /**
+     * 十几秒才换一次标题的，更像播放器在刷状态而不是歌词。
+     *
+     * 阈值 0.2.16 从 8 秒放宽到 12 秒（慢歌每句 8~12 秒很常见，旧值让它们永远判不出），
+     * 但仍要有个上限挡「每 15 秒把歌名刷一遍」的播放器。
+     */
     @Test
-    fun tenSecondsApartStayStable() {
+    fun fifteenSecondsApartStayStable() {
         val timeline = TitleTimeline()
         timeline.record(0, "A", 180_000, "m1", "歌手")
-        assertEquals(TitleVerdict.STABLE, timeline.record(10_000, "B", 180_000, "m1", "歌手"))
+        assertEquals(TitleVerdict.STABLE, timeline.record(15_000, "B", 180_000, "m1", "歌手"))
+    }
+
+    /** 慢歌（每句 10 秒）必须能判出来：旧阈值 8 秒让这类歌永远没有歌词。 */
+    @Test
+    fun tenSecondBalladStillLooksPseudo() {
+        val timeline = TitleTimeline()
+        timeline.record(0, "第一句", 180_000, "m1", "歌手")
+        assertEquals(TitleVerdict.PSEUDO, timeline.record(10_000, "第二句", 180_000, "m1", "歌手"))
+    }
+
+    /**
+     * 判定一旦成立就粘住。
+     *
+     * 按窗口重算的旧实现里，一首歌只要遇到一段长过门（前后句隔 30 秒），
+     * 窗口滚过去之后中位数超限，判定掉回 STABLE —— 用户看到的是「唱到一半歌词没了」。
+     */
+    @Test
+    fun pseudoStaysLatchedAcrossLongInterlude() {
+        val timeline = TitleTimeline()
+        timeline.record(0, "第一句", 180_000, "m1", "歌手")
+        assertEquals(TitleVerdict.PSEUDO, timeline.record(3_000, "第二句", 180_000, "m1", "歌手"))
+        // 30 秒过门：窗口里只剩这一条，按旧逻辑会掉回 STABLE
+        assertEquals(TitleVerdict.PSEUDO, timeline.record(33_000, "过门之后", 180_000, "m1", "歌手"))
+    }
+
+    /** 换歌必须重新判定：上一首是逐行歌词，不代表这一首也是。 */
+    @Test
+    fun trackChangeResetsLatchedPseudo() {
+        val timeline = TitleTimeline()
+        timeline.record(0, "第一句", 180_000, "m1", "歌手")
+        assertEquals(TitleVerdict.PSEUDO, timeline.record(3_000, "第二句", 180_000, "m1", "歌手"))
+        // duration 变了 = 换歌：历史清空、锁释放，新歌只有一条 → UNKNOWN
+        assertEquals(TitleVerdict.UNKNOWN, timeline.record(4_000, "新歌名", 200_000, "m2", "歌手"))
     }
 
     /** 「歌名」→「歌名 - 播放中」是播放器附状态，不是歌词，不能算作证据。 */
