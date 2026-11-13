@@ -139,7 +139,11 @@ object Probe {
         sb.appendLine()
 
         sb.appendLine("[CLOCK] jumps=${s.positionJumpCount} timed=${s.timedLyrics} l1OnlyOnPause=${s.l1OnlyOnPause}")
-        sb.appendLine("[WINDOW] attached=${s.viewAttached} measured=${s.viewMeasured} hiddenByRule=${s.hiddenByRule}")
+        sb.appendLine(
+            "[WINDOW] attached=${s.viewAttached} measured=${s.viewMeasured} " +
+                "w=${s.windowWidth} h=${s.windowHeight} resizes=${s.windowResizes} " +
+                "hiddenByRule=${s.hiddenByRule}"
+        )
         // 按应用隐藏紧跟窗口：两者合起来回答「窗口为什么什么都没画」。
         // 名字选对了却不隐藏，通常是 a11yConnected=false（勾了但服务没跑）或 foreground 报的不是那个包。
         sb.appendLine(

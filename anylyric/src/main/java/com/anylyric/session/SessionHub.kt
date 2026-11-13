@@ -1510,6 +1510,7 @@ class SessionHub private constructor(context: Context) {
      */
     private fun publishSnapshot(active: MediaController?, title: String?, duration: Long) {
         if (!Probe.enabled) return
+        val (windowWidth, windowHeight) = overlay.windowSize()
         Probe.snapshot = ProbeSnapshot(
             listenerConnected = listenerConnected,
             listenerGranted = Permissions.isListenerGranted(appContext) == true,
@@ -1528,6 +1529,9 @@ class SessionHub private constructor(context: Context) {
             timedLyrics = currentLinesTimed,
             viewAttached = overlay.isAttached(),
             viewMeasured = overlay.isMeasured(),
+            windowWidth = windowWidth,
+            windowHeight = windowHeight,
+            windowResizes = overlay.resizeCount(),
             // 这条以前写死 false（等于报告里永远说「没按规则隐藏」）。按真实语义填：
             // 用户开了「无歌词时隐藏」且当前确实没有歌词行 → 窗口是被这条规则收掉的。
             hiddenByRule = prefs.hideWhenNoLyrics && currentLines.isEmpty(),

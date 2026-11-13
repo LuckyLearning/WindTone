@@ -126,6 +126,33 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
 
     fun isAttached(): Boolean = view?.isAttachedToWindow == true
 
+    /** 窗口当前像素尺寸；还没量到时为 0×0。 */
+    fun windowSize(): Pair<Int, Int> = lastSurfaceW to lastSurfaceH
+
+    /** 进程启动以来窗口尺寸变化次数（诊断用，见 [onSurfaceSizeChanged]）。 */
+    fun resizeCount(): Int = windowResizes
+
+    private var lastSurfaceW = 0
+    private var lastSurfaceH = 0
+    private var windowResizes = 0
+
+    /**
+     * 记录一次真实的尺寸变化。
+     *
+     * 「从 0 到有」不算 resize —— 那是窗口第一次挂上来的正常测量，
+     * 把它算进去会让计数永远多 1，看趋势时容易误判。
+     */
+    private fun onSurfaceSizeChanged(w: Int, h: Int) {
+        if (w <= 0 || h <= 0) return
+        if (lastSurfaceW > 0 && lastSurfaceH > 0 &&
+            (w != lastSurfaceW || h != lastSurfaceH)
+        ) {
+            windowResizes++
+        }
+        lastSurfaceW = w
+        lastSurfaceH = h
+    }
+
     /**
      * 歌词窗当前是否存在。
      *
@@ -207,7 +234,12 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         }
         applyLayoutLimits(renderer)
         // 在 layout 期间直接改窗口位置不安全，延到下一轮消息再摆
-        renderer.sizeListener = { _, _ -> renderer.post(placeTask) }
+        // 窗口尺寸变化要计数：自适应宽度下每句歌词长度不同都会触发一次 resize，
+        // 而 Surface 的 GPU buffer 是按窗口面积分配的 —— 这是 graphics 偏高的直接嫌疑。
+        renderer.sizeListener = { w, h ->
+            onSurfaceSizeChanged(w, h)
+            renderer.post(placeTask)
+        }
 
         val lp = buildParams()
         val added = try {

@@ -236,5 +236,6 @@
     <string name="diag_code_overlay_not_measured">悬浮层已挂上但没有尺寸，多半是布局问题。</string>
     <string name="diag_code_hidden_by_rule">已开启「无歌词时隐藏」，当前没有可显示的歌词，悬浮窗被主动收起。这是预期行为。</string>
     <string name="diag_code_hidden_by_app">按应用隐藏生效中：当前前台应用在隐藏名单里，悬浮窗按设置让位。这是预期行为，退出该应用后会自动恢复。</string>
+    <string name="diag_code_a11y_disconnected">开了「按应用隐藏」，但无障碍服务没连上，勾选的应用一个都不会隐藏。部分 ROM 在应用更新后会把它关掉 —— 去系统设置里重新开启「AnyLyric 前台应用识别」。</string>
     <string name="diag_code_ok">工作正常，歌词正在从 %1$s 获取。</string>
 </resources>

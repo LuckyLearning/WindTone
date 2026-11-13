@@ -154,6 +154,7 @@ class DiagActivity : BaseActivity() {
                 // 这两条都是「按用户设置隐藏」，不是故障：报红会让人以为程序坏了
                 DiagCode.LISTENER_UNBOUND,
                 DiagCode.HIDDEN_BY_APP,
+                DiagCode.A11Y_DISCONNECTED,
                 DiagCode.HIDDEN_BY_RULE -> colorWarn
 
                 else -> colorBad
@@ -181,6 +182,7 @@ class DiagActivity : BaseActivity() {
         DiagCode.OVERLAY_NOT_MEASURED -> getString(R.string.diag_code_overlay_not_measured)
         DiagCode.HIDDEN_BY_RULE -> getString(R.string.diag_code_hidden_by_rule)
         DiagCode.HIDDEN_BY_APP -> getString(R.string.diag_code_hidden_by_app)
+        DiagCode.A11Y_DISCONNECTED -> getString(R.string.diag_code_a11y_disconnected)
         DiagCode.OK -> getString(R.string.diag_code_ok, Probe.hitSource ?: "-")
     }
 

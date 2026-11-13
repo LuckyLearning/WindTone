@@ -26,6 +26,21 @@ data class ProbeSnapshot(
     val timedLyrics: Boolean = false,
     val viewAttached: Boolean = false,
     val viewMeasured: Boolean = false,
+    /**
+     * 歌词窗的实际像素尺寸（0 = 还没量到）。
+     *
+     * 必须报出来：`[RESOURCE] graphics` 是 GPU 按窗口面积分配的 buffer，
+     * 没有尺寸就无法判断「57MB 是因为窗口太大，还是因为反复 resize」。
+     */
+    val windowWidth: Int = 0,
+    val windowHeight: Int = 0,
+    /**
+     * 进程启动以来窗口尺寸变化次数。
+     *
+     * 自适应宽度（默认）下，每换一句歌词长度不同 → 窗口 resize → Surface 重新分配 buffer。
+     * 这个计数持续增长就说明「每句都在重新分配图形缓冲」，是 graphics 偏高的直接嫌疑。
+     */
+    val windowResizes: Int = 0,
     val hiddenByRule: Boolean = false,
 
     /**
@@ -65,6 +80,9 @@ enum class DiagCode {
     OVERLAY_NOT_MEASURED,
     HIDDEN_BY_RULE,
 
+    /** 开「按应用隐藏」但无障碍服务没连：该功能完全不会生效，需要用户去开。 */
+    A11Y_DISCONNECTED,
+
     /** 按应用隐藏生效中：这是用户自己设的，不是故障。 */
     HIDDEN_BY_APP,
     OK
@@ -94,6 +112,14 @@ object DiagRules {
         !s.listenerConnected && s.hitSource == null ->
             Diagnosis(DiagCode.LISTENER_UNBOUND, "granted=true, connected=false, hit=none")
 
+        // 开了「按应用隐藏」但无障碍服务没连：名单一个都不会生效。
+        // 放在歌词类问题之后、会话之前 —— 它不影响出不出歌词，只影响「该不该让位」。
+        s.hideByAppEnabled && !s.a11yConnected ->
+            Diagnosis(
+                DiagCode.A11Y_DISCONNECTED,
+                "hideByApp=true, hiddenApps=${s.hiddenAppCount}, a11yConnected=false"
+            )
+
         s.sessionCount == 0 ->
             Diagnosis(DiagCode.NO_SESSION, "sessions=0")
 
@@ -112,12 +138,13 @@ object DiagRules {
             Diagnosis(DiagCode.CLOCK_UNSTABLE, "jumps=${s.positionJumpCount}, timed=true")
 
         // 按应用隐藏：窗口还在（viewAttached 仍为 true），只是按用户设置不画。
-        // 排在「窗口没挂上」之前 —— 这一条能解释「什么都没显示」，正是用户想问的。
-        s.overlaySuppressed ->
+        // 但「因为本应用自己的页面在屏上」不算 —— 诊断页自己就开着，
+        // 这一条若照报，用户会看到「按应用隐藏生效中」，而名单其实没命中。
+        s.overlaySuppressed && !s.hideByOwnUi ->
             Diagnosis(
                 DiagCode.HIDDEN_BY_APP,
-                "suppressed=true, ownUi=${s.hideByOwnUi}, " +
-                    "foreground=${s.foregroundPkg ?: "unknown"}, inList=${s.foregroundHidden}"
+                "suppressed=true, foreground=${s.foregroundPkg ?: "unknown"}, " +
+                    "inList=${s.foregroundHidden}"
             )
 
         !s.viewAttached ->

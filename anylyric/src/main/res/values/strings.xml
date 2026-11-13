@@ -237,5 +237,6 @@
     <string name="diag_code_overlay_not_measured">The overlay is attached but has no size. Likely a layout problem.</string>
     <string name="diag_code_hidden_by_rule">“Hide when no lyrics” is on and there is nothing to show, so the overlay is hidden on purpose.</string>
     <string name="diag_code_hidden_by_app">Hidden by app: the current foreground app is in your hide list, so the overlay steps aside. Expected behavior; it comes back when you leave that app.</string>
+    <string name="diag_code_a11y_disconnected">“Hide in apps” is on, but the accessibility service is not connected, so none of the selected apps will hide the overlay. Some ROMs disable it after an app update — turn it on again in system settings.</string>
     <string name="diag_code_ok">Working as designed. Lyrics are being taken from %1$s.</string>
 </resources>
