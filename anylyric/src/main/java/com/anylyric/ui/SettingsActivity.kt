@@ -497,12 +497,17 @@ class SettingsActivity : BaseActivity() {
             default = OverlayDefaults.BG_COLOR,
             onPick = { color -> editStyle { it.copy(bgColor = color) } }
         )
-        rows += colorRow(
+        val strokeColorRow = colorRow(
             getString(R.string.appearance_color_stroke),
             current = { prefs.style().strokeColor },
             default = OverlayDefaults.STROKE_COLOR,
             onPick = { color -> editStyle { it.copy(strokeColor = color) } }
         )
+        rows += strokeColorRow
+        // 描边关闭时描边色无效：整行隐藏，别留着让人以为改了有用。
+        uiRefreshers += {
+            strokeColorRow.visibility = if (prefs.style().stroke) View.VISIBLE else View.GONE
+        }
 
         return cardSection(
             getString(R.string.section_colors),
@@ -522,35 +527,63 @@ class SettingsActivity : BaseActivity() {
             current = { prefs.style().titleEnabled },
             onChange = { checked -> editStyle { it.copy(titleEnabled = checked) } }
         )
-        rows += divider()
-        rows += labeled(
-            getString(R.string.title_position),
-            chipRow(
-                options = listOf(
-                    getString(R.string.title_pos_top),
-                    getString(R.string.title_pos_bottom)
-                ),
-                current = { if (prefs.style().titlePos == TitlePos.TOP) 0 else 1 },
-                onPick = { index ->
-                    editStyle { it.copy(titlePos = if (index == 0) TitlePos.TOP else TitlePos.BOTTOM) }
-                }
+
+        // 标题关闭时，位置 / 字号 / 颜色都是无效配置：整组隐藏，不留空行。
+        val details = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
             )
-        )
-        rows += spacer(6)
-        rows += stepperRow(
-            label = getString(R.string.title_font),
-            value = { getString(R.string.display_font_value, prefs.style().titleFontSp.toInt().toString()) },
-            isDefault = { prefs.style().titleFontSp == OverlayDefaults.TITLE_FONT_SP },
-            minus = { editStyle { it.copy(titleFontSp = it.titleFontSp - 1f) } },
-            plus = { editStyle { it.copy(titleFontSp = it.titleFontSp + 1f) } },
-            reset = { editStyle { it.copy(titleFontSp = OverlayDefaults.TITLE_FONT_SP) } }
-        )
-        rows += colorRow(
-            getString(R.string.title_color),
-            current = { prefs.style().titleColor },
-            default = OverlayDefaults.TITLE_COLOR,
-            onPick = { color -> editStyle { it.copy(titleColor = color) } }
-        )
+            addView(divider())
+            addView(
+                labeled(
+                    getString(R.string.title_position),
+                    chipRow(
+                        options = listOf(
+                            getString(R.string.title_pos_top),
+                            getString(R.string.title_pos_bottom)
+                        ),
+                        current = { if (prefs.style().titlePos == TitlePos.TOP) 0 else 1 },
+                        onPick = { index ->
+                            editStyle {
+                                it.copy(
+                                    titlePos = if (index == 0) TitlePos.TOP else TitlePos.BOTTOM
+                                )
+                            }
+                        }
+                    )
+                )
+            )
+            addView(spacer(6))
+            addView(
+                stepperRow(
+                    label = getString(R.string.title_font),
+                    value = {
+                        getString(
+                            R.string.display_font_value,
+                            prefs.style().titleFontSp.toInt().toString()
+                        )
+                    },
+                    isDefault = { prefs.style().titleFontSp == OverlayDefaults.TITLE_FONT_SP },
+                    minus = { editStyle { it.copy(titleFontSp = it.titleFontSp - 1f) } },
+                    plus = { editStyle { it.copy(titleFontSp = it.titleFontSp + 1f) } },
+                    reset = { editStyle { it.copy(titleFontSp = OverlayDefaults.TITLE_FONT_SP) } }
+                )
+            )
+            addView(
+                colorRow(
+                    getString(R.string.title_color),
+                    current = { prefs.style().titleColor },
+                    default = OverlayDefaults.TITLE_COLOR,
+                    onPick = { color -> editStyle { it.copy(titleColor = color) } }
+                )
+            )
+        }
+        rows += details
+        uiRefreshers += {
+            details.visibility = if (prefs.style().titleEnabled) View.VISIBLE else View.GONE
+        }
 
         return cardSection(getString(R.string.section_title), null, rows)
     }

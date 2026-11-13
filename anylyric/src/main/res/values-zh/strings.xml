@@ -170,7 +170,7 @@
     <string name="route_git_mirror_hint">镜像节点。通常更慢，但别的线路不通时往往能连上。</string>
     <string name="section_window">悬浮窗</string>
     <string name="section_colors">颜色</string>
-    <string name="section_colors_hint">点任意一行都能取色，四项各自可单独恢复默认。</string>
+    <string name="section_colors_hint">点任意一行都能取色，每项都能单独恢复默认。</string>
     <string name="section_title">标题</string>
     <string name="section_behavior">行为</string>
     <string name="appearance_lines_hint">歌词总行数。当前句折行优先，剩下的预算才给后续行。</string>
