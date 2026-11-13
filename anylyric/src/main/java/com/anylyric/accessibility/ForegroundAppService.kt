@@ -1,13 +1,18 @@
 package com.anylyric.accessibility
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import android.view.inputmethod.InputMethodManager
 import com.anylyric.data.Prefs
 import com.anylyric.diag.Probe
+
+/** 提交未成功时的补排间隔：只需跨过 Handler 与 elapsedRealtime 的几毫秒误差。 */
+private const val COMMIT_RETRY_MS = 120L
 
 /**
  * 前台应用检测（0.2.11，「按应用隐藏悬浮窗」的唯一检测通道）。
@@ -28,7 +33,12 @@ import com.anylyric.diag.Probe
 class ForegroundAppService : AccessibilityService() {
 
     private val handler = Handler(Looper.getMainLooper())
-    private val stabilizer = PkgStabilizer()
+
+    /**
+     * 用**单调时钟**（`elapsedRealtime`）而不是墙钟：系统对时、跨时区、休眠恢复
+     * 都可能让 `currentTimeMillis` 跳一下，跳负了滞回就永远提交不了。
+     */
+    private val stabilizer = PkgStabilizer(clock = { SystemClock.elapsedRealtime() })
 
     /** 懒加载一次就复用：事件频率虽低，但每来一次就新建一个 Prefs 只是白分配。 */
     private val prefs: Prefs by lazy { Prefs(applicationContext) }
@@ -40,16 +50,25 @@ class ForegroundAppService : AccessibilityService() {
     private var lastReported: String? = null
 
     /**
-     * 候选包名稳定 450ms 后提交一次。
+     * 候选包名稳定 450ms 后提交。
      *
      * 必须靠这个延迟回调：`onRaw` 只更新候选，没有新事件时没人推进时钟，
      * 候选就永远提交不了（表现为「切了应用但不隐藏」）。
+     *
+     * 提交失败时**再排一次**（[PkgStabilizer.hasPending]）：`postDelayed` 的基准是
+     * uptime、判定用的是 elapsedRealtime，两者可能差几毫秒 —— 只排一次的话，
+     * 那几毫秒就足以让候选永久卡住，这正是 0.2.11 真机 `foreground=unknown` 的成因之一。
      */
-    private val commitTick = Runnable {
-        val stable = stabilizer.tick()
-        if (stable != lastReported) {
-            lastReported = stable
-            ForegroundApps.report(stable)
+    private val commitTick = object : Runnable {
+        override fun run() {
+            val stable = stabilizer.tick()
+            if (stable != lastReported) {
+                lastReported = stable
+                if (Probe.enabled) Probe.write("前台", "稳定 → ${stable ?: "未知"}")
+                ForegroundApps.report(stable)
+                return
+            }
+            if (stabilizer.hasPending()) handler.postDelayed(this, COMMIT_RETRY_MS)
         }
     }
 
@@ -61,6 +80,8 @@ class ForegroundAppService : AccessibilityService() {
 
         val pkg = runCatching { event.packageName?.toString() }.getOrNull() ?: return
         if (shouldIgnoreForegroundEvent(pkg, imePackages())) return
+        // 调试开着时留一条：真机上「一个事件都没来」和「来了但没提交」是两种完全不同的故障。
+        if (Probe.enabled) Probe.write("前台", "事件 $pkg")
 
         stabilizer.onRaw(pkg)
         handler.removeCallbacks(commitTick)
@@ -70,7 +91,19 @@ class ForegroundAppService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         ForegroundApps.serviceConnected = true
-        Probe.write("权限", "无障碍服务已连接（可接收窗口切换）")
+        // XML 里已经声明过一次订阅面，这里**再设一遍**：真机上见过 ROM 覆盖或
+        // 资源解析导致 `accessibilityEventTypes` 没生效的情况 —— 那时服务是连着的
+        // （a11yConnected=true）却一个窗口事件都收不到，探针表现正是 foreground=unknown。
+        // 只在连接时跑一次，不进热路径。
+        runCatching {
+            val info = serviceInfo ?: AccessibilityServiceInfo()
+            info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+            if (info.feedbackType == 0) info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
+            info.notificationTimeout = 100
+            serviceInfo = info
+            ForegroundApps.serviceEventTypes = info.eventTypes
+        }
+        Probe.write("前台", "无障碍服务已连接，订阅 eventTypes=${ForegroundApps.serviceEventTypes}")
     }
 
     override fun onDestroy() {

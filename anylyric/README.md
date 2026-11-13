@@ -481,6 +481,31 @@ AccessibilityEvent(TYPE_WINDOW_STATE_CHANGED)
 - 支持直接粘完整包名添加（排障时最省事）；
 - 勾选即时生效，没有「保存」按钮。
 
+### 实时前台应用（0.2.12）
+
+设置页「按应用隐藏 → 实时前台应用」：显示最近切过的 20 个应用（应用名 + 包名），
+当前前台高亮，**点一下就能加入/移出隐藏名单**。
+
+存在的理由：车机上「勾了名字却不隐藏」时，必须先知道「切过去时系统报的是哪个包」。
+列表为空本身就是证据 —— 一个事件都没收到，该去查无障碍，而不是查名单。
+
+- **不落盘**：内存环形 20 条，进程结束即清。写文件既要权限，长跑还会膨胀；
+- 去重：同一个包重复上报（窗口内部变化）不会在列表里刷屏；
+- 名称查 `PackageManager` 并缓存，这行每秒被 `refresh` 读到但不会每次都问系统。
+
+### 0.2.12 修掉的「勾了却不隐藏」
+
+真机探针（HONOR PGT-AN00 / 0.2.11）给出两个硬证据，都是实现缺陷：
+
+| 现象 | 根因 | 修法 |
+|---|---|---|
+| `foreground=unknown`，切过去完全不隐藏 | 监听器挂在 `SessionHub.attach()` 里，而 `attach()` 只在**通知服务建连**时调用。该机 `listenerConnected=false`（degraded），`SessionHub` 由设置页创建，`attach` 从未执行 → 前台包名变化一次都没触发重算 | 监听移到 `SessionHub` 的 `init`；`detach()` 也不再移除（监听与 SessionHub 同属进程单例，不存在泄漏） |
+| 即使注册了也可能永远收不到包名 | 滞回只 `postDelayed` **一次**：Handler 走 uptime、判定走墙钟，早几毫秒 `tick()` 就不提交，候选永久卡住 | 时钟换 `elapsedRealtime`（单调）；`PkgStabilizer.hasPending()` + 提交失败再排一次，自愈 |
+| `a11yConnected=true` 却一个事件没有 | XML 订阅在部分 ROM 上不生效 | `onServiceConnected` 里用代码再设一遍 `eventTypes`，并把实际值写进报告 `[HIDE] events=` |
+
+> 判据：`events` 必须含 **32**（`TYPE_WINDOW_STATE_CHANGED`）。不含 = 订阅没生效；
+> 含 32 但 `foreground` 仍是 `unknown` = 系统没派发，或用户从未切过应用。
+
 ## 设置页结构（v0.2.11）
 
 一屏分成 10 张自带标题的卡片：状态（含两项权限与当前播放）、悬浮窗、外观、颜色、标题、
@@ -500,7 +525,7 @@ AccessibilityEvent(TYPE_WINDOW_STATE_CHANGED)
 
 | 项 | 结果 |
 |---|---|
-| `:anylyric:testDebugUnitTest` | **194 项**通过（LRC 解析 10、伪歌名判定 11、责任链 10、时钟 6、判因 14、权限列表解析 7、几何 10、折行 9、行预算 7、样式 11、开机策略 6、更新 18、资源采样 7、行推进 tick 11、L0 缓存 6、工作量计数 4、JSON 解包 7、播放状态扩展 7、看门狗 6、在线解析 7、歌名解析 4、前台滞回 5、隐藏判定 9） |
+| `:anylyric:testDebugUnitTest` | **198 项**通过（LRC 解析 10、伪歌名判定 11、责任链 10、时钟 6、判因 14、权限列表解析 7、几何 10、折行 9、行预算 7、样式 11、开机策略 6、更新 18、资源采样 7、行推进 tick 11、L0 缓存 6、工作量计数 4、JSON 解包 7、播放状态扩展 7、看门狗 6、在线解析 7、歌名解析 4、前台滞回 6、隐藏判定 12） |
 | `:anylyric:lintDebug` | Error 0（Warning 73，均为既有项或预期项） |
 | `assembleRelease` | 约 **306 KB**（含矢量图标 + 5 组密度 PNG），运行时依赖仅 `kotlin-stdlib` |
 | 真机 | 手机（HONOR / API 37）已验证 L1 可命中；车机 **未验证**；按应用隐藏（无障碍通道）**未上真机** |

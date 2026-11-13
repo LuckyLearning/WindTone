@@ -99,4 +99,30 @@ class ForegroundAppsTest {
         assertEquals(listOf<String?>(null), seen)
         assertNull(ForegroundApps.currentPkg)
     }
+
+    @Test
+    fun `recent keeps the newest 20 and drops the oldest`() {
+        // 车机现场排查就靠这份列表：能翻到「刚才切过的那个包」。
+        // 无上限会让长跑进程一点点涨内存，所以固定 20 条。
+        repeat(25) { ForegroundApps.report("pkg.$it") }
+        val recent = ForegroundApps.recent()
+        assertEquals(20, recent.size)
+        assertEquals("pkg.5", recent.first().pkg)
+        assertEquals("pkg.24", recent.last().pkg)
+    }
+
+    @Test
+    fun `recent skips duplicate reports`() {
+        // 同一个包重复上报（窗口内部变化）不该在列表里刷出一堆同一条
+        ForegroundApps.report("com.example.video")
+        ForegroundApps.report("com.example.video")
+        assertEquals(1, ForegroundApps.recent().size)
+    }
+
+    @Test
+    fun `reset clears the recent list`() {
+        ForegroundApps.report("com.example.video")
+        ForegroundApps.reset()
+        assertTrue(ForegroundApps.recent().isEmpty())
+    }
 }

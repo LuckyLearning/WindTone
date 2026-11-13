@@ -734,6 +734,16 @@ class SettingsActivity : BaseActivity() {
             )
         )
         detail.addView(divider())
+        // 实时前台：回答「切过去时前台到底是哪个包」。车机上勾的名字与真实包名对不上时，
+        // 这是唯一能当场看到证据的地方；列表里可以直接把那个包加进名单。
+        detail.addView(
+            clickableValueRow(
+                label = getString(R.string.hide_apps_recent),
+                value = { recentForegroundLabel() },
+                onClick = { showRecentForegroundDialog() }
+            )
+        )
+        detail.addView(divider())
         detail.addView(
             clickableValueRow(
                 label = getString(R.string.hide_apps_access),
@@ -937,6 +947,118 @@ class SettingsActivity : BaseActivity() {
             all = entries
             refilter()
         }
+    }
+
+    /**
+     * 卡片里「实时前台」那一行的值。
+     *
+     * 直接给应用名（查不到给包名）：车机上应用名常与真实包名对不上，
+     * 这一行存在的意义就是让用户当场看到「刚才切过去时系统报的是谁」。
+     */
+    private fun recentForegroundLabel(): String {
+        val pkg = ForegroundApps.currentPkg ?: return getString(R.string.hide_apps_recent_none)
+        return appLabel(pkg)
+    }
+
+    /** 包名 → 应用名。带缓存：这行每秒会被 refresh 读到，不该每次都问 PackageManager。 */
+    private fun appLabel(pkg: String): String {
+        appLabelCache[pkg]?.let { return it }
+        val label = runCatching {
+            packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+        }.getOrDefault(pkg)
+        appLabelCache[pkg] = label
+        return label
+    }
+
+    private val appLabelCache = HashMap<String, String>()
+
+    /**
+     * 最近切过的应用（0.2.12）。
+     *
+     * 这是 WindTone 那套「前台应用记录」的轻量版：**不落盘**，只保留进程内的最近 20 条。
+     * 用法很直接 —— 切到目标应用 → 回到这里 → 列表里就有它的真实包名，点一下即加入名单。
+     *
+     * 空列表本身就是证据：说明无障碍服务一个事件都没收到，此时该去查权限而不是查名单。
+     */
+    private fun showRecentForegroundDialog() {
+        val entries = ForegroundApps.recent().asReversed()
+        if (entries.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle(getString(R.string.hide_apps_recent_title))
+                .setMessage(
+                    if (ForegroundApps.serviceConnected) {
+                        getString(R.string.hide_apps_recent_empty)
+                    } else {
+                        getString(R.string.hide_apps_recent_no_service)
+                    }
+                )
+                .setPositiveButton(getString(R.string.hide_apps_close), null)
+                .show()
+            return
+        }
+
+        val current = ForegroundApps.currentPkg
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+
+        for (entry in entries) {
+            val check = CheckBox(this).apply {
+                isChecked = entry.pkg in prefs.hiddenApps
+                // 整行可点：勾选框只负责显示状态，不接点击，否则会出现「点字没反应」
+                isClickable = false
+                isFocusable = false
+            }
+            val title = text(appLabel(entry.pkg), 15f).apply {
+                if (entry.pkg == current) setTextColor(colorAccent)
+            }
+            val sub = text(entry.pkg, 11f, secondary = true)
+
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                minimumHeight = dp(56)
+                isClickable = true
+                isFocusable = true
+                setPadding(dp(4), dp(2), dp(4), dp(2))
+                addView(
+                    LinearLayout(this@SettingsActivity).apply {
+                        orientation = LinearLayout.VERTICAL
+                        addView(title)
+                        addView(sub)
+                    },
+                    LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                )
+                addView(check)
+                setOnClickListener {
+                    toggleHiddenApp(entry.pkg)
+                    check.isChecked = entry.pkg in prefs.hiddenApps
+                    // 卡片上的「已选 N 个」要跟着变；对话框本身不用重建
+                    refresh()
+                }
+            }
+            list.addView(row)
+            list.addView(divider(6, 6))
+        }
+
+        val scroll = ScrollView(this).apply { addView(list) }
+        val listHeight = (resources.displayMetrics.heightPixels * 0.6f).toInt()
+            .coerceAtMost(dp(460))
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(
+                scroll,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    listHeight
+                )
+            )
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.hide_apps_recent_title))
+            .setView(root)
+            .setPositiveButton(getString(R.string.hide_apps_close), null)
+            .setOnDismissListener { if (!isFinishing && !isDestroyed) refresh() }
+            .show()
     }
 
     /** 后台枚举可启动应用，并补上「名单里已有但不可启动」的包。 */

@@ -16,6 +16,25 @@ object ForegroundApps {
         private set
 
     /**
+     * 最近的前台切换（0.2.12）：内存环形，最多 [RECENT_MAX] 条，进程结束即清。
+     *
+     * 存在的理由很实在：车机上「勾了却不隐藏」时，必须先回答「切过去时前台到底是哪个包」。
+     * 以前只能靠探测报告的 `[HIDE] foreground=` 事后猜，而那个值在服务没上报时是 unknown。
+     * 现在设置页能直接看到这份列表，并一键把它加进隐藏名单。
+     *
+     * **不落盘**：这是现场证据，不是历史档案；写文件既要权限也会长跑膨胀。
+     */
+    data class Entry(val pkg: String, val atMillis: Long)
+
+    private const val RECENT_MAX = 20
+
+    private val recentLog = ArrayDeque<Entry>()
+
+    /** 最近的前台切换（旧的在前）。返回副本，调用方可随意遍历。 */
+    @Synchronized
+    fun recent(): List<Entry> = recentLog.toList()
+
+    /**
      * 无障碍服务**此刻是否真的连着**（由 [ForegroundAppService] 维护）。
      *
      * 与「系统设置里那个勾打没打」是两件事：车机上服务被杀、勾还留着是常态。
@@ -26,9 +45,18 @@ object ForegroundApps {
     var serviceConnected: Boolean = false
 
     /**
+     * 服务实际订阅的事件类型位掩码（`AccessibilityServiceInfo.eventTypes`）。
+     *
+     * 报告里要能看到它是不是含 `TYPE_WINDOW_STATE_CHANGED`（32）：
+     * 「服务连着却一个事件都没来」时，这是唯一能区分「订阅没生效」与「系统不派发」的证据。
+     */
+    @Volatile
+    var serviceEventTypes: Int = 0
+
+    /**
      * 包名变化监听。
      *
-     * 用 `CopyOnWriteArrayList`：注册/注销只发生在服务建连与销毁这种低频时刻，
+     * 用 `CopyOnWriteArrayList`：注册/注销只发生在会话创建与销毁这种低频时刻，
      * 而回调是每次应用切换都要走的路径 —— 读多写少，正好。
      */
     private val listeners = java.util.concurrent.CopyOnWriteArrayList<(String?) -> Unit>()
@@ -50,6 +78,12 @@ object ForegroundApps {
         val normalized = pkg?.takeIf { it.isNotBlank() }
         if (normalized == currentPkg) return false
         currentPkg = normalized
+        if (normalized != null) {
+            synchronized(this) {
+                recentLog.addLast(Entry(normalized, System.currentTimeMillis()))
+                while (recentLog.size > RECENT_MAX) recentLog.removeFirst()
+            }
+        }
         // 单个监听器抛异常不能影响其它监听器（也不能把服务带崩）
         for (listener in listeners) {
             runCatching { listener(normalized) }
@@ -60,6 +94,7 @@ object ForegroundApps {
     /** 服务被解绑 / 用户关掉功能时清空，避免残留一个过期包名导致悬浮窗一直不显示。 */
     fun reset() {
         report(null)
+        synchronized(this) { recentLog.clear() }
     }
 }
 

@@ -41,6 +41,14 @@ internal class PkgStabilizer(
         return stable
     }
 
+    /**
+     * 是否还有「已收到但尚未提交」的候选。
+     *
+     * 服务侧靠它做自愈：`postDelayed` 可能比稳定窗口早几毫秒触发（Handler 走 uptime、
+     * 这里的时钟走墙钟），那一次 `tick()` 不会提交 —— 若只排一次，候选就永远卡住了。
+     */
+    fun hasPending(): Boolean = candidate != stable
+
     /** 仅推进时钟（没有新事件时），检查候选是否已够稳定可提交。 */
     fun tick(): String? {
         tryCommit(clock())

@@ -22,6 +22,11 @@
     <string name="hide_apps_pick">选择应用</string>
     <string name="hide_apps_pick_value">已选 %1$s 个</string>
     <string name="hide_apps_pick_none">未选择</string>
+    <string name="hide_apps_recent">实时前台应用</string>
+    <string name="hide_apps_recent_none">未知</string>
+    <string name="hide_apps_recent_title">最近切过的应用</string>
+    <string name="hide_apps_recent_empty">还没有收到任何前台切换。先切到要隐藏的应用，再回到这里，就能看到它的包名。</string>
+    <string name="hide_apps_recent_no_service">无障碍服务当前未连接，收不到前台切换。请先开启「无障碍服务」，再回来查看。</string>
     <string name="hide_apps_access">无障碍服务</string>
     <string name="hide_apps_access_off">未开启 —— 点击去系统设置开启</string>
     <string name="hide_apps_access_on">已开启</string>

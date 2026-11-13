@@ -284,6 +284,14 @@ class SessionHub private constructor(context: Context) {
                 // 车机上少数 ROM 会拦 NEW_TASK 启动：忽略即可，用户仍可从桌面进入
             }
         }
+        // 前台监听必须挂在**构造**处，不能等 attach()。
+        //
+        // 0.2.11 的真机 bug 就出在这里：attach() 只在通知服务建连时调用，而
+        // 「通知使用权已授权但服务未绑定」（degraded）在车机上是常态 ——
+        // 那种情况下 SessionHub 由设置页创建，attach 永远不会跑，
+        // 前台包名变化一次也没触发过重算，表现就是「勾了名单却不隐藏」。
+        ForegroundApps.addListener(foregroundListener)
+        applyHideState()
     }
 
     private val callback = object : MediaController.Callback() {
@@ -645,9 +653,8 @@ class SessionHub private constructor(context: Context) {
         else QUERY_FOREIGN_ACTIVE_MS
 
     fun attach() {
-        // 前台包名可能在本服务起来之前就已经报过了（无障碍服务先被系统拉起），
-        // 所以注册完立刻按当前值重算一次，别等下一次应用切换。
-        ForegroundApps.addListener(foregroundListener)
+        // 前台监听在 init 里就挂好了（见那里为什么不能放在这）。
+        // 这里只补一次判定：服务起来时前台可能已经换过应用了。
         applyHideState()
         requestRefresh("attach")
     }
@@ -673,8 +680,9 @@ class SessionHub private constructor(context: Context) {
         // 服务销毁用 release 而不是 hide：连 OverlayHost 自己的回调（隐藏到期等）
         // 一起摘掉，否则残留的 hiddenUntil 会把下一次会话的歌词卡在「隐藏期内」。
         overlay.release()
-        // 监听也要摘：否则服务重启前残留的前台事件仍会来改（已不存在的）窗口状态。
-        ForegroundApps.removeListener(foregroundListener)
+        // 注意：**不摘** ForegroundApps 的监听。detach 只代表通知服务没了，
+        // 设置页/诊断页可能还开着，前台切换仍要能重算显隐；监听器与 SessionHub
+        // 同属进程单例，不存在泄漏。
     }
 
     // ---------------------------------------------------------------- 按应用隐藏
@@ -1524,12 +1532,14 @@ class SessionHub private constructor(context: Context) {
             // 用户开了「无歌词时隐藏」且当前确实没有歌词行 → 窗口是被这条规则收掉的。
             hiddenByRule = prefs.hideWhenNoLyrics && currentLines.isEmpty(),
             a11yConnected = ForegroundApps.serviceConnected,
+            a11yEventTypes = ForegroundApps.serviceEventTypes,
             hideByAppEnabled = prefs.hideByAppEnabled,
             hiddenAppCount = prefs.hiddenApps.size,
             foregroundPkg = ForegroundApps.currentPkg,
             foregroundHidden = prefs.hideByAppActive &&
                 overlayHiddenFor(ForegroundApps.currentPkg, prefs.hiddenApps),
             overlaySuppressed = overlay.isSuppressed(),
+            hideByOwnUi = ownUiCount > 0,
             displayCount = displayCount(),
             fontScale = appContext.resources.configuration.fontScale
         )

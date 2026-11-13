@@ -23,6 +23,11 @@
     <string name="hide_apps_pick">Apps to hide in</string>
     <string name="hide_apps_pick_value">%1$s selected</string>
     <string name="hide_apps_pick_none">None selected</string>
+    <string name="hide_apps_recent">Foreground app</string>
+    <string name="hide_apps_recent_none">Unknown</string>
+    <string name="hide_apps_recent_title">Recently foreground apps</string>
+    <string name="hide_apps_recent_empty">No foreground switch has arrived yet. Switch to the app you want to hide in, then come back — its package name will show up here.</string>
+    <string name="hide_apps_recent_no_service">The accessibility service is not connected, so no foreground switch can arrive. Turn it on first, then come back.</string>
     <string name="hide_apps_access">Accessibility service</string>
     <string name="hide_apps_access_off">Not enabled — tap to open system settings</string>
     <string name="hide_apps_access_on">Enabled</string>

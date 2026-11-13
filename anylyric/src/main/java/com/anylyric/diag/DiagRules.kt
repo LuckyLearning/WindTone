@@ -38,11 +38,15 @@ data class ProbeSnapshot(
      *  · [a11yConnected] —— 无障碍服务是否真的连着（勾了不等于在跑）。
      */
     val a11yConnected: Boolean = false,
+    /** 无障碍服务实际订阅的事件类型位掩码；32（`TYPE_WINDOW_STATE_CHANGED`）缺失 = 订阅没生效。 */
+    val a11yEventTypes: Int = 0,
     val hideByAppEnabled: Boolean = false,
     val hiddenAppCount: Int = 0,
     val foregroundPkg: String? = null,
     val foregroundHidden: Boolean = false,
     val overlaySuppressed: Boolean = false,
+    /** 让位是不是因为「本应用自己的界面在屏上」（设置页/诊断页），而不是名单命中。 */
+    val hideByOwnUi: Boolean = false,
 
     val displayCount: Int = 1,
     val fontScale: Float = 1f
@@ -112,8 +116,8 @@ object DiagRules {
         s.overlaySuppressed ->
             Diagnosis(
                 DiagCode.HIDDEN_BY_APP,
-                "suppressed=true, foreground=${s.foregroundPkg ?: "unknown"}, " +
-                    "inList=${s.foregroundHidden}"
+                "suppressed=true, ownUi=${s.hideByOwnUi}, " +
+                    "foreground=${s.foregroundPkg ?: "unknown"}, inList=${s.foregroundHidden}"
             )
 
         !s.viewAttached ->

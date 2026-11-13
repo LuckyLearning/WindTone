@@ -1,7 +1,9 @@
 package com.anylyric.accessibility
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -58,5 +60,19 @@ class PkgStabilizerTest {
         stabilizer.tick()
         stabilizer.reset()
         assertNull(stabilizer.stablePkg())
+    }
+
+    @Test
+    fun `candidate stays pending until the window elapses`() {
+        // 服务侧靠这个判据决定「要不要再排一次 tick」：
+        // postDelayed 比稳定窗口早几毫秒触发时，只排一次就永远卡住了。
+        stabilizer.onRaw("com.example.video")
+        assertTrue(stabilizer.hasPending())
+        now += 100L
+        stabilizer.tick()
+        assertTrue(stabilizer.hasPending())
+        now += 400L
+        stabilizer.tick()
+        assertFalse(stabilizer.hasPending())
     }
 }

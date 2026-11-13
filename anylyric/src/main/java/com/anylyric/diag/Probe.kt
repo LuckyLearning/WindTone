@@ -143,12 +143,12 @@ object Probe {
         // 按应用隐藏紧跟窗口：两者合起来回答「窗口为什么什么都没画」。
         // 名字选对了却不隐藏，通常是 a11yConnected=false（勾了但服务没跑）或 foreground 报的不是那个包。
         sb.appendLine(
-            "[HIDE] a11yConnected=${s.a11yConnected} enabled=${s.hideByAppEnabled} " +
-                "hiddenApps=${s.hiddenAppCount}"
+            "[HIDE] a11yConnected=${s.a11yConnected} events=${s.a11yEventTypes} " +
+                "enabled=${s.hideByAppEnabled} hiddenApps=${s.hiddenAppCount}"
         )
         sb.appendLine(
             "  foreground=${s.foregroundPkg ?: "unknown"} inList=${s.foregroundHidden} " +
-                "suppressed=${s.overlaySuppressed}"
+                "suppressed=${s.overlaySuppressed} ownUi=${s.hideByOwnUi}"
         )
         sb.appendLine("[RENDER] $lastRender")
         sb.appendLine("[PROCESS] cachedLogLines=${lines().size} dropped=$dropped")
