@@ -71,6 +71,10 @@ class ResourceSamplerTest {
     fun sampleLineIsSingleLine() {
         val line = ResourceSampler.Sample(
             pssKb = 120 * 1024,
+            privateKb = 46 * 1024,
+            codeKb = 30 * 1024,
+            graphicsKb = 9 * 1024,
+            systemKb = 12 * 1024,
             javaUsedKb = 8 * 1024,
             javaMaxKb = 48 * 1024,
             nativeKb = 3 * 1024,
@@ -81,17 +85,58 @@ class ResourceSamplerTest {
             uptimeSec = 90
         ).oneLine()
         assertTrue(line.contains("pss=120.0MB"))
+        // private 必须跟 pss 一起出现在日志里：只看 pss 会误以为应用独占 120MB
+        assertTrue(line.contains("private=46.0MB"))
         assertTrue(line.contains("cpu=7%"))
         assertTrue(line.contains("threads=17"))
         assertTrue(!line.contains('\n'))
     }
 
+    /** 报告要比日志多一行拆解：能区分「独占」与「共享分摊」。 */
+    @Test
+    fun detailBreaksDownPss() {
+        val detail = ResourceSampler.Sample(
+            pssKb = 110 * 1024,
+            privateKb = 44 * 1024,
+            codeKb = 33 * 1024,
+            graphicsKb = 11 * 1024,
+            systemKb = 22 * 1024,
+            javaUsedKb = 7 * 1024,
+            javaMaxKb = 384 * 1024,
+            nativeKb = 31 * 1024,
+            cpuPercent = 26,
+            threads = 33,
+            fds = 248,
+            gcCount = 6,
+            uptimeSec = 37
+        ).detail()
+        assertTrue(detail.contains("private=44.0MB"))
+        assertTrue(detail.contains("code=33.0MB"))
+        assertTrue(detail.contains("graphics=11.0MB"))
+        assertTrue(detail.contains("system=22.0MB"))
+    }
+
     /** 读不到的值显示 '?'，不能显示 -1 让人误以为是真实数据。 */
     @Test
     fun unknownValuesAreMarked() {
-        val line = ResourceSampler.Sample(-1, 0, 0, 0, -1, 1, -1, -1, 0).oneLine()
+        val line = ResourceSampler.Sample(
+            pssKb = -1,
+            privateKb = -1,
+            codeKb = -1,
+            graphicsKb = -1,
+            systemKb = -1,
+            javaUsedKb = 0,
+            javaMaxKb = 1,
+            nativeKb = -1,
+            cpuPercent = -1,
+            threads = 0,
+            fds = -1,
+            gcCount = -1,
+            uptimeSec = 0
+        ).oneLine()
         assertTrue(line.contains("cpu=?"))
         assertTrue(line.contains("gc=?"))
         assertTrue(line.contains("pss=?"))
+        assertTrue(line.contains("private=?"))
     }
 }

@@ -412,6 +412,35 @@ MediaWatchService  (NotificationListenerService，由系统绑定，不自拉活
 | 服务销毁后 `OverlayHost` 的 Handler 回调残留；若「隐藏 10 分钟」计时器被摘掉而 `hiddenUntil` 还留着，下一次会话的歌词会被永远卡在「隐藏期内」 | 新增 `OverlayHost.release()`：摘掉全部回调并复位 `hiddenUntil`，两个动作绑在一起，由 `SessionHub.detach()` 调用 |
 | 其余复核结论：`Probe` 内存日志 300 条硬顶、L1 行缓冲 200 条、通知表 16 包上限、L0 解析缓存单条、淡入动画在 `onDetachedFromWindow` 取消、回调注册/注销成对 —— 均有界，无需再改 |
 
+### 0.2.12：PSS 怎么看，以及为什么降不下去
+
+`[RESOURCE]` 从一行扩成四行，把 PSS 拆开：
+
+```text
+pss=110.4MB private=44.1MB java=7.5MB/384.0MB native=31.1MB
+code=33.0MB graphics=11.0MB system=22.0MB  (code/graphics/system 为共享部分按比例分摊)
+```
+
+**`pss` 不等于「本应用独占」**：它把代码段、中文字体、图形驱动这些共享页按比例摊进来，
+所以任何 Android 应用都会背一份 100MB 量级的账。真正该看的是 `private`
+（进程被杀后能回收的量）。
+
+实测（HONOR PGT-AN00，0.2.11 探针）：`pss=113.2MB java=7.5MB native=31.1MB` ——
+Java 堆只有 7.5MB，其余是 native（Skia 字体与渲染缓存）与共享库分摊。升级后同一条会
+多出 `private=` 与 `code/graphics/system`，那才是判断依据。
+
+已核实**没有**这些泄漏：
+
+| 疑点 | 结论 |
+|---|---|
+| 网络连接 | 更新检查与在线补词都在 `finally` 里 `disconnect()` |
+| 线程池 | 更新竞速 `finally shutdownNow()`；在线补词为单个 daemon 线程 |
+| 位图 | 只有设置页应用图标，`LruCache(48)` 随对话框销毁即回收 |
+| 窗口 surface | 取消/隐藏时 `removeViewImmediate`；按应用隐藏**保留**窗口（这是有意的，拆建会掉帧） |
+
+**唯一有效的降 PSS 手段**：把悬浮窗调小 —— `graphics` 段与窗口面积成正比。
+不要为此改软件渲染：那会把绘制推回 CPU，车机上直接掉帧，得不偿失。
+
 ## 开机自启与后台保活（v0.2.7）
 
 设置页新增「开机与后台」卡片，两项都**默认关闭**：

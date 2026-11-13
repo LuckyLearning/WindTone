@@ -23,6 +23,20 @@ object ResourceSampler {
     data class Sample(
         /** 整进程 PSS（KB）。ROM 裁掉 Debug.getMemoryInfo 时为 -1。 */
         val pssKb: Int,
+        /**
+         * 本进程**独占**的脏页（KB）。
+         *
+         * 这是比 PSS 更该看的数字：PSS 把共享库、字体、图形驱动按比例摊给本进程，
+         * 而 private 才是「进程被杀之后能真正回收」的那部分。
+         * 车机上看到 `pss=110MB` 就以为应用吃了 110MB，是这类报告最常见的误读。
+         */
+        val privateKb: Int,
+        /** 代码段（dex / oat / .so 映射）按比例分摊到本进程的部分。 */
+        val codeKb: Int,
+        /** 图形缓冲（GPU / SurfaceFlinger 分配的 buffer）。窗口越大这块越大。 */
+        val graphicsKb: Int,
+        /** 系统侧共享部分（ashmem、字体、系统库）。 */
+        val systemKb: Int,
         val javaUsedKb: Int,
         val javaMaxKb: Int,
         val nativeKb: Int,
@@ -35,8 +49,10 @@ object ResourceSampler {
         val uptimeSec: Long
     ) {
         /** 一行日志用：够短，能塞进日志缓冲还不刷屏。 */
-        fun oneLine(): String = buildString(96) {
+        fun oneLine(): String = buildString(112) {
             append("pss=").append(mb(pssKb))
+            // private 紧跟 pss：这两个数字一起看才知道「大头是共享还是独占」
+            append(" private=").append(mb(privateKb))
             append(" java=").append(mb(javaUsedKb)).append('/').append(mb(javaMaxKb))
             append(" native=").append(mb(nativeKb))
             append(" cpu=").append(if (cpuPercent < 0) "?" else "$cpuPercent%")
@@ -46,10 +62,20 @@ object ResourceSampler {
             append(" uptime=").append(uptimeSec).append('s')
         }
 
-        /** 报告用：多一行明细，便于对照是不是「内存涨了但 PSS 没涨」。 */
-        fun detail(): String = buildString(128) {
-            appendLine("  pss=${mb(pssKb)} java=${mb(javaUsedKb)}/${mb(javaMaxKb)} native=${mb(nativeKb)}")
-            appendLine("  cpu=${if (cpuPercent < 0) "?" else "$cpuPercent%"} threads=$threads fd=$fds gc=${if (gcCount < 0) "?" else gcCount}")
+        /** 报告用：拆开 PSS 构成，便于判断「涨的是独占还是共享」。 */
+        fun detail(): String = buildString(180) {
+            appendLine(
+                "  pss=${mb(pssKb)} private=${mb(privateKb)} " +
+                    "java=${mb(javaUsedKb)}/${mb(javaMaxKb)} native=${mb(nativeKb)}"
+            )
+            appendLine(
+                "  code=${mb(codeKb)} graphics=${mb(graphicsKb)} system=${mb(systemKb)}" +
+                    "  (code/graphics/system 为共享部分按比例分摊)"
+            )
+            appendLine(
+                "  cpu=${if (cpuPercent < 0) "?" else "$cpuPercent%"} threads=$threads " +
+                    "fd=$fds gc=${if (gcCount < 0) "?" else gcCount}"
+            )
             append("  uptime=${uptimeSec}s")
         }
 
@@ -78,9 +104,14 @@ object ResourceSampler {
         val runtime = Runtime.getRuntime()
         val javaMax = (runtime.maxMemory() / 1024L).toInt()
         val javaUsed = ((runtime.totalMemory() - runtime.freeMemory()) / 1024L).toInt()
+        val mem = readMemInfo()
 
         return Sample(
-            pssKb = readPssKb(),
+            pssKb = mem.pssKb,
+            privateKb = mem.privateKb,
+            codeKb = mem.codeKb,
+            graphicsKb = mem.graphicsKb,
+            systemKb = mem.systemKb,
             javaUsedKb = javaUsed,
             javaMaxKb = javaMax,
             nativeKb = (Debug.getNativeHeapAllocatedSize() / 1024L).toInt(),
@@ -142,10 +173,42 @@ object ResourceSampler {
     /** USER_HZ 在 Android 上恒为 100；拿不到 sysconf 时退回这个值。 */
     private fun clockTicksPerSecond(): Long = 100L
 
-    private fun readPssKb(): Int = try {
+    /**
+     * 一次 `Debug.getMemoryInfo` 读出整份拆解。
+     *
+     * 只调一次而不是分五次问：每次调用都会扫一遍 smaps，分开问就是五倍开销，
+     * 而这里每分钟才采一次，没必要让采样本身成为负担。
+     */
+    private data class MemInfo(
+        val pssKb: Int,
+        val privateKb: Int,
+        val codeKb: Int,
+        val graphicsKb: Int,
+        val systemKb: Int
+    )
+
+    private fun readMemInfo(): MemInfo = try {
         val info = Debug.MemoryInfo()
         Debug.getMemoryInfo(info)
-        info.totalPss
+        MemInfo(
+            pssKb = info.totalPss,
+            privateKb = info.totalPrivateDirty,
+            codeKb = memoryStat(info, "summary.code"),
+            graphicsKb = memoryStat(info, "summary.graphics"),
+            systemKb = memoryStat(info, "summary.system")
+        )
+    } catch (_: Throwable) {
+        MemInfo(-1, -1, -1, -1, -1)
+    }
+
+    /**
+     * 单项统计。
+     *
+     * `getMemoryStat` 在个别 ROM 上会返回 null 甚至抛异常，这时给 **-1** 而不是 0 ——
+     * 报告里显示 `?`（读不到），而不是假的 0MB（看起来像「没有代码段」）。
+     */
+    private fun memoryStat(info: Debug.MemoryInfo, key: String): Int = try {
+        info.getMemoryStat(key)?.toIntOrNull() ?: -1
     } catch (_: Throwable) {
         -1
     }
