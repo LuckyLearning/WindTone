@@ -182,6 +182,10 @@ internal fun SettingsOverlayPage(
     // v1.2.54：细参从「一个大折叠」改成按语义分组的折叠 —— 每组各开各关，
     // 找一项不用先展开三十行再往下翻。默认只展开「歌词文字」，
     // 其余保持收起（升级前那一版默认也是收起的，观感一致）。
+    //
+    // 第二版（同版）：整页从「一堆平铺的行 + 五组折叠」收成「主开关 + 六张折叠卡」，
+    // 预设 / 输出屏幕 / 明暗两套收进「外观与预设」，全屏形态与位置调整收进「位置与尺寸」。
+    var groupStyle by rememberSaveable { mutableStateOf(false) }
     var groupPosition by rememberSaveable { mutableStateOf(false) }
     var groupText by rememberSaveable { mutableStateOf(true) }
     var groupTitle by rememberSaveable { mutableStateOf(false) }
@@ -227,85 +231,73 @@ internal fun SettingsOverlayPage(
             }
         },
         // 关掉悬浮歌词是「回到默认」，但这里的 ↺ 只负责把开关拨回默认值，
-        // 不等同于下面那个「调整位置」——位置是另一件事，不在这里复位。
+        // 不等同于「位置与尺寸」组里的「调整悬浮歌词位置」—— 位置是另一件事，不在这里复位。
         onReset = resetAction(player.lyricOverlay != SettingsDefaults.LYRIC_OVERLAY) {
             onLyricOverlay(SettingsDefaults.LYRIC_OVERLAY)
         },
     )
+    // 运行状态：开关打开且已授权时显示。这一行是排障的关键 ——
+    // 悬浮窗启动失败（挂窗被 ROM 拒绝 / 前台服务被系统拦）在
+    // 旧版本里是完全静默的，用户只看到「开关开了但什么都没发生」。
+    if (player.lyricOverlay && canDrawOverlay) {
+        val failed = overlayHealth.status == LyricOverlayBus.Status.FAILED
+        Text(
+            text = when (overlayHealth.status) {
+                LyricOverlayBus.Status.RUNNING ->
+                    stringResource(R.string.running_go_to_the_home, overlayHealth.detail)
+                LyricOverlayBus.Status.FAILED ->
+                    stringResource(R.string.start_failed_check_settings_apps, overlayHealth.detail)
+                LyricOverlayBus.Status.IDLE -> stringResource(R.string.overlay_not_running)
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = if (failed) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            modifier = Modifier.padding(top = 2.dp, bottom = 6.dp),
+        )
+    }
+    if (overlayHintVisible && !canDrawOverlay) {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp)
+                .windShadow(level = 1, shape = RoundedCornerShape(10.dp)),
+        ) {
+            Text(
+                text = if (overlayJumpFailed) {
+                    stringResource(R.string.could_not_open_the_system)
+                } else {
+                    stringResource(R.string.permission_path_settings_apps_permissions)
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(10.dp),
+            )
+        }
+    }
     // 关掉开关时，下面这些**全部不显示**（v1.1.21 用户要求）：形态、宽度、
     // 位置、行数、字号、对齐、底板、暂停表现、文字颜色，全部只对「浮层已经
     // 在屏幕上」这件事有意义。留着它们只会让人以为「改了会生效」，
     // 而实际什么都看不到 —— 展示出来的每一行都必须是当下真正起作用的。
     if (player.lyricOverlay) {
-        // 全屏高度开关（v1.1.19）**不进预设体系**：整屏形态是「结构切换」而不是
-        // 「皮肤」，与预设混在一起会造成「选了预设却变了结构」的困惑（设计文档 §7.2）。
-        // 所以它保持在预设网格之上独立可见。
+        // ---------------- 外观与预设（v1.2.54 第二版：整页只剩折叠卡） ----------------
         //
-        // v1.2.54：三颗侧钮只在车载模式下真正挂出来，所以**手机模式下整组不显示** ——
-        // 留着就是一个「开了也看不见」的死开关（这就是「不起效的就收起」）。
-        if (player.carMode) {
-            OverlayGroup(
-                title = stringResource(R.string.oh_show_handles),
-                subtitle = if (player.overlayHandles) {
-                    stringResource(R.string.oh_show_handles_on)
-                } else {
-                    stringResource(R.string.oh_show_handles_off)
-                },
-                expanded = groupHandles,
-                onToggle = { groupHandles = !groupHandles },
-            ) {
-                SwitchRow(
-                    title = stringResource(R.string.oh_show_handles),
-                    subtitle = if (player.overlayHandles) {
-                        stringResource(R.string.oh_show_handles_on)
-                    } else {
-                        stringResource(R.string.oh_show_handles_off)
-                    },
-                    checked = player.overlayHandles,
-                    onCheckedChange = onOverlayHandles,
-                    onReset = resetAction(player.overlayHandles != SettingsDefaults.OVERLAY_HANDLES) {
-                        onOverlayHandles(SettingsDefaults.OVERLAY_HANDLES)
-                    },
-                )
-                if (player.overlayHandles) {
-                    SideHandleRows(
-                        player = player,
-                        onOverlayHandle = onOverlayHandle,
-                        onOverlayHandleA11yMode = onOverlayHandleA11yMode,
-                        onOverlayHandleOrder = onOverlayHandleOrder,
-                    )
-                }
-            }
-        }
-        SwitchRow(
-            title = stringResource(R.string.full_screen_height),
-            subtitle = if (player.lyricOverlayFullHeight) {
-                stringResource(R.string.fills_the_screen_leaving_56dp)
-            } else {
-                stringResource(R.string.turns_the_single_subtitle_into)
-            },
-            checked = player.lyricOverlayFullHeight,
-            onCheckedChange = onLyricOverlayFullHeight,
-            onReset = resetAction(player.lyricOverlayFullHeight != SettingsDefaults.OVERLAY_FULL_HEIGHT) {
-                onLyricOverlayFullHeight(SettingsDefaults.OVERLAY_FULL_HEIGHT)
-            },
-        )
-
-        // ---------------- 输出屏幕 / 白天·夜间两套（v1.2.52） ----------------
+        // 上一版把「输出屏幕 / 白天夜间两套 / 预设网格」留在组外常显：它们加起来
+        // 七八行、五种高度，与下面几张折叠卡混在一起，整页还是「一长串平铺」。
+        // 这一版把三者收进同一张卡 —— 它们回答的是同一个问题：「我改成什么样」。
         //
-        // 摆在预设**之前**是有意的：用户先要确认「我改的是哪一套、画在哪块屏」，
-        // 再去挑样式。反过来先挑预设，改完发现改的是另一套，还得回来再挑一遍。
-        OverlayDisplaySection(onSelect = onOverlayDisplayId)
-        OverlayStyleScopeSection(
-            onCopyToDark = onCopyOverlayStyleToDark,
-            onClearDark = onClearOverlayDarkStyle,
-        )
-
-        // ---------------- 样式预设（v1.1.78，FR-06） ----------------
-        //
-        // 状态卡（上方开关 + 运行态）与网格成对：快捷换样式在网格，深度调参在折叠区。
-        // 「当前预设」不落盘，由参数反推（R5）——命中显示其名，出厂默认显示
-        // 「默认预设」，改乱显示「自定义」并给「恢复上次套用」入口（FR-04）。
+        // 顺序仍是「先确认改的是哪一套，再挑样子」：预设网格在最上面（最常点），
+        // 输出屏幕（多屏才有）其次，明暗两套的状态说明垫底（读一次就够）。
+        OverlayGroup(
+            title = stringResource(R.string.overlay_group_style),
+            subtitle = presetSummary(player),
+            expanded = groupStyle,
+            onToggle = { groupStyle = !groupStyle },
+        ) {
         GroupLabel(stringResource(R.string.style_presets))
         val presetParams = player.overlayPresetParams()
         val matchedPreset = currentOverlayPreset(presetParams)
@@ -339,23 +331,51 @@ internal fun SettingsOverlayPage(
                 )
             }
         }
+        // 输出屏幕：只有一块屏时函数内部直接返回，不留一行「内置屏幕」的空选项
+        OverlayDisplaySection(onSelect = onOverlayDisplayId)
+        // 明暗两套：状态说明 + 复制到夜间 / 夜间恢复跟随（后者仅在夜间有自有值时出现）
+        OverlayStyleScopeSection(
+            onCopyToDark = onCopyOverlayStyleToDark,
+            onClearDark = onClearOverlayDarkStyle,
+        )
+        } // 外观与预设
 
-        // ---------------- 五个可折叠分组（v1.2.54 重排） ----------------
+        // ---------------- 六张折叠卡（v1.2.54 第二版重排） ----------------
         //
-        // 顺序 = 用户的排查顺序：先「摆哪儿 / 多大」，再「字长什么样」，再「标题」，
-        // 再「底色」，最后「行为」。每组收起时副标题报一次关键值 ——
-        // 不展开也能确认「现在是不是我要的那档」。
+        // 顺序 = 用户的排查顺序：先「改成什么样」（外观与预设），再「摆哪儿 / 多大」，
+        // 再「字长什么样」，再「标题」，再「底色」，最后「行为」。每组收起时
+        // 副标题报一次关键值 —— 不展开也能确认「现在是不是我要的那档」。
         //
-        // 「不起效的就收起」体现在两层：
-        //  ① 组内：形态决定尺寸项、不透明度 0 藏背景色、描边关掉藏粗细 / 颜色、
-        //     标题关掉藏整块、只有一行歌词时藏「其他行」；
-        //  ② 组间：侧钮整组只在车载模式出现（手机上开了也看不见）。
+        // 「显示隐藏联动」体现在三层：
+        //  ① 组内父项：全屏形态决定尺寸那套控件、不透明度 0 藏背景色与圆角边框、
+        //     描边关掉藏粗细 / 颜色、标题关掉藏整块、只有一行歌词时藏「其他行」与行距；
+        //  ② 组间：侧钮整组只在车载模式出现（手机上开了也看不见）；
+        //  ③ 整页：主开关关掉时，六张卡一张都不出现。
         OverlayGroup(
             title = stringResource(R.string.position_and_size),
             subtitle = positionSummary(player),
             expanded = groupPosition,
             onToggle = { groupPosition = !groupPosition },
         ) {
+        // 形态开关放在这一组的第一行：它决定下面出现哪一套尺寸控件。
+        // v1.2.54 第二版才从组外搬进来 —— 它此前孤零零地站在预设网格之上，
+        // 既不属于预设，也不属于任何一组，是整页最突兀的一行。
+        //
+        // **不进预设体系**：整屏形态是「结构切换」而不是「皮肤」，与预设混在一起
+        // 会造成「选了预设却变了结构」的困惑（设计文档 §7.2）。
+        SwitchRow(
+            title = stringResource(R.string.full_screen_height),
+            subtitle = if (player.lyricOverlayFullHeight) {
+                stringResource(R.string.fills_the_screen_leaving_56dp)
+            } else {
+                stringResource(R.string.turns_the_single_subtitle_into)
+            },
+            checked = player.lyricOverlayFullHeight,
+            onCheckedChange = onLyricOverlayFullHeight,
+            onReset = resetAction(player.lyricOverlayFullHeight != SettingsDefaults.OVERLAY_FULL_HEIGHT) {
+                onLyricOverlayFullHeight(SettingsDefaults.OVERLAY_FULL_HEIGHT)
+            },
+        )
         // 形态开关在最上面：它决定下面出现哪一套尺寸控件。
         if (player.lyricOverlayFullHeight) {
             // 全屏形态：宽度、高度、水平 / 垂直位置都是百分比滑块。
@@ -504,6 +524,62 @@ internal fun SettingsOverlayPage(
                 ) { onLyricOverlayYPercent(SettingsDefaults.OVERLAY_Y_PERCENT) },
             )
         } // else：单条字幕那一套尺寸
+
+        // 位置调整（拖拽微调）：v1.2.54 第二版才搬进本组。
+        //
+        // 它此前孤零零地挂在页面最底部 —— 想微调位置得先滚到页尾，而「位置」
+        // 这一组就在屏幕上方。两种形态给的是**两条不同的操作路径**，按钮文案也据此分开：
+        //  - 单条字幕：进入后横竖都能拖，窗口小而自由；
+        //  - 全屏歌词：只能左右拖（高度由屏幕决定），拖完双击即可锁定。
+        // 不合成一个按钮，是因为「拖到什么程度算对」在两种形态下完全不同 ——
+        // 一个提示「上下左右」，另一个只提示「左右」，合并会让人以为全屏也能上下挪。
+        if (canDrawOverlay) {
+            ActionRow(
+                title = when {
+                    !player.overlayEditing -> if (player.lyricOverlayFullHeight) {
+                        stringResource(R.string.adjust_horizontal_position_on_the)
+                    } else {
+                        stringResource(R.string.adjust_floating_lyric_position)
+                    }
+                    else -> stringResource(R.string.finish_adjusting)
+                },
+                subtitle = when {
+                    player.overlayEditing && player.lyricOverlayFullHeight ->
+                        stringResource(R.string.adjusting_drag_the_lyrics_on)
+                    player.overlayEditing ->
+                        stringResource(R.string.drag_the_lyrics_anywhere_on)
+                    // 满宽时全屏窗口盖住整块屏：直接进编辑态会「吃触摸但拖不动」，
+                    // 所以这里先说清楚点下去会发生什么（实现里会自动留出 8% 余量）。
+                    player.lyricOverlayFullHeight && player.lyricOverlayFullWidthPercent >= 100 ->
+                        stringResource(R.string.currently_full_width_with_no)
+                    player.lyricOverlayFullHeight ->
+                        stringResource(R.string.temporarily_unlocks_dragging_within_the)
+                    else ->
+                        stringResource(R.string.temporarily_unlocks_dragging_the_position)
+                },
+                onClick = {
+                    val entering = !player.overlayEditing
+                    if (entering && player.lyricOverlayFullHeight) {
+                        // 满宽进编辑态等于「能吃触摸但拖不动」：桌面被盖住、用户还以为拖成功了。
+                        // 这里先收 8% 留白，把「点了就能拖」变成确定性结果。
+                        val narrowed = player.lyricOverlayFullWidthPercent >= 100
+                        if (narrowed) onLyricOverlayFullWidthPercent(OVERLAY_FULL_EDIT_LEAVE_PERCENT)
+                        // 全屏编辑态在 App 内是隐藏的（否则会盖住本页、连「完成调整」都点不到），
+                        // 所以必须说清楚「去哪儿拖」——否则用户会觉得按了没反应。
+                        android.widget.Toast.makeText(
+                            context,
+                            if (narrowed) {
+                                AppStrings.s(R.string.adjusting_width_narrowed_to_92)
+                            } else {
+                                AppStrings.s(R.string.adjusting_drag_the_lyrics_on_2)
+                            },
+                            android.widget.Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                    onOverlayEditing(entering)
+                },
+            )
+        }
         } // 位置与尺寸
 
         // ---------------- 歌词文字 ----------------
@@ -513,6 +589,12 @@ internal fun SettingsOverlayPage(
             expanded = groupText,
             onToggle = { groupText = !groupText },
         ) {
+        // 「只有一行歌词」时，有两项根本无从作用：
+        //  · 其他行（颜色 / 字号 / 压暗）—— 没有上下句可调；
+        //  · 行距 —— 一行字之间没有「行与行之间」。
+        // 两者共用一个判据，免得哪天一处改了另一处没跟上。
+        // 全屏形态永远有多行；行数「自动」(0) 按高度反推、可能多行，所以保留。
+        val multiLine = player.lyricOverlayFullHeight || player.lyricOverlayLines != 1
         // v1.2.54：字号一律用**磅值 + −/＋ 步进**，取消滑杆与上下限
         // （用户原话：「字号大小不按区间，用磅，没有区间限制，参考 anylyric」）。
         // 滑杆天生要 range，所以只要留着滑杆就一定有区间。
@@ -600,8 +682,7 @@ internal fun SettingsOverlayPage(
             ) { onLyricOverlayCurrentSp(SettingsDefaults.OVERLAY_CURRENT_SP) },
         )
         // 只有一行歌词时，「其他行」没有任何一行可作用 —— 整块收起（v1.2.54）。
-        // 全屏形态永远有上下文行；单条形态则是行数 >1 / 行数自动时才可能出现。
-        if (player.lyricOverlayFullHeight || player.lyricOverlayLines != 1) {
+        if (multiLine) {
             GroupLabel(stringResource(R.string.overlay_context_lines))
             ActionRow(
                 title = stringResource(R.string.overlay_context_color),
@@ -654,6 +735,8 @@ internal fun SettingsOverlayPage(
                 ) { onLyricOverlayDimPercent(SettingsDefaults.OVERLAY_DIM_PERCENT) },
             )
         }
+        // 行距同理：只有一行时收起（v1.2.54 第二版新增的联动）。
+        if (multiLine) {
         SliderRow(
             title = if (player.lyricOverlayLineSpacingDp == 0) {
                 stringResource(R.string.lyric_line_spacing_compact)
@@ -672,6 +755,7 @@ internal fun SettingsOverlayPage(
                 player.lyricOverlayLineSpacingDp != SettingsDefaults.OVERLAY_LINE_SPACING_DP,
             ) { onLyricOverlayLineSpacingDp(SettingsDefaults.OVERLAY_LINE_SPACING_DP) },
         )
+        } // multiLine
         // 描边总开关（v1.2.53）：先决定「要不要描边」，再决定「多粗 / 什么色」。
         // v1.2.54：关掉时粗细与颜色两行**收起**（不起效就收起），
         // 值仍留在盘上，重新打开还是上次那套。
@@ -1033,17 +1117,62 @@ internal fun SettingsOverlayPage(
                 onLyricOverlayHiddenApps(emptySet())
             },
         )
+        } // 行为
 
-        // v1.1.52：一键恢复默认。悬浮歌词的设置项如今横跨四组三十多项，
+        // ---------------- 侧钮（仅车载，v1.2.54 第二版挪到最后） ----------------
+        //
+        // 它只在车载模式下真正挂出来，所以手机模式下整组不显示 ——
+        // 留着就是一个「开了也看不见」的死开关（「不起效的就收起」）。
+        // 放在六张样式卡之后：前三张卡是「歌词长什么样」，侧钮是「车上多几颗按钮」，
+        // 后者是外设形态，先看外表再看外设。
+        if (player.carMode) {
+            OverlayGroup(
+                title = stringResource(R.string.oh_show_handles),
+                subtitle = if (player.overlayHandles) {
+                    stringResource(R.string.oh_show_handles_on)
+                } else {
+                    stringResource(R.string.oh_show_handles_off)
+                },
+                expanded = groupHandles,
+                onToggle = { groupHandles = !groupHandles },
+            ) {
+                SwitchRow(
+                    title = stringResource(R.string.oh_show_handles),
+                    subtitle = if (player.overlayHandles) {
+                        stringResource(R.string.oh_show_handles_on)
+                    } else {
+                        stringResource(R.string.oh_show_handles_off)
+                    },
+                    checked = player.overlayHandles,
+                    onCheckedChange = onOverlayHandles,
+                    onReset = resetAction(player.overlayHandles != SettingsDefaults.OVERLAY_HANDLES) {
+                        onOverlayHandles(SettingsDefaults.OVERLAY_HANDLES)
+                    },
+                )
+                // 总开关关掉时，下面四颗钮的开关与顺序全部收起
+                if (player.overlayHandles) {
+                    SideHandleRows(
+                        player = player,
+                        onOverlayHandle = onOverlayHandle,
+                        onOverlayHandleA11yMode = onOverlayHandleA11yMode,
+                        onOverlayHandleOrder = onOverlayHandleOrder,
+                    )
+                }
+            }
+        }
+
+        // v1.1.52：一键恢复默认。悬浮歌词的设置项如今横跨六组三十多项，
         // 逐行点 ↺ 太折磨 —— 给一个总入口，二次确认防误触。
         // 不动的两样：主开关（用户既然开着就是想用，恢复样式不该把它关掉）
         // 与隐藏名单（那是「哪些 App 别打扰我」的意志，不是样式）。
+        //
+        // v1.2.54 第二版把它从「行为」卡里搬出来单独一行：恢复默认是**兜底**入口，
+        // 卡收起时它也跟着消失，用户在最需要它的时候反而找不到。
         ActionRow(
             title = stringResource(R.string.restore_all_defaults),
             subtitle = stringResource(R.string.restores_shape_size_position_font),
             onClick = { showResetAll = true },
         )
-        } // 行为
     }
     // 关闭态只留一句「打开后有什么可调」，免得这一整块消失得像设置丢了。
     if (!player.lyricOverlay) {
@@ -1055,103 +1184,8 @@ internal fun SettingsOverlayPage(
         )
     }
 
-    // 运行状态：开关打开且已授权时显示。这一行是排障的关键 ——
-    // 悬浮窗启动失败（挂窗被 ROM 拒绝 / 前台服务被系统拦）在
-    // 旧版本里是完全静默的，用户只看到「开关开了但什么都没发生」。
-    if (player.lyricOverlay && canDrawOverlay) {
-        val failed = overlayHealth.status == LyricOverlayBus.Status.FAILED
-        Text(
-            text = when (overlayHealth.status) {
-                LyricOverlayBus.Status.RUNNING ->
-                    stringResource(R.string.running_go_to_the_home, overlayHealth.detail)
-                LyricOverlayBus.Status.FAILED ->
-                    stringResource(R.string.start_failed_check_settings_apps, overlayHealth.detail)
-                LyricOverlayBus.Status.IDLE -> stringResource(R.string.overlay_not_running)
-            },
-            style = MaterialTheme.typography.labelSmall,
-            color = if (failed) {
-                MaterialTheme.colorScheme.error
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-            modifier = Modifier.padding(top = 2.dp, bottom = 6.dp),
-        )
-    }
-    if (overlayHintVisible && !canDrawOverlay) {
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            shape = RoundedCornerShape(10.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp)
-                .windShadow(level = 1, shape = RoundedCornerShape(10.dp)),
-        ) {
-            Text(
-                text = if (overlayJumpFailed) {
-                    stringResource(R.string.could_not_open_the_system)
-                } else {
-                    stringResource(R.string.permission_path_settings_apps_permissions)
-                },
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(10.dp),
-            )
-        }
-    }
-    // 位置调整：开关打开且已授权时才出现。
-    //
-    // 两种形态给的是**两条不同的操作路径**，按钮文案也据此分开：
-    //  - 单条字幕：进入后横竖都能拖，窗口小而自由；
-    //  - 全屏歌词：只能左右拖（高度由屏幕决定），拖完双击即可锁定。
-    // 不合成一个按钮，是因为「拖到什么程度算对」在两种形态下完全不同 ——
-    // 一个提示「上下左右」，另一个只提示「左右」，合并会让人以为全屏也能上下挪。
-    if (player.lyricOverlay && canDrawOverlay) {
-        ActionRow(
-            title = when {
-                !player.overlayEditing -> if (player.lyricOverlayFullHeight) {
-                    stringResource(R.string.adjust_horizontal_position_on_the)
-                } else {
-                    stringResource(R.string.adjust_floating_lyric_position)
-                }
-                else -> stringResource(R.string.finish_adjusting)
-            },
-            subtitle = when {
-                player.overlayEditing && player.lyricOverlayFullHeight ->
-                    stringResource(R.string.adjusting_drag_the_lyrics_on)
-                player.overlayEditing ->
-                    stringResource(R.string.drag_the_lyrics_anywhere_on)
-                // 满宽时全屏窗口盖住整块屏：直接进编辑态会「吃触摸但拖不动」，
-                // 所以这里先说清楚点下去会发生什么（实现里会自动留出 8% 余量）。
-                player.lyricOverlayFullHeight && player.lyricOverlayFullWidthPercent >= 100 ->
-                    stringResource(R.string.currently_full_width_with_no)
-                player.lyricOverlayFullHeight ->
-                    stringResource(R.string.temporarily_unlocks_dragging_within_the)
-                else ->
-                    stringResource(R.string.temporarily_unlocks_dragging_the_position)
-            },
-            onClick = {
-                val entering = !player.overlayEditing
-                if (entering && player.lyricOverlayFullHeight) {
-                    // 满宽进编辑态等于「能吃触摸但拖不动」：桌面被盖住、用户还以为拖成功了。
-                    // 这里先收 8% 留白，把「点了就能拖」变成确定性结果。
-                    val narrowed = player.lyricOverlayFullWidthPercent >= 100
-                    if (narrowed) onLyricOverlayFullWidthPercent(OVERLAY_FULL_EDIT_LEAVE_PERCENT)
-                    // 全屏编辑态在 App 内是隐藏的（否则会盖住本页、连「完成调整」都点不到），
-                    // 所以必须说清楚「去哪儿拖」——否则用户会觉得按了没反应。
-                    android.widget.Toast.makeText(
-                        context,
-                        if (narrowed) {
-                            AppStrings.s(R.string.adjusting_width_narrowed_to_92)
-                        } else {
-                            AppStrings.s(R.string.adjusting_drag_the_lyrics_on_2)
-                        },
-                        android.widget.Toast.LENGTH_LONG,
-                    ).show()
-                }
-                onOverlayEditing(entering)
-            },
-        )
-    }
+    // 位置调整（拖拽微调）已在 v1.2.54 第二版搬进「位置与尺寸」折叠卡：
+    // 它属于「摆哪儿」这件事，挂在页尾要用户先滚到最下面才找得到。
 
     // 悬浮歌词剩下的三个选项共用同一个弹层：标题 / 说明 / 选项列表都由 [OverlayChoice] 提供，
     // 选中项右侧打 ✓，点任意一项即生效并关闭（改完引擎会给一次 6 秒前台预览）。
@@ -1418,9 +1452,26 @@ internal fun SettingsOverlayPage(
  * 用户不用展开就知道「现在宽多少、字号多大、标题在哪一边」。
  * 全部取自 [PlayerUiState]，不读 Prefs —— 界面显示必须与磁盘状态同源。
  */
+/**
+ * 「外观与预设」卡收起时的那行摘要：当前命中的预设名。
+ *
+ * 这一组里只有预设是有「名字」的东西 —— 报出名字就回答了用户唯一想确认的事：
+ * 「我现在用的是哪套」。参数被改乱时显示「自定义」，从未配过显示「默认预设」
+ * （与 `overlayPresetLabel` 同一套口径，但走字符串资源以便中英各一套）。
+ */
 @Composable
-private fun positionSummary(player: PlayerUiState): String = if (player.lyricOverlayFullHeight) {
-    stringResource(
+private fun presetSummary(player: PlayerUiState): String {
+    val params = player.overlayPresetParams()
+    val matched = currentOverlayPreset(params)
+    return when {
+        matched != null -> matched.displayName
+        params == OVERLAY_FACTORY_PARAMS -> stringResource(R.string.overlay_summary_factory_preset)
+        else -> stringResource(R.string.overlay_summary_custom_preset)
+    }
+}
+
+@Composable
+private fun positionSummary(player: PlayerUiState): String = if (player.lyricOverlayFullHeight) {    stringResource(
         R.string.overlay_summary_full,
         player.lyricOverlayFullWidthPercent,
         player.lyricOverlayFullHeightPercent,

@@ -1,21 +1,29 @@
 package com.luckylearning.windtone.ui
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -25,6 +33,8 @@ import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.overlay.A11yRuntime
 import com.luckylearning.windtone.overlay.OverlayCollapseHelper
 import com.luckylearning.windtone.state.PlayerUiState
+import com.luckylearning.windtone.ui.theme.AppVisual
+import com.luckylearning.windtone.ui.theme.windShadow
 
 /**
  * 悬浮窗设置页的**可折叠分组**（v1.2.54）。
@@ -34,8 +44,13 @@ import com.luckylearning.windtone.state.PlayerUiState
  * 展开范围越大越容易滚丢位置。按语义拆成若干组、各自收展之后，
  * 每组只占一行高度，展开的也只是一小段。
  *
- * 收起时副标题仍然报出该组的关键当前值（例如「上 · 居中 · 62%」），
+ * 收起时副标题仍然报出该组的关键当前值（例如「上方 · 居中 · 12 磅」），
  * 这样**不展开也能确认设置是不是自己想要的那档**。
+ *
+ * **一张组 = 一张卡**（v1.2.54 第二版）：整页只剩「主开关 + 几张折叠卡」，
+ * 不再是一长串行首尾相接的通铺列表。卡内的行由 [LocalSettingsRowFlat]
+ * 切成透明底 —— 否则 [ActionRow] 自带的卡面会在组卡里再套一层小卡，
+ * 边框与阴影叠起来比平铺更花。
  */
 @Composable
 internal fun OverlayGroup(
@@ -45,34 +60,58 @@ internal fun OverlayGroup(
     onToggle: () -> Unit,
     content: @Composable () -> Unit,
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
+    val shape = RoundedCornerShape(14.dp)
+    // 展开 / 收起的箭头转 180°，给一次明确的状态反馈（180ms，与全站转场同速）
+    val arrowAngle by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = tween(AppVisual.Motion.FastMs),
+        label = "overlayGroupArrow",
+    )
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = shape,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onToggle)
-            .padding(top = 12.dp, bottom = 6.dp),
+            .padding(top = 8.dp)
+            .windShadow(level = 1, shape = shape),
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        Column(Modifier.padding(horizontal = 14.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable(onClick = onToggle)
+                    .padding(top = 12.dp, bottom = if (expanded) 4.dp else 12.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowDown,
+                    contentDescription = stringResource(
+                        if (expanded) R.string.collapse else R.string.expand,
+                    ),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.graphicsLayer { rotationZ = arrowAngle },
+                )
+            }
+            if (expanded) {
+                CompositionLocalProvider(LocalSettingsRowFlat provides true) {
+                    Column(Modifier.padding(bottom = 10.dp)) { content() }
+                }
+            }
         }
-        Icon(
-            imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-            contentDescription = stringResource(
-                if (expanded) R.string.collapse else R.string.expand,
-            ),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
-    if (expanded) content()
 }
 
 /** 设置页侧钮顺序列表的显示名（与单颗显隐开关文案对齐）。 */

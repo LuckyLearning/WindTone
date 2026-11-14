@@ -183,13 +183,13 @@ class SettingsScreenTest {
     }
 
     /**
-     * v1.1.78：进入悬浮歌词子页后展开细参。v1.2.54 起细参按语义拆成五个可折叠分组。
+     * v1.1.78：进入悬浮歌词子页后展开细参。v1.2.54 起细参按语义拆成六张折叠卡。
      *
-     * 默认只展开「歌词文字」一组，这里把其余四组点开（多次点击会收起，
+     * 默认只展开「歌词文字」一组，这里把其余五组点开（多次点击会收起，
      * 所以「歌词文字」不能碰）。等价于旧版那个「高级参数」大开关。
      */
     private fun expandOverlayAdvanced() {
-        listOf("位置与尺寸", "标题块", "背景", "行为").forEach { group ->
+        listOf("外观与预设", "位置与尺寸", "标题块", "背景", "行为").forEach { group ->
             compose.onNodeWithText(group).performScrollTo().performClick()
             compose.waitForIdle()
         }
@@ -225,7 +225,8 @@ class SettingsScreenTest {
     fun overlayBackReturnsToLyricsPageNotRoot() {
         render(player = PlayerUiState(lyricOverlay = true))
         openOverlayPage()
-        compose.onNodeWithText("全屏高度").performScrollTo().assertIsDisplayed()
+        // v1.2.54 第二版：页面上只剩「主开关 + 折叠卡」，用最上面那张卡的标题打点
+        compose.onNodeWithText("外观与预设").performScrollTo().assertIsDisplayed()
 
         compose.onNodeWithContentDescription("返回").performClick()
         compose.waitForIdle()
@@ -631,6 +632,51 @@ class SettingsScreenTest {
 
         compose.onNodeWithText("当前行字号", substring = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("其他行字号", substring = true).assertDoesNotExist()
+    }
+
+    /**
+     * v1.2.54 第二版：整页不再是「几十行平铺」，而是「主开关 + 六张折叠卡」。
+     *
+     * 用户原话「所有设置规划组合一下，显示隐藏要联动起来，不要罗列全部平铺」——
+     * 这条测的正是**收起态**：六张卡的标题都在，而卡内的细项一个都不渲染。
+     * 断言用 assertDoesNotExist（不存在，而不是不可见）：收起必须是没进组合，
+     * 否则读屏软件还能扫到一堆「看得见摸不着」的控件。
+     */
+    @Test
+    fun overlayPageIsCollapsedIntoCardsByDefault() {
+        render(player = PlayerUiState(lyricOverlay = true))
+
+        openOverlayPage()
+
+        listOf("外观与预设", "位置与尺寸", "歌词文字", "标题块", "背景", "行为").forEach { card ->
+            compose.onNodeWithText(card).performScrollTo().assertIsDisplayed()
+        }
+        // 默认只展开「歌词文字」，其余卡内细项一律不存在
+        listOf(
+            "全屏高度",
+            "悬浮歌词行数",
+            "背景不透明度",
+            "暂停时的悬浮歌词",
+            "显示歌名与歌手",
+        ).forEach { title ->
+            compose.onNodeWithText(title, substring = true).assertDoesNotExist()
+        }
+        // 默认展开的那一张，细项必须在
+        compose.onNodeWithText("正文字号").performScrollTo().assertIsDisplayed()
+    }
+
+    /**
+     * v1.2.54 第二版：只有一行歌词时，行距也跟着「其他行」一起收起。
+     *
+     * 一行字之间没有「行与行之间」，留着滑杆就是「调了没反应」。
+     */
+    @Test
+    fun overlayLineSpacingHidesForSingleLine() {
+        render(player = PlayerUiState(lyricOverlay = true, lyricOverlayLines = 1))
+        openOverlayPage()
+        expandOverlayAdvanced()
+
+        compose.onNodeWithText("歌词行距", substring = true).assertDoesNotExist()
     }
 
     /** v1.2.54：行数 >1 时「其他行」的三项（颜色 / 字号 / 压暗）出现 */

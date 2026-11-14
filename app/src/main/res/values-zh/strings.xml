@@ -368,6 +368,9 @@
     <string name="both_title_and_artist_default">歌名与歌手两行都显示（默认）</string>
 
     <!-- v1.2.54：折叠分组 / 标题块 / 分角色样式 -->
+    <string name="overlay_group_style">外观与预设</string>
+    <string name="overlay_summary_factory_preset">默认预设</string>
+    <string name="overlay_summary_custom_preset">自定义</string>
     <string name="overlay_group_lyric_text">歌词文字</string>
     <string name="overlay_group_title">标题块</string>
     <string name="overlay_current_line">当前行</string>

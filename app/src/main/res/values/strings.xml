@@ -399,6 +399,9 @@ The app cannot stop the OEM clearing third-party accessibility on boot; tap the 
     <string name="both_title_and_artist_default">Both title and artist (default)</string>
 
     <!-- v1.2.54: collapsible groups, title block, per-role lyric styling -->
+    <string name="overlay_group_style">Appearance &amp; presets</string>
+    <string name="overlay_summary_factory_preset">Default preset</string>
+    <string name="overlay_summary_custom_preset">Custom</string>
     <string name="overlay_group_lyric_text">Lyrics text</string>
     <string name="overlay_group_title">Title block</string>
     <string name="overlay_current_line">Current line</string>

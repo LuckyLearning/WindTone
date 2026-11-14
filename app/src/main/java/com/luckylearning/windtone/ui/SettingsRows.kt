@@ -59,6 +59,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -181,14 +182,31 @@ internal fun DebugLabel(text: String) {
  */
 @Composable
 internal fun GroupLabel(text: String) {
+    // 组内（折叠卡里）比整页少一层呼吸：卡本身已经有内边距，
+    // 再按整页那套 14dp 打头会显得空。
+    val flat = LocalSettingsRowFlat.current
     Text(
         text,
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.onSurface,
         fontWeight = FontWeight.Medium,
-        modifier = Modifier.padding(top = 14.dp, bottom = 2.dp),
+        modifier = Modifier.padding(top = if (flat) 10.dp else 14.dp, bottom = 2.dp),
     )
 }
+
+/**
+ * 「这一行位于折叠组卡内部」的视觉开关（v1.2.54）。
+ *
+ * 为什么需要：悬浮歌词子页把三十多项收进几张折叠卡之后，[ActionRow] 原本那张
+ * `surfaceVariant` 小卡就变成了**卡中卡** —— 一张组卡里再嵌七八张带阴影的小卡，
+ * 边框层层套着，比平铺更花。这里让组把行切成「透明底 + 无阴影」的列表行，
+ * 卡面只由组本身承担一次。
+ *
+ * 用 CompositionLocal 而不是给每个行组件加参数：行组件被全项目上百处复用，
+ * 加参数会让「组内 / 组外」这个纯视觉决策散落到每个调用点；默认值 false
+ * 保证组外一处像素都不动。
+ */
+internal val LocalSettingsRowFlat = staticCompositionLocalOf { false }
 
 /**
  * 「恢复默认」按钮的判据包装。
@@ -400,8 +418,15 @@ internal fun StepperRow(
 @Composable
 private fun StepButton(label: String, description: String, onClick: () -> Unit) {
     val shape = RoundedCornerShape(10.dp)
+    // 组内卡片本身就是 surfaceVariant 底，按钮再用同色会完全看不见 ——
+    // 换成高一档的容器色，保持「按钮是可按的」这层视觉区分。
+    val color = if (LocalSettingsRowFlat.current) {
+        MaterialTheme.colorScheme.surfaceContainerHighest
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
     Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        color = color,
         shape = shape,
         modifier = Modifier
             .size(38.dp)
@@ -529,14 +554,23 @@ internal fun ActionRow(
     swatch: Int? = null,
     onReset: (() -> Unit)? = null,
 ) {
+    // 组内扁平：不画独立卡面与阴影，只留可点区域（卡面由 OverlayGroup 提供）
+    val flat = LocalSettingsRowFlat.current
+    val shape = RoundedCornerShape(if (flat) 8.dp else 12.dp)
     Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(12.dp),
+        color = if (flat) Color.Transparent else MaterialTheme.colorScheme.surfaceVariant,
+        shape = shape,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .windShadow(level = 1, shape = RoundedCornerShape(12.dp))
-            .clip(RoundedCornerShape(12.dp))
+            .padding(vertical = if (flat) 0.dp else 4.dp)
+            .then(
+                if (flat) {
+                    Modifier
+                } else {
+                    Modifier.windShadow(level = 1, shape = RoundedCornerShape(12.dp))
+                },
+            )
+            .clip(shape)
             .clickable(onClick = onClick),
     ) {
         Row(
