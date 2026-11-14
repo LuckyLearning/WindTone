@@ -166,90 +166,7 @@
   <div class="board">
 
     <figure class="fig" id="scr-overlay-style">
-      <div class="cap"><b>㉖ 设置 → 歌词 → 悬浮窗样式（总览）</b><em>SettingsOverlayPage.kt · 状态卡 + 输出屏幕 / 双套 + 预设网格 + 五个可折叠分组（v1.2.54）</em></div>
-      <div class="phone">
-        <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
-        <div class="app">
-          <div class="topbar"><div class="tb-row">
-            <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
-            <div class="lib-title" style="font-size:15px">悬浮窗样式</div>
-            <button class="ibtn"><svg class="ic"><use href="#i-reset"/></svg></button>
-          </div></div>
-          <div class="list" style="padding:12px 14px;overflow:hidden">
-            <div class="sw-row">
-              <div class="sw-main"><div class="sw-t">桌面悬浮歌词</div><div class="sw-s">运行中 · 已授权「显示在其他应用上层」· 歌词：我把心事写进旋律里面</div></div>
-              <span class="switch"><i></i></span>
-            </div>
-            <div class="section-label" style="margin-top:14px">输出屏幕</div>
-            <div class="sw-row"><div class="sw-main"><div class="sw-t">输出屏幕</div><div class="sw-s">悬浮歌词画在哪块屏幕上；车机带副驾屏 / 头枕屏时用</div></div><div class="chips" style="flex:none"><span class="fchip on">内置屏幕</span><span class="fchip">副驾屏</span></div></div>
-            <div class="section-label" style="margin-top:14px">白天 / 夜间两套</div>
-            <div class="sw-row"><div class="sw-main"><div class="sw-t" style="color:var(--primary)">当前编辑：白天样式</div><div class="sw-s">外观分两套，跟随主题自动切换；夜里改过的那几项只在夜间生效，其余仍跟随白天</div></div></div>
-            <div class="sw-row"><div class="sw-main"><div class="sw-t">把白天样式复制到夜间</div><div class="sw-s">复制后夜间自成一套，再改白天不影响夜间</div></div></div>
-            <div class="section-label" style="margin-top:14px">样式预设 · 手机（4 套）</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-              <div class="tile" style="border-color:var(--primary)">
-                <div class="t-ic"><svg class="ic"><use href="#i-lyrics"/></svg></div>
-                <div class="t-t">极简单行</div>
-              </div>
-              <div class="tile">
-                <div class="t-ic"><svg class="ic"><use href="#i-palette"/></svg></div>
-                <div class="t-t">毛玻璃双行</div>
-              </div>
-              <div class="tile" style="border-color:var(--primary)">
-                <div class="t-ic"><svg class="ic"><use href="#i-album"/></svg></div>
-                <div class="t-t">液态渐变 · 唱片</div>
-              </div>
-              <div class="tile">
-                <div class="t-ic"><svg class="ic"><use href="#i-queue"/></svg></div>
-                <div class="t-t">经典方块</div>
-              </div>
-            </div>
-            <div class="section-label" style="margin-top:14px">样式预设 · 车机专属（仅车载模式展示）</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
-              <div class="tile" style="border-color:var(--primary)">
-                <div class="t-ic"><svg class="ic"><use href="#i-speed"/></svg></div>
-                <div class="t-t">🚗 导航窄条</div>
-              </div>
-              <div class="tile">
-                <div class="t-ic"><svg class="ic"><use href="#i-palette"/></svg></div>
-                <div class="t-t">🚗 驻停歌词</div>
-              </div>
-              <div class="tile">
-                <div class="t-ic"><svg class="ic"><use href="#i-note"/></svg></div>
-                <div class="t-t">🚗 纯净浮层</div>
-              </div>
-            </div>
-            <div class="section-label" style="margin-top:14px">通用参数</div>
-            <div class="sw-row"><div class="sw-main"><div class="sw-t">歌词行数</div><div class="sw-s">当前行 + 下一行</div></div><div class="chips" style="flex:none"><span class="fchip">1</span><span class="fchip on">2</span><span class="fchip">3</span></div></div>
-            <div class="sw-row"><div class="sw-main"><div class="sw-t">文字大小</div><div class="sw-s">随系统字号缩放之上再缩放</div></div><div class="slider" style="width:120px;flex:none"><span class="fill" style="width:45%"></span><span class="knob" style="left:45%"></span></div></div>
-            <div class="sw-row"><div class="sw-main"><div class="sw-t">对齐</div></div><div class="chips" style="flex:none"><span class="fchip">左</span><span class="fchip on">中</span><span class="fchip">右</span></div></div>
-            <div class="sw-row"><div class="sw-main"><div class="sw-t">宽度</div><div class="sw-s">屏幕宽度百分比</div></div><div class="slider" style="width:120px;flex:none"><span class="fill" style="width:80%"></span><span class="knob" style="left:80%"></span></div></div>
-            <div class="sw-row"><div class="sw-main"><div class="sw-t">显示位置</div><div class="sw-s">顶部 · 可拖动微调</div></div></div>
-            <div class="sw-row"><div class="sw-main"><div class="sw-t">点击穿透</div><div class="sw-s">触摸事件透传给下方应用</div></div><span class="switch"><i></i></span></div>
-            <div class="sw-row"><div class="sw-main"><div class="sw-t">锁屏 / 通知栏歌词</div></div><span class="switch"><i></i></span></div>
-            <div class="row-action" style="margin-top:10px"><svg class="ic" style="color:var(--primary)"><use href="#i-cloud"/></svg>
-              <div class="ra-main"><div class="ra-title">不显示悬浮窗的应用</div><div class="ra-sub">已在名单：微信 · 高德地图 · 王者荣耀</div></div></div>
-          </div>
-        </div>
-      </div>
-      <p class="note"><b>分组容器版式（改动 ③）：</b>子页从「通铺列表」改为三段式——
-      <b>状态卡</b>（开关 + 运行态 + 当前歌词预览）/ <b>预设网格</b>（手机 4 套 2 列 + 车机 3 套 3 列，选中描边 primary，车机组仅车机模式显示）/
-      <b>通用参数</b>（滑杆行、chips 行、开关行同规格混排）。所有行高、圆角（14dp）、间距（12dp）统一。
-      <br><b>输出屏幕与白天 / 夜间两套（v1.2.52）</b>摆在<b>样式预设之前</b>：用户先要确认「我改的是哪一套、
-      画在哪块屏」，再去挑样式。两节都是普通设置行，不新增样式：输出屏幕是 chips 行（只有一块屏时整节不出现）；
-      双套是「当前编辑：白天 / 夜间样式」一行说明 + 两条整组操作（复制到夜间 / 夜间恢复跟随白天，后者仅在夜间有自有值时出现）。
-      <b>不提供「现在编辑哪一套」的切换开关</b> —— 编辑对象由主题决定，多一个开关就会出现「界面深色、却在编辑白天那套」的分裂状态。
-      <b>全部预设只展示、无控制按钮</b>（D1）。
-      <br>      <b>文字描边（v1.2.53）</b>由「只有粗细」改为<b>开关 + 粗细</b>，开关排在滑杆<b>之前</b>：
-      先决定「要不要描边」再决定「多粗」。关掉后不画任何可读性阴影，配合「背景不透明度 0」
-      就是纯文字形态；宽度与颜色两行仍然可见（值不丢），重新打开即恢复上次粗细。
-      <br><b>分组收展（v1.2.54）</b>：原先一个「高级参数」大开关兜住三十多项，展开就是一屏滑杆。
-      现在拆成<b>位置与尺寸 / 歌词文字 / 标题块 / 背景 / 行为</b>五组（车载模式另有「侧钮」组），
-      每组一行标题 + 副标题报当前关键值，各自收展（见 ㉖b）。</p>
-    </figure>
-
-    <figure class="fig" id="scr-overlay-groups">
-      <div class="cap"><b>㉖b 细参改为五个可折叠分组（v1.2.54）</b><em>OverlayGroup（ui/OverlayGroupRows.kt）· 每组一行标题 + 当前值摘要 + 展开箭头</em></div>
+      <div class="cap"><b>㉖ 设置 → 歌词 → 悬浮窗样式（总览 · 收起态）</b><em>SettingsOverlayPage.kt · 主开关 + 六张折叠卡 + 页尾恢复默认（v1.2.54 第二版）</em></div>
       <div class="phone">
         <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
         <div class="app">
@@ -263,56 +180,76 @@
               <div class="sw-main"><div class="sw-t">桌面悬浮歌词</div><div class="sw-s">运行中 · 已授权「显示在其他应用上层」</div></div>
               <span class="switch"><i></i></span>
             </div>
-
-            <div class="sw-row" style="margin-top:6px">
-              <div class="sw-main"><div class="sw-t" style="font-weight:700">位置与尺寸</div><div class="sw-s">单条 · 宽 80% · 3 行</div></div>
-              <span style="color:var(--on-surface-variant);font-size:15px">⌄</span>
-            </div>
-
-            <div class="sw-row" style="margin-top:6px">
-              <div class="sw-main"><div class="sw-t" style="font-weight:700">歌词文字</div><div class="sw-s">字号 20 磅 · 居中</div></div>
-              <span style="color:var(--on-surface-variant);font-size:15px">⌃</span>
-            </div>
-            <div class="sw-row"><div class="sw-main"><div class="sw-t">正文字号</div><div class="sw-s">点 −/＋ 逐档增减，不设上下限</div></div><div class="chips" style="flex:none;align-items:center;gap:6px"><span class="fchip" style="padding:2px 9px">−</span><span style="font-size:12.5px;color:var(--primary);min-width:44px;text-align:center">20 磅</span><span class="fchip" style="padding:2px 9px">＋</span></div></div>
-            <div class="sw-row"><div class="sw-main"><div class="sw-t">水平对齐</div></div><div class="chips" style="flex:none"><span class="fchip">居左</span><span class="fchip on">居中</span></div></div>
-            <div class="section-label" style="margin-top:8px">当前行</div>
-            <div class="sw-row"><div class="sw-main"><div class="sw-t">当前行字号</div><div class="sw-s">点 −/＋ 逐档增减，不设上下限</div></div><div class="chips" style="flex:none;align-items:center;gap:6px"><span class="fchip" style="padding:2px 9px">−</span><span style="font-size:12.5px;color:var(--primary);min-width:44px;text-align:center">26 磅</span><span class="fchip" style="padding:2px 9px">＋</span></div></div>
-            <div class="section-label" style="margin-top:8px">其他行</div>
-            <div class="sw-row"><div class="sw-main"><div class="sw-t">其他行字号</div><div class="sw-s">点 −/＋ 逐档增减，不设上下限</div></div><div class="chips" style="flex:none;align-items:center;gap:6px"><span class="fchip" style="padding:2px 9px">−</span><span style="font-size:12.5px;color:var(--primary);min-width:44px;text-align:center">跟随正文</span><span class="fchip" style="padding:2px 9px">＋</span></div></div>
-            <div class="sw-row"><div class="sw-main"><div class="sw-t">其他行颜色</div><div class="sw-s">使用单独的颜色</div></div><span style="width:20px;height:20px;border-radius:6px;background:#8A8F98;flex:none"></span></div>
-            <div class="sw-row"><div class="sw-main"><div class="sw-t">文字描边</div><div class="sw-s">压在浅色画面上也读得清</div></div><span class="switch"><i></i></span></div>
-
-            <div class="sw-row" style="margin-top:6px">
-              <div class="sw-main"><div class="sw-t" style="font-weight:700">标题块</div><div class="sw-s">下方 · 居右 · 12 磅</div></div>
-              <span style="color:var(--on-surface-variant);font-size:15px">⌄</span>
-            </div>
-
-            <div class="sw-row">
-              <div class="sw-main"><div class="sw-t" style="font-weight:700">背景</div><div class="sw-s">不透明度 55%</div></div>
-              <span style="color:var(--on-surface-variant);font-size:15px">⌄</span>
-            </div>
-
-            <div class="sw-row">
-              <div class="sw-main"><div class="sw-t" style="font-weight:700">行为</div><div class="sw-s">暂停后淡出 · 淡入 160ms</div></div>
-              <span style="color:var(--on-surface-variant);font-size:15px">⌄</span>
+            <div style="background:var(--c-high);border-radius:14px;padding:10px 12px;margin-top:8px;display:flex;align-items:center;gap:8px"><div style="flex:1"><div style="font-size:13px;font-weight:700">外观与预设</div><div style="font-size:10.5px;color:var(--on-surface-variant)">毛玻璃双行</div></div><span style="color:var(--on-surface-variant);font-size:14px">⌄</span></div>
+            <div style="background:var(--c-high);border-radius:14px;padding:10px 12px;margin-top:8px;display:flex;align-items:center;gap:8px"><div style="flex:1"><div style="font-size:13px;font-weight:700">位置与尺寸</div><div style="font-size:10.5px;color:var(--on-surface-variant)">单条 · 宽 80% · 3 行</div></div><span style="color:var(--on-surface-variant);font-size:14px">⌄</span></div>
+            <div style="background:var(--c-high);border-radius:14px;padding:10px 12px;margin-top:8px;display:flex;align-items:center;gap:8px"><div style="flex:1"><div style="font-size:13px;font-weight:700">歌词文字</div><div style="font-size:10.5px;color:var(--on-surface-variant)">20 磅 · 居中 · 描边关</div></div><span style="color:var(--on-surface-variant);font-size:14px">⌃</span></div>
+            <div style="background:var(--c-high);border-radius:14px;padding:10px 12px;margin-top:8px;display:flex;align-items:center;gap:8px"><div style="flex:1"><div style="font-size:13px;font-weight:700">标题块</div><div style="font-size:10.5px;color:var(--on-surface-variant)">上方 · 居中 · 12 磅</div></div><span style="color:var(--on-surface-variant);font-size:14px">⌄</span></div>
+            <div style="background:var(--c-high);border-radius:14px;padding:10px 12px;margin-top:8px;display:flex;align-items:center;gap:8px"><div style="flex:1"><div style="font-size:13px;font-weight:700">背景</div><div style="font-size:10.5px;color:var(--on-surface-variant)">不透明度 55%</div></div><span style="color:var(--on-surface-variant);font-size:14px">⌄</span></div>
+            <div style="background:var(--c-high);border-radius:14px;padding:10px 12px;margin-top:8px;display:flex;align-items:center;gap:8px"><div style="flex:1"><div style="font-size:13px;font-weight:700">行为</div><div style="font-size:10.5px;color:var(--on-surface-variant)">暂停淡出 · 淡入 160ms</div></div><span style="color:var(--on-surface-variant);font-size:14px">⌄</span></div>
+            <div style="display:flex;align-items:center;gap:8px;padding:12px 2px 2px;color:var(--on-surface-variant)">
+              <div style="flex:1;font-size:12.5px">全部恢复默认</div>
             </div>
           </div>
         </div>
       </div>
-      <p class="note"><b>为什么分组：</b>原来一个大开关展开后要翻十几屏才找得到「当前行颜色」，改完一项还得滚回去看同类项。
-      分组后每组只占一行高度，要不要展开由用户点。<b>收起时副标题报当前关键值</b>
-      （「单条 · 宽 80% · 3 行」「下方 · 居右 · 12 磅」）—— 不展开也能确认是不是自己要的那档。
-      <br><b>不起效的就收起（同一版的口径）：</b>
-      ① 背景不透明度 = 0 时，颜色 / 圆角 / 边框三项收起（板都看不见了）；
-      ② 文字描边关掉时，粗细与颜色收起；
-      ③ 标题关掉时，位置 / 对齐 / 大小 / 颜色 / 描边全收起；
-      ④ 只有一行歌词时，「其他行」整组收起（没有上下句可调）；
-      ⑤ 手机模式下「侧钮」整组不出现（车上才挂那几颗钮）。
-      <br><b>样式规则：</b>组标题用 <code>titleSmall / SemiBold</code>，副标题 <code>labelSmall / onSurfaceVariant</code>，
-      箭头用 24dp 的 <code>KeyboardArrowUp / Down</code>；展开后的行是既有的 <code>ActionRow / SwitchRow / ChoiceRow / SliderRow</code>，
-      <b>字号一律用新增的 <code>StepperRow</code></b>：<code>− [20 磅] ＋</code> 三个元素一行，点一次 ±2 磅、不设上下限
-      （滑杆天生要 <code>range</code>，用它就等于把区间又装回去了）。0 在「当前行 / 其他行」上是「跟随正文」的哨兵值，
-      显示成「跟随正文」而不是「0 磅」。</p>
+      <p class="note"><b>整页只剩「开关 + 六张卡」（v1.2.54 第二版）：</b>上一版虽然把细参拆成了五组，
+      但「输出屏幕 / 白天夜间两套 / 预设网格」还留在组外常显，加起来七八行、五种高度，
+      与折叠卡片混排，整页仍是一长串平铺。这一版把它们全部收进卡里：
+      <b>外观与预设</b>（预设网格 + 输出屏幕 + 明暗两套）/ <b>位置与尺寸</b>（含全屏形态开关与位置调整）/
+      <b>歌词文字</b> / <b>标题块</b> / <b>背景</b> / <b>行为</b>，车载模式另有<b>侧钮</b>卡。
+      运行状态与授权引导贴在开关正下方；<b>「全部恢复默认」单独排在页尾</b>——它是兜底入口，
+      卡收起时跟着消失就等于在最需要它的时候找不到。
+      <br><b>一张卡一层皮：</b>每张卡是 14dp 圆角 + <code>surfaceVariant</code> 底 + 一级阴影，
+      卡内的行切成<b>透明底、无阴影</b>（<code>LocalSettingsRowFlat</code>）。否则 <code>ActionRow</code>
+      自带的卡面会在组卡里再套一层小卡，边框与阴影叠起来比平铺更花。
+      <br><b>收起不等于看不见：</b>每张卡的副标题报当前关键值（「毛玻璃双行」「单条 · 宽 80% · 3 行」
+      「上方 · 居中 · 12 磅」「不透明度 55%」），不展开也知道现在是什么档。</p>
+    </figure>
+
+    <figure class="fig" id="scr-overlay-groups">
+      <div class="cap"><b>㉖b 展开两张卡：卡内是扁平行（v1.2.54）</b><em>OverlayGroup + LocalSettingsRowFlat · 卡面只有一层，行不再各自带底色</em></div>
+      <div class="phone">
+        <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+        <div class="app">
+          <div class="topbar"><div class="tb-row">
+            <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+            <div class="lib-title" style="font-size:15px">悬浮窗样式</div>
+            <button class="ibtn"><svg class="ic"><use href="#i-reset"/></svg></button>
+          </div></div>
+          <div class="list" style="padding:12px 14px;overflow:hidden">
+            <div style="background:var(--c-high);border-radius:14px;padding:10px 12px;margin-top:4px">
+              <div style="display:flex;align-items:center;gap:8px;padding-bottom:6px;border-bottom:1px solid var(--glass-bd)">
+                <div style="flex:1"><div style="font-size:13px;font-weight:700">歌词文字</div>
+                <div style="font-size:10.5px;color:var(--on-surface-variant)">20 磅 · 居中 · 描边关</div></div>
+                <span style="color:var(--on-surface-variant);font-size:14px">⌃</span>
+              </div>
+            <div style="display:flex;align-items:center;gap:8px;padding:9px 2px;border-bottom:1px solid var(--glass-bd)"><div style="flex:1"><div style="font-size:12.5px">正文字号</div><div style="font-size:10px;color:var(--on-surface-variant)">点 −/＋ 逐档增减，不设上下限</div></div><div class="chips" style="flex:none;align-items:center;gap:6px"><span class="fchip" style="padding:2px 9px">−</span><span style="font-size:11.5px;color:var(--primary);min-width:44px;text-align:center">20 磅</span><span class="fchip" style="padding:2px 9px">＋</span></div></div>
+            <div style="display:flex;align-items:center;gap:8px;padding:9px 2px;border-bottom:1px solid var(--glass-bd)"><div style="flex:1"><div style="font-size:12.5px">水平对齐</div><div style="font-size:10px;color:var(--on-surface-variant)">歌词在框内居左 / 居中</div></div><div class="chips" style="flex:none"><span class="fchip">居左</span><span class="fchip on">居中</span></div></div>
+              <div class="section-label" style="margin-top:8px">当前行</div>
+            <div style="display:flex;align-items:center;gap:8px;padding:9px 2px;border-bottom:1px solid var(--glass-bd)"><div style="flex:1"><div style="font-size:12.5px">当前行字号</div><div style="font-size:10px;color:var(--on-surface-variant)">点 −/＋ 逐档增减，不设上下限</div></div><div class="chips" style="flex:none;align-items:center;gap:6px"><span class="fchip" style="padding:2px 9px">−</span><span style="font-size:11.5px;color:var(--primary);min-width:44px;text-align:center">26 磅</span><span class="fchip" style="padding:2px 9px">＋</span></div></div>
+              <div class="section-label" style="margin-top:8px">其他行</div>
+            <div style="display:flex;align-items:center;gap:8px;padding:9px 2px;border-bottom:1px solid var(--glass-bd)"><div style="flex:1"><div style="font-size:12.5px">其他行字号</div><div style="font-size:10px;color:var(--on-surface-variant)">0 = 跟随正文</div></div><div class="chips" style="flex:none;align-items:center;gap:6px"><span class="fchip" style="padding:2px 9px">−</span><span style="font-size:11.5px;color:var(--primary);min-width:44px;text-align:center">跟随正文</span><span class="fchip" style="padding:2px 9px">＋</span></div></div>
+            <div style="display:flex;align-items:center;gap:8px;padding:9px 2px;border-bottom:1px solid var(--glass-bd)"><div style="flex:1"><div style="font-size:12.5px">其他行颜色</div><div style="font-size:10px;color:var(--on-surface-variant)">使用单独的颜色</div></div><span style="width:18px;height:18px;border-radius:6px;background:#8A8F98;flex:none"></span></div>
+            <div style="display:flex;align-items:center;gap:8px;padding:9px 2px;border-bottom:1px solid var(--glass-bd)"><div style="flex:1"><div style="font-size:12.5px">文字描边</div><div style="font-size:10px;color:var(--on-surface-variant)">关掉后是纯文字</div></div><span class="switch"><i></i></span></div>
+            </div>
+            <div style="background:var(--c-high);border-radius:14px;padding:10px 12px;margin-top:8px;display:flex;align-items:center;gap:8px"><div style="flex:1"><div style="font-size:13px;font-weight:700">标题块</div><div style="font-size:10.5px;color:var(--on-surface-variant)">上方 · 居中 · 12 磅</div></div><span style="color:var(--on-surface-variant);font-size:14px">⌄</span></div>
+            <div style="background:var(--c-high);border-radius:14px;padding:10px 12px;margin-top:8px;display:flex;align-items:center;gap:8px"><div style="flex:1"><div style="font-size:13px;font-weight:700">背景</div><div style="font-size:10.5px;color:var(--on-surface-variant)">不透明度 55%</div></div><span style="color:var(--on-surface-variant);font-size:14px">⌄</span></div>
+            <div style="background:var(--c-high);border-radius:14px;padding:10px 12px;margin-top:8px;display:flex;align-items:center;gap:8px"><div style="flex:1"><div style="font-size:13px;font-weight:700">行为</div><div style="font-size:10.5px;color:var(--on-surface-variant)">暂停淡出 · 淡入 160ms</div></div><span style="color:var(--on-surface-variant);font-size:14px">⌄</span></div>
+          </div>
+        </div>
+      </div>
+      <p class="note"><b>卡内的行是「扁」的：</b>标题行下方是一条细分隔线，之后每行只有文字与控件，
+      没有独立底色、没有阴影、没有圆角 —— 一整张卡只有一个卡面。点按仍有水波纹（<code>clip</code> 到 8dp 圆角）。
+      −/＋ 按钮在卡内改用 <code>surfaceContainerHighest</code>：与卡面同色会完全看不见。
+      <br><b>显示隐藏联动（五个判据）：</b>① 全屏形态决定出现哪一套尺寸控件；
+      ② 背景不透明度 0 → 收颜色 / 圆角 / 边框；③ 文字描边关 → 收粗细 / 颜色；
+      ④ 标题关 → 收整块子项；⑤ 单条只显示一行 → 收「其他行」与<b>歌词行距</b>（一行字之间没有行与行之间）。
+      外加车载才有侧钮卡、主开关关掉整页只剩开关与授权引导。
+      <br><b>样式规则：</b>卡标题 <code>titleSmall / SemiBold</code>，副标题 <code>labelSmall / onSurfaceVariant</code>，
+      箭头用 24dp 的 <code>KeyboardArrowDown</code> 并旋转 180°（180ms，与全站转场同速）；
+      卡间距 8dp，卡内水平内边距 14dp。
+      <b>字号一律用 <code>StepperRow</code></b>：<code>− [20 磅] ＋</code> 一行，点一次 ±2 磅、不设上下限
+      （滑杆天生要 <code>range</code>，用它就等于把区间又装回去了）。0 在「当前行 / 其他行」上是「跟随正文」的哨兵值。</p>
     </figure>
 
     <figure class="fig" id="scr-overlay-preset-detail">
