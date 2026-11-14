@@ -668,9 +668,9 @@ adb shell pm grant com.anylyric android.permission.WRITE_SECURE_SETTINGS
 
 | 项 | 结果 |
 |---|---|
-| `:anylyric:testDebugUnitTest` | **198 项**通过（LRC 解析 10、伪歌名判定 11、责任链 10、时钟 6、判因 14、权限列表解析 7、几何 10、折行 9、行预算 7、样式 11、开机策略 6、更新 18、资源采样 7、行推进 tick 11、L0 缓存 6、工作量计数 4、JSON 解包 7、播放状态扩展 7、看门狗 6、在线解析 7、歌名解析 4、前台滞回 6、隐藏判定 12） |
-| `:anylyric:lintDebug` | Error 0（Warning 73，均为既有项或预期项） |
-| `assembleRelease` | 约 **306 KB**（含矢量图标 + 5 组密度 PNG），运行时依赖仅 `kotlin-stdlib` |
+| `:anylyric:testDebugUnitTest` | **252 项**通过（LRC 解析 10、伪歌名判定 11、责任链 10、时钟 6、判因 14、权限列表解析 7、几何 10、折行 9、行预算 7、样式 14、开机策略 6、更新 18、资源采样 7、行推进 tick 11、L0 缓存 6、工作量计数 4、JSON 解包 7、播放状态扩展 7、看门狗 6、在线解析 7、歌名解析 4、前台滞回 6、隐藏判定 12、滑杆换算 7、权限引导 4、页间滑动 7、主题 6、会话合并 4、滚动歌词 8） |
+| `:anylyric:lintDebug` | Error 0（Warning 均为既有项或预期项） |
+| `assembleRelease` | 约 **343 KB**（含矢量图标 + 5 组密度 PNG），运行时依赖仅 `kotlin-stdlib` |
 | 真机 | 手机（HONOR / API 37）已验证 L1 可命中；车机 **未验证**；按应用隐藏（无障碍通道）**未上真机** |
 
 未验证项：车机播放器的通道命中率、车厂 ROM 对悬浮窗与通知使用权的策略、多屏行为、
