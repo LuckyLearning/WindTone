@@ -2,6 +2,7 @@ package com.anylyric.accessibility
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.app.Notification
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
@@ -10,6 +11,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.inputmethod.InputMethodManager
 import com.anylyric.data.Prefs
 import com.anylyric.diag.Probe
+import com.anylyric.session.SessionHub
 
 /** 提交未成功时的补排间隔：只需跨过 Handler 与 elapsedRealtime 的几毫秒误差。 */
 private const val COMMIT_RETRY_MS = 120L
@@ -49,6 +51,9 @@ class ForegroundAppService : AccessibilityService() {
     /** 上一次真正上报过的稳定包名，用来挡掉重复上报。 */
     private var lastReported: String? = null
 
+    /** 上一次处理过的媒体通知内容（标题 + 正文），用来挡掉播放器每秒重发的那一批。 */
+    private var lastNotificationKey: String? = null
+
     /**
      * 候选包名稳定 450ms 后提交。
      *
@@ -73,7 +78,14 @@ class ForegroundAppService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event == null || event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+        if (event == null) return
+        // 媒体通知先处理：它不受「按应用隐藏是否开启」影响 —— 那条权限被车厂拦掉时，
+        // 这条通道是唯一还能拿到歌名的路，不能因为用户没开隐藏功能就被跳过。
+        if (event.eventType == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED) {
+            onNotificationEvent(event)
+            return
+        }
+        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         // 开关关着 / 名单为空：一次早退，连包名都不解析。
         // 服务可能是用户早就开着、后来清空了名单，这时不该继续做无用功。
         if (!foregroundDetectionNeeded(prefs.hideByAppEnabled, prefs.hiddenApps)) return
@@ -88,6 +100,40 @@ class ForegroundAppService : AccessibilityService() {
         handler.postDelayed(commitTick, PkgStabilizer.STABLE_MS)
     }
 
+    /**
+     * 媒体通知 → 歌名 / 歌手（或逐行歌词）。
+     *
+     * **只处理媒体通知**：其余通知在 `isMedia` 判断处就返回，一个字段都不读。
+     * 这是订阅 `typeNotificationStateChanged` 的唯一理由，也是它的边界 ——
+     * 微信、短信、验证码这类通知永远进不到这里。
+     */
+    private fun onNotificationEvent(event: AccessibilityEvent) {
+        val pkg = runCatching { event.packageName?.toString() }.getOrNull() ?: return
+        if (pkg == packageName) return
+        val notification = runCatching {
+            event.parcelableData as? Notification
+        }.getOrNull() ?: return
+        val extras = notification.extras ?: return
+        val isMedia = notification.category == Notification.CATEGORY_TRANSPORT ||
+            extras.containsKey(Notification.EXTRA_MEDIA_SESSION)
+        if (!isMedia) return
+
+        val content = MediaNotification.split(
+            extras.getCharSequence(Notification.EXTRA_TITLE) ?: event.text.firstOrNull(),
+            extras.getCharSequence(Notification.EXTRA_TEXT),
+            extras.getCharSequence(Notification.EXTRA_BIG_TEXT)
+        )
+        if (content.title == null && content.body == null) return
+        // 播放器每秒重发同一条通知（进度变化也算变化）：内容没变就不必再跑一遍刷新。
+        val key = "${content.title}\u0000${content.body}"
+        if (key == lastNotificationKey) return
+        lastNotificationKey = key
+        if (Probe.enabled) {
+            Probe.write("通知通道", "$pkg title=${content.title} body=${content.body?.length ?: 0}字")
+        }
+        SessionHub.get(this).onA11yNotification(pkg, content.title, content.body)
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         ForegroundApps.serviceConnected = true
@@ -100,7 +146,8 @@ class ForegroundAppService : AccessibilityService() {
         // 只在连接时跑一次，不进热路径。
         runCatching {
             val info = serviceInfo ?: AccessibilityServiceInfo()
-            info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+            info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+                AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED
             if (info.feedbackType == 0) info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             info.notificationTimeout = 100
             serviceInfo = info
@@ -112,6 +159,7 @@ class ForegroundAppService : AccessibilityService() {
     override fun onDestroy() {
         ForegroundApps.serviceConnected = false
         handler.removeCallbacks(commitTick)
+        lastNotificationKey = null
         // 进程内状态一起清：服务被销毁后那个包名不再可信，留着会让悬浮窗一上来就被藏住。
         ForegroundApps.reset()
         super.onDestroy()
@@ -122,6 +170,7 @@ class ForegroundAppService : AccessibilityService() {
         handler.removeCallbacks(commitTick)
         stabilizer.reset()
         lastReported = null
+        lastNotificationKey = null
         // 清掉残留包名：否则下次开启会先继承一个过期值，悬浮窗可能一上来就被藏住。
         ForegroundApps.reset()
         Probe.write("权限", "无障碍服务被解绑（系统关闭或被杀）")

@@ -151,6 +151,9 @@ class DiagActivity : BaseActivity() {
         conclusionText.setTextColor(
             when (diagnosis.code) {
                 DiagCode.OK -> colorOk
+                // 「没有通知使用权但直连通道在工作」是可用状态：报红等于告诉用户「坏了」，
+                // 而它此刻正在正常出歌词。给绿，与 OK 同级。
+                DiagCode.EXTERNAL_ONLY -> colorOk
                 // 这两条都是「按用户设置隐藏」，不是故障：报红会让人以为程序坏了
                 DiagCode.LISTENER_UNBOUND,
                 DiagCode.HIDDEN_BY_APP,
@@ -184,6 +187,7 @@ class DiagActivity : BaseActivity() {
         DiagCode.HIDDEN_BY_APP -> getString(R.string.diag_code_hidden_by_app)
         DiagCode.A11Y_DISCONNECTED -> getString(R.string.diag_code_a11y_disconnected)
         DiagCode.PINNED_NO_SESSION -> getString(R.string.diag_code_pinned_no_session)
+        DiagCode.EXTERNAL_ONLY -> getString(R.string.diag_code_external_only, Probe.hitSource ?: "-")
         DiagCode.OK -> getString(R.string.diag_code_ok, Probe.hitSource ?: "-")
     }
 

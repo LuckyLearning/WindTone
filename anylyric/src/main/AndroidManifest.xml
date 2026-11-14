@@ -14,7 +14,10 @@
       0.2.11 起多了一个**无障碍服务**（.accessibility.ForegroundAppService），但它不是
       uses-permission、也不是默认生效的：只有用户主动去系统「辅助功能」里打开后，
       「按应用隐藏悬浮窗」才会工作；关闭时该服务根本不会被系统绑定。
-      订阅面只有窗口切换事件，canRetrieveWindowContent=false —— 读不到屏幕内容。
+      订阅面只有「窗口切换」与「媒体通知」两类事件，canRetrieveWindowContent=false ——
+      读不到屏幕内容。媒体通知这条是 0.2.22 加的：车厂把通知使用权授权页整页拦掉时，
+      媒体通知里的歌名是唯一还能拿到的信息（见 res/xml/foreground_app_service.xml 的说明），
+      且**只处理 category=transport / 带 EXTRA_MEDIA_SESSION 的通知**，其余一个字段都不读。
       这是与 WindTone 同款的实现取舍，写在这里是为了不让下一个人误以为它是白捡的。
     -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />

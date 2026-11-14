@@ -61,8 +61,8 @@
     <string name="hide_apps_search">Search apps</string>
     <string name="hide_apps_add_package">Add “%1$s”</string>
     <string name="hide_apps_close">Done</string>
-    <string name="a11y_service_label">AnyLyric foreground detection</string>
-    <string name="a11y_service_description">Tells AnyLyric which app is in the foreground, so the lyrics overlay can step aside in the apps you choose. It only reads the package name when windows switch — never screen content, never your input.</string>
+    <string name="a11y_service_label">AnyLyric lyric helper</string>
+    <string name="a11y_service_description">Two jobs: (1) tell AnyLyric which app is in the foreground so the overlay steps aside in the apps you choose; (2) read the text of music notifications (transport-category only) so lyrics still work on head units that block the notification-access page. It never reads screen content and never records your input.</string>
     <string name="section_probe">Channel probe</string>
 
     <string name="appearance_preset">Preset</string>
@@ -165,6 +165,7 @@
     <string name="status_listener_degraded_ok">Granted · degraded mode (lyrics working)</string>
     <string name="status_listener_unbound_failed">Granted, but the system did not reconnect</string>
     <string name="status_listener_disconnected">Notification access not granted — lyrics unavailable</string>
+    <string name="status_external_ok">Connected through the car\'s direct channel — no permission needed</string>
     <string name="overlay_standby">AnyLyric is running — waiting for playback</string>
     <string name="status_title_is_lyric">TITLE is lyrics (pseudo title)</string>
     <string name="status_no_session">No active player</string>
@@ -266,6 +267,8 @@
     <string name="title_font">Title size</string>
     <string name="title_color">Title color</string>
     <string name="perm_required_hint">Both permissions are required. Grant them on this screen — no computer needed.</string>
+    <string name="perm_a11y_fallback_hint">If this head unit has no notification-access entry at all, turn on the Accessibility switch below instead: AnyLyric will read the song name from music notifications and fetch the lyrics online.</string>
+    <string name="perm_external_ok_hint">This head unit does not expose notification access (the car maker blocks that page), so that switch can be left alone. The car\'s own media service hands over the song info and lyrics without any permission — status: %1$s.</string>
     <string name="perm_unbound_hint">The permission is already ticked; the system just has not bound the service yet. It usually recovers within seconds, and lyrics keep working meanwhile. If it never does, tap System settings and toggle the switch off and on.</string>
     <string name="perm_unbound_working_hint">Notification access is granted but the system has not bound the service. AnyLyric is polling media sessions at a low rate instead, and lyrics work normally; it switches back to push automatically once connected. No action needed.</string>
     <string name="a11y_auto_restored">Accessibility service restored automatically</string>
@@ -294,5 +297,6 @@
     <string name="diag_code_hidden_by_app">Hidden by app: the current foreground app is in your hide list, so the overlay steps aside. Expected behavior; it comes back when you leave that app.</string>
     <string name="diag_code_a11y_disconnected">“Hide in apps” is on, but the accessibility service is not connected, so none of the selected apps will hide the overlay. Some ROMs disable it after an app update — turn it on again in system settings.</string>
     <string name="diag_code_pinned_no_session">A player is pinned under Player channel, but it has no media session right now. Set it back to Automatic, or start playback in that player.</string>
+    <string name="diag_code_external_only">Working through the car\'s direct channel. Notification access is not granted (this head unit blocks that page), but the car\'s media service hands over the song info and lyrics without any permission — lyrics are coming from %1$s.</string>
     <string name="diag_code_ok">Working as designed. Lyrics are being taken from %1$s.</string>
 </resources>

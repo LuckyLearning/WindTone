@@ -7,6 +7,7 @@ import android.content.Intent
 import android.service.notification.NotificationListenerService
 import com.anylyric.accessibility.AccessibilityWatchdog
 import com.anylyric.data.Prefs
+import com.anylyric.session.SessionHub
 
 /**
  * 开机自启（0.2.7）。
@@ -32,6 +33,10 @@ class BootReceiver : BroadcastReceiver() {
         // 没有 WRITE_SECURE_SETTINGS 时内部直接返回 false，不做任何事。
         AccessibilityWatchdog.tryAutoRestore(context)
         if (!BootPolicy.shouldRebind(intent.action, Prefs(context).bootAutostart)) return
+        // 先把中枢拉起来：有些车机根本没开放「通知使用权」，requestRebind 必然无果，
+        // 但车机直连通道（BYD 媒体中心 SDK）不需要权限 —— 它挂在 SessionHub 的 init 里，
+        // 不在这一步创建就一直不会启动，开机后自然什么都不出现。
+        runCatching { SessionHub.get(context) }
         runCatching {
             NotificationListenerService.requestRebind(
                 ComponentName(context, MediaWatchService::class.java)

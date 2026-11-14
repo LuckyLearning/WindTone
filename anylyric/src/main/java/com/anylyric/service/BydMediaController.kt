@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.media.session.PlaybackState
 import android.os.Binder
 import android.os.Build
 import android.os.Bundle
@@ -28,7 +29,11 @@ import com.anylyric.session.SessionHub
  *    TITLE / ARTIST / ALBUM / DURATION / LYRICS（含 `com.byd.mediacenter.metadata.LYRICS`）。
  *
  * 只读、不申请任何系统权限、不调播放控制；服务不存在或不可绑时静默跳过。
- * 绑定生命周期跟随 [MediaWatchService]，服务销毁即解绑。
+ *
+ * **0.2.22 起不再挂在 [MediaWatchService] 上启动**：那个服务要等用户授予「通知使用权」
+ * 才会被系统绑定，而车厂 ROM 常常把授权页整页拦掉（DiLink5 →「多媒体不支持」），
+ * 于是「唯一不需要权限的通道」被「拿不到的权限」挡在门外。现在由 SessionHub 在
+ * 应用启动时直接拉起来，授权状态与它无关。
  */
 object BydMediaController {
 
@@ -39,12 +44,48 @@ object BydMediaController {
     private const val LISTENER = "com.byd.mediacontroller.sdk.IMediaControllerSdkListener"
     private const val TRANSACT_REGISTER = 1
 
+    private const val STATUS_IDLE = "idle"
+    private const val STATUS_BINDING = "binding"
+    private const val STATUS_REGISTERED = "registered"
+    private const val STATUS_BIND_REJECTED = "bind_rejected"
+    private const val STATUS_BOUND_LOST = "bound_lost"
+    private const val STATUS_NULL_BINDING = "null_binding"
+    private const val STATUS_UNAVAILABLE = "unavailable"
+
     private val main = Handler(Looper.getMainLooper())
 
     @Volatile private var appContext: Context? = null
     @Volatile private var connection: ServiceConnection? = null
     @Volatile private var bound = false
     @Volatile private var deathRecipient: IBinder.DeathRecipient? = null
+
+    /**
+     * 通道状态，给诊断页与设置页看的一行字。
+     *
+     * 「已绑定」与「已注册」是两件事：bindService 成功只是拿到了 binder，
+     * 真正开始推送要等 `transact(1)` 注册成功。0.2.22 之前这两步都不留痕，
+     * 真机上「BYD 通道到底有没有在工作」只能靠猜。
+     */
+    @Volatile private var status: String = STATUS_IDLE
+
+    /**
+     * 最近一次回调码 3 的播放状态。
+     *
+     * **这条是「无通知使用权也能滚歌词」的关键**：没有 `MediaSession` 就拿不到
+     * 播放进度，带时间轴的歌词只能停在第一句。BYD 的 SDK 会把同一份
+     * `PlaybackState`（含 position / speed / state）推过来，有了它时钟就能外推。
+     */
+    @Volatile private var lastState: PlaybackState? = null
+
+    /** 已经收到过多少次元数据回调；用来区分「绑上了但不推」和「根本没绑上」。 */
+    @Volatile private var metadataCount = 0
+
+    fun statusLabel(): String = when (status) {
+        STATUS_REGISTERED ->
+            "registered(meta=$metadataCount, state=${if (lastState == null) "no" else "yes"})"
+
+        else -> status
+    }
 
     /** 回调码 4 的解析结果直接交给 SessionHub；解析失败不影响主链路。 */
     private val callback = object : Binder() {
@@ -60,9 +101,10 @@ object BydMediaController {
                     1 -> data.readInt()
                     // 封面 Bundle：本应用不加载封面，读掉即可
                     2 -> if (data.readInt() != 0) Bundle.CREATOR.createFromParcel(data)
-                    // 播放状态：标准会话通常也有，这里只消费不采用
+                    // 播放状态：0.2.22 起**采用**它 —— 无通知使用权时这是唯一的进度来源。
+                    // 之前「只消费不采用」，于是 BYD 直连模式只能显示整段歌词的第一句。
                     3 -> if (data.readInt() != 0) {
-                        android.media.session.PlaybackState.CREATOR.createFromParcel(data)
+                        lastState = PlaybackState.CREATOR.createFromParcel(data)
                     }
                     // 元数据 Bundle：歌名 / 歌手 / 专辑 / 时长 / 歌词
                     4 -> {
@@ -96,7 +138,10 @@ object BydMediaController {
             app.packageManager.resolveService(intent, 0) != null
         }.getOrDefault(false)
         // 非 BYD 设备且解析不到服务：直接跳过，不产生任何绑定尝试。
-        if (!resolves && !isBydDevice()) return
+        if (!resolves && !isBydDevice()) {
+            status = STATUS_UNAVAILABLE
+            return
+        }
 
         val conn = object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -117,32 +162,39 @@ object BydMediaController {
                         data.writeStrongBinder(callback)
                         service.transact(TRANSACT_REGISTER, data, reply, 0)
                         reply.readException()
+                        status = STATUS_REGISTERED
                         Log.i(TAG, "BYD media controller registered")
                     } finally {
                         data.recycle()
                         reply.recycle()
                     }
                 } catch (t: Throwable) {
+                    status = "register_failed(${t.javaClass.simpleName})"
                     Log.w(TAG, "register failed", t)
                 }
             }
 
             override fun onServiceDisconnected(name: ComponentName?) {
                 bound = false
+                status = STATUS_BOUND_LOST
             }
 
             override fun onBindingDied(name: ComponentName?) {
                 bound = false
+                status = STATUS_BOUND_LOST
             }
 
             override fun onNullBinding(name: ComponentName?) {
                 bound = false
+                status = STATUS_NULL_BINDING
             }
         }
         connection = conn
         runCatching {
             bound = app.bindService(intent, conn, Context.BIND_AUTO_CREATE)
+            status = if (bound) STATUS_BINDING else STATUS_BIND_REJECTED
         }.onFailure {
+            status = "bind_failed(${it.javaClass.simpleName})"
             Log.w(TAG, "bind failed", it)
             connection = null
         }
@@ -160,6 +212,9 @@ object BydMediaController {
         connection = null
         deathRecipient = null
         appContext = null
+        status = STATUS_IDLE
+        lastState = null
+        metadataCount = 0
     }
 
     private fun deliver(bundle: Bundle) {
@@ -186,7 +241,10 @@ object BydMediaController {
             "lyrics"
         )
         val ctx = appContext ?: return
-        main.post { SessionHub.get(ctx).onBydMetadata(title, artist, album, duration, lyrics) }
+        metadataCount++
+        // 状态一起递过去：无通知使用权时，SessionHub 靠它外推动画/行推进。
+        val state = lastState
+        main.post { SessionHub.get(ctx).onBydMetadata(title, artist, album, duration, lyrics, state) }
     }
 
     // Bundle.get 在新 SDK 被标弃用（类型不安全）；这里正是要按实际类型兼容 Number/String。

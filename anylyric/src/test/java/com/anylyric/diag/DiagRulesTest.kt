@@ -25,6 +25,56 @@ class DiagRulesTest {
     }
 
     /**
+     * 没有通知使用权、但车机直连通道拿到了歌词：这是**可用状态**。
+     *
+     * DiLink5 上授权页被车厂拦成「多媒体不支持」，用户永远开不了；此时再报
+     * PERMISSION_LISTENER 等于让人一直去修一个修不好的开关，而歌词其实正在出。
+     */
+    @Test
+    fun externalChannelWithoutPermissionIsWorkingNotBroken() {
+        val diagnosis = DiagRules.evaluate(
+            ok().copy(
+                listenerGranted = false,
+                listenerConnected = false,
+                hitSource = "BYD",
+                externalSource = "registered(meta=3, state=yes)"
+            )
+        )
+        assertEquals(DiagCode.EXTERNAL_ONLY, diagnosis.code)
+        assertTrue(diagnosis.evidence.contains("registered"))
+    }
+
+    /** 通道绑上了但没拿到歌词：仍按权限问题报，但证据里必须带上通道状态。 */
+    @Test
+    fun externalChannelWithoutLyricsStillReportsPermission() {
+        val diagnosis = DiagRules.evaluate(
+            ok().copy(
+                listenerGranted = false,
+                listenerConnected = false,
+                hitSource = null,
+                externalSource = "bind_rejected"
+            )
+        )
+        assertEquals(DiagCode.PERMISSION_LISTENER, diagnosis.code)
+        assertTrue(diagnosis.evidence.contains("bind_rejected"))
+    }
+
+    /** 直连通道有歌词、但悬浮窗没授权：窗口建不出来，必须报悬浮窗而不是「正在工作」。 */
+    @Test
+    fun externalChannelWorkingButNoOverlayReportsOverlay() {
+        val diagnosis = DiagRules.evaluate(
+            ok().copy(
+                listenerGranted = false,
+                listenerConnected = false,
+                overlayGranted = false,
+                hitSource = "BYD",
+                externalSource = "registered(meta=1, state=no)"
+            )
+        )
+        assertEquals(DiagCode.PERMISSION_OVERLAY, diagnosis.code)
+    }
+
+    /**
      * 勾着但服务没连上，是「空窗期」而不是「没授权」。
      *
      * 真机反馈：应用关闭后重新打开，设置页显示未授予，进去看却是勾选状态。

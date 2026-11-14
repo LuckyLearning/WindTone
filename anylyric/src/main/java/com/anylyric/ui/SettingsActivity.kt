@@ -2621,6 +2621,14 @@ class SettingsActivity : BaseActivity() {
         val degradedWorking = listener == ListenerState.GRANTED_NOT_BOUND &&
             status.hitSource != null
 
+        // 没有通知使用权，但车机直连通道已经拿到歌词：这是**可用**状态。
+        // 车厂把授权页拦掉时（DiLink5 →「多媒体不支持」），用户无论怎么点都开不了；
+        // 此时还挂着红色「通知使用权未开启」等于让人去修一个修不好的开关。
+        val externalLabel = hub.externalStatusLabel()
+        val externalWorking = listener == ListenerState.NOT_GRANTED &&
+            externalLabel != null &&
+            status.hitSource != null
+
         statusBanner.text = getString(
             when (listener) {
                 ListenerState.GRANTED -> R.string.status_listener_connected
@@ -2630,7 +2638,9 @@ class SettingsActivity : BaseActivity() {
                     else -> R.string.status_listener_unbound
                 }
 
-                ListenerState.NOT_GRANTED -> R.string.status_listener_disconnected
+                ListenerState.NOT_GRANTED ->
+                    if (externalWorking) R.string.status_external_ok
+                    else R.string.status_listener_disconnected
             }
         )
         statusBanner.setTextColor(
@@ -2642,12 +2652,21 @@ class SettingsActivity : BaseActivity() {
                     else -> colorWarn
                 }
 
-                ListenerState.NOT_GRANTED -> colorBad
+                ListenerState.NOT_GRANTED ->
+                    if (externalWorking) colorOk else colorBad
             }
         )
 
         statusLine.text = when (listener) {
-            ListenerState.NOT_GRANTED -> getString(R.string.perm_required_hint)
+            ListenerState.NOT_GRANTED ->
+                if (externalWorking) {
+                    getString(R.string.perm_external_ok_hint, externalLabel)
+                } else {
+                    // 车厂拦掉授权页时，第二条不依赖权限的路是「无障碍读媒体通知」。
+                    // 只在确实拿不到那条权限时才提，普通手机上这句是噪音。
+                    getString(R.string.perm_required_hint) + "\n\n" +
+                        getString(R.string.perm_a11y_fallback_hint)
+                }
             ListenerState.GRANTED_NOT_BOUND -> getString(
                 when {
                     degradedWorking -> R.string.perm_unbound_working_hint
@@ -2684,10 +2703,14 @@ class SettingsActivity : BaseActivity() {
             }
         }
 
-        applyListenerState(listener, degradedWorking)
+        applyListenerState(listener, degradedWorking, externalWorking)
         applyPermissionState(overlayState, status.overlayGranted)
         notificationDesc.visibility =
-            if (listener == ListenerState.GRANTED || degradedWorking) View.GONE else View.VISIBLE
+            if (listener == ListenerState.GRANTED || degradedWorking || externalWorking) {
+                View.GONE
+            } else {
+                View.VISIBLE
+            }
         overlayDesc.visibility = if (status.overlayGranted) View.GONE else View.VISIBLE
         overlayButton.text = getString(
             if (status.overlayGranted) R.string.perm_review else R.string.perm_open
@@ -2748,13 +2771,17 @@ class SettingsActivity : BaseActivity() {
      * 这是**正常工作状态**（降级运行），不能染成警告色，否则用户会一遍遍去系统设置里
      * 关开那个开关，而那里显示的本来就是「已开启」。
      */
-    private fun applyListenerState(state: ListenerState, degradedWorking: Boolean) {
+    private fun applyListenerState(
+        state: ListenerState,
+        degradedWorking: Boolean,
+        externalWorking: Boolean = false
+    ) {
         // 只有两态：能用 / 要处理。
         //
         // 之前这一行有四种说法（已授予 / 未授予 / 已授权未连接 / 已授权降级运行），
         // 用户要在脑子里做一次翻译才知道「所以现在能不能用」。「已授权未连接」这类
         // 中间态属于**原因**，上面那行状态横幅已经整句说清楚了；这一行只回答能不能用。
-        val usable = state == ListenerState.GRANTED || degradedWorking
+        val usable = state == ListenerState.GRANTED || degradedWorking || externalWorking
         notificationState.text = getString(
             if (usable) R.string.perm_state_ok else R.string.perm_state_todo
         )

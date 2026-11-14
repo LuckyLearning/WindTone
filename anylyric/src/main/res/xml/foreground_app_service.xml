@@ -1,18 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  前台应用检测的订阅面（「按应用隐藏悬浮窗」用）。
+  前台应用检测的订阅面（「按应用隐藏悬浮窗」用），0.2.22 起兼作「媒体通知」的兜底通道。
 
-  只订阅一件事：typeWindowStateChanged（窗口状态变化，即「切到了哪个应用」）。
+  订阅两件事：
+  · typeWindowStateChanged —— 窗口状态变化，即「切到了哪个应用」；
+  · typeNotificationStateChanged —— 通知出现/更新。**只处理 category=transport
+    或带 EXTRA_MEDIA_SESSION 的媒体通知**，其它通知在类型判断处就 return，
+    一个字段都不读（见 ForegroundAppService.onNotificationEvent）。
   · 不订阅内容变化（typeWindowContentChanged）、不订阅滚动/点击/文本；
-  · canRetrieveWindowContent=false —— 本服务**拿不到屏幕上的任何内容**，
-    只从事件里读一个 packageName。这是权限最小化的硬约束，改动前请先想清楚。
+  · canRetrieveWindowContent=false —— 本服务**拿不到屏幕上的任何内容**。
   · notificationTimeout=100：系统合并同类事件的窗口，防止快速切换时刷爆回调。
+
+  为什么需要通知事件：车厂 ROM 常把「通知使用权」授权页整页拦掉（DiLink5 报
+  「多媒体不支持」），那条权限是最干净的通道但拿不到。媒体通知的文本里有歌名，
+  配合在线补词就能在没有权限的机器上出歌词 —— 这是最后一条不依赖车厂配合的路。
 
   isAccessibilityTool（API 31+）：本服务确实是为「不遮挡用户要看的内容」服务的辅助能力。
   声明为 true 后，Android 13+ 不会把它当成可疑服务反复提示或自动关闭。
 -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeNotificationStateChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagDefault"
     android:canRetrieveWindowContent="false"

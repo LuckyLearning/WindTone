@@ -60,8 +60,8 @@
     <string name="hide_apps_search">搜索应用</string>
     <string name="hide_apps_add_package">添加「%1$s」</string>
     <string name="hide_apps_close">完成</string>
-    <string name="a11y_service_label">AnyLyric 前台应用识别</string>
-    <string name="a11y_service_description">让 AnyLyric 知道当前前台是哪个应用，从而在你勾选的应用里自动让出屏幕。只在窗口切换时读取包名，不读取屏幕内容、不记录任何输入。</string>
+    <string name="a11y_service_label">AnyLyric 歌词助手</string>
+    <string name="a11y_service_description">做两件事：一是知道当前前台是哪个应用，从而在你勾选的应用里自动让出屏幕；二是读取音乐通知里的文字（只认媒体类通知），让「通知使用权」被车厂拦掉的车机也能出歌词。不读取屏幕内容，不记录任何输入。</string>
     <string name="section_probe">通道探测</string>
 
     <string name="appearance_preset">预设</string>
@@ -164,6 +164,7 @@
     <string name="status_listener_degraded_ok">已授权 · 降级运行（歌词正常）</string>
     <string name="status_listener_unbound_failed">已授权，但系统没有自动恢复连接</string>
     <string name="status_listener_disconnected">通知使用权未授予，歌词暂不可用</string>
+    <string name="status_external_ok">已通过车机直连通道连接，不需要权限</string>
     <string name="overlay_standby">AnyLyric 已启动，等待播放</string>
     <string name="status_title_is_lyric">TITLE 是歌词（伪歌名）</string>
     <string name="status_no_session">当前没有正在播放的应用</string>
@@ -263,6 +264,8 @@
     <string name="title_font">标题字号</string>
     <string name="title_color">标题颜色</string>
     <string name="perm_required_hint">两项权限都是必需的，都能在这一屏里完成授权，不需要连电脑。</string>
+    <string name="perm_a11y_fallback_hint">如果在这台车机上根本找不到「通知使用权」这一项，可以往下打开「无障碍」开关：AnyLyric 会从媒体通知里读歌名，再联网补全歌词。</string>
+    <string name="perm_external_ok_hint">这台车机没有开放「通知使用权」（车厂把这页拦掉了），那个开关不用再找。车机自己的媒体服务不需要任何权限就能把歌名与歌词交过来 —— 通道状态：%1$s。</string>
     <string name="perm_unbound_hint">权限是勾选状态，只是系统还没把服务绑上。通常几秒内自动恢复，歌词此时仍可正常获取；一直连不上时，点「系统设置」把开关关掉再打开一次。</string>
     <string name="perm_unbound_working_hint">通知使用权已授权，系统暂未绑定服务。当前靠低频查询获取媒体会话，歌词照常显示；能连上时会自动切回推送模式。不用管它。</string>
     <string name="a11y_auto_restored">已自动恢复无障碍服务</string>
@@ -291,5 +294,6 @@
     <string name="diag_code_hidden_by_app">按应用隐藏生效中：当前前台应用在隐藏名单里，悬浮窗按设置让位。这是预期行为，退出该应用后会自动恢复。</string>
     <string name="diag_code_a11y_disconnected">开了「按应用隐藏」，但无障碍服务没连上，勾选的应用一个都不会隐藏。部分 ROM 在应用更新后会把它关掉 —— 去系统设置里重新开启「AnyLyric 前台应用识别」。</string>
     <string name="diag_code_pinned_no_session">「播放器频道」里锁定了一个播放器，但它当前没有媒体会话。改回自动，或先在它里面放首歌。</string>
+    <string name="diag_code_external_only">正在走车机直连通道。通知使用权没有授权（这台车机的授权页被车厂拦住了），但车机自己的媒体服务不需要权限就能把歌名与歌词交过来 —— 歌词来自 %1$s。</string>
     <string name="diag_code_ok">工作正常，歌词正在从 %1$s 获取。</string>
 </resources>

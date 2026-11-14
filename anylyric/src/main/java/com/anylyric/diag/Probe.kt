@@ -106,6 +106,10 @@ object Probe {
             sb.appendLine("  pinned=${s.pinnedPackage} matched=${s.pinnedPackage == s.chosenPackage}")
         }
         sb.appendLine("  title=${oneLine(s.title)} artist=${oneLine(s.artist)} duration=${s.durationMs}")
+        // 直连通道紧跟会话：没有通知使用权时，这一行是「还有没有别的东西在供数据」的唯一线索。
+        if (s.externalSource != null) {
+            sb.appendLine("[EXTERNAL] car_direct=${s.externalSource}")
+        }
         sb.appendLine()
 
         sb.appendLine("[METADATA KEYS] count=${s.metadataKeys.size}")

@@ -45,7 +45,9 @@ class MediaWatchService : NotificationListenerService() {
 
     override fun onDestroy() {
         SessionHub.get(this).detach()
-        BydMediaController.stop()
+        // **不解绑 BYD 通道**：这个服务被销毁只说明通知服务断开（用户关了授权、
+        // 或系统回收绑定），而直连通道不需要那个授权，正要在这种时候继续工作。
+        // 进程真的退出时 binder 自然断开，不需要手动 stop。
         super.onDestroy()
     }
 }

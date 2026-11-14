@@ -25,6 +25,7 @@ import com.anylyric.diag.Perf
 import com.anylyric.diag.Probe
 import com.anylyric.diag.ProbeSnapshot
 import com.anylyric.diag.ResourceSampler
+import com.anylyric.lyrics.ExternalLyrics
 import com.anylyric.lyrics.LyricLine
 import com.anylyric.lyrics.LyricResult
 import com.anylyric.lyrics.LyricTick
@@ -39,6 +40,7 @@ import com.anylyric.lyrics.sources.L1TitleStreamSource
 import com.anylyric.lyrics.sources.L2NotificationSource
 import com.anylyric.overlay.OverlayHost
 import com.anylyric.service.BootPolicy
+import com.anylyric.service.BydMediaController
 import com.anylyric.service.MediaWatchService
 import com.anylyric.ui.SettingsActivity
 import com.anylyric.util.AppLabels
@@ -147,6 +149,26 @@ class SessionHub private constructor(context: Context) {
     private var externalTitle: String? = null
     private var externalArtist: String? = null
     private var externalLyrics: String? = null
+
+    /** 外部源给的时长。没有 MediaSession 时它只用于在线补词的匹配，不参与行推进。 */
+    private var externalDuration = 0L
+
+    /**
+     * BYD 推来的播放状态。
+     *
+     * 无通知使用权时**没有 MediaSession 可读**，带时间轴的歌词只能停在第一句。
+     * 这个状态里就有 position / speed / state，把它喂给 [clock] 即可继续外推 ——
+     * 没有它，「不靠权限也能滚动」只成立一半。
+     */
+    private var externalState: PlaybackState? = null
+
+    /** 当前是否在「只用外部源工作」（未授权时的降级形态）。诊断与 UI 都读它。 */
+    private var externalOnly = false
+
+    /** 外部源的重解析指纹：歌名或整段歌词变了才重新建行表。 */
+    private var externalKeyTitle: String? = null
+    private var externalKeyLyrics: String? = null
+    private var externalKeyDuration = Long.MIN_VALUE
 
     /** 上次的换歌指纹：同一会话内 mediaId/duration/album/track 变了才算换歌。 */
     private var lastIdentity: String? = null
@@ -310,6 +332,15 @@ class SessionHub private constructor(context: Context) {
         ForegroundApps.addListener(foregroundListener)
         applyHideState()
 
+        // 车机直连通道：**必须在这里启动，不能等 MediaWatchService**。
+        //
+        // 那个服务要等用户授予「通知使用权」才会被系统绑定，而车厂 ROM 常常把授权页
+        // 整页拦掉（DiLink5 报「多媒体不支持」）。BYD 的第三方媒体控制服务不需要任何
+        // 权限，把它挂在「需要权限的服务的 onCreate」上，等于让唯一能绕过权限的通道
+        // 先过一遍拿不到的权限 —— 0.2.21 及以前的真机报告里它一次都没启动过。
+        // start() 内部幂等，非 BYD 设备会立刻返回。
+        BydMediaController.start(appContext)
+
         // 首次拉取必须由这里发起。
         //
         // attach() 是死方法（没有任何调用点），而 degraded 轮询又是在**第一次 refreshNow
@@ -343,6 +374,16 @@ class SessionHub private constructor(context: Context) {
     fun prefs(): Prefs = prefs
 
     fun overlay(): OverlayHost = overlay
+
+    /**
+     * 车机直连通道的状态（给设置页与诊断页用）。
+     *
+     * `null` = 这台设备没有这条通道（非 BYD / 服务不存在 / 还没启动）。
+     * 有值时是 `registered(meta=N, state=yes)` 这类可读状态，用户能据此判断
+     * 「不需要权限的那条路到底通不通」。
+     */
+    fun externalStatusLabel(): String? =
+        BydMediaController.statusLabel().takeIf { it != "idle" }
 
     /**
      * 调试开关的唯一切换点。
@@ -532,15 +573,24 @@ class SessionHub private constructor(context: Context) {
         artist: String?,
         album: String?,
         durationMs: Long,
-        lyrics: String?
+        lyrics: String?,
+        state: PlaybackState? = null
     ) {
         if (Probe.enabled) {
             Probe.write(
                 "会话",
-                "byd metadata title=$title artist=$artist album=$album dur=$durationMs"
+                "byd metadata title=$title artist=$artist album=$album dur=$durationMs " +
+                    "lyrics=${lyrics?.length ?: 0}字 state=${state?.state}/${state?.position}"
             )
         }
         var changed = false
+        if (state != null) {
+            // 进度变了也算「输入变了」：无通知使用权时没有别的事件会来推着歌词走。
+            if (externalState?.position != state.position || externalState?.state != state.state) {
+                changed = true
+            }
+            externalState = state
+        }
         val cleanTitle = title?.trim()?.takeIf { it.isNotEmpty() }
         if (cleanTitle != null && cleanTitle != externalTitle) {
             externalTitle = cleanTitle
@@ -562,10 +612,59 @@ class SessionHub private constructor(context: Context) {
             externalLyrics = cleanLyrics
             changed = true
         }
+        // 时长按「秒」上报的车机同样存在，与标准元数据那条路保持同一套量级修正。
+        val fixedDuration = if (durationMs in 1..9_999L) durationMs * 1_000L else durationMs
+        if (fixedDuration > 0 && fixedDuration != externalDuration) {
+            externalDuration = fixedDuration
+            changed = true
+        }
         if (!changed) return
         // 外部源变了：标题 / 歌词都可能来自它，强制下一轮重跑责任链。
         keyValid = false
         requestRefresh("byd_metadata")
+    }
+
+    /**
+     * 无障碍通道送来的媒体通知文本（主线程）。
+     *
+     * 与 [onBydMetadata] 共用 `external*` 这组字段 —— 两者都是「不依赖通知使用权的
+     * 旁路」，只是来源不同。**BYD 直连优先**：它的字段是结构化推送，而通知文本
+     * 可能只剩一句「歌手 - 专辑」，被它覆盖反而更差。
+     *
+     * 通知正文的单行 / 多行分开处理：多行才当歌词（逐行流），单行按歌手看待 ——
+     * 媒体通知的单行正文几乎都是歌手名，硬当歌词会滚出一句「周杰伦」。
+     */
+    fun onA11yNotification(pkg: String?, title: String?, body: String?) {
+        if (pkg == null) return
+        if (BydMediaController.statusLabel().startsWith("registered")) return
+        if (title == null && body == null) return
+
+        var changed = false
+        val cleanTitle = title?.trim()?.takeIf { it.isNotEmpty() }
+        if (cleanTitle != null && cleanTitle != externalTitle) {
+            externalTitle = cleanTitle
+            // 换歌：上一首的通知文本作废，新的一批随事件重发过来。
+            externalLyrics = null
+            changed = true
+        }
+        val bodyLines = body?.lines()?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
+        if (bodyLines.size >= 2) {
+            val text = bodyLines.joinToString("\n")
+            if (text != externalLyrics) {
+                externalLyrics = text
+                changed = true
+            }
+        } else if (bodyLines.size == 1) {
+            if (bodyLines[0] != externalArtist) {
+                externalArtist = bodyLines[0]
+                changed = true
+            }
+        }
+        if (!changed) return
+        if (Probe.enabled) {
+            Probe.write("通知通道", "pkg=$pkg title=$cleanTitle body=${bodyLines.size}行")
+        }
+        requestRefresh("a11y_notification")
     }
 
     fun onNotificationPosted(sbn: StatusBarNotification?) {
@@ -700,6 +799,12 @@ class SessionHub private constructor(context: Context) {
         externalTitle = null
         externalArtist = null
         externalLyrics = null
+        externalState = null
+        externalDuration = 0L
+        externalOnly = false
+        externalKeyTitle = null
+        externalKeyLyrics = null
+        externalKeyDuration = Long.MIN_VALUE
         stickyTitle = null
         stickyArtist = null
         lastRawTitle = null
@@ -850,13 +955,81 @@ class SessionHub private constructor(context: Context) {
         pseudoPackages += pkg
     }
 
+    /**
+     * 只用外部源渲染（无通知使用权时的降级形态）。
+     *
+     * 与 [refreshNow] 的区别只有一处：**没有 MediaController**。会话查询、选择、
+     * 通知文本、责任链全部跳过，直接用 BYD 媒体中心推来的歌名 / 歌手 / 时长 /
+     * 整段歌词 + 播放状态驱动时钟与行推进。
+     *
+     * 返回 false 表示「外部源也没东西」——调用方照旧收起窗口、保持权限提示。
+     *
+     * 这条路径**不做伪歌名判定**：直连通道没有「TITLE 里塞歌词」这种形态，
+     * 歌名与歌词是两个明确字段。硬套 TitleTimeline 只会让它多等 15 秒。
+     */
+    private fun refreshFromExternalOnly(reason: String): Boolean {
+        val title = externalTitle?.trim()?.takeIf { it.isNotEmpty() }
+        val lyricsText = externalLyrics
+        if (title == null && lyricsText.isNullOrBlank()) {
+            externalOnly = false
+            return false
+        }
+        externalOnly = true
+
+        // 时钟：position < 0 表示播放器没给进度，此时保持上一次锚点不动（不硬推）。
+        val state = externalState
+        val playState = mapState(state?.state ?: PlaybackState.STATE_NONE)
+        val position = state?.position ?: -1L
+        val speed = state?.playbackSpeed ?: 1f
+        if (position != clockRawPosition || playState != clockRawState || speed != clockRawSpeed) {
+            clockRawPosition = position
+            clockRawState = playState
+            clockRawSpeed = speed
+            clock.update(position, speed, playState)
+        }
+        lastPlayState = playState
+
+        if (title != externalKeyTitle ||
+            lyricsText != externalKeyLyrics ||
+            externalDuration != externalKeyDuration
+        ) {
+            externalKeyTitle = title
+            externalKeyLyrics = lyricsText
+            externalKeyDuration = externalDuration
+            val lines = ExternalLyrics.parse(lyricsText)
+            // 无时间轴时锚第一行：直连通道给的是整段歌词，第一行更接近「从头开始念」，
+            // 取末行会一上来就显示最后一句（L2 的多行通知同理，见 currentAnchorIndex 注释）。
+            setCurrentLines(lines, if (lines.size > 1 && lines.first().timeMs == null) 0 else -1)
+            hitSource = if (lines.isEmpty()) null else EXTERNAL_SOURCE
+            lastTitle = title
+            lastArtist = externalArtist?.trim()?.takeIf { it.isNotEmpty() }
+            lastRawTitle = title
+            lastVerdict = TitleVerdict.UNKNOWN
+            labelCache = null
+            if (Probe.enabled) {
+                Probe.write("歌词", "external-only lines=${lines.size} reason=$reason")
+            }
+            if (lines.isEmpty()) maybeRequestOnline(title, lastArtist, externalDuration)
+        }
+
+        publishSnapshot(null, lastTitle, externalDuration)
+        render()
+        scheduleLineTick()
+        return true
+    }
+
     /** 全量重算：会话 → 状态 → 责任链 → 渲染。只在事件合并之后、主线程上跑。 */
     private fun refreshNow(reason: String) {
         Perf.onRefresh()
 
         if (!listenerConnected) {
             if (Permissions.isListenerGranted(appContext) != true) {
-                // 真的没授权：任何查询都会被系统拒绝
+                // 真的没授权：任何 getActiveSessions 都会被系统拒绝。
+                // 但「没有权限」不等于「不能工作」：车机直连通道（BYD 媒体中心 SDK）
+                // 不需要任何权限，只要有数据就继续渲染 —— 否则在没有「通知使用权」
+                // 入口的车机上，本应用永远是黑屏 + 一句权限提示。
+                if (refreshFromExternalOnly(reason)) return
+                externalOnly = false
                 stopLineTick()
                 overlay.hide()
                 return
@@ -868,6 +1041,7 @@ class SessionHub private constructor(context: Context) {
             startDegraded()
         } else {
             stopDegraded()
+            externalOnly = false
             // 只有「真连上」才记心跳：降级模式下进程活着但服务没绑，看门狗本来就该重绑。
             // 这里写盘由 Prefs 内部节流（5 分钟一次），刷新频率再高也不会放大写放大。
             prefs.markAlive()
@@ -1351,7 +1525,8 @@ class SessionHub private constructor(context: Context) {
             // 手动锁定播放器、而它当前没有会话：说清楚在等谁。
             // 不这样的话这里会落进下面的 waiting 分支，一直显示「正在获取歌词…」——
             // 用户看到的是「锁了以后就不工作了」，而其实是锁定的那个播放器没在放。
-            if (prefs.sessionPinned && controller == null) {
+            // 外部源模式（车机直连）本来就没有 controller，不能套这条。
+            if (prefs.sessionPinned && controller == null && !externalOnly) {
                 push(
                     appContext.getString(
                         R.string.overlay_pinned_waiting,
@@ -1651,6 +1826,8 @@ class SessionHub private constructor(context: Context) {
                 overlayHiddenFor(ForegroundApps.currentPkg, prefs.hiddenApps),
             overlaySuppressed = overlay.isSuppressed(),
             hideByOwnUi = ownUiCount > 0,
+            // 「idle」不写进报告：非 BYD 设备上它没有信息量，只会让报告更长。
+            externalSource = BydMediaController.statusLabel().takeIf { it != "idle" },
             displayCount = displayCount(),
             fontScale = appContext.resources.configuration.fontScale
         )
@@ -1872,6 +2049,9 @@ class SessionHub private constructor(context: Context) {
 
         /** 在线补词的来源标识（进探测报告与状态卡）。 */
         private const val ONLINE_SOURCE = "ONLINE"
+
+        /** 车机直连通道（BYD 媒体中心 SDK）的来源标识；不需要通知使用权。 */
+        private const val EXTERNAL_SOURCE = "BYD"
 
         /** 状态／元数据回调里，两次完整会话查询的最小间隔。 */
         private const val QUERY_MIN_INTERVAL_MS = 3_000L

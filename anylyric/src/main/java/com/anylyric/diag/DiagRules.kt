@@ -68,6 +68,15 @@ data class ProbeSnapshot(
     /** 让位是不是因为「本应用自己的界面在屏上」（设置页/诊断页），而不是名单命中。 */
     val hideByOwnUi: Boolean = false,
 
+    /**
+     * 车机直连通道（BYD 媒体中心 SDK）的状态。
+     *
+     * `null` = 非 BYD 设备或没尝试；`registered(meta=N, state=yes)` = 已注册且在推数据。
+     * 这一行回答的是「没有通知使用权时，还有没有别的东西在供数据」——
+     * 0.2.21 及以前的报告里这个信息完全缺失，只能靠猜。
+     */
+    val externalSource: String? = null,
+
     val displayCount: Int = 1,
     val fontScale: Float = 1f
 )
@@ -93,6 +102,15 @@ enum class DiagCode {
 
     /** 手动锁定的播放器当前没有媒体会话：不是取不到歌词，是锁定的那个没在放。 */
     PINNED_NO_SESSION,
+
+    /**
+     * 没有「通知使用权」，但车机直连通道在工作。
+     *
+     * 这不是故障：部分车厂 ROM 把通知使用权授权页整页拦掉（DiLink5 →「多媒体不支持」），
+     * 而 BYD 媒体中心的第三方 Binder 服务不需要任何权限就能给歌名 / 歌手 / 歌词。
+     * 报成 PERMISSION_LISTENER 会让用户以为「没授权就等于不能用」，然后一直去修一个修不好的开关。
+     */
+    EXTERNAL_ONLY,
     OK
 }
 
@@ -108,8 +126,30 @@ data class Diagnosis(val code: DiagCode, val evidence: String)
 object DiagRules {
 
     fun evaluate(s: ProbeSnapshot): Diagnosis = when {
+        // 直连通道已经拿到歌词、但悬浮窗没授权：窗口根本建不出来，先报这个 ——
+        // 否则会给出一个绿色的「正在工作」，而用户屏上什么都没有。
+        !s.listenerGranted && s.externalSource != null && s.hitSource != null &&
+            !s.overlayGranted ->
+            Diagnosis(DiagCode.PERMISSION_OVERLAY, "canDrawOverlays=false, external=${s.externalSource}")
+
+        // 最先判：没有授权但直连通道已经拿到歌词 —— 这是「能用的状态」，不是待修的故障。
+        !s.listenerGranted && s.externalSource != null && s.hitSource != null ->
+            Diagnosis(
+                DiagCode.EXTERNAL_ONLY,
+                "listenerGranted=false, external=${s.externalSource}, hit=${s.hitSource}"
+            )
+
         !s.listenerGranted ->
-            Diagnosis(DiagCode.PERMISSION_LISTENER, "listenerGranted=false")
+            Diagnosis(
+                DiagCode.PERMISSION_LISTENER,
+                if (s.externalSource == null) {
+                    "listenerGranted=false"
+                } else {
+                    // 通道绑上了但没出歌词：报告里必须带上通道状态，否则无法区分
+                    // 「车机没这个服务」与「有服务但没在推」。
+                    "listenerGranted=false, external=${s.externalSource}, hit=none"
+                }
+            )
 
         !s.overlayGranted ->
             Diagnosis(DiagCode.PERMISSION_OVERLAY, "canDrawOverlays=false")
