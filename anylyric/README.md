@@ -165,8 +165,35 @@ BYD 媒体中心有个面向第三方应用的 Binder 服务 `com.byd.mediacontr
 （`ExternalLyrics.looksLikeLyrics`：带时间轴的行集，或每行都不长的 ≥4 行文本），
 并把 `keys=…` 写进探测报告。键名会随 DiLink 版本变，认形状不会。
 
-**判定与界面（0.2.22 起）**
+### 0.2.23：取词稳定性对齐 Cardash（用户原话「参考 cardash，它的歌词获取的很稳定」）
 
+> 拆了 `cardash-v233.apk`（`source1/decompiled-cardash233`）。它的取词在
+> `MusicLyricsListenerService` 里，稳定**不是靠某个接口**，而是靠三条结构：
+> ① `addOnActiveSessionsChangedListener` 把「换播放器」变成推送；
+> ② `onListenerConnected` 之后挂一个 900ms 自驱循环，每轮重读已绑定会话的
+> metadata / playbackState ——**播放器一次回调都不发，它照样 1 秒内跟上**；
+> ③ 解析结果为空且仍是同一首歌时，沿用上一轮的行表（`listD.isEmpty() && 同曲 → 保留`）。
+> AnyLyric 之前完全事件驱动，这三条一条都没有。
+
+三条按「不增加耗电」的前提各改一处：
+
+| Cardash 的做法 | AnyLyric 0.2.23 | 为什么不一样 |
+|---|---|---|
+| 会话变化推送 | `MediaWatchService` 在 `onListenerConnected` 里订阅 `OnActiveSessionsChangedListener`（带本服务 `ComponentName`，否则系统拒绝）→ `SessionHub.onActiveSessionsChanged()` | 一样。之前只能靠通知 / 节流查询猜，「点了另一个播放器还要挂十几秒」就是这条缺失 |
+| 900ms 无条件自驱 | `selfHealTicker`：1 秒看一次（暂停 5 秒），**只有静默超过 1.5 秒才真的读一次** | 无条件轮询在车机上等于每秒两次 binder。正常播放器每秒都有 state 回调，这条路径等于空转一次布尔判断 |
+| 同曲空窗保留旧行 | 责任链全 miss 时，若没换歌（`identity` 与展示标题都没变）就保留 `currentLines`，且**不动 `hitSource`** | 保留 source 是为了不让 auto 判因凭空多一条 `NO_CHANNEL`；换歌时仍然清空 —— 那是真没这首的词 |
+
+另补一条与 Cardash 同源的**网络恢复重试**：它 `registerDefaultNetworkCallback` 后
+`onAvailable` 立刻重新解析；AnyLyric 只用来**把在线补词的尝试次数清零**。
+车机上「开机时网还没通 / 地库里没信号」恰好会把 4 次退避全吃掉，等网通了那首就永远停在
+「暂无歌词」。新增 `ACCESS_NETWORK_STATE`（普通权限，不弹窗），
+`data/NetworkWatch.kt` 注册一次，回调里只做「清账 + 刷新」。
+
+判定逻辑抽成纯函数 `session/StabilityPolicy.kt`（`pollDelayMs` / `shouldRequery` /
+`keepLines`），10 项单测钉住边界 —— 这两个判定写错的代价分别是耗电和闪屏，
+真机上都不好回看。
+
+**判定与界面（0.2.22 起）**
 - 新增 `DiagCode.EXTERNAL_ONLY`：未授权 + 直连通道已拿到歌词 → **绿色**。
   报 `PERMISSION_LISTENER` 会让用户以为不能用，而它正在正常工作。
 - 直连通道有歌词但悬浮窗没授权 → 报 `PERMISSION_OVERLAY`（窗口建不出来，绿色是误报）。

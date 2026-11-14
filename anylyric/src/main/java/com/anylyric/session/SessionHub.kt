@@ -21,6 +21,7 @@ import com.anylyric.accessibility.AccessibilityWatchdog
 import com.anylyric.accessibility.ForegroundApps
 import com.anylyric.accessibility.overlayHiddenFor
 import com.anylyric.data.ListenerState
+import com.anylyric.data.NetworkWatch
 import com.anylyric.data.Permissions
 import com.anylyric.data.Prefs
 import com.anylyric.diag.Perf
@@ -116,6 +117,17 @@ class SessionHub private constructor(context: Context) {
 
     private var controller: MediaController? = null
     private var listenerConnected = false
+
+    /**
+     * 最近一次收到**当前会话**回调的时刻（elapsedRealtime）。
+     *
+     * 存在的唯一目的：判断「这个播放器还会不会推」。有的车机播放器只在换歌时发一次
+     * metadata，之后进度全靠别人来问 —— 没有这个时间戳，「要不要自己读一次」就无从判断。
+     */
+    private var lastControllerEventAt = 0L
+
+    /** 静默补查的定时器是否已排上（排上就不再重复 post）。 */
+    private var selfHealScheduled = false
 
     /** 上次向系统请求重绑的时刻，用于节流（系统自身对 requestRebind 有频率限制）。 */
     private var lastRebindAt = 0L
@@ -338,6 +350,8 @@ class SessionHub private constructor(context: Context) {
         Probe.setEnabled(prefs.debugEnabled)
         // 歌词磁盘缓存：取到过一次就永久可用，冷启动/重绑都不必重新联网。
         OnlineLyricsFetcher.bind(appContext)
+        // 「网回来了」= 之前那些取词失败不算数（开机 / 出地库是最常见的一幕）。
+        NetworkWatch.start(appContext) { onNetworkAvailable() }
         if (prefs.debugEnabled) startResourceTicker()
         // 菜单关闭、隐藏到期、换了输出屏幕：都需要上层重新算一遍内容再决定是否重建窗口
         overlay.onRequestRender = { requestRefresh(REASON_UI) }
@@ -402,12 +416,15 @@ class SessionHub private constructor(context: Context) {
             // 回调给的对象就是最新的：留一份，省掉每次刷新一次跨进程查询
             callbackMetadata = metadata
             callbackMetadataValid = true
+            // 记下「这个播放器还在推」：静默补查据此决定要不要自己读一次
+            lastControllerEventAt = SystemClock.elapsedRealtime()
             requestRefresh(REASON_METADATA)
         }
 
         override fun onPlaybackStateChanged(state: PlaybackState?) {
             callbackState = state
             callbackStateValid = true
+            lastControllerEventAt = SystemClock.elapsedRealtime()
             requestRefresh(REASON_STATE)
         }
 
@@ -415,6 +432,23 @@ class SessionHub private constructor(context: Context) {
             detachController()
             requestRefresh("session_destroyed")
         }
+    }
+
+    /**
+     * 系统推来的「活动会话变了」（0.2.23）。
+     *
+     * 参照 Cardash：它在 `onListenerConnected` 里挂了
+     * `addOnActiveSessionsChangedListener`，换播放器 / 会话消失是**推送**过来的。
+     * AnyLyric 之前只有三条发现路径：本应用的媒体通知、外来通知（且节流 1–5 秒）、
+     * 降级轮询 —— 没有一条是「系统告诉你换播放器了」。
+     * 表现就是：点了另一个播放器，悬浮窗还挂着上一个的歌十几秒。
+     *
+     * 收到就立刻全量查一次会话（`reason` 会在 [refreshNow] 里走全量分支）。
+     */
+    fun onActiveSessionsChanged(count: Int) {
+        lastSessionCount = count
+        if (Probe.enabled) Probe.write("会话", "activeSessionsChanged count=$count")
+        requestRefresh("sessions_changed")
     }
 
     fun prefs(): Prefs = prefs
@@ -559,6 +593,79 @@ class SessionHub private constructor(context: Context) {
         degraded = false
         mainHandler.removeCallbacks(degradedTicker)
         if (Probe.enabled) Probe.write("权限", "degraded=false（服务已连接）")
+    }
+
+    // ------------------------------------------------------------ 静默补查（0.2.23）
+
+    /**
+     * 回调静默时的补读。
+     *
+     * 参照 Cardash 的 900ms 自驱循环：它不等播放器发事件，自己按周期重读已绑定会话的
+     * metadata / playbackState，所以「播放器不推」在它那里根本不是一个故障。
+     * AnyLyric 之前完全事件驱动 —— 推送稀疏的播放器表现为换歌不换词、暂停后歌词还在滚，
+     * 而且因为没有事件，日志里一片空白，连判因都无从下手。
+     *
+     * 这里取折中：**只在静默超过 [StabilityPolicy.QUIET_MS] 时才真的读一次**。
+     * 正常播放器每秒都有 state 回调，这条路径等于空转一次布尔判断；
+     * 只有「不推的播放器」才会走到跨进程查询。间隔也分两档（播放中 1 秒 / 其它 5 秒）。
+     */
+    private val selfHealTicker = object : Runnable {
+        override fun run() {
+            selfHealScheduled = false
+            if (controller == null) return
+            val now = SystemClock.elapsedRealtime()
+            // 用上一次刷新记下的播放态，而不是现读一次 playbackState ——
+            // 那正是本方法要省掉的跨进程调用。
+            val playing = lastPlayState == PlayState.PLAYING
+            if (StabilityPolicy.shouldRequery(now, lastControllerEventAt, playing)) {
+                // 只作废「回调缓存」，不动时钟锚点与换歌指纹：前者是这次要重读的，
+                // 后者是上一个会话/上一首歌的事实，一起清会让渲染闪一下。
+                callbackMetadataValid = false
+                callbackStateValid = false
+                if (Probe.enabled) {
+                    Probe.write("会话", "self-heal silent=${now - lastControllerEventAt}ms")
+                }
+                requestRefresh(REASON_SELF_HEAL)
+            }
+            scheduleSelfHeal()
+        }
+    }
+
+    /** 有绑定的会话就排一次补查；没有会话时什么都不做（不轮询空会话）。 */
+    private fun scheduleSelfHeal() {
+        if (selfHealScheduled) return
+        if (controller == null) return
+        selfHealScheduled = true
+        val playing = lastPlayState == PlayState.PLAYING
+        mainHandler.postDelayed(selfHealTicker, StabilityPolicy.pollDelayMs(playing))
+    }
+
+    private fun stopSelfHeal() {
+        mainHandler.removeCallbacks(selfHealTicker)
+        selfHealScheduled = false
+    }
+
+    /**
+     * 默认网络恢复可用（0.2.23）。
+     *
+     * 只做一件事：把「这首歌已经试过几次」的账清掉。开机 / 出地库后网才通时，
+     * 之前的 4 次退避已经用光，不清账就再也不会重试。
+     * 正在取词时不动（`onlineInFlight`）：那一次请求自己会带着结果回来。
+     */
+    private fun onNetworkAvailable() {
+        // 网络回调在系统的 binder 线程上：状态字段与刷新都必须在主线程动。
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post { onNetworkAvailable() }
+            return
+        }
+        if (!prefs.onlineLyrics) return
+        if (onlineInFlight) return
+        if (onlineAttempts == 0 && onlineNextAtMs == 0L) return
+        onlineAttempts = 0
+        onlineNextAtMs = 0L
+        mainHandler.removeCallbacks(onlineRetry)
+        if (Probe.enabled) Probe.write("歌词", "network available → 重试次数归零")
+        requestRefresh("network_available")
     }
 
     fun onListenerConnected() {
@@ -835,6 +942,9 @@ class SessionHub private constructor(context: Context) {
         refreshScheduled = false
         pendingReason = null
         tickScheduled = false
+        // removeCallbacksAndMessages 已经把补查任务摘掉了，标志位必须一起复位：
+        // 否则下一次 bind 时 scheduleSelfHeal() 会以为「已经排上了」，从此再也不排。
+        selfHealScheduled = false
         degraded = false
         detachController()
         // 在线结果跟着服务生命周期释放；磁盘缓存留着，重绑后不必重抓。
@@ -986,6 +1096,8 @@ class SessionHub private constructor(context: Context) {
     }
 
     private fun rankReason(reason: String): Int = when (reason) {
+        // 补查是最弱的解释：同一帧里只要还有任何真实事件，原因就该记成那个事件。
+        REASON_SELF_HEAL -> -1
         REASON_STATE, REASON_METADATA -> 1
         REASON_NOTIFICATION_OTHER -> 0
         REASON_NOTIFICATION -> 2
@@ -1108,7 +1220,8 @@ class SessionHub private constructor(context: Context) {
         val fullQuery = when {
             controller == null -> true
             reason == REASON_NOTIFICATION_OTHER -> now - lastFullQueryAt >= foreignQueryInterval()
-            reason == REASON_STATE || reason == REASON_METADATA || reason == REASON_NOTIFICATION ->
+            reason == REASON_STATE || reason == REASON_METADATA || reason == REASON_NOTIFICATION ||
+                reason == REASON_SELF_HEAL ->
                 cachedState != lastPlayState || now - lastFullQueryAt >= QUERY_MIN_INTERVAL_MS
             else -> true
         }
@@ -1202,7 +1315,8 @@ class SessionHub private constructor(context: Context) {
 
         // 换歌判定：同一会话内 mediaId / duration / album / track 变了才清掉粘住的标题。
         val identity = identityExtra(active, metadata)
-        if (identity != lastIdentity) {
+        val identityChanged = identity != lastIdentity
+        if (identityChanged) {
             lastIdentity = identity
             stickyTitle = null
             stickyArtist = null
@@ -1287,7 +1401,8 @@ class SessionHub private constructor(context: Context) {
             else -> stickyArtist
         }
 
-        if (displayTitle != lastTitle || displayArtist != lastArtist) {
+        val titleChanged = displayTitle != lastTitle || displayArtist != lastArtist
+        if (titleChanged) {
             labelCache = null
             // 换歌：上一首的在线结果必须立刻作废，否则新歌开头几秒会闪出旧歌词。
             resetOnlineState()
@@ -1368,8 +1483,23 @@ class SessionHub private constructor(context: Context) {
                 hitSource = ONLINE_SOURCE
                 setCurrentLines(onlineLines, -1)
             } else {
-                hitSource = null
-                setCurrentLines(emptyList())
+                // 同曲空窗保持（0.2.23，参照 Cardash）：播放器在换歌间隙 / 刷新歌词字段的
+                // 那一两拍里常常把歌词清空，立刻清屏就会闪一下「正在获取歌词…」。
+                // 判定为换歌时仍然清掉 —— 那是真的没有这一首的词，留着上一首更糟。
+                if (StabilityPolicy.keepLines(
+                        identityChanged || titleChanged,
+                        currentLines.isNotEmpty()
+                    )
+                ) {
+                    // **不动 hitSource**：诊断报告里那一行仍要说实话（词是哪条通道给的），
+                    // 置空会让 auto 判因凭空多出一条 NO_CHANNEL。
+                    if (Probe.enabled) {
+                        Probe.write("歌词", "keep last lines (same track, ${currentLines.size}行)")
+                    }
+                } else {
+                    hitSource = null
+                    setCurrentLines(emptyList())
+                }
             }
             // 在线匹配用**展示用**歌名/歌手：它才是用户看到的真实曲目信息。
             if (hit == null) maybeRequestOnline(displayTitle, displayArtist, duration)
@@ -1402,6 +1532,9 @@ class SessionHub private constructor(context: Context) {
         // 与重跑解析完全不是一个量级。
         render()
         scheduleLineTick()
+        // 兜底：只要还绑着会话，补查就必须在排上（幂等）。放在这里而不是只在 bind 里，
+        // 是为了让「服务被销毁又重建」「会话没换但定时器被清掉」这些路径都能自愈。
+        scheduleSelfHeal()
     }
 
     /** 换歌指纹的附加位：duration / mediaId 都缺失时，靠包名 + 专辑 + 音轨兜底。 */
@@ -2069,6 +2202,11 @@ class SessionHub private constructor(context: Context) {
         controller?.unregisterCallback(callback)
         controller = next
         next?.registerCallback(callback, mainHandler)
+        // 新会话从「刚收到过事件」起算：否则第一轮补查会立刻多读一次，
+        // 而这时的回调缓存本来就是空的（bind 已经清过）。
+        lastControllerEventAt = SystemClock.elapsedRealtime()
+        // 有会话才开始排补查；没有会话时排上只是空转。
+        if (next == null) stopSelfHeal() else scheduleSelfHeal()
         // 缓存属于上一个会话：不清掉的话，新会话的第一帧会拿旧播放器的事实去渲染 ——
         // 表现就是换播放器后先闪一下上一首的歌词。
         invalidateSessionCaches()
@@ -2105,6 +2243,7 @@ class SessionHub private constructor(context: Context) {
     private fun detachController() {
         controller?.unregisterCallback(callback)
         controller = null
+        stopSelfHeal()
         invalidateSessionCaches()
     }
 
@@ -2164,6 +2303,14 @@ class SessionHub private constructor(context: Context) {
         private const val REASON_NOTIFICATION = "notification"
         private const val REASON_NOTIFICATION_OTHER = "notification_other"
         private const val REASON_UI = "overlay_event"
+
+        /**
+         * 回调静默时自己补读一次（0.2.23）。
+         *
+         * 单独一个原因而不是复用 `state`：它不该触发全量会话查询（每秒一次 getActiveSessions
+         * 会很贵），也不该在探测日志里冒充「播放器真有状态回调」。
+         */
+        private const val REASON_SELF_HEAL = "self_heal"
 
         /** 在线补词的来源标识（进探测报告与状态卡）。 */
         private const val ONLINE_SOURCE = "ONLINE"

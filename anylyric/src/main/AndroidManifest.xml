@@ -13,6 +13,10 @@
       · REQUEST_INSTALL_PACKAGES —— 下载完新版本后拉起系统安装器。
       不申请存储、蓝牙、读取日志等任何其它权限。
 
+      唯一的例外是 ACCESS_NETWORK_STATE（0.2.23）：普通权限，安装即授予、不弹窗，
+      只用来注册「默认网络恢复可用」的回调 —— 车机开机时常常还没联网，等网通了要把
+      在线补词的失败次数清零重试，否则那一首永远停在「暂无歌词」。
+
       0.2.11 起多了一个**无障碍服务**（.accessibility.ForegroundAppService），但它不是
       uses-permission、也不是默认生效的：只有用户主动去系统「辅助功能」里打开后，
       「按应用隐藏悬浮窗」才会工作；关闭时该服务根本不会被系统绑定。
@@ -25,6 +29,11 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!--
+      仅用于 ConnectivityManager.registerDefaultNetworkCallback（0.2.23）。
+      普通权限：不弹窗、不给用户添任何一步操作，也读不到网络内容。
+    -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!--
       两项自启相关（0.2.7，用户拍板放开旧的「不申请电池白名单」边界）：
       · RECEIVE_BOOT_COMPLETED —— 收开机广播，配合设置里的「开机自启」开关主动
