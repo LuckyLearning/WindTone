@@ -149,6 +149,11 @@
     <string name="perm_open_failed_none">(none)</string>
     <string name="perm_notification_manual">Settings → Notification access → find AnyLyric in the list (alphabetical, near the top) and turn the switch on</string>
     <string name="perm_overlay_manual">Settings → Apps → Special app access → Display over other apps → find AnyLyric and turn the switch on</string>
+    <string name="perm_guide_listener_title">One step left: notification access</string>
+    <string name="perm_guide_listener_body">The system page did not open (some head units answer with \"multimedia not supported\"), or the switch is still off.\n\nOpen it manually — try both paths:\n① Settings → Apps → Special app access → Notification access → turn on AnyLyric\n② Settings → Notifications (or \"Notifications &amp; status bar\") → Notification access → turn on AnyLyric\n\nCome back to this page afterwards; the status turns into \"Connected\".\nIf neither path lists this item, this head unit does not expose notification access to third-party apps — the lyrics cannot be read here, and this is not an installation problem.</string>
+    <string name="perm_guide_overlay_title">One step left: display over other apps</string>
+    <string name="perm_guide_overlay_body">The system page did not open, or the switch is still off.\n\nOpen it manually:\n① Settings → Apps → Special app access → Display over other apps → turn on AnyLyric\n② Some head units call it \"floating window\"; it is also under App info → AnyLyric → Permissions\n\nCome back to this page afterwards; the status updates by itself.</string>
+    <string name="perm_guide_retry">Try again</string>
     <string name="perm_accessibility_manual">Settings → Accessibility → Downloaded apps → AnyLyric → turn “AnyLyric foreground detection” on</string>
     <string name="perm_copy_detail">Copy details</string>
     <string name="perm_copied">Copied</string>

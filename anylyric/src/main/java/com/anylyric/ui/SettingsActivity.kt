@@ -3,6 +3,7 @@ package com.anylyric.ui
 import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
@@ -53,6 +54,8 @@ import com.anylyric.R
 import com.anylyric.accessibility.AccessibilityWatchdog
 import com.anylyric.accessibility.ForegroundApps
 import com.anylyric.data.ListenerState
+import com.anylyric.data.PermissionGate
+import com.anylyric.data.Permissions
 import com.anylyric.data.Prefs
 import com.anylyric.diag.Probe
 import com.anylyric.overlay.Align
@@ -142,6 +145,17 @@ class SettingsActivity : BaseActivity() {
     private val pollHandler = Handler(Looper.getMainLooper())
     private var pollTicks = 0
 
+    /**
+     * 刚从哪一项权限的设置页回来。
+     *
+     * 只在真的发起过一次跳转后才有值。返回时若该项仍未授权，说明这条路在这台机器上
+     * 走不通（DiLink5 把「通知使用权」拦成「多媒体不支持」），改为屏幕内给路径向导。
+     */
+    private var pendingPermission = PendingPermission.NONE
+    private var pendingPermissionAt = 0L
+
+    private val permissionProbe = Runnable { checkPendingPermission(fromResume = false) }
+
     private val poller = object : Runnable {
         override fun run() {
             refresh()
@@ -173,11 +187,14 @@ class SettingsActivity : BaseActivity() {
         if (hub.listenerState() != ListenerState.GRANTED && hub.tryRebind()) {
             startPolling(POLL_FIRST_DELAY_MS)
         }
+        // 从设置页回来：授权成功了就当没事，没成功就得说清「为什么点了没反应」。
+        checkPendingPermission(fromResume = true)
     }
 
     override fun onPause() {
         super.onPause()
         pollHandler.removeCallbacks(poller)
+        pollHandler.removeCallbacks(permissionProbe)
     }
 
     override fun onStop() {
@@ -199,6 +216,9 @@ class SettingsActivity : BaseActivity() {
     }
 
     // ---------------------------------------------------------------- 页面骨架
+
+    /** 「刚跳去过哪一项权限的设置页」。只用于返回后的向导判定，不参与任何业务逻辑。 */
+    private enum class PendingPermission { NONE, LISTENER, OVERLAY }
 
     /**
      * 五个标签页。
@@ -1408,6 +1428,8 @@ class SettingsActivity : BaseActivity() {
      */
     private fun openAccessibilitySettings() {
         openSystemSettings(
+            // 无障碍不在「返回后向导」的覆盖范围：它有自己的开关页与提示（见 showA11yGuide）。
+            kind = PendingPermission.NONE,
             candidates = listOf(
                 "无障碍列表" to Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS),
                 "应用详情页" to appDetailsIntent(),
@@ -2819,7 +2841,16 @@ class SettingsActivity : BaseActivity() {
 
     private fun openNotificationSettings() {
         openSystemSettings(
+            kind = PendingPermission.LISTENER,
             candidates = listOf(
+                // 直达「本应用」那一页（API 30+）。车机常把**列表页**拦掉，
+                // 但对单应用的开关页放行，所以它排第一 —— DiLink5 上列表页就是死路。
+                "本应用通知使用权" to Intent(
+                    Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS
+                ).putExtra(
+                    Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
+                    ComponentName(packageName, Permissions.LISTENER_CLASS)
+                ),
                 "通知使用权列表" to Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS),
                 "应用详情页" to appDetailsIntent(),
                 "设置首页" to Intent(Settings.ACTION_SETTINGS)
@@ -2830,6 +2861,7 @@ class SettingsActivity : BaseActivity() {
 
     private fun openOverlaySettings() {
         openSystemSettings(
+            kind = PendingPermission.OVERLAY,
             candidates = listOf(
                 "悬浮窗权限页" to Intent(
                     Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
@@ -2841,6 +2873,65 @@ class SettingsActivity : BaseActivity() {
             ),
             manualHint = getString(R.string.perm_overlay_manual)
         )
+    }
+
+    /**
+     * 跳转后回来，检查「该给的是不是还是没给」。
+     *
+     * 两条触发路径，缺一不可：
+     *  · [fromResume] —— 正常往返（设置页把我们盖住又退回来）；
+     *  · 延迟探测 —— 有些 ROM 只弹一句「多媒体不支持」就当处理完了，我们不 pause 也不 resume，
+     *    没有这条就永远等不到检查，用户看到的是「按钮点了没反应」。
+     */
+    private fun checkPendingPermission(fromResume: Boolean) {
+        val pending = pendingPermission
+        if (pending == PendingPermission.NONE) return
+        // 延迟探测时人还在本页才算「没跳走」；已被设置页盖住就等 onResume 再判。
+        if (!fromResume && !hasWindowFocus()) return
+
+        val granted = when (pending) {
+            PendingPermission.LISTENER ->
+                Permissions.isListenerGranted(this) ?: return
+            PendingPermission.OVERLAY -> Settings.canDrawOverlays(this)
+            PendingPermission.NONE -> return
+        }
+        val waited = SystemClock.elapsedRealtime() - pendingPermissionAt
+        if (PermissionGate.shouldGuide(waited, granted)) {
+            pendingPermission = PendingPermission.NONE
+            Probe.write("权限向导", "${pending.name} 返回后仍未授权（${waited}ms）")
+            showPermissionGuide(pending)
+        } else if (granted) {
+            // 已授权：任务完成，别再挂着等下一次 resume。
+            pendingPermission = PendingPermission.NONE
+        }
+    }
+
+    /**
+     * 屏幕内的路径向导。
+     *
+     * 车机上跳转被拦时，用户唯一能走的就是自己翻设置，所以这里必须写清路径，
+     * 并且对「多媒体不支持」给出解释 —— 否则他会以为是本应用坏了。
+     */
+    private fun showPermissionGuide(kind: PendingPermission) {
+        val listener = kind == PendingPermission.LISTENER
+        AlertDialog.Builder(this)
+            .setTitle(
+                getString(
+                    if (listener) R.string.perm_guide_listener_title
+                    else R.string.perm_guide_overlay_title
+                )
+            )
+            .setMessage(
+                getString(
+                    if (listener) R.string.perm_guide_listener_body
+                    else R.string.perm_guide_overlay_body
+                )
+            )
+            .setPositiveButton(getString(R.string.perm_guide_retry)) { _, _ ->
+                if (listener) openNotificationSettings() else openOverlaySettings()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun appDetailsIntent(): Intent =
@@ -2856,6 +2947,7 @@ class SettingsActivity : BaseActivity() {
      *    所以候选顺序只按真机实测结果排，不按"理论上体验更好"排。
      */
     private fun openSystemSettings(
+        kind: PendingPermission,
         candidates: List<Pair<String, Intent>>,
         manualHint: String
     ) {
@@ -2865,6 +2957,12 @@ class SettingsActivity : BaseActivity() {
             try {
                 startActivity(intent)
                 Probe.write("设置跳转", "$label 已启动（${intent.action}）")
+                // 「已启动」只代表 Intent 没抛异常，不代表页面真的打开了。
+                // 记下这一笔，回来时若权限仍未授予，改为屏幕内给路径（见 checkPendingPermission）。
+                pendingPermission = kind
+                pendingPermissionAt = SystemClock.elapsedRealtime()
+                pollHandler.removeCallbacks(permissionProbe)
+                pollHandler.postDelayed(permissionProbe, PermissionGate.PROBE_DELAY_MS)
                 return
             } catch (t: Throwable) {
                 val reason = t.javaClass.simpleName + (t.message?.let { "：$it" } ?: "")

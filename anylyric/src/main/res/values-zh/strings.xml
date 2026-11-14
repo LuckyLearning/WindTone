@@ -148,6 +148,11 @@
     <string name="perm_open_failed_none">（无）</string>
     <string name="perm_notification_manual">设置 → 通知使用权 → 在列表里找到 AnyLyric（按字母排序在 A 开头），把开关打开</string>
     <string name="perm_overlay_manual">设置 → 应用 → 特殊应用权限 → 显示在其他应用上层 → 找到 AnyLyric，把开关打开</string>
+    <string name="perm_guide_listener_title">还差一步：通知使用权</string>
+    <string name="perm_guide_listener_body">系统页面没能打开（部分车机会提示「多媒体不支持」），或者开关还没打开。\n\n请在系统设置里手动打开，两条路径都试一下：\n① 设置 → 应用 → 特殊应用权限（有的车机叫「特殊访问权限」）→ 通知使用权 → 打开 AnyLyric\n② 设置 → 通知（或「通知与状态栏」）→ 通知使用权 → 打开 AnyLyric\n\n打开后回到本页，状态会变成「已连接」。\n如果两条路都找不到这一项，说明这台车机没有向第三方应用开放通知使用权 —— 本应用读不到歌词，这不是安装出了问题。</string>
+    <string name="perm_guide_overlay_title">还差一步：悬浮窗权限</string>
+    <string name="perm_guide_overlay_body">系统页面没能打开，或者开关还没打开。\n\n请在系统设置里手动打开：\n① 设置 → 应用 → 特殊应用权限 → 显示在其他应用上层 → 打开 AnyLyric\n② 部分车机把它叫「悬浮窗」，也能在「应用管理 → AnyLyric → 权限」里找到\n\n打开后回到本页，状态会自动更新。</string>
+    <string name="perm_guide_retry">再试一次</string>
     <string name="perm_accessibility_manual">设置 → 辅助功能 / 无障碍 → 已下载的应用 → AnyLyric → 打开「AnyLyric 前台应用识别」</string>
     <string name="perm_copy_detail">复制详情</string>
     <string name="perm_copied">已复制</string>
