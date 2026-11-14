@@ -53,6 +53,7 @@ import android.widget.TextView
 import com.anylyric.R
 import com.anylyric.accessibility.AccessibilityWatchdog
 import com.anylyric.accessibility.ForegroundApps
+import com.anylyric.data.Devices
 import com.anylyric.data.ListenerState
 import com.anylyric.data.PermissionGate
 import com.anylyric.data.Permissions
@@ -104,6 +105,7 @@ class SettingsActivity : BaseActivity() {
     private lateinit var notificationState: TextView
     private lateinit var notificationButton: TextView
     private lateinit var notificationSettingsButton: TextView
+    private lateinit var reconnectButton: TextView
     private lateinit var notificationDesc: TextView
     private lateinit var overlayState: TextView
     private lateinit var overlayButton: TextView
@@ -159,10 +161,20 @@ class SettingsActivity : BaseActivity() {
     private val poller = object : Runnable {
         override fun run() {
             refresh()
-            if (hub.listenerState() == ListenerState.GRANTED) return
+            val state = hub.listenerState()
+            if (state == ListenerState.GRANTED) return
             if (pollTicks >= MAX_POLL_TICKS) return
             pollTicks++
-            pollHandler.postDelayed(this, POLL_INTERVAL_MS)
+            // 车机上「已授权」到「被系统绑定」之间可能隔着几分钟（真机：开了权限后
+            // 很久才自己连上）。只在第一拍发一次 requestRebind，等于把一次运气当成机制。
+            // 这里每 4 拍补发一次，前 10 秒 1.2 秒一拍、之后 10 秒一拍，覆盖约 3 分钟。
+            if (state == ListenerState.GRANTED_NOT_BOUND && pollTicks % REBIND_EVERY_TICKS == 0) {
+                hub.tryRebind(force = true)
+            }
+            pollHandler.postDelayed(
+                this,
+                if (pollTicks <= FAST_POLL_TICKS) POLL_INTERVAL_MS else SLOW_POLL_INTERVAL_MS
+            )
         }
     }
 
@@ -184,7 +196,10 @@ class SettingsActivity : BaseActivity() {
             toast(getString(R.string.a11y_auto_restored))
         }
         refresh()
-        if (hub.listenerState() != ListenerState.GRANTED && hub.tryRebind()) {
+        if (hub.listenerState() != ListenerState.GRANTED) {
+            // 用户刚从系统设置回来：**必须强制发一次**，不能吃 5 秒节流 ——
+            // 他刚点的就是「我已经开了」，此刻再被节流挡掉，体验就是「点了没用」。
+            hub.tryRebind(force = true)
             startPolling(POLL_FIRST_DELAY_MS)
         }
         // 从设置页回来：授权成功了就当没事，没成功就得说清「为什么点了没反应」。
@@ -267,6 +282,7 @@ class SettingsActivity : BaseActivity() {
         val diag = buildDiagCard()
         val update = buildUpdateCard()
         val theme = buildThemeCard()
+        val scope = themeScopeNote()
 
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
@@ -291,7 +307,7 @@ class SettingsActivity : BaseActivity() {
         }
         // 横屏双栏的分法按页定：左栏是「摆哪儿、长什么样」，右栏是「读什么、怎么更新」。
         addPage(content, page(SettingsTab.OVERVIEW, listOf(status), listOf(channel)))
-        addPage(content, page(SettingsTab.LOOK, listOf(window, look), listOf(theme, colors)))
+        addPage(content, page(SettingsTab.LOOK, listOf(scope, window, look), listOf(theme, colors)))
         addPage(content, page(SettingsTab.LYRICS, listOf(title), listOf(behavior)))
         addPage(content, page(SettingsTab.RUNTIME, listOf(keepAlive), listOf(hideApps)))
         addPage(content, page(SettingsTab.MORE, listOf(diag), listOf(update)))
@@ -661,6 +677,10 @@ class SettingsActivity : BaseActivity() {
         notificationSettingsButton = textButton(getString(R.string.perm_review)) {
             openNotificationSettings()
         }
+        // 「立即重连」只在已授权但没绑上时出现：此时用户什么都没法再授权，
+        // 唯一能做的就是让系统再 bind 一次。等十几秒不成就得给这个按钮，
+        // 否则页面只会一直写「正在等待」，人只能干等或者去系统里关开一遍。
+        reconnectButton = textButton(getString(R.string.perm_reconnect_now)) { manualReconnect() }
 
         overlayState = text("", 13f, bold = true)
         overlayButton = textButton(getString(R.string.perm_open)) { openOverlaySettings() }
@@ -680,6 +700,7 @@ class SettingsActivity : BaseActivity() {
             notificationDesc,
             row(notificationState, notificationButton),
             notificationSettingsButton,
+            reconnectButton,
             divider(10, 10),
             text(getString(R.string.perm_overlay_title), 14f),
             overlayDesc,
@@ -1051,6 +1072,29 @@ class SettingsActivity : BaseActivity() {
      * 切换会重建页面（换 Context 才让 `values-night` 生效），重建前先拍一张旧界面，
      * 由 [ThemeSwitch] 在新界面第一帧淡出 —— 不然这一下白闪很难看。
      */
+    /**
+     * 「现在改的是哪一套外观」提示条，常驻外观页最上方。
+     *
+     * 外观按主题分成日间 / 夜间两套。用户调字号时看不到这句话，就不知道改的是哪一套，
+     * 切主题后发现「设置没生效」或「另一套被改了」，很难自己想到是按主题分开存的。
+     */
+    private fun themeScopeNote(): View {
+        val dark = prefs.styleIsDark()
+        val view = text(
+            getString(
+                if (dark) R.string.appearance_scope_dark else R.string.appearance_scope_light
+            ),
+            11.5f
+        )
+        view.setTextColor(colorAccent)
+        view.setPadding(dp(12), dp(10), dp(12), dp(10))
+        view.background = GradientDrawable().apply {
+            cornerRadius = dp(10).toFloat()
+            setColor(tint(colorAccent, if (isNight) 0x24 else 0x14))
+        }
+        return view
+    }
+
     private fun buildThemeCard(): View {
         val rows = ArrayList<View>(4)
         rows += labeled(
@@ -1074,6 +1118,9 @@ class SettingsActivity : BaseActivity() {
     private fun applyTheme(mode: ThemeMode) {
         if (mode == prefs.themeMode) return
         prefs.themeMode = mode
+        // 歌词外观与主题绑定：切主题要立刻换成另一套，否则界面已经变夜了、
+        // 悬浮窗还挂着白天那套配色，看起来像设置没保存。
+        hub.applyStyle()
         // 先拍旧界面再重建：recreate 之后旧窗口就没了，拍不到。
         ThemeSwitch.capture(this)
         recreate()
@@ -1981,7 +2028,19 @@ class SettingsActivity : BaseActivity() {
         false
     }
 
+    /**
+     * 申请电池优化白名单。
+     *
+     * 车机上这条路是**死路**：DiLink5 收到 ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+     * 会直接弹「多媒体系统不支持该操作」，而 `startActivity` 并不抛异常 —— 旧代码据此
+     * 认为跳转成功，用户看到的是「开关弹一下又自己关回去」，反复点反复弹。
+     * 所以车机上先判定、直接讲清原因，把「应用详情页」留给愿意手动找的人。
+     */
     private fun requestIgnoreBatteryOptimizations() {
+        if (Devices.isCarHeadUnit(this)) {
+            showBatteryCarDialog()
+            return
+        }
         val request = Intent(
             Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
             Uri.parse("package:$packageName")
@@ -1993,15 +2052,27 @@ class SettingsActivity : BaseActivity() {
             // 个别 ROM 裁掉了这个 action：退回应用详情页，用户自己找「电池」入口
         }
         try {
-            startActivity(
-                Intent(
-                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                    Uri.parse("package:$packageName")
-                )
-            )
+            startActivity(appDetailsIntent())
         } catch (_: Throwable) {
             // 连详情页都没有：什么都不做，开关会被 refresh 复位成真实状态
         }
+    }
+
+    /**
+     * 车机专用说明。
+     *
+     * 不说清「为什么点了没反应」，用户只会反复点。这里给一条手动路径 + 两条替代方案，
+     * 并且明确写「找不到也不要紧」—— 这台车机上确实可能根本没有这个入口。
+     */
+    private fun showBatteryCarDialog() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.battery_car_title)
+            .setMessage(R.string.battery_car_body)
+            .setPositiveButton(R.string.battery_car_open) { _, _ ->
+                runCatching { startActivity(appDetailsIntent()) }
+            }
+            .setNegativeButton(android.R.string.ok, null)
+            .show()
     }
 
     // ---------------------------------------------------------------- 诊断
@@ -2712,6 +2783,8 @@ class SettingsActivity : BaseActivity() {
                 View.VISIBLE
             }
         overlayDesc.visibility = if (status.overlayGranted) View.GONE else View.VISIBLE
+        reconnectButton.visibility =
+            if (listener == ListenerState.GRANTED_NOT_BOUND) View.VISIBLE else View.GONE
         overlayButton.text = getString(
             if (status.overlayGranted) R.string.perm_review else R.string.perm_open
         )
@@ -2811,6 +2884,20 @@ class SettingsActivity : BaseActivity() {
             ListenerState.GRANTED -> openNotificationSettings()
         }
         refresh()
+    }
+
+    /**
+     * 「立即重连」：强制让系统重新 bind 一次。
+     *
+     * 与 [onNotificationAction] 走同一个 `tryRebind(force = true)`，但这里不看返回值 ——
+     * 它只表示「请求发出去了没有」，与「系统什么时候真的绑上」无关。
+     * 轮询从头开始跑，状态自己会变。
+     */
+    private fun manualReconnect() {
+        hub.tryRebind(force = true)
+        pollTicks = 0
+        startPolling(POLL_FIRST_DELAY_MS)
+        toast(getString(R.string.perm_rebind_requested))
     }
 
     private fun applyPermissionState(view: TextView, granted: Boolean) {
@@ -3056,8 +3143,19 @@ class SettingsActivity : BaseActivity() {
         /** 空窗期轮询间隔。只读授权列表与内存标志，代价可忽略。 */
         private const val POLL_INTERVAL_MS = 1_200L
 
-        /** 最多轮询次数（约 10 秒）。系统不重绑时不再空转，改为提示手工重开。 */
-        private const val MAX_POLL_TICKS = 8
+        /**
+         * 前 [FAST_POLL_TICKS] 拍用 1.2 秒，之后拉到 10 秒 —— 车机上系统 bind
+         * 可能拖几分钟（真机：授权后很久才自己连上），一直 1.2 秒会被无谓地唤醒几十次。
+         */
+        private const val FAST_POLL_TICKS = 8
+
+        private const val SLOW_POLL_INTERVAL_MS = 10_000L
+
+        /** 最多轮询次数（约 3.5 分钟）。仍然不连就交给看门狗与「系统设置」手工关开。 */
+        private const val MAX_POLL_TICKS = 30
+
+        /** 每 4 拍补发一次 requestRebind，整轮下来约 8 次，不是只赌第一下。 */
+        private const val REBIND_EVERY_TICKS = 4
 
         private const val UNBOUND_TIMEOUT_MS = 9_000L
 

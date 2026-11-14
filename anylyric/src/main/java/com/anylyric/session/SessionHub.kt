@@ -1,9 +1,11 @@
 package com.anylyric.session
 
 import android.app.Notification
+import android.content.ComponentCallbacks
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.hardware.display.DisplayManager
 import android.media.MediaMetadata
 import android.media.session.MediaController
@@ -305,6 +307,9 @@ class SessionHub private constructor(context: Context) {
     /** 上一次真正写进悬浮层的文本，避免同一句反复重绘与重复记日志。 */
     private var lastRenderedSignature = Int.MIN_VALUE
 
+    /** 上一次生效的外观属于夜间那套吗。系统深浅变化时只在真的换了才重排。 */
+    private var lastStyleDark = false
+
     init {
         Probe.setEnabled(prefs.debugEnabled)
         if (prefs.debugEnabled) startResourceTicker()
@@ -331,6 +336,21 @@ class SessionHub private constructor(context: Context) {
         // 前台包名变化一次也没触发过重算，表现就是「勾了名单却不隐藏」。
         ForegroundApps.addListener(foregroundListener)
         applyHideState()
+
+        // 主题跟随系统（ThemeMode.AUTO）时，系统切夜间不会重建本进程的界面，
+        // 但歌词外观是按主题分两套存的 —— 不在这里换一次，悬浮窗会一直挂着白天的配色。
+        // 只在「真的换了深浅」时才重排，避免每次字体缩放/旋转都白跑一遍 applyStyle。
+        lastStyleDark = prefs.styleIsDark()
+        appContext.registerComponentCallbacks(object : ComponentCallbacks {
+            override fun onConfigurationChanged(newConfig: Configuration) {
+                val dark = prefs.styleIsDark()
+                if (dark == lastStyleDark) return
+                lastStyleDark = dark
+                applyStyle()
+            }
+
+            override fun onLowMemory() = Unit
+        })
 
         // 车机直连通道：**必须在这里启动，不能等 MediaWatchService**。
         //

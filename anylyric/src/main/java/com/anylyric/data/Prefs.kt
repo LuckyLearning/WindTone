@@ -2,6 +2,7 @@ package com.anylyric.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.content.res.Configuration
 import com.anylyric.overlay.Align
 import com.anylyric.overlay.LineMode
 import com.anylyric.overlay.OverlayDefaults
@@ -20,8 +21,10 @@ import com.anylyric.update.DownloadRoute
  */
 class Prefs(context: Context) {
 
+    private val appContext: Context = context.applicationContext
+
     private val sp: SharedPreferences =
-        context.applicationContext.getSharedPreferences(NAME, Context.MODE_PRIVATE)
+        appContext.getSharedPreferences(NAME, Context.MODE_PRIVATE)
 
     /** 调试开关：默认关闭，关闭时 Probe 零采集、零分配。 */
     var debugEnabled: Boolean
@@ -184,60 +187,148 @@ class Prefs(context: Context) {
         lastAliveAt = nowMs
     }
 
-    fun style(): OverlayStyle = styleCache ?: OverlayDefaults.sanitize(
-        OverlayStyle(
-            preset = Preset.of(sp.getString(KEY_PRESET, null)),
-            fontSp = sp.getFloat(KEY_FONT, OverlayDefaults.FONT_SP),
-            bold = sp.getBoolean(KEY_BOLD, OverlayDefaults.BOLD),
-            maxLines = sp.getInt(KEY_LINES, OverlayDefaults.MAX_LINES),
-            lineMode = LineMode.of(sp.getString(KEY_LINE_MODE, null)),
-            opacity = sp.getFloat(KEY_OPACITY, OverlayDefaults.OPACITY),
-            cornerDp = sp.getFloat(KEY_CORNER, OverlayDefaults.CORNER_DP),
-            stroke = sp.getBoolean(KEY_STROKE, OverlayDefaults.STROKE),
-            secondaryAlpha = sp.getFloat(KEY_SECONDARY_ALPHA, OverlayDefaults.SECONDARY_ALPHA),
-            align = Align.of(sp.getString(KEY_ALIGN, null)),
-            lineOffsetDp = sp.getFloat(KEY_LINE_OFFSET, OverlayDefaults.LINE_OFFSET_DP),
-            fadeMs = sp.getInt(KEY_FADE, OverlayDefaults.FADE_MS),
-            primaryColor = sp.getInt(KEY_PRIMARY_COLOR, OverlayDefaults.PRIMARY_COLOR),
-            secondaryColor = sp.getInt(KEY_SECONDARY_COLOR, OverlayDefaults.SECONDARY_COLOR),
-            bgColor = sp.getInt(KEY_BG_COLOR, OverlayDefaults.BG_COLOR),
-            strokeColor = sp.getInt(KEY_STROKE_COLOR, OverlayDefaults.STROKE_COLOR),
-            widthRatio = sp.getFloat(KEY_WIDTH_RATIO, OverlayDefaults.WIDTH_RATIO),
-            heightRatio = sp.getFloat(KEY_HEIGHT_RATIO, OverlayDefaults.HEIGHT_RATIO),
-            titleEnabled = sp.getBoolean(KEY_TITLE_ENABLED, OverlayDefaults.TITLE_ENABLED),
-            titleFontSp = sp.getFloat(KEY_TITLE_FONT, OverlayDefaults.TITLE_FONT_SP),
-            titleColor = sp.getInt(KEY_TITLE_COLOR, OverlayDefaults.TITLE_COLOR),
-            titlePos = TitlePos.of(sp.getString(KEY_TITLE_POS, null))
-        )
-    ).also { styleCache = it }
+    /**
+     * 当前生效的歌词外观属于「夜间」那一套吗。
+     *
+     * AUTO 时看系统 uiMode；LIGHT/DARK 是用户显式选择，直接照它算 —— 不能只读
+     * Context 的 uiMode，因为 `applicationContext` 永远是系统值，而 Activity 那份
+     * 已被 `ThemeContext.wrap` 换掉了，两者会给出不同答案（界面说白天、悬浮窗说夜间）。
+     */
+    fun styleIsDark(): Boolean = when (themeMode) {
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+        ThemeMode.AUTO -> (appContext.resources.configuration.uiMode and
+            Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+    }
 
+    /** 当前主题那套外观是否被单独改过。没改过时继承另一套，切主题不会「设置全丢」。 */
+    fun hasOwnStyle(): Boolean = sp.contains(styleKey(styleIsDark(), KEY_FONT))
+
+    /**
+     * 读当前主题对应的那套外观。
+     *
+     * 外观与主题绑定（0.2.23）：日间一套、夜间一套，切主题自动换，改参数只改当前那套。
+     * 夜间那套**从未写过**时以日间那套为种子 —— 用户第一次切到夜间看到的是自己调好的
+     * 排版与字号，而不是一堆出厂值；一旦在夜间改过任意一项就固化，之后各管各的。
+     */
+    fun style(): OverlayStyle {
+        val dark = styleIsDark()
+        val cached = if (dark) darkStyleCache else lightStyleCache
+        if (cached != null) return cached
+        val seed = if (dark) readStyle(dark = false, seed = null) else null
+        val loaded = readStyle(dark = dark, seed = seed)
+        if (dark) darkStyleCache = loaded else lightStyleCache = loaded
+        return loaded
+    }
+
+    private fun styleKey(dark: Boolean, base: String): String = if (dark) "d_$base" else base
+
+    private fun readStyle(dark: Boolean, seed: OverlayStyle?): OverlayStyle = OverlayDefaults.sanitize(
+        OverlayStyle(
+            preset = Preset.of(
+                sp.getString(styleKey(dark, KEY_PRESET), seed?.preset?.id)
+            ),
+            fontSp = sp.getFloat(
+                styleKey(dark, KEY_FONT), seed?.fontSp ?: OverlayDefaults.FONT_SP
+            ),
+            bold = sp.getBoolean(styleKey(dark, KEY_BOLD), seed?.bold ?: OverlayDefaults.BOLD),
+            maxLines = sp.getInt(
+                styleKey(dark, KEY_LINES), seed?.maxLines ?: OverlayDefaults.MAX_LINES
+            ),
+            lineMode = LineMode.of(
+                sp.getString(styleKey(dark, KEY_LINE_MODE), seed?.lineMode?.id)
+            ),
+            opacity = sp.getFloat(
+                styleKey(dark, KEY_OPACITY), seed?.opacity ?: OverlayDefaults.OPACITY
+            ),
+            cornerDp = sp.getFloat(
+                styleKey(dark, KEY_CORNER), seed?.cornerDp ?: OverlayDefaults.CORNER_DP
+            ),
+            stroke = sp.getBoolean(
+                styleKey(dark, KEY_STROKE), seed?.stroke ?: OverlayDefaults.STROKE
+            ),
+            secondaryAlpha = sp.getFloat(
+                styleKey(dark, KEY_SECONDARY_ALPHA),
+                seed?.secondaryAlpha ?: OverlayDefaults.SECONDARY_ALPHA
+            ),
+            align = Align.of(sp.getString(styleKey(dark, KEY_ALIGN), seed?.align?.id)),
+            lineOffsetDp = sp.getFloat(
+                styleKey(dark, KEY_LINE_OFFSET),
+                seed?.lineOffsetDp ?: OverlayDefaults.LINE_OFFSET_DP
+            ),
+            fadeMs = sp.getInt(styleKey(dark, KEY_FADE), seed?.fadeMs ?: OverlayDefaults.FADE_MS),
+            primaryColor = sp.getInt(
+                styleKey(dark, KEY_PRIMARY_COLOR),
+                seed?.primaryColor ?: OverlayDefaults.PRIMARY_COLOR
+            ),
+            secondaryColor = sp.getInt(
+                styleKey(dark, KEY_SECONDARY_COLOR),
+                seed?.secondaryColor ?: OverlayDefaults.SECONDARY_COLOR
+            ),
+            bgColor = sp.getInt(
+                styleKey(dark, KEY_BG_COLOR), seed?.bgColor ?: OverlayDefaults.BG_COLOR
+            ),
+            strokeColor = sp.getInt(
+                styleKey(dark, KEY_STROKE_COLOR),
+                seed?.strokeColor ?: OverlayDefaults.STROKE_COLOR
+            ),
+            widthRatio = sp.getFloat(
+                styleKey(dark, KEY_WIDTH_RATIO),
+                seed?.widthRatio ?: OverlayDefaults.WIDTH_RATIO
+            ),
+            heightRatio = sp.getFloat(
+                styleKey(dark, KEY_HEIGHT_RATIO),
+                seed?.heightRatio ?: OverlayDefaults.HEIGHT_RATIO
+            ),
+            titleEnabled = sp.getBoolean(
+                styleKey(dark, KEY_TITLE_ENABLED),
+                seed?.titleEnabled ?: OverlayDefaults.TITLE_ENABLED
+            ),
+            titleFontSp = sp.getFloat(
+                styleKey(dark, KEY_TITLE_FONT),
+                seed?.titleFontSp ?: OverlayDefaults.TITLE_FONT_SP
+            ),
+            titleColor = sp.getInt(
+                styleKey(dark, KEY_TITLE_COLOR),
+                seed?.titleColor ?: OverlayDefaults.TITLE_COLOR
+            ),
+            titlePos = TitlePos.of(
+                sp.getString(styleKey(dark, KEY_TITLE_POS), seed?.titlePos?.id)
+            )
+        )
+    )
+
+    /** 写当前主题那一套；另一套保持原样。 */
     fun saveStyle(style: OverlayStyle) {
         val safe = OverlayDefaults.sanitize(style)
+        val dark = styleIsDark()
         sp.edit()
-            .putString(KEY_PRESET, safe.preset.id)
-            .putFloat(KEY_FONT, safe.fontSp)
-            .putBoolean(KEY_BOLD, safe.bold)
-            .putInt(KEY_LINES, safe.maxLines)
-            .putString(KEY_LINE_MODE, safe.lineMode.id)
-            .putFloat(KEY_OPACITY, safe.opacity)
-            .putFloat(KEY_CORNER, safe.cornerDp)
-            .putBoolean(KEY_STROKE, safe.stroke)
-            .putFloat(KEY_SECONDARY_ALPHA, safe.secondaryAlpha)
-            .putString(KEY_ALIGN, safe.align.id)
-            .putFloat(KEY_LINE_OFFSET, safe.lineOffsetDp)
-            .putInt(KEY_FADE, safe.fadeMs)
-            .putInt(KEY_PRIMARY_COLOR, safe.primaryColor)
-            .putInt(KEY_SECONDARY_COLOR, safe.secondaryColor)
-            .putInt(KEY_BG_COLOR, safe.bgColor)
-            .putInt(KEY_STROKE_COLOR, safe.strokeColor)
-            .putFloat(KEY_WIDTH_RATIO, safe.widthRatio)
-            .putFloat(KEY_HEIGHT_RATIO, safe.heightRatio)
-            .putBoolean(KEY_TITLE_ENABLED, safe.titleEnabled)
-            .putFloat(KEY_TITLE_FONT, safe.titleFontSp)
-            .putInt(KEY_TITLE_COLOR, safe.titleColor)
-            .putString(KEY_TITLE_POS, safe.titlePos.id)
+            .putString(styleKey(dark, KEY_PRESET), safe.preset.id)
+            .putFloat(styleKey(dark, KEY_FONT), safe.fontSp)
+            .putBoolean(styleKey(dark, KEY_BOLD), safe.bold)
+            .putInt(styleKey(dark, KEY_LINES), safe.maxLines)
+            .putString(styleKey(dark, KEY_LINE_MODE), safe.lineMode.id)
+            .putFloat(styleKey(dark, KEY_OPACITY), safe.opacity)
+            .putFloat(styleKey(dark, KEY_CORNER), safe.cornerDp)
+            .putBoolean(styleKey(dark, KEY_STROKE), safe.stroke)
+            .putFloat(styleKey(dark, KEY_SECONDARY_ALPHA), safe.secondaryAlpha)
+            .putString(styleKey(dark, KEY_ALIGN), safe.align.id)
+            .putFloat(styleKey(dark, KEY_LINE_OFFSET), safe.lineOffsetDp)
+            .putInt(styleKey(dark, KEY_FADE), safe.fadeMs)
+            .putInt(styleKey(dark, KEY_PRIMARY_COLOR), safe.primaryColor)
+            .putInt(styleKey(dark, KEY_SECONDARY_COLOR), safe.secondaryColor)
+            .putInt(styleKey(dark, KEY_BG_COLOR), safe.bgColor)
+            .putInt(styleKey(dark, KEY_STROKE_COLOR), safe.strokeColor)
+            .putFloat(styleKey(dark, KEY_WIDTH_RATIO), safe.widthRatio)
+            .putFloat(styleKey(dark, KEY_HEIGHT_RATIO), safe.heightRatio)
+            .putBoolean(styleKey(dark, KEY_TITLE_ENABLED), safe.titleEnabled)
+            .putFloat(styleKey(dark, KEY_TITLE_FONT), safe.titleFontSp)
+            .putInt(styleKey(dark, KEY_TITLE_COLOR), safe.titleColor)
+            .putString(styleKey(dark, KEY_TITLE_POS), safe.titlePos.id)
             .apply()
-        styleCache = null
+        // 两套一起失效：夜间没单独设置过时是「继承日间」，只清一边会读到过期值。
+        lightStyleCache = null
+        darkStyleCache = null
     }
 
     fun resetStyle() {
@@ -268,12 +359,17 @@ class Prefs(context: Context) {
 
     companion object {
         /**
-         * 样式缓存：读一次要碰 16 个 key，而渲染、设置页每一行、每次刷新都会读。
+         * 样式缓存：读一次要碰 20 个 key，而渲染、设置页每一行、每次刷新都会读。
          * 写入口只有 [saveStyle]，写完就失效。放在 companion 里是因为服务与设置页
          * 各持有一个 Prefs 实例，缓存必须共用同一份，否则一边改了另一边看不到。
+         *
+         * 日间 / 夜间各一份：两套外观是独立事实，共用一份必然在切主题时读到对面那套。
          */
         @Volatile
-        private var styleCache: OverlayStyle? = null
+        private var lightStyleCache: OverlayStyle? = null
+
+        @Volatile
+        private var darkStyleCache: OverlayStyle? = null
 
         private const val NAME = "anylyric"
         private const val KEY_DEBUG = "debug_enabled"

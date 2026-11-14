@@ -13,6 +13,8 @@
     <string name="theme_auto">Auto</string>
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
+    <string name="appearance_scope_dark">The lyric overlay is stored twice, once per theme. You are editing the NIGHT set; switching to day loads the other one.</string>
+    <string name="appearance_scope_light">The lyric overlay is stored twice, once per theme. You are editing the DAY set; switching to night loads the other one.</string>
     <string name="theme_hint">Affects these settings pages only. The lyric overlay keeps its own colours under “Colours”.</string>
 
     <string name="section_autostart">Autostart &amp; keep-alive</string>
@@ -21,6 +23,14 @@
     <string name="autostart_watchdog">Periodic rebind check</string>
     <string name="autostart_watchdog_hint">Every 15 minutes, check a heartbeat and ask the system to rebind if the listener silently died. Some car ROMs kill background services without notifying the app. Off by default; no foreground service and no wake locks.</string>
     <string name="autostart_keepalive">Keep alive (battery optimization)</string>
+    <string name="battery_car_title">This head unit does not allow apps to ask</string>
+    <string name="battery_car_body">The system answers with “the multimedia system does not support this operation” because the manufacturer blocked the request page. The app is not broken.
+
+Try the manual path: Settings → Apps → AnyLyric → Battery / Power management → Unrestricted.
+
+If that entry does not exist, it is fine: turn on “Start on boot” above and “Periodic rebind” below, which also get the service back after the system kills it.</string>
+    <string name="battery_car_open">Open app details</string>
+    <string name="perm_reconnect_now">Reconnect now</string>
     <string name="autostart_keepalive_hint">Ask the system to skip battery optimization for AnyLyric. The switch reflects the real system state; turning it off is done on the system page.</string>
 
     <!-- 按应用隐藏（0.2.11）：无障碍服务只读窗口切换的包名，不读屏幕内容。 -->

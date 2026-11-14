@@ -12,6 +12,8 @@
     <string name="theme_auto">自动</string>
     <string name="theme_light">白天</string>
     <string name="theme_dark">夜间</string>
+    <string name="appearance_scope_dark">歌词外观按主题分开保存：现在改的是「夜间」样式，切到日间会换成另一套。</string>
+    <string name="appearance_scope_light">歌词外观按主题分开保存：现在改的是「日间」样式，切到夜间会换成另一套。</string>
     <string name="theme_hint">只影响这两个设置界面；歌词悬浮窗的深浅在「配色」里单独调。</string>
 
     <string name="section_autostart">开机与后台</string>
@@ -20,6 +22,14 @@
     <string name="autostart_watchdog">定期自检重绑</string>
     <string name="autostart_watchdog_hint">每 15 分钟检查一次心跳，服务被静默杀掉时请求系统重新绑定。部分车机会在后台直接杀掉服务且不回调。默认关闭：不常驻、不持锁。</string>
     <string name="autostart_keepalive">后台保活（电池优化白名单）</string>
+    <string name="battery_car_title">这台车机不允许应用自己申请</string>
+    <string name="battery_car_body">系统会直接回一句「多媒体系统不支持该操作」，因为车厂把「忽略电池优化」的申请入口拦掉了，不是应用出错。
+
+可以在车机设置里手动找：设置 → 应用管理 → AnyLyric → 耗电管理 / 电池 → 选「不限制」。
+
+找不到也不要紧：把上面的「开机自启」和下面的「定期自检重绑」打开，同样能让歌词服务被系统回收后再连回来。</string>
+    <string name="battery_car_open">打开应用详情页</string>
+    <string name="perm_reconnect_now">立即重连</string>
     <string name="autostart_keepalive_hint">申请让系统不再对 AnyLyric 做电池优化，开关状态以系统实际结果为准；关闭需要到系统设置里撤销。</string>
 
     <!-- 按应用隐藏（0.2.11）：无障碍服务只读窗口切换的包名，不读屏幕内容。 -->
