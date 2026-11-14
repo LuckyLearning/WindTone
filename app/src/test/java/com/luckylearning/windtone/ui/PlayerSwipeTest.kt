@@ -30,6 +30,28 @@ class PlayerSwipeTest {
         )
     }
 
+    /**
+     * 宽屏（车机）按比例算阈值会离谱：1700dp 横屏的 18% 是 300dp，用户根本划不了那么长。
+     * 传了上限之后阈值被压到上限，短距离位移也能翻页。
+     */
+    @Test
+    fun `宽屏上阈值被 dp 上限压住`() {
+        val wide = 2400f
+        val cap = 288f // 96dp × 3x
+        // 纯比例：2400 × 18% = 432px，300px 不够 → 不动
+        assertEquals(PageSwipe.Stay, PlayerSwipe.resolvePage(-300f, wide, 0f, PlayerPane.ART))
+        // 压到 288px 之后 300px 就够 → 翻页
+        assertEquals(
+            PageSwipe.To(PlayerPane.LYRICS),
+            PlayerSwipe.resolvePage(-300f, wide, 0f, PlayerPane.ART, cap),
+        )
+        // 窄屏（手机）比例阈值本来就小于上限，行为不受影响
+        assertEquals(
+            PageSwipe.Stay,
+            PlayerSwipe.resolvePage(-100f, width, 0f, PlayerPane.ART, cap),
+        )
+    }
+
     @Test
     fun `向右越过阈值翻到上一页`() {
         assertEquals(
@@ -156,5 +178,26 @@ class PlayerSwipeTest {
         assertEquals(1, PlayerSwipe.pageDelta(PlayerPane.ART, PlayerPane.LYRICS))
         assertEquals(-1, PlayerSwipe.pageDelta(PlayerPane.ART, PlayerPane.INFO))
         assertEquals(2, PlayerSwipe.pageDelta(PlayerPane.INFO, PlayerPane.LYRICS))
+    }
+
+    /**
+     * 落位位移必须是「页相位」的反号：让目标页居中，整排要朝**目标所在方向**推。
+     *
+     * 这一条是 v1.2.55 首发翻页失灵的真凶 —— 之前用的是 `pageDelta * width`（正号），
+     * 于是每次翻页都先往反方向弹回、再硬切到目标页，看起来像「滑了没反应」。
+     */
+    @Test
+    fun `落位位移把目标页搬到中心`() {
+        // 往右翻页（ART → LYRICS）：整排往左推一屏，位移为负
+        assertEquals(-width, PlayerSwipe.settlePx(PlayerPane.ART, PlayerPane.LYRICS, width), 0.01f)
+        // 往左翻页（ART → INFO）：整排往右推一屏，位移为正
+        assertEquals(width, PlayerSwipe.settlePx(PlayerPane.ART, PlayerPane.INFO, width), 0.01f)
+        // 目标页相位 + 落位位移 = 0（正好居中），这才是判据的来源
+        assertEquals(
+            0f,
+            PlayerSwipe.pageDelta(PlayerPane.INFO, PlayerPane.LYRICS) * width +
+                PlayerSwipe.settlePx(PlayerPane.INFO, PlayerPane.LYRICS, width),
+            0.01f,
+        )
     }
 }

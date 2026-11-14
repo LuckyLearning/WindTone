@@ -110,4 +110,48 @@ class PlayerSwipeGestureTest {
         compose.waitForIdle()
         assertNull(rec.last)
     }
+
+    /**
+     * 连续两次同向滑动必须按**翻页后**的页号判定（v1.2.55 首发回归）。
+     *
+     * 生产代码传的是 `{ PlayerPane.of(state.playerPane) }`，`state` 是普通值参数；
+     * `pointerInput(Unit)` 只执行一次，捕获到第一次组合的 lambda 就再也不更新 ——
+     * 于是停在歌词页后无论怎么滑都按旧页算，左滑永远「切下一首」，三页翻不过去。
+     * 这里刻意用「值快照」的写法复刻那个调用方，走 [rememberUpdatedState] 的兜底。
+     */
+    @Test
+    fun `翻页后下一次滑动按新页号判定`() {
+        val rec = Rec()
+        compose.setContent {
+            var pane by remember { mutableStateOf(PlayerPane.ART) }
+            // ⚠️ 关键：普通局部值（不是 State 读），模拟生产代码里的 state.playerPane
+            val snapshot = pane
+            val scope = rememberCoroutineScope()
+            val offset = remember { Animatable(0f) }
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .testTag("pager")
+                    .playerSwipePages(
+                        offset = offset,
+                        scope = scope,
+                        currentPane = { snapshot },
+                        onSettle = { result ->
+                            rec.last = result
+                            if (result is PageSwipe.To) pane = result.target
+                        },
+                    )
+            )
+        }
+        // 第一次：图片页 → 歌词页
+        compose.onNodeWithTag("pager").performTouchInput { swipeLeft() }
+        compose.waitForIdle()
+        assertEquals(PageSwipe.To(PlayerPane.LYRICS), rec.last)
+
+        // 第二次：已在歌词页，再左滑就该切下一首（若页号是旧的，这里仍是 To）
+        rec.last = null
+        compose.onNodeWithTag("pager").performTouchInput { swipeLeft() }
+        compose.waitForIdle()
+        assertEquals(PageSwipe.Skip(SwipeSwitch.NEXT), rec.last)
+    }
 }
