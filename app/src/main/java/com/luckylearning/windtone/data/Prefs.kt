@@ -151,6 +151,17 @@ object SettingsDefaults {
     const val PLAYER_A11Y_ACTION = true
 
     /**
+     * 播放页中部的页序号（0 歌曲信息 / 1 图片 + 单行歌词 / 2 歌词）。
+     *
+     * 默认落在**第 1 页（图片页）**：它是「封面 + 当前一句」的组合，进页面第一眼
+     * 既有视觉主体又有歌词，是三个页里信息密度最平衡的。
+     */
+    const val PLAYER_PANE = 1
+
+    /** 播放页中部的页数（歌曲信息 / 图片 + 单行歌词 / 歌词） */
+    const val PLAYER_PANE_COUNT = 3
+
+    /**
      * 悬浮窗左侧的侧钮（收起 / 播放暂停 / 打开播放页 / 无障碍，v1.2.0+）是否显示。
      *
      * 只在**车载模式**下才会真正挂出来 —— 鼠标键盘的手机上，那三颗钮纯属遮挡；
@@ -1252,17 +1263,32 @@ class Prefs private constructor(context: Context) {
         }
 
     /**
-     * 播放页中部显示的是歌词（true，默认）还是封面（false）。
+     * 播放页中部当前停在第几页：0 歌曲信息 / 1 图片 + 单行歌词 / 2 歌词。
      *
      * 落盘而不是用 `remember`：播放页是覆盖层，收起后整棵子树离开组合，
-     * `remember` 的状态会一起丢——用户每次打开播放页都被拨回歌词态，
-     * 对习惯"封面党"的人来说就是每次都要多点一下。
+     * `remember` 的状态会一起丢——用户每次打开播放页都被拨回默认页，
+     * 对习惯停在某些页的人来说就是每次都要多点一下。
+     *
+     * 迁移：v1.2.54 及以前只有一个布尔 [KEY_LYRICS_PANE]（true = 歌词 / false = 封面）。
+     * 新键不存在而旧键存在时按「true → 歌词页 / false → 图片页」换算，
+     * 老用户升级后仍停在自己习惯的那一页；换算只发生在读取时，不额外写盘。
      */
-    var lyricsPaneVisible: Boolean
-        get() = sp.getBoolean(KEY_LYRICS_PANE, true)
+    var playerPane: Int
+        get() {
+            if (sp.contains(KEY_PLAYER_PANE)) {
+                return sp.getInt(KEY_PLAYER_PANE, SettingsDefaults.PLAYER_PANE)
+                    .coerceIn(0, SettingsDefaults.PLAYER_PANE_COUNT - 1)
+            }
+            if (sp.contains(KEY_LYRICS_PANE)) {
+                val legacyLyrics = sp.getBoolean(KEY_LYRICS_PANE, true)
+                return if (legacyLyrics) PlayerPane.LYRICS.index else PlayerPane.ART.index
+            }
+            return SettingsDefaults.PLAYER_PANE
+        }
         set(value) {
-            sp.edit().putBoolean(KEY_LYRICS_PANE, value).apply()
-            ioScope.launch { store.putBoolean(KEY_LYRICS_PANE, value) }
+            val v = value.coerceIn(0, SettingsDefaults.PLAYER_PANE_COUNT - 1)
+            sp.edit().putInt(KEY_PLAYER_PANE, v).apply()
+            ioScope.launch { store.putInt(KEY_PLAYER_PANE, v) }
         }
 
     // ============================================================ 4. 均衡器与音效
@@ -2533,6 +2559,8 @@ class Prefs private constructor(context: Context) {
         const val KEY_ONLINE_CACHE_PREFETCH = "online_cache_prefetch"
         const val KEY_ONLINE_PARALLEL_DOWNLOAD = "online_parallel_download"
         const val KEY_LYRICS_PANE = "lyrics_pane_visible"
+        /** 播放页中部页序号（0 信息 / 1 图片 / 2 歌词，v1.2.55）。旧布尔键只读作迁移。 */
+        const val KEY_PLAYER_PANE = "player_pane"
         // ⚠️ 逐字歌词移除后（v1.1.8）有三个键不再读写：`lyric_word_by_word` /
         //    `lyric_sung_color` / `lyric_overlay_sung_color`。它们仍留在老用户的
         //    SharedPreferences 里，**刻意不做清理** —— 为三个死键写迁移代码不划算，

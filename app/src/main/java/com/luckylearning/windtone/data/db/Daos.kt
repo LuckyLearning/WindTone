@@ -287,6 +287,18 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlist_songs WHERE playlistId = :id ORDER BY position ASC")
     suspend fun songsOf(id: Long): List<PlaylistSongEntity>
 
+    /**
+     * 某首歌被收进了哪些歌单（播放页「歌曲信息」页用）。
+     *
+     * 只查**用户歌单**：收藏 / 最近播放这类虚拟歌单没有 playlist 行，由调用方
+     * 按 `favorite` 状态与内存索引另行判断，不要把虚拟口径塞进 SQL。
+     */
+    @Query(
+        "SELECT p.* FROM playlists p INNER JOIN playlist_songs ps ON p.id = ps.playlistId " +
+            "WHERE ps.songId = :songId ORDER BY p.createdAt DESC"
+    )
+    suspend fun playlistsContaining(songId: Long): List<PlaylistEntity>
+
     @Query("SELECT COALESCE(MAX(position), -1) FROM playlist_songs WHERE playlistId = :id")
     suspend fun maxPosition(id: Long): Int
 

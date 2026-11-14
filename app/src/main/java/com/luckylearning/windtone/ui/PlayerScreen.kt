@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -63,6 +64,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -84,6 +86,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -93,6 +96,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.data.OverlayPreset
+import com.luckylearning.windtone.data.PlayerPane
+import com.luckylearning.windtone.data.SongFacts
 import com.luckylearning.windtone.data.overlayPresetLabel
 import com.luckylearning.windtone.state.overlayPresetParams
 import com.luckylearning.windtone.ui.theme.AppVisual
@@ -103,6 +108,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /** 车载模式：歌词态无操作多久后收起顶栏 / 控制键 / 状态行（毫秒） */
 private const val CAR_IMMERSIVE_DELAY_MS = 5_000L
@@ -138,12 +144,18 @@ fun PlayerScreen(
      */
     onLyricOffsetAbsolute: (Int) -> Unit = {},
     /**
-     * 播放页中部显示歌词（true）还是封面（false）。
+     * 播放页中部停在第几页（v1.2.55：信息 / 图片 / 歌词）。
      *
-     * 这个状态由引擎持有并落盘（批次 10.4-③）：以前是 `remember`，每次进播放页
-     * 都重置回歌词态，切到封面后退出再进来又变回歌词——用户会以为开关坏了。
+     * 由引擎持有并落盘：以前是布尔（歌词 / 封面）而且用 `remember`，每次进播放页
+     * 都重置回默认页 —— 用户会以为翻页没记住。现在三页都记住，下次进来还在原页。
      */
-    onLyricsPaneVisible: (Boolean) -> Unit = {},
+    onPlayerPane: (PlayerPane) -> Unit = {},
+    /**
+     * 读取「歌曲信息」页的派生数据（歌单归属 / 播放统计 / 音频参数）。
+     *
+     * 只在信息页真正可见时调用一次：这三张表没必要为了「可能翻过去」而提前查。
+     */
+    loadSongFacts: suspend (Song) -> SongFacts = { SongFacts() },
     /**
      * true = 作为宽屏右栏的**面板**（平板双栏）；false = 手机上的全屏覆盖层。
      * 面板态没有「收起播放页」这回事——它本来就不是盖上去的，箭头点了没反应。
@@ -187,8 +199,11 @@ fun PlayerScreen(
     isFavorite: Boolean = false,
     onToggleFavorite: (Song) -> Unit = {},
 ) {
-    // 歌词 / 封面二选一：状态在引擎里（落盘，跨会话保留），这里只是个只读视图 + 回调。
-    val showLyrics = state.lyricsPaneVisible
+    // 中部三页（v1.2.55）：信息 / 图片 / 歌词。状态在引擎里（落盘，跨会话保留），
+    // 这里只是个只读视图 + 回调。showLyrics 仍被沉浸态、屏幕常亮、顶栏图标判断复用 ——
+    // 只有歌词页需要「一屏全是字」的那套行为，信息页与图片页保持完整界面。
+    val currentPane = PlayerPane.of(state.playerPane)
+    val showLyrics = currentPane == PlayerPane.LYRICS
 
     // v1.1.92：播放页左侧的「前台识别状态」按钮。
     // 状态不能只在进入页面时读一次 —— 用户点按钮去系统里开/关，回来必须立刻反映，
@@ -271,24 +286,18 @@ fun PlayerScreen(
         lastActionAt = System.currentTimeMillis()
     }
 
-    // ------------------------------------------------------ 中部手势（2026-10-30 Spike）
+    // ------------------------------------------------------ 中部手势（v1.2.55 三页翻页）
     //
-    // 手机：左右 = 歌词↔封面；上下 = 切歌（歌词态边缘 overscroll / 封面态整区）。
-    // 车机：左右仍切歌（双栏同场无视图可切）；上下同样切歌。
+    // 中部是三张横排的页：歌曲信息 / 图片 + 单行歌词 / 歌词。左右滑翻页；
+    // 首尾两页再往外滑才切歌（切完回图片页）。纵向整根轴留给歌词滚动，
+    // 不再有「上下滑切歌」——理由见 PlayerSwipe 的文件头注释。
+    //
     // 偏移量只服务横向跟手；顶栏与底部控制行不跟着晃。
     //
     // ⚠️ 作用域必须在组合期取一次：手势回调不是挂起函数，而 snapTo / animateTo 是，
     //    在 modifier 内部每次重组新建 scope 会让进行中的回弹动画被取消。
     val swipeScope = rememberCoroutineScope()
     val swipeOffset = remember { Animatable(0f) }
-    val onVerticalSkip: (SwipeSwitch) -> Unit = { dir ->
-        keepAwake()
-        when (dir) {
-            SwipeSwitch.NEXT -> onNext()
-            SwipeSwitch.PREVIOUS -> onPrevious()
-            SwipeSwitch.NONE -> Unit
-        }
-    }
 
     // 进入车载模式且停在播放页时，先给满 5 秒再考虑收起
     LaunchedEffect(layoutSpec.isCar) {
@@ -365,6 +374,20 @@ fun PlayerScreen(
     // Compose 的失效是跟着 .value 的读取点走的，所以播放页本身不会随进度重组，
     // 只有真正读它的进度条 / 时间文字 / 歌词面板会重组。
     val progressState = progressFlow.collectAsStateWithLifecycle()
+
+    // ------------------------------------------------------ 歌曲信息页数据（v1.2.55）
+    //
+    // 只在信息页真正可见时拉一次：歌单归属 / 播放统计 / 音频参数是三条不同的查询，
+    // 为了「可能翻过去」提前查是纯浪费（音频参数还要开一次 MediaExtractor）。
+    // `remember` 的 key 用 stableKey —— 换歌时旧数据自动作废，不会把上一首的
+    // 播放次数挂在新歌名下。
+    var songFacts by remember(song?.stableKey) { mutableStateOf<SongFacts?>(null) }
+    LaunchedEffect(song?.stableKey, currentPane) {
+        val s = song
+        if (currentPane == PlayerPane.INFO && s != null && songFacts == null) {
+            songFacts = loadSongFacts(s)
+        }
+    }
 
     // G6：看歌词时屏幕常亮。Compose foundation 的 Modifier.keepScreenOn 在本 BOM 下解析不到，
     // 改挂 View.keepScreenOn；切回封面 / 离开组合时还原。
@@ -498,7 +521,14 @@ fun PlayerScreen(
                     } else {
                         // 手机顶栏中间留空 —— 歌名 / 歌手在下方常驻歌名行里（效果图 ⑫ 的 p-nowrow）
                         Spacer(Modifier.weight(1f))
-                        IconButton(onClick = { keepAwake(); onLyricsPaneVisible(!showLyrics) }) {
+                        IconButton(onClick = {
+                            keepAwake()
+                            // 歌词页 → 回图片页；其余情况 → 去歌词页。
+                            // 这与改前的「封面/歌词」二态按钮是同一枚，只是多了信息页仍归到这一条。
+                            onPlayerPane(
+                                if (showLyrics) PlayerPane.ART else PlayerPane.LYRICS
+                            )
+                        }) {
                             Icon(
                                 imageVector = if (showLyrics) AppIcons.Album else AppIcons.Lyrics,
                                 contentDescription = if (showLyrics) stringResource(R.string.cd_show_cover) else stringResource(R.string.cd_show_lyrics),
@@ -521,168 +551,195 @@ fun PlayerScreen(
                 Spacer(Modifier.height(8.dp))
             }
 
-            // --------------------------------------------- 中部：封面 / 歌词
+            // --------------------------------------------- 中部：三页（v1.2.55）
             //
-            // 2026-10-30：手机左右切视图、上下切歌；车机左右仍切歌。
+            // 页序 = 歌曲信息 → 图片 + 单行歌词 → 歌词。左右滑翻页，首尾页再往外滑切歌。
             // **只挂中部、不挂整页**：底部进度条是横向拖动，整页挂必然抢手势。
-            // 歌词纵向滚动 vs 上下切歌：边缘 overscroll 才切（playerVerticalSkipEdge）。
             //
-            // 2026-10-28 起跟手位移加在各分支**内容**上，避免车机左侧功能键跟着横滑。
-            Box(
-                Modifier
-                    .weight(1f)
-                    .then(
-                        if (layoutSpec.gesture.horizontal == HorizontalSwipe.SKIP_TRACK) {
-                            Modifier.playerSwipeToSwitch(
-                                offset = swipeOffset,
-                                scope = swipeScope,
-                                onSwipe = onVerticalSkip,
-                            )
-                        } else {
-                            Modifier.playerSwipeToPane(
-                                offset = swipeOffset,
-                                scope = swipeScope,
-                                onPane = { pane ->
-                                    keepAwake()
-                                    when (pane) {
-                                        SwipePane.SHOW_COVER -> onLyricsPaneVisible(false)
-                                        SwipePane.SHOW_LYRICS -> onLyricsPaneVisible(true)
-                                        SwipePane.NONE -> Unit
-                                    }
-                                },
-                            )
+            // 车机左侧功能列（收藏 / 队列 / 设置）固定在翻页容器**外面**：
+            // v1.1.53 的初衷是「视线不要横穿整块屏」，让它跟着页面一起滑就白改了。
+            Row(Modifier.weight(1f).fillMaxWidth()) {
+                if (layoutSpec.sideActions && !immersive) {
+                    CarSideActions(
+                        isFavorite = isFavorite,
+                        canFavorite = song != null,
+                        onFavorite = {
+                            song?.let { onToggleFavorite(it) }
+                            keepAwake()
                         },
-                    )
-                    // 歌词态 / 车机：边缘 overscroll 切歌。封面态改走 CoverPane 内 direct。
-                    .then(
-                        if (layoutSpec.gesture.vertical == VerticalSwipe.SKIP_TRACK &&
-                            (layoutSpec.isCar || showLyrics)
-                        ) {
-                            Modifier.playerVerticalSkipEdge(onSwipe = onVerticalSkip)
-                        } else {
-                            Modifier
+                        onQueue = { keepAwake(); onShowQueue() },
+                        showA11y = state.showA11yAction,
+                        a11yEnabled = a11yEnabled,
+                        onA11y = {
+                            keepAwake()
+                            // 直接落到系统无障碍页（DiLink 上是我们解析出的 BYD 页）；
+                            // 全失败时给一句可执行的提示，而不是静默没反应。
+                            if (!ForegroundAppDetector.openAccessibilitySettings(a11yContext)) {
+                                val msg = if (
+                                    ForegroundAppDetector.canOpenAccessibilityPage(a11yContext)
+                                ) {
+                                    a11yContext.getString(R.string.player_a11y_open_failed)
+                                } else {
+                                    a11yContext.getString(R.string.player_a11y_no_page)
+                                }
+                                Toast.makeText(a11yContext, msg, Toast.LENGTH_LONG).show()
+                            }
                         },
+                        onOptions = { keepAwake(); showOptions = true },
                     )
-            ) {
-                // 跟手位移（只动内容，不动容器）
-                val slide = Modifier.graphicsLayer { translationX = swipeOffset.value }
-                // 长按哪一行就在哪一刻对表：位置在这里取一次快照
-                val onLineLongPress: (Int, Long) -> Unit = { lineIndex, lineMs ->
-                    keepAwake()
-                    lyricLineMenu = Triple(lineIndex, lineMs, progressState.value.positionMs)
-                }
-                if (layoutSpec.vinylAlongsideLyrics) {
-                    // 车机（v1.1.44）：参考车机版音乐应用的版式 —— **左歌词、右唱片**，
-                    // 两者同时在场，不再「二选一」。宽屏上这样排的信息密度最高：
-                    // 歌词占主视区（瞄一眼就能读），唱片在右侧做视觉锚点。
-                    //
-                    // v1.1.53（2026-10-22 用户要求）：收藏 / 播放队列 / 播放设置
-                    // 三键从「顶栏右上 + 底部行最右」**收进最左侧一列竖排** ——
-                    // 1707dp 宽屏上这三点原本散在三个角，视线要横穿整块屏；
-                    // 竖排一列后驾驶位单手一列盲按就行，且底部控制行只剩
-                    // 「播放模式 + ⏮⏯⏭」，主键居中不再被右槽抢视线。
-                    Row(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        // 沉浸态（5 秒无触摸）与顶栏 / 控制行同步收起，歌词拿回全宽
-                        if (!immersive) {
-                            CarSideActions(
-                                isFavorite = isFavorite,
-                                canFavorite = song != null,
-                                onFavorite = {
-                                    song?.let { onToggleFavorite(it) }
-                                    keepAwake()
-                                },
-                                onQueue = { keepAwake(); onShowQueue() },
-                                showA11y = state.showA11yAction,
-                                a11yEnabled = a11yEnabled,
-                                onA11y = {
-                                    keepAwake()
-                                    // 直接落到系统无障碍页（DiLink 上是我们解析出的 BYD 页）；
-                                    // 全失败时给一句可执行的提示，而不是静默没反应。
-                                    if (!ForegroundAppDetector.openAccessibilitySettings(a11yContext)) {
-                                        val msg = if (
-                                            ForegroundAppDetector.canOpenAccessibilityPage(a11yContext)
-                                        ) {
-                                            a11yContext.getString(R.string.player_a11y_open_failed)
-                                        } else {
-                                            a11yContext.getString(R.string.player_a11y_no_page)
-                                        }
-                                        Toast.makeText(a11yContext, msg, Toast.LENGTH_LONG).show()
-                                    }
-                                },
-                                onOptions = { keepAwake(); showOptions = true },
-                            )
-                        }
-                        PlayerLyrics(
-                            state = state,
-                            progressState = progressState,
-                            onSeekTo = onSeekTo,
-                            onLineLongPress = onLineLongPress,
-                            modifier = Modifier
-                                .weight(1.08f)
-                                .fillMaxHeight()
-                                .padding(end = 24.dp)
-                                .then(slide),
-                        )
-                        CarVinylPane(
-                            song = song,
-                            isPlaying = state.isPlaying,
-                            onToggle = onToggle,
-                            modifier = Modifier
-                                .weight(0.92f)
-                                .fillMaxHeight()
-                                // 右侧留一点边，唱片不要贴到屏幕右缘（参考车机版布局是居中偏右）
-                                .padding(end = 16.dp)
-                                .then(slide),
-                        )
-                    }
-                } else if (showLyrics) {
-                    PlayerLyrics(
-                        state = state,
-                        progressState = progressState,
-                        onSeekTo = onSeekTo,
-                        onLineLongPress = onLineLongPress,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .then(slide),
-                    )
-                } else {
-                    // 封面态：横向切视图由父级 playerSwipeToPane 负责；
-                    // 纵向切歌在 CoverPane 内 direct（无滚动子级）。
-                    // 音量改回系统键 / 车机旋钮 —— 上下滑让给切歌（2026-10-30 Spike）。
-                    Box(Modifier.fillMaxSize().then(slide)) {
-                        CoverPane(
-                            song = song,
-                            isPlaying = state.isPlaying,
-                            onToggle = onToggle,
-                            onSkip = onVerticalSkip,
-                        )
-                    }
                 }
 
-                // 播放模式切换提示：浮在封面 / 歌词之上，不参与布局，所以不会顶动其他元素
-                val hintAlpha by animateFloatAsState(
-                    targetValue = if (modeHintVisible) 1f else 0f,
-                    animationSpec = tween(180),
-                    label = "playModeHint",
-                )
-                if (hintAlpha > 0.01f) {
-                    Surface(
-                        shape = RoundedCornerShape(50),
-                        color = scheme.surfaceContainerHighest.copy(alpha = 0.92f),
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 8.dp)
-                            .alpha(hintAlpha),
-                    ) {
-                        Text(
-                            text = modeHint,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = scheme.onSurface,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 7.dp),
+                BoxWithConstraints(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        // 三页都 fillMaxSize 并平移出屏，不裁的话屏幕外的页会画到外面
+                        .clipToBounds()
+                        .playerSwipePages(
+                            offset = swipeOffset,
+                            scope = swipeScope,
+                            currentPane = { PlayerPane.of(state.playerPane) },
+                            onSettle = { result ->
+                                keepAwake()
+                                when (result) {
+                                    is PageSwipe.To -> onPlayerPane(result.target)
+                                    is PageSwipe.Skip -> {
+                                        when (result.dir) {
+                                            SwipeSwitch.NEXT -> onNext()
+                                            SwipeSwitch.PREVIOUS -> onPrevious()
+                                            SwipeSwitch.NONE -> Unit
+                                        }
+                                        // 切歌后回图片页（用户 2026-11-14 拍板）：
+                                        // 换了一首歌，先给新的封面 + 新的那一句。
+                                        onPlayerPane(PlayerPane.ART)
+                                    }
+                                    PageSwipe.Stay -> Unit
+                                }
+                            },
                         )
+                ) {
+                    val pageWidth = constraints.maxWidth.toFloat()
+                    // 长按哪一行就在哪一刻对表：位置在这里取一次快照
+                    val onLineLongPress: (Int, Long) -> Unit = { lineIndex, lineMs ->
+                        keepAwake()
+                        lyricLineMenu = Triple(lineIndex, lineMs, progressState.value.positionMs)
+                    }
+
+                    PlayerPane.entries.forEach { page ->
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                // ⚠️ 必须用 offset（影响布局位置）而不是 graphicsLayer：
+                                // graphicsLayer 只改绘制，屏幕外的页仍然占着原来的命中区域，
+                                // 会把手势从当前页抢走。offset 在布局阶段读位移，
+                                // 拖动时只重新放置、不重组三页内容。
+                                .offset {
+                                    IntOffset(
+                                        ((page.index - currentPane.index) * pageWidth + swipeOffset.value)
+                                            .roundToInt(),
+                                        0,
+                                    )
+                                }
+                        ) {
+                            when (page) {
+                                PlayerPane.INFO -> SongInfoPane(
+                                    song = song,
+                                    facts = songFacts,
+                                    isFavorite = isFavorite,
+                                    carMode = layoutSpec.isCar,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+
+                                PlayerPane.ART -> CoverLyricPane(
+                                    song = song,
+                                    isPlaying = state.isPlaying,
+                                    onToggle = onToggle,
+                                    lyrics = state.lyrics,
+                                    progressState = progressState,
+                                    offsetMs = state.lyricOffsetMs,
+                                    carMode = layoutSpec.isCar,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+
+                                PlayerPane.LYRICS -> if (layoutSpec.vinylAlongsideLyrics) {
+                                    // 车机（v1.1.44）：左歌词、右唱片，两者同时在场。
+                                    // 宽屏上信息密度最高：歌词占主视区（瞄一眼就能读），
+                                    // 唱片在右侧做视觉锚点。
+                                    Row(
+                                        modifier = Modifier.fillMaxSize(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        PlayerLyrics(
+                                            state = state,
+                                            progressState = progressState,
+                                            onSeekTo = onSeekTo,
+                                            onLineLongPress = onLineLongPress,
+                                            modifier = Modifier
+                                                .weight(1.08f)
+                                                .fillMaxHeight()
+                                                .padding(end = 24.dp)
+                                                // 给底部页码点让位，否则最后一行歌词会被压住
+                                                .padding(bottom = 20.dp),
+                                        )
+                                        CarVinylPane(
+                                            song = song,
+                                            isPlaying = state.isPlaying,
+                                            onToggle = onToggle,
+                                            modifier = Modifier
+                                                .weight(0.92f)
+                                                .fillMaxHeight()
+                                                // 右侧留一点边，唱片不要贴到屏幕右缘
+                                                .padding(end = 16.dp),
+                                        )
+                                    }
+                                } else {
+                                    PlayerLyrics(
+                                        state = state,
+                                        progressState = progressState,
+                                        onSeekTo = onSeekTo,
+                                        onLineLongPress = onLineLongPress,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(bottom = 20.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // 页码点：跟着内容走，不占顶栏 / 底栏（那两处两端版式不同）。
+                    // 沉浸态一起收起 —— 那一档的诉求是「一屏全是字」，任何可点的东西都是干扰。
+                    if (!immersive) {
+                        PlayerPaneDots(
+                            current = currentPane,
+                            onSelect = { target -> keepAwake(); onPlayerPane(target) },
+                            large = layoutSpec.isCar,
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                        )
+                    }
+
+                    // 播放模式切换提示：浮在页面之上，不参与布局，所以不会顶动其他元素
+                    val hintAlpha by animateFloatAsState(
+                        targetValue = if (modeHintVisible) 1f else 0f,
+                        animationSpec = tween(180),
+                        label = "playModeHint",
+                    )
+                    if (hintAlpha > 0.01f) {
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = scheme.surfaceContainerHighest.copy(alpha = 0.92f),
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 34.dp)
+                                .alpha(hintAlpha),
+                        ) {
+                            Text(
+                                text = modeHint,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = scheme.onSurface,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 7.dp),
+                            )
+                        }
                     }
                 }
             }

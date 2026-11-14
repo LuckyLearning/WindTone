@@ -1,5 +1,6 @@
 package com.luckylearning.windtone.playback
 
+import com.luckylearning.windtone.data.PlayerPane
 import com.luckylearning.windtone.data.ThemeMode
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.lyrics.Lyrics
@@ -109,7 +110,9 @@ interface PlayerActions : OverlayActions {
 
     /** 未经「双语歌词」过滤的原始歌词（导出用：译文要一起写进 LRC） */
     fun lyricsForExport(): Lyrics
-    fun setLyricsPaneVisible(visible: Boolean)
+
+    /** 播放页中部停在第几页（信息 / 图片 / 歌词）：落盘，下次进播放页保持 */
+    fun setPlayerPane(pane: PlayerPane)
     fun setCarMode(enabled: Boolean)
 
     /**

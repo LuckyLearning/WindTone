@@ -8,26 +8,18 @@ import com.luckylearning.windtone.ui.theme.UiFormFactor
 /**
  * 播放页中部的手势语义（UI v2 · 阶段五）。
  *
- * ## 为什么上下滑不能「切歌词/封面视图」
+ * ## v1.2.55 起：手势不再按形态分叉
  *
- * 设计稿初版曾写「左右 = 切歌、上下 = 切视图，全端一致」。落地前核对代码发现
- * 这条与物理交互冲突：歌词 `LazyColumn` 本身就是**纵向滚动**的，把上下滑拿去切视图
- * 会直接和滚歌词抢手势。现有实现之所以是「歌词态只在 overscroll 边缘才认上下滑」，
- * 正是为了避开这个冲突。
+ * 早期这里有一张「手机左右切面板 / 车机左右切歌、上下切歌」的分叉表。播放页改成
+ * **三页横排**（信息 / 图片 / 歌词）之后，两端语义完全一致：
+ * 左右滑翻页，首尾页再往外滑才是切歌；纵向整根轴留给歌词滚动。
  *
- * 所以真正可统一的语义是：**「切歌」在两端都可用且方向一致（上下）；
- * 「切面板」只发生在有多余面板可切的形态（手机左右）**。车机是歌词 + 黑胶双栏同场，
- * 没有面板可切，于是左右也用来切歌 —— 这不是「语义相反」，而是「同一个手势在
- * 有第二面板时优先切面板」。本表把这个隐性约定写成可断言的数据。
+ * 因此这张表只剩「长按 = 歌词行菜单 / 列表多选」这一条，且全端开放
+ * （车机用大触控目标，不再整块禁用）。分叉表本身随之删除 ——
+ * 留一个恒为同一个值的枚举字段只会让人误以为还有别的取值。
  */
-internal enum class HorizontalSwipe { SWITCH_PANE, SKIP_TRACK }
-
-internal enum class VerticalSwipe { SKIP_TRACK, NONE }
-
 internal data class PlayerGestureSemantics(
-    val horizontal: HorizontalSwipe,
-    val vertical: VerticalSwipe,
-    /** 长按 = 歌词行菜单 / 列表多选，全端开放（车机用大目标，不再整块禁用）。 */
+    /** 长按 = 歌词行菜单 / 列表多选，全端开放 */
     val longPressMenu: Boolean = true,
 )
 
@@ -89,11 +81,7 @@ internal data class PlayerLayoutSpec(
             return PlayerLayoutSpec(
                 isCar = car,
                 touchMin = density.touchMin,
-                gesture = PlayerGestureSemantics(
-                    horizontal = if (car) HorizontalSwipe.SKIP_TRACK
-                    else HorizontalSwipe.SWITCH_PANE,
-                    vertical = VerticalSwipe.SKIP_TRACK,
-                ),
+                gesture = PlayerGestureSemantics(),
                 fillHeightOnly = car,
                 horizontalPadding = if (car) 40.dp else 20.dp,
                 vinylAlongsideLyrics = car,

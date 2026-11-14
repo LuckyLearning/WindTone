@@ -27,8 +27,8 @@
   <div class="bh-row">
     <a class="backdocs" href="index.html">← 效果图总览</a>
     <div class="bh-title">二、播放页<small>UI 效果图 · 设计基准（第 2 / 7 章）</small></div>
-    <span class="bh-badge"><span id="pageCount">6</span> 屏</span>
-    <span class="bh-badge">对齐 v1.1.29</span>
+    <span class="bh-badge"><span id="pageCount">7</span> 屏</span>
+    <span class="bh-badge">对齐 v1.2.55</span>
     <button class="tgl" id="themeBtn">🌙 深色主题</button>
   </div>
   <nav class="bh-nav"><a href="01-main.html">主界面</a><a href="02-player.html" class="on">播放页</a><a href="03-sheets.html">抽屉与弹窗</a><a href="04-settings.html">设置页</a><a href="05-extras.html">小组件·通知</a><a href="06-car.html">车机版</a><a href="09-online.html">在线与云盘</a><a href="10-tools.html">工具与实验</a><a href="08-floating-lyrics.html">悬浮歌词</a><a href="07-spec.html">颜色与尺寸</a><a href="verify.html">模拟器验证</a></nav>
@@ -36,15 +36,19 @@
 
 <div class="wrap">
 <section class="sec" id="sec-player">
-  <div class="sec-hd"><h2>二、播放页</h2><span>PlayerScreen.kt · PlayerScreenParts.kt · LyricsPane.kt —— 歌词态 / 封面态 / 音量浮层 / 暂无歌词 / 纯文本 / 沉浸态（手机 + 车机）</span></div>
+  <div class="sec-hd"><h2>二、播放页</h2><span>PlayerScreen.kt · PlayerPanes.kt · PlayerScreenParts.kt · LyricsPane.kt —— 三页（歌曲信息 / 图片 + 当前一句 / 歌词）/ 音量浮层 / 暂无歌词 / 纯文本 / 沉浸态（手机 + 车机）</span></div>
   <div class="legend">
-    <b>左右滑动切歌（2026-10-27）</b>：中部内容区（歌词 / 唱片）<b>左滑 → 下一首、右滑 → 上一首</b>。
-    手指拖动时这一层跟着平移一小段（阻力 0.45、上限屏宽 1/6），松手没过阈值就弹回 —— 有这一步
-    用户才知道「这一划被认了」，否则歌变了、屏幕上什么都没发生。阈值取屏宽 12%，<b>或者</b>甩得够快
-    （900px/s）也算 —— 行车中手指划不长，只认位移会让人觉得「划了没反应」；两者方向冲突时<b>以位移为准</b>
-    （甩出去又拉回来，本意就是不切）。<br>
-    手势<b>只挂中部</b>，不挂整页：底部进度条本身就是横向拖动，挂整页必然抢手势；中部歌词区是纵向滚动，
-    与横向手势方向互斥，不会互相打岔。判据与参数集中在 <code>PlayerSwipe.kt</code>（纯函数，有单测）。
+    <b>三页横滑（v1.2.55）</b>：播放页中部是三张横排的页 —— <b>第 1 页 歌曲信息 → 第 2 页 图片 + 当前一句 → 第 3 页 歌词</b>。
+    <b>左右滑翻页</b>；在<b>第 3 页继续左滑 = 下一首</b>，在<b>第 1 页继续右滑 = 上一首</b>，切歌后<b>回到第 2 页</b>。
+    翻页阈值取屏宽 18%（比切歌时代的 12% 更钝：误翻会打断正在读的那一句），或者甩得够快（900px/s）也算；
+    位移与速度冲突时<b>以位移为准</b>（甩出去又拉回来，本意就是不动）。首尾页越界时跟手乘 0.32 阻力、夹在屏宽 30% 内 ——
+    拖不动多少，但手指能感到「这里到头了」。<br>
+    <b>纵向不再切歌</b>：歌词页的 <code>LazyColumn</code> 本身就是纵向滚动，旧实现靠「滚到边界才认上下滑」绕开冲突，
+    实际用起来分不清「在滚歌词还是在切歌」；现在整根纵轴留给滚动，手势与内容一一对应。
+    <br>
+    手势<b>只挂中部</b>，不挂整页：底部进度条本身就是横向拖动，挂整页必然抢手势。三页都用 <code>Modifier.offset</code>
+    （影响布局位置）平移出屏 —— 用 <code>graphicsLayer</code> 只改绘制，屏幕外的页仍占着原来的命中区域，会把手势抢走。
+    判据与参数集中在 <code>PlayerSwipe.kt</code>（纯函数，有单测）。
   </div>
   <div class="board">
 <figure class="fig" id="scr-player-lyrics">
@@ -149,7 +153,7 @@
 </figure>
 
 <figure class="fig" id="scr-player-cover">
-  <div class="cap"><b>⑬ 播放页 · 封面态（含播放模式提示）</b><em>PlayerScreen.kt · PlayerScreenParts.kt(CoverPane) + modeHint</em></div>
+  <div class="cap"><b>⑬ 播放页 · 第 2 页：图片 + 当前一句</b><em>PlayerScreen.kt · PlayerPanes.kt(CoverLyricPane) + PlayerPaneDots</em></div>
   <div class="phone">
     <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
     <div class="app">
@@ -163,10 +167,10 @@
         <div class="p-mid">
           <div class="p-cover">
             <div class="cov cov-292 c2"><svg><use href="#i-note"/></svg></div>
-            <div class="cover-album">叶惠美</div>
-            <div class="cover-file">夜曲.flac · 24bit / 96kHz</div>
-            <div class="ghost-chip">双击暂停 · 左右滑切歌 · 上下滑调音量</div>
+            <div class="cover-lyric">为你弹奏萧邦的夜曲</div>
+            <div class="cover-lyric tr">Playing Chopin's Nocturne for you</div>
           </div>
+          <div class="p-dots"><span class="p-dot"><i></i></span><span class="p-dot on"><i></i></span><span class="p-dot"><i></i></span></div>
           <div class="mode-hint" data-modehint style="display:block">随机播放</div>
         </div>
         <div class="p-nowrow">
@@ -194,11 +198,109 @@
       </div>
     </div>
   </div>
-  <p class="note"><b>关键点：</b>封面 292dp / 圆角 24dp / 阴影 18dp，播放时呼吸缩放 1.0↔1.025（2600ms 反转）；
-  下方 = 专辑名 14sp + 文件名 11sp（alpha .75） + 手势提示胶囊 10sp；<br>
-  <b>歌名/歌手 + 收藏红心固定在进度条上方一行</b>（左对齐标题 18sp/歌手 12sp，右侧红心），顶栏只留收起 / 歌词↔封面切换 / 播放设置；<br>
-  <b>控制区必须三段式</b>：左槽放播放模式按钮（顺序播放时图标 onSurfaceVariant，其余档 primary）+ 中间「上一首 / 播放 66dp 圆形主键 / 下一首」间距 20dp + 右槽放<b>播放队列</b>（与左槽等宽配平），保证主键绝对居中；<br>
-  播放模式四档轮换：顺序播放 → 列表循环 → 单曲循环 → 随机播放，切换后浮出模式名 1.4s（此处固定展示「随机播放」）。</p>
+  <p class="note"><b>关键点（v1.2.55 三页）：</b>中部改成三张横排的页，<b>左右滑翻页</b>：
+  <b>第 1 页 歌曲信息 → 第 2 页 图片 + 当前一句 → 第 3 页 歌词</b>；
+  在<b>第 3 页继续左滑 = 下一首</b>，在<b>第 1 页继续右滑 = 上一首</b>，切歌后<b>回到第 2 页</b>（新封面 + 新的一句）。
+  <b>上下滑不再切歌</b> —— 纵向整根轴留给歌词滚动。<br>
+  图片页 = 封面 292dp（车机上限 420dp，播放时呼吸缩放 1.0↔1.025）+ <b>当前这一句</b> 18sp/600（次级副行 13sp，有译文才出现）；
+  双击封面仍是播放 / 暂停。原来封面下方那行「专辑 / 文件名 / 手势提示」随三页改版一起取消 —— 专辑与文件信息都在第 1 页，不必重复。<br>
+  <b>页码点</b>贴中部区域底部居中（8dp/6dp 圆点，可点跳页），不占顶栏也不占控制区：顶栏在车机被歌名占满、手机被歌词键占着，只有跟着内容走才能在两端摆出同一套版式。<br>
+  顶栏右侧那枚仍是「歌词 ↔ 图片」二态键：不在歌词页 → 图标 <code>i-lyrics</code>（去歌词页），在歌词页 → 图标 <code>i-album</code>（回图片页）。</p>
+</figure>
+
+<figure class="fig" id="scr-player-info">
+  <div class="cap"><b>⑬b 播放页 · 第 1 页：歌曲信息</b><em>PlayerPanes.kt(SongInfoPane) · 数据 = Song 快照 + PlayerViewModel.loadSongFacts</em></div>
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+    <div class="app">
+      <div class="player">
+        <div class="p-top">
+          <button class="ibtn"><svg class="ic"><use href="#i-down"/></svg></button>
+          <div class="t-main"><div class="sp"></div></div>
+          <button class="ibtn"><svg class="ic"><use href="#i-lyrics"/></svg></button>
+          <button class="ibtn"><svg class="ic"><use href="#i-tune"/></svg></button>
+        </div>
+        <div class="p-mid">
+          <div class="p-info">
+            <div class="p-info-head">
+              <div class="cov cov-56 c2"><svg><use href="#i-note"/></svg></div>
+              <div style="min-width:0">
+                <div class="p-info-title">夜曲</div>
+                <div class="p-info-sub">周杰伦</div>
+              </div>
+            </div>
+            <div class="p-info-group">
+              <h4>标签信息</h4>
+              <div class="p-info-card">
+                <div class="p-info-row"><b>专辑</b><span>十一月的萧邦</span></div>
+                <div class="p-info-row"><b>专辑艺人</b><span>周杰伦</span></div>
+                <div class="p-info-row"><b>年份</b><span>2005</span></div>
+                <div class="p-info-row"><b>流派</b><span>华语流行</span></div>
+                <div class="p-info-row"><b>音轨</b><span>第 1 碟 · 第 1 首</span></div>
+              </div>
+            </div>
+            <div class="p-info-group">
+              <h4>文件信息</h4>
+              <div class="p-info-card">
+                <div class="p-info-row"><b>容器</b><span>FLAC</span></div>
+                <div class="p-info-row"><b>编码</b><span>FLAC</span></div>
+                <div class="p-info-row"><b>采样率</b><span>96 kHz</span></div>
+                <div class="p-info-row"><b>位深</b><span>24 bit</span></div>
+                <div class="p-info-row"><b>码率</b><span>2304 kbps</span></div>
+                <div class="p-info-row"><b>路径</b><span>/storage/emulated/0/Music/十一月的萧邦/01 夜曲.flac</span></div>
+              </div>
+            </div>
+            <div class="p-info-group">
+              <h4>所在歌单</h4>
+              <div class="p-info-card">
+                <div class="p-info-chips"><span class="p-info-chip">我的收藏</span><span class="p-info-chip">开车常听</span><span class="p-info-chip">周杰伦全集</span></div>
+              </div>
+            </div>
+            <div class="p-info-group">
+              <h4>播放统计</h4>
+              <div class="p-info-card">
+                <div class="p-info-row"><b>播放次数</b><span>42</span></div>
+                <div class="p-info-row"><b>上次播放</b><span>2026-11-13 08:12</span></div>
+                <div class="p-info-row"><b>累计收听</b><span>1:58:06</span></div>
+                <div class="p-info-row"><b>加入曲库</b><span>2026-09-30 21:04</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="p-dots"><span class="p-dot on"><i></i></span><span class="p-dot"><i></i></span><span class="p-dot"><i></i></span></div>
+        </div>
+        <div class="p-nowrow">
+          <div class="p-now-main"><div class="p-now-title">夜曲</div><div class="p-now-artist">周杰伦</div></div>
+          <button class="ibtn fav-on" title="取消收藏"><svg class="ic"><use href="#i-heart"/></svg></button>
+        </div>
+        <div class="p-progress">
+          <div class="track"><span class="buf" style="width:88%"></span><span class="played" style="width:37%"></span>
+            <span class="thumb" style="left:37%"><i></i></span></div>
+        </div>
+        <div class="p-times"><span>1:24</span><span>3:46</span></div>
+        <div class="p-ctl">
+          <div class="slot"><button class="ibtn mode-on" data-playmode title="播放模式：随机播放"><svg class="ic"><use href="#i-shuffle"/></svg></button></div>
+          <div class="mid">
+            <button class="ibtn"><svg class="ic ic-34"><use href="#i-prev"/></svg></button>
+            <button class="play-main"><svg class="ic ic-34"><use href="#i-pause"/></svg></button>
+            <button class="ibtn"><svg class="ic ic-34"><use href="#i-next"/></svg></button>
+          </div>
+          <div class="slot end"><button class="ibtn" title="播放队列"><svg class="ic"><use href="#i-queue"/></svg></button></div>
+        </div>
+        <div class="p-status">
+          <span class="chip-lsrc">内嵌同步歌词</span>
+          <span class="right"><span>导入文件夹</span><span>队列 500 首</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>关键点：</b>四组信息 —— <b>标签</b>（专辑 / 专辑艺人 / 年份 / 流派 / 音轨 + 碟号）、
+  <b>文件</b>（容器 / 编码 / 采样率 / 声道 / 位深 / 码率 / 时长 / 大小 / 路径）、
+  <b>所在歌单</b>（用户歌单；收藏中时额外多一枚「我的收藏」）、
+  <b>播放统计</b>（播放次数 / 上次播放 / 累计收听 / 加入曲库）。<br>
+  缺值的行显示 <code>—</code> 并压暗而不是整行消失 —— 不显示会让人以为应用漏了字段，而「这个文件本来没这个标签」本身也是信息。<br>
+  数据分两路：<b>Song 快照</b>（进页即有）+ <b>进页拉一次的派生数据</b>（歌单归属 / 播放统计 / 音频参数）。
+  派生数据没回来之前先显示已有值，不摆骨架条 —— 这里的绝大部分行本来就有值。<br>
+  该页内容可纵向滚动（<code>verticalScroll</code>）；车机同款版式只放大字号（标题 20sp / 值 17sp / 标签 15sp）。</p>
 </figure>
 
 <figure class="fig" id="scr-player-vol">

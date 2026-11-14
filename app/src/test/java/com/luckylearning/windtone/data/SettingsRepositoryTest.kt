@@ -78,7 +78,7 @@ class SettingsRepositoryTest {
         settings.setOverlayEnabled(true)
         settings.setOverlayFullHeight(true)
         settings.setOverlayShowTitle(true)
-        settings.setLyricsPaneVisible(false)
+        settings.setPlayerPane(PlayerPane.INFO)
         settings.setCarMode(true)
 
         assert(prefs.skipSilence)
@@ -91,7 +91,7 @@ class SettingsRepositoryTest {
         assert(prefs.lyricOverlay)
         assert(prefs.lyricOverlayFullHeight)
         assert(prefs.lyricOverlayShowTitle)
-        assert(!prefs.lyricsPaneVisible)
+        assertEquals(PlayerPane.INFO.index, prefs.playerPane)
         assert(prefs.carMode)
     }
 

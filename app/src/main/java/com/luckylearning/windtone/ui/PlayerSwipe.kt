@@ -4,18 +4,10 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.unit.Velocity
+import com.luckylearning.windtone.data.PlayerPane
 import com.luckylearning.windtone.ui.theme.AppVisual
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -23,258 +15,193 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 /**
- * 一次滑动切歌的去向。[NONE] = 没到阈值，什么都不做。
+ * 一次边界滑动的去向（v1.2.55 起只剩「页滑到头了 → 切歌」这一种用法）。
  *
- * 2026-10-30 起：手机中部切歌主路径改到**纵向**（上滑下一首 / 下滑上一首）；
- * 横向改切「歌词 ↔ 封面」。车机中部横向仍切歌（双栏同时在，没有视图可切）。
+ * [NONE] 不会再由 [PlayerSwipe.resolvePage] 产出，保留它是为了让 `when` 分支完整、
+ * 也让调用方的「无动作」语义有个显式值。
  */
 internal enum class SwipeSwitch { NONE, NEXT, PREVIOUS }
 
 /**
- * 横向滑动切换「歌词 / 封面」面板的去向。
+ * 一次横向滑动的判定结果（v1.2.55）。
  *
- * - [SHOW_COVER]：向左划过阈值 → 封面
- * - [SHOW_LYRICS]：向右划过阈值 → 歌词
- * - [NONE]：没过阈值
+ * 播放页中部是三页横排（信息 / 图片 / 歌词），左右滑先翻页；
+ * 只有**首尾两页再往外滑**才落到切歌上 —— 这样「页」和「曲」共用一根横轴，
+ * 越界的那一下正好是「越过这一张，换下一首」的直觉。
  */
-internal enum class SwipePane { NONE, SHOW_COVER, SHOW_LYRICS }
+internal sealed interface PageSwipe {
+    /** 没到阈值：留在原页 */
+    data object Stay : PageSwipe
+
+    /** 翻到相邻页 */
+    data class To(val target: PlayerPane) : PageSwipe
+
+    /** 已经在首 / 尾页还继续往外滑：切上一首 / 下一首 */
+    data class Skip(val dir: SwipeSwitch) : PageSwipe
+}
 
 /**
- * 播放页中部手势的判据与参数。
+ * 播放页中部手势的判据与参数（v1.2.55 重写）。
  *
- * ## 2026-10-30 分工（Spike）
+ * ## 为什么不再有「上下滑切歌」
  *
- * | 方向 | 手机 | 车机 |
- * |---|---|---|
- * | 左右 | 歌词 ↔ 封面 | 仍切歌（双栏同场） |
- * | 上下 | 切歌 | 切歌 |
+ * 歌词页的 `LazyColumn` 本身就是纵向滚动。旧实现靠「滚到边界才认上下滑」绕开
+ * 冲突，但那套机制在车机上会让人分不清「我是在滚歌词还是在切歌」，而且图片页 /
+ * 信息页根本没有纵向内容可滚，上下滑纯粹是多余的第二套切歌手势。
+ * 现在切歌只走横轴末端，纵向整根轴留给滚动 —— 手势与内容一一对应。
  *
- * ## 与歌词纵向滚动的冲突：**边缘才切歌**
+ * ## 与歌词纵向滚动的关系
  *
- * 歌词 `LazyColumn` / `verticalScroll` 先吃纵向；只有子级滚不动、把 overscroll
- * 剩给父级时（顶向下拉 / 底向上推），才累计并在松手时判切歌。中段滚歌词不误切。
- *
- * 封面态没有纵向滚动子级，走 [playerVerticalSkipDirect] 整区上下切。
- *
- * 阈值 / 甩速 / 阻力与 2026-10-27 同一套。
+ * `detectHorizontalDragGestures` 自带方向锁：纵向先超过 touch slop 时它直接放弃，
+ * 事件留给子级 `LazyColumn`。所以横向翻页和纵向滚歌词可以叠在同一棵树上。
  */
 internal object PlayerSwipe {
 
-    /** 位移阈值：沿滑动轴尺寸的 12%。 */
-    const val ThresholdRatio: Float = 0.12f
+    /**
+     * 翻页位移阈值：沿横向尺寸的 18%。
+     *
+     * 比切歌时代的 12% 更「钝」一点 —— 翻页是低成本动作，但误翻会打断正在读的
+     * 那一句；宁可让用户多滑一点，也不要一碰就翻过去。
+     */
+    const val PageThresholdRatio: Float = 0.18f
 
-    /** 快速轻扫速度阈值（px/s）。 */
+    /** 快速轻扫速度阈值（px/s）：手指划不长时的兜底 */
     const val FlingVelocity: Float = 900f
 
-    /** 跟手位移上限：沿轴尺寸的 1/6。 */
-    const val MaxOffsetRatio: Float = 1f / 6f
+    /** 首尾页越界时的跟手阻力（不翻页，只给「到边了」的反馈） */
+    const val EdgeResistance: Float = 0.32f
 
-    /** 跟手阻力。 */
-    const val Resistance: Float = 0.45f
+    /** 越界跟手位移上限：横向尺寸的 30% */
+    const val EdgeMaxRatio: Float = 0.30f
 
-    /**
-     * 判定要不要切歌。
-     *
-     * @param dragPx 累计位移（向左 / 向上为负）
-     * @param sizePx 沿该轴的手势区尺寸
-     * @param velocity 松手瞬间沿轴速度（向左 / 向上为负）
-     *
-     * 位移与速度冲突时**以位移为准**。
-     */
-    fun resolve(dragPx: Float, sizePx: Float, velocity: Float = 0f): SwipeSwitch {
-        if (sizePx <= 0f) return SwipeSwitch.NONE
-        val farEnough = abs(dragPx) >= sizePx * ThresholdRatio
-        val fastEnough = abs(velocity) >= FlingVelocity
-        if (!farEnough && !fastEnough) return SwipeSwitch.NONE
-        val dir = if (farEnough) dragPx else velocity
-        return if (dir < 0f) SwipeSwitch.NEXT else SwipeSwitch.PREVIOUS
-    }
-
-    /**
-     * 判定横向要不要切面板：向左 → 封面，向右 → 歌词。
-     */
-    fun resolvePane(dragPx: Float, widthPx: Float, velocityX: Float = 0f): SwipePane {
-        if (widthPx <= 0f) return SwipePane.NONE
-        val farEnough = abs(dragPx) >= widthPx * ThresholdRatio
-        val fastEnough = abs(velocityX) >= FlingVelocity
-        if (!farEnough && !fastEnough) return SwipePane.NONE
-        val dir = if (farEnough) dragPx else velocityX
-        return if (dir < 0f) SwipePane.SHOW_COVER else SwipePane.SHOW_LYRICS
-    }
-
-    fun resisted(dragPx: Float, sizePx: Float): Float {
-        if (sizePx <= 0f) return 0f
-        val cap = sizePx * MaxOffsetRatio
-        return (dragPx * Resistance).coerceIn(-cap, cap)
-    }
-
+    /** 翻到位 / 回弹的动画时长 */
     const val SettleMs: Int = AppVisual.Motion.BaseMs
-}
 
-/** 横向：手机切歌词/封面。 */
-internal fun Modifier.playerSwipeToPane(
-    offset: Animatable<Float, AnimationVector1D>,
-    scope: CoroutineScope,
-    onPane: (SwipePane) -> Unit,
-): Modifier = pointerInput(Unit) {
-    val tracker = VelocityTracker()
-    var accum = 0f
-    detectHorizontalDragGestures(
-        onDragStart = {
-            accum = 0f
-            tracker.resetTracking()
-        },
-        onHorizontalDrag = { change, dragAmount ->
-            accum += dragAmount
-            tracker.addPosition(change.uptimeMillis, change.position)
-            change.consume()
-            scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                offset.snapTo(PlayerSwipe.resisted(accum, size.width.toFloat()))
-            }
-        },
-        onDragEnd = {
-            val vx = tracker.calculateVelocity().x
-            val pane = PlayerSwipe.resolvePane(accum, size.width.toFloat(), vx)
-            if (pane != SwipePane.NONE) onPane(pane)
-            scope.launch {
-                offset.animateTo(
-                    0f,
-                    tween(PlayerSwipe.SettleMs, easing = AppVisual.Motion.Ease),
-                )
-            }
-        },
-        onDragCancel = {
-            scope.launch {
-                offset.animateTo(
-                    0f,
-                    tween(PlayerSwipe.SettleMs, easing = AppVisual.Motion.Ease),
-                )
-            }
-        },
-    )
+    /** 切歌后新页滑入的时长：比回弹略长，让「换了一首」这件事有存在感 */
+    const val SkipSettleMs: Int = AppVisual.Motion.BaseMs + 80
+
+    /**
+     * 判定这次横滑该翻页还是切歌。
+     *
+     * @param dragPx 累计位移（向左为负）
+     * @param widthPx 中部手势区宽度（px）
+     * @param velocityX 松手瞬间横向速度（向左为负）
+     * @param pane 拖动开始时所处的页
+     *
+     * 位移与速度冲突时**以位移为准**（与旧版切歌判据同一原则：甩出去又拉回来时
+     * 用户的真实意图是不动）。
+     */
+    fun resolvePage(
+        dragPx: Float,
+        widthPx: Float,
+        velocityX: Float = 0f,
+        pane: PlayerPane,
+    ): PageSwipe {
+        if (widthPx <= 0f) return PageSwipe.Stay
+        val farEnough = abs(dragPx) >= widthPx * PageThresholdRatio
+        val fastEnough = abs(velocityX) >= FlingVelocity
+        if (!farEnough && !fastEnough) return PageSwipe.Stay
+        val dir = if (farEnough) dragPx else velocityX
+        return if (dir < 0f) {
+            pane.next()?.let { PageSwipe.To(it) } ?: PageSwipe.Skip(SwipeSwitch.NEXT)
+        } else {
+            pane.previous()?.let { PageSwipe.To(it) } ?: PageSwipe.Skip(SwipeSwitch.PREVIOUS)
+        }
+    }
+
+    /**
+     * 跟手位移（px）。
+     *
+     * 页内 1:1 跟手（要的就是「拖到哪看到哪」）；首尾页越界时乘 [EdgeResistance]
+     * 并夹在 [EdgeMaxRatio] 内 —— 拖不动多少，但手指能感到「这里到头了」。
+     */
+    fun followPx(dragPx: Float, widthPx: Float, pane: PlayerPane): Float {
+        if (widthPx <= 0f) return 0f
+        val atEdge = (dragPx < 0f && pane.next() == null) || (dragPx > 0f && pane.previous() == null)
+        if (!atEdge) return dragPx.coerceIn(-widthPx, widthPx)
+        val cap = widthPx * EdgeMaxRatio
+        return (dragPx * EdgeResistance).coerceIn(-cap, cap)
+    }
+
+    /** 从 [from] 到 [to] 的位移，单位「页」；正值 = 目标在右侧 */
+    fun pageDelta(from: PlayerPane, to: PlayerPane): Int = to.index - from.index
 }
 
 /**
- * 横向滑动切歌（车机中部 / 旧调用兼容）。
+ * 三页横向翻页手势（v1.2.55）。
+ *
+ * 三个要点：
+ *  1. **只挂中部**：底部进度条是横向拖动，整页挂必然抢手势。
+ *  2. **翻页与切歌共用一次判定**（[PlayerSwipe.resolvePage]）：翻到相邻页就把页面
+ *     滑到位再回报；首尾页再往外滑就先滑出、回报切歌、然后让新页从另一侧滑入。
+ *  3. **`currentPane` 用 lambda 而不是值**：写成值会把 `pointerInput` 的 key 绑到
+ *     页序号上，翻页瞬间重建 pointerInput 会让进行中的手势状态丢掉。
  *
  * ⚠️ 只能有一层 `pointerInput`（v1.2.10 双层导致手势未挂上）。
  */
-internal fun Modifier.playerSwipeToSwitch(
+internal fun Modifier.playerSwipePages(
     offset: Animatable<Float, AnimationVector1D>,
     scope: CoroutineScope,
-    onSwipe: (SwipeSwitch) -> Unit,
+    currentPane: () -> PlayerPane,
+    onSettle: (PageSwipe) -> Unit,
 ): Modifier = pointerInput(Unit) {
     val tracker = VelocityTracker()
     var accum = 0f
+    var paneAtStart = PlayerPane.ART
+    val settle = tween<Float>(PlayerSwipe.SettleMs, easing = AppVisual.Motion.Ease)
+
     detectHorizontalDragGestures(
         onDragStart = {
             accum = 0f
+            paneAtStart = currentPane()
             tracker.resetTracking()
+            // 上一段归位动画可能还没跑完：让它停下，从当前位移继续跟手，
+            // 否则 snapTo 会和 animateTo 抢同一个 Animatable。
+            scope.launch(start = CoroutineStart.UNDISPATCHED) { offset.stop() }
         },
         onHorizontalDrag = { change, dragAmount ->
             accum += dragAmount
             tracker.addPosition(change.uptimeMillis, change.position)
             change.consume()
             scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                offset.snapTo(PlayerSwipe.resisted(accum, size.width.toFloat()))
+                offset.snapTo(
+                    PlayerSwipe.followPx(accum, size.width.toFloat(), paneAtStart),
+                )
             }
         },
         onDragEnd = {
             val vx = tracker.calculateVelocity().x
-            val dir = PlayerSwipe.resolve(accum, size.width.toFloat(), vx)
-            if (dir != SwipeSwitch.NONE) onSwipe(dir)
+            val width = size.width.toFloat()
+            val result = PlayerSwipe.resolvePage(accum, width, vx, paneAtStart)
             scope.launch {
-                offset.animateTo(
-                    0f,
-                    tween(PlayerSwipe.SettleMs, easing = AppVisual.Motion.Ease),
-                )
+                when (result) {
+                    PageSwipe.Stay -> offset.animateTo(0f, settle)
+
+                    is PageSwipe.To -> {
+                        // 先滑到相邻页的位置，再换页 —— 换页时 offset 归零，
+                        // 两者在同一帧生效，视觉上就是一整张翻过去。
+                        offset.animateTo(
+                            PlayerSwipe.pageDelta(paneAtStart, result.target) * width,
+                            settle,
+                        )
+                        onSettle(result)
+                        offset.snapTo(0f)
+                    }
+
+                    is PageSwipe.Skip -> {
+                        // 越过这张 → 当前页滑出屏幕，切歌，新页（图片页）从反侧滑入。
+                        val outPx = if (result.dir == SwipeSwitch.NEXT) -width else width
+                        offset.animateTo(outPx, settle)
+                        onSettle(result)
+                        offset.snapTo(-outPx)
+                        offset.animateTo(
+                            0f,
+                            tween(PlayerSwipe.SkipSettleMs, easing = AppVisual.Motion.Ease),
+                        )
+                    }
+                }
             }
         },
-        onDragCancel = {
-            scope.launch {
-                offset.animateTo(
-                    0f,
-                    tween(PlayerSwipe.SettleMs, easing = AppVisual.Motion.Ease),
-                )
-            }
-        },
+        onDragCancel = { scope.launch { offset.animateTo(0f, settle) } },
     )
-}
-
-/**
- * 纵向切歌 · 边缘 overscroll 路径（歌词态 / 车机左列）。
- *
- * 子级滚得动时 available.y == 0，这里不累计；滚不动才认。
- */
-internal fun Modifier.playerVerticalSkipEdge(
-    onSwipe: (SwipeSwitch) -> Unit,
-): Modifier = composed {
-    val connection = remember(onSwipe) { VerticalSkipConnection(onSwipe) }
-    Modifier
-        .onSizeChanged { connection.updateAxisSize(it.height.toFloat()) }
-        .nestedScroll(connection)
-}
-
-/**
- * 纵向切歌 · 直接拖路径（封面态 / 无滚动子级）。
- *
- * 与 [playerVerticalSkipEdge] 不要叠在同一可滚动树上，否则边缘可能连跳两首。
- */
-internal fun Modifier.playerVerticalSkipDirect(
-    onSwipe: (SwipeSwitch) -> Unit,
-): Modifier = pointerInput(onSwipe) {
-    val tracker = VelocityTracker()
-    var accum = 0f
-    detectVerticalDragGestures(
-        onDragStart = {
-            accum = 0f
-            tracker.resetTracking()
-        },
-        onVerticalDrag = { change, dragAmount ->
-            accum += dragAmount
-            tracker.addPosition(change.uptimeMillis, change.position)
-            change.consume()
-        },
-        onDragEnd = {
-            val vy = tracker.calculateVelocity().y
-            val dir = PlayerSwipe.resolve(accum, size.height.toFloat(), vy)
-            if (dir != SwipeSwitch.NONE) onSwipe(dir)
-        },
-    )
-}
-
-/**
- * 歌词滚到顶/底后，把子级吃不掉的纵向 overscroll 收成切歌。
- */
-internal class VerticalSkipConnection(
-    private val onSwipe: (SwipeSwitch) -> Unit,
-) : NestedScrollConnection {
-    private var accum = 0f
-    private var axisPx = 0f
-
-    fun updateAxisSize(px: Float) {
-        axisPx = px
-    }
-
-    override fun onPostScroll(
-        consumed: Offset,
-        available: Offset,
-        source: NestedScrollSource,
-    ): Offset {
-        if (available.y == 0f) return Offset.Zero
-        accum += available.y
-        return Offset(0f, available.y)
-    }
-
-    override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-        val size = when {
-            axisPx > 0f -> axisPx
-            abs(accum) > 0f -> abs(accum) / PlayerSwipe.ThresholdRatio
-            else -> 0f
-        }
-        val dir = PlayerSwipe.resolve(accum, size, available.y)
-        accum = 0f
-        if (dir != SwipeSwitch.NONE) onSwipe(dir)
-        return Velocity.Zero
-    }
 }

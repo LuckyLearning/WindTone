@@ -111,7 +111,8 @@ internal fun PlayerPane(
             // v1.1.78 悬浮窗样式速选面板：套用预设 + 「更多设置」跳设置页
             onApplyOverlayPreset = playerVm::applyOverlayPreset,
             onOpenSettings = onOpenSettings,
-            onLyricsPaneVisible = playerVm::setLyricsPaneVisible,
+            onPlayerPane = playerVm::setPlayerPane,
+            loadSongFacts = playerVm::loadSongFacts,
             pane = onExportLyrics == null,
         )
     }

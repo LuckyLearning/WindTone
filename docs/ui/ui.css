@@ -925,3 +925,25 @@ body{
   -webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 40px),transparent 100%);
   mask-image:linear-gradient(180deg,#000 calc(100% - 40px),transparent 100%);
 }
+
+/* ---------------------------------------------------------------- v1.2.55 播放页三页 */
+/* 中部是三页横排（信息 / 图片 + 单行歌词 / 歌词），底部页码点表示当前页并可点跳页。 */
+.p-dots{position:absolute;left:50%;bottom:0;transform:translateX(-50%);display:flex;align-items:center}
+.p-dot{width:28px;height:28px;display:flex;align-items:center;justify-content:center}
+.p-dot i{width:6px;height:6px;border-radius:50%;background:var(--on-surface-variant);opacity:.32}
+.p-dot.on i{width:8px;height:8px;background:var(--primary);opacity:1}
+.cover-lyric{font-size:18px;font-weight:600;color:var(--on-bg);text-align:center;line-height:1.45;margin-top:18px;padding:0 12px}
+.cover-lyric.tr{font-size:13px;font-weight:400;color:var(--on-surface-variant);margin-top:6px}
+/* 歌曲信息页 */
+.p-info{display:flex;flex-direction:column;gap:10px;overflow:auto;padding:6px 4px;text-align:left}
+.p-info-head{display:flex;align-items:center;gap:12px;flex:none}
+.p-info-title{font-size:16px;font-weight:700;color:var(--on-bg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.p-info-sub{font-size:13px;color:var(--on-surface-variant);margin-top:2px}
+.p-info-group>h4{font-size:13px;font-weight:700;color:var(--primary);margin:0 0 4px 4px}
+.p-info-card{background:var(--c);border-radius:14px;padding:8px 12px}
+.p-info-row{display:flex;gap:8px;padding:4px 0;font-size:14px;line-height:1.45}
+.p-info-row>b{width:78px;flex:none;font-weight:400;color:var(--on-surface-variant);font-size:12.5px;line-height:1.55}
+.p-info-row>span{flex:1;min-width:0;color:var(--on-bg);word-break:break-all}
+.p-info-row>span.dim{color:var(--on-surface-variant);opacity:.55}
+.p-info-chips{display:flex;flex-wrap:wrap;gap:6px}
+.p-info-chip{background:var(--badge-lrc-bg);color:var(--primary);border-radius:999px;padding:5px 12px;font-size:14px}

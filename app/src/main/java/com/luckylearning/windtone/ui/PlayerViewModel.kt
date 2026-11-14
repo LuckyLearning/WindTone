@@ -5,13 +5,18 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.luckylearning.windtone.MusicApp
+import com.luckylearning.windtone.data.AudioInspector
+import com.luckylearning.windtone.data.SongFacts
 import com.luckylearning.windtone.data.ThemeMode
+import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.overlay.LyricOverlayBus
 import com.luckylearning.windtone.playback.PlayerActions
 import com.luckylearning.windtone.state.PlaybackProgress
 import com.luckylearning.windtone.state.PlayerUiState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 播放域 ViewModel：界面与 [com.luckylearning.windtone.playback.PlaybackEngine] 之间的那一层。
@@ -43,6 +48,39 @@ class PlayerViewModel(private val app: Application) :
 
     /** 桌面悬浮窗的运行状态：设置页据此显示「运行中 / 启动失败原因」 */
     val overlayHealth: StateFlow<LyricOverlayBus.Health> = container.playback.overlayHealth
+
+    /**
+     * 读取「歌曲信息」页需要的派生数据（歌单归属 / 播放统计 / 音频技术参数）。
+     *
+     * 只在信息页可见时调用一次。刻意做成挂起函数而不是状态流：
+     * 页内没有「数据实时变化」的诉求，进页拉一次、离页丢弃最简单，
+     * 也不会为了一个弹页把三张表全订阅起来。
+     */
+    suspend fun loadSongFacts(song: Song): SongFacts = withContext(Dispatchers.IO) {
+        val songId = song.dbId
+        val playlists = if (songId > 0L) {
+            container.db.playlistDao().playlistsContaining(songId).map { it.name }
+        } else {
+            emptyList()
+        }
+        val state = if (songId > 0L) container.db.songStateDao().bySongId(songId) else null
+        // genre / year / albumArtist / discNumber 不入 Room，扫描时写在 Prefs 侧缓存里；
+        // 从数据库直接构造的 Song 这几个字段是 null，这里盖回来一次，信息页才有完整标签。
+        val tagged = container.discNumbers.overlay(
+            container.albumArtists.overlay(container.genreYears.overlay(song))
+        )
+        SongFacts(
+            playlistNames = playlists,
+            playCount = state?.playCount ?: 0,
+            lastPlayedAt = state?.lastPlayedAt ?: 0L,
+            playedMs = state?.playedMs ?: 0L,
+            audio = AudioInspector.inspect(app, song),
+            genre = tagged.genre,
+            year = tagged.year,
+            albumArtist = tagged.albumArtist,
+            discNumber = tagged.discNumber,
+        )
+    }
 
     /** 把当前歌词导出成 LRC 文件（带翻译行的双语歌词会同时导出） */
     fun exportLyrics(target: Uri) {

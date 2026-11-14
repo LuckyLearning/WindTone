@@ -47,21 +47,12 @@ class PlayerLayoutSpecTest {
     }
 
     @Test
-    fun `切歌手势在两端方向一致 —— 上下滑全端切歌`() {
+    fun `手势不再按形态分叉 —— 三页翻页两端一致`() {
+        // 上下滑切歌已删除：纵向整根轴留给歌词滚动。这里断言的是「没有别的分叉残留」——
+        // 一旦有人把 HorizontalSwipe / VerticalSwipe 加回来，编译期就会先报错。
         UiFormFactor.entries.forEach { form ->
-            assertEquals(
-                "$form 上下滑应切歌",
-                VerticalSwipe.SKIP_TRACK,
-                spec(form).gesture.vertical,
-            )
+            assertTrue("$form 长按菜单仍开放", spec(form).gesture.longPressMenu)
         }
-    }
-
-    @Test
-    fun `左右滑：有第二面板时切面板，双栏同场时切歌`() {
-        assertEquals(HorizontalSwipe.SWITCH_PANE, spec(UiFormFactor.PHONE).gesture.horizontal)
-        assertEquals(HorizontalSwipe.SWITCH_PANE, spec(UiFormFactor.TABLET).gesture.horizontal)
-        assertEquals(HorizontalSwipe.SKIP_TRACK, spec(UiFormFactor.CAR).gesture.horizontal)
     }
 
     @Test

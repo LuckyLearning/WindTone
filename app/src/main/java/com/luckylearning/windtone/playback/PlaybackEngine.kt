@@ -22,6 +22,7 @@ import com.luckylearning.windtone.data.LocalLyricsMatch
 import com.luckylearning.windtone.data.LyricsLoader
 import com.luckylearning.windtone.data.MessageBus
 import com.luckylearning.windtone.data.OverlayPreset
+import com.luckylearning.windtone.data.PlayerPane
 import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.data.SettingsRepository
@@ -114,7 +115,7 @@ class PlaybackEngine(
             overlayHandleOrder = prefs.overlayHandleOrder,
             lyricTapSeeks = prefs.lyricTapSeeks,
             showA11yAction = prefs.playerA11yAction,
-            lyricsPaneVisible = prefs.lyricsPaneVisible,
+            playerPane = prefs.playerPane,
             carMode = prefs.carMode,
             lyricOverlay = prefs.lyricOverlay,
             lyricOverlayLines = prefs.lyricOverlayLines,
@@ -1543,10 +1544,13 @@ class PlaybackEngine(
     /** 导出用的原始歌词：带双语副行（v1.2.2 起显示也固定为中英都显示） */
     override fun lyricsForExport(): Lyrics = rawLyrics
 
-    /** 播放页展示歌词还是封面：落盘，下次进播放页保持这一状态 */
-    override fun setLyricsPaneVisible(visible: Boolean) {
-        prefs.lyricsPaneVisible = visible
-        _player.update { it.copy(lyricsPaneVisible = visible) }
+    /** 播放页停在第几页：落盘，下次进播放页保持这一状态 */
+    override fun setPlayerPane(pane: PlayerPane) {
+        // 相同值直接返回：切歌时**每次**都会把页面拨回图片页，若已在图片页就没必要
+        // 为一次没变化的值写两次存储（SharedPreferences + DataStore）。
+        if (_player.value.playerPane == pane.index) return
+        prefs.playerPane = pane.index
+        _player.update { it.copy(playerPane = pane.index) }
     }
 
     /**

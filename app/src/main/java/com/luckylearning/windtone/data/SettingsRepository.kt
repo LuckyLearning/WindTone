@@ -119,10 +119,9 @@ class SettingsRepository(val prefs: Prefs) {
         prefs.lyricTapSeeks = enabled
     }
 
-    /** @return 夹取到 0..2 后的值 */
-
-    fun setLyricsPaneVisible(visible: Boolean) {
-        prefs.lyricsPaneVisible = visible
+    /** 播放页中部页序号：0 信息 / 1 图片 / 2 歌词（v1.2.55）；越界夹回合法区间 */
+    fun setPlayerPane(pane: PlayerPane) {
+        prefs.playerPane = pane.index
     }
 
     fun setCarMode(enabled: Boolean) {

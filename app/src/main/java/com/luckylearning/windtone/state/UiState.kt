@@ -522,8 +522,8 @@ data class PlayerUiState(
      * ⚠️ 这里已经**过滤过**的 [lyrics] 才是正确显示源；原始歌词在引擎里另存一份，
      * 只给导出用。别在渲染处再按本字段过滤一遍。
      */
-    /** 播放页中部显示歌词（true）还是封面（false）；跨会话保留 */
-    val lyricsPaneVisible: Boolean = true,
+    /** 播放页中部当前页序号（0 信息 / 1 图片 / 2 歌词）；跨会话保留，见 [PlayerPane] */
+    val playerPane: Int = SettingsDefaults.PLAYER_PANE,
     /** 车载模式：启动直进播放页 + 播放页 5 秒无操作进入沉浸态 */
     val carMode: Boolean = false,
     /** 桌面悬浮歌词：退到桌面后仍在最上层显示当前歌词行 */
