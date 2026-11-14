@@ -200,6 +200,7 @@
     <string name="diag_no_target">没有可接收文件的应用，请改用「复制」。</string>
 
     <string name="overlay_no_lyrics">暂无歌词</string>
+    <string name="overlay_no_lyrics_hint">暂无歌词 · 在设置「歌词」页打开在线补词</string>
     <string name="overlay_fetching">正在获取歌词…</string>
     <string name="overlay_pinned_waiting">等待「%1$s」播放…</string>
 
@@ -259,7 +260,7 @@
     <string name="appearance_stroke_hint">给文字描一圈细边。背景偏亮时基本必开。</string>
     <string name="appearance_hide_empty_hint">取不到歌词时什么都不画；关掉则显示一行「暂无歌词」。</string>
     <string name="behavior_online_lyrics">在线补词</string>
-    <string name="behavior_online_lyrics_hint">本地通道全部取不到时，按歌名与歌手去在线歌词库找一份。这是歌词链路里唯一的联网出口。默认关闭。</string>
+    <string name="behavior_online_lyrics_hint">本地取不到时，按歌名与歌手去在线库找一份（只发歌名和歌手，不发别的内容）。取到一次就存到本机，同一首歌以后不再联网。默认开启。</string>
     <string name="position_handle_hint">左边缘的小把手，点一下收起或展开悬浮窗。</string>
     <string name="title_show">显示歌名与歌手</string>
     <string name="title_show_hint">「歌名 · 歌手」居中显示在歌词上方或下方。</string>

@@ -201,6 +201,7 @@ If that entry does not exist, it is fine: turn on “Start on boot” above and 
     <string name="diag_no_target">No app can receive the file. Use Copy instead.</string>
 
     <string name="overlay_no_lyrics">No lyrics</string>
+    <string name="overlay_no_lyrics_hint">No lyrics · turn on Online lyrics on the Lyrics tab</string>
     <string name="overlay_fetching">Getting lyrics…</string>
     <!-- Pinned player has no session: say who we are waiting for, not "no lyrics". -->
     <string name="overlay_pinned_waiting">Waiting for %1$s…</string>
@@ -262,7 +263,7 @@ If that entry does not exist, it is fine: turn on “Start on boot” above and 
     <string name="appearance_stroke_hint">Draw a thin outline around the text. Almost required on a bright background.</string>
     <string name="appearance_hide_empty_hint">Draw nothing when no lyrics are available. Off shows a small “No lyrics” note instead.</string>
     <string name="behavior_online_lyrics">Online lyrics fallback</string>
-    <string name="behavior_online_lyrics_hint">When every local channel misses, look the song up online by title and artist. This is the only path that lets the lyrics chain use the network. Off by default.</string>
+    <string name="behavior_online_lyrics_hint">When no local channel has the words, look them up by title and artist. Only those two fields are sent, and a match is stored on this device so the same song never goes online twice. On by default.</string>
     <string name="position_handle_hint">A small tab on the left edge. Tap it to collapse or expand the overlay.</string>
     <string name="title_show">Show song title</string>
     <string name="title_show_hint">“Song · Artist”, centered above or below the lyrics.</string>

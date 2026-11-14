@@ -30,6 +30,7 @@ import com.anylyric.diag.ResourceSampler
 import com.anylyric.lyrics.ExternalLyrics
 import com.anylyric.lyrics.LyricLine
 import com.anylyric.lyrics.LyricResult
+import com.anylyric.lyrics.LyricStore
 import com.anylyric.lyrics.LyricTick
 import com.anylyric.lyrics.LyricsSourceChain
 import com.anylyric.lyrics.TitleTimeline
@@ -124,8 +125,31 @@ class SessionHub private constructor(context: Context) {
     /** 在线补词的结果；只在本地通道全 miss 时使用。 */
     private var onlineLines: List<LyricLine> = emptyList()
 
-    /** 已经为本首歌发起过在线请求的键，避免每次刷新都重复请求。 */
-    private var onlineRequestedKey: String? = null
+    /**
+     * 当前正在取词的那首歌（[LyricStore.key]）。换歌时归零，见 [resetOnlineState]。
+     *
+     * 0.2.22 及以前用「请求过的键」做一次性去重：请求失败后这个键一直留着，
+     * 于是**同一首歌再也不会重试** —— 网络抖一下就整首没词，直到应用重启。
+     */
+    private var onlineKey: String? = null
+
+    /** 本首歌已经尝试过几次。到 [MAX_ONLINE_ATTEMPTS] 就停手，别把没词的歌变成轮询。 */
+    private var onlineAttempts = 0
+
+    /** 下一次允许重试的时刻（elapsedRealtime）。失败后按 [ONLINE_BACKOFF_MS] 退避。 */
+    private var onlineNextAtMs = 0L
+
+    private var onlineInFlight = false
+
+    /**
+     * 失败后的重试任务。
+     *
+     * 为什么必须自己安排重试：取词是异步的，失败本身不会产生任何新事件 ——
+     * 歌还在放、`render()` 不会自己再跑一次。没有这个任务，「失败」就等于「这首没词」。
+     */
+    private val onlineRetry = Runnable {
+        if (!onlineInFlight) requestRefresh("online_retry")
+    }
 
     /**
      * 无时间轴行集里「当前行」的锚点。-1 表示取最后一行（L1 缓冲的形态）。
@@ -312,6 +336,8 @@ class SessionHub private constructor(context: Context) {
 
     init {
         Probe.setEnabled(prefs.debugEnabled)
+        // 歌词磁盘缓存：取到过一次就永久可用，冷启动/重绑都不必重新联网。
+        OnlineLyricsFetcher.bind(appContext)
         if (prefs.debugEnabled) startResourceTicker()
         // 菜单关闭、隐藏到期、换了输出屏幕：都需要上层重新算一遍内容再决定是否重建窗口
         overlay.onRequestRender = { requestRefresh(REASON_UI) }
@@ -618,8 +644,7 @@ class SessionHub private constructor(context: Context) {
             externalLyrics = null
             stickyTitle = null
             stickyArtist = null
-            onlineLines = emptyList()
-            onlineRequestedKey = null
+            resetOnlineState()
             changed = true
         }
         val cleanArtist = artist?.trim()?.takeIf { it.isNotEmpty() }
@@ -812,9 +837,8 @@ class SessionHub private constructor(context: Context) {
         tickScheduled = false
         degraded = false
         detachController()
-        // 在线结果跟着服务生命周期释放；缓存本身有界（64 首），留着避免重绑后来回重抓。
-        onlineLines = emptyList()
-        onlineRequestedKey = null
+        // 在线结果跟着服务生命周期释放；磁盘缓存留着，重绑后不必重抓。
+        resetOnlineState()
         // BYD 外部源也一起清掉：服务销毁后它不再可信，重绑时会重新推。
         externalTitle = null
         externalArtist = null
@@ -928,7 +952,9 @@ class SessionHub private constructor(context: Context) {
         overlay.applyStyle()
         // 「无歌词时隐藏」这类策略属于渲染阶段判定，样式改完必须重算一次。
         // 没有会话时不重算：否则用户一改样式，屏上会凭空多出一个「暂无歌词」。
-        if (controller != null) render()
+        // 车机直连（externalOnly）没有 controller 但**有内容**，必须重算 ——
+        // 否则在设置页调字号、换主题，悬浮窗一点变化都没有。
+        if (controller != null || externalOnly) render()
     }
 
     /**
@@ -1029,8 +1055,12 @@ class SessionHub private constructor(context: Context) {
             if (Probe.enabled) {
                 Probe.write("歌词", "external-only lines=${lines.size} reason=$reason")
             }
-            if (lines.isEmpty()) maybeRequestOnline(title, lastArtist, externalDuration)
         }
+
+        // 取词请求放在「换歌判定」之外：失败重试走的是同一个刷新入口
+        // （requestRefresh("online_retry")），而那时歌名没变、上面的块根本不会进 ——
+        // 放在块里等于重试永远不生效。去重与退避都在 maybeRequestOnline 内部。
+        if (hitSource == null) maybeRequestOnline(title, lastArtist, externalDuration)
 
         publishSnapshot(null, lastTitle, externalDuration)
         render()
@@ -1260,8 +1290,7 @@ class SessionHub private constructor(context: Context) {
         if (displayTitle != lastTitle || displayArtist != lastArtist) {
             labelCache = null
             // 换歌：上一首的在线结果必须立刻作废，否则新歌开头几秒会闪出旧歌词。
-            onlineLines = emptyList()
-            onlineRequestedKey = null
+            resetOnlineState()
             hitSource = null
         }
         lastTitle = displayTitle
@@ -1570,7 +1599,13 @@ class SessionHub private constructor(context: Context) {
                     SystemClock.elapsedRealtime() - lastTitleChangeAt <= TITLE_WAIT_TIMEOUT_MS)
             push(
                 appContext.getString(
-                    if (waiting) R.string.overlay_fetching else R.string.overlay_no_lyrics
+                    when {
+                        waiting -> R.string.overlay_fetching
+                        // 有歌名却没有词，而唯一的词源（在线补词）是关着的：
+                        // 这时候只写「暂无歌词」，用户会以为不支持这首歌。
+                        !prefs.onlineLyrics -> R.string.overlay_no_lyrics_hint
+                        else -> R.string.overlay_no_lyrics
+                    }
                 ),
                 listOfNotNull(titleForOverlay()),
                 null,
@@ -1593,47 +1628,102 @@ class SessionHub private constructor(context: Context) {
     }
 
     /**
-     * 本地全 miss 且开关打开时，异步请求一次在线歌词。
+     * 本地全 miss 且开关打开时，异步取一次在线歌词（内存 → 磁盘 → 网络）。
      *
-     * 同一首歌只请求一次（[onlineRequestedKey] 去重）。结果在主线程回调，
-     * 回来后会重新核对「还是不是当前这首歌」——换歌后到达的旧结果直接丢弃。
-     * 如果期间本地通道已经命中，也不覆盖：本地歌词一定比在线匹配更准。
+     * 与旧实现的区别是**会重试**：每首歌最多 [MAX_ONLINE_ATTEMPTS] 次，失败按
+     * [ONLINE_BACKOFF_MS] 退避。原因是取词失败不会产生任何新事件，歌还在放、
+     * render 不会自己再跑；不主动安排重试，一次网络抖动就等于整首没词。
+     *
+     * 结果在主线程回调，回来后会重新核对「还是不是当前这首歌」——
+     * 换歌后到达的旧结果直接丢弃。期间本地通道已命中的也不覆盖：本地词更准。
      */
     private fun maybeRequestOnline(title: String?, artist: String?, durationMs: Long) {
         if (!prefs.onlineLyrics) return
         val cleanTitle = title?.trim().orEmpty()
         if (cleanTitle.isEmpty()) return
         val cleanArtist = artist?.trim().orEmpty()
-        val key = "$cleanTitle\u0000$cleanArtist"
-        if (key == onlineRequestedKey) return
-        onlineRequestedKey = key
-        if (Probe.enabled) Probe.write("歌词", "online request: $cleanTitle / $cleanArtist")
+        val key = LyricStore.key(cleanTitle, cleanArtist)
+        if (key.isBlank()) return
 
-        OnlineLyricsFetcher.request(cleanTitle, cleanArtist, durationMs) { lines ->
-            // 已在主线程回调
-            if (!prefs.onlineLyrics) return@request
-            if (lastTitle?.trim().orEmpty() != cleanTitle) return@request
-            if (lastArtist?.trim().orEmpty() != cleanArtist) return@request
-            if (hitSource != null) {
-                if (Probe.enabled) {
-                    Probe.write("歌词", "online result ignored (local hit=$hitSource)")
-                }
-                return@request
-            }
-            onlineLines = lines
-            setCurrentLines(lines, -1)
-            hitSource = ONLINE_SOURCE
-            render()
-            scheduleLineTick()
-            if (Probe.enabled) Probe.write("歌词", "online hit lines=${lines.size}")
+        if (key != onlineKey) {
+            onlineKey = key
+            onlineAttempts = 0
+            onlineNextAtMs = 0L
+            mainHandler.removeCallbacks(onlineRetry)
         }
+        if (onlineInFlight || onlineAttempts >= MAX_ONLINE_ATTEMPTS) return
+
+        val now = SystemClock.elapsedRealtime()
+        if (now < onlineNextAtMs) {
+            scheduleOnlineRetry(onlineNextAtMs - now)
+            return
+        }
+
+        onlineAttempts++
+        onlineInFlight = true
+        if (Probe.enabled) {
+            Probe.write("歌词", "online request #$onlineAttempts: $cleanTitle / $cleanArtist")
+        }
+
+        OnlineLyricsFetcher.request(
+            cleanTitle,
+            cleanArtist,
+            durationMs,
+            onResult = { lines ->
+                onlineInFlight = false
+                if (!prefs.onlineLyrics) return@request
+                if (!isCurrentSong(cleanTitle, cleanArtist)) return@request
+                if (hitSource != null) {
+                    if (Probe.enabled) {
+                        Probe.write("歌词", "online result ignored (local hit=$hitSource)")
+                    }
+                    return@request
+                }
+                onlineLines = lines
+                setCurrentLines(lines, -1)
+                hitSource = ONLINE_SOURCE
+                render()
+                scheduleLineTick()
+                if (Probe.enabled) Probe.write("歌词", "online hit lines=${lines.size}")
+            },
+            onMiss = {
+                onlineInFlight = false
+                if (!isCurrentSong(cleanTitle, cleanArtist)) return@request
+                val backoff = ONLINE_BACKOFF_MS[
+                    (onlineAttempts - 1).coerceIn(0, ONLINE_BACKOFF_MS.lastIndex)
+                ]
+                onlineNextAtMs = SystemClock.elapsedRealtime() + backoff
+                scheduleOnlineRetry(backoff)
+                if (Probe.enabled) {
+                    Probe.write("歌词", "online miss #$onlineAttempts, retry in ${backoff}ms")
+                }
+            }
+        )
+    }
+
+    /** 回调到达时这首歌还是屏上那首吗。以**展示用**歌名/歌手为准。 */
+    private fun isCurrentSong(title: String, artist: String): Boolean =
+        lastTitle?.trim().orEmpty() == title && lastArtist?.trim().orEmpty() == artist
+
+    private fun scheduleOnlineRetry(delayMs: Long) {
+        mainHandler.removeCallbacks(onlineRetry)
+        mainHandler.postDelayed(onlineRetry, delayMs.coerceAtLeast(1_000L))
+    }
+
+    /** 换歌 / 服务回收：取词状态全部归零，连排队中的重试一起撤销。 */
+    private fun resetOnlineState() {
+        onlineLines = emptyList()
+        onlineKey = null
+        onlineAttempts = 0
+        onlineNextAtMs = 0L
+        onlineInFlight = false
+        mainHandler.removeCallbacks(onlineRetry)
     }
 
     /** 设置页切换在线补词时调用：关掉要立刻释放缓存与已显示的结果。 */
     fun onOnlineLyricsChanged() {
         if (!prefs.onlineLyrics) {
-            onlineLines = emptyList()
-            onlineRequestedKey = null
+            resetOnlineState()
             OnlineLyricsFetcher.clear()
             hitSource = null
         }
@@ -2069,6 +2159,17 @@ class SessionHub private constructor(context: Context) {
 
         /** 在线补词的来源标识（进探测报告与状态卡）。 */
         private const val ONLINE_SOURCE = "ONLINE"
+
+        /**
+         * 同一首歌最多取几次在线歌词。
+         *
+         * 4 次够跨过「地库没信号 → 出地库恢复」这类短暂断网；再多就变成对没有词的歌
+         * 反复发请求，既费流量也让「没找到」这件事拖很久才显示。
+         */
+        private const val MAX_ONLINE_ATTEMPTS = 4
+
+        /** 失败后的退避，按尝试次数取；数组比算法更容易照着实测调。 */
+        private val ONLINE_BACKOFF_MS = longArrayOf(6_000L, 15_000L, 30_000L, 60_000L)
 
         /** 车机直连通道（BYD 媒体中心 SDK）的来源标识；不需要通知使用权。 */
         private const val EXTERNAL_SOURCE = "BYD"

@@ -59,6 +59,37 @@ object LrcParser {
     }
 
     /**
+     * 把行表重新写成 LRC 文本（只保留时间轴，丢掉 `[ti:]` 之类的标签）。
+     *
+     * 用途只有一个：在线取到的结果要落盘缓存，下次冷启动直接读，不再联网。
+     * 只存 `timeMs` + 文本就够 —— 我们本来就只支持逐行精度，字级标签解析时已经剥掉。
+     */
+    fun build(lines: List<LyricLine>): String {
+        if (lines.isEmpty()) return ""
+        val sb = StringBuilder(lines.size * 24)
+        for (line in lines) {
+            val time = line.timeMs
+            if (time != null) {
+                val total = time.coerceAtLeast(0L)
+                val minutes = total / 60_000L
+                val seconds = (total % 60_000L) / 1_000L
+                val millis = total % 1_000L
+                sb.append('[')
+                if (minutes < 10) sb.append('0')
+                sb.append(minutes).append(':')
+                if (seconds < 10) sb.append('0')
+                sb.append(seconds).append('.')
+                if (millis < 100) sb.append('0')
+                if (millis < 10) sb.append('0')
+                sb.append(millis)
+                sb.append(']')
+            }
+            sb.append(line.text).append('\n')
+        }
+        return sb.toString()
+    }
+
+    /**
      * 内容特征判定：是否像一段带时间轴的歌词。
      * 用于 L0 / L2 在没有明确键名时做兜底识别，必须配合「解析出 >= 2 行」再采纳。
      */

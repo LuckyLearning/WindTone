@@ -2,6 +2,7 @@ package com.anylyric.lyrics.online
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Base64
 
@@ -58,5 +59,55 @@ class OnlineLyricsParserTest {
         assertNull(OnlineLyricsParser.kugouContent("""{"content":""}"""))
         assertNull(OnlineLyricsParser.neteaseSongId("""{"result":{}}"""))
         assertNull(OnlineLyricsParser.neteaseLyric("""{}"""))
+    }
+
+    /**
+     * 候选列表：0.2.22 及以前只取第一条，结果经常是翻唱 / 剪辑版。
+     * 现在把整页都交给打分器，所以字段必须抠全（歌名、歌手、时长）。
+     */
+    @Test
+    fun `kugou songs returns every candidate with fields`() {
+        val json = """{"data":{"info":[
+            {"hash":"A","songname":"晴天","singername":"周杰伦","duration":269},
+            {"hash":"B","songname":"晴天 (Live)","singername":"某歌手","duration":300}
+        ]}}"""
+        val songs = OnlineLyricsParser.kugouSongs(json)
+        assertEquals(2, songs.size)
+        assertEquals("晴天", songs[0].title)
+        assertEquals("周杰伦", songs[0].artist)
+        assertEquals(269L, songs[0].durationSec)
+    }
+
+    @Test
+    fun `kugou lyric candidates convert duration from milliseconds`() {
+        val json = """{"candidates":[
+            {"id":"1","accesskey":"K","song":"稻香","singer":"周杰伦","duration":269000}
+        ]}"""
+        val list = OnlineLyricsParser.kugouLyricCandidates(json)
+        assertEquals(1, list.size)
+        assertEquals("K", list[0].accessKey)
+        assertEquals(269L, list[0].durationSec)
+    }
+
+    @Test
+    fun `netease songs join artists and convert duration`() {
+        val json = """{"result":{"songs":[
+            {"id":1,"name":"稻香","duration":269500,
+             "artists":[{"name":"周杰伦"}]},
+            {"id":2,"name":"合唱","duration":200000,
+             "artists":[{"name":"甲"},{"name":"乙"}]}
+        ]}}"""
+        val songs = OnlineLyricsParser.neteaseSongs(json)
+        assertEquals(2, songs.size)
+        assertEquals("周杰伦", songs[0].artist)
+        assertEquals(269L, songs[0].durationSec)
+        assertEquals("甲/乙", songs[1].artist)
+    }
+
+    @Test
+    fun `candidate lists are empty for malformed payloads`() {
+        assertTrue(OnlineLyricsParser.kugouSongs("not json").isEmpty())
+        assertTrue(OnlineLyricsParser.kugouLyricCandidates("""{}""").isEmpty())
+        assertTrue(OnlineLyricsParser.neteaseSongs("""{"result":{}}""").isEmpty())
     }
 }

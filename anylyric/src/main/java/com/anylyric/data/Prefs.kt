@@ -165,7 +165,9 @@ class Prefs(context: Context) {
      * 歌词链路因此会联网 —— 这是用户显式打开才生效的可选能力，默认零联网。
      */
     var onlineLyrics: Boolean
-        get() = sp.getBoolean(KEY_ONLINE_LYRICS, false)
+        // 默认开启（0.2.23）：车机上多数播放器根本不把歌词写进通知 / 会话，
+        // 在线补词是唯一能出词的路。只发歌名与歌手，且取到一次就落盘，可随时关。
+        get() = sp.getBoolean(KEY_ONLINE_LYRICS, true)
         set(value) = sp.edit().putBoolean(KEY_ONLINE_LYRICS, value).apply()
 
     /** 最近一次「确认服务活着」的心跳时间，供看门狗判断是否掉线。 */

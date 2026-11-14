@@ -13,6 +13,8 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.Parcel
 import android.util.Log
+import com.anylyric.diag.Probe
+import com.anylyric.lyrics.ExternalLyrics
 import com.anylyric.session.SessionHub
 
 /**
@@ -234,17 +236,47 @@ object BydMediaController {
         )
         val album = firstText(bundle, "android.media.metadata.ALBUM", "album")
         val duration = firstLong(bundle, "android.media.metadata.DURATION", "duration")
-        val lyrics = firstText(
+        val known = firstText(
             bundle,
             "com.byd.mediacenter.metadata.LYRICS",
             "android.media.metadata.LYRICS",
             "lyrics"
         )
+        // 键名对不上时按**内容形状**再找一遍：不同 DiLink 版本给这个字段起的名字不一样，
+        // 猜键名是会过期的手法，认「像不像歌词」不会。
+        val lyrics = known ?: scanLyrics(bundle)
+        if (Probe.enabled) {
+            Probe.write(
+                "BYD",
+                "meta keys=${bundle.keySet().joinToString(",")} " +
+                    "lyrics=${lyrics?.length ?: 0}${if (known == null && lyrics != null) "(scan)" else ""}"
+            )
+        }
         val ctx = appContext ?: return
         metadataCount++
         // 状态一起递过去：无通知使用权时，SessionHub 靠它外推动画/行推进。
         val state = lastState
         main.post { SessionHub.get(ctx).onBydMetadata(title, artist, album, duration, lyrics, state) }
+    }
+
+    /**
+     * 在整包里找「最像歌词」的那个字符串字段。
+     *
+     * 只认 CharSequence / String，其它类型（Bitmap、int、数组）看都不看；
+     * 多个候选时取最长的那份 —— 歌词一定比标题、歌手、专辑名长。
+     */
+    private fun scanLyrics(bundle: Bundle): String? {
+        var best: String? = null
+        for (key in bundle.keySet()) {
+            val text = when (val value = bundle.get(key)) {
+                is CharSequence -> value.toString()
+                else -> continue
+            }
+            if (text.length < 16) continue
+            if (!ExternalLyrics.looksLikeLyrics(text)) continue
+            if (best == null || text.length > best.length) best = text
+        }
+        return best
     }
 
     // Bundle.get 在新 SDK 被标弃用（类型不安全）；这里正是要按实际类型兼容 Number/String。

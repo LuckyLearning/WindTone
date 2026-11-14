@@ -1,6 +1,7 @@
 package com.anylyric.lyrics
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -64,5 +65,25 @@ class ExternalLyricsTest {
         val lines = ExternalLyrics.parse("[00:01.00]A\n\n[00:05.00]B")
         assertEquals(2, lines.size)
         assertEquals("B", lines[1].text)
+    }
+
+    /**
+     * 键名未知时的兜底识别：宁可漏（判不像），也不能把专辑简介当歌词画到屏上。
+     */
+    @Test
+    fun looksLikeLyricsAcceptsTimedLrc() {
+        assertTrue(ExternalLyrics.looksLikeLyrics("[00:01.00]A\n[00:05.00]B"))
+    }
+
+    @Test
+    fun looksLikeLyricsRequiresEnoughPlainLines() {
+        assertFalse(ExternalLyrics.looksLikeLyrics("第一行\n第二行"))
+        assertTrue(ExternalLyrics.looksLikeLyrics("一\n二\n三\n四"))
+    }
+
+    @Test
+    fun looksLikeLyricsRejectsLongParagraph() {
+        val paragraph = "这是一段很长的专辑介绍文字，".repeat(6) + "\n第二行"
+        assertFalse(ExternalLyrics.looksLikeLyrics(paragraph))
     }
 }

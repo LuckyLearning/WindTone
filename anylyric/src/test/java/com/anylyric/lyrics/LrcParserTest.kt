@@ -81,4 +81,25 @@ class LrcParserTest {
         assertTrue(LrcParser.parse("").isEmpty())
         assertTrue(LrcParser.parse("没有时间轴的纯文本").isEmpty())
     }
+
+    /** 落盘缓存的序列化：只保留时间轴 + 文本，读回来必须与原来等价。 */
+    @Test
+    fun buildWritesTimedLrcThatParsesBack() {
+        val lines = listOf(
+            LyricLine(0L, "第一句"),
+            LyricLine(61_050L, "第二句"),
+            LyricLine(null, "没有时间轴的行")
+        )
+        val text = LrcParser.build(lines)
+        assertEquals("[00:00.000]第一句\n[01:01.050]第二句\n没有时间轴的行\n", text)
+        val back = LrcParser.parse(text)
+        assertEquals(2, back.size)
+        assertEquals(61_050L, back[1].timeMs)
+        assertEquals("第二句", back[1].text)
+    }
+
+    @Test
+    fun buildReturnsEmptyForEmptyInput() {
+        assertEquals("", LrcParser.build(emptyList()))
+    }
 }

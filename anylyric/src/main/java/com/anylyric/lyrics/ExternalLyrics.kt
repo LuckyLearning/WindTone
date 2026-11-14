@@ -42,4 +42,30 @@ object ExternalLyrics {
         if (parts.size < MIN_PLAIN_LINES) return emptyList()
         return parts.map { LyricLine(null, it) }
     }
+
+    /**
+     * 「这段文本像不像歌词」——给**不知道键名**的兜底通道用。
+     *
+     * 车厂 SDK 把歌词塞在哪个键里没有公开约定（不同 DiLink 版本还不一样），
+     * 与其猜键名，不如按内容形状认：带时间轴的行集，或每行都不长的多行文本。
+     *
+     * @param minLines 纯文本形态至少几行才算。扫描整包时要更严（默认 4 行）：
+     *   专辑简介、榜单文案也常是多行短句，2 行就认会把它们当歌词画到屏上。
+     */
+    fun looksLikeLyrics(raw: String?, minLines: Int = 4): Boolean {
+        if (raw.isNullOrBlank()) return false
+        val text = raw.trim()
+        if (text.isEmpty()) return false
+        if (LrcParser.looksLikeLrc(text)) return parse(text).size >= 2
+        var lines = 0
+        for (line in text.split('\n')) {
+            val trimmed = line.trim()
+            if (trimmed.isEmpty()) continue
+            // 歌词行不会太长；长句多半是简介或 URL。
+            if (trimmed.length > 80) return false
+            lines++
+            if (lines >= minLines) return true
+        }
+        return false
+    }
 }
