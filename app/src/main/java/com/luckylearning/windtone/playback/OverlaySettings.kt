@@ -432,6 +432,98 @@ class OverlaySettings(
     override fun materialYouEnabled(): Boolean = prefs.materialYou
 
     /**
+     * 把「当前主题那一套」悬浮窗外观重读进界面状态（v1.2.52）。
+     *
+     * 悬浮窗外观分白天 / 夜间两套（见 `data/OverlayStylePrefs`），主题一换就等于
+     * 换了一整组参数。不重读的话，设置页上那些滑块还停在**上一套**的位置：
+     * 界面已经是深色、字号却显示白天的 40sp，用户一拖滑块，写进去的又是夜间那套 ——
+     * 看起来像「设置页的数字和桌面上的字不一样」。
+     *
+     * 三条自我约束：
+     *  1. **只读状态、不写盘**：切主题不该产生任何落盘副作用（尤其是别把夜间那套
+     *     顺手写进白天键）；
+     *  2. **不动 [OverlayPresetTracker]**：它记的是「上次套用预设时的参数」，
+     *     用来判断「已修改 / 可恢复」，与「当前看的是哪套」无关；
+     *  3. **不叫醒悬浮窗**：由调用方统一 bump（换主题时服务还要整窗重绘一次，
+     *     两件事分别做，失败时更容易定位是哪一环没跑）。
+     */
+    internal fun reloadOverlayStyle() {
+        state.update {
+            it.copy(
+                lyricOverlayLines = prefs.lyricOverlayLines,
+                lyricOverlayShowTitle = prefs.lyricOverlayShowTitle,
+                lyricOverlayTextSp = prefs.lyricOverlayTextSp,
+                lyricOverlayTitlePercent = prefs.lyricOverlayTitlePercent,
+                lyricOverlayTitleMode = prefs.lyricOverlayTitleMode,
+                lyricOverlayPauseMode = prefs.lyricOverlayPauseMode,
+                lyricOverlayAlign = prefs.lyricOverlayAlign,
+                lyricOverlayTextColor = prefs.lyricOverlayTextColor,
+                lyricOverlayCurrentColor = prefs.lyricOverlayCurrentColor,
+                lyricOverlayDimPercent = prefs.lyricOverlayDimPercent,
+                lyricOverlayLineSpacingDp = prefs.lyricOverlayLineSpacingDp,
+                lyricOverlayFadeMs = prefs.lyricOverlayFadeMs,
+                lyricOverlayBgColor = prefs.lyricOverlayBgColor,
+                lyricOverlayBgAlphaPercent = prefs.lyricOverlayBgAlphaPercent,
+                lyricOverlayCornerRadiusDp = prefs.lyricOverlayCornerRadiusDp,
+                lyricOverlayBorderWidthDp = prefs.lyricOverlayBorderWidthDp,
+                lyricOverlayBorderColor = prefs.lyricOverlayBorderColor,
+                lyricOverlayStrokeWidthDp = prefs.lyricOverlayStrokeWidthDp,
+                lyricOverlayStrokeColor = prefs.lyricOverlayStrokeColor,
+                lyricOverlayWidthPercent = prefs.lyricOverlayWidthPercent,
+                lyricOverlayBoxHeightPercent = prefs.lyricOverlayBoxHeightPercent,
+                lyricOverlayXPercent = prefs.lyricOverlayXPercent,
+                lyricOverlayYPercent = prefs.lyricOverlayYPercent,
+                lyricOverlayFullWidthPercent = prefs.lyricOverlayFullWidthPercent,
+                lyricOverlayFullHeightPercent = prefs.lyricOverlayFullHeightPercent,
+                lyricOverlayFullOffsetPercent = prefs.lyricOverlayFullOffsetPercent,
+                lyricOverlayFullYPercent = prefs.lyricOverlayFullYPercent,
+            )
+        }
+    }
+
+    // ------------------------------------------------ 输出屏幕与双套外观（v1.2.52）
+
+    /**
+     * 换输出屏幕。
+     *
+     * 只落盘 + 叫醒服务：**换屏是整窗重建**（`WindowManager` 绑在 Display 上），
+     * 服务下一帧发现「挂着的屏」与设置不一致，就会自己摘窗、换 WM、重挂
+     * （见 `LyricOverlayService.rebuildWindowsForDisplay`）。这里不去直接操作窗口，
+     * 免得两处同时对同一个窗口增删，出现「明明挂了却看不见」。
+     *
+     * 顺手起一次前台预览：换屏后用户最需要的就是「看一眼到底跑哪去了」。
+     */
+    override fun setLyricOverlayDisplayId(displayId: Int) {
+        prefs.lyricOverlayDisplayId = displayId
+        previewOverlayAfterConfigChange()
+    }
+
+    /**
+     * 白天那套复制到夜间。
+     *
+     * 复制完**当前生效的那套值并没有变**（夜间原来继承白天，复制后拿到同样的值），
+     * 所以这里只需要提示一下服务下次按夜间那套算，并把界面状态重读一遍 ——
+     * 重读是为了让「夜间样式恢复跟随白天」这个入口立刻出现（它按 hasOwnDark 显隐）。
+     */
+    override fun copyOverlayStyleToDark() {
+        prefs.copyOverlayStyleToDark()
+        reloadOverlayStyle()
+        LyricOverlayBridge.bumpAppearance()
+    }
+
+    /**
+     * 夜间那套恢复跟随白天。
+     *
+     * 这一下**会真切改变观感**（夜间自有值被丢掉、回到白天的值），所以必须
+     * 重读状态 + 重绘 + 预览三件套一起做，否则用户点完在设置页里看不到任何变化。
+     */
+    override fun clearOverlayDarkStyle() {
+        prefs.clearOverlayDarkStyle()
+        reloadOverlayStyle()
+        previewOverlayAfterConfigChange()
+    }
+
+    /**
      * 外观 / 排版配置改完的统一收尾：通知服务重绘 + 给一次前台预览。
      * 用户改完字号 / 底板 / 行数能**当场**看到效果，不用退到桌面验证。
      */

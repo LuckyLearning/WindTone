@@ -6,6 +6,8 @@ import com.luckylearning.windtone.data.StorageHotplugPolicy
 import com.luckylearning.windtone.ui.AppStrings
 import com.luckylearning.windtone.R
 import android.app.Application
+import android.content.ComponentCallbacks
+import android.content.res.Configuration
 import android.os.SystemClock
 import android.util.Log
 import androidx.media3.common.MediaItem
@@ -337,8 +339,19 @@ class PlaybackEngine(
     /** 上一次规划后台预取的时间（ticker 每 200ms 走一次，靠它节流到 3 秒） */
     private var lastPrefetchPlanAt = 0L
 
+    /**
+     * 上一次应用到悬浮窗的「是不是夜间那套」（v1.2.52）。
+     *
+     * 只用来判断「系统明暗这次变了没有」。不能每次配置变更都重读 + bump ——
+     * 车机上转屏、语言、字体缩放都会触发 `onConfigurationChanged`，
+     * 每次重读外观会让悬浮窗在无关变更时也闪一下。
+     */
+    private var lastOverlayStyleDark = false
+
     init {
         AudioFx.init(app)
+        // 悬浮窗外观分白天 / 夜间两套（v1.2.52）：系统到点换深色，就要换另一套
+        registerOverlayThemeWatcher()
         SceneMode.init(prefs)
         SceneMode.setHooks(
             SceneMode.Hooks(
@@ -1537,6 +1550,46 @@ class PlaybackEngine(
         // 流里必须是已经写进去的那个值，避免「画的是新主题、读回来是旧值」。
         settings.setThemeMode(mode)
         _themeMode.value = mode
+        // 悬浮窗外观分白天 / 夜间两套（v1.2.52）：换主题等于换一整组外观参数。
+        // 手动切档（而不是等下次 onConfigurationChanged）是必须的 —— 系统明暗没变，
+        // 那条回调根本不会来；而用户点「深色」的这一刻悬浮窗就该变成夜间那套。
+        lastOverlayStyleDark = prefs.overlayStyleIsDark()
+        overlaySettings.reloadOverlayStyle()
+        LyricOverlayBridge.bumpAppearance()
+    }
+
+    /**
+     * 盯住系统明暗（v1.2.52）：外观分两套后，「跟随系统」的语义才真正成立。
+     *
+     * 为什么挂在**引擎**上而不是 Activity：
+     *  - 悬浮窗是独立进程级的长寿服务，App 退到后台时界面早没了，但系统到点换深色
+     *    照样得换那套参数 —— 只有进程级、且与界面生命周期无关的监听才兜得住；
+     *  - `MainActivity` 声明了 `configChanges="uiMode"`，系统明暗变化**不会**重建 Activity，
+     *    所以也别指望走「重建 → 重新读一次 Prefs」这条路。
+     *
+     * ⚠️ 必须读 `newConfig`：`onConfigurationChanged` 早于 `Resources` 更新，
+     * 这时候读 `app.resources.configuration.uiMode` 拿到的还是**旧值**，
+     * 判「变了没有」永远为 false，表现为「系统切了深色，悬浮窗还是白天的样子」。
+     * 所以把 newConfig 里的 uiMode **显式喂给 Prefs**（`setOverlayUiMode`），
+     * 让「该用哪套」只认这一份权威值，不再从 Resources 里猜。
+     * （AnyLyric 那边踩过同一个坑，两边刻意保持同一口径。）
+     */
+    private fun registerOverlayThemeWatcher() {
+        lastOverlayStyleDark = prefs.overlayStyleIsDark()
+        app.registerComponentCallbacks(
+            object : ComponentCallbacks {
+                override fun onConfigurationChanged(newConfig: Configuration) {
+                    prefs.setOverlayUiMode(newConfig.uiMode)
+                    val dark = prefs.overlayStyleIsDark()
+                    if (dark == lastOverlayStyleDark) return
+                    lastOverlayStyleDark = dark
+                    overlaySettings.reloadOverlayStyle()
+                    LyricOverlayBridge.bumpAppearance()
+                }
+
+                override fun onLowMemory() = Unit
+            },
+        )
     }
 
     override fun setCarMode(enabled: Boolean) {
@@ -1662,6 +1715,14 @@ class PlaybackEngine(
 
     override fun applyOverlayPreset(preset: OverlayPreset) =
         overlaySettings.applyOverlayPreset(preset)
+
+    // v1.2.52：输出屏幕与白天 / 夜间两套外观
+    override fun setLyricOverlayDisplayId(displayId: Int) =
+        overlaySettings.setLyricOverlayDisplayId(displayId)
+
+    override fun copyOverlayStyleToDark() = overlaySettings.copyOverlayStyleToDark()
+
+    override fun clearOverlayDarkStyle() = overlaySettings.clearOverlayDarkStyle()
 
     // v1.1.48：自定义尺寸 / 位置 / 背景
     override fun setLyricOverlayBoxHeightPercent(percent: Int) =

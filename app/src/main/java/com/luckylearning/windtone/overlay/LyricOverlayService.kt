@@ -11,6 +11,7 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
@@ -94,6 +95,33 @@ import com.luckylearning.windtone.ui.AppStrings
 class LyricOverlayService : Service(), OverlayStateBinder.Host {
 
     private var windowManager: WindowManager? = null
+
+    // ------------------------------------------------ 多屏输出（v1.2.52）
+    //
+    // 车机上常见「中控 + 副驾 / 头枕屏」，用户要把歌词放到另一块屏上。
+    // 关键事实：**WindowManager 绑定在 Display 上**，窗口加到哪个 WM 就在哪块屏显示；
+    // 换屏不能改 params，只能把窗口摘下来、换 WM、重新 addView（见 rebuildWindowsForDisplay）。
+
+    /** 当前窗口挂在哪块屏上（`Display.getDisplayId()`，0 = 主屏） */
+    private var attachedDisplayId = 0
+
+    /** 目标屏的密度：副屏可能与主屏不同（1080p 中控 + 720p 头枕），dp 必须按它换算 */
+    private var displayDensity = 0f
+
+    /** 目标屏的像素尺寸；0 = 还没解析出来，此时退回 WindowMetrics / displayMetrics */
+    private var displayWidthPx = 0
+    private var displayHeightPx = 0
+
+    /** 屏幕热插拔监听（拔掉正在用的副屏 / 副屏分辨率变化） */
+    private var displayListener: DisplayManager.DisplayListener? = null
+
+    /**
+     * 上一次应用的悬浮窗外观属于白天还是夜间（v1.2.52）。
+     *
+     * `null` = 还没应用过。用来在系统明暗变化时判断「要不要重绘」——
+     * 外观每帧都要对账，但明暗切换只在 `onConfigurationChanged` 里发生一次。
+     */
+    private var appliedStyleDark: Boolean? = null
 
     /** 外层容器：拖动时整体移动，虚线边框画在它身上 */
     override var container: FrameLayout? = null
@@ -270,7 +298,8 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         super.onCreate()
         serviceAlive = true
         startForeground(OverlayNotification.ID, OverlayNotification.build(this))
-        windowManager = getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+        windowManager = resolveOverlayWindowManager()
+        registerDisplayListener()
         // 灭屏 / 亮屏：只在代码里注册才收得到（清单注册 Android 不会派发）
         runCatching {
             val filter = IntentFilter().apply {
@@ -326,6 +355,16 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        // 悬浮窗外观分白天 / 夜间两套（v1.2.52）：系统明暗一变就要换另一套。
+        // 用 `newConfig.uiMode` 判，别读 resources —— 回调早于 Resources 更新，
+        // 读 resources 拿到的还是旧值（详见 Prefs.setOverlayUiMode）。
+        val prefs = Prefs(this)
+        prefs.setOverlayUiMode(newConfig.uiMode)
+        val nowDark = prefs.overlayStyleIsDark()
+        if (appliedStyleDark != null && appliedStyleDark != nowDark) {
+            appliedStyleDark = nowDark
+            LyricOverlayBridge.bumpAppearance()
+        }
         // 横竖屏切换后屏幕宽度变了，已存的绝对坐标可能落到屏幕外，
         // 直接按新尺寸重新夹取一次最省事。拖动中不打扰——那会把窗口弹回旧坐标。
         // 全屏模式没有坐标可夹，但**尺寸要跟着新屏幕重算**，否则竖屏时窗口还是横屏的高。
@@ -346,6 +385,13 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         foregroundJob?.cancel()
         pauseHandleJob?.cancel()
         stopA11yWatch()
+        displayListener?.let { l ->
+            runCatching {
+                (getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager)
+                    ?.unregisterDisplayListener(l)
+            }
+        }
+        displayListener = null
         runCatching { unregisterReceiver(screenReceiver) }
         scope.cancel()
         detachWindow()
@@ -357,7 +403,138 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
 
     // ------------------------------------------------------------------ 窗口
 
+    /**
+     * 按设置解析「窗口该挂到哪块屏」，并顺手记下那块屏的密度与尺寸（v1.2.52）。
+     *
+     * 为什么返回一个 `WindowManager` 而不是直接 `addView`：本服务里所有挂窗 / 摘窗
+     * 都走 `windowManager` 字段，换屏只要把这个字段换掉，其余代码一行不用改。
+     *
+     * 三种落空情况都**回落到主屏**，绝不留在「既没挂上也没回落」的中间态：
+     *  1. 设置里存的是主屏 → 直接用系统 WM，连 DisplayManager 都不用问；
+     *  2. 那块屏已经不在了（副屏拔掉 / 车机重启后 displayId 变了）→ 写回 0；
+     *  3. `createDisplayContext` 抛异常（部分 ROM 限制）→ 写回 0。
+     *
+     * 第 2、3 种必须**写回设置**，否则每次挂窗都必然失败一次，而用户在设置页看到的是
+     * 「输出屏幕：副屏」「开关：已开启」，桌面却什么都没有 —— 只能靠猜。
+     */
+    private fun resolveOverlayWindowManager(): WindowManager? {
+        val base = getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+        attachedDisplayId = 0
+        displayDensity = 0f
+        displayWidthPx = 0
+        displayHeightPx = 0
+        val wanted = runCatching { Prefs(this).lyricOverlayDisplayId }
+            .getOrDefault(SettingsDefaults.OVERLAY_DISPLAY_ID)
+        if (wanted == SettingsDefaults.OVERLAY_DISPLAY_ID) return base
+        val manager = getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+        val display = manager?.getDisplay(wanted)
+        val ctx = display?.let { runCatching { createDisplayContext(it) }.getOrNull() }
+        val metrics = ctx?.resources?.displayMetrics
+        if (display == null || ctx == null || metrics == null) {
+            runCatching { Prefs(this).lyricOverlayDisplayId = SettingsDefaults.OVERLAY_DISPLAY_ID }
+            return base
+        }
+        attachedDisplayId = display.displayId
+        displayDensity = metrics.density
+        displayWidthPx = metrics.widthPixels
+        displayHeightPx = metrics.heightPixels
+        return (ctx.getSystemService(Context.WINDOW_SERVICE) as? WindowManager) ?: base
+    }
+
+    /**
+     * 换屏：**整窗重建**。
+     *
+     * 不能只改 `layoutParams` —— `WindowManager` 是「某块屏的窗口管理器」，
+     * 已挂上的 View 属于旧屏那个 WM；对着新 WM `updateViewLayout` 一个不属于它的 View
+     * 会抛 `IllegalArgumentException`（被 `runCatching` 吃掉后表现成「点了没反应」）。
+     *
+     * 重建时必须把「已应用快照」全部作废，否则下一帧 `applyAppearance` 会认为
+     * 「宽度 / 位置 / 掩码都没变」，什么都不做 —— 窗口确实挂上了，但停在默认尺寸。
+     * 侧钮那对掩码尤其要清：不清的话，换屏后 `syncHandlesVisibility` 判定
+     * 「该显示的没变」，三颗钮从此再也不出现。
+     */
+    private fun rebuildWindowsForDisplay() {
+        detachHandles()
+        detachWindow()
+        appliedHandleMask = -1
+        appliedHandleOrder = ""
+        windowManager = resolveOverlayWindowManager()
+        appliedTextSp = -1
+        appliedLines = -1
+        appliedTitlePercent = -1
+        appliedBgAlpha = -1
+        appliedPauseMode = -1
+        appliedAlign = -1
+        appliedWidthPercent = -1
+        appliedBoxHeightPercent = -1
+        appliedFullHeightPercent = -1
+        appliedFullYPercent = -1
+        appliedXPct = -1
+        appliedYPct = -1
+        appliedBgKey = Int.MIN_VALUE
+        appliedLegibility = Int.MIN_VALUE
+        appliedStrokeKey = Int.MIN_VALUE
+        appliedLineSpacingDp = -1
+        appliedFullHeight = -1
+        appliedFullWidthPercent = -1
+        appliedFullOffsetPercent = -1
+        appliedTextColor = COLOR_NOT_APPLIED
+        appliedStyleDark = null
+        if (Prefs(this).lyricOverlay) attachWindow()
+        LyricOverlayBridge.bumpAppearance()
+    }
+
+    /**
+     * 屏幕增删改（v1.2.52）。
+     *
+     * 只关心**自己挂的那块屏**：
+     *  - 被拔掉 → 立刻重建成主屏。不处理的话，窗口对象还活着但所在的屏没了，
+     *    用户看到的是「服务在跑、屏幕上什么都没有」，还得重启 App 才能恢复；
+     *  - 分辨率 / 密度变了（转屏、副屏换输出模式）→ 重取 WM 与尺寸再摆一次，
+     *    否则窗口会按旧屏宽算出来的百分比尺寸挂在新分辨率上（字小一圈 / 超出屏幕）。
+     *
+     * 主屏（displayId 0）的旋转已经由 `onConfigurationChanged` 负责，这里跳过，
+     * 免得同一次转屏摆两遍位置。
+     */
+    private fun registerDisplayListener() {
+        val manager = getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager ?: return
+        val listener = object : DisplayManager.DisplayListener {
+            override fun onDisplayAdded(displayId: Int) = Unit
+
+            override fun onDisplayRemoved(displayId: Int) {
+                if (attachedDisplayId == 0 || displayId != attachedDisplayId) return
+                rebuildWindowsForDisplay()
+            }
+
+            override fun onDisplayChanged(displayId: Int) {
+                if (attachedDisplayId == 0 || displayId != attachedDisplayId) return
+                windowManager = resolveOverlayWindowManager()
+                if (container == null) return
+                // 尺寸全部重算：重取 WM 时 displayWidthPx/HeightPx 也刷新了
+                appliedWidthPercent = -1
+                appliedBoxHeightPercent = -1
+                appliedFullHeightPercent = -1
+                appliedFullYPercent = -1
+                appliedXPct = -1
+                appliedYPct = -1
+                // ⚠️ 匿名对象里 `this` 是监听器本身，取 Prefs 必须指名外部服务
+                if (Prefs(this@LyricOverlayService).lyricOverlayFullHeight) {
+                    applyFullHeightChrome(true)
+                } else {
+                    applyPosition()
+                }
+            }
+        }
+        manager.registerDisplayListener(listener, Handler(Looper.getMainLooper()))
+        displayListener = listener
+    }
+
     private fun attachWindow(): Boolean {
+        // 输出屏幕在「窗口没挂着」的时候被改过（挂窗失败过 / 服务刚起）：
+        // 先按设置重新解析 WM，否则会用着旧屏的窗口管理器挂窗，挂到错的那块屏上
+        if (attachedDisplayId != Prefs(this).lyricOverlayDisplayId) {
+            windowManager = resolveOverlayWindowManager()
+        }
         val wm = windowManager ?: return false
         if (container != null) return true
         PerfMarks.overlayMountBegin()
@@ -511,8 +688,19 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             PerfMarks.overlayMountEnd(ok = false)
             val detail = AppStrings.s(R.string.los_attach_fail, t.javaClass.simpleName, t.message ?: "")
                 .ifEmpty { "挂载悬浮窗失败：${t.javaClass.simpleName}: ${t.message}" }
-            CrashLog.record(this, "LyricOverlay", detail + "\n\n" + t.stackTraceToString())
+            // 记下挂的是哪块屏：多屏下「副屏不接受悬浮窗」与「没授权」的表现一模一样，
+            // 只有这条能把两者分开（诊断页 → 崩溃日志里看得到）
+            CrashLog.record(
+                this,
+                "LyricOverlay",
+                detail + "\n输出屏幕 displayId=$attachedDisplayId\n\n" + t.stackTraceToString(),
+            )
             LyricOverlayBridge.report(LyricOverlayBus.Status.FAILED, detail)
+            // 副屏挂不上（ROM 不接受 / 屏刚拔掉还没回调）：把设置写回主屏，
+            // 不然用户下次开开关还是失败，而错误信息里根本看不出是屏幕的问题。
+            if (attachedDisplayId != 0) {
+                runCatching { Prefs(this).lyricOverlayDisplayId = SettingsDefaults.OVERLAY_DISPLAY_ID }
+            }
             // 同步把开关关掉，别让设置页显示「已开启」而桌面什么都没有
             Prefs(this).lyricOverlay = false
             stopSelf()
@@ -666,8 +854,18 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         return pct
     }
 
-    /** 屏幕真实尺寸（像素）。优先用 WindowMetrics，避免 displayMetrics 在部分机型上偏小。 */
+    /**
+     * 屏幕真实尺寸（像素）。优先用 WindowMetrics，避免 displayMetrics 在部分机型上偏小。
+     *
+     * v1.2.52：输出到副屏时先看**解析出来的那块屏**的尺寸。副屏那个 WM 的
+     * `currentWindowMetrics` 在部分车机 ROM 上返回的是主屏 bounds（不是它自己那块），
+     * 于是窗口宽度按主屏算、挂到副屏上就超宽。用 `createDisplayContext` 拿到的
+     * `displayMetrics` 更贴近实际，两者冲突时以它为准。
+     */
     private fun screenSize(): Pair<Int, Int> {
+        if (attachedDisplayId != 0 && displayWidthPx > 0 && displayHeightPx > 0) {
+            return displayWidthPx to displayHeightPx
+        }
         val wm = windowManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && wm != null) {
             val b = runCatching { wm.currentWindowMetrics.bounds }.getOrNull()
@@ -1003,7 +1201,17 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
      * `GradientDrawable` 会造成无谓的分配与重排。
      */
     override fun applyAppearance(prefs: Prefs) {
+        // v1.2.52：输出屏幕换了。WindowManager 绑在 Display 上，改 params 没用，
+        // 只能整窗重建一次，本次直接返回（重建后由 bumpAppearance 再走一遍这里）。
+        // 兜底进来时窗口没挂着也没关系：重建里的 detach 是空操作，最后会按新屏重新挂。
+        if (attachedDisplayId != prefs.lyricOverlayDisplayId) {
+            rebuildWindowsForDisplay()
+            return
+        }
         val tv = lyricView ?: return
+
+        // 记下这一帧用的是白天还是夜间那套；系统明暗变化时靠它判断「要不要重绘」
+        appliedStyleDark = prefs.overlayStyleIsDark()
 
         // v1.2.0：侧钮随「车载模式 / 开关」变化实时增删 ——
         // 用户切到手机模式或关掉开关时不能留三颗钮飘在桌面上。
@@ -2025,8 +2233,17 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
 
     private fun canDraw(): Boolean = canDrawOverlay(this)
 
-    private fun dp(value: Int): Int =
-        (value * resources.displayMetrics.density).toInt().coerceAtLeast(1)
+    /**
+     * dp → 像素。
+     *
+     * v1.2.52：输出到副屏时按**那块屏**的密度换算。用本服务 `resources`（主屏密度）
+     * 的话，中控 1080p（density 2.0）+ 头枕屏 720p（density 1.5）这种组合下，
+     * 副屏上的字号、内边距、侧钮大小会整体大一圈 —— 用户会说「换块屏字就变大了」。
+     */
+    private fun dp(value: Int): Int {
+        val density = if (displayDensity > 0f) displayDensity else resources.displayMetrics.density
+        return (value * density).toInt().coerceAtLeast(1)
+    }
 
     companion object {
         // collapse width: OverlayCollapseHelper.COLLAPSED_WIDTH_DP

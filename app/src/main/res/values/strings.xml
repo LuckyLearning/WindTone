@@ -1070,6 +1070,19 @@ The list is fetched once on add — nothing is saved if the fetch fails.</string
     <string name="ov_style_hint">Tap to apply — the overlay updates immediately; fine-tune in Settings</string>
     <string name="ov_style_modified">Parameters were edited manually. Restore “%1$s”</string>
     <string name="ov_more_settings">More settings…</string>
+    <!-- 输出屏幕与白天 / 夜间两套外观（v1.2.52） -->
+    <string name="ov_display_title">Output screen</string>
+    <string name="ov_display_sub">Which screen shows the floating lyrics — for head units with a second or headrest display</string>
+    <string name="ov_display_unnamed">Display %1$d</string>
+    <string name="ov_scope_title">Light / dark sets</string>
+    <string name="ov_scope_now_light">Editing: light set</string>
+    <string name="ov_scope_now_dark">Editing: dark set</string>
+    <string name="ov_scope_hint">Overlay appearance has two sets that follow the theme. Items you change in the dark set apply at night only — everything else keeps following the light set.</string>
+    <string name="ov_scope_mode_fixed">The theme is pinned to light/dark, so the dark set follows the system automatically only when the theme is set to “Follow system”.</string>
+    <string name="ov_scope_copy_to_dark">Copy light set to dark</string>
+    <string name="ov_scope_copy_to_dark_sub">Then the dark set stands on its own — later light changes won’t affect it</string>
+    <string name="ov_scope_reset_dark">Make dark set follow light again</string>
+    <string name="ov_scope_reset_dark_sub">Discards the items changed only in the dark set</string>
     <plurals name="queue_sheet_title">
         <item quantity="one">Play queue · %1$d song</item>
         <item quantity="other">Play queue · %1$d songs</item>

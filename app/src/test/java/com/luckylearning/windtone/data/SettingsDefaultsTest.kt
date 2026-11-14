@@ -84,6 +84,7 @@ class SettingsDefaultsTest {
 
         // 桌面悬浮歌词
         check("lyricOverlay", prefs.lyricOverlay, SettingsDefaults.LYRIC_OVERLAY)
+        check("lyricOverlayDisplayId", prefs.lyricOverlayDisplayId, SettingsDefaults.OVERLAY_DISPLAY_ID)
         check("lyricOverlayLines", prefs.lyricOverlayLines, SettingsDefaults.OVERLAY_LINES)
         check("lyricOverlayTextSp", prefs.lyricOverlayTextSp, SettingsDefaults.OVERLAY_TEXT_SP)
         check("lyricOverlayTitlePercent", prefs.lyricOverlayTitlePercent, SettingsDefaults.OVERLAY_TITLE_PERCENT)

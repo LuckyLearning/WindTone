@@ -121,6 +121,21 @@ interface OverlayActions {
      */
     fun applyOverlayPreset(preset: OverlayPreset)
 
+    // ------------------------------------------------ 输出屏幕与白天 / 夜间两套（v1.2.52）
+
+    /**
+     * 悬浮歌词输出到哪块屏幕（`Display.getDisplayId()`，0 = 主屏）。
+     *
+     * 这是**行为类**设置，只有一套 —— 夜里换字号是审美，夜里悬浮窗跑到另一块屏是事故。
+     */
+    fun setLyricOverlayDisplayId(displayId: Int)
+
+    /** 把白天那套外观逐项复制到夜间，之后夜间自成一套、改白天不再影响夜间 */
+    fun copyOverlayStyleToDark()
+
+    /** 夜间那套恢复跟随白天（丢掉所有夜间自有值） */
+    fun clearOverlayDarkStyle()
+
     fun canDrawOverlay(): Boolean
     fun setOverlayEditing(editing: Boolean)
     fun setAppForeground(foreground: Boolean)

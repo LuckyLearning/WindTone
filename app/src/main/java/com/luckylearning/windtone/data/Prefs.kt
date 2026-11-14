@@ -201,6 +201,14 @@ object SettingsDefaults {
 
     const val LYRIC_OVERLAY = false
 
+    /**
+     * 悬浮歌词输出屏幕出厂值：0 = 主屏 / 默认屏。
+     *
+     * 绝大多数设备只有一块屏，默认必须落在主屏上；多屏车机上用户自己选副屏，
+     * 那是「这块屏专门放歌词」的明确意图，出厂不该替人猜。
+     */
+    const val OVERLAY_DISPLAY_ID = 0
+
     /** 悬浮歌词行数默认值：1 = 只显示当前行（老行为不变） */
     const val OVERLAY_LINES = 1
 
@@ -620,6 +628,13 @@ enum class DownloadRoute(val prefix: String?) {
  * 分区只是可读性；属性名、存储键、默认值、夹取逻辑全部保持不变，调用方无感。
  * 下方 companion 的键常量按同一域名分区，与属性一一对位。
  *
+ * ## 悬浮窗外观分白天 / 夜间两套（v1.2.52）
+ * 第 5 区里「长什么样」的那批键（[STYLE_KEYS]）会按主题自动分流：白天写原键，
+ * 夜间写 `d_` 前缀键，夜间没写过的项读时回落白天。分流发生在 [OverlayStylePrefs]
+ * 这个 `SharedPreferences` 包装里，所以**本类下面的属性与所有调用方都不需要知道有两套**
+ * —— 加一个外观键时，把它登记进 [STYLE_KEYS] 即可（行为键别登记，理由见那里的注释）。
+ * 只回答「现在用哪套」的三个方法见第 5 区开头的 `overlayStyleIsDark()` 一族。
+ *
  * ## 双写迁移（v1.1.37）
  * 存储正从 SharedPreferences 迁往 DataStore（见 [SettingsDataStore]）。分三步走，**本版只做第一步**：
  *
@@ -641,8 +656,23 @@ enum class DownloadRoute(val prefix: String?) {
  */
 class Prefs private constructor(context: Context) {
 
-    private val sp: SharedPreferences =
+    /**
+     * 解析「当前该用哪套悬浮窗外观」要看系统明暗，而 `context` 在构造后就不再用了，
+     * 这里存成字段，免得每次读取都从外面传。
+     */
+    private val appContext: Context = context.applicationContext ?: context
+
+    /** 磁盘上那张原始表（白天原键 + 夜间 `d_` 前缀键混在同一张表里） */
+    private val raw: SharedPreferences =
         context.getSharedPreferences("music_player_prefs", Context.MODE_PRIVATE)
+
+    /**
+     * 对外那个 `sp`：**悬浮窗外观的键按主题自动分流到白天 / 夜间两套**，
+     * 其余键原样透传。这样下面 90 多处 getter / setter 一行都不用动 ——
+     * 理由与逐键继承规则见 [OverlayStylePrefs] 的类注释。
+     */
+    private val sp: SharedPreferences =
+        OverlayStylePrefs(raw, STYLE_KEYS) { overlayStyleIsDark() }
 
     /** 新存储（DataStore）；与 [sp] 双写过渡 */
     private val store = SettingsDataStore(context)
@@ -669,7 +699,7 @@ class Prefs private constructor(context: Context) {
     init {
         // 搬存量。失败不影响启动：读一直走 SharedPreferences（那边数据始终完整），
         // 下次启动会再试一次（KEY_MIGRATED 没落下，backfill 会重跑）。
-        ioScope.launch { runCatching { store.warmUp(sp) } }
+        ioScope.launch { runCatching { store.warmUp(raw) } }
     }
 
     // ------------------------------------------------------- DataStore 写合并（A14）
@@ -1397,6 +1427,108 @@ class Prefs private constructor(context: Context) {
         }
 
     // ============================================================ 5. 桌面悬浮歌词
+
+    // ------------------------------------------------ 外观的白天 / 夜间两套（v1.2.52）
+    //
+    // 下面这些属性本身**不分两套**，它们只负责回答「现在该用哪套」以及
+    // 「夜里那套有没有被单独改过」。真正的分流发生在 [OverlayStylePrefs] 里：
+    // 上层所有外观 getter / setter 写的都还是同一个键名，包装器按当前作用域换名。
+
+    /** 缓存的解析结果：`(主题模式, uiMode) → 是否夜间` */
+    private var cachedDarkMode: ThemeMode? = null
+    private var cachedDarkUiMode = Int.MIN_VALUE
+    private var cachedDark = false
+
+    /**
+     * 系统当前 uiMode 的**权威值**。
+     *
+     * 启动时取自资源；此后由配置回调经 [setOverlayUiMode] 显式喂入。
+     * 为什么不每次现读 `resources.configuration`：`onConfigurationChanged` 可能早于
+     * `Resources` 更新，那几毫秒里读到的还是旧值，而「该换哪一套外观」只在这个回调里
+     * 判一次 —— 判错就再也没人补，表现是「系统切了深色，悬浮窗还是白天的样子」。
+     */
+    private var currentUiMode = appContext.resources.configuration.uiMode
+
+    /**
+     * 由配置回调喂入新的 uiMode（v1.2.52）。
+     *
+     * 调用方只该是「拿到了 `Configuration` 的地方」（引擎的组件回调 / 悬浮窗服务），
+     * 传 `newConfig.uiMode`。
+     */
+    fun setOverlayUiMode(uiMode: Int) {
+        if (uiMode == currentUiMode) return
+        currentUiMode = uiMode
+        cachedDarkMode = null // 逼下次重算
+    }
+
+    /**
+     * 当前这一帧的悬浮窗外观取夜间那套吗？
+     *
+     * 悬浮窗服务每帧都要对一次外观（见 `LyricOverlayService.applyAppearance`），
+     * 而它底下会问到几十个键 —— 每次都解析枚举 + 读 `Configuration` 太浪费，
+     * 所以按「输入是否变了」缓存。输入只有两个：主题模式与系统 uiMode。
+     */
+    fun overlayStyleIsDark(): Boolean {
+        val mode = themeMode
+        val uiMode = currentUiMode
+        if (mode == cachedDarkMode && uiMode == cachedDarkUiMode) return cachedDark
+        val dark = OverlayStyleScope.isDark(mode, uiMode)
+        cachedDarkMode = mode
+        cachedDarkUiMode = uiMode
+        cachedDark = dark
+        return dark
+    }
+
+    /** 夜间那套是否有**自己写过的**值（没有 = 完全跟随白天，设置页据此隐藏「恢复跟随」） */
+    fun overlayStyleHasOwnDark(): Boolean =
+        STYLE_KEYS.any { raw.contains(OverlayStyleScope.key(it, true)) }
+
+    /**
+     * 把白天那套**逐项复制**到夜间。
+     *
+     * 给「我夜里想以白天为底再调两下」的用户：不复制的话，夜间的每一项都还在继承
+     * 白天，用户改一项就等于把这项从继承里摘出来 —— 结果往往是「改了字号，底板还是
+     * 白天的，看着不对」。复制之后夜间自成一套，改白天不再影响夜间。
+     *
+     * 只复制已有值的键：没写过的键继续走默认值 / 继承，不会平白多出 27 条记录。
+     */
+    fun copyOverlayStyleToDark() {
+        val snapshot = HashMap(raw.all)
+        val editor = raw.edit()
+        STYLE_KEYS.forEach { base ->
+            val value = snapshot[base] ?: return@forEach
+            val dark = OverlayStyleScope.key(base, true)
+            when (value) {
+                is Boolean -> editor.putBoolean(dark, value)
+                is Int -> editor.putInt(dark, value)
+                is Long -> editor.putLong(dark, value)
+                is Float -> editor.putFloat(dark, value)
+                is String -> editor.putString(dark, value)
+                is Set<*> -> editor.putStringSet(dark, value.filterIsInstance<String>().toSet())
+            }
+        }
+        editor.apply()
+    }
+
+    /** 丢掉夜间那套的全部自有值，重新跟随白天（等价于「夜间样式恢复跟随白天」） */
+    fun clearOverlayDarkStyle() {
+        val editor = raw.edit()
+        STYLE_KEYS.forEach { editor.remove(OverlayStyleScope.key(it, true)) }
+        editor.apply()
+    }
+
+    /**
+     * 悬浮歌词输出到哪块屏幕（[android.view.Display.getDisplayId]，0 = 主屏 / 默认屏）。
+     *
+     * 车机上常见「中控 + 副驾 / 头枕屏」的多屏形态，AnyLyric 那套做法就是让用户选。
+     * 这是**行为类**设置，只有一套：夜里换字号是审美，夜里悬浮窗跑到另一块屏是事故。
+     */
+    var lyricOverlayDisplayId: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_DISPLAY_ID, SettingsDefaults.OVERLAY_DISPLAY_ID)
+        set(value) {
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_DISPLAY_ID, value).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_DISPLAY_ID, value) }
+        }
 
     /**
      * 桌面悬浮歌词（默认关闭）。
@@ -2198,6 +2330,9 @@ class Prefs private constructor(context: Context) {
 
         // ---- 5. 桌面悬浮歌词 ----
         const val KEY_LYRIC_OVERLAY = "lyric_overlay"
+
+        /** 悬浮歌词输出到哪块屏幕（v1.2.52）：`Display.getDisplayId()`，0 = 主屏 */
+        const val KEY_LYRIC_OVERLAY_DISPLAY_ID = "lyric_overlay_display_id"
         const val KEY_LYRIC_OVERLAY_X = "lyric_overlay_x"
         const val KEY_LYRIC_OVERLAY_Y = "lyric_overlay_y"
         const val KEY_LYRIC_OVERLAY_LINES = "lyric_overlay_lines"
@@ -2267,5 +2402,54 @@ class Prefs private constructor(context: Context) {
         const val KEY_UPDATE_ROUTE = "update_download_route"
         const val KEY_UPDATE_READY_APK = "update_ready_apk_path"
         const val KEY_UPDATE_READY_APK_VERSION = "update_ready_apk_version"
+
+        // ------------------------------------------------ 悬浮窗外观的白天 / 夜间两套（v1.2.52）
+
+        /**
+         * 分两套的键（27 项）。夜间那套用 `d_` 前缀，逐键继承白天（见 [OverlayStylePrefs]）。
+         *
+         * **刻意不在这里的键** —— 它们只有一套，属于「要不要显示 / 显示在哪」而非「长什么样」：
+         *  - [KEY_LYRIC_OVERLAY]：总开关。若分两套，天一亮/天一黑悬浮窗会自己消失，
+         *    用户根本想不到是主题干的；
+         *  - [KEY_LYRIC_OVERLAY_HIDDEN_APPS]：隐藏名单（行为规则，与外观无关）；
+         *  - [KEY_LYRIC_OVERLAY_FULL_HEIGHT]：单条字幕 ↔ 全屏歌词的**形态**切换，
+         *    等同于换布局，不是换皮肤，两套形态各有自己的尺寸键（那几个键是分两套的）；
+         *  - [KEY_LYRIC_OVERLAY_DISPLAY_ID]：输出屏幕（拔屏 / 换屏是硬件事实，不该被主题改）；
+         *  - 侧钮四键（`overlay_handle_*`）：车载模式的按键布局，同理；
+         *  - 三个迁移用的旧键（`*_scale` / `*_backdrop` / `*_custom_bg`）：只读，不参与分流，
+         *    夜间回落读到的就是白天那次迁移结果，正是想要的。
+         */
+        internal val STYLE_KEYS: Set<String> = setOf(
+            // 正文与标题
+            KEY_LYRIC_OVERLAY_LINES,
+            KEY_LYRIC_OVERLAY_TITLE,
+            KEY_LYRIC_OVERLAY_TEXT_SP,
+            KEY_LYRIC_OVERLAY_TITLE_PERCENT,
+            KEY_LYRIC_OVERLAY_TITLE_MODE,
+            KEY_LYRIC_OVERLAY_TEXT_COLOR,
+            KEY_LYRIC_OVERLAY_CURRENT_COLOR,
+            KEY_LYRIC_OVERLAY_DIM,
+            KEY_LYRIC_OVERLAY_ALIGN,
+            KEY_LYRIC_OVERLAY_LINE_SPACING,
+            KEY_LYRIC_OVERLAY_PAUSE_MODE,
+            KEY_LYRIC_OVERLAY_FADE,
+            // 底板与描边
+            KEY_LYRIC_OVERLAY_BG_COLOR,
+            KEY_LYRIC_OVERLAY_BG_ALPHA,
+            KEY_LYRIC_OVERLAY_CORNER,
+            KEY_LYRIC_OVERLAY_BORDER_W,
+            KEY_LYRIC_OVERLAY_BORDER_C,
+            KEY_LYRIC_OVERLAY_STROKE_W,
+            KEY_LYRIC_OVERLAY_STROKE_C,
+            // 尺寸与位置（两套形态各一组）
+            KEY_LYRIC_OVERLAY_WIDTH,
+            KEY_LYRIC_OVERLAY_BOX_HEIGHT,
+            KEY_LYRIC_OVERLAY_X_PCT,
+            KEY_LYRIC_OVERLAY_Y_PCT,
+            KEY_LYRIC_OVERLAY_FULL_WIDTH,
+            KEY_LYRIC_OVERLAY_FULL_HEIGHT_PCT,
+            KEY_LYRIC_OVERLAY_FULL_OFFSET,
+            KEY_LYRIC_OVERLAY_FULL_Y_PCT,
+        )
     }
 }

@@ -136,6 +136,12 @@ internal fun SettingsOverlayPage(
     onLyricOverlayHiddenApps: (Set<String>) -> Unit,
     /** 套用样式预设（v1.1.78；批量写盘，走 OverlayActions.applyOverlayPreset） */
     onApplyOverlayPreset: (OverlayPreset) -> Unit = {},
+    /** 悬浮歌词输出到哪块屏幕（v1.2.52；`Display.getDisplayId()`，0 = 主屏） */
+    onOverlayDisplayId: (Int) -> Unit = {},
+    /** 把白天那套外观复制到夜间（v1.2.52） */
+    onCopyOverlayStyleToDark: () -> Unit = {},
+    /** 夜间那套恢复跟随白天（v1.2.52） */
+    onClearOverlayDarkStyle: () -> Unit = {},
     /** 悬浮窗左侧三颗侧钮的显示开关（v1.2.0，仅车载模式生效） */
     onOverlayHandles: (Boolean) -> Unit = {},
     /** 单颗侧钮开关：0 收起 / 1 播放暂停 / 2 打开播放页 / 3 无障碍 */
@@ -381,6 +387,16 @@ internal fun SettingsOverlayPage(
             onReset = resetAction(player.lyricOverlayFullHeight != SettingsDefaults.OVERLAY_FULL_HEIGHT) {
                 onLyricOverlayFullHeight(SettingsDefaults.OVERLAY_FULL_HEIGHT)
             },
+        )
+
+        // ---------------- 输出屏幕 / 白天·夜间两套（v1.2.52） ----------------
+        //
+        // 摆在预设**之前**是有意的：用户先要确认「我改的是哪一套、画在哪块屏」，
+        // 再去挑样式。反过来先挑预设，改完发现改的是另一套，还得回来再挑一遍。
+        OverlayDisplaySection(onSelect = onOverlayDisplayId)
+        OverlayStyleScopeSection(
+            onCopyToDark = onCopyOverlayStyleToDark,
+            onClearDark = onClearOverlayDarkStyle,
         )
 
         // ---------------- 样式预设（v1.1.78，FR-06） ----------------

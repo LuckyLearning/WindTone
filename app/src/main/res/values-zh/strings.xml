@@ -1038,6 +1038,19 @@
     <string name="ov_style_hint">点按即套用，悬浮窗立即换样式；可到设置页微调细节</string>
     <string name="ov_style_modified">参数已被手动修改。恢复「%1$s」原样</string>
     <string name="ov_more_settings">更多设置…</string>
+    <!-- 输出屏幕与白天 / 夜间两套外观（v1.2.52） -->
+    <string name="ov_display_title">输出屏幕</string>
+    <string name="ov_display_sub">悬浮歌词画在哪块屏幕上；车机带副驾屏 / 头枕屏时用</string>
+    <string name="ov_display_unnamed">屏幕 %1$d</string>
+    <string name="ov_scope_title">白天 / 夜间两套</string>
+    <string name="ov_scope_now_light">当前编辑：白天样式</string>
+    <string name="ov_scope_now_dark">当前编辑：夜间样式</string>
+    <string name="ov_scope_hint">悬浮窗外观分白天 / 夜间两套，跟随主题自动切换。夜里改过的那几项只在夜间生效，其余仍跟随白天。</string>
+    <string name="ov_scope_mode_fixed">主题已固定为浅色或深色，只有「跟随系统」时才会随系统明暗自动切换。</string>
+    <string name="ov_scope_copy_to_dark">把白天样式复制到夜间</string>
+    <string name="ov_scope_copy_to_dark_sub">复制后夜间自成一套，再改白天不影响夜间</string>
+    <string name="ov_scope_reset_dark">夜间样式恢复跟随白天</string>
+    <string name="ov_scope_reset_dark_sub">丢掉夜间单独改过的那些项</string>
     <plurals name="queue_sheet_title">
         <item quantity="other">播放队列 · %1$d 首</item>
     </plurals>

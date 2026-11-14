@@ -275,6 +275,12 @@ fun SettingsScreen(
     onLyricOverlayHiddenApps: (Set<String>) -> Unit,
     /** 套用悬浮歌词样式预设（v1.1.78；带默认值保测试兼容） */
     onApplyOverlayPreset: (OverlayPreset) -> Unit = {},
+    /** 悬浮歌词输出到哪块屏幕（v1.2.52） */
+    onOverlayDisplayId: (Int) -> Unit = {},
+    /** 白天那套外观复制到夜间（v1.2.52） */
+    onCopyOverlayStyleToDark: () -> Unit = {},
+    /** 夜间那套恢复跟随白天（v1.2.52） */
+    onClearOverlayDarkStyle: () -> Unit = {},
     /** 「前台应用记录」开关（v1.1.29） */
     onForegroundLogEnabled: (Boolean) -> Unit,
     /** 调试分区解锁开关（v1.1.31，默认隐藏） */
@@ -558,6 +564,9 @@ fun SettingsScreen(
                             onLyricOverlayTextColor = onLyricOverlayTextColor,
                             onLyricOverlayHiddenApps = onLyricOverlayHiddenApps,
                             onApplyOverlayPreset = onApplyOverlayPreset,
+                            onOverlayDisplayId = onOverlayDisplayId,
+                            onCopyOverlayStyleToDark = onCopyOverlayStyleToDark,
+                            onClearOverlayDarkStyle = onClearOverlayDarkStyle,
                             onOverlayEditing = onOverlayEditing,
                             onOverlayPreview = onOverlayPreview,
                         )
