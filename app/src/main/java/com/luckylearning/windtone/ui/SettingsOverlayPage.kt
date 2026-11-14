@@ -128,6 +128,8 @@ internal fun SettingsOverlayPage(
     onLyricOverlayCurrentColor: (Int) -> Unit,
     onLyricOverlayDimPercent: (Int) -> Unit,
     onLyricOverlayStrokeWidthDp: (Int) -> Unit,
+    /** 描边总开关（v1.2.53）：关掉 = 纯文字，连可读性阴影都不画（带默认值保测试兼容） */
+    onLyricOverlayStrokeEnabled: (Boolean) -> Unit = {},
     onLyricOverlayStrokeColor: (Int) -> Unit,
     onLyricOverlayFadeMs: (Int) -> Unit,
     onLyricOverlayTitleMode: (Int) -> Unit,
@@ -703,6 +705,22 @@ internal fun SettingsOverlayPage(
                 player.lyricOverlayLineSpacingDp != SettingsDefaults.OVERLAY_LINE_SPACING_DP,
             ) { onLyricOverlayLineSpacingDp(SettingsDefaults.OVERLAY_LINE_SPACING_DP) },
         )
+        // 描边总开关（v1.2.53）：排在宽度滑杆**之前** —— 先决定「要不要描边」，
+        // 再决定「多粗」。关掉时宽度与颜色两行仍然可见（值没丢），滑杆落盘后
+        // 重新打开就还是用户上次的粗细。
+        SwitchRow(
+            title = stringResource(R.string.text_outline),
+            subtitle = if (player.lyricOverlayStrokeEnabled) {
+                stringResource(R.string.outline_keeps_text_readable)
+            } else {
+                stringResource(R.string.outline_off_pure_text)
+            },
+            checked = player.lyricOverlayStrokeEnabled,
+            onCheckedChange = onLyricOverlayStrokeEnabled,
+            onReset = resetAction(
+                player.lyricOverlayStrokeEnabled != SettingsDefaults.OVERLAY_STROKE_ENABLED,
+            ) { onLyricOverlayStrokeEnabled(SettingsDefaults.OVERLAY_STROKE_ENABLED) },
+        )
         SliderRow(
             title = if (player.lyricOverlayStrokeWidthDp == 0) {
                 stringResource(R.string.text_outline_auto)
@@ -1213,6 +1231,7 @@ internal fun SettingsOverlayPage(
                     onLyricOverlayCurrentColor(SettingsDefaults.OVERLAY_CURRENT_COLOR)
                     onLyricOverlayDimPercent(SettingsDefaults.OVERLAY_DIM_PERCENT)
                     onLyricOverlayStrokeWidthDp(SettingsDefaults.OVERLAY_STROKE_WIDTH_DP)
+                    onLyricOverlayStrokeEnabled(SettingsDefaults.OVERLAY_STROKE_ENABLED)
                     onLyricOverlayStrokeColor(SettingsDefaults.OVERLAY_STROKE_COLOR)
                     onLyricOverlayLineSpacingDp(SettingsDefaults.OVERLAY_LINE_SPACING_DP)
                     // 标题

@@ -104,6 +104,9 @@ interface OverlayActions {
     fun setLyricOverlayCurrentColor(value: Int)
     fun setLyricOverlayDimPercent(value: Int)
     fun setLyricOverlayStrokeWidthDp(value: Int)
+
+    /** 描边总开关（v1.2.53）：关掉 = 纯文字，连可读性阴影都不画 */
+    fun setLyricOverlayStrokeEnabled(value: Boolean)
     fun setLyricOverlayStrokeColor(value: Int)
     fun setLyricOverlayFadeMs(value: Int)
     fun setLyricOverlayTitleMode(value: Int)

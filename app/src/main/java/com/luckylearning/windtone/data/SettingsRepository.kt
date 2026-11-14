@@ -269,6 +269,12 @@ class SettingsRepository(val prefs: Prefs) {
         return prefs.lyricOverlayStrokeWidthDp
     }
 
+    /** 描边总开关（v1.2.53）。落盘后回读一次，保证界面状态与存储一致。 */
+    fun setLyricOverlayStrokeEnabled(value: Boolean): Boolean {
+        prefs.lyricOverlayStrokeEnabled = value
+        return prefs.lyricOverlayStrokeEnabled
+    }
+
     fun setLyricOverlayStrokeColor(value: Int): Int {
         prefs.lyricOverlayStrokeColor = value
         return prefs.lyricOverlayStrokeColor

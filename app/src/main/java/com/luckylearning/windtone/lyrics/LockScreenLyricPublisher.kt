@@ -46,6 +46,9 @@ object LockScreenLyricPublisher {
         holdUntilAdjustedMs = -1L
         originalTitle = null
         originalArtist = null
+        // 换歌：整段 LRC 缓存必须作废，否则会把上一首的歌词发给下一个接收方
+        lrcCacheKey = Int.MIN_VALUE
+        lrcCache = ""
     }
 
     /** 开关切换后调用：下一 tick 强制重发一次（否则「文案未变」会直接 return） */
@@ -112,6 +115,17 @@ object LockScreenLyricPublisher {
         }
 
         val builder = old.buildUpon().setDescription(want.ifEmpty { null })
+        // v1.2.53：同一份歌词再走一遍**系统媒体会话**（安卓自带的 metadata 通道）。
+        //
+        // 只靠 description 时，能读到歌词的只有「认 DISPLAY_DESCRIPTION」的少数 UI；
+        // 车机自带播放器 / 第三方歌词应用（如 AnyLyric）通常看 subtitle 与 extras，
+        // 于是「播放器明明有歌词，别的应用一首也拿不到」。
+        //   · subtitle → 当前行：逐句更新，界面上一眼能看到，值也短；
+        //   · extras   → `lyrics` 整段 LRC（切歌时才算一次）、`lyric_line` 当前行、
+        //                `lyric_offset_ms` 用户校准的偏移，供需要整段歌词去自行定位的接收方。
+        // title / artist 一律不碰 —— 它们属于歌名歌手，只有实验室里的 AVRCP 通道会占用。
+        builder.setSubtitle(want.ifEmpty { null })
+        builder.setExtras(mediaSessionExtras(state, want))
         if (btWanted.isNotEmpty()) {
             // 接管 title 前先拍原始文案（每首只拍一次；reset() 清掉）
             if (originalTitle == null) {
@@ -149,6 +163,55 @@ object LockScreenLyricPublisher {
     private fun btDirty(btWanted: String): Boolean = btWanted != btApplied
 
     private const val BT_TITLE_MAX_CHARS = 40
+
+    // ---- 系统媒体会话歌词（v1.2.53）----
+    //
+    // 整段 LRC 只在「歌词对象换了」时序列化一次：ticker 每 500ms 走一遍，
+    // 每句都重建几千字的字符串纯属浪费，而同一首歌里行表根本不会变。
+
+    private var lrcCacheKey: Int = Int.MIN_VALUE
+    private var lrcCache: String = ""
+
+    /**
+     * 写进 `MediaMetadata.extras` 的歌词字段。
+     *
+     * 键名刻意用 `lyrics` / `lyric_line`：这是各家播放器与歌词应用的事实约定
+     * （AnyLyric 这类接收方按「键名含 lyric」判定，见其 L0 通道）。
+     */
+    private fun mediaSessionExtras(state: PlayerUiState, line: String): android.os.Bundle =
+        android.os.Bundle().apply {
+            putString("lyric_line", line)
+            putInt("lyric_offset_ms", state.lyricOffsetMs)
+            val lrc = lrcTextOf(state.lyrics)
+            if (lrc.isNotEmpty()) putString("lyrics", lrc)
+        }
+
+    /**
+     * 行表 → 整段 LRC 文本。
+     *
+     * 无时间轴的行（`timeMs < 0`）照原样输出为纯文本行 —— 接收方拿到后至少能按
+     * 「无时间轴歌词」显示，而不是整段丢掉。
+     */
+    internal fun lrcTextOf(lyrics: Lyrics): String {
+        if (lyrics.isEmpty) return ""
+        val key = System.identityHashCode(lyrics) * 31 + lyrics.lines.size
+        if (key == lrcCacheKey) return lrcCache
+        val sb = StringBuilder(1024)
+        for (line in lyrics.lines) {
+            val t = line.timeMs
+            if (t >= 0) {
+                val totalSec = t / 1000
+                sb.append('[')
+                    .append((totalSec / 60).toString().padStart(2, '0')).append(':')
+                    .append((totalSec % 60).toString().padStart(2, '0')).append('.')
+                    .append(((t % 1000) / 10).toString().padStart(2, '0')).append(']')
+            }
+            sb.append(line.text).append('\n')
+        }
+        lrcCacheKey = key
+        lrcCache = sb.toString()
+        return lrcCache
+    }
 
     /**
      * 记下「这一句还能撑到何时」。纯数据，供单测与 [publish] 共用口径。

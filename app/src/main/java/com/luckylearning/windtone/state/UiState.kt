@@ -587,6 +587,8 @@ data class PlayerUiState(
     val lyricOverlayDimPercent: Int = SettingsDefaults.OVERLAY_DIM_PERCENT,
     val lyricOverlayStrokeWidthDp: Int = SettingsDefaults.OVERLAY_STROKE_WIDTH_DP,
     val lyricOverlayStrokeColor: Int = SettingsDefaults.OVERLAY_STROKE_COLOR,
+    /** 描边总开关（v1.2.53）：关掉 = 纯文字，连可读性阴影都不画 */
+    val lyricOverlayStrokeEnabled: Boolean = SettingsDefaults.OVERLAY_STROKE_ENABLED,
     val lyricOverlayFadeMs: Int = SettingsDefaults.OVERLAY_FADE_MS,
     val lyricOverlayTitleMode: Int = SettingsDefaults.OVERLAY_TITLE_MODE,
     /** 悬浮窗里的歌词文字颜色（ARGB，默认纯白） */

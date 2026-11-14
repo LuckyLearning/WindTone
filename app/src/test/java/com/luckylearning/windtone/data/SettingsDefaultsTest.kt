@@ -90,6 +90,11 @@ class SettingsDefaultsTest {
         check("lyricOverlayTitlePercent", prefs.lyricOverlayTitlePercent, SettingsDefaults.OVERLAY_TITLE_PERCENT)
         check("lyricOverlayAlign", prefs.lyricOverlayAlign, SettingsDefaults.OVERLAY_ALIGN)
         check("lyricOverlayBgAlphaPercent", prefs.lyricOverlayBgAlphaPercent, SettingsDefaults.OVERLAY_BG_ALPHA_PERCENT)
+        check(
+            "lyricOverlayStrokeEnabled",
+            prefs.lyricOverlayStrokeEnabled,
+            SettingsDefaults.OVERLAY_STROKE_ENABLED,
+        )
         check("lyricOverlayPauseMode", prefs.lyricOverlayPauseMode, SettingsDefaults.OVERLAY_PAUSE_MODE)
         check("lyricOverlayWidthPercent", prefs.lyricOverlayWidthPercent, SettingsDefaults.OVERLAY_WIDTH_PERCENT)
         check("lyricOverlayFullHeight", prefs.lyricOverlayFullHeight, SettingsDefaults.OVERLAY_FULL_HEIGHT)

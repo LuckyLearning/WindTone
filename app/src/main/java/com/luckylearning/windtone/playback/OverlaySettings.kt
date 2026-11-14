@@ -294,6 +294,12 @@ class OverlaySettings(
         previewOverlayAfterConfigChange()
     }
 
+    override fun setLyricOverlayStrokeEnabled(value: Boolean) {
+        settings.setLyricOverlayStrokeEnabled(value)
+        state.update { it.copy(lyricOverlayStrokeEnabled = value) }
+        previewOverlayAfterConfigChange()
+    }
+
     override fun setLyricOverlayStrokeWidthDp(value: Int) {
         val normalized = settings.setLyricOverlayStrokeWidthDp(value)
         state.update { it.copy(lyricOverlayStrokeWidthDp = normalized) }
@@ -469,6 +475,7 @@ class OverlaySettings(
                 lyricOverlayBorderColor = prefs.lyricOverlayBorderColor,
                 lyricOverlayStrokeWidthDp = prefs.lyricOverlayStrokeWidthDp,
                 lyricOverlayStrokeColor = prefs.lyricOverlayStrokeColor,
+                lyricOverlayStrokeEnabled = prefs.lyricOverlayStrokeEnabled,
                 lyricOverlayWidthPercent = prefs.lyricOverlayWidthPercent,
                 lyricOverlayBoxHeightPercent = prefs.lyricOverlayBoxHeightPercent,
                 lyricOverlayXPercent = prefs.lyricOverlayXPercent,

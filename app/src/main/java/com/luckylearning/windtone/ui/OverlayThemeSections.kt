@@ -84,9 +84,10 @@ internal fun OverlayDisplaySection(onSelect: (Int) -> Unit) {
 internal fun OverlayStyleScopeSection(onCopyToDark: () -> Unit, onClearDark: () -> Unit) {
     val context = LocalContext.current
     val prefs = remember(context) { Prefs(context) }
-    val uiMode = LocalConfiguration.current.uiMode
-    val mode = prefs.themeMode
-    val dark = OverlayStyleScope.isDark(mode, uiMode)
+    val config = LocalConfiguration.current
+    // 明暗按**悬浮窗实际输出屏**算（副屏的 Configuration 与这里看到的不一定同步），
+    // 所以判定交给 Prefs；读一下 config 只是让本组合在系统明暗变化时重组。
+    val dark = remember(config) { prefs.overlayStyleIsDark() }
     // 「夜间那套有没有自有值」不是响应式数据：复制 / 清除之后手动改，避免多一个状态源
     var hasOwnDark by remember { mutableStateOf(prefs.overlayStyleHasOwnDark()) }
 
@@ -109,7 +110,7 @@ internal fun OverlayStyleScopeSection(onCopyToDark: () -> Unit, onClearDark: () 
             modifier = Modifier.padding(top = 2.dp),
         )
         // 主题被钉死时提前说清楚：不然用户会以为「跟随系统」坏了
-        if (mode != ThemeMode.SYSTEM) {
+        if (prefs.themeMode != ThemeMode.SYSTEM) {
             Text(
                 text = stringResource(R.string.ov_scope_mode_fixed),
                 style = MaterialTheme.typography.labelSmall,

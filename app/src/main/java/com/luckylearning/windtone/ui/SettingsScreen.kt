@@ -266,6 +266,8 @@ fun SettingsScreen(
     onLyricOverlayCurrentColor: (Int) -> Unit,
     onLyricOverlayDimPercent: (Int) -> Unit,
     onLyricOverlayStrokeWidthDp: (Int) -> Unit,
+    /** 描边总开关（v1.2.53；带默认值保测试兼容） */
+    onLyricOverlayStrokeEnabled: (Boolean) -> Unit = {},
     onLyricOverlayStrokeColor: (Int) -> Unit,
     onLyricOverlayFadeMs: (Int) -> Unit,
     onLyricOverlayTitleMode: (Int) -> Unit,
@@ -558,6 +560,7 @@ fun SettingsScreen(
                             onLyricOverlayCurrentColor = onLyricOverlayCurrentColor,
                             onLyricOverlayDimPercent = onLyricOverlayDimPercent,
                             onLyricOverlayStrokeWidthDp = onLyricOverlayStrokeWidthDp,
+                            onLyricOverlayStrokeEnabled = onLyricOverlayStrokeEnabled,
                             onLyricOverlayStrokeColor = onLyricOverlayStrokeColor,
                             onLyricOverlayFadeMs = onLyricOverlayFadeMs,
                             onLyricOverlayTitleMode = onLyricOverlayTitleMode,

@@ -349,6 +349,9 @@
     <string name="lyric_line_spacing_compact">歌词行距 紧凑</string>
     <string name="lyric_line_spacing_dp">歌词行距 %1$sdp</string>
     <string name="gap_between_lyric_lines_reduce">歌词行与行之间的空隙；行数多窗口矮时调小能多塞一行</string>
+    <string name="text_outline">文字描边</string>
+    <string name="outline_keeps_text_readable">让歌词在任何画面上都清晰可读</string>
+    <string name="outline_off_pure_text">已关闭 —— 纯文字，不画描边（浅色字落在浅色画面上会发糊）</string>
     <string name="text_outline_auto">文字描边 自动</string>
     <string name="text_outline_dp">文字描边 %1$sdp</string>
     <string name="auto_3dp_without_a_backdrop">自动 = 无底板时描边 3dp、有底板时 2dp；手动设了宽度就不再自动变</string>

@@ -788,6 +788,7 @@ fun MainScreen(
                     onLyricOverlayCurrentColor = playerVm::setLyricOverlayCurrentColor,
                     onLyricOverlayDimPercent = playerVm::setLyricOverlayDimPercent,
                     onLyricOverlayStrokeWidthDp = playerVm::setLyricOverlayStrokeWidthDp,
+                    onLyricOverlayStrokeEnabled = playerVm::setLyricOverlayStrokeEnabled,
                     onLyricOverlayStrokeColor = playerVm::setLyricOverlayStrokeColor,
                     onLyricOverlayFadeMs = playerVm::setLyricOverlayFadeMs,
                     onLyricOverlayTitleMode = playerVm::setLyricOverlayTitleMode,

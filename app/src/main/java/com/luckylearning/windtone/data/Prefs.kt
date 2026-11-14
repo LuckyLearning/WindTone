@@ -376,6 +376,9 @@ object SettingsDefaults {
     const val OVERLAY_STROKE_WIDTH_DP = 0
     val OVERLAY_STROKE_WIDTH_RANGE = 0..4
 
+    /** 描边总开关：默认开（既有行为）。关掉 = 纯文字，连可读性阴影都不画。 */
+    const val OVERLAY_STROKE_ENABLED = true
+
     /** 描边颜色（默认纯黑） */
     const val OVERLAY_STROKE_COLOR = 0xFF000000.toInt()
 
@@ -1437,28 +1440,66 @@ class Prefs private constructor(context: Context) {
     /** 缓存的解析结果：`(主题模式, uiMode) → 是否夜间` */
     private var cachedDarkMode: ThemeMode? = null
     private var cachedDarkUiMode = Int.MIN_VALUE
+    private var cachedDarkDisplayId = Int.MIN_VALUE
     private var cachedDark = false
 
     /**
-     * 系统当前 uiMode 的**权威值**。
+     * **应用所在那块屏**（通常是中控 / 手机主屏）当前 uiMode 的权威值。
      *
      * 启动时取自资源；此后由配置回调经 [setOverlayUiMode] 显式喂入。
      * 为什么不每次现读 `resources.configuration`：`onConfigurationChanged` 可能早于
      * `Resources` 更新，那几毫秒里读到的还是旧值，而「该换哪一套外观」只在这个回调里
      * 判一次 —— 判错就再也没人补，表现是「系统切了深色，悬浮窗还是白天的样子」。
      */
-    private var currentUiMode = appContext.resources.configuration.uiMode
+    private var appUiMode = appContext.resources.configuration.uiMode
+
+    /**
+     * **悬浮窗输出屏**的 uiMode（v1.2.53）。
+     *
+     * 为什么不能复用 [appUiMode]：`Display` 各自持有 `Configuration`，副驾屏 / 头枕屏的
+     * 明暗与中控并不保证同步；更要紧的是应用跑在中控上时，**副屏的配置变化根本不会
+     * 触发应用的 `onConfigurationChanged`** —— 于是「投到副屏后配色不跟车机切换」。
+     * 这个值只由悬浮窗服务写（它在 `createDisplayContext(display)` 上注册回调），
+     * `null` 表示还没喂过（此时回落到 [appUiMode]，等价于 v1.2.52 的行为）。
+     */
+    private var displayUiMode: Int? = null
 
     /**
      * 由配置回调喂入新的 uiMode（v1.2.52）。
      *
-     * 调用方只该是「拿到了 `Configuration` 的地方」（引擎的组件回调 / 悬浮窗服务），
-     * 传 `newConfig.uiMode`。
+     * 调用方只该是「拿到了 `Configuration` 的地方」（引擎的组件回调），
+     * 传 `newConfig.uiMode`。**输出屏是副屏时不要调这个** —— 用 [setOverlayDisplayUiMode]。
      */
     fun setOverlayUiMode(uiMode: Int) {
-        if (uiMode == currentUiMode) return
-        currentUiMode = uiMode
+        if (uiMode == appUiMode) return
+        appUiMode = uiMode
         cachedDarkMode = null // 逼下次重算
+    }
+
+    /**
+     * 由**输出屏**的配置回调喂入 uiMode（v1.2.53）。
+     *
+     * 悬浮窗服务在目标屏的 `Context`（`createDisplayContext`）上注册 `ComponentCallbacks`，
+     * 把该屏的 `newConfig.uiMode` 传进来。主屏也可以传（等价于 [setOverlayUiMode]），
+     * 但只有 `lyricOverlayDisplayId != 0` 时才会被真正采用，见 [effectiveUiMode]。
+     */
+    fun setOverlayDisplayUiMode(uiMode: Int) {
+        if (uiMode == displayUiMode) return
+        displayUiMode = uiMode
+        cachedDarkMode = null // 逼下次重算
+    }
+
+    /**
+     * 该用哪个 uiMode 判明暗：输出到副屏且拿到过副屏配置 → 副屏的；否则应用的。
+     *
+     * 「输出屏幕」是行为键（永远单套），所以这里读的是**当前设置**而不是某个缓存值，
+     * 换屏后下一次解析立刻切到新屏的口径。
+     */
+    private fun effectiveUiMode(): Int {
+        if (lyricOverlayDisplayId != SettingsDefaults.OVERLAY_DISPLAY_ID) {
+            displayUiMode?.let { return it }
+        }
+        return appUiMode
     }
 
     /**
@@ -1466,15 +1507,19 @@ class Prefs private constructor(context: Context) {
      *
      * 悬浮窗服务每帧都要对一次外观（见 `LyricOverlayService.applyAppearance`），
      * 而它底下会问到几十个键 —— 每次都解析枚举 + 读 `Configuration` 太浪费，
-     * 所以按「输入是否变了」缓存。输入只有两个：主题模式与系统 uiMode。
+     * 所以按「输入是否变了」缓存。输入只有三个：主题模式、uiMode、输出屏幕。
      */
     fun overlayStyleIsDark(): Boolean {
         val mode = themeMode
-        val uiMode = currentUiMode
-        if (mode == cachedDarkMode && uiMode == cachedDarkUiMode) return cachedDark
+        val uiMode = effectiveUiMode()
+        val displayId = lyricOverlayDisplayId
+        if (mode == cachedDarkMode && uiMode == cachedDarkUiMode && displayId == cachedDarkDisplayId) {
+            return cachedDark
+        }
         val dark = OverlayStyleScope.isDark(mode, uiMode)
         cachedDarkMode = mode
         cachedDarkUiMode = uiMode
+        cachedDarkDisplayId = displayId
         cachedDark = dark
         return dark
     }
@@ -1724,6 +1769,24 @@ class Prefs private constructor(context: Context) {
             )
             sp.edit().putInt(KEY_LYRIC_OVERLAY_DIM, v).apply()
             ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_DIM, v) }
+        }
+
+    /**
+     * 文字描边总开关（v1.2.53，默认开）。
+     *
+     * 关掉后**完全不画**可读性阴影，配合「背景不透明度 = 0」就是只有歌词的纯文字形态。
+     * 在它之前，「无底板」会被自动补一圈硬描边（v1.1.25 的可读性补偿），于是
+     * 「透明度拉满仍然看得见描边」—— 用户拿不到真正干净的画面，只能靠改描边颜色
+     * 去「假装」没有描边（浅色字配浅色描边），一换壁纸就又显形。
+     */
+    var lyricOverlayStrokeEnabled: Boolean
+        get() = sp.getBoolean(
+            KEY_LYRIC_OVERLAY_STROKE_ON,
+            SettingsDefaults.OVERLAY_STROKE_ENABLED,
+        )
+        set(value) {
+            sp.edit().putBoolean(KEY_LYRIC_OVERLAY_STROKE_ON, value).apply()
+            ioScope.launch { store.putBoolean(KEY_LYRIC_OVERLAY_STROKE_ON, value) }
         }
 
     /** 文字描边宽度（dp）：0 = 自动（有底板 3dp 柔光 / 无底板 2dp 硬描边） */
@@ -2375,6 +2438,7 @@ class Prefs private constructor(context: Context) {
         const val KEY_LYRIC_OVERLAY_CURRENT_COLOR = "lyric_overlay_current_color"
         const val KEY_LYRIC_OVERLAY_DIM = "lyric_overlay_dim_percent"
         const val KEY_LYRIC_OVERLAY_STROKE_W = "lyric_overlay_stroke_width_dp"
+        const val KEY_LYRIC_OVERLAY_STROKE_ON = "lyric_overlay_stroke_on"
         const val KEY_LYRIC_OVERLAY_STROKE_C = "lyric_overlay_stroke_color"
         const val KEY_LYRIC_OVERLAY_FADE = "lyric_overlay_fade_ms"
         const val KEY_LYRIC_OVERLAY_TITLE_MODE = "lyric_overlay_title_mode"
@@ -2440,6 +2504,7 @@ class Prefs private constructor(context: Context) {
             KEY_LYRIC_OVERLAY_BORDER_W,
             KEY_LYRIC_OVERLAY_BORDER_C,
             KEY_LYRIC_OVERLAY_STROKE_W,
+            KEY_LYRIC_OVERLAY_STROKE_ON,
             KEY_LYRIC_OVERLAY_STROKE_C,
             // 尺寸与位置（两套形态各一组）
             KEY_LYRIC_OVERLAY_WIDTH,

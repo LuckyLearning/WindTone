@@ -1759,6 +1759,8 @@ class PlaybackEngine(
         overlaySettings.setLyricOverlayDimPercent(value)
     override fun setLyricOverlayStrokeWidthDp(value: Int) =
         overlaySettings.setLyricOverlayStrokeWidthDp(value)
+    override fun setLyricOverlayStrokeEnabled(value: Boolean) =
+        overlaySettings.setLyricOverlayStrokeEnabled(value)
     override fun setLyricOverlayStrokeColor(value: Int) =
         overlaySettings.setLyricOverlayStrokeColor(value)
     override fun setLyricOverlayFadeMs(value: Int) =

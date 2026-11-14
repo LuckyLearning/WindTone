@@ -3,6 +3,7 @@ package com.luckylearning.windtone.overlay
 import android.annotation.SuppressLint
 import android.app.Service
 import android.content.BroadcastReceiver
+import android.content.ComponentCallbacks
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -114,6 +115,39 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
 
     /** 屏幕热插拔监听（拔掉正在用的副屏 / 副屏分辨率变化） */
     private var displayListener: DisplayManager.DisplayListener? = null
+
+    /**
+     * 输出屏的 `Context`（v1.2.53，仅副屏时非空）。
+     *
+     * 它的 `Resources` 绑在那块 Display 的 `Configuration` 上，因此可以在它身上注册
+     * `ComponentCallbacks` 收到**该屏**的配置变化 —— 应用跑在中控上时，
+     * 副驾屏 / 头枕屏的明暗切换不会触发应用的 `onConfigurationChanged`，
+     * 只靠引擎那条回调永远等不到（这就是「投到副屏后配色不跟车机切换」的根因）。
+     */
+    private var displayContext: Context? = null
+
+    /**
+     * 输出屏的配置回调：把该屏 uiMode 喂给 [Prefs]，并重算尺寸后重绘。
+     *
+     * 与引擎那条 `registerOverlayThemeWatcher` 的区别只在「哪块屏」：那条看应用所在屏，
+     * 这条看悬浮窗实际画在上面的屏。两条都喂，`Prefs` 按输出屏幕决定信哪个。
+     */
+    private val displayConfigCallbacks = object : ComponentCallbacks {
+        override fun onConfigurationChanged(newConfig: Configuration) {
+            val prefs = Prefs(this@LyricOverlayService)
+            // 必须用 newConfig：回调早于 Resources 更新
+            prefs.setOverlayDisplayUiMode(newConfig.uiMode)
+            val metrics = displayContext?.resources?.displayMetrics
+            if (metrics != null && metrics.widthPixels > 0 && metrics.heightPixels > 0) {
+                displayDensity = metrics.density
+                displayWidthPx = metrics.widthPixels
+                displayHeightPx = metrics.heightPixels
+            }
+            LyricOverlayBridge.bumpAppearance()
+        }
+
+        override fun onLowMemory() = Unit
+    }
 
     /**
      * 上一次应用的悬浮窗外观属于白天还是夜间（v1.2.52）。
@@ -392,6 +426,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             }
         }
         displayListener = null
+        unbindDisplayConfigCallbacks()
         runCatching { unregisterReceiver(screenReceiver) }
         scope.cancel()
         detachWindow()
@@ -425,20 +460,48 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         displayHeightPx = 0
         val wanted = runCatching { Prefs(this).lyricOverlayDisplayId }
             .getOrDefault(SettingsDefaults.OVERLAY_DISPLAY_ID)
-        if (wanted == SettingsDefaults.OVERLAY_DISPLAY_ID) return base
+        if (wanted == SettingsDefaults.OVERLAY_DISPLAY_ID) {
+            // 回主屏：副屏那套明暗口径要一起摘掉，否则副屏拔掉后还按旧屏的
+            // uiMode 取外观（表现是「插过深色副屏，拔掉后中控一直是夜间那套」）。
+            unbindDisplayConfigCallbacks()
+            return base
+        }
         val manager = getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
         val display = manager?.getDisplay(wanted)
         val ctx = display?.let { runCatching { createDisplayContext(it) }.getOrNull() }
         val metrics = ctx?.resources?.displayMetrics
         if (display == null || ctx == null || metrics == null) {
             runCatching { Prefs(this).lyricOverlayDisplayId = SettingsDefaults.OVERLAY_DISPLAY_ID }
+            unbindDisplayConfigCallbacks()
             return base
         }
         attachedDisplayId = display.displayId
         displayDensity = metrics.density
         displayWidthPx = metrics.widthPixels
         displayHeightPx = metrics.heightPixels
+        bindDisplayConfigCallbacks(ctx)
         return (ctx.getSystemService(Context.WINDOW_SERVICE) as? WindowManager) ?: base
+    }
+
+    /**
+     * 绑定 / 解绑输出屏的配置回调（v1.2.53）。
+     *
+     * 绑定的时候顺手把该屏**当前**的 uiMode 喂一次：`registerComponentCallbacks`
+     * 只报「之后」的变化，不喂这一下，第一次投到副屏时会沿用主屏的明暗。
+     */
+    private fun bindDisplayConfigCallbacks(ctx: Context) {
+        if (displayContext === ctx) return
+        unbindDisplayConfigCallbacks()
+        displayContext = ctx
+        Prefs(this).setOverlayDisplayUiMode(ctx.resources.configuration.uiMode)
+        runCatching { ctx.registerComponentCallbacks(displayConfigCallbacks) }
+    }
+
+    private fun unbindDisplayConfigCallbacks() {
+        displayContext?.let { ctx ->
+            runCatching { ctx.unregisterComponentCallbacks(displayConfigCallbacks) }
+        }
+        displayContext = null
     }
 
     /**
@@ -509,6 +572,9 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             override fun onDisplayChanged(displayId: Int) {
                 if (attachedDisplayId == 0 || displayId != attachedDisplayId) return
                 windowManager = resolveOverlayWindowManager()
+                // 部分 ROM 不把副屏的明暗变化走配置回调，只在 onDisplayChanged 里报一声；
+                // 这里补一次重绘，两套外观才会真的换过去。
+                LyricOverlayBridge.bumpAppearance()
                 if (container == null) return
                 // 尺寸全部重算：重取 WM 时 displayWidthPx/HeightPx 也刷新了
                 appliedWidthPercent = -1
@@ -1222,7 +1288,8 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         // 就是一片糊（v1.1.25）。v1.1.51 起背景只有「颜色 + 不透明度」一套语义。
         // v1.1.52：描边宽度 / 颜色开放为设置项（0 = 自动），一并纳入「变了才重算」。
         val backdropNow = OverlayBackground.legibilityKey(prefs.lyricOverlayBgAlphaPercent)
-        val strokeKey = prefs.lyricOverlayStrokeWidthDp * 31 +
+        val strokeKey = (if (prefs.lyricOverlayStrokeEnabled) 1 else 0) * 131 +
+            prefs.lyricOverlayStrokeWidthDp * 31 +
             (prefs.lyricOverlayStrokeColor and 0x00FFFFFF)
         if (appliedLegibility != backdropNow || appliedStrokeKey != strokeKey) {
             appliedLegibility = backdropNow
@@ -1353,6 +1420,14 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
      * 有底板时保持原来的柔光（底板已经给了对比度，再加深会显脏）。
      */
     private fun applyTextLegibility(tv: TextView, backdrop: Int, prefs: Prefs) {
+        // v1.2.53：描边总开关。关掉时**连可读性阴影都不画** —— 用户要的「只有歌词」
+        // 就是字直接压在画面上，任何一圈描边都会让「透明底板」看起来还是有框。
+        // 代价是浅色字落在浅色画面上会糊，这是用户显式选择的取舍。
+        if (!prefs.lyricOverlayStrokeEnabled) {
+            tv.setShadowLayer(0f, 0f, 0f, Color.TRANSPARENT)
+            renderDeduper.clear()
+            return
+        }
         // v1.1.52：用户手动设了描边宽度就完全交给它 —— 零位移的实色投影围一圈
         // 就是描边（TextView 没有原生描边，投影是唯一不引自定义 View 的画法）；
         // 0 = 自动：无底板换硬描边、有底板保持柔光。

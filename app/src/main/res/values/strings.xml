@@ -380,6 +380,9 @@ The app cannot stop the OEM clearing third-party accessibility on boot; tap the 
     <string name="lyric_line_spacing_compact">Lyric line spacing Compact</string>
     <string name="lyric_line_spacing_dp">Lyric line spacing %1$sdp</string>
     <string name="gap_between_lyric_lines_reduce">Gap between lyric lines; reduce it to fit one more line in a short window</string>
+    <string name="text_outline">Text outline</string>
+    <string name="outline_keeps_text_readable">Keeps the lyrics readable on any background</string>
+    <string name="outline_off_pure_text">Off — pure text, no outline (light text may blur over a light background)</string>
     <string name="text_outline_auto">Text outline Auto</string>
     <string name="text_outline_dp">Text outline %1$sdp</string>
     <string name="auto_3dp_without_a_backdrop">Auto: 3dp without a backdrop, 2dp with one. A manual width stops the automatic change</string>

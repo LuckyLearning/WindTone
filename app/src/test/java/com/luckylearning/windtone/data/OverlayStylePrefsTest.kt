@@ -209,4 +209,41 @@ class OverlayStylePrefsTest {
             assertTrue("外观键应分两套：$key", key in Prefs.STYLE_KEYS)
         }
     }
+
+    /**
+     * v1.2.53：明暗要按**输出屏**判，不能永远读应用所在屏。
+     *
+     * 真机表现就是这条的反面：歌词投到副驾屏后，车机切夜间，中控（应用所在屏）
+     * 也收到了一次配置回调，但副屏没被问到 —— 悬浮窗停在白天那套。
+     */
+    @Test
+    fun `输出到副屏时明暗取副屏配置并随换屏切换`() {
+        prefs.themeMode = ThemeMode.SYSTEM
+        prefs.setOverlayUiMode(0x10) // 应用所在屏：白天
+        prefs.setOverlayDisplayUiMode(0x20) // 输出屏：夜间
+
+        prefs.lyricOverlayDisplayId = 0
+        assertFalse("主屏输出时应跟随应用配置", prefs.overlayStyleIsDark())
+
+        prefs.lyricOverlayDisplayId = 7
+        assertTrue("副屏输出时应跟随副屏配置", prefs.overlayStyleIsDark())
+
+        prefs.lyricOverlayDisplayId = 0
+        assertFalse("回到主屏后不能再按副屏配置取外观", prefs.overlayStyleIsDark())
+    }
+
+    @Test
+    fun `描边开关属于外观键并分两套`() {
+        assertTrue(
+            "描边开关是外观项，夜里关掉不该影响白天",
+            Prefs.KEY_LYRIC_OVERLAY_STROKE_ON in Prefs.STYLE_KEYS,
+        )
+        prefs.themeMode = ThemeMode.LIGHT
+        prefs.lyricOverlayStrokeEnabled = false
+        prefs.themeMode = ThemeMode.DARK
+        assertFalse("夜间没写过就继承白天（白天已关）", prefs.lyricOverlayStrokeEnabled)
+        prefs.lyricOverlayStrokeEnabled = true
+        prefs.themeMode = ThemeMode.LIGHT
+        assertFalse("夜间单独开过，不影响白天", prefs.lyricOverlayStrokeEnabled)
+    }
 }
