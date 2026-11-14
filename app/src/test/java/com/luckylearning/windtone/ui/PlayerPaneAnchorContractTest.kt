@@ -19,6 +19,9 @@ import java.io.File
  * 这类问题**照常编译、照常跑过所有手势单测**：判据、动画、状态链路全对，
  * 只是两个 snapshot 写入差了一帧。所以除了 [PlayerSwipeTest] 的相位恒等式，
  * 还要用源码扫描锁住生产接线的三个不可拆条件（写法错了就红，不依赖真机）。
+ *
+ * 注：手机顶栏那枚「歌词 ⇄ 图片」二态键已于 v1.2.57 删除（三页横滑与页码点
+ * 已覆盖），改页入口只剩手势与页码点两处。
  */
 class PlayerPaneAnchorContractTest {
 
@@ -92,16 +95,16 @@ class PlayerPaneAnchorContractTest {
         assertTrue(settle.contains("selectPane(result.target)"))
         assertTrue(settle.contains("selectPane(PlayerPane.ART)"))
 
-        // 全文件只允许 selectPane 自己调 onPlayerPane。顶栏、页码点、手势三个入口
-        // 都必须收敛过去；以后新增外部改页入口时，这条会提醒先同步写视觉锚点。
+        // 全文件只允许 selectPane 自己调 onPlayerPane。页码点与手势两个入口都必须
+        // 收敛过去；以后新增外部改页入口时，这条会提醒先同步写视觉锚点。
         assertEquals(
             "存在绕过 selectPane 的直接改页调用（会重新引入跨帧回闪）",
             1,
             Regex("onPlayerPane\\(").findAll(text).count(),
         )
         assertTrue(
-            "顶栏 / 页码点 / 手势共四处改页入口都要走 selectPane",
-            Regex("selectPane\\(").findAll(text).count() >= 5,
+            "页码点 / To / Skip 回图片页三处加函数定义，selectPane 至少出现 4 次",
+            Regex("selectPane\\(").findAll(text).count() >= 4,
         )
     }
 }

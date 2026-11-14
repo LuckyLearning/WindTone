@@ -41,6 +41,8 @@ class PlayerLayoutSpecTest {
         assertFalse(phone.vinylAlongsideLyrics)
         assertTrue(phone.nowRowAlways)
         assertTrue(phone.seekJumpButtons)
+        // 场景芯片 2026-11-15 收回：手机端这一排 4 枚纯占地方，只在车机显示
+        assertFalse(phone.sceneChips)
         assertTrue(phone.statusRow)
         assertTrue(phone.queueInControls)
         assertEquals(20f, phone.horizontalPadding.value, 0f)
@@ -63,11 +65,12 @@ class PlayerLayoutSpecTest {
     }
 
     @Test
-    fun `功能对等：快进快退与场景芯片全端可用`() {
+    fun `快进快退全端可用，场景芯片仅车机`() {
         UiFormFactor.entries.forEach { form ->
             val s = spec(form)
             assertTrue("$form ±10/15s 快进快退", s.seekJumpButtons)
-            assertTrue("$form 场景芯片", s.sceneChips)
+            // 2026-11-15 用户反馈：手机端不显示场景芯片
+            assertEquals("$form 场景芯片", s.isCar, s.sceneChips)
             assertTrue("$form 长按菜单", s.gesture.longPressMenu)
         }
     }
@@ -82,6 +85,7 @@ class PlayerLayoutSpecTest {
             assertEquals("queueInControls", !s.isCar, s.queueInControls)
             assertEquals("sideActions", s.isCar, s.sideActions)
             assertEquals("vinylAlongsideLyrics", s.isCar, s.vinylAlongsideLyrics)
+            assertEquals("sceneChips", s.isCar, s.sceneChips)
         }
     }
 

@@ -49,7 +49,7 @@ internal data class PlayerLayoutSpec(
     val nowRowAlways: Boolean,
     /** ±10/15s 快进快退（车机走方控 / 系统通知 seek，不重复占位）。 */
     val seekJumpButtons: Boolean,
-    /** 场景芯片（大触控目标）。 */
+    /** 场景芯片（驾车 / 通勤 / 助眠 / 关闭，仅车机）。 */
     val sceneChips: Boolean,
     /** 底部状态行（歌词源 / 偏移 / 队列数）。 */
     val statusRow: Boolean,
@@ -87,10 +87,14 @@ internal data class PlayerLayoutSpec(
                 vinylAlongsideLyrics = car,
                 sideActions = car,
                 nowRowAlways = !car,
-                // 阶段八 功能对等：±10/15s 快进快退与场景芯片改为全端可用。
+                // 阶段八 功能对等：±10/15s 快进快退改为全端可用。
                 // 车机走方控 seek 不冲突，多一个就地入口不影响驾驶安全。
                 seekJumpButtons = true,
-                sceneChips = true,
+                // 场景芯片（驾车 / 通勤 / 助眠 / 关闭）改为**仅车机**
+                // （2026-11-15 用户真机反馈：「这排按键改为仅车载模式出现」）。
+                // 手机上这 4 枚占掉了控制行上方整整一行，而手机切场景的频率极低；
+                // 车机才是驾驶语境里真正用得上的地方，触控目标也更大。
+                sceneChips = car,
                 // 状态行（歌词源 / 偏移 / 队列数）仍按用户 2026-10-18 明确要求
                 // 在车机不显示：它占 30dp 高度，挤掉的是歌词区。
                 statusRow = !car,

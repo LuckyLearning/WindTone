@@ -537,22 +537,10 @@ fun PlayerScreen(
                         // 「箭头右侧那段的正中」（偏右约 24dp，肉眼一眼就看得出）。
                         if (!pane) Spacer(Modifier.width(48.dp))
                     } else {
-                        // 手机顶栏中间留空 —— 歌名 / 歌手在下方常驻歌名行里（效果图 ⑫ 的 p-nowrow）
+                        // 手机顶栏中间留空 —— 歌名 / 歌手在下方常驻歌名行里（效果图 ⑫ 的 p-nowrow）。
+                        // 这里原有一枚「歌词 ⇄ 图片」二态键，v1.2.57 删除：三页横滑与底部
+                        // 页码点已经覆盖同一件事，多一个入口只让顶栏更挤（2026-11-15 用户确认）。
                         Spacer(Modifier.weight(1f))
-                        IconButton(onClick = {
-                            keepAwake()
-                            // 歌词页 → 回图片页；其余情况 → 去歌词页。
-                            // 这与改前的「封面/歌词」二态按钮是同一枚，只是多了信息页仍归到这一条。
-                            selectPane(
-                                if (showLyrics) PlayerPane.ART else PlayerPane.LYRICS
-                            )
-                        }) {
-                            Icon(
-                                imageVector = if (showLyrics) AppIcons.Album else AppIcons.Lyrics,
-                                contentDescription = if (showLyrics) stringResource(R.string.cd_show_cover) else stringResource(R.string.cd_show_lyrics),
-                                tint = scheme.onSurface,
-                            )
-                        }
                     }
                     // 车机：播放设置已移进左侧竖排功能列（v1.1.53），顶栏不再出现
                     if (!layoutSpec.sideActions) {

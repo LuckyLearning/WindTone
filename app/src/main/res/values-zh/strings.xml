@@ -976,8 +976,6 @@
     <!-- i18n batch 3: PlayerScreen / PlayerScreenParts (2026-10-31) -->
     <string name="cd_collapse_player">收起播放页</string>
     <string name="player_not_playing">未在播放</string>
-    <string name="cd_show_cover">切换为封面</string>
-    <string name="cd_show_lyrics">切换为歌词</string>
     <string name="cd_player_options">播放设置</string>
     <string name="cd_favorite">收藏</string>
     <string name="cd_unfavorite">取消收藏</string>

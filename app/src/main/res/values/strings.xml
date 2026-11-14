@@ -1007,8 +1007,6 @@ The list is fetched once on add — nothing is saved if the fetch fails.</string
     <!-- i18n batch 3: PlayerScreen / PlayerScreenParts (2026-10-31) -->
     <string name="cd_collapse_player">Collapse player</string>
     <string name="player_not_playing">Not playing</string>
-    <string name="cd_show_cover">Show cover</string>
-    <string name="cd_show_lyrics">Show lyrics</string>
     <string name="cd_player_options">Playback settings</string>
     <string name="cd_favorite">Favorite</string>
     <string name="cd_unfavorite">Remove favorite</string>
