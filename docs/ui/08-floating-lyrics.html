@@ -270,20 +270,20 @@
             </div>
 
             <div class="sw-row" style="margin-top:6px">
-              <div class="sw-main"><div class="sw-t" style="font-weight:700">歌词文字</div><div class="sw-s">字号 20sp · 居中</div></div>
+              <div class="sw-main"><div class="sw-t" style="font-weight:700">歌词文字</div><div class="sw-s">字号 20 磅 · 居中</div></div>
               <span style="color:var(--on-surface-variant);font-size:15px">⌃</span>
             </div>
-            <div class="sw-row"><div class="sw-main"><div class="sw-t">正文字号 20sp</div></div><div class="slider" style="width:120px;flex:none"><span class="fill" style="width:28%"></span><span class="knob" style="left:28%"></span></div></div>
+            <div class="sw-row"><div class="sw-main"><div class="sw-t">正文字号</div><div class="sw-s">点 −/＋ 逐档增减，不设上下限</div></div><div class="chips" style="flex:none;align-items:center;gap:6px"><span class="fchip" style="padding:2px 9px">−</span><span style="font-size:12.5px;color:var(--primary);min-width:44px;text-align:center">20 磅</span><span class="fchip" style="padding:2px 9px">＋</span></div></div>
             <div class="sw-row"><div class="sw-main"><div class="sw-t">水平对齐</div></div><div class="chips" style="flex:none"><span class="fchip">居左</span><span class="fchip on">居中</span></div></div>
             <div class="section-label" style="margin-top:8px">当前行</div>
-            <div class="sw-row"><div class="sw-main"><div class="sw-t">当前行字号 正文的 130%</div></div><div class="slider" style="width:120px;flex:none"><span class="fill" style="width:58%"></span><span class="knob" style="left:58%"></span></div></div>
+            <div class="sw-row"><div class="sw-main"><div class="sw-t">当前行字号</div><div class="sw-s">点 −/＋ 逐档增减，不设上下限</div></div><div class="chips" style="flex:none;align-items:center;gap:6px"><span class="fchip" style="padding:2px 9px">−</span><span style="font-size:12.5px;color:var(--primary);min-width:44px;text-align:center">26 磅</span><span class="fchip" style="padding:2px 9px">＋</span></div></div>
             <div class="section-label" style="margin-top:8px">其他行</div>
-            <div class="sw-row"><div class="sw-main"><div class="sw-t">其他行字号 正文的 80%</div></div><div class="slider" style="width:120px;flex:none"><span class="fill" style="width:20%"></span><span class="knob" style="left:20%"></span></div></div>
+            <div class="sw-row"><div class="sw-main"><div class="sw-t">其他行字号</div><div class="sw-s">点 −/＋ 逐档增减，不设上下限</div></div><div class="chips" style="flex:none;align-items:center;gap:6px"><span class="fchip" style="padding:2px 9px">−</span><span style="font-size:12.5px;color:var(--primary);min-width:44px;text-align:center">跟随正文</span><span class="fchip" style="padding:2px 9px">＋</span></div></div>
             <div class="sw-row"><div class="sw-main"><div class="sw-t">其他行颜色</div><div class="sw-s">使用单独的颜色</div></div><span style="width:20px;height:20px;border-radius:6px;background:#8A8F98;flex:none"></span></div>
             <div class="sw-row"><div class="sw-main"><div class="sw-t">文字描边</div><div class="sw-s">压在浅色画面上也读得清</div></div><span class="switch"><i></i></span></div>
 
             <div class="sw-row" style="margin-top:6px">
-              <div class="sw-main"><div class="sw-t" style="font-weight:700">标题块</div><div class="sw-s">下方 · 居右 · 正文的 62%</div></div>
+              <div class="sw-main"><div class="sw-t" style="font-weight:700">标题块</div><div class="sw-s">下方 · 居右 · 12 磅</div></div>
               <span style="color:var(--on-surface-variant);font-size:15px">⌄</span>
             </div>
 
@@ -301,7 +301,7 @@
       </div>
       <p class="note"><b>为什么分组：</b>原来一个大开关展开后要翻十几屏才找得到「当前行颜色」，改完一项还得滚回去看同类项。
       分组后每组只占一行高度，要不要展开由用户点。<b>收起时副标题报当前关键值</b>
-      （「单条 · 宽 80% · 3 行」「下方 · 居右 · 正文的 62%」）—— 不展开也能确认是不是自己要的那档。
+      （「单条 · 宽 80% · 3 行」「下方 · 居右 · 12 磅」）—— 不展开也能确认是不是自己要的那档。
       <br><b>不起效的就收起（同一版的口径）：</b>
       ① 背景不透明度 = 0 时，颜色 / 圆角 / 边框三项收起（板都看不见了）；
       ② 文字描边关掉时，粗细与颜色收起；
@@ -309,8 +309,10 @@
       ④ 只有一行歌词时，「其他行」整组收起（没有上下句可调）；
       ⑤ 手机模式下「侧钮」整组不出现（车上才挂那几颗钮）。
       <br><b>样式规则：</b>组标题用 <code>titleSmall / SemiBold</code>，副标题 <code>labelSmall / onSurfaceVariant</code>，
-      箭头用 24dp 的 <code>KeyboardArrowUp / Down</code>；展开后的行仍是既有的 <code>SliderRow / ActionRow / SwitchRow / ChoiceRow</code>，
-      不引入新行规格。</p>
+      箭头用 24dp 的 <code>KeyboardArrowUp / Down</code>；展开后的行是既有的 <code>ActionRow / SwitchRow / ChoiceRow / SliderRow</code>，
+      <b>字号一律用新增的 <code>StepperRow</code></b>：<code>− [20 磅] ＋</code> 三个元素一行，点一次 ±2 磅、不设上下限
+      （滑杆天生要 <code>range</code>，用它就等于把区间又装回去了）。0 在「当前行 / 其他行」上是「跟随正文」的哨兵值，
+      显示成「跟随正文」而不是「0 磅」。</p>
     </figure>
 
     <figure class="fig" id="scr-overlay-preset-detail">
@@ -503,8 +505,8 @@
               </div>
             </div>
             <div class="cset-row">
-              <div style="flex:1"><div class="cset-k">文字大小</div><div class="cset-s">悬浮窗正文字号（12~60sp）；与预设 textSp 同源</div></div>
-              <div class="cset-step">−</div><div class="cset-v">28sp</div><div class="cset-step"><svg class="ic"><use href="#i-add"/></svg></div>
+              <div style="flex:1"><div class="cset-k">文字大小</div><div class="cset-s">悬浮窗正文字号（磅值，不设上下限）；与预设 textSp 同源</div></div>
+              <div class="cset-step">−</div><div class="cset-v">28 磅</div><div class="cset-step"><svg class="ic"><use href="#i-add"/></svg></div>
             </div>
             <div class="cset-row">
               <div style="flex:1"><div class="cset-k">显示位置</div><div class="cset-s">四角快捷 + 拖动微调</div></div>
