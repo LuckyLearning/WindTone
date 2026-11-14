@@ -324,6 +324,62 @@ class OverlaySettings(
         previewOverlayAfterConfigChange()
     }
 
+    // ------------------------------------------------ 标题块与分角色样式（v1.2.54）
+
+    override fun setLyricOverlayTitlePos(value: Int) {
+        val normalized = settings.setLyricOverlayTitlePos(value)
+        state.update { it.copy(lyricOverlayTitlePos = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setLyricOverlayTitleAlign(value: Int) {
+        val normalized = settings.setLyricOverlayTitleAlign(value)
+        state.update { it.copy(lyricOverlayTitleAlign = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setLyricOverlayTitleColor(value: Int) {
+        val normalized = settings.setLyricOverlayTitleColor(value)
+        state.update { it.copy(lyricOverlayTitleColor = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setLyricOverlayTitleStrokeEnabled(value: Boolean) {
+        val normalized = settings.setLyricOverlayTitleStrokeEnabled(value)
+        state.update { it.copy(lyricOverlayTitleStrokeEnabled = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setLyricOverlayTitleStrokeWidthDp(value: Int) {
+        val normalized = settings.setLyricOverlayTitleStrokeWidthDp(value)
+        state.update { it.copy(lyricOverlayTitleStrokeWidthDp = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setLyricOverlayTitleStrokeColor(value: Int) {
+        val normalized = settings.setLyricOverlayTitleStrokeColor(value)
+        state.update { it.copy(lyricOverlayTitleStrokeColor = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setLyricOverlayCurrentScale(value: Int) {
+        val normalized = settings.setLyricOverlayCurrentScale(value)
+        state.update { it.copy(lyricOverlayCurrentScale = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setLyricOverlayContextScale(value: Int) {
+        val normalized = settings.setLyricOverlayContextScale(value)
+        state.update { it.copy(lyricOverlayContextScale = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setLyricOverlayContextColor(value: Int) {
+        val normalized = settings.setLyricOverlayContextColor(value)
+        state.update { it.copy(lyricOverlayContextColor = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
     /**
      * 套用样式预设（v1.1.78）：24 项外观参数一次性批量写盘 + 一次状态合并 +
      * 一次预览收尾。逐项走 setter 会触发 20 多次 bumpAppearance / 起预览，
@@ -476,6 +532,15 @@ class OverlaySettings(
                 lyricOverlayStrokeWidthDp = prefs.lyricOverlayStrokeWidthDp,
                 lyricOverlayStrokeColor = prefs.lyricOverlayStrokeColor,
                 lyricOverlayStrokeEnabled = prefs.lyricOverlayStrokeEnabled,
+                lyricOverlayTitlePos = prefs.lyricOverlayTitlePos,
+                lyricOverlayTitleAlign = prefs.lyricOverlayTitleAlign,
+                lyricOverlayTitleColor = prefs.lyricOverlayTitleColor,
+                lyricOverlayTitleStrokeEnabled = prefs.lyricOverlayTitleStrokeEnabled,
+                lyricOverlayTitleStrokeWidthDp = prefs.lyricOverlayTitleStrokeWidthDp,
+                lyricOverlayTitleStrokeColor = prefs.lyricOverlayTitleStrokeColor,
+                lyricOverlayCurrentScale = prefs.lyricOverlayCurrentScale,
+                lyricOverlayContextScale = prefs.lyricOverlayContextScale,
+                lyricOverlayContextColor = prefs.lyricOverlayContextColor,
                 lyricOverlayWidthPercent = prefs.lyricOverlayWidthPercent,
                 lyricOverlayBoxHeightPercent = prefs.lyricOverlayBoxHeightPercent,
                 lyricOverlayXPercent = prefs.lyricOverlayXPercent,

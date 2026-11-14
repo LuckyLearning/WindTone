@@ -259,6 +259,17 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
     private var appliedLines = -1
     private var appliedTitlePercent = -1
 
+    /**
+     * 标题块的「已应用」快照（v1.2.54）：位置（上/下）、对齐（三档）、颜色、描边。
+     *
+     * 位置变化要**动视图层级**（LinearLayout 里的下标），所以必须单独记一份；
+     * 颜色 / 描边合成一个键，和歌词描边同口径。
+     */
+    private var appliedTitlePos = -1
+    private var appliedTitleAlign = -1
+    private var appliedTitleColor = Int.MIN_VALUE
+    private var appliedTitleStrokeKey = Int.MIN_VALUE
+
     /** 已应用的背景不透明度 / 暂停表现 / 对齐 */
     private var appliedBgAlpha = -1
     private var appliedPauseMode = -1
@@ -525,6 +536,10 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         appliedTextSp = -1
         appliedLines = -1
         appliedTitlePercent = -1
+        appliedTitlePos = -1
+        appliedTitleAlign = -1
+        appliedTitleColor = Int.MIN_VALUE
+        appliedTitleStrokeKey = Int.MIN_VALUE
         appliedBgAlpha = -1
         appliedPauseMode = -1
         appliedAlign = -1
@@ -643,7 +658,12 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         // 放在独立的 TextView 里而不是拼进歌词串，是为了让两处字号 / 行距各自独立 ——
         // 标题调大不该把歌词顶出去，歌词换行数也不该影响标题。
         val title = TextView(this).apply {
-            setTextColor(OverlayTextStyler.withAlpha(Prefs(this@LyricOverlayService).lyricOverlayTextColor, TITLE_ALPHA))
+            setTextColor(
+                OverlayTextStyler.withAlpha(
+                    Prefs(this@LyricOverlayService).lyricOverlayTextColor,
+                    OverlayAppearance.TITLE_FOLLOW_ALPHA,
+                ),
+            )
             setPadding(dp(18), dp(8), dp(18), 0)
             includeFontPadding = false
             maxLines = 2
@@ -721,6 +741,9 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             lyricView = tv
             titleView = title
             contentColumn = column
+            // 标题的位置 / 对齐 / 颜色 / 描边（v1.2.54）：新建出来的窗口必须当场套一遍，
+            // 否则「标题在下方」要等下一次设置变更才生效（首帧会闪在错误的位置）
+            applyTitleStyle(Prefs(this), force = true)
             attachCollapseHandle()
             layoutParams = params
             windowAttached = true
@@ -1338,9 +1361,8 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         if (appliedTextColor != textColor) {
             appliedTextColor = textColor
             tv.setTextColor(textColor)
-            // 标题用同一个色相、压低透明度：换歌词颜色时两处一起走，不会出现
-            // 「歌词变黄、标题还是白的」这种半截生效
-            titleView?.setTextColor(OverlayTextStyler.withAlpha(textColor, TITLE_ALPHA))
+            // 标题颜色不再跟着这里走：标题可能自选了颜色（v1.2.54），
+            // 由 applyTitleStyle 统一决定「跟随正文色」还是「用自选色」
         }
 
         val textSp = prefs.lyricOverlayTextSp
@@ -1362,6 +1384,10 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
                 OverlayAppearance.titleTextSp(textSp, titlePercent),
             )
         }
+
+        // 标题块的位置 / 对齐 / 颜色 / 描边（v1.2.54）：四项合成一次比对，
+        // 位置变了会动视图下标，颜色变了只改字色，描边变了只改 shadowLayer。
+        applyTitleStyle(prefs)
 
         // 行数变了窗口高度就变了，夹取上限（屏高 − 窗高）跟着变。
         // 必须等一帧、让布局先量出新高度，否则拿到的是旧高度。
@@ -1402,8 +1428,79 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         if (appliedAlign != align) {
             appliedAlign = align
             tv.gravity = OverlayAppearance.alignGravity(align)
-            // 标题跟着歌词一起对齐，否则「居左」时标题还悬在中间，看着像两个控件
-            titleView?.gravity = OverlayAppearance.alignGravity(align)
+            // 标题的对齐自 v1.2.54 起是独立设置（可居中 / 居左 / 居右），
+            // 不再跟着歌词一起变 —— 见 applyTitleStyle
+        }
+    }
+
+    /**
+     * 标题块的样式与位置（v1.2.54）。
+     *
+     * 为什么标题能单独描边、歌词不能：投影是 `TextView` 级的（`setShadowLayer`），
+     * `Spannable` 里改不了每一行的描边。标题是独立 `TextView`，所以四件事
+     * （位置 / 对齐 / 颜色 / 描边）都能与歌词解耦。
+     *
+     * 位置 = 视图在 `LinearLayout` 里的下标：0 在歌词上方、1 在下方。
+     * 换位置时**先摘再插**，顺手把上下内边距对调，否则标题贴在底边时会顶出一条空隙。
+     */
+    private fun applyTitleStyle(prefs: Prefs, force: Boolean = false) {
+        val tv = titleView ?: return
+        val pos = prefs.lyricOverlayTitlePos
+        val align = prefs.lyricOverlayTitleAlign
+        // 0 = 跟随歌词文字色（压到 78%）；自选色时原样使用
+        val color = prefs.lyricOverlayTitleColor.takeIf { it != 0 }
+            ?: OverlayTextStyler.withAlpha(prefs.lyricOverlayTextColor, OverlayAppearance.TITLE_FOLLOW_ALPHA)
+        val strokeKey = (if (prefs.lyricOverlayTitleStrokeEnabled) 1 else 0) * 131 +
+            prefs.lyricOverlayTitleStrokeWidthDp * 31 +
+            (prefs.lyricOverlayTitleStrokeColor and 0x00FFFFFF)
+        if (!force &&
+            appliedTitlePos == pos &&
+            appliedTitleAlign == align &&
+            appliedTitleColor == color &&
+            appliedTitleStrokeKey == strokeKey
+        ) {
+            return
+        }
+        val posChanged = appliedTitlePos != pos || force
+        appliedTitlePos = pos
+        appliedTitleAlign = align
+        appliedTitleColor = color
+        appliedTitleStrokeKey = strokeKey
+
+        tv.setTextColor(color)
+        tv.gravity = OverlayAppearance.alignGravity3(align)
+        if (posChanged) {
+            val column = contentColumn as? android.widget.LinearLayout
+            if (column != null) {
+                val target = if (pos == 0) 0 else 1
+                if (column.indexOfChild(tv) != target) {
+                    column.removeView(tv)
+                    column.addView(
+                        tv,
+                        target.coerceAtMost(column.childCount),
+                        android.widget.LinearLayout.LayoutParams(
+                            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ),
+                    )
+                }
+            }
+            // 贴底时把内边距对调：上方不留 8dp，下方补 8dp
+            if (pos == 0) {
+                tv.setPadding(dp(18), dp(8), dp(18), 0)
+            } else {
+                tv.setPadding(dp(18), 0, dp(18), dp(8))
+            }
+        }
+        if (prefs.lyricOverlayTitleStrokeEnabled) {
+            tv.setShadowLayer(
+                dp(prefs.lyricOverlayTitleStrokeWidthDp).toFloat(),
+                0f,
+                0f,
+                prefs.lyricOverlayTitleStrokeColor,
+            )
+        } else {
+            tv.setShadowLayer(0f, 0f, 0f, Color.TRANSPARENT)
         }
     }
 
@@ -1618,6 +1715,9 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             noBackdrop = noBackdrop,
             currentColor = renderPrefs.lyricOverlayCurrentColor,
             dimPercent = renderPrefs.lyricOverlayDimPercent,
+            currentScalePercent = renderPrefs.lyricOverlayCurrentScale,
+            contextScalePercent = renderPrefs.lyricOverlayContextScale,
+            contextColor = renderPrefs.lyricOverlayContextColor,
         )
         if (!renderDeduper.begin(renderKey)) {
             if (!fading && tv.alpha != targetAlpha) {
@@ -1635,6 +1735,9 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             noBackdrop,
             currentColor = renderPrefs.lyricOverlayCurrentColor,
             dimPercent = renderPrefs.lyricOverlayDimPercent,
+            currentScalePercent = renderPrefs.lyricOverlayCurrentScale,
+            contextScalePercent = renderPrefs.lyricOverlayContextScale,
+            contextColor = renderPrefs.lyricOverlayContextColor,
         )
         val sameText = tv.text.toString() == spanned.toString()
 
@@ -2405,9 +2508,6 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         private val EDIT_STROKE_COLOR = Color.argb(220, 88, 166, 255)
 
 
-
-        /** 歌名 / 歌手小字的不透明度：压暗到 ~70%，层级自然落在歌词之下 */
-        private const val TITLE_ALPHA = 0xB4
 
         /** 歌名 / 歌手最多两行（歌名 + 歌手），行数自适应时按它扣高度 */
         private const val TITLE_ROWS = 2

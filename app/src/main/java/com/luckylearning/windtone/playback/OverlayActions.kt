@@ -111,6 +111,35 @@ interface OverlayActions {
     fun setLyricOverlayFadeMs(value: Int)
     fun setLyricOverlayTitleMode(value: Int)
 
+    // ------------------------------------------------ 标题块与分角色样式（v1.2.54）
+
+    /** 标题块位置：0 歌词上方 / 1 歌词下方 */
+    fun setLyricOverlayTitlePos(value: Int)
+
+    /** 标题块对齐：0 居中 / 1 居左 / 2 居右（与歌词对齐互不影响） */
+    fun setLyricOverlayTitleAlign(value: Int)
+
+    /** 标题块颜色：0 = 跟随歌词文字色（默认），其余 ARGB */
+    fun setLyricOverlayTitleColor(value: Int)
+
+    /** 标题描边开关（默认关） */
+    fun setLyricOverlayTitleStrokeEnabled(value: Boolean)
+
+    /** 标题描边宽度（dp，1..4） */
+    fun setLyricOverlayTitleStrokeWidthDp(value: Int)
+
+    /** 标题描边颜色（ARGB） */
+    fun setLyricOverlayTitleStrokeColor(value: Int)
+
+    /** 当前行字号：正文字号的百分比（60..180） */
+    fun setLyricOverlayCurrentScale(value: Int)
+
+    /** 其他行字号：正文字号的百分比（60..180） */
+    fun setLyricOverlayContextScale(value: Int)
+
+    /** 其他行颜色：0 = 跟随歌词文字色（默认，再按压暗算不透明度），其余 ARGB */
+    fun setLyricOverlayContextColor(value: Int)
+
     /** 悬浮窗歌词文字颜色（ARGB） */
     fun setLyricOverlayTextColor(color: Int)
 

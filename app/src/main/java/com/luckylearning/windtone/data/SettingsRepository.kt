@@ -290,6 +290,57 @@ class SettingsRepository(val prefs: Prefs) {
         return prefs.lyricOverlayTitleMode
     }
 
+    // ------------------------------------------------ 标题块与分角色样式（v1.2.54）
+
+    /** @return 夹到 0..1 后的值（0 上 / 1 下） */
+    fun setLyricOverlayTitlePos(value: Int): Int {
+        prefs.lyricOverlayTitlePos = value
+        return prefs.lyricOverlayTitlePos
+    }
+
+    /** @return 夹到 0..2 后的值（0 中 / 1 左 / 2 右） */
+    fun setLyricOverlayTitleAlign(value: Int): Int {
+        prefs.lyricOverlayTitleAlign = value
+        return prefs.lyricOverlayTitleAlign
+    }
+
+    fun setLyricOverlayTitleColor(value: Int): Int {
+        prefs.lyricOverlayTitleColor = value
+        return prefs.lyricOverlayTitleColor
+    }
+
+    fun setLyricOverlayTitleStrokeEnabled(value: Boolean): Boolean {
+        prefs.lyricOverlayTitleStrokeEnabled = value
+        return prefs.lyricOverlayTitleStrokeEnabled
+    }
+
+    fun setLyricOverlayTitleStrokeWidthDp(value: Int): Int {
+        prefs.lyricOverlayTitleStrokeWidthDp = value
+        return prefs.lyricOverlayTitleStrokeWidthDp
+    }
+
+    fun setLyricOverlayTitleStrokeColor(value: Int): Int {
+        prefs.lyricOverlayTitleStrokeColor = value
+        return prefs.lyricOverlayTitleStrokeColor
+    }
+
+    /** @return 夹到 [SettingsDefaults.OVERLAY_LINE_SCALE_RANGE] 后的值 */
+    fun setLyricOverlayCurrentScale(value: Int): Int {
+        prefs.lyricOverlayCurrentScale = value
+        return prefs.lyricOverlayCurrentScale
+    }
+
+    /** @return 夹到 [SettingsDefaults.OVERLAY_LINE_SCALE_RANGE] 后的值 */
+    fun setLyricOverlayContextScale(value: Int): Int {
+        prefs.lyricOverlayContextScale = value
+        return prefs.lyricOverlayContextScale
+    }
+
+    fun setLyricOverlayContextColor(value: Int): Int {
+        prefs.lyricOverlayContextColor = value
+        return prefs.lyricOverlayContextColor
+    }
+
     fun setOverlayTextColor(color: Int) {
         prefs.lyricOverlayTextColor = color
     }

@@ -53,6 +53,9 @@ internal object OverlayTextStyler {
      * @param noBackdrop   是否无底板；无底板时上下文/译文不能压太暗（见 [OverlayLegibility]）
      * @param currentColor 当前行单独高亮色（v1.1.52）；0 = 跟随 [baseColor]（TextView 文字色）
      * @param dimPercent   上下句压暗百分比（v1.1.52，20–80）；默认 42 与播放页对齐
+     * @param currentScalePercent 当前行字号 = 正文字号的百分比（v1.2.54，默认 100）
+     * @param contextScalePercent 其他行字号 = 正文字号的百分比（v1.2.54，默认 100）
+     * @param contextColor 其他行颜色（v1.2.54）；0 = 跟随 [baseColor]，仍按压暗算不透明度
      */
     fun build(
         lines: List<OverlayTextComposer.StyledLine>,
@@ -61,37 +64,55 @@ internal object OverlayTextStyler {
         noBackdrop: Boolean,
         currentColor: Int = 0,
         dimPercent: Int = OverlayLegibility.DEFAULT_DIM_PERCENT,
+        currentScalePercent: Int = 100,
+        contextScalePercent: Int = 100,
+        contextColor: Int = 0,
     ): CharSequence {
         if (lines.isEmpty()) return ""
+        // v1.2.54：分角色字号 = 用户百分比 × 形态基准（全屏的当前行基线比正文大 13%）
+        val currentScale = currentScalePercent.coerceIn(40, 200) / 100f *
+            (if (fullHeight) FULL_CURRENT_SCALE else 1f)
+        val contextScale = contextScalePercent.coerceIn(40, 200) / 100f
         val only = lines.singleOrNull()
-        // 单行 && 主角 && 不是全屏模式 && 没有单独设当前行色时走纯字符串快路径：
+        // 单行 && 主角 && 不是全屏模式 && 没有单独设当前行色 / 字号时走纯字符串快路径：
         // 主角**不需要任何 span**（颜色由 TextView 的文字色决定），1 行模式正是
-        // 最常见的字幕形态。用户设了「当前行颜色」后主角要单独染色，快路径作废。
+        // 最常见的字幕形态。用户设了「当前行颜色 / 字号」后主角要单独染 / 缩放，快路径作废。
         if (!fullHeight && only != null && only.role == OverlayTextComposer.Role.CURRENT) {
-            if (currentColor == 0) return only.text
+            if (currentColor == 0 && currentScalePercent == 100) return only.text
             return SpannableStringBuilder().apply {
                 append(only.text)
-                setSpan(
-                    ForegroundColorSpan(currentColor),
-                    0,
-                    length,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                )
+                if (currentColor != 0) {
+                    setSpan(
+                        ForegroundColorSpan(currentColor),
+                        0,
+                        length,
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                    )
+                }
+                if (currentScalePercent != 100) {
+                    setSpan(
+                        RelativeSizeSpan(currentScale),
+                        0,
+                        length,
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                    )
+                }
             }
         }
         // 无底板时不能把上下句压到 42%：浅底（泊车影像 / 地图）上那就是一片雾。
         val contextAlpha = OverlayLegibility.contextAlpha(noBackdrop, dimPercent)
-        val translationAlpha = OverlayLegibility.translationAlpha(noBackdrop, dimPercent)
         // 单条模式：配角 / 译文与正文**同色相**，只压暗不换色（v1.1.79 修复）。
         // 原先这里写死白色：用户把「悬浮歌词文字颜色」调成橙 / 黄后，上下句仍是白的，
         // 只有顶部歌名（跟随文字色）变了色，看起来就像「颜色染到歌名上去了」。
         // alpha 仍以旧版 150 为基准按压暗百分比等比缩放，默认文字色（白）下视觉不变。
+        // v1.2.54：色相可由「其他行颜色」单独指定（0 = 仍跟随正文色），alpha 规则不变。
         val stripContextColor = withAlpha(
-            baseColor,
+            if (contextColor != 0) contextColor else baseColor,
             (STRIP_CONTEXT_ALPHA * dimPercent.coerceIn(0, 100) /
                 OverlayLegibility.DEFAULT_DIM_PERCENT.toFloat()).roundToInt()
                 .coerceIn(30, 255),
         )
+        val fullContextColor = withAlpha(if (contextColor != 0) contextColor else baseColor, contextAlpha)
         return SpannableStringBuilder().apply {
             lines.forEachIndexed { index, line ->
                 if (index > 0) append("\n")
@@ -101,15 +122,17 @@ internal object OverlayTextStyler {
                 when (line.role) {
                     OverlayTextComposer.Role.CURRENT -> {
                         if (fullHeight) {
-                            // 播放页的当前行：字号放大一档 + 加粗 + 满不透明
+                            // 播放页的当前行：加粗 + 满不透明（字号走下面的统一缩放）
                             setSpan(
-                                RelativeSizeSpan(FULL_CURRENT_SCALE),
+                                StyleSpan(Typeface.BOLD),
                                 start,
                                 end,
                                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
                             )
+                        }
+                        if (currentScale != 1f) {
                             setSpan(
-                                StyleSpan(Typeface.BOLD),
+                                RelativeSizeSpan(currentScale),
                                 start,
                                 end,
                                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
@@ -127,17 +150,19 @@ internal object OverlayTextStyler {
                     }
                     OverlayTextComposer.Role.CONTEXT -> {
                         setSpan(
-                            ForegroundColorSpan(
-                                if (fullHeight) {
-                                    withAlpha(baseColor, contextAlpha)
-                                } else {
-                                    stripContextColor
-                                },
-                            ),
+                            ForegroundColorSpan(if (fullHeight) fullContextColor else stripContextColor),
                             start,
                             end,
                             Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
                         )
+                        if (contextScale != 1f) {
+                            setSpan(
+                                RelativeSizeSpan(contextScale),
+                                start,
+                                end,
+                                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                            )
+                        }
                         if (fullHeight) {
                             setSpan(
                                 StyleSpan(Typeface.NORMAL),
@@ -149,20 +174,16 @@ internal object OverlayTextStyler {
                     }
                     OverlayTextComposer.Role.TRANSLATION -> {
                         setSpan(
-                            ForegroundColorSpan(
-                                if (fullHeight) {
-                                    withAlpha(baseColor, translationAlpha)
-                                } else {
-                                    stripContextColor
-                                },
-                            ),
+                            ForegroundColorSpan(if (fullHeight) fullContextColor else stripContextColor),
                             start,
                             end,
                             Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
                         )
+                        // 译文跟着当前行走：当前行放大了，译文同比放大才不脱节
                         setSpan(
                             RelativeSizeSpan(
-                                if (fullHeight) FULL_TRANSLATION_SCALE else TRANSLATION_SCALE,
+                                (if (fullHeight) FULL_TRANSLATION_SCALE else TRANSLATION_SCALE) *
+                                    currentScale,
                             ),
                             start,
                             end,

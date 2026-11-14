@@ -152,8 +152,20 @@ class PlaybackEngine(
             lyricOverlayDimPercent = prefs.lyricOverlayDimPercent,
             lyricOverlayStrokeWidthDp = prefs.lyricOverlayStrokeWidthDp,
             lyricOverlayStrokeColor = prefs.lyricOverlayStrokeColor,
+            // v1.2.53 漏了这一个：重启后界面显示「描边开」而实际是关的，用户得点两次才能打开
+            lyricOverlayStrokeEnabled = prefs.lyricOverlayStrokeEnabled,
             lyricOverlayFadeMs = prefs.lyricOverlayFadeMs,
             lyricOverlayTitleMode = prefs.lyricOverlayTitleMode,
+            // v1.2.54：标题块 / 分角色样式
+            lyricOverlayTitlePos = prefs.lyricOverlayTitlePos,
+            lyricOverlayTitleAlign = prefs.lyricOverlayTitleAlign,
+            lyricOverlayTitleColor = prefs.lyricOverlayTitleColor,
+            lyricOverlayTitleStrokeEnabled = prefs.lyricOverlayTitleStrokeEnabled,
+            lyricOverlayTitleStrokeWidthDp = prefs.lyricOverlayTitleStrokeWidthDp,
+            lyricOverlayTitleStrokeColor = prefs.lyricOverlayTitleStrokeColor,
+            lyricOverlayCurrentScale = prefs.lyricOverlayCurrentScale,
+            lyricOverlayContextScale = prefs.lyricOverlayContextScale,
+            lyricOverlayContextColor = prefs.lyricOverlayContextColor,
             // 车载模式：启动直接进播放页（跳过库主页）
             playerExpanded = prefs.carMode,
             speed = prefs.playbackSpeed,
@@ -1767,6 +1779,26 @@ class PlaybackEngine(
         overlaySettings.setLyricOverlayFadeMs(value)
     override fun setLyricOverlayTitleMode(value: Int) =
         overlaySettings.setLyricOverlayTitleMode(value)
+
+    // v1.2.54：标题块（位置 / 对齐 / 颜色 / 描边）与「当前行 / 其他行」分角色样式
+    override fun setLyricOverlayTitlePos(value: Int) =
+        overlaySettings.setLyricOverlayTitlePos(value)
+    override fun setLyricOverlayTitleAlign(value: Int) =
+        overlaySettings.setLyricOverlayTitleAlign(value)
+    override fun setLyricOverlayTitleColor(value: Int) =
+        overlaySettings.setLyricOverlayTitleColor(value)
+    override fun setLyricOverlayTitleStrokeEnabled(value: Boolean) =
+        overlaySettings.setLyricOverlayTitleStrokeEnabled(value)
+    override fun setLyricOverlayTitleStrokeWidthDp(value: Int) =
+        overlaySettings.setLyricOverlayTitleStrokeWidthDp(value)
+    override fun setLyricOverlayTitleStrokeColor(value: Int) =
+        overlaySettings.setLyricOverlayTitleStrokeColor(value)
+    override fun setLyricOverlayCurrentScale(value: Int) =
+        overlaySettings.setLyricOverlayCurrentScale(value)
+    override fun setLyricOverlayContextScale(value: Int) =
+        overlaySettings.setLyricOverlayContextScale(value)
+    override fun setLyricOverlayContextColor(value: Int) =
+        overlaySettings.setLyricOverlayContextColor(value)
 
     override fun canDrawOverlay(): Boolean = overlaySettings.canDrawOverlay()
     override fun setOverlayEditing(editing: Boolean) = overlaySettings.setOverlayEditing(editing)

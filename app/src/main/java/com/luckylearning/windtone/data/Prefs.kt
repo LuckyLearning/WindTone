@@ -389,6 +389,59 @@ object SettingsDefaults {
     /** 标题显示内容：0 歌名 + 歌手（默认）/ 1 只歌名 / 2 只歌手 */
     const val OVERLAY_TITLE_MODE = 0
 
+    // ------------------------------------------------ 标题块与分角色样式（v1.2.54）
+
+    /**
+     * 标题块放在歌词**上面还是下面**：0 = 上面（既有行为）/ 1 = 下面。
+     *
+     * 默认 0：升级后不动老用户的观感。放下面这一档是给「字幕式」场景用的 ——
+     * 车机上歌名压在歌词上方会挡住视线中心，挪到下方更像原生字幕。
+     */
+    const val OVERLAY_TITLE_POS = 0
+
+    /** 标题块的对齐：0 居中（默认）/ 1 居左 / 2 居右。与歌词的对齐**各管各的** */
+    const val OVERLAY_TITLE_ALIGN = 0
+
+    /**
+     * 标题块文字颜色：0 = 跟随「歌词文字颜色」并压到 78% 不透明度，其余为 ARGB。
+     *
+     * 默认 0（跟随）：不做这个功能之前标题就是「歌词色的 78%」，
+     * 升级后没人动过设置的那批用户不该看到颜色变样。
+     */
+    const val OVERLAY_TITLE_COLOR = 0
+
+    /** 标题描边开关：默认关（既有行为 —— 标题一直没有投影） */
+    const val OVERLAY_TITLE_STROKE_ON = false
+
+    /** 标题描边宽度（dp）：默认 2，开关关掉时不画 */
+    const val OVERLAY_TITLE_STROKE_WIDTH_DP = 2
+    val OVERLAY_TITLE_STROKE_WIDTH_RANGE = 1..4
+
+    /** 标题描边颜色（默认纯黑，与歌词描边同色） */
+    const val OVERLAY_TITLE_STROKE_COLOR = 0xFF000000.toInt()
+
+    /**
+     * 当前行字号：**正文字号的百分比**（默认 100）。
+     *
+     * 用百分比而不是独立 sp：正文滑杆一调，当前行 / 其他行跟着走，
+     * 只在「当前行要比其他行大多少」这件事上单独拧，不会出现两组数字各调各的。
+     */
+    const val OVERLAY_CURRENT_SCALE = 100
+
+    /** 其他行（上下句 / 译文以外的歌词行）字号：正文的百分比（默认 100） */
+    const val OVERLAY_CONTEXT_SCALE = 100
+
+    /** 行内字号百分比的合法区间：60% 已经是「明显小一号」，180% 再大就会把小窗撑破 */
+    val OVERLAY_LINE_SCALE_RANGE = 60..180
+
+    /**
+     * 其他行颜色：0 = 跟随「歌词文字颜色」（再按压暗算不透明度），其余为 ARGB。
+     *
+     * 默认 0：其他行与当前行同色相、只有明暗差别，是升级前的观感；
+     * 想做成「当前行高亮 + 其他行灰色」的人自己挑一个色即可。
+     */
+    const val OVERLAY_CONTEXT_COLOR = 0
+
     /**
      * 悬浮窗宽度（屏幕宽度的百分比，1..100）。
      *
@@ -1836,6 +1889,111 @@ class Prefs private constructor(context: Context) {
             ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_PAUSE_MODE, v) }
         }
 
+    // ------------------------------------------------ 标题块与分角色样式（v1.2.54）
+
+    /** 标题块位置：0 歌词上方（默认）/ 1 歌词下方 */
+    var lyricOverlayTitlePos: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_TITLE_POS, SettingsDefaults.OVERLAY_TITLE_POS).coerceIn(0, 1)
+        set(value) {
+            val v = value.coerceIn(0, 1)
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_TITLE_POS, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_TITLE_POS, v) }
+        }
+
+    /** 标题块对齐：0 居中（默认）/ 1 居左 / 2 居右。与歌词对齐互不影响 */
+    var lyricOverlayTitleAlign: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_TITLE_ALIGN, SettingsDefaults.OVERLAY_TITLE_ALIGN).coerceIn(0, 2)
+        set(value) {
+            val v = value.coerceIn(0, 2)
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_TITLE_ALIGN, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_TITLE_ALIGN, v) }
+        }
+
+    /**
+     * 标题块颜色：0 = 跟随歌词文字色并压到 78% 不透明度（默认），其余为 ARGB。
+     *
+     * setter 与背景色不同，**保留 alpha 原样**：标题色有「压低一档」的默认语义，
+     * 用户挑了一个颜色就该是他挑的那个颜色，不该再叠一层不透明度。
+     */
+    var lyricOverlayTitleColor: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_TITLE_C, SettingsDefaults.OVERLAY_TITLE_COLOR)
+        set(value) {
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_TITLE_C, value).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_TITLE_C, value) }
+        }
+
+    /** 标题描边开关（默认关） */
+    var lyricOverlayTitleStrokeEnabled: Boolean
+        get() = sp.getBoolean(KEY_LYRIC_OVERLAY_TITLE_STROKE_ON, SettingsDefaults.OVERLAY_TITLE_STROKE_ON)
+        set(value) {
+            sp.edit().putBoolean(KEY_LYRIC_OVERLAY_TITLE_STROKE_ON, value).apply()
+            ioScope.launch { store.putBoolean(KEY_LYRIC_OVERLAY_TITLE_STROKE_ON, value) }
+        }
+
+    /** 标题描边宽度（dp，1..4）；开关关掉时不画 */
+    var lyricOverlayTitleStrokeWidthDp: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_TITLE_STROKE_W, SettingsDefaults.OVERLAY_TITLE_STROKE_WIDTH_DP)
+            .coerceIn(
+                SettingsDefaults.OVERLAY_TITLE_STROKE_WIDTH_RANGE.first,
+                SettingsDefaults.OVERLAY_TITLE_STROKE_WIDTH_RANGE.last,
+            )
+        set(value) {
+            val v = value.coerceIn(
+                SettingsDefaults.OVERLAY_TITLE_STROKE_WIDTH_RANGE.first,
+                SettingsDefaults.OVERLAY_TITLE_STROKE_WIDTH_RANGE.last,
+            )
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_TITLE_STROKE_W, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_TITLE_STROKE_W, v) }
+        }
+
+    /** 标题描边颜色（ARGB） */
+    var lyricOverlayTitleStrokeColor: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_TITLE_STROKE_C, SettingsDefaults.OVERLAY_TITLE_STROKE_COLOR)
+        set(value) {
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_TITLE_STROKE_C, value).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_TITLE_STROKE_C, value) }
+        }
+
+    /** 当前行字号：正文字号的百分比（60..180，默认 100） */
+    var lyricOverlayCurrentScale: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_CURRENT_SCALE, SettingsDefaults.OVERLAY_CURRENT_SCALE)
+            .coerceIn(
+                SettingsDefaults.OVERLAY_LINE_SCALE_RANGE.first,
+                SettingsDefaults.OVERLAY_LINE_SCALE_RANGE.last,
+            )
+        set(value) {
+            val v = value.coerceIn(
+                SettingsDefaults.OVERLAY_LINE_SCALE_RANGE.first,
+                SettingsDefaults.OVERLAY_LINE_SCALE_RANGE.last,
+            )
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_CURRENT_SCALE, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_CURRENT_SCALE, v) }
+        }
+
+    /** 其他行（上下句）字号：正文字号的百分比（60..180，默认 100） */
+    var lyricOverlayContextScale: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_CONTEXT_SCALE, SettingsDefaults.OVERLAY_CONTEXT_SCALE)
+            .coerceIn(
+                SettingsDefaults.OVERLAY_LINE_SCALE_RANGE.first,
+                SettingsDefaults.OVERLAY_LINE_SCALE_RANGE.last,
+            )
+        set(value) {
+            val v = value.coerceIn(
+                SettingsDefaults.OVERLAY_LINE_SCALE_RANGE.first,
+                SettingsDefaults.OVERLAY_LINE_SCALE_RANGE.last,
+            )
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_CONTEXT_SCALE, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_CONTEXT_SCALE, v) }
+        }
+
+    /** 其他行颜色：0 = 跟随歌词文字色（默认，再按压暗算不透明度），其余为 ARGB */
+    var lyricOverlayContextColor: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_CONTEXT_C, SettingsDefaults.OVERLAY_CONTEXT_COLOR)
+        set(value) {
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_CONTEXT_C, value).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_CONTEXT_C, value) }
+        }
+
     /**
      * 悬浮歌词窗内文字的对齐：0 居中（默认）/ 1 居左。
      *
@@ -2443,6 +2601,17 @@ class Prefs private constructor(context: Context) {
         const val KEY_LYRIC_OVERLAY_FADE = "lyric_overlay_fade_ms"
         const val KEY_LYRIC_OVERLAY_TITLE_MODE = "lyric_overlay_title_mode"
 
+        // ---- 标题块与分角色样式（v1.2.54）----
+        const val KEY_LYRIC_OVERLAY_TITLE_POS = "lyric_overlay_title_pos"
+        const val KEY_LYRIC_OVERLAY_TITLE_ALIGN = "lyric_overlay_title_align"
+        const val KEY_LYRIC_OVERLAY_TITLE_C = "lyric_overlay_title_color"
+        const val KEY_LYRIC_OVERLAY_TITLE_STROKE_ON = "lyric_overlay_title_stroke_on"
+        const val KEY_LYRIC_OVERLAY_TITLE_STROKE_W = "lyric_overlay_title_stroke_width_dp"
+        const val KEY_LYRIC_OVERLAY_TITLE_STROKE_C = "lyric_overlay_title_stroke_color"
+        const val KEY_LYRIC_OVERLAY_CURRENT_SCALE = "lyric_overlay_current_scale"
+        const val KEY_LYRIC_OVERLAY_CONTEXT_SCALE = "lyric_overlay_context_scale"
+        const val KEY_LYRIC_OVERLAY_CONTEXT_C = "lyric_overlay_context_color"
+
         // ---- 6. 前台检测与调试 ----
         const val KEY_LYRIC_OVERLAY_HIDDEN_APPS = "lyric_overlay_hidden_apps"
         const val KEY_FOREGROUND_LOG_ENABLED = "foreground_log_enabled"
@@ -2490,8 +2659,19 @@ class Prefs private constructor(context: Context) {
             KEY_LYRIC_OVERLAY_TEXT_SP,
             KEY_LYRIC_OVERLAY_TITLE_PERCENT,
             KEY_LYRIC_OVERLAY_TITLE_MODE,
+            // 标题块的位置 / 对齐 / 颜色 / 描边（v1.2.54）
+            KEY_LYRIC_OVERLAY_TITLE_POS,
+            KEY_LYRIC_OVERLAY_TITLE_ALIGN,
+            KEY_LYRIC_OVERLAY_TITLE_C,
+            KEY_LYRIC_OVERLAY_TITLE_STROKE_ON,
+            KEY_LYRIC_OVERLAY_TITLE_STROKE_W,
+            KEY_LYRIC_OVERLAY_TITLE_STROKE_C,
             KEY_LYRIC_OVERLAY_TEXT_COLOR,
             KEY_LYRIC_OVERLAY_CURRENT_COLOR,
+            // 当前行 / 其他行的字号与颜色（v1.2.54）
+            KEY_LYRIC_OVERLAY_CURRENT_SCALE,
+            KEY_LYRIC_OVERLAY_CONTEXT_SCALE,
+            KEY_LYRIC_OVERLAY_CONTEXT_C,
             KEY_LYRIC_OVERLAY_DIM,
             KEY_LYRIC_OVERLAY_ALIGN,
             KEY_LYRIC_OVERLAY_LINE_SPACING,

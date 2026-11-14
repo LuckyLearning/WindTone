@@ -591,6 +591,17 @@ data class PlayerUiState(
     val lyricOverlayStrokeEnabled: Boolean = SettingsDefaults.OVERLAY_STROKE_ENABLED,
     val lyricOverlayFadeMs: Int = SettingsDefaults.OVERLAY_FADE_MS,
     val lyricOverlayTitleMode: Int = SettingsDefaults.OVERLAY_TITLE_MODE,
+    /** v1.2.54 标题块：位置（0 上 / 1 下）、对齐（0 中 / 1 左 / 2 右）、颜色（0 跟随） */
+    val lyricOverlayTitlePos: Int = SettingsDefaults.OVERLAY_TITLE_POS,
+    val lyricOverlayTitleAlign: Int = SettingsDefaults.OVERLAY_TITLE_ALIGN,
+    val lyricOverlayTitleColor: Int = SettingsDefaults.OVERLAY_TITLE_COLOR,
+    val lyricOverlayTitleStrokeEnabled: Boolean = SettingsDefaults.OVERLAY_TITLE_STROKE_ON,
+    val lyricOverlayTitleStrokeWidthDp: Int = SettingsDefaults.OVERLAY_TITLE_STROKE_WIDTH_DP,
+    val lyricOverlayTitleStrokeColor: Int = SettingsDefaults.OVERLAY_TITLE_STROKE_COLOR,
+    /** v1.2.54 分角色字号（正文字号的百分比）与「其他行」颜色（0 跟随） */
+    val lyricOverlayCurrentScale: Int = SettingsDefaults.OVERLAY_CURRENT_SCALE,
+    val lyricOverlayContextScale: Int = SettingsDefaults.OVERLAY_CONTEXT_SCALE,
+    val lyricOverlayContextColor: Int = SettingsDefaults.OVERLAY_CONTEXT_COLOR,
     /** 悬浮窗里的歌词文字颜色（ARGB，默认纯白） */
     val lyricOverlayTextColor: Int = SettingsDefaults.OVERLAY_TEXT_COLOR,
     /** 悬浮歌词是否处于「调整位置」模式（临时可拖动，会话级，不落盘） */

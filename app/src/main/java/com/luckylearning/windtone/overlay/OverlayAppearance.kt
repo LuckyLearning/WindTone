@@ -66,6 +66,27 @@ object OverlayAppearance {
         }
 
     /**
+     * **标题块**的三档对齐（v1.2.54）：0 居中 / 1 居左 / 2 居右。
+     *
+     * 歌词的对齐只有两档（居中 / 居左），标题多一档「居右」—— 标题是装饰性的一行小字，
+     * 「贴右下角」是字幕里很常见的位置，而歌词本体居中 / 居左就够用。
+     * 两套分开后，标题可以居中、歌词居左，互不牵扯。
+     */
+    fun alignGravity3(align: Int): Int = when (align) {
+        OverlayPositioner.ALIGN_LEFT -> Gravity.START or Gravity.CENTER_VERTICAL
+        OverlayPositioner.ALIGN_RIGHT -> Gravity.END or Gravity.CENTER_VERTICAL
+        else -> Gravity.CENTER
+    }
+
+    /**
+     * 标题块「跟随歌词颜色」时压到的不透明度（180/255 ≈ 71%）。
+     *
+     * 标题是配角：与歌词同色但压暗一档，才能让视线落在正在唱的那句上。
+     * 用户自选了标题颜色时**不再压暗** —— 挑了什么色就该显示什么色。
+     */
+    const val TITLE_FOLLOW_ALPHA = 0xB4
+
+    /**
      * 歌名 / 歌手两行小字的字号（sp）：**正文 × 用户设的百分比**（v1.1.51）。
      *
      * 用比例而不是独立 sp，是因为标题是配角：用户把正文从 20 调到 28 时，

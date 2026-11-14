@@ -33,6 +33,14 @@ object OverlayPositioner {
     /** 「对齐」档位：窗内文字靠左。现在只影响文字排版，不影响窗口位置 */
     const val ALIGN_LEFT = 1
 
+    /**
+     * 「对齐」档位：靠右（v1.2.54）。
+     *
+     * **只有标题块用得到**：歌词本体的对齐仍是「居中 / 靠左」两档，
+     * 这一档进不了 [Prefs.lyricOverlayAlign]（它的 setter 夹在 0..1）。
+     */
+    const val ALIGN_RIGHT = 2
+
     /** `savedX` / `savedY` 的这个值表示「用户从未拖动过」，此时走默认位置 */
     const val UNSET: Int = Int.MIN_VALUE
 
