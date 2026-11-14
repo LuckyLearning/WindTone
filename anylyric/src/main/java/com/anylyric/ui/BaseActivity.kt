@@ -1,15 +1,20 @@
 package com.anylyric.ui
 
 import android.app.Activity
+import android.content.Context
 import android.content.res.Configuration
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import com.anylyric.data.Prefs
 import com.anylyric.session.SessionHub
+import com.anylyric.theme.ThemeContext
+import com.anylyric.theme.ThemeSwitch
 
 /**
  * 两个界面的共用排版工具。
@@ -23,6 +28,31 @@ import com.anylyric.session.SessionHub
  * 「同一个控件在两处长得不一样」。
  */
 abstract class BaseActivity : Activity() {
+
+    /**
+     * 界面明暗的唯一入口。
+     *
+     * 放在 `attachBaseContext` 而不是每个页面的 `onCreate` 里 `setTheme()`：
+     * 这里换掉的是 Activity 的整份 Configuration，`values-night/` 的 style、
+     * `resources.configuration.uiMode`、以及本类的 [isNight] 会同时跟着变，
+     * 不会出现「style 是夜间、取色却按白天算」的错位。
+     *
+     * 副作用要记住：改了存储里的主题后必须 `recreate()`，否则新值要等下次进页面才生效。
+     */
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(ThemeContext.wrap(newBase, Prefs(newBase).themeMode))
+    }
+
+    /**
+     * 主题切换的淡入。
+     *
+     * 必须在 `onCreate`（页面已经把内容 setContentView 进来）之后、第一帧之前做，
+     * 所以挂在 `onPostCreate`：早了没有内容可遮，晚了会先闪一下新界面。
+     */
+    override fun onPostCreate(savedInstanceState: Bundle?) {
+        super.onPostCreate(savedInstanceState)
+        ThemeSwitch.play(this)
+    }
 
     /**
      * 本应用界面在屏期间，让悬浮窗让位（0.2.11「按应用隐藏」的零权限那一半）。

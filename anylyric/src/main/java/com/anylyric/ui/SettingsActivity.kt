@@ -3,6 +3,7 @@ package com.anylyric.ui
 import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -25,8 +26,12 @@ import android.text.TextUtils
 import android.text.TextWatcher
 import android.util.LruCache
 import android.view.Gravity
+import android.view.MotionEvent
+import android.view.VelocityTracker
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
+import android.view.animation.DecelerateInterpolator
 import android.widget.BaseAdapter
 import android.widget.CheckBox
 import android.widget.EditText
@@ -53,6 +58,8 @@ import com.anylyric.overlay.Preset
 import com.anylyric.overlay.TitlePos
 import com.anylyric.service.ServiceWatchdog
 import com.anylyric.session.SessionHub
+import com.anylyric.theme.ThemeMode
+import com.anylyric.theme.ThemeSwitch
 import com.anylyric.update.ApkInstaller
 import com.anylyric.update.ApkProvider
 import com.anylyric.update.CheckResult
@@ -63,6 +70,7 @@ import com.anylyric.update.UpdateChecker
 import com.anylyric.util.AppLabels
 import java.io.File
 import java.util.Locale
+import kotlin.math.abs
 
 /**
  * 唯一主界面，按五个标签页组织：概览（状态与播放器频道）、外观（窗口/样式/配色）、
@@ -226,6 +234,7 @@ class SettingsActivity : BaseActivity() {
         val hideApps = buildHideAppsCard()
         val diag = buildDiagCard()
         val update = buildUpdateCard()
+        val theme = buildThemeCard()
 
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
@@ -238,7 +247,10 @@ class SettingsActivity : BaseActivity() {
         top.addView(tabBar())
         root.addView(top)
 
-        val content = FrameLayout(this).apply {
+        // 左右滑动切页：横屏车机上比去点顶部标签条省事（手指不用抬到屏幕上方）。
+        // 用自绘容器而不是 ViewPager2 —— 后者要配 Adapter 重建页面，与本页
+        // 「页面只建一次」的约定冲突，滚动位置和控件状态全得自己搬。
+        val content = SwipePager(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 0,
@@ -247,7 +259,7 @@ class SettingsActivity : BaseActivity() {
         }
         // 横屏双栏的分法按页定：左栏是「摆哪儿、长什么样」，右栏是「读什么、怎么更新」。
         addPage(content, page(SettingsTab.OVERVIEW, listOf(status), listOf(channel)))
-        addPage(content, page(SettingsTab.LOOK, listOf(window, look), listOf(colors)))
+        addPage(content, page(SettingsTab.LOOK, listOf(window, look), listOf(theme, colors)))
         addPage(content, page(SettingsTab.LYRICS, listOf(title), listOf(behavior)))
         addPage(content, page(SettingsTab.RUNTIME, listOf(keepAlive), listOf(hideApps)))
         addPage(content, page(SettingsTab.MORE, listOf(diag), listOf(update)))
@@ -260,6 +272,96 @@ class SettingsActivity : BaseActivity() {
     private fun addPage(container: FrameLayout, page: ScrollView) {
         tabPages[page.tag as SettingsTab] = page
         container.addView(page)
+    }
+
+    /**
+     * 内容容器：左右滑动切页。
+     *
+     * 三条约束，都是真机上踩出来的：
+     *  · **只在横向意图明确时才抢触摸**（横向位移 > 1.5 倍 slop 且明显大于纵向），
+     *    否则页内纵向滚动会变得发黏；
+     *  · 落点在胶囊条（HorizontalScrollView）、滑杆、输入框上时**完全不抢** ——
+     *    这些控件自己就要吃横向手势，抢过来等于把它们废掉；
+     *  · 跟手位移只走 35%：跟满会把下一层的空白背景扯出来，像界面被撕开。
+     */
+    private inner class SwipePager(context: Context) : FrameLayout(context) {
+
+        private val slop = ViewConfiguration.get(context).scaledTouchSlop
+        private val tracker = VelocityTracker.obtain()
+
+        private var downX = 0f
+        private var downY = 0f
+        private var dragging = false
+        private var blocked = false
+
+        override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = ev.x
+                    downY = ev.y
+                    dragging = false
+                    blocked = hitsHorizontalControl(this, ev.x, ev.y)
+                    tracker.clear()
+                }
+
+                MotionEvent.ACTION_MOVE -> if (!blocked && !dragging) {
+                    val dx = ev.x - downX
+                    val dy = ev.y - downY
+                    if (abs(dx) > slop * 1.5f && abs(dx) > abs(dy) * 1.3f) {
+                        dragging = true
+                        tracker.clear()
+                        tracker.addMovement(ev)
+                    }
+                }
+
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    dragging = false
+                    tracker.clear()
+                }
+            }
+            return dragging
+        }
+
+        override fun onTouchEvent(ev: MotionEvent): Boolean {
+            tracker.addMovement(ev)
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_MOVE -> {
+                    tabPages[currentTab]?.translationX = (ev.x - downX) * FOLLOW_RATIO
+                }
+
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    tracker.computeCurrentVelocity(1000)
+                    val step = SwipeNav.decide(ev.x - downX, width, tracker.xVelocity)
+                    tracker.clear()
+                    // 先让当前页弹回原位再切：不弹回的话它会带着位移被 GONE，
+                    // 下次切回来还在歪着。
+                    tabPages[currentTab]?.animate()?.translationX(0f)?.setDuration(140)?.start()
+                    dragging = false
+                    if (step != 0) stepTab(step)
+                }
+            }
+            return true
+        }
+    }
+
+    /** 从触点往下找：有没有落在一个「自己会吃横向手势」的控件上。 */
+    private fun hitsHorizontalControl(group: ViewGroup, px: Float, py: Float): Boolean {
+        for (i in group.childCount - 1 downTo 0) {
+            val child = group.getChildAt(i)
+            if (child.visibility != View.VISIBLE) continue
+            val x = px + group.scrollX - child.left
+            val y = py + group.scrollY - child.top
+            if (x < 0f || y < 0f || x >= child.width || y >= child.height) continue
+            if (child is HorizontalScrollView || child is SeekBar || child is EditText) return true
+            if (child is ViewGroup && hitsHorizontalControl(child, x, y)) return true
+        }
+        return false
+    }
+
+    /** 滑到上一页 / 下一页；到头就什么也不做（不做回弹，避免误以为翻过去了）。 */
+    private fun stepTab(step: Int) {
+        val target = SettingsTab.values().getOrNull(currentTab.ordinal + step) ?: return
+        selectTab(target, slide = step)
     }
 
     /**
@@ -354,7 +456,11 @@ class SettingsActivity : BaseActivity() {
                         dp(2).coerceAtLeast(1)
                     )
                 )
-                setOnClickListener { selectTab(tab) }
+                setOnClickListener {
+                    // 点标签也走同一套滑入动效：方向按「往前还是往后」推，
+                    // 与左右滑动的手感保持一致。
+                    selectTab(tab, slide = (tab.ordinal - currentTab.ordinal).coerceIn(-1, 1))
+                }
             }
             bar.addView(cell, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             tabLabels[tab] = label
@@ -384,13 +490,21 @@ class SettingsActivity : BaseActivity() {
     private fun selectTab(
         tab: SettingsTab,
         restoreScroll: Boolean = true,
-        storeCurrent: Boolean = true
+        storeCurrent: Boolean = true,
+        slide: Int = 0
     ) {
         if (storeCurrent) tabPages[currentTab]?.let { tabScroll[currentTab] = it.scrollY }
         currentTab = tab
         prefs.settingsTab = tab.name
         tabPages.forEach { (key, page) ->
-            page.visibility = if (key == tab) View.VISIBLE else View.GONE
+            if (key == tab) {
+                page.visibility = View.VISIBLE
+            } else {
+                page.visibility = View.GONE
+                // 被切走的那页必须复位：滑动跟手时它带过位移，不复位下次回来是歪的。
+                page.translationX = 0f
+                page.alpha = 1f
+            }
         }
         tabLabels.forEach { (key, label) ->
             label.setTextColor(if (key == tab) colorAccent else colorSecondaryText)
@@ -399,9 +513,24 @@ class SettingsActivity : BaseActivity() {
         tabUnderlines.forEach { (key, line) ->
             line.visibility = if (key == tab) View.VISIBLE else View.GONE
         }
+        val page = tabPages[tab] ?: return
+
+        // 滑入动效：新页从切换方向的一侧滑进来并淡入。
+        // 用屏宽算位移而不是用 page.width —— 刚从 GONE 变 VISIBLE 的 View
+        // 还没重新测量，这一帧宽度是 0，按它算等于没有动画。
+        if (slide != 0) {
+            page.translationX = slide * resources.displayMetrics.widthPixels * SLIDE_RATIO
+            page.alpha = 0.45f
+            page.animate()
+                .translationX(0f)
+                .alpha(1f)
+                .setDuration(SLIDE_MS)
+                .setInterpolator(DecelerateInterpolator())
+                .start()
+        }
+
         if (!restoreScroll) return
         // GONE 的 ScrollView 没有真实高度，必须等这一帧布局完成后再 scrollTo。
-        val page = tabPages[tab] ?: return
         page.post { page.scrollTo(0, tabScroll[tab] ?: 0) }
     }
 
@@ -697,6 +826,45 @@ class SettingsActivity : BaseActivity() {
         }
 
         return cardSection(getString(R.string.section_appearance), null, rows)
+    }
+
+    // ---------------------------------------------------------------- 主题
+
+    /**
+     * 界面明暗。
+     *
+     * 只有三项，用胶囊而不是开关：开关只能表达两态，而「跟随系统」是第三态，
+     * 且是默认值 —— 少了它，用户想「先别管、跟系统走」就没有出口。
+     *
+     * 切换会重建页面（换 Context 才让 `values-night` 生效），重建前先拍一张旧界面，
+     * 由 [ThemeSwitch] 在新界面第一帧淡出 —— 不然这一下白闪很难看。
+     */
+    private fun buildThemeCard(): View {
+        val rows = ArrayList<View>(4)
+        rows += labeled(
+            getString(R.string.theme_mode),
+            chipRow(
+                options = ThemeMode.values().map { getString(themeLabel(it)) },
+                current = { ThemeMode.values().indexOf(prefs.themeMode) },
+                onPick = { index -> applyTheme(ThemeMode.values()[index]) }
+            )
+        )
+        rows += hint(getString(R.string.theme_hint))
+        return cardSection(getString(R.string.section_theme), null, rows)
+    }
+
+    private fun themeLabel(mode: ThemeMode): Int = when (mode) {
+        ThemeMode.AUTO -> R.string.theme_auto
+        ThemeMode.LIGHT -> R.string.theme_light
+        ThemeMode.DARK -> R.string.theme_dark
+    }
+
+    private fun applyTheme(mode: ThemeMode) {
+        if (mode == prefs.themeMode) return
+        prefs.themeMode = mode
+        // 先拍旧界面再重建：recreate 之后旧窗口就没了，拍不到。
+        ThemeSwitch.capture(this)
+        recreate()
     }
 
     // ---------------------------------------------------------------- 颜色
@@ -2314,32 +2482,23 @@ class SettingsActivity : BaseActivity() {
      * 关开那个开关，而那里显示的本来就是「已开启」。
      */
     private fun applyListenerState(state: ListenerState, degradedWorking: Boolean) {
+        // 只有两态：能用 / 要处理。
+        //
+        // 之前这一行有四种说法（已授予 / 未授予 / 已授权未连接 / 已授权降级运行），
+        // 用户要在脑子里做一次翻译才知道「所以现在能不能用」。「已授权未连接」这类
+        // 中间态属于**原因**，上面那行状态横幅已经整句说清楚了；这一行只回答能不能用。
+        val usable = state == ListenerState.GRANTED || degradedWorking
         notificationState.text = getString(
-            when {
-                state == ListenerState.GRANTED -> R.string.perm_granted
-                degradedWorking -> R.string.perm_state_degraded_ok
-                state == ListenerState.GRANTED_NOT_BOUND -> R.string.perm_state_unbound
-                else -> R.string.perm_missing
-            }
+            if (usable) R.string.perm_state_ok else R.string.perm_state_todo
         )
-        notificationState.setTextColor(
-            when {
-                state == ListenerState.GRANTED -> colorOk
-                degradedWorking -> colorOk
-                state == ListenerState.GRANTED_NOT_BOUND -> colorWarn
-                else -> colorBad
-            }
-        )
+        notificationState.setTextColor(if (usable) colorOk else colorBad)
+        // 能用时不给按钮：那一行不留动作，避免用户以为「还得再点一下才生效」。
+        notificationButton.visibility = if (usable) View.GONE else View.VISIBLE
         notificationButton.text = getString(
-            when {
-                state == ListenerState.GRANTED -> R.string.perm_review
-                degradedWorking -> R.string.perm_retry
-                state == ListenerState.GRANTED_NOT_BOUND -> R.string.perm_retry
-                else -> R.string.perm_open
-            }
+            // 已授权但没连上：先重试绑定（多数情况一下就回来了），仍失败才跳系统设置。
+            if (state == ListenerState.GRANTED_NOT_BOUND) R.string.perm_retry
+            else R.string.perm_open
         )
-        notificationButton.visibility =
-            if (state == ListenerState.GRANTED) View.GONE else View.VISIBLE
     }
 
     private fun onNotificationAction() {
@@ -2361,7 +2520,11 @@ class SettingsActivity : BaseActivity() {
     }
 
     private fun applyPermissionState(view: TextView, granted: Boolean) {
-        view.text = getString(if (granted) R.string.perm_granted else R.string.perm_missing)
+        // 与通知那一行同一套词：能用 / 要处理。两处说法必须一致，
+        // 否则同一个「已开启」在上下两行会显示成不同的字，看着像两个状态。
+        view.text = getString(
+            if (granted) R.string.perm_state_ok else R.string.perm_state_todo
+        )
         view.setTextColor(if (granted) colorOk else colorBad)
     }
 
@@ -2530,6 +2693,15 @@ class SettingsActivity : BaseActivity() {
         private const val MAX_POLL_TICKS = 8
 
         private const val UNBOUND_TIMEOUT_MS = 9_000L
+
+        /** 滑动切页的长度：短到不挡下一步操作，长到能看出「换了一页」。 */
+        private const val SLIDE_MS = 220L
+
+        /** 滑入时的起始横向位移 = 屏宽的 18%，约等于一页宽度的六分之一。 */
+        private const val SLIDE_RATIO = 0.18f
+
+        /** 手指跟手位移的折减系数：跟满会露出底下空白，像界面被撕开。 */
+        private const val FOLLOW_RATIO = 0.35f
 
         /** 旋转重建时保存当前标签页与各页滚动位置（Int 快照，见项目红线）。 */
         private const val KEY_TAB = "settings_tab"

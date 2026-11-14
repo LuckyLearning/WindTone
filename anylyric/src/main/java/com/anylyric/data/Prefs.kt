@@ -7,6 +7,7 @@ import com.anylyric.overlay.OverlayDefaults
 import com.anylyric.overlay.OverlayStyle
 import com.anylyric.overlay.Preset
 import com.anylyric.overlay.TitlePos
+import com.anylyric.theme.ThemeMode
 import com.anylyric.update.DownloadRoute
 
 /**
@@ -107,6 +108,16 @@ class Prefs(context: Context) {
     var settingsTab: String
         get() = sp.getString(KEY_SETTINGS_TAB, "").orEmpty()
         set(value) = sp.edit().putString(KEY_SETTINGS_TAB, value).apply()
+
+    /**
+     * 界面明暗：自动 / 白天 / 夜间。默认跟随系统。
+     *
+     * 在 `attachBaseContext` 里读，所以写入必须用**同步可见**的方式 ——
+     * SharedPreferences 的 `apply()` 对同进程读是立即可见的，改完直接 recreate 即可。
+     */
+    var themeMode: ThemeMode
+        get() = ThemeMode.of(sp.getString(KEY_THEME_MODE, null))
+        set(value) = sp.edit().putString(KEY_THEME_MODE, value.key).apply()
 
     /** 悬浮层输出到哪块屏幕。默认主屏。 */
     var displayId: Int
@@ -269,6 +280,8 @@ class Prefs(context: Context) {
         private const val KEY_A11Y_REQUESTED = "a11y_requested"
         private const val KEY_PINNED_SESSION = "pinned_session_package"
         private const val KEY_SETTINGS_TAB = "settings_tab"
+
+        private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_DISPLAY_ID = "display_id"
 
         private const val KEY_PRESET = "style_preset"

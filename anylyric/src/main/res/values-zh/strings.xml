@@ -2,10 +2,17 @@
 <resources>
     <string name="app_name">AnyLyric</string>
 
-    <string name="settings_subtitle">显示车机上「正在播放的那个播放器」自己暴露的歌词。不播放声音、不控制播放、不读任何文件。</string>
+    <string name="settings_subtitle">显示播放器自己发布的歌词。</string>
 
     <string name="section_status">状态</string>
     <string name="section_appearance">外观</string>
+
+    <string name="section_theme">主题</string>
+    <string name="theme_mode">明暗</string>
+    <string name="theme_auto">自动</string>
+    <string name="theme_light">白天</string>
+    <string name="theme_dark">夜间</string>
+    <string name="theme_hint">只影响这两个设置界面；歌词悬浮窗的深浅在「配色」里单独调。</string>
 
     <string name="section_autostart">开机与后台</string>
     <string name="autostart_boot">开机自启</string>
@@ -111,10 +118,9 @@
     <string name="perm_notification_desc">必需。让 AnyLyric 读取「已经在播放」的那个播放器的媒体会话。</string>
     <string name="perm_overlay_title">显示在其他应用上层</string>
     <string name="perm_overlay_desc">必需。只用于绘制歌词悬浮层。</string>
-    <string name="perm_granted">已授予</string>
-    <string name="perm_missing">未授予</string>
-    <string name="perm_state_unbound">已授权，系统尚未连接</string>
-    <string name="perm_state_degraded_ok">已授权 · 降级运行</string>
+    <!-- 权限行只有两态：能用 / 要处理。原因交给上面那行状态横幅整句说明。 -->
+    <string name="perm_state_ok">可用 ✓</string>
+    <string name="perm_state_todo">要处理 !</string>
     <string name="perm_open">去开启</string>
     <string name="perm_retry">重新连接</string>
     <string name="perm_review">系统设置</string>

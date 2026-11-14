@@ -3,10 +3,17 @@
 <resources>
     <string name="app_name">AnyLyric</string>
 
-    <string name="settings_subtitle">Shows lyrics exposed by the player already running on this car. Plays no audio, controls nothing, reads no files.</string>
+    <string name="settings_subtitle">Shows lyrics the player itself publishes.</string>
 
     <string name="section_status">Status</string>
     <string name="section_appearance">Appearance</string>
+
+    <string name="section_theme">Theme</string>
+    <string name="theme_mode">Brightness</string>
+    <string name="theme_auto">Auto</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_hint">Affects these settings pages only. The lyric overlay keeps its own colours under “Colours”.</string>
 
     <string name="section_autostart">Autostart &amp; keep-alive</string>
     <string name="autostart_boot">Start on boot</string>
@@ -112,10 +119,9 @@
     <string name="perm_notification_desc">Required. Lets AnyLyric read the media session of the player that is already playing.</string>
     <string name="perm_overlay_title">Display over other apps</string>
     <string name="perm_overlay_desc">Required. Used only to draw the lyric overlay.</string>
-    <string name="perm_granted">Granted</string>
-    <string name="perm_missing">Not granted</string>
-    <string name="perm_state_unbound">Granted, not yet connected</string>
-    <string name="perm_state_degraded_ok">Granted · degraded mode</string>
+    <!-- 权限行只有两态：能用 / 要处理。原因交给上面那行状态横幅整句说明。 -->
+    <string name="perm_state_ok">Ready ✓</string>
+    <string name="perm_state_todo">Needs action !</string>
     <string name="perm_open">Open settings</string>
     <string name="perm_retry">Reconnect</string>
     <string name="perm_review">System settings</string>
