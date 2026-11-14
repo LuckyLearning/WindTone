@@ -202,8 +202,26 @@ fun PlayerScreen(
     // 中部三页（v1.2.55）：信息 / 图片 / 歌词。状态在引擎里（落盘，跨会话保留），
     // 这里只是个只读视图 + 回调。showLyrics 仍被沉浸态、屏幕常亮、顶栏图标判断复用 ——
     // 只有歌词页需要「一屏全是字」的那套行为，信息页与图片页保持完整界面。
-    val currentPane = PlayerPane.of(state.playerPane)
+    //
+    // ⚠️ 视觉锚点必须是**本地 snapshot 状态**，不能直接用 state.playerPane：
+    // 三页相位在 `Modifier.offset{}` 的 lambda 里算，那是 layout 阶段；而
+    // StateFlow → collectAsStateWithLifecycle → 重组要等下一帧。翻页动画结束时
+    // `offset.snapTo(0f)` 当帧就生效，页号却还停在旧页 —— 中间会画出「位移已归零、
+    // 锚点还是旧页」的一帧旧页回闪（v1.2.56 真机反馈「左右滑屏幕闪一下」）。
+    // 本地 IntState 在 layout 阶段读，和位移写在同一个快照事务里，同帧一起重排。
+    val visualPaneState = remember { mutableIntStateOf(state.playerPane) }
+    val currentPane = PlayerPane.of(visualPaneState.intValue)
     val showLyrics = currentPane == PlayerPane.LYRICS
+
+    // 所有改页入口统一走这里：**先写视觉锚点（同帧），再落盘**。
+    // 顺序不能反，也不能把写锚点推迟到 StateFlow 回流之后 —— 那正是闪烁的来源。
+    // state.playerPane 的写入口目前全部收敛在本函数（引擎里不主动改页号），
+    // 因此不需要再用 LaunchedEffect 把回流值同步回来；若以后新增外部入口，
+    // 必须同时写 visualPaneState，否则相位锚点会与持久化状态脱节。
+    fun selectPane(target: PlayerPane) {
+        visualPaneState.intValue = target.index
+        onPlayerPane(target)
+    }
 
     // v1.1.92：播放页左侧的「前台识别状态」按钮。
     // 状态不能只在进入页面时读一次 —— 用户点按钮去系统里开/关，回来必须立刻反映，
@@ -525,7 +543,7 @@ fun PlayerScreen(
                             keepAwake()
                             // 歌词页 → 回图片页；其余情况 → 去歌词页。
                             // 这与改前的「封面/歌词」二态按钮是同一枚，只是多了信息页仍归到这一条。
-                            onPlayerPane(
+                            selectPane(
                                 if (showLyrics) PlayerPane.ART else PlayerPane.LYRICS
                             )
                         }) {
@@ -598,11 +616,13 @@ fun PlayerScreen(
                         .playerSwipePages(
                             offset = swipeOffset,
                             scope = swipeScope,
-                            currentPane = { PlayerPane.of(state.playerPane) },
+                            // 读本地视觉锚点，不读 state.playerPane：翻页提交后这一帧
+                            // 就能拿到新页号，不会让下一次拖动仍按旧页判定。
+                            currentPane = { PlayerPane.of(visualPaneState.intValue) },
                             onSettle = { result ->
                                 keepAwake()
                                 when (result) {
-                                    is PageSwipe.To -> onPlayerPane(result.target)
+                                    is PageSwipe.To -> selectPane(result.target)
                                     is PageSwipe.Skip -> {
                                         when (result.dir) {
                                             SwipeSwitch.NEXT -> onNext()
@@ -611,7 +631,7 @@ fun PlayerScreen(
                                         }
                                         // 切歌后回图片页（用户 2026-11-14 拍板）：
                                         // 换了一首歌，先给新的封面 + 新的那一句。
-                                        onPlayerPane(PlayerPane.ART)
+                                        selectPane(PlayerPane.ART)
                                     }
                                     PageSwipe.Stay -> Unit
                                 }
@@ -635,8 +655,12 @@ fun PlayerScreen(
                                 // 拖动时只重新放置、不重组三页内容。
                                 .offset {
                                     IntOffset(
-                                        ((page.index - currentPane.index) * pageWidth + swipeOffset.value)
-                                            .roundToInt(),
+                                        PlayerSwipe.phasePx(
+                                            page = page,
+                                            anchorIndex = visualPaneState.intValue,
+                                            offsetPx = swipeOffset.value,
+                                            widthPx = pageWidth,
+                                        ).roundToInt(),
                                         0,
                                     )
                                 }
@@ -712,7 +736,7 @@ fun PlayerScreen(
                     if (!immersive) {
                         PlayerPaneDots(
                             current = currentPane,
-                            onSelect = { target -> keepAwake(); onPlayerPane(target) },
+                            onSelect = { target -> keepAwake(); selectPane(target) },
                             large = layoutSpec.isCar,
                             modifier = Modifier.align(Alignment.BottomCenter),
                         )

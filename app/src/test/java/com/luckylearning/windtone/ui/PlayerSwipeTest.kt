@@ -215,4 +215,37 @@ class PlayerSwipeTest {
             0.01f,
         )
     }
+
+    /**
+     * 翻页提交的两个瞬间，对**每一页**都必须算出同一个相位：
+     *
+     * - 动画结束：锚点 = 起始页、位移 = [PlayerSwipe.settlePx]
+     * - 提交之后：锚点 = 目标页、位移 = 0
+     *
+     * 这两个值要在同一帧写进 [PlayerSwipe.phasePx] 的两个 snapshot 输入里；
+     * 只归零位移、锚点还停在旧页，就会画出「旧页居中」的一帧回闪
+     * （v1.2.56 真机反馈「左右滑切换页面时屏幕会闪一下」）。
+     */
+    @Test
+    fun `提交翻页时三页相位连续不回闪`() {
+        val transitions = listOf(
+            PlayerPane.INFO to PlayerPane.ART,
+            PlayerPane.ART to PlayerPane.INFO,
+            PlayerPane.ART to PlayerPane.LYRICS,
+            PlayerPane.LYRICS to PlayerPane.ART,
+        )
+        transitions.forEach { (from, to) ->
+            val finishOffset = PlayerSwipe.settlePx(from, to, width)
+            PlayerPane.entries.forEach { page ->
+                val before = PlayerSwipe.phasePx(page, from.index, finishOffset, width)
+                val after = PlayerSwipe.phasePx(page, to.index, 0f, width)
+                assertEquals(
+                    "$from → $to / ${page.name} 相位跳变",
+                    before.toDouble(),
+                    after.toDouble(),
+                    0.01,
+                )
+            }
+        }
+    }
 }

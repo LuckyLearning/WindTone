@@ -19,7 +19,9 @@ import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.swipeUp
 import com.luckylearning.windtone.data.PlayerPane
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -43,6 +45,9 @@ class PlayerSwipeGestureTest {
 
     private class Rec {
         var last: PageSwipe? = null
+
+        /** 提交回调触发那一刻的位移，用于守「提交在归零之前」的时序 */
+        var offsetAtSettle: Float? = null
     }
 
     private fun render(start: PlayerPane): Rec {
@@ -61,6 +66,7 @@ class PlayerSwipeGestureTest {
                         currentPane = { pane },
                         onSettle = { result ->
                             rec.last = result
+                            rec.offsetAtSettle = offset.value
                             if (result is PageSwipe.To) pane = result.target
                         },
                     )
@@ -155,6 +161,7 @@ class PlayerSwipeGestureTest {
                         currentPane = { snapshot },
                         onSettle = { result ->
                             rec.last = result
+                            rec.offsetAtSettle = offset.value
                             if (result is PageSwipe.To) pane = result.target
                         },
                     )
@@ -170,5 +177,26 @@ class PlayerSwipeGestureTest {
         compose.onNodeWithTag("pager").performTouchInput { swipeLeft() }
         compose.waitForIdle()
         assertEquals(PageSwipe.Skip(SwipeSwitch.NEXT), rec.last)
+    }
+
+    /**
+     * 提交回调必须发生在 `offset.snapTo(0f)` **之前**（v1.2.56 闪烁修复的时序契约）。
+     *
+     * 调用方在 onSettle 里同步写视觉锚点，紧接着手势层归零位移 —— 两个 snapshot
+     * 写落在同一帧的 layout 里，三页相位才连续。若把提交挪到归零之后，或者改成
+     * 等 StateFlow 回流再写锚点，中间就会画出一帧「位移归零、锚点还是旧页」的回闪。
+     */
+    @Test
+    fun `提交回调发生在位移归零之前`() {
+        val rec = render(PlayerPane.ART)
+        compose.onNodeWithTag("pager").performTouchInput { swipeLeft() }
+        compose.waitForIdle()
+        assertEquals(PageSwipe.To(PlayerPane.LYRICS), rec.last)
+        val atSettle = rec.offsetAtSettle
+        assertNotNull("onSettle 未被调用", atSettle)
+        assertTrue(
+            "提交时位移应仍在目标页落位处（负的一整屏），实际 $atSettle",
+            atSettle!! < -1f,
+        )
     }
 }

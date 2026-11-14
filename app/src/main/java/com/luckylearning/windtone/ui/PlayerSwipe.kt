@@ -154,6 +154,21 @@ internal object PlayerSwipe {
     fun pageDelta(from: PlayerPane, to: PlayerPane): Int = to.index - from.index
 
     /**
+     * 某页相对视觉锚点的横向位置（px）。
+     *
+     * 三页横排的**唯一**相位公式：`(页序 - 锚点页序) * 页宽 + 位移`。
+     * 抽成公开函数是为了让布局（`Modifier.offset{}`）与单测对质同一套算式 ——
+     * 翻页提交时锚点前移、位移归零，两者对每一页必须算出相同的值，
+     * 否则用户会看到一帧旧页回闪。
+     */
+    fun phasePx(
+        page: PlayerPane,
+        anchorIndex: Int,
+        offsetPx: Float,
+        widthPx: Float,
+    ): Float = (page.index - anchorIndex) * widthPx + offsetPx
+
+    /**
      * 把 [to] 页搬到中心的位移（px）。
      *
      * 三页的布局相位是 `(页序 - 当前页序) * 页宽 + 位移`：要让 [to] 落到 0，
@@ -179,6 +194,16 @@ internal object PlayerSwipe {
  *     lambda 实例。调用方写的是 `{ PlayerPane.of(state.playerPane) }`，而 `state`
  *     是个普通值参数 —— 捕获住就永远是打开播放页时的那个页号，翻页后再滑仍按旧页
  *     判定（停在歌词页时表现为「怎么滑都是下一首」）。v1.2.55 首发即踩此坑。
+ *
+ * ## ⚠️ 提交与位移归零必须同帧（v1.2.56）
+ *
+ * `Modifier.offset{}` 的 lambda 在 **layout 阶段**读 [PlayerSwipe.phasePx] 的两个
+ * snapshot 输入（视觉锚点 + [offset]）；而页号持久化走 StateFlow → collectAsState →
+ * **下一帧重组**。所以 [onSettle] 里必须**同步写视觉锚点**，紧接着本协程的
+ * `offset.snapTo(0f)` —— 两者落在同一批快照变更里，layout 一次读到两个新值。
+ * 若把锚点写入推迟到状态回流之后，中间就会画出「位移已归零、锚点还是旧页」的
+ * 一帧旧页回闪（真机表现：翻页时屏幕闪一下）。调用方 `PlayerScreen.selectPane`
+ * 承担这个顺序，改动时不要拆开。
  *
  * ⚠️ 只能有一层 `pointerInput`（v1.2.10 双层导致手势未挂上）。
  */
@@ -270,8 +295,9 @@ internal fun Modifier.playerSwipePages(
                             PageSwipe.Stay -> Unit // 上面已处理
 
                             is PageSwipe.To -> {
-                                // 先滑到目标页的位置，再换页 —— 换页时 offset 归零，
-                                // 两者在同一帧生效，视觉上就是一整张翻过去。
+                                // 先滑到目标页的位置，再换页 —— commit() 里同步写视觉
+                                // 锚点，紧接着 snapTo(0f) 归零；两者必须在同一帧，
+                                // 视觉上才是一整张翻过去，而不是闪回旧页再切新页。
                                 offset.animateTo(
                                     PlayerSwipe.settlePx(paneAtStart, result.target, width),
                                     settle,
