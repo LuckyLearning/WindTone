@@ -245,7 +245,7 @@ fun SettingsScreen(
     onLyricOverlayFullOffsetPercent: (Int) -> Unit,
     onLyricOverlayShowTitle: (Boolean) -> Unit,
     /** 标题字号：正文的百分比（40..100，v1.1.51） */
-    onLyricOverlayTitlePercent: (Int) -> Unit,
+    onLyricOverlayTitleSp: (Int) -> Unit,
     /** 正文字号：sp（12..60，v1.1.51） */
     onLyricOverlayTextSp: (Int) -> Unit,
     onLyricOverlayAlign: (Int) -> Unit,
@@ -279,8 +279,8 @@ fun SettingsScreen(
     onLyricOverlayTitleStrokeWidthDp: (Int) -> Unit = {},
     onLyricOverlayTitleStrokeColor: (Int) -> Unit = {},
     /** v1.2.54 分角色：当前行 / 其他行的字号百分比与其他行颜色 */
-    onLyricOverlayCurrentScale: (Int) -> Unit = {},
-    onLyricOverlayContextScale: (Int) -> Unit = {},
+    onLyricOverlayCurrentSp: (Int) -> Unit = {},
+    onLyricOverlayContextSp: (Int) -> Unit = {},
     onLyricOverlayContextColor: (Int) -> Unit = {},
     /** 悬浮窗歌词文字颜色 —— v1.1.4 */
     onLyricOverlayTextColor: (Int) -> Unit,
@@ -552,7 +552,7 @@ fun SettingsScreen(
                             onLyricOverlayFullWidthPercent = onLyricOverlayFullWidthPercent,
                             onLyricOverlayFullOffsetPercent = onLyricOverlayFullOffsetPercent,
                             onLyricOverlayShowTitle = onLyricOverlayShowTitle,
-                            onLyricOverlayTitlePercent = onLyricOverlayTitlePercent,
+                            onLyricOverlayTitleSp = onLyricOverlayTitleSp,
                             onLyricOverlayTextSp = onLyricOverlayTextSp,
                             onLyricOverlayAlign = onLyricOverlayAlign,
                             onLyricOverlayPauseMode = onLyricOverlayPauseMode,
@@ -581,8 +581,8 @@ fun SettingsScreen(
                             onLyricOverlayTitleStrokeEnabled = onLyricOverlayTitleStrokeEnabled,
                             onLyricOverlayTitleStrokeWidthDp = onLyricOverlayTitleStrokeWidthDp,
                             onLyricOverlayTitleStrokeColor = onLyricOverlayTitleStrokeColor,
-                            onLyricOverlayCurrentScale = onLyricOverlayCurrentScale,
-                            onLyricOverlayContextScale = onLyricOverlayContextScale,
+                            onLyricOverlayCurrentSp = onLyricOverlayCurrentSp,
+                            onLyricOverlayContextSp = onLyricOverlayContextSp,
                             onLyricOverlayContextColor = onLyricOverlayContextColor,
                             onLyricOverlayTextColor = onLyricOverlayTextColor,
                             onLyricOverlayHiddenApps = onLyricOverlayHiddenApps,

@@ -158,9 +158,9 @@ class OverlaySettings(
         previewOverlayAfterConfigChange()
     }
 
-    override fun setLyricOverlayTitlePercent(percent: Int) {
-        val normalized = settings.setOverlayTitlePercent(percent)
-        state.update { it.copy(lyricOverlayTitlePercent = normalized) }
+    override fun setLyricOverlayTitleSp(titleSp: Int) {
+        val normalized = settings.setOverlayTitleSp(titleSp)
+        state.update { it.copy(lyricOverlayTitleSp = normalized) }
         previewOverlayAfterConfigChange()
     }
 
@@ -362,15 +362,15 @@ class OverlaySettings(
         previewOverlayAfterConfigChange()
     }
 
-    override fun setLyricOverlayCurrentScale(value: Int) {
-        val normalized = settings.setLyricOverlayCurrentScale(value)
-        state.update { it.copy(lyricOverlayCurrentScale = normalized) }
+    override fun setLyricOverlayCurrentSp(value: Int) {
+        val normalized = settings.setLyricOverlayCurrentSp(value)
+        state.update { it.copy(lyricOverlayCurrentSp = normalized) }
         previewOverlayAfterConfigChange()
     }
 
-    override fun setLyricOverlayContextScale(value: Int) {
-        val normalized = settings.setLyricOverlayContextScale(value)
-        state.update { it.copy(lyricOverlayContextScale = normalized) }
+    override fun setLyricOverlayContextSp(value: Int) {
+        val normalized = settings.setLyricOverlayContextSp(value)
+        state.update { it.copy(lyricOverlayContextSp = normalized) }
         previewOverlayAfterConfigChange()
     }
 
@@ -404,7 +404,9 @@ class OverlaySettings(
         val strokeColor = settings.setLyricOverlayStrokeColor(preset.strokeColor)
         val spacing = settings.setLyricOverlayLineSpacingDp(preset.lineSpacingDp)
         settings.setOverlayShowTitle(preset.showTitle)
-        val titlePercent = settings.setOverlayTitlePercent(preset.titlePercent)
+        // 预设表里标题仍按「占正文的百分比」表达（这是组合的排版意图），
+        // 落到设置上换算成绝对磅值 —— v1.2.54 起标题字号是独立 sp。
+        val titleSp = settings.setOverlayTitleSp((textSp * preset.titlePercent + 50) / 100)
         val titleMode = settings.setLyricOverlayTitleMode(preset.titleMode)
         val bgAlpha = settings.setOverlayBgAlphaPercent(preset.bgAlphaPercent)
         settings.setOverlayBgColor(preset.bgColor)
@@ -429,7 +431,7 @@ class OverlaySettings(
                 lyricOverlayStrokeColor = strokeColor,
                 lyricOverlayLineSpacingDp = spacing,
                 lyricOverlayShowTitle = preset.showTitle,
-                lyricOverlayTitlePercent = titlePercent,
+                lyricOverlayTitleSp = titleSp,
                 lyricOverlayTitleMode = titleMode,
                 lyricOverlayBgAlphaPercent = bgAlpha,
                 // Prefs 的 bgColor setter 只保留 RGB，读回同一个值避免 UI 与落盘不一致
@@ -515,7 +517,7 @@ class OverlaySettings(
                 lyricOverlayLines = prefs.lyricOverlayLines,
                 lyricOverlayShowTitle = prefs.lyricOverlayShowTitle,
                 lyricOverlayTextSp = prefs.lyricOverlayTextSp,
-                lyricOverlayTitlePercent = prefs.lyricOverlayTitlePercent,
+                lyricOverlayTitleSp = prefs.lyricOverlayTitleSp,
                 lyricOverlayTitleMode = prefs.lyricOverlayTitleMode,
                 lyricOverlayPauseMode = prefs.lyricOverlayPauseMode,
                 lyricOverlayAlign = prefs.lyricOverlayAlign,
@@ -538,8 +540,8 @@ class OverlaySettings(
                 lyricOverlayTitleStrokeEnabled = prefs.lyricOverlayTitleStrokeEnabled,
                 lyricOverlayTitleStrokeWidthDp = prefs.lyricOverlayTitleStrokeWidthDp,
                 lyricOverlayTitleStrokeColor = prefs.lyricOverlayTitleStrokeColor,
-                lyricOverlayCurrentScale = prefs.lyricOverlayCurrentScale,
-                lyricOverlayContextScale = prefs.lyricOverlayContextScale,
+                lyricOverlayCurrentSp = prefs.lyricOverlayCurrentSp,
+                lyricOverlayContextSp = prefs.lyricOverlayContextSp,
                 lyricOverlayContextColor = prefs.lyricOverlayContextColor,
                 lyricOverlayWidthPercent = prefs.lyricOverlayWidthPercent,
                 lyricOverlayBoxHeightPercent = prefs.lyricOverlayBoxHeightPercent,

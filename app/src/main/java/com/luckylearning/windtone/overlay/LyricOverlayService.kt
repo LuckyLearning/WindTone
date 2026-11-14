@@ -257,7 +257,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
 
     /** 已应用的歌词行数 / 标题占正文百分比（v1.1.15）；-1 = 还没应用过 */
     private var appliedLines = -1
-    private var appliedTitlePercent = -1
+    private var appliedTitleSp = -1
 
     /**
      * 标题块的「已应用」快照（v1.2.54）：位置（上/下）、对齐（三档）、颜色、描边。
@@ -535,7 +535,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         windowManager = resolveOverlayWindowManager()
         appliedTextSp = -1
         appliedLines = -1
-        appliedTitlePercent = -1
+        appliedTitleSp = -1
         appliedTitlePos = -1
         appliedTitleAlign = -1
         appliedTitleColor = Int.MIN_VALUE
@@ -672,8 +672,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             setTextSize(
                 TypedValue.COMPLEX_UNIT_SP,
                 OverlayAppearance.titleTextSp(
-                    Prefs(this@LyricOverlayService).lyricOverlayTextSp,
-                    Prefs(this@LyricOverlayService).lyricOverlayTitlePercent,
+                    Prefs(this@LyricOverlayService).lyricOverlayTitleSp,
                 ),
             )
             gravity = OverlayAppearance.alignGravity(Prefs(this@LyricOverlayService).lyricOverlayAlign)
@@ -1217,7 +1216,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         )
         val titlePx = if (prefs.lyricOverlayShowTitle) {
             val titleSize = spToPx(
-                OverlayAppearance.titleTextSp(prefs.lyricOverlayTextSp, prefs.lyricOverlayTitlePercent),
+                OverlayAppearance.titleTextSp(prefs.lyricOverlayTitleSp),
             )
             (titleSize * OverlayLineFit.FONT_HEIGHT_FACTOR * TITLE_ROWS).roundToInt() + dp(8)
         } else {
@@ -1366,23 +1365,18 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         }
 
         val textSp = prefs.lyricOverlayTextSp
-        // 标题字号 = 正文 × 百分比，所以正文一变标题也得跟着重设一遍
-        val textSpChanged = appliedTextSp != textSp
-        if (textSpChanged) {
+        if (appliedTextSp != textSp) {
             appliedTextSp = textSp
             tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSp.toFloat())
             // 这里不再设 maxWidth：宽度已由窗口（屏宽 × 百分比）统一控制，
             // 两处都限宽只会让「调了没反应」变得难以解释。
         }
 
-        // 歌名 / 歌手两行小字：字号 = 正文 × 百分比，正文一调它就跟着走（v1.1.51）
-        val titlePercent = prefs.lyricOverlayTitlePercent
-        if (appliedTitlePercent != titlePercent || textSpChanged) {
-            appliedTitlePercent = titlePercent
-            titleView?.setTextSize(
-                TypedValue.COMPLEX_UNIT_SP,
-                OverlayAppearance.titleTextSp(textSp, titlePercent),
-            )
+        // 歌名 / 歌手两行小字：v1.2.54 起是**独立磅值**，不再跟正文的百分比联动
+        val titleSp = prefs.lyricOverlayTitleSp
+        if (appliedTitleSp != titleSp) {
+            appliedTitleSp = titleSp
+            titleView?.setTextSize(TypedValue.COMPLEX_UNIT_SP, titleSp.toFloat())
         }
 
         // 标题块的位置 / 对齐 / 颜色 / 描边（v1.2.54）：四项合成一次比对，
@@ -1715,8 +1709,9 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             noBackdrop = noBackdrop,
             currentColor = renderPrefs.lyricOverlayCurrentColor,
             dimPercent = renderPrefs.lyricOverlayDimPercent,
-            currentScalePercent = renderPrefs.lyricOverlayCurrentScale,
-            contextScalePercent = renderPrefs.lyricOverlayContextScale,
+            textSp = renderPrefs.lyricOverlayTextSp,
+            currentSp = renderPrefs.lyricOverlayCurrentSp,
+            contextSp = renderPrefs.lyricOverlayContextSp,
             contextColor = renderPrefs.lyricOverlayContextColor,
         )
         if (!renderDeduper.begin(renderKey)) {
@@ -1735,8 +1730,9 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             noBackdrop,
             currentColor = renderPrefs.lyricOverlayCurrentColor,
             dimPercent = renderPrefs.lyricOverlayDimPercent,
-            currentScalePercent = renderPrefs.lyricOverlayCurrentScale,
-            contextScalePercent = renderPrefs.lyricOverlayContextScale,
+            textSp = renderPrefs.lyricOverlayTextSp,
+            currentSp = renderPrefs.lyricOverlayCurrentSp,
+            contextSp = renderPrefs.lyricOverlayContextSp,
             contextColor = renderPrefs.lyricOverlayContextColor,
         )
         val sameText = tv.text.toString() == spanned.toString()

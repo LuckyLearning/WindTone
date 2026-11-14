@@ -68,6 +68,7 @@ class SettingsScreenTest {
         onThemeMode: (ThemeMode) -> Unit = {},
         onCarMode: (Boolean) -> Unit = {},
         onLyricScale: (Float) -> Unit = {},
+        onLyricOverlayTextSp: (Int) -> Unit = {},
         onLyricOverlayTextColor: (Int) -> Unit = {},
         onLyricOverlayBoxHeightPercent: (Int) -> Unit = {},
         onLyricOverlayFullHeightPercent: (Int) -> Unit = {},
@@ -106,8 +107,8 @@ class SettingsScreenTest {
                     onLyricOverlayFullWidthPercent = {},
                     onLyricOverlayFullOffsetPercent = {},
                     onLyricOverlayShowTitle = {},
-                    onLyricOverlayTitlePercent = {},
-                    onLyricOverlayTextSp = {},
+                    onLyricOverlayTitleSp = {},
+                    onLyricOverlayTextSp = onLyricOverlayTextSp,
                     onLyricOverlayAlign = {},
                     onLyricOverlayPauseMode = {},
                     onLyricOverlayWidthPercent = {},
@@ -553,15 +554,31 @@ class SettingsScreenTest {
         compose.onNodeWithText("悬浮歌词底板", substring = true).assertDoesNotExist()
     }
 
-    /** v1.1.51：字号是 12–60sp 的滑杆，不再是「小 / 中 / 大」三档选项 */
+    /**
+     * v1.2.54：字号改成**磅值 + −/＋ 步进**，不再有滑杆与上下限。
+     *
+     * 用户原话「字号大小不按区间，用磅，没有区间限制，参考 anylyric」——
+     * 滑杆天生需要 range，所以「还在用滑杆」本身就等于「还有区间」，
+     * 这条测试锁住的是「点 ＋ 真的按 2 磅往上走」，而不只是界面上有个数字。
+     */
     @Test
-    fun overlayFontSizeIsASliderInSp() {
-        render(player = PlayerUiState(lyricOverlay = true, lyricOverlayTextSp = 28))
+    fun overlayFontSizeUsesPtStepper() {
+        var lastSp = -1
+        render(
+            player = PlayerUiState(lyricOverlay = true, lyricOverlayTextSp = 28),
+            onLyricOverlayTextSp = { lastSp = it },
+        )
 
         openOverlayPage()
         expandOverlayAdvanced()
 
-        compose.onNodeWithText("正文字号 28sp", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("正文字号").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("28 磅").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription("正文字号 增大").performScrollTo().performClick()
+        assertEquals("步进 2 磅，且不设上限", 30, lastSp)
+        compose.onNodeWithContentDescription("正文字号 减小").performScrollTo().performClick()
+        assertEquals("减号同样一档 2 磅", 26, lastSp)
+        // 旧的「小 / 中 / 大」三档不该再出现
         compose.onNodeWithText("小", substring = false).assertDoesNotExist()
     }
 

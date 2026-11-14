@@ -334,7 +334,7 @@
     <string name="moves_between_the_left_and">在左右留白之间移动；也可以到桌面上直接拖（两处是同一份设置）</string>
     <string name="moves_between_the_top_and">在上下留白之间移动；桌面上直接拖也会同步到这里</string>
     <string name="font">字体</string>
-    <string name="body_size_sp">正文字号 %1$ssp</string>
+    <string name="body_size_sp">正文字号</string>
     <string name="applies_immediately_the_line_count">改完立刻生效，行数选「自动」时会跟着重新排</string>
     <string name="floating_lyric_alignment">悬浮歌词对齐</string>
     <string name="lyrics_align_left_inside_the">歌词在窗内靠左排，适合长句与固定视线</string>
@@ -361,8 +361,7 @@
     <string name="show_title_and_artist">显示歌名与歌手</string>
     <string name="adds_two_small_lines_at">在歌词旁加两行小字：歌名 / 歌手（放上面还是下面在下面单独设置）</string>
     <string name="lyrics_only_no_title_lines">只显示歌词，不加标题行</string>
-    <string name="title_size_of_body">标题字号 正文的 %1$s%%</string>
-    <string name="affects_only_the_two_small">只影响歌名 / 歌手两行小字；40–100%%，默认 62%%</string>
+    <string name="title_size_of_body">标题字号</string>
     <string name="title_content">标题内容</string>
     <string name="title_only_a_more_compact">只显示歌名，标题更紧凑</string>
     <string name="artist_only">只显示歌手</string>
@@ -373,9 +372,14 @@
     <string name="overlay_group_title">标题块</string>
     <string name="overlay_current_line">当前行</string>
     <string name="overlay_context_lines">其他行</string>
-    <string name="overlay_current_size">当前行字号 正文的 %1$d%%</string>
-    <string name="overlay_context_size">其他行字号 正文的 %1$d%%</string>
-    <string name="overlay_scale_hint">以正文为 100%%，当前行与其他行各自可调</string>
+    <string name="overlay_current_size">当前行字号</string>
+    <string name="overlay_context_size">其他行字号</string>
+    <string name="overlay_step_hint">点 −/＋ 逐档增减，不设上下限</string>
+    <string name="overlay_size_pt">%1$d 磅</string>
+    <string name="overlay_follow_body_pt">跟随正文（%1$d 磅）</string>
+    <string name="overlay_title_size_follow">磅值，与正文各自独立</string>
+    <string name="step_decrease_of">%1$s 减小</string>
+    <string name="step_increase_of">%1$s 增大</string>
     <string name="overlay_context_color">其他行颜色</string>
     <string name="overlay_context_color_sub">其他行使用单独的颜色（明暗仍由下面的压暗滑杆控制）</string>
     <string name="overlay_context_color_intro">上下句的色相；不透明度仍由「其他行压暗」滑杆决定</string>
@@ -398,9 +402,9 @@
     <string name="overlay_title_outline_color">标题描边颜色</string>
     <string name="overlay_summary_full">全屏 · 宽 %1$d%% · 高 %2$d%%</string>
     <string name="overlay_summary_strip">单条 · 宽 %1$d%% · %2$s</string>
-    <string name="overlay_summary_text">字号 %1$dsp · %2$s</string>
+    <string name="overlay_summary_text">字号 %1$d 磅 · %2$s</string>
     <string name="overlay_summary_title_off">未显示</string>
-    <string name="overlay_summary_title">%1$s · %2$s · 正文的 %3$d%%</string>
+    <string name="overlay_summary_title">%1$s · %2$s · %3$d 磅</string>
     <string name="overlay_summary_bg_none">无底板（纯文字）</string>
     <string name="overlay_summary_bg">不透明度 %1$d%%</string>
     <string name="overlay_summary_behavior">暂停后%1$s · 淡入 %2$dms</string>
@@ -704,7 +708,7 @@
     <string name="percentage_of_the_screen_width">屏幕宽度的百分比（1–100%%）。窗口越窄，能左右移动的范围越大；窗口越宽，长句折行越晚</string>
     <string name="horizontal_position_2">水平位置 %1$s</string>
     <string name="vertical_position_2">垂直位置 %1$s</string>
-    <string name="continuously_adjustable_from_12_to">12–60sp 连续可调。手机 16–22sp 合适，车机离得远建议 24–32sp；改完立刻生效，行数选「自动」时会跟着重新排</string>
+    <string name="continuously_adjustable_from_12_to">按磅数调，不设上下限。手机 16–22 磅合适，车机离得远建议 24–32 磅；改完立刻生效，行数选「自动」时会跟着重新排</string>
     <string name="brightness_kept_for_context_lines">非当前句保留的亮度：越小上下句越暗、当前句越突出；默认 42%% 与播放页一致（无底板时不低于 61%%，浅色画面上不糊）</string>
     <string name="nothing_configured_yet_floating_lyrics_2">还没有设置。选中的应用在前台时，悬浮歌词自动收起，退出后恢复；找不到应用就先去「关于与诊断 → 调试 → 前台应用记录」看包名</string>
     <string name="start_failed_check_settings_apps">启动失败：%1$s。可到 设置 → 应用 → 显示悬浮窗（部分系统叫「后台弹出界面」）确认，详情见 关于与更新 → 诊断与排障 → 崩溃日志</string>
@@ -2098,7 +2102,7 @@
     <string name="lob_ap_auto_lines">自动行数</string>
     <string name="lob_ap_lines">%1$d 行</string>
     <string name="lob_ap_width"> / 宽%1$d%%</string>
-    <string name="lob_ap_text"> / 字号%1$dsp（标题 %2$d%%）</string>
+    <string name="lob_ap_text"> / 字号%1$d 磅（标题 %2$d 磅）</string>
     <string name="lob_ap_align_left"> / 对齐居左</string>
     <string name="lob_ap_align_center"> / 对齐居中</string>
     <string name="lob_ap_bg"> / 背景%1$d%%</string>

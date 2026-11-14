@@ -365,7 +365,7 @@ The app cannot stop the OEM clearing third-party accessibility on boot; tap the 
     <string name="moves_between_the_left_and">Moves between the left and right margins; dragging on the home screen does the same</string>
     <string name="moves_between_the_top_and">Moves between the top and bottom margins; dragging on the home screen syncs here</string>
     <string name="font">Font</string>
-    <string name="body_size_sp">Body size %1$ssp</string>
+    <string name="body_size_sp">Body size</string>
     <string name="applies_immediately_the_line_count">Applies immediately; the line count is recalculated when set to Auto</string>
     <string name="floating_lyric_alignment">Floating lyric alignment</string>
     <string name="lyrics_align_left_inside_the">Lyrics align left inside the window; suits long lines and a fixed gaze</string>
@@ -392,8 +392,7 @@ The app cannot stop the OEM clearing third-party accessibility on boot; tap the 
     <string name="show_title_and_artist">Show title and artist</string>
     <string name="adds_two_small_lines_at">Adds two small lines for the song title and artist; whether they sit above or below the lyrics is set below</string>
     <string name="lyrics_only_no_title_lines">Lyrics only, no title lines</string>
-    <string name="title_size_of_body">Title size %1$s%% of body</string>
-    <string name="affects_only_the_two_small">Affects only the two small title lines; 40–100%%, default 62%%</string>
+    <string name="title_size_of_body">Title size</string>
     <string name="title_content">Title content</string>
     <string name="title_only_a_more_compact">Title only, a more compact header</string>
     <string name="artist_only">Artist only</string>
@@ -404,9 +403,14 @@ The app cannot stop the OEM clearing third-party accessibility on boot; tap the 
     <string name="overlay_group_title">Title block</string>
     <string name="overlay_current_line">Current line</string>
     <string name="overlay_context_lines">Other lines</string>
-    <string name="overlay_current_size">Current line size %1$d%% of body</string>
-    <string name="overlay_context_size">Other lines size %1$d%% of body</string>
-    <string name="overlay_scale_hint">100%% matches the body size; current and other lines are adjusted separately</string>
+    <string name="overlay_current_size">Current line size</string>
+    <string name="overlay_context_size">Other lines size</string>
+    <string name="overlay_step_hint">Tap − / ＋ to adjust, no upper or lower limit</string>
+    <string name="overlay_size_pt">%1$d pt</string>
+    <string name="overlay_follow_body_pt">Follow body (%1$d pt)</string>
+    <string name="overlay_title_size_follow">Sits below the title switch</string>
+    <string name="step_decrease_of">Decrease %1$s</string>
+    <string name="step_increase_of">Increase %1$s</string>
     <string name="overlay_context_color">Other lines color</string>
     <string name="overlay_context_color_sub">Other lines use their own color (brightness still follows the dim slider)</string>
     <string name="overlay_context_color_intro">Hue for the other lyric lines; the dim slider below still controls their opacity</string>
@@ -429,9 +433,9 @@ The app cannot stop the OEM clearing third-party accessibility on boot; tap the 
     <string name="overlay_title_outline_color">Title outline color</string>
     <string name="overlay_summary_full">Full height · %1$d%% wide · %2$d%% tall</string>
     <string name="overlay_summary_strip">Single strip · %1$d%% wide · %2$s</string>
-    <string name="overlay_summary_text">%1$dsp · %2$s</string>
+    <string name="overlay_summary_text">%1$d pt · %2$s</string>
     <string name="overlay_summary_title_off">Hidden</string>
-    <string name="overlay_summary_title">%1$s · %2$s · %3$d%% of body</string>
+    <string name="overlay_summary_title">%1$s · %2$s · %3$d pt</string>
     <string name="overlay_summary_bg_none">No backdrop (pure text)</string>
     <string name="overlay_summary_bg">Opacity %1$d%%</string>
     <string name="overlay_summary_behavior">When paused: %1$s · Fade %2$dms</string>
@@ -735,7 +739,7 @@ The app cannot stop the OEM clearing third-party accessibility on boot; tap the 
     <string name="percentage_of_the_screen_width">Percentage of the screen width (1–100%%). Narrower windows leave more room to move; wider ones wrap long lines later</string>
     <string name="horizontal_position_2">Horizontal position %1$s</string>
     <string name="vertical_position_2">Vertical position %1$s</string>
-    <string name="continuously_adjustable_from_12_to">Continuously adjustable from 12 to 60sp. 16–22sp suits phones; 24–32sp is easier to read from a distance in a car. Applies immediately and is recalculated when the line count is Auto</string>
+    <string name="continuously_adjustable_from_12_to">Point size, with no upper or lower limit. 16–22 pt suits phones; 24–32 pt is easier to read from a distance in a car. Applies immediately and is recalculated when the line count is Auto</string>
     <string name="brightness_kept_for_context_lines">Brightness kept for context lines: lower values dim them further and make the current line stand out; the default 42%% matches the player (never below 61%% without a backdrop, so it stays legible on light backgrounds)</string>
     <string name="nothing_configured_yet_floating_lyrics_2">Nothing configured yet. Floating lyrics hide while a checked app is in front and return when you leave it; if an app is missing, look up its package in About &amp; diagnostics → Debug → Foreground app history</string>
     <string name="start_failed_check_settings_apps">Start failed: %1$s. Check Settings → Apps → Display over other apps (called Background pop-ups on some systems); details are in About &amp; diagnostics → Crash log</string>
@@ -2132,7 +2136,7 @@ Expired codes refresh automatically. This app is read-only — it never uploads,
     <string name="lob_ap_auto_lines">auto lines</string>
     <string name="lob_ap_lines">%1$d lines</string>
     <string name="lob_ap_width"> / width %1$d%%</string>
-    <string name="lob_ap_text"> / text %1$dsp (title %2$d%%)</string>
+    <string name="lob_ap_text"> / text %1$d pt (title %2$d pt)</string>
     <string name="lob_ap_align_left"> / align left</string>
     <string name="lob_ap_align_center"> / align center</string>
     <string name="lob_ap_bg"> / background %1$d%%</string>

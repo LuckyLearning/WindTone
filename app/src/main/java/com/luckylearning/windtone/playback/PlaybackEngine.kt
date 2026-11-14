@@ -122,7 +122,7 @@ class PlaybackEngine(
             lyricOverlayFullWidthPercent = prefs.lyricOverlayFullWidthPercent,
             lyricOverlayFullOffsetPercent = prefs.lyricOverlayFullOffsetPercent,
             lyricOverlayShowTitle = prefs.lyricOverlayShowTitle,
-            lyricOverlayTitlePercent = prefs.lyricOverlayTitlePercent,
+            lyricOverlayTitleSp = prefs.lyricOverlayTitleSp,
             lyricOverlayTextSp = prefs.lyricOverlayTextSp,
             lyricOverlayPauseMode = prefs.lyricOverlayPauseMode,
             // v1.1.29：悬浮窗按应用隐藏 + 前台应用记录开关
@@ -163,8 +163,8 @@ class PlaybackEngine(
             lyricOverlayTitleStrokeEnabled = prefs.lyricOverlayTitleStrokeEnabled,
             lyricOverlayTitleStrokeWidthDp = prefs.lyricOverlayTitleStrokeWidthDp,
             lyricOverlayTitleStrokeColor = prefs.lyricOverlayTitleStrokeColor,
-            lyricOverlayCurrentScale = prefs.lyricOverlayCurrentScale,
-            lyricOverlayContextScale = prefs.lyricOverlayContextScale,
+            lyricOverlayCurrentSp = prefs.lyricOverlayCurrentSp,
+            lyricOverlayContextSp = prefs.lyricOverlayContextSp,
             lyricOverlayContextColor = prefs.lyricOverlayContextColor,
             // 车载模式：启动直接进播放页（跳过库主页）
             playerExpanded = prefs.carMode,
@@ -1704,8 +1704,8 @@ class PlaybackEngine(
     override fun setLyricOverlayShowTitle(show: Boolean) =
         overlaySettings.setLyricOverlayShowTitle(show)
 
-    override fun setLyricOverlayTitlePercent(percent: Int) =
-        overlaySettings.setLyricOverlayTitlePercent(percent)
+    override fun setLyricOverlayTitleSp(titleSp: Int) =
+        overlaySettings.setLyricOverlayTitleSp(titleSp)
 
     override fun setLyricOverlayTextSp(textSp: Int) = overlaySettings.setLyricOverlayTextSp(textSp)
 
@@ -1793,10 +1793,10 @@ class PlaybackEngine(
         overlaySettings.setLyricOverlayTitleStrokeWidthDp(value)
     override fun setLyricOverlayTitleStrokeColor(value: Int) =
         overlaySettings.setLyricOverlayTitleStrokeColor(value)
-    override fun setLyricOverlayCurrentScale(value: Int) =
-        overlaySettings.setLyricOverlayCurrentScale(value)
-    override fun setLyricOverlayContextScale(value: Int) =
-        overlaySettings.setLyricOverlayContextScale(value)
+    override fun setLyricOverlayCurrentSp(value: Int) =
+        overlaySettings.setLyricOverlayCurrentSp(value)
+    override fun setLyricOverlayContextSp(value: Int) =
+        overlaySettings.setLyricOverlayContextSp(value)
     override fun setLyricOverlayContextColor(value: Int) =
         overlaySettings.setLyricOverlayContextColor(value)
 

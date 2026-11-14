@@ -340,6 +340,87 @@ internal fun SliderRow(
 }
 
 /**
+ * 数值步进行（v1.2.54）。
+ *
+ * 为什么不用 [SliderRow]：滑杆必须给一个 `range`，而这一版用户的要求是
+ * 「字号用磅、**不设区间**」—— 没有上下限就没有滑杆可言。步进器只提供 −/＋
+ * 两个按钮，点一次变一档，能一直加、一直减，和 AnyLyric 的字号交互一致。
+ *
+ * @param valueLabel 右侧显示的可读值（如「20 磅」或「跟随正文」）——调用方负责本地化与单位
+ * @param subtitle 副标题：说明这一档作用于什么、0 代表什么
+ * @param onReset 非空时在最右画一个 ↺（只在当前值偏离出厂默认时由调用方传入）
+ */
+@Composable
+internal fun StepperRow(
+    title: String,
+    valueLabel: String,
+    onDecrease: () -> Unit,
+    onIncrease: () -> Unit,
+    subtitle: String? = null,
+    onReset: (() -> Unit)? = null,
+) {
+    // 副标题放在控件行**下面**占满整宽：字号说明往往是一整句
+    // （「手机 16–22 磅合适，车机离得远建议 24–32 磅…」），挤在左侧列里
+    // 只剩十来个字宽，会折成一坨。
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f),
+            )
+            if (onReset != null) {
+                ResetButton(onReset)
+                Spacer(Modifier.width(4.dp))
+            }
+            // 读屏软件只念得出「按钮」，两个按钮会分不清加减 —— 描述里带标题。
+            StepButton("−", stringResource(R.string.step_decrease_of, title), onDecrease)
+            Text(
+                valueLabel,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                // 固定最小宽度：「20 磅」→「120 磅」变宽时按钮不许跳位
+                modifier = Modifier.widthIn(min = 64.dp),
+            )
+            StepButton("＋", stringResource(R.string.step_increase_of, title), onIncrease)
+        }
+        if (subtitle != null) {
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** [StepperRow] 的 −/＋ 按钮：38dp 方形，够车机上点中 */
+@Composable
+private fun StepButton(label: String, description: String, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(10.dp)
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = shape,
+        modifier = Modifier
+            .size(38.dp)
+            .clip(shape)
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = description },
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                label,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/**
  * 设置主页的**二级分类入口卡**（v1.1.3 新增，效果图 ㉙ 的 `.cat-row`）。
  *
  * 与 [ActionRow] 的分工（效果图原话：「子页入口行与分类卡的区别」）：

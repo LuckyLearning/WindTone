@@ -50,10 +50,10 @@ interface OverlayActions {
     fun setLyricOverlayFullOffsetPercent(percent: Int)
     fun setLyricOverlayShowTitle(show: Boolean)
 
-    /** 标题字号：正文的百分比（40..100，v1.1.51） */
-    fun setLyricOverlayTitlePercent(percent: Int)
+    /** 标题字号：sp 绝对磅值（v1.2.54 起），不设上限 */
+    fun setLyricOverlayTitleSp(titleSp: Int)
 
-    /** 正文字号：sp（12..60，v1.1.51 起任意值） */
+    /** 正文字号：sp（v1.1.51 起任意值；v1.2.54 起不设上限，只挡 0） */
     fun setLyricOverlayTextSp(textSp: Int)
     fun setLyricOverlayPauseMode(mode: Int)
     fun setLyricOverlayAlign(align: Int)
@@ -131,11 +131,11 @@ interface OverlayActions {
     /** 标题描边颜色（ARGB） */
     fun setLyricOverlayTitleStrokeColor(value: Int)
 
-    /** 当前行字号：正文字号的百分比（60..180） */
-    fun setLyricOverlayCurrentScale(value: Int)
+    /** 当前行字号（sp）：0 = 跟随正文，非 0 为绝对磅值（v1.2.54，不设上限） */
+    fun setLyricOverlayCurrentSp(value: Int)
 
-    /** 其他行字号：正文字号的百分比（60..180） */
-    fun setLyricOverlayContextScale(value: Int)
+    /** 其他行字号（sp）：0 = 跟随正文，非 0 为绝对磅值（v1.2.54，不设上限） */
+    fun setLyricOverlayContextSp(value: Int)
 
     /** 其他行颜色：0 = 跟随歌词文字色（默认，再按压暗算不透明度），其余 ARGB */
     fun setLyricOverlayContextColor(value: Int)

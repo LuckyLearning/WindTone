@@ -53,6 +53,12 @@ data class OverlayPreset(
     val lineSpacingDp: Int,
     // ---- 标题 ----
     val showTitle: Boolean,
+    /**
+     * 标题字号占正文的百分比（**预设表的排版意图**，不是存储口径）。
+     *
+     * 落到设置上会换算成绝对磅值（v1.2.54 起标题字号是独立 sp），
+     * 换算只在 `toParams()` 与 `applyOverlayPreset()` 两处发生。
+     */
     val titlePercent: Int,
     val titleMode: Int,
     // ---- 背景 ----
@@ -347,7 +353,11 @@ data class OverlayPresetParams(
     val strokeColor: Int,
     val lineSpacingDp: Int,
     val showTitle: Boolean,
-    val titlePercent: Int,
+    /**
+     * 标题字号（sp）。预设表里标题是按「占正文的百分比」表达的排版意图，
+     * 快照里换算成磅值 —— 与设置页的实际存储口径一致（v1.2.54）。
+     */
+    val titleSp: Int,
     val titleMode: Int,
     val bgAlphaPercent: Int,
     val bgColor: Int,
@@ -374,7 +384,8 @@ fun OverlayPreset.toParams() = OverlayPresetParams(
     strokeColor = strokeColor,
     lineSpacingDp = lineSpacingDp,
     showTitle = showTitle,
-    titlePercent = titlePercent,
+    // 62% × 20sp ≈ 12sp：四舍五入后与用户面默认值（OVERLAY_TITLE_SP）一致
+    titleSp = (textSp * titlePercent + 50) / 100,
     titleMode = titleMode,
     bgAlphaPercent = bgAlphaPercent,
     bgColor = bgColor,
@@ -406,7 +417,7 @@ val OVERLAY_FACTORY_PARAMS = OverlayPresetParams(
     strokeColor = SettingsDefaults.OVERLAY_STROKE_COLOR,
     lineSpacingDp = SettingsDefaults.OVERLAY_LINE_SPACING_DP, // 2
     showTitle = SettingsDefaults.OVERLAY_SHOW_TITLE, // false
-    titlePercent = SettingsDefaults.OVERLAY_TITLE_PERCENT, // 62
+    titleSp = SettingsDefaults.OVERLAY_TITLE_SP, // 12
     titleMode = SettingsDefaults.OVERLAY_TITLE_MODE, // 0
     bgAlphaPercent = SettingsDefaults.OVERLAY_BG_ALPHA_PERCENT, // 55
     bgColor = SettingsDefaults.OVERLAY_BG_COLOR,

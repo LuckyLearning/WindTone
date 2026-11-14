@@ -533,7 +533,7 @@ data class PlayerUiState(
     /** 悬浮窗最上面是否显示「歌名 + 歌手」两行小字 */
     val lyricOverlayShowTitle: Boolean = SettingsDefaults.OVERLAY_SHOW_TITLE,
     /** 歌名 / 歌手两行小字的字号：正文的百分比（40..100，v1.1.51） */
-    val lyricOverlayTitlePercent: Int = SettingsDefaults.OVERLAY_TITLE_PERCENT,
+    val lyricOverlayTitleSp: Int = SettingsDefaults.OVERLAY_TITLE_SP,
     /** 悬浮歌词正文字号（sp，12..60，v1.1.51 起任意值） */
     val lyricOverlayTextSp: Int = SettingsDefaults.OVERLAY_TEXT_SP,
     /** 悬浮歌词暂停时：0 淡出 / 1 隐藏 */
@@ -599,8 +599,8 @@ data class PlayerUiState(
     val lyricOverlayTitleStrokeWidthDp: Int = SettingsDefaults.OVERLAY_TITLE_STROKE_WIDTH_DP,
     val lyricOverlayTitleStrokeColor: Int = SettingsDefaults.OVERLAY_TITLE_STROKE_COLOR,
     /** v1.2.54 分角色字号（正文字号的百分比）与「其他行」颜色（0 跟随） */
-    val lyricOverlayCurrentScale: Int = SettingsDefaults.OVERLAY_CURRENT_SCALE,
-    val lyricOverlayContextScale: Int = SettingsDefaults.OVERLAY_CONTEXT_SCALE,
+    val lyricOverlayCurrentSp: Int = SettingsDefaults.OVERLAY_CURRENT_SP,
+    val lyricOverlayContextSp: Int = SettingsDefaults.OVERLAY_CONTEXT_SP,
     val lyricOverlayContextColor: Int = SettingsDefaults.OVERLAY_CONTEXT_COLOR,
     /** 悬浮窗里的歌词文字颜色（ARGB，默认纯白） */
     val lyricOverlayTextColor: Int = SettingsDefaults.OVERLAY_TEXT_COLOR,
@@ -661,7 +661,7 @@ fun PlayerUiState.overlayPresetParams() = com.luckylearning.windtone.data.Overla
     strokeColor = lyricOverlayStrokeColor,
     lineSpacingDp = lyricOverlayLineSpacingDp,
     showTitle = lyricOverlayShowTitle,
-    titlePercent = lyricOverlayTitlePercent,
+    titleSp = lyricOverlayTitleSp,
     titleMode = lyricOverlayTitleMode,
     bgAlphaPercent = lyricOverlayBgAlphaPercent,
     bgColor = lyricOverlayBgColor,

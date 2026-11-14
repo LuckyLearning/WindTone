@@ -7,6 +7,7 @@ import android.text.Spanned
 import android.text.style.ForegroundColorSpan
 import android.text.style.RelativeSizeSpan
 import android.text.style.StyleSpan
+import com.luckylearning.windtone.data.SettingsDefaults
 import kotlin.math.roundToInt
 
 /**
@@ -53,8 +54,9 @@ internal object OverlayTextStyler {
      * @param noBackdrop   是否无底板；无底板时上下文/译文不能压太暗（见 [OverlayLegibility]）
      * @param currentColor 当前行单独高亮色（v1.1.52）；0 = 跟随 [baseColor]（TextView 文字色）
      * @param dimPercent   上下句压暗百分比（v1.1.52，20–80）；默认 42 与播放页对齐
-     * @param currentScalePercent 当前行字号 = 正文字号的百分比（v1.2.54，默认 100）
-     * @param contextScalePercent 其他行字号 = 正文字号的百分比（v1.2.54，默认 100）
+     * @param textSp 正文字号（sp）—— 分角色字号的换算基准
+     * @param currentSp 当前行字号（sp，v1.2.54）；**0 = 跟随正文**
+     * @param contextSp 其他行字号（sp，v1.2.54）；**0 = 跟随正文**
      * @param contextColor 其他行颜色（v1.2.54）；0 = 跟随 [baseColor]，仍按压暗算不透明度
      */
     fun build(
@@ -64,21 +66,28 @@ internal object OverlayTextStyler {
         noBackdrop: Boolean,
         currentColor: Int = 0,
         dimPercent: Int = OverlayLegibility.DEFAULT_DIM_PERCENT,
-        currentScalePercent: Int = 100,
-        contextScalePercent: Int = 100,
+        textSp: Int = SettingsDefaults.OVERLAY_TEXT_SP,
+        currentSp: Int = SettingsDefaults.OVERLAY_CURRENT_SP,
+        contextSp: Int = SettingsDefaults.OVERLAY_CONTEXT_SP,
         contextColor: Int = 0,
     ): CharSequence {
         if (lines.isEmpty()) return ""
-        // v1.2.54：分角色字号 = 用户百分比 × 形态基准（全屏的当前行基线比正文大 13%）
-        val currentScale = currentScalePercent.coerceIn(40, 200) / 100f *
-            (if (fullHeight) FULL_CURRENT_SCALE else 1f)
-        val contextScale = contextScalePercent.coerceIn(40, 200) / 100f
+        // v1.2.54：分角色字号是**绝对磅值**（0 = 跟随正文），渲染成 RelativeSizeSpan
+        // 需要的是「相对正文的倍率」，所以在这里换算。全屏形态的当前行基线（+13%）叠乘
+        // 在最外层 —— 它是形态自带的排版比例，不是用户设置的一部分。
+        val baseSp = textSp.coerceAtLeast(SettingsDefaults.OVERLAY_FONT_MIN_SP)
+        val currentSpEff = if (currentSp > 0) currentSp else baseSp
+        val contextSpEff = if (contextSp > 0) contextSp else baseSp
+        /** 当前行是否真的与正文不同号（决定要不要加 span / 能不能走快路径） */
+        val currentResized = currentSpEff != baseSp
+        val currentScale = currentSpEff.toFloat() / baseSp * (if (fullHeight) FULL_CURRENT_SCALE else 1f)
+        val contextScale = contextSpEff.toFloat() / baseSp
         val only = lines.singleOrNull()
         // 单行 && 主角 && 不是全屏模式 && 没有单独设当前行色 / 字号时走纯字符串快路径：
         // 主角**不需要任何 span**（颜色由 TextView 的文字色决定），1 行模式正是
         // 最常见的字幕形态。用户设了「当前行颜色 / 字号」后主角要单独染 / 缩放，快路径作废。
         if (!fullHeight && only != null && only.role == OverlayTextComposer.Role.CURRENT) {
-            if (currentColor == 0 && currentScalePercent == 100) return only.text
+            if (currentColor == 0 && !currentResized) return only.text
             return SpannableStringBuilder().apply {
                 append(only.text)
                 if (currentColor != 0) {
@@ -89,7 +98,7 @@ internal object OverlayTextStyler {
                         Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
                     )
                 }
-                if (currentScalePercent != 100) {
+                if (currentResized) {
                     setSpan(
                         RelativeSizeSpan(currentScale),
                         0,

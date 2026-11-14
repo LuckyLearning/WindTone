@@ -260,8 +260,9 @@ class OverlayStylePrefsTest {
             Prefs.KEY_LYRIC_OVERLAY_TITLE_ALIGN,
             Prefs.KEY_LYRIC_OVERLAY_TITLE_C,
             Prefs.KEY_LYRIC_OVERLAY_TITLE_STROKE_ON,
-            Prefs.KEY_LYRIC_OVERLAY_CURRENT_SCALE,
-            Prefs.KEY_LYRIC_OVERLAY_CONTEXT_SCALE,
+            Prefs.KEY_LYRIC_OVERLAY_TITLE_SP,
+            Prefs.KEY_LYRIC_OVERLAY_CURRENT_SP,
+            Prefs.KEY_LYRIC_OVERLAY_CONTEXT_SP,
             Prefs.KEY_LYRIC_OVERLAY_CONTEXT_C,
         ).forEach { key ->
             assertTrue("外观键应分两套：$key", key in Prefs.STYLE_KEYS)
@@ -269,15 +270,15 @@ class OverlayStylePrefsTest {
 
         prefs.themeMode = ThemeMode.LIGHT
         prefs.lyricOverlayTitlePos = 1
-        prefs.lyricOverlayContextScale = 140
+        prefs.lyricOverlayContextSp = 26
         prefs.themeMode = ThemeMode.DARK
         assertEquals("夜间没写过就继承白天", 1, prefs.lyricOverlayTitlePos)
-        assertEquals("夜间没写过就继承白天", 140, prefs.lyricOverlayContextScale)
+        assertEquals("夜间没写过就继承白天", 26, prefs.lyricOverlayContextSp)
 
         prefs.lyricOverlayTitlePos = 0
-        prefs.lyricOverlayContextScale = 80
+        prefs.lyricOverlayContextSp = 18
         prefs.themeMode = ThemeMode.LIGHT
         assertEquals("夜间单独改过，不影响白天", 1, prefs.lyricOverlayTitlePos)
-        assertEquals("夜间单独改过，不影响白天", 140, prefs.lyricOverlayContextScale)
+        assertEquals("夜间单独改过，不影响白天", 26, prefs.lyricOverlayContextSp)
     }
 }

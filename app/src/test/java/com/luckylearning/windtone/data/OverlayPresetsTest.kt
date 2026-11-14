@@ -166,7 +166,7 @@ class OverlayPresetsTest {
             params.xPercent, params.yPercent,
             params.textSp, params.align, params.textColor, params.currentColor,
             params.dimPercent, params.strokeWidthDp, params.strokeColor, params.lineSpacingDp,
-            params.showTitle, params.titlePercent, params.titleMode,
+            params.showTitle, params.titleSp, params.titleMode,
             params.bgAlphaPercent, params.bgColor, params.cornerRadiusDp,
             params.borderWidthDp, params.borderColor,
             params.pauseMode, params.fadeMs,

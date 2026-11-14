@@ -82,6 +82,14 @@ import kotlin.math.roundToInt
  */
 private const val OVERLAY_FULL_EDIT_LEAVE_PERCENT = 92
 
+/**
+ * 字号步进的档位（sp，v1.2.54）。
+ *
+ * 2 磅一档：1 磅太琐碎（从 20 调到 40 要点 20 次），4 磅太粗（微调时跨过头）。
+ * 与 AnyLyric 的字号步进保持一致 —— 用户要的就是「参考 anylyric」。
+ */
+private const val FONT_STEP_SP = 2
+
 
 @Composable
 internal fun SettingsOverlayPage(
@@ -94,7 +102,8 @@ internal fun SettingsOverlayPage(
     onLyricOverlayFullWidthPercent: (Int) -> Unit,
     onLyricOverlayFullOffsetPercent: (Int) -> Unit,
     onLyricOverlayShowTitle: (Boolean) -> Unit,
-    onLyricOverlayTitlePercent: (Int) -> Unit,
+    /** v1.2.54：标题字号改成绝对磅值（sp），不再是正文的百分比 */
+    onLyricOverlayTitleSp: (Int) -> Unit,
     onLyricOverlayTextSp: (Int) -> Unit,
     onLyricOverlayAlign: (Int) -> Unit,
     onLyricOverlayPauseMode: (Int) -> Unit,
@@ -126,9 +135,9 @@ internal fun SettingsOverlayPage(
     onLyricOverlayTitleStrokeEnabled: (Boolean) -> Unit = {},
     onLyricOverlayTitleStrokeWidthDp: (Int) -> Unit = {},
     onLyricOverlayTitleStrokeColor: (Int) -> Unit = {},
-    /** v1.2.54 分角色：当前行 / 其他行的字号百分比与其他行颜色 */
-    onLyricOverlayCurrentScale: (Int) -> Unit = {},
-    onLyricOverlayContextScale: (Int) -> Unit = {},
+    /** v1.2.54 分角色：当前行 / 其他行的字号（sp，0 = 跟随正文）与其他行颜色 */
+    onLyricOverlayCurrentSp: (Int) -> Unit = {},
+    onLyricOverlayContextSp: (Int) -> Unit = {},
     onLyricOverlayContextColor: (Int) -> Unit = {},
     onLyricOverlayTextColor: (Int) -> Unit,
     /** 「不显示悬浮窗的应用」名单（v1.1.29）；整体写回，弹窗内逐个勾选 */
@@ -504,21 +513,20 @@ internal fun SettingsOverlayPage(
             expanded = groupText,
             onToggle = { groupText = !groupText },
         ) {
-        // v1.1.51：字号从「小 / 中 / 大」三档改成 12–60sp 连续可调。
-        // 三档在车机上永远差一截 —— 观看距离、屏幕尺寸、个人视力都不同，
-        // 连续滑杆才谈得上「调到自己舒服」。
-        SliderRow(
-            title = stringResource(R.string.body_size_sp, player.lyricOverlayTextSp),
+        // v1.2.54：字号一律用**磅值 + −/＋ 步进**，取消滑杆与上下限
+        // （用户原话：「字号大小不按区间，用磅，没有区间限制，参考 anylyric」）。
+        // 滑杆天生要 range，所以只要留着滑杆就一定有区间。
+        StepperRow(
+            title = stringResource(R.string.body_size_sp),
             subtitle = stringResource(R.string.continuously_adjustable_from_12_to),
-            value = player.lyricOverlayTextSp.toFloat(),
-            range = SettingsDefaults.OVERLAY_TEXT_SP_RANGE.first.toFloat()..
-                SettingsDefaults.OVERLAY_TEXT_SP_RANGE.last.toFloat(),
-            onValueChange = {
-                onLyricOverlayTextSp(it.roundToInt().coerceIn(
-                    SettingsDefaults.OVERLAY_TEXT_SP_RANGE.first,
-                    SettingsDefaults.OVERLAY_TEXT_SP_RANGE.last,
-                ))
+            valueLabel = stringResource(R.string.overlay_size_pt, player.lyricOverlayTextSp),
+            onDecrease = {
+                onLyricOverlayTextSp(
+                    (player.lyricOverlayTextSp - FONT_STEP_SP)
+                        .coerceAtLeast(SettingsDefaults.OVERLAY_FONT_MIN_SP),
+                )
             },
+            onIncrease = { onLyricOverlayTextSp(player.lyricOverlayTextSp + FONT_STEP_SP) },
             onReset = resetAction(player.lyricOverlayTextSp != SettingsDefaults.OVERLAY_TEXT_SP) {
                 onLyricOverlayTextSp(SettingsDefaults.OVERLAY_TEXT_SP)
             },
@@ -571,21 +579,25 @@ internal fun SettingsOverlayPage(
                 player.lyricOverlayCurrentColor != SettingsDefaults.OVERLAY_CURRENT_COLOR,
             ) { onLyricOverlayCurrentColor(SettingsDefaults.OVERLAY_CURRENT_COLOR) },
         )
-        SliderRow(
-            title = stringResource(R.string.overlay_current_size, player.lyricOverlayCurrentScale),
-            subtitle = stringResource(R.string.overlay_scale_hint),
-            value = player.lyricOverlayCurrentScale.toFloat(),
-            range = SettingsDefaults.OVERLAY_LINE_SCALE_RANGE.first.toFloat()..
-                SettingsDefaults.OVERLAY_LINE_SCALE_RANGE.last.toFloat(),
-            onValueChange = {
-                onLyricOverlayCurrentScale(it.roundToInt().coerceIn(
-                    SettingsDefaults.OVERLAY_LINE_SCALE_RANGE.first,
-                    SettingsDefaults.OVERLAY_LINE_SCALE_RANGE.last,
-                ))
+        // 字号：0 = 跟随正文（默认），非 0 为绝对磅值。加号从「跟随」出发时
+        // 以正文为起点加减一档，用户不会因为 0 这个哨兵值看不出该往哪边点。
+        StepperRow(
+            title = stringResource(R.string.overlay_current_size),
+            subtitle = stringResource(R.string.overlay_step_hint),
+            valueLabel = lineSizeLabel(player.lyricOverlayCurrentSp, player.lyricOverlayTextSp),
+            onDecrease = {
+                onLyricOverlayCurrentSp(
+                    stepDown(player.lyricOverlayCurrentSp, player.lyricOverlayTextSp),
+                )
+            },
+            onIncrease = {
+                onLyricOverlayCurrentSp(
+                    stepUp(player.lyricOverlayCurrentSp, player.lyricOverlayTextSp),
+                )
             },
             onReset = resetAction(
-                player.lyricOverlayCurrentScale != SettingsDefaults.OVERLAY_CURRENT_SCALE,
-            ) { onLyricOverlayCurrentScale(SettingsDefaults.OVERLAY_CURRENT_SCALE) },
+                player.lyricOverlayCurrentSp != SettingsDefaults.OVERLAY_CURRENT_SP,
+            ) { onLyricOverlayCurrentSp(SettingsDefaults.OVERLAY_CURRENT_SP) },
         )
         // 只有一行歌词时，「其他行」没有任何一行可作用 —— 整块收起（v1.2.54）。
         // 全屏形态永远有上下文行；单条形态则是行数 >1 / 行数自动时才可能出现。
@@ -609,21 +621,23 @@ internal fun SettingsOverlayPage(
                     player.lyricOverlayContextColor != SettingsDefaults.OVERLAY_CONTEXT_COLOR,
                 ) { onLyricOverlayContextColor(SettingsDefaults.OVERLAY_CONTEXT_COLOR) },
             )
-            SliderRow(
-                title = stringResource(R.string.overlay_context_size, player.lyricOverlayContextScale),
-                subtitle = stringResource(R.string.overlay_scale_hint),
-                value = player.lyricOverlayContextScale.toFloat(),
-                range = SettingsDefaults.OVERLAY_LINE_SCALE_RANGE.first.toFloat()..
-                    SettingsDefaults.OVERLAY_LINE_SCALE_RANGE.last.toFloat(),
-                onValueChange = {
-                    onLyricOverlayContextScale(it.roundToInt().coerceIn(
-                        SettingsDefaults.OVERLAY_LINE_SCALE_RANGE.first,
-                        SettingsDefaults.OVERLAY_LINE_SCALE_RANGE.last,
-                    ))
+            StepperRow(
+                title = stringResource(R.string.overlay_context_size),
+                subtitle = stringResource(R.string.overlay_step_hint),
+                valueLabel = lineSizeLabel(player.lyricOverlayContextSp, player.lyricOverlayTextSp),
+                onDecrease = {
+                    onLyricOverlayContextSp(
+                        stepDown(player.lyricOverlayContextSp, player.lyricOverlayTextSp),
+                    )
+                },
+                onIncrease = {
+                    onLyricOverlayContextSp(
+                        stepUp(player.lyricOverlayContextSp, player.lyricOverlayTextSp),
+                    )
                 },
                 onReset = resetAction(
-                    player.lyricOverlayContextScale != SettingsDefaults.OVERLAY_CONTEXT_SCALE,
-                ) { onLyricOverlayContextScale(SettingsDefaults.OVERLAY_CONTEXT_SCALE) },
+                    player.lyricOverlayContextSp != SettingsDefaults.OVERLAY_CONTEXT_SP,
+                ) { onLyricOverlayContextSp(SettingsDefaults.OVERLAY_CONTEXT_SP) },
             )
             SliderRow(
                 title = stringResource(R.string.context_line_brightness, player.lyricOverlayDimPercent),
@@ -777,23 +791,24 @@ internal fun SettingsOverlayPage(
                         player.lyricOverlayTitleAlign != SettingsDefaults.OVERLAY_TITLE_ALIGN,
                     ) { onLyricOverlayTitleAlign(SettingsDefaults.OVERLAY_TITLE_ALIGN) },
                 )
-                // 大小：标题字号 = 正文的百分比（正文调大时标题自动跟着放大，
-                // 既不用再手动追一次，也保证标题永远小于歌词、不会把歌词挤出去）。
-                SliderRow(
-                    title = stringResource(R.string.title_size_of_body, player.lyricOverlayTitlePercent),
-                    subtitle = stringResource(R.string.affects_only_the_two_small),
-                    value = player.lyricOverlayTitlePercent.toFloat(),
-                    range = SettingsDefaults.OVERLAY_TITLE_PERCENT_RANGE.first.toFloat()..
-                        SettingsDefaults.OVERLAY_TITLE_PERCENT_RANGE.last.toFloat(),
-                    onValueChange = {
-                        onLyricOverlayTitlePercent(it.roundToInt().coerceIn(
-                            SettingsDefaults.OVERLAY_TITLE_PERCENT_RANGE.first,
-                            SettingsDefaults.OVERLAY_TITLE_PERCENT_RANGE.last,
-                        ))
+                // 大小：独立磅值（v1.2.54 起不再按正文百分比）。标题与正文解耦，
+                // 用户直接说「标题 13 磅」，不用先看正文多少磅再心算百分比。
+                StepperRow(
+                    title = stringResource(R.string.title_size_of_body),
+                    subtitle = stringResource(R.string.overlay_title_size_follow),
+                    valueLabel = stringResource(R.string.overlay_size_pt, player.lyricOverlayTitleSp),
+                    onDecrease = {
+                        onLyricOverlayTitleSp(
+                            (player.lyricOverlayTitleSp - FONT_STEP_SP)
+                                .coerceAtLeast(SettingsDefaults.OVERLAY_FONT_MIN_SP),
+                        )
+                    },
+                    onIncrease = {
+                        onLyricOverlayTitleSp(player.lyricOverlayTitleSp + FONT_STEP_SP)
                     },
                     onReset = resetAction(
-                        player.lyricOverlayTitlePercent != SettingsDefaults.OVERLAY_TITLE_PERCENT,
-                    ) { onLyricOverlayTitlePercent(SettingsDefaults.OVERLAY_TITLE_PERCENT) },
+                        player.lyricOverlayTitleSp != SettingsDefaults.OVERLAY_TITLE_SP,
+                    ) { onLyricOverlayTitleSp(SettingsDefaults.OVERLAY_TITLE_SP) },
                 )
                 // 颜色：0 = 跟随歌词文字色（压到 78%），自选色则原样使用
                 ActionRow(
@@ -1349,7 +1364,7 @@ internal fun SettingsOverlayPage(
                     onLyricOverlayLineSpacingDp(SettingsDefaults.OVERLAY_LINE_SPACING_DP)
                     // 标题
                     onLyricOverlayShowTitle(SettingsDefaults.OVERLAY_SHOW_TITLE)
-                    onLyricOverlayTitlePercent(SettingsDefaults.OVERLAY_TITLE_PERCENT)
+                    onLyricOverlayTitleSp(SettingsDefaults.OVERLAY_TITLE_SP)
                     onLyricOverlayTitleMode(SettingsDefaults.OVERLAY_TITLE_MODE)
                     // 标题块的位置 / 对齐 / 颜色 / 描边（v1.2.54）
                     onLyricOverlayTitlePos(SettingsDefaults.OVERLAY_TITLE_POS)
@@ -1359,8 +1374,8 @@ internal fun SettingsOverlayPage(
                     onLyricOverlayTitleStrokeWidthDp(SettingsDefaults.OVERLAY_TITLE_STROKE_WIDTH_DP)
                     onLyricOverlayTitleStrokeColor(SettingsDefaults.OVERLAY_TITLE_STROKE_COLOR)
                     // 当前行 / 其他行（v1.2.54）
-                    onLyricOverlayCurrentScale(SettingsDefaults.OVERLAY_CURRENT_SCALE)
-                    onLyricOverlayContextScale(SettingsDefaults.OVERLAY_CONTEXT_SCALE)
+                    onLyricOverlayCurrentSp(SettingsDefaults.OVERLAY_CURRENT_SP)
+                    onLyricOverlayContextSp(SettingsDefaults.OVERLAY_CONTEXT_SP)
                     onLyricOverlayContextColor(SettingsDefaults.OVERLAY_CONTEXT_COLOR)
                     // 背景
                     onLyricOverlayBgAlphaPercent(SettingsDefaults.OVERLAY_BG_ALPHA_PERCENT)
@@ -1425,6 +1440,37 @@ private fun textSummary(player: PlayerUiState): String = stringResource(
     OVERLAY_ALIGN_LABELS[player.lyricOverlayAlign.coerceIn(0, 1)],
 )
 
+/**
+ * 分角色字号的可读值。
+ *
+ * 0 是「跟随正文」的哨兵值，直接显示成「0 磅」会让人以为字被关掉了，
+ * 所以跟随态显示正文的磅数 —— 用户一眼能看出「跟随 = 现在多少磅」。
+ */
+@Composable
+private fun lineSizeLabel(sp: Int, bodySp: Int): String =
+    if (sp <= 0) {
+        stringResource(R.string.overlay_follow_body_pt, bodySp)
+    } else {
+        stringResource(R.string.overlay_size_pt, sp)
+    }
+
+/**
+ * 分角色字号往下减一档。
+ *
+ * 跟随态（0）按减号时，起点**视作正文磅数**再减两磅 —— 否则 0 − 2 会被夹回 1，
+ * 用户会看到字号从「跟随 20 磅」一步掉到「1 磅」。
+ */
+private fun stepDown(sp: Int, bodySp: Int): Int {
+    val base = if (sp <= 0) bodySp else sp
+    return (base - FONT_STEP_SP).coerceAtLeast(SettingsDefaults.OVERLAY_FONT_MIN_SP)
+}
+
+/** 分角色字号往上加一档（跟随态同样以正文为起点），**不设上限** */
+private fun stepUp(sp: Int, bodySp: Int): Int {
+    val base = if (sp <= 0) bodySp else sp
+    return base + FONT_STEP_SP
+}
+
 @Composable
 private fun titleSummary(player: PlayerUiState): String {
     if (!player.lyricOverlayShowTitle) return stringResource(R.string.overlay_summary_title_off)
@@ -1438,7 +1484,7 @@ private fun titleSummary(player: PlayerUiState): String {
             else -> R.string.overlay_align_center
         },
     )
-    return stringResource(R.string.overlay_summary_title, pos, align, player.lyricOverlayTitlePercent)
+    return stringResource(R.string.overlay_summary_title, pos, align, player.lyricOverlayTitleSp)
 }
 
 @Composable

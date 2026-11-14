@@ -128,8 +128,9 @@ class SettingsDefaultsTest {
             prefs.lyricOverlayTitleStrokeColor,
             SettingsDefaults.OVERLAY_TITLE_STROKE_COLOR,
         )
-        check("lyricOverlayCurrentScale", prefs.lyricOverlayCurrentScale, SettingsDefaults.OVERLAY_CURRENT_SCALE)
-        check("lyricOverlayContextScale", prefs.lyricOverlayContextScale, SettingsDefaults.OVERLAY_CONTEXT_SCALE)
+        check("lyricOverlayTitleSp", prefs.lyricOverlayTitleSp, SettingsDefaults.OVERLAY_TITLE_SP)
+        check("lyricOverlayCurrentSp", prefs.lyricOverlayCurrentSp, SettingsDefaults.OVERLAY_CURRENT_SP)
+        check("lyricOverlayContextSp", prefs.lyricOverlayContextSp, SettingsDefaults.OVERLAY_CONTEXT_SP)
         check("lyricOverlayContextColor", prefs.lyricOverlayContextColor, SettingsDefaults.OVERLAY_CONTEXT_COLOR)
         check("lyricOverlayHiddenApps", prefs.lyricOverlayHiddenApps, SettingsDefaults.OVERLAY_HIDDEN_APPS)
         check("foregroundLogEnabled", prefs.foregroundLogEnabled, SettingsDefaults.FOREGROUND_LOG_ENABLED)

@@ -145,13 +145,13 @@ class SettingsRepository(val prefs: Prefs) {
         prefs.lyricOverlayShowTitle = show
     }
 
-    /** @return 夹取到 [SettingsDefaults.OVERLAY_TITLE_PERCENT_RANGE] 后的值 */
-    fun setOverlayTitlePercent(percent: Int): Int {
-        prefs.lyricOverlayTitlePercent = percent
-        return prefs.lyricOverlayTitlePercent
+    /** @return 夹取到「≥ [SettingsDefaults.OVERLAY_FONT_MIN_SP]」后的标题字号（sp，不设上限） */
+    fun setOverlayTitleSp(titleSp: Int): Int {
+        prefs.lyricOverlayTitleSp = titleSp
+        return prefs.lyricOverlayTitleSp
     }
 
-    /** @return 夹取到 [SettingsDefaults.OVERLAY_TEXT_SP_RANGE] 后的值 */
+    /** @return 夹取到「≥ [SettingsDefaults.OVERLAY_FONT_MIN_SP]」后的正文/标题字号（sp，不设上限） */
     fun setOverlayTextSp(textSp: Int): Int {
         prefs.lyricOverlayTextSp = textSp
         return prefs.lyricOverlayTextSp
@@ -324,16 +324,16 @@ class SettingsRepository(val prefs: Prefs) {
         return prefs.lyricOverlayTitleStrokeColor
     }
 
-    /** @return 夹到 [SettingsDefaults.OVERLAY_LINE_SCALE_RANGE] 后的值 */
-    fun setLyricOverlayCurrentScale(value: Int): Int {
-        prefs.lyricOverlayCurrentScale = value
-        return prefs.lyricOverlayCurrentScale
+    /** @return 当前行字号（sp）：0 = 跟随正文；不设上限，只挡负数 */
+    fun setLyricOverlayCurrentSp(value: Int): Int {
+        prefs.lyricOverlayCurrentSp = value
+        return prefs.lyricOverlayCurrentSp
     }
 
-    /** @return 夹到 [SettingsDefaults.OVERLAY_LINE_SCALE_RANGE] 后的值 */
-    fun setLyricOverlayContextScale(value: Int): Int {
-        prefs.lyricOverlayContextScale = value
-        return prefs.lyricOverlayContextScale
+    /** @return 其他行字号（sp）：0 = 跟随正文；不设上限，只挡负数 */
+    fun setLyricOverlayContextSp(value: Int): Int {
+        prefs.lyricOverlayContextSp = value
+        return prefs.lyricOverlayContextSp
     }
 
     fun setLyricOverlayContextColor(value: Int): Int {

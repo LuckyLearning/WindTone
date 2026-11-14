@@ -107,16 +107,19 @@ class SettingsRepositoryTest {
     }
 
     @Test
-    fun `字号类设置越界夹到各自区间`() {
-        // 正文 12..60sp、标题 40..100%
-        assertEquals(SettingsDefaults.OVERLAY_TEXT_SP_RANGE.last, settings.setOverlayTextSp(999))
-        assertEquals(SettingsDefaults.OVERLAY_TEXT_SP_RANGE.first, settings.setOverlayTextSp(-1))
-        assertEquals(SettingsDefaults.OVERLAY_TITLE_PERCENT_RANGE.last, settings.setOverlayTitlePercent(999))
-        assertEquals(SettingsDefaults.OVERLAY_TITLE_PERCENT_RANGE.first, settings.setOverlayTitlePercent(0))
-        // 落盘的也必须是夹取后的值，否则重启后读回一个越界数
-        // （最后一次写的是下界：正文 -1 → 12，标题 0 → 40）
-        assertEquals(SettingsDefaults.OVERLAY_TEXT_SP_RANGE.first, prefs.lyricOverlayTextSp)
-        assertEquals(SettingsDefaults.OVERLAY_TITLE_PERCENT_RANGE.first, prefs.lyricOverlayTitlePercent)
+    fun `字号类设置只挡 0 不设上限`() {
+        // v1.2.54：正文 / 标题 / 当前行 / 其他行统一改成磅值，用户要求「不设区间」——
+        // 上界不再夹取（999 就该原样落盘），下界只挡 0 / 负数（= 字看不见）。
+        assertEquals(999, settings.setOverlayTextSp(999))
+        assertEquals(SettingsDefaults.OVERLAY_FONT_MIN_SP, settings.setOverlayTextSp(0))
+        assertEquals(999, settings.setOverlayTitleSp(999))
+        assertEquals(SettingsDefaults.OVERLAY_FONT_MIN_SP, settings.setOverlayTitleSp(-3))
+        // 落盘的也必须是夹取后的值，否则重启后读回一个看不见的字号
+        assertEquals(SettingsDefaults.OVERLAY_FONT_MIN_SP, prefs.lyricOverlayTextSp)
+        assertEquals(SettingsDefaults.OVERLAY_FONT_MIN_SP, prefs.lyricOverlayTitleSp)
+        // 0 对「当前行 / 其他行」是「跟随正文」的哨兵值，不是越界，负数才夹回 0
+        assertEquals(0, settings.setLyricOverlayCurrentSp(0))
+        assertEquals(0, settings.setLyricOverlayContextSp(-1))
     }
 
     @Test

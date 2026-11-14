@@ -1,6 +1,7 @@
 package com.luckylearning.windtone.overlay
 
 import android.view.Gravity
+import com.luckylearning.windtone.data.SettingsDefaults
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -50,22 +51,20 @@ class OverlayAppearanceTest {
     }
 
     @Test
-    fun `titleTextSp 是正文乘百分比，不再有档位倍率`() {
-        // 正文 20sp、标题 62% = 12.4sp
-        assertEquals(12.4f, OverlayAppearance.titleTextSp(20, 62), 1e-4f)
-        // 正文调到 28sp，标题跟着放大，不需要用户再动一次
-        assertEquals(17.36f, OverlayAppearance.titleTextSp(28, 62), 1e-4f)
-        // 100% = 与正文同号
-        assertEquals(30f, OverlayAppearance.titleTextSp(30, 100), 1e-4f)
+    fun `titleTextSp 直接用磅值，不再按正文百分比换算`() {
+        // v1.2.54：标题字号是独立磅值 —— 传 13 就是 13sp，与正文多少磅无关
+        assertEquals(13f, OverlayAppearance.titleTextSp(13), 1e-4f)
+        assertEquals(12f, OverlayAppearance.titleTextSp(SettingsDefaults.OVERLAY_TITLE_SP), 1e-4f)
+        // 不设上限：车机上要 40 磅也给 40 磅
+        assertEquals(40f, OverlayAppearance.titleTextSp(40), 1e-4f)
     }
 
     @Test
-    fun `titleTextSp 的正文与百分比越界都被夹取`() {
-        // 正文越界夹到 12..60sp，百分比越界夹到 1..200%
-        assertEquals(OverlayAppearance.titleTextSp(12, 62), OverlayAppearance.titleTextSp(-9, 62), 1e-4f)
-        assertEquals(OverlayAppearance.titleTextSp(60, 62), OverlayAppearance.titleTextSp(999, 62), 1e-4f)
-        assertEquals(OverlayAppearance.titleTextSp(20, 1), OverlayAppearance.titleTextSp(20, 0), 1e-4f)
-        assertEquals(OverlayAppearance.titleTextSp(20, 200), OverlayAppearance.titleTextSp(20, 999), 1e-4f)
+    fun `titleTextSp 只挡 0 与负数`() {
+        // 0 / 负数会让标题彻底消失，夹到 1sp 保底；正数一律原样
+        assertEquals(1f, OverlayAppearance.titleTextSp(0), 1e-4f)
+        assertEquals(1f, OverlayAppearance.titleTextSp(-5), 1e-4f)
+        assertEquals(999f, OverlayAppearance.titleTextSp(999), 1e-4f)
     }
 
     @Test

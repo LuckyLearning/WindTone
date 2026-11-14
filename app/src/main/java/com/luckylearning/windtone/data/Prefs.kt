@@ -220,8 +220,8 @@ object SettingsDefaults {
      */
     const val OVERLAY_TEXT_SP = 20
 
-    /** 字号的合法区间（sp）：12 以下基本看不清，60 在车机上已经是半屏高的字 */
-    val OVERLAY_TEXT_SP_RANGE = 12..60
+    /** 字号的合法下限（sp）：只挡 0 与负数，**不设上限** */
+    const val OVERLAY_FONT_MIN_SP = 1
 
     /**
      * 旧「小 / 中 / 大」三档对应的 sp —— **只用于老用户迁移**，设置页不再出现。
@@ -237,10 +237,21 @@ object SettingsDefaults {
      */
     const val OVERLAY_SHOW_TITLE = false
 
-    /** 歌名 / 歌手两行小字的字号，存「正文的百分比」（v1.1.51），默认 62% */
+    /**
+     * 歌名 / 歌手两行小字的字号（sp，v1.2.54 起是**独立磅值**，默认 12）。
+     *
+     * v1.1.51 起这里存的是「正文的百分比」（默认 62%）。改成绝对磅值的原因：
+     * 百分比要用户自己换算（「我想让标题 13 磅」→ 得先知道正文多少磅再算），
+     * 调完正文还得回头确认标题是不是被带跑了。磅值所见即所得。
+     *
+     * **迁移**：新键没写过时按旧百分比 × 当前正文字号换算，老用户看到的字号不变。
+     */
+    const val OVERLAY_TITLE_SP = 12
+
+    /** 旧「标题占正文的百分比」默认值 —— **只用于迁移与预设**，设置页不再出现 */
     const val OVERLAY_TITLE_PERCENT = 62
 
-    /** 标题占正文的百分比区间：再小看不清，再大就会挤掉歌词主体 */
+    /** 旧百分比的合法区间 —— 只用于读历史值，别在新代码里用 */
     val OVERLAY_TITLE_PERCENT_RANGE = 40..100
 
     /** 旧「小 / 中 / 大」标题档对应的百分比 —— 只用于迁移（0.55 / 0.62 / 0.78） */
@@ -421,18 +432,16 @@ object SettingsDefaults {
     const val OVERLAY_TITLE_STROKE_COLOR = 0xFF000000.toInt()
 
     /**
-     * 当前行字号：**正文字号的百分比**（默认 100）。
+     * 当前行字号（sp）。**0 = 跟随正文**（默认），非 0 为绝对磅值。
      *
-     * 用百分比而不是独立 sp：正文滑杆一调，当前行 / 其他行跟着走，
-     * 只在「当前行要比其他行大多少」这件事上单独拧，不会出现两组数字各调各的。
+     * 为什么用磅值而不是「正文的百分比」（v1.2.54 改）：百分比要用户自己换算，
+     * 而且只能在 60–180% 这段里拧；磅值所见即所得，配合 −/＋ 步进可以一直加减，
+     * 不设上下限。0 保留为「跟随正文」——正文一调它跟着走，这是默认形态。
      */
-    const val OVERLAY_CURRENT_SCALE = 100
+    const val OVERLAY_CURRENT_SP = 0
 
-    /** 其他行（上下句 / 译文以外的歌词行）字号：正文的百分比（默认 100） */
-    const val OVERLAY_CONTEXT_SCALE = 100
-
-    /** 行内字号百分比的合法区间：60% 已经是「明显小一号」，180% 再大就会把小窗撑破 */
-    val OVERLAY_LINE_SCALE_RANGE = 60..180
+    /** 其他行（上下句）字号（sp）：0 = 跟随正文（默认），非 0 为绝对磅值 */
+    const val OVERLAY_CONTEXT_SP = 0
 
     /**
      * 其他行颜色：0 = 跟随「歌词文字颜色」（再按压暗算不透明度），其余为 ARGB。
@@ -1674,40 +1683,61 @@ class Prefs private constructor(context: Context) {
         }
 
     /**
-     * 歌名 / 歌手两行小字的字号，存**正文的百分比**（v1.1.51，默认 62%）。
+     * 标题块字号（sp，v1.2.54 起是**独立磅值**，默认 12）。
      *
-     * 为什么是比例而不是独立 sp：标题是配角，用户调大正文时它应当跟着放大，
-     * 而不是要再手动去追一次；比例还能保证「标题永远比正文小」这条排版约束。
+     * 与正文解耦：标题要小一号是排版常识，但「小多少」让用户直接说磅数，
+     * 而不是让他先看正文多少磅、再心算百分比。
      *
-     * **迁移**：新键没写过时，按旧的 0/1/2 档换算成 55 / 62 / 78%，观感不变。
+     * **迁移**：新键没写过时按旧百分比 × 当前正文字号换算
+     * （默认 20sp × 62% ≈ 12sp，与 [SettingsDefaults.OVERLAY_TITLE_SP] 对齐），
+     * 老用户升级后字号一模一样。
      */
-    var lyricOverlayTitlePercent: Int
+    var lyricOverlayTitleSp: Int
         get() {
-            val stored = sp.getInt(KEY_LYRIC_OVERLAY_TITLE_PERCENT, Int.MIN_VALUE)
-            val raw = when {
-                stored != Int.MIN_VALUE -> stored
-                // 老用户：按当时的 0/1/2 档换算（0.55 / 0.62 / 0.78）
-                sp.contains(KEY_LYRIC_OVERLAY_TITLE_SCALE) -> SettingsDefaults.OVERLAY_TITLE_PERCENT_BY_SCALE[
-                    sp.getInt(KEY_LYRIC_OVERLAY_TITLE_SCALE, 0).coerceIn(0, 2),
-                ]
-                else -> SettingsDefaults.OVERLAY_TITLE_PERCENT
+            val stored = sp.getInt(KEY_LYRIC_OVERLAY_TITLE_SP, Int.MIN_VALUE)
+            if (stored != Int.MIN_VALUE) {
+                return stored.coerceAtLeast(SettingsDefaults.OVERLAY_FONT_MIN_SP)
             }
-            return raw.coerceIn(
-                SettingsDefaults.OVERLAY_TITLE_PERCENT_RANGE.first,
-                SettingsDefaults.OVERLAY_TITLE_PERCENT_RANGE.last,
-            )
+            // 整数四舍五入：20 × 62 / 100 = 12.4 → 12
+            val derived = (lyricOverlayTextSp * legacyTitlePercent() + 50) / 100
+            return derived.coerceAtLeast(SettingsDefaults.OVERLAY_FONT_MIN_SP)
         }
         set(value) {
-            val v = value.coerceIn(
-                SettingsDefaults.OVERLAY_TITLE_PERCENT_RANGE.first,
-                SettingsDefaults.OVERLAY_TITLE_PERCENT_RANGE.last,
-            )
-            sp.edit().putInt(KEY_LYRIC_OVERLAY_TITLE_PERCENT, v).apply()
-            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_TITLE_PERCENT, v) }
+            val v = value.coerceAtLeast(SettingsDefaults.OVERLAY_FONT_MIN_SP)
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_TITLE_SP, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_TITLE_SP, v) }
         }
 
     /**
-     * 悬浮歌词正文字号（sp，v1.1.51 起可调 12–60）。
+     * 旧「标题占正文的百分比」（v1.1.51 口径）—— **只读，仅供迁移**。
+     *
+     * 新代码一律用 [lyricOverlayTitleSp]；保留它是为了把老用户调过的百分比
+     * 换算成磅值后不丢观感，以及预设组合仍然按「标题是正文的 62%」表达。
+     */
+    val lyricOverlayTitlePercent: Int
+        get() = legacyTitlePercent()
+
+    private fun legacyTitlePercent(): Int {
+        val stored = sp.getInt(KEY_LYRIC_OVERLAY_TITLE_PERCENT, Int.MIN_VALUE)
+        val raw = when {
+            stored != Int.MIN_VALUE -> stored
+            // 更老的用户：按当时的 0/1/2 档换算（0.55 / 0.62 / 0.78）
+            sp.contains(KEY_LYRIC_OVERLAY_TITLE_SCALE) -> SettingsDefaults.OVERLAY_TITLE_PERCENT_BY_SCALE[
+                sp.getInt(KEY_LYRIC_OVERLAY_TITLE_SCALE, 0).coerceIn(0, 2),
+            ]
+            else -> SettingsDefaults.OVERLAY_TITLE_PERCENT
+        }
+        return raw.coerceIn(
+            SettingsDefaults.OVERLAY_TITLE_PERCENT_RANGE.first,
+            SettingsDefaults.OVERLAY_TITLE_PERCENT_RANGE.last,
+        )
+    }
+
+    /**
+     * 悬浮歌词正文字号（sp）。
+     *
+     * v1.1.51 起从「小 / 中 / 大」三档改成任意值；v1.2.54 起
+     * **取消 12–60 的上限**（用户要求「字号用磅、不设区间」），只保证 ≥1。
      *
      * v1.1.50 之前存的是 0/1/2 三档。**迁移**：新键没写过时按旧档位换算
      * （16 / 20 / 25sp），老用户升级后字号一模一样，不必重设。
@@ -1723,16 +1753,10 @@ class Prefs private constructor(context: Context) {
                 ]
                 else -> SettingsDefaults.OVERLAY_TEXT_SP
             }
-            return raw.coerceIn(
-                SettingsDefaults.OVERLAY_TEXT_SP_RANGE.first,
-                SettingsDefaults.OVERLAY_TEXT_SP_RANGE.last,
-            )
+            return raw.coerceAtLeast(SettingsDefaults.OVERLAY_FONT_MIN_SP)
         }
         set(value) {
-            val v = value.coerceIn(
-                SettingsDefaults.OVERLAY_TEXT_SP_RANGE.first,
-                SettingsDefaults.OVERLAY_TEXT_SP_RANGE.last,
-            )
+            val v = value.coerceAtLeast(SettingsDefaults.OVERLAY_FONT_MIN_SP)
             sp.edit().putInt(KEY_LYRIC_OVERLAY_TEXT_SP, v).apply()
             ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_TEXT_SP, v) }
         }
@@ -1954,36 +1978,24 @@ class Prefs private constructor(context: Context) {
             ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_TITLE_STROKE_C, value) }
         }
 
-    /** 当前行字号：正文字号的百分比（60..180，默认 100） */
-    var lyricOverlayCurrentScale: Int
-        get() = sp.getInt(KEY_LYRIC_OVERLAY_CURRENT_SCALE, SettingsDefaults.OVERLAY_CURRENT_SCALE)
-            .coerceIn(
-                SettingsDefaults.OVERLAY_LINE_SCALE_RANGE.first,
-                SettingsDefaults.OVERLAY_LINE_SCALE_RANGE.last,
-            )
+    /** 当前行字号（sp）：0 = 跟随正文（默认），其余为绝对磅值，不设上限 */
+    var lyricOverlayCurrentSp: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_CURRENT_SP, SettingsDefaults.OVERLAY_CURRENT_SP)
+            .coerceAtLeast(0)
         set(value) {
-            val v = value.coerceIn(
-                SettingsDefaults.OVERLAY_LINE_SCALE_RANGE.first,
-                SettingsDefaults.OVERLAY_LINE_SCALE_RANGE.last,
-            )
-            sp.edit().putInt(KEY_LYRIC_OVERLAY_CURRENT_SCALE, v).apply()
-            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_CURRENT_SCALE, v) }
+            val v = value.coerceAtLeast(0)
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_CURRENT_SP, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_CURRENT_SP, v) }
         }
 
-    /** 其他行（上下句）字号：正文字号的百分比（60..180，默认 100） */
-    var lyricOverlayContextScale: Int
-        get() = sp.getInt(KEY_LYRIC_OVERLAY_CONTEXT_SCALE, SettingsDefaults.OVERLAY_CONTEXT_SCALE)
-            .coerceIn(
-                SettingsDefaults.OVERLAY_LINE_SCALE_RANGE.first,
-                SettingsDefaults.OVERLAY_LINE_SCALE_RANGE.last,
-            )
+    /** 其他行（上下句）字号（sp）：0 = 跟随正文（默认），其余为绝对磅值，不设上限 */
+    var lyricOverlayContextSp: Int
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_CONTEXT_SP, SettingsDefaults.OVERLAY_CONTEXT_SP)
+            .coerceAtLeast(0)
         set(value) {
-            val v = value.coerceIn(
-                SettingsDefaults.OVERLAY_LINE_SCALE_RANGE.first,
-                SettingsDefaults.OVERLAY_LINE_SCALE_RANGE.last,
-            )
-            sp.edit().putInt(KEY_LYRIC_OVERLAY_CONTEXT_SCALE, v).apply()
-            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_CONTEXT_SCALE, v) }
+            val v = value.coerceAtLeast(0)
+            sp.edit().putInt(KEY_LYRIC_OVERLAY_CONTEXT_SP, v).apply()
+            ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_CONTEXT_SP, v) }
         }
 
     /** 其他行颜色：0 = 跟随歌词文字色（默认，再按压暗算不透明度），其余为 ARGB */
@@ -2608,8 +2620,13 @@ class Prefs private constructor(context: Context) {
         const val KEY_LYRIC_OVERLAY_TITLE_STROKE_ON = "lyric_overlay_title_stroke_on"
         const val KEY_LYRIC_OVERLAY_TITLE_STROKE_W = "lyric_overlay_title_stroke_width_dp"
         const val KEY_LYRIC_OVERLAY_TITLE_STROKE_C = "lyric_overlay_title_stroke_color"
-        const val KEY_LYRIC_OVERLAY_CURRENT_SCALE = "lyric_overlay_current_scale"
-        const val KEY_LYRIC_OVERLAY_CONTEXT_SCALE = "lyric_overlay_context_scale"
+
+        /** 标题字号（sp，独立磅值；旧百分比键 [KEY_LYRIC_OVERLAY_TITLE_PERCENT] 只读迁移用） */
+        const val KEY_LYRIC_OVERLAY_TITLE_SP = "lyric_overlay_title_sp"
+
+        /** 当前行 / 其他行字号（sp）：0 = 跟随正文，非 0 = 绝对磅值 */
+        const val KEY_LYRIC_OVERLAY_CURRENT_SP = "lyric_overlay_current_sp"
+        const val KEY_LYRIC_OVERLAY_CONTEXT_SP = "lyric_overlay_context_sp"
         const val KEY_LYRIC_OVERLAY_CONTEXT_C = "lyric_overlay_context_color"
 
         // ---- 6. 前台检测与调试 ----
@@ -2666,11 +2683,12 @@ class Prefs private constructor(context: Context) {
             KEY_LYRIC_OVERLAY_TITLE_STROKE_ON,
             KEY_LYRIC_OVERLAY_TITLE_STROKE_W,
             KEY_LYRIC_OVERLAY_TITLE_STROKE_C,
+            KEY_LYRIC_OVERLAY_TITLE_SP,
             KEY_LYRIC_OVERLAY_TEXT_COLOR,
             KEY_LYRIC_OVERLAY_CURRENT_COLOR,
             // 当前行 / 其他行的字号与颜色（v1.2.54）
-            KEY_LYRIC_OVERLAY_CURRENT_SCALE,
-            KEY_LYRIC_OVERLAY_CONTEXT_SCALE,
+            KEY_LYRIC_OVERLAY_CURRENT_SP,
+            KEY_LYRIC_OVERLAY_CONTEXT_SP,
             KEY_LYRIC_OVERLAY_CONTEXT_C,
             KEY_LYRIC_OVERLAY_DIM,
             KEY_LYRIC_OVERLAY_ALIGN,

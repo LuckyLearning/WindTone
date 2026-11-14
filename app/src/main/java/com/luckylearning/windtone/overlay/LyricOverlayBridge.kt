@@ -29,7 +29,7 @@ private fun prefsOverlayParams(prefs: Prefs) = OverlayPresetParams(
     strokeColor = prefs.lyricOverlayStrokeColor,
     lineSpacingDp = prefs.lyricOverlayLineSpacingDp,
     showTitle = prefs.lyricOverlayShowTitle,
-    titlePercent = prefs.lyricOverlayTitlePercent,
+    titleSp = prefs.lyricOverlayTitleSp,
     titleMode = prefs.lyricOverlayTitleMode,
     bgAlphaPercent = prefs.lyricOverlayBgAlphaPercent,
     bgColor = prefs.lyricOverlayBgColor,
@@ -297,9 +297,9 @@ object LyricOverlayBridge {
                     AppStrings.s(
                         R.string.lob_ap_text,
                         prefs.lyricOverlayTextSp,
-                        prefs.lyricOverlayTitlePercent,
+                        prefs.lyricOverlayTitleSp,
                     ).ifEmpty {
-                        " / 字号${prefs.lyricOverlayTextSp}sp（标题 ${prefs.lyricOverlayTitlePercent}%）"
+                        " / 字号${prefs.lyricOverlayTextSp} 磅（标题 ${prefs.lyricOverlayTitleSp} 磅）"
                     },
                 )
                 append(

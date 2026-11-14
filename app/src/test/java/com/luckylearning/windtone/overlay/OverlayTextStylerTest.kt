@@ -171,24 +171,41 @@ class OverlayTextStylerTest {
     // ------------------------------------------------ v1.2.54 分角色样式
 
     @Test
-    fun `当前行字号百分比落到 RelativeSizeSpan`() {
-        // 单条模式：当前行 150% → 1.5 倍；不设时走纯字符串快路径（见上面的用例）
+    fun `当前行字号按磅值换算成 RelativeSizeSpan`() {
+        // v1.2.54：用户设的是磅值。正文 20 磅、当前行 30 磅 → 1.5 倍。
         val result = OverlayTextStyler.build(
             listOf(OverlayTextComposer.StyledLine("now", OverlayTextComposer.Role.CURRENT)),
             fullHeight = false,
             baseColor = white,
             noBackdrop = false,
-            currentScalePercent = 150,
+            textSp = 20,
+            currentSp = 30,
         ) as Spanned
         val size = result.getSpans(0, result.length, RelativeSizeSpan::class.java).single()
         assertEquals(1.5f, size.sizeChange, 0.0001f)
     }
 
     @Test
-    fun `全屏模式当前行字号是基线 1_13 乘用户百分比`() {
-        // 全屏的「当前行比别的行大 13%」是形态基线，用户百分比在它之上叠乘：
-        // 120% → 1.13 × 1.2 ≈ 1.356，调小到 80% → 1.13 × 0.8 ≈ 0.904
-        fun scaleOf(percent: Int): Float {
+    fun `当前行字号为 0 时跟随正文并走纯字符串快路径`() {
+        // 0 = 跟随正文（默认）。这时不该多出任何 span —— 单行字幕是最常见的形态，
+        // 快路径省下的是每次换句的 Spannable 组装。
+        val plain = OverlayTextStyler.build(
+            listOf(OverlayTextComposer.StyledLine("now", OverlayTextComposer.Role.CURRENT)),
+            fullHeight = false,
+            baseColor = white,
+            noBackdrop = false,
+            textSp = 20,
+            currentSp = 0,
+        )
+        assertEquals("now", plain.toString())
+        assertTrue("跟随正文时不该有 span", plain !is Spanned)
+    }
+
+    @Test
+    fun `全屏模式当前行字号是基线 1_13 乘磅值倍率`() {
+        // 全屏的「当前行比别的行大 13%」是形态基线，用户设的磅值换算出的倍率在它之上叠乘：
+        // 正文 20 / 当前行 24 → 1.13 × 1.2 ≈ 1.356；当前行 16 → 1.13 × 0.8 ≈ 0.904
+        fun scaleOf(currentSp: Int): Float {
             val result = OverlayTextStyler.build(
                 listOf(
                     OverlayTextComposer.StyledLine("now", OverlayTextComposer.Role.CURRENT),
@@ -197,19 +214,21 @@ class OverlayTextStylerTest {
                 fullHeight = true,
                 baseColor = white,
                 noBackdrop = false,
-                currentScalePercent = percent,
+                textSp = 20,
+                currentSp = currentSp,
             ) as Spanned
             // 当前行是第 0 段，取覆盖起点 0 的那个 span
             return result
                 .getSpans(0, 3, RelativeSizeSpan::class.java)
                 .single().sizeChange
         }
-        assertEquals(1.13f * 1.2f, scaleOf(120), 0.0001f)
-        assertEquals(1.13f * 0.8f, scaleOf(80), 0.0001f)
+        assertEquals(1.13f * 1.2f, scaleOf(24), 0.0001f)
+        assertEquals(1.13f * 0.8f, scaleOf(16), 0.0001f)
     }
 
     @Test
-    fun `其他行字号百分比只作用在上下句与译文`() {
+    fun `其他行字号只作用在上下句与译文`() {
+        // 正文 20 磅、其他行 16 磅 → 0.8 倍
         val result = OverlayTextStyler.build(
             listOf(
                 OverlayTextComposer.StyledLine("now", OverlayTextComposer.Role.CURRENT),
@@ -218,7 +237,8 @@ class OverlayTextStylerTest {
             fullHeight = false,
             baseColor = white,
             noBackdrop = false,
-            contextScalePercent = 80,
+            textSp = 20,
+            contextSp = 16,
         ) as Spanned
         val spans = result.getSpans(0, result.length, RelativeSizeSpan::class.java)
         assertEquals("只该有一处缩放 span（上下句）", 1, spans.size)

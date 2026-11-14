@@ -22,13 +22,14 @@ import android.view.Gravity
 object OverlayAppearance {
 
     /**
-     * 悬浮歌词字号的合法区间（sp）—— 与 `SettingsDefaults.OVERLAY_TEXT_SP_RANGE` 同源。
+     * 悬浮歌词字号的**软参考**区间（sp）—— 只写在文档 / 提示里，**不再夹取**。
      *
-     * v1.1.51 起字号是连续值（滑杆 12–60），不再只有小 / 中 / 大三档：
-     * 手机竖屏 16–22sp 舒服，车机看距离 24–32sp 才够，固定档位总差一截。
+     * v1.1.51 起字号是连续值；v1.2.54 起干脆取消上下限（用户要求「用磅、不设区间」）：
+     * 手机竖屏 16–22sp 舒服，车机看距离 24–32sp 才够，但「够不够大」只有用户自己知道，
+     * 代码不该替他决定上限。这两个常量仅用于说明推荐范围。
      */
-    const val MIN_TEXT_SP = 12
-    const val MAX_TEXT_SP = 60
+    const val RECOMMENDED_TEXT_SP_MIN = 12
+    const val RECOMMENDED_TEXT_SP_MAX = 60
 
     /**
      * 暂停态的不透明度（0..1）。
@@ -87,13 +88,12 @@ object OverlayAppearance {
     const val TITLE_FOLLOW_ALPHA = 0xB4
 
     /**
-     * 歌名 / 歌手两行小字的字号（sp）：**正文 × 用户设的百分比**（v1.1.51）。
+     * 歌名 / 歌手两行小字的字号（sp）。
      *
-     * 用比例而不是独立 sp，是因为标题是配角：用户把正文从 20 调到 28 时，
-     * 标题应该跟着放大，而不是要再手动追一次；比例还保证「标题永远比正文小」。
+     * v1.2.54 起是**独立磅值**（用户直接说「标题 13 磅」），不再按正文百分比换算；
+     * 这里只做下限保护 —— 0 或负数会让标题彻底消失。
      */
-    fun titleTextSp(bodySp: Int, percent: Int): Float =
-        bodySp.coerceIn(MIN_TEXT_SP, MAX_TEXT_SP) * percent.coerceIn(1, 200) / 100f
+    fun titleTextSp(titleSp: Int): Float = titleSp.coerceAtLeast(1).toFloat()
 
     /**
      * 暂停 / 播放的目标透明度。
