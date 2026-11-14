@@ -17,6 +17,21 @@
 
     <!-- 按应用隐藏（0.2.11）：无障碍服务只读窗口切换的包名，不读屏幕内容。 -->
     <string name="section_hide_apps">按应用隐藏</string>
+
+    <!-- 播放器频道（0.2.17）：锁定后只认这一个包，目标没会话时宁可不显示。 -->
+    <string name="section_channel">播放器频道</string>
+    <string name="channel_mode">选择方式</string>
+    <string name="channel_mode_auto">自动</string>
+    <string name="channel_mode_pinned">已锁定：%1$s</string>
+    <string name="channel_hint">车机上音乐一般固定走同一个播放器。自动模式从正在播放的会话里挑，可能被导航语音或残留会话抢走；锁定后只读这一个，它没有会话时不会显示歌词。</string>
+    <string name="channel_dialog_title">播放器频道</string>
+    <string name="channel_auto">自动选择</string>
+    <string name="channel_auto_hint">从正在播放的会话里挑一个</string>
+    <string name="channel_no_session">当前没有活跃的媒体会话。先放一首歌，再打开这里。</string>
+    <string name="channel_subtitle">%1$s · %2$s</string>
+    <string name="channel_playing">正在播放</string>
+    <string name="channel_paused">已暂停</string>
+    <string name="status_pinned_no_session">已锁定「%1$s」，但它当前没有媒体会话 —— 换个播放器，或在「播放器频道」里改回自动</string>
     <string name="hide_apps_enable">在勾选的应用里隐藏悬浮窗</string>
     <string name="hide_apps_enable_hint">勾选的应用切到前台时，歌词与左侧把手一起让位；退出后自动恢复到你原来的收起／展开状态。AnyLyric 自己的页面始终不画悬浮窗。需要开启下方的无障碍服务。</string>
     <string name="hide_apps_pick">选择应用</string>
@@ -152,6 +167,7 @@
 
     <string name="overlay_no_lyrics">暂无歌词</string>
     <string name="overlay_fetching">正在获取歌词…</string>
+    <string name="overlay_pinned_waiting">等待「%1$s」播放…</string>
 
 
     <string name="settings_version">版本 %1$s</string>
@@ -241,5 +257,6 @@
     <string name="diag_code_hidden_by_rule">已开启「无歌词时隐藏」，当前没有可显示的歌词，悬浮窗被主动收起。这是预期行为。</string>
     <string name="diag_code_hidden_by_app">按应用隐藏生效中：当前前台应用在隐藏名单里，悬浮窗按设置让位。这是预期行为，退出该应用后会自动恢复。</string>
     <string name="diag_code_a11y_disconnected">开了「按应用隐藏」，但无障碍服务没连上，勾选的应用一个都不会隐藏。部分 ROM 在应用更新后会把它关掉 —— 去系统设置里重新开启「AnyLyric 前台应用识别」。</string>
+    <string name="diag_code_pinned_no_session">「播放器频道」里锁定了一个播放器，但它当前没有媒体会话。改回自动，或先在它里面放首歌。</string>
     <string name="diag_code_ok">工作正常，歌词正在从 %1$s 获取。</string>
 </resources>

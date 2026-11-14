@@ -18,6 +18,21 @@
 
     <!-- 按应用隐藏（0.2.11）：无障碍服务只读窗口切换的包名，不读屏幕内容。 -->
     <string name="section_hide_apps">Hide in apps</string>
+
+    <!-- Player channel (0.2.17): pinning means "only this package", no fallback. -->
+    <string name="section_channel">Player channel</string>
+    <string name="channel_mode">Selection</string>
+    <string name="channel_mode_auto">Automatic</string>
+    <string name="channel_mode_pinned">Pinned: %1$s</string>
+    <string name="channel_hint">Music usually goes through one player in a car. Automatic picks whichever session is playing, and navigation prompts or leftover sessions can steal it; pinning reads only that one and shows nothing while it has no session.</string>
+    <string name="channel_dialog_title">Player channel</string>
+    <string name="channel_auto">Automatic</string>
+    <string name="channel_auto_hint">Pick from whichever session is playing</string>
+    <string name="channel_no_session">No active media session right now. Start playing something, then come back.</string>
+    <string name="channel_subtitle">%1$s · %2$s</string>
+    <string name="channel_playing">playing</string>
+    <string name="channel_paused">paused</string>
+    <string name="status_pinned_no_session">Pinned “%1$s” has no media session right now — switch players, or set Player channel back to Automatic</string>
     <string name="hide_apps_enable">Hide overlay in selected apps</string>
     <string name="hide_apps_enable_hint">When one of the selected apps comes to the foreground, both the lyrics and the collapse handle step aside; leaving the app brings them back in the state you left them. AnyLyric’s own pages always hide the overlay. Requires the accessibility service below.</string>
     <string name="hide_apps_pick">Apps to hide in</string>
@@ -153,6 +168,8 @@
 
     <string name="overlay_no_lyrics">No lyrics</string>
     <string name="overlay_fetching">Getting lyrics…</string>
+    <!-- Pinned player has no session: say who we are waiting for, not "no lyrics". -->
+    <string name="overlay_pinned_waiting">Waiting for %1$s…</string>
 
 
     <string name="settings_version">Version %1$s</string>
@@ -242,5 +259,6 @@
     <string name="diag_code_hidden_by_rule">“Hide when no lyrics” is on and there is nothing to show, so the overlay is hidden on purpose.</string>
     <string name="diag_code_hidden_by_app">Hidden by app: the current foreground app is in your hide list, so the overlay steps aside. Expected behavior; it comes back when you leave that app.</string>
     <string name="diag_code_a11y_disconnected">“Hide in apps” is on, but the accessibility service is not connected, so none of the selected apps will hide the overlay. Some ROMs disable it after an app update — turn it on again in system settings.</string>
+    <string name="diag_code_pinned_no_session">A player is pinned under Player channel, but it has no media session right now. Set it back to Automatic, or start playback in that player.</string>
     <string name="diag_code_ok">Working as designed. Lyrics are being taken from %1$s.</string>
 </resources>

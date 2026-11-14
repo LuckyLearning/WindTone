@@ -102,6 +102,9 @@ object Probe {
         sb.appendLine("[SESSION]")
         sb.appendLine("  sessions=${s.sessionCount} playing=${s.playingCount}")
         sb.appendLine("  chosen=${s.chosenPackage ?: "none"}")
+        if (s.pinnedPackage != null) {
+            sb.appendLine("  pinned=${s.pinnedPackage} matched=${s.pinnedPackage == s.chosenPackage}")
+        }
         sb.appendLine("  title=${oneLine(s.title)} artist=${oneLine(s.artist)} duration=${s.durationMs}")
         sb.appendLine()
 

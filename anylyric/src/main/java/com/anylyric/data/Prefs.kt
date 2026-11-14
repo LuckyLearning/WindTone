@@ -83,6 +83,21 @@ class Prefs(context: Context) {
     val hideByAppActive: Boolean
         get() = hideByAppEnabled && hiddenApps.isNotEmpty()
 
+    /**
+     * 锁定的播放器包名（空串 = 自动选择）。
+     *
+     * 车机上音乐一般固定走同一个播放器，但「自动挑」在以下场景会跳：
+     * 导航语音临时发布会话、上一首的残留会话、某个 App 抢了前台。
+     * 锁定后只认这一个包，目标没有活跃会话时**宁可不出歌词**，也不去读别人的。
+     */
+    var pinnedSessionPackage: String
+        get() = sp.getString(KEY_PINNED_SESSION, "").orEmpty()
+        set(value) = sp.edit().putString(KEY_PINNED_SESSION, value.orEmpty()).apply()
+
+    /** 是否处于手动锁定模式。 */
+    val sessionPinned: Boolean
+        get() = pinnedSessionPackage.isNotBlank()
+
     /** 悬浮层输出到哪块屏幕。默认主屏。 */
     var displayId: Int
         get() = sp.getInt(KEY_DISPLAY_ID, DEFAULT_DISPLAY_ID)
@@ -242,6 +257,7 @@ class Prefs(context: Context) {
         private const val KEY_HIDE_BY_APP = "hide_by_app_enabled"
         private const val KEY_HIDDEN_APPS = "hidden_apps"
         private const val KEY_A11Y_REQUESTED = "a11y_requested"
+        private const val KEY_PINNED_SESSION = "pinned_session_package"
         private const val KEY_DISPLAY_ID = "display_id"
 
         private const val KEY_PRESET = "style_preset"

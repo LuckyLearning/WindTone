@@ -183,6 +183,7 @@ class DiagActivity : BaseActivity() {
         DiagCode.HIDDEN_BY_RULE -> getString(R.string.diag_code_hidden_by_rule)
         DiagCode.HIDDEN_BY_APP -> getString(R.string.diag_code_hidden_by_app)
         DiagCode.A11Y_DISCONNECTED -> getString(R.string.diag_code_a11y_disconnected)
+        DiagCode.PINNED_NO_SESSION -> getString(R.string.diag_code_pinned_no_session)
         DiagCode.OK -> getString(R.string.diag_code_ok, Probe.hitSource ?: "-")
     }
 

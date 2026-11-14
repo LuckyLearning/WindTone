@@ -66,6 +66,34 @@ class DiagRulesTest {
         assertEquals(DiagCode.NO_SESSION, diagnosis.code)
     }
 
+    /**
+     * 锁定了播放器、但锁定的那个没有会话：必须报「锁定目标没在放」，不能报「没有会话」。
+     *
+     * 车机上通常还有导航语音这类会话在跑，`sessions=1` 却是空窗；若落进 NO_SESSION，
+     * 用户会以为整台车机都没在放音乐，而实际是自己锁定的播放器关掉了。
+     */
+    @Test
+    fun pinnedWithoutSessionExplainsItself() {
+        val diagnosis = DiagRules.evaluate(
+            ok().copy(
+                pinnedPackage = "com.kugou",
+                chosenPackage = null,
+                sessionCount = 1,
+                playingCount = 1
+            )
+        )
+        assertEquals(DiagCode.PINNED_NO_SESSION, diagnosis.code)
+        assertTrue(diagnosis.evidence.contains("com.kugou"))
+    }
+
+    @Test
+    fun pinnedAndChosenIsOk() {
+        val diagnosis = DiagRules.evaluate(
+            ok().copy(pinnedPackage = "com.kugou", chosenPackage = "com.kugou")
+        )
+        assertEquals(DiagCode.OK, diagnosis.code)
+    }
+
     @Test
     fun sessionsWithoutPlaybackAreInactive() {
         val diagnosis = DiagRules.evaluate(ok().copy(playingCount = 0))

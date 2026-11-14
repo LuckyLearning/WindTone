@@ -14,6 +14,8 @@ data class ProbeSnapshot(
     val sessionCount: Int = 0,
     val playingCount: Int = 0,
     val chosenPackage: String? = null,
+    /** 手动锁定的播放器包名；null = 自动选择。与 [chosenPackage] 不同就说明锁定的那个没在跑。 */
+    val pinnedPackage: String? = null,
     val title: String? = null,
     val artist: String? = null,
     val durationMs: Long = 0L,
@@ -88,6 +90,9 @@ enum class DiagCode {
 
     /** 按应用隐藏生效中：这是用户自己设的，不是故障。 */
     HIDDEN_BY_APP,
+
+    /** 手动锁定的播放器当前没有媒体会话：不是取不到歌词，是锁定的那个没在放。 */
+    PINNED_NO_SESSION,
     OK
 }
 
@@ -121,6 +126,15 @@ object DiagRules {
             Diagnosis(
                 DiagCode.A11Y_DISCONNECTED,
                 "hideByApp=true, granted=${s.a11yGranted}, hiddenApps=${s.hiddenAppCount}"
+            )
+
+        // 锁定了播放器、但它没有会话：这条要在「没有会话」之前判 ——
+        // 车机上通常别的会话（导航）还在，用户看到的却是空窗，说明的必须是「锁定的那个没在放」。
+        s.pinnedPackage != null && s.chosenPackage == null ->
+            Diagnosis(
+                DiagCode.PINNED_NO_SESSION,
+                "pinned=${s.pinnedPackage}, sessions=${s.sessionCount}, " +
+                    "playing=${s.playingCount}"
             )
 
         s.sessionCount == 0 ->

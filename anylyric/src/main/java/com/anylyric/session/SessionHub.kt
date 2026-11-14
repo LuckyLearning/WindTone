@@ -41,6 +41,7 @@ import com.anylyric.overlay.OverlayHost
 import com.anylyric.service.BootPolicy
 import com.anylyric.service.MediaWatchService
 import com.anylyric.ui.SettingsActivity
+import com.anylyric.util.AppLabels
 
 /**
  * 全应用唯一的会话协调器。
@@ -60,6 +61,9 @@ class SessionHub private constructor(context: Context) {
         val artist: String?,
         val hitSource: String?,
         val verdict: TitleVerdict,
+
+        /** 当前绑定的播放器包名；null = 没绑上（锁定模式下目标没会话时也是 null）。 */
+        val chosenPackage: String? = null,
 
         /** TITLE 与歌词行相同：播放器在拿 TITLE 推歌词，不能当歌名展示。 */
         val titleIsLyric: Boolean = false
@@ -376,6 +380,7 @@ class SessionHub private constructor(context: Context) {
         artist = lastArtist,
         hitSource = hitSource,
         verdict = lastVerdict,
+        chosenPackage = controller?.packageName,
         titleIsLyric = titleIsLyric()
     )
 
@@ -762,6 +767,16 @@ class SessionHub private constructor(context: Context) {
     /** 编辑态进出后重算一次：进入编辑要显示窗口，退出编辑要恢复原判定。 */
     fun refreshHideState() {
         applyHideState()
+    }
+
+    /**
+     * 播放器锁定变了：立刻重新挑一次会话。
+     *
+     * 不这样做的话，用户从「自动」切到「锁定某个播放器」后，要等下一次事件
+     * （可能十几秒）才会切过去，看起来像没生效。
+     */
+    fun onSessionPinnedChanged() {
+        requestRefresh("pinned_changed")
     }
 
     /** 样式变更（字号／预设／透明度／行数…）立即生效，不重建窗口。 */
@@ -1305,6 +1320,21 @@ class SessionHub private constructor(context: Context) {
                 overlay.hide()
                 return
             }
+            // 手动锁定播放器、而它当前没有会话：说清楚在等谁。
+            // 不这样的话这里会落进下面的 waiting 分支，一直显示「正在获取歌词…」——
+            // 用户看到的是「锁了以后就不工作了」，而其实是锁定的那个播放器没在放。
+            if (prefs.sessionPinned && controller == null) {
+                push(
+                    appContext.getString(
+                        R.string.overlay_pinned_waiting,
+                        AppLabels.of(appContext, prefs.pinnedSessionPackage)
+                    ),
+                    emptyList(),
+                    null,
+                    prompt = true
+                )
+                return
+            }
             // 标题还在动、只是还没攒够两句 —— 那是「获取中」，不是「没有」。
             // 把两者分开，用户才不会以为这个播放器不被支持。
             //
@@ -1565,6 +1595,7 @@ class SessionHub private constructor(context: Context) {
             sessionCount = lastSessionCount,
             playingCount = lastPlayingCount,
             chosenPackage = active?.packageName,
+            pinnedPackage = prefs.pinnedSessionPackage.ifBlank { null },
             title = title,
             artist = lastArtist,
             durationMs = duration,
@@ -1647,7 +1678,51 @@ class SessionHub private constructor(context: Context) {
         }
     }
 
+    /** 设置页「播放器频道」列表用的一条。 */
+    data class SessionInfo(
+        val packageName: String,
+        val title: String?,
+        val playing: Boolean
+    )
+
+    /**
+     * 当前活跃的媒体会话快照。
+     *
+     * 一次 `getActiveSessions` + 每个会话读一次元数据，都是跨进程调用 ——
+     * **只在打开选择对话框时调**，不要放进每秒刷新。
+     */
+    fun activeSessionInfos(): List<SessionInfo> = querySessions().map { controller ->
+        val state = runCatching { controller.playbackState?.state }.getOrNull()
+        val title = runCatching {
+            controller.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
+        }.getOrNull()
+        SessionInfo(
+            packageName = controller.packageName,
+            title = title,
+            playing = state == PlaybackState.STATE_PLAYING
+        )
+    }
+
+    /**
+     * 从候选会话里挑一个。
+     *
+     * 手动锁定（0.2.17）时**只在锁定的那个包里挑**；该包没有活跃会话就返回 null ——
+     * 宁可不出歌词，也不去读导航语音或上一个 App 的残留会话。这条是用户明确要求的：
+     * 「选择后就只获取它的」。
+     */
     private fun pick(sessions: List<MediaController>): MediaController? {
+        if (sessions.isEmpty()) return null
+        val pinned = prefs.pinnedSessionPackage
+        val pool = SessionPin.narrow(sessions, pinned) { it.packageName }
+        if (pool.isEmpty()) {
+            if (Probe.enabled) Probe.write("会话", "锁定目标 $pinned 没有活跃会话")
+            return null
+        }
+        return pickBest(pool)
+    }
+
+    /** 自动选择时的偏好：正在播放 → 有标题 → 位置更新最新。 */
+    private fun pickBest(sessions: List<MediaController>): MediaController? {
         if (sessions.isEmpty()) return null
         val playing = sessions.filter {
             it.playbackState?.state == PlaybackState.STATE_PLAYING

@@ -33,6 +33,7 @@ import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ListView
+import android.widget.RadioButton
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.Switch
@@ -57,6 +58,7 @@ import com.anylyric.update.DownloadRoute
 import com.anylyric.update.FailureKind
 import com.anylyric.update.Release
 import com.anylyric.update.UpdateChecker
+import com.anylyric.util.AppLabels
 import java.io.File
 import java.util.Locale
 
@@ -187,6 +189,7 @@ class SettingsActivity : BaseActivity() {
 
         // 先把每张卡片建出来（同一段 View 只能有一个父容器），再决定单栏还是双栏。
         val status = buildStatusCard()
+        val channel = buildChannelCard()
         val window = buildWindowCard()
         val look = buildLookCard()
         val colors = buildColorCard()
@@ -200,7 +203,7 @@ class SettingsActivity : BaseActivity() {
         if (isWide()) {
             // 车机横屏：两栏能少滚一半。左栏是「窗在哪、长什么样」，右栏是「写什么、怎么更新」。
             val left = column()
-            listOf(status, window, look, colors).forEach { left.addView(it) }
+            listOf(status, channel, window, look, colors).forEach { left.addView(it) }
             val right = column()
             listOf(title, behavior, keepAlive, hideApps, diag, update).forEach { right.addView(it) }
             root.addView(
@@ -215,8 +218,10 @@ class SettingsActivity : BaseActivity() {
                 }
             )
         } else {
-            listOf(status, window, look, colors, title, behavior, keepAlive, hideApps, diag, update)
-                .forEach { root.addView(it) }
+            listOf(
+                status, channel, window, look, colors, title, behavior,
+                keepAlive, hideApps, diag, update
+            ).forEach { root.addView(it) }
         }
 
         root.addView(
@@ -957,16 +962,7 @@ class SettingsActivity : BaseActivity() {
     }
 
     /** 包名 → 应用名。带缓存：这行每秒会被 refresh 读到，不该每次都问 PackageManager。 */
-    private fun appLabel(pkg: String): String {
-        appLabelCache[pkg]?.let { return it }
-        val label = runCatching {
-            packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
-        }.getOrDefault(pkg)
-        appLabelCache[pkg] = label
-        return label
-    }
-
-    private val appLabelCache = HashMap<String, String>()
+    private fun appLabel(pkg: String): String = AppLabels.of(this, pkg)
 
     /**
      * 最近切过的应用（0.2.12）。
@@ -1201,6 +1197,126 @@ class SettingsActivity : BaseActivity() {
             source.draw(Canvas(bitmap))
             return BitmapDrawable(resources, bitmap).also { iconCache.put(pkg, it) }
         }
+    }
+
+    // ---------------------------------------------------------------- 播放器频道
+
+    /**
+     * 「播放器频道」（0.2.17）。
+     *
+     * 车机上音乐一般固定走同一个播放器，但自动挑选在三种场景会跳：导航语音临时发布
+     * 会话、上一首的残留会话、某个 App 抢了前台。锁定后只认那一个包，**目标没有会话
+     * 时宁可不出歌词**，也不读别人的 —— 这是用户明确要的语义。
+     */
+    private fun buildChannelCard(): View {
+        val rows = ArrayList<View>(3)
+        rows += clickableValueRow(
+            label = getString(R.string.channel_mode),
+            value = {
+                if (prefs.sessionPinned) {
+                    getString(
+                        R.string.channel_mode_pinned,
+                        appLabel(prefs.pinnedSessionPackage)
+                    )
+                } else {
+                    getString(R.string.channel_mode_auto)
+                }
+            },
+            onClick = { showChannelDialog() }
+        )
+        rows += hint(getString(R.string.channel_hint))
+        return cardSection(getString(R.string.section_channel), null, rows)
+    }
+
+    /**
+     * 频道选择对话框。
+     *
+     * 会话列表在这里**现查一次**（`getActiveSessions` + 每个会话读元数据都是跨进程调用），
+     * 不放进每秒刷新：设置页开着的时候没必要一直问系统。
+     */
+    private fun showChannelDialog() {
+        val sessions = hub.activeSessionInfos()
+        val pinned = prefs.pinnedSessionPackage
+
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val radios = ArrayList<RadioButton>()
+
+        fun addRow(pkg: String, title: String, subtitle: String) {
+            val radio = RadioButton(this).apply {
+                isChecked = pkg == pinned
+                // 整行可点：单选按钮自己接管点击会出现「点字没反应」
+                isClickable = false
+                isFocusable = false
+            }
+            val texts = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(text(title, 15f))
+                addView(text(subtitle, 11f, secondary = true))
+            }
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                minimumHeight = dp(56)
+                isClickable = true
+                isFocusable = true
+                setPadding(dp(4), dp(2), dp(4), dp(2))
+                addView(radio)
+                addView(
+                    texts,
+                    LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                )
+                setOnClickListener {
+                    radios.forEach { it.isChecked = false }
+                    radio.isChecked = true
+                    prefs.pinnedSessionPackage = pkg
+                    hub.onSessionPinnedChanged()
+                }
+            }
+            radios += radio
+            list.addView(row)
+            list.addView(divider(4, 4))
+        }
+
+        addRow("", getString(R.string.channel_auto), getString(R.string.channel_auto_hint))
+        list.addView(divider(8, 8))
+        if (sessions.isEmpty()) {
+            list.addView(hint(getString(R.string.channel_no_session)))
+        } else {
+            sessions.forEach { info ->
+                addRow(
+                    info.packageName,
+                    appLabel(info.packageName),
+                    getString(
+                        R.string.channel_subtitle,
+                        info.packageName,
+                        getString(
+                            if (info.playing) R.string.channel_playing else R.string.channel_paused
+                        )
+                    )
+                )
+            }
+        }
+
+        val scroll = ScrollView(this).apply { addView(list) }
+        val listHeight = (resources.displayMetrics.heightPixels * 0.5f).toInt()
+            .coerceAtMost(dp(400))
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(
+                scroll,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    listHeight
+                )
+            )
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.channel_dialog_title))
+            .setView(root)
+            .setPositiveButton(getString(R.string.hide_apps_close), null)
+            .setOnDismissListener { if (!isFinishing && !isDestroyed) refresh() }
+            .show()
     }
 
     /** 本应用是否已在电池优化白名单里。ROM 裁掉该服务时按「不在」处理。 */
@@ -1909,21 +2025,31 @@ class SettingsActivity : BaseActivity() {
                 }
             )
 
-            ListenerState.GRANTED -> if (status.sessionCount == 0) {
-                getString(R.string.status_no_session)
-            } else {
-                // TITLE 与歌词行相同时（伪歌名漏网 / 判定尚未成立）不能把歌词当歌名展示，
-                // 明说「TITLE 被播放器当歌词用」比展示一句歌词诚实。
-                val titleText = if (status.titleIsLyric) {
-                    getString(R.string.status_title_is_lyric)
-                } else {
-                    status.title ?: "-"
+            ListenerState.GRANTED -> when {
+                // 锁定模式读不到目标会话：这不是「没有音乐」，而是「锁定的那个没在放」，
+                // 直接说清楚，否则用户会以为歌词功能坏了。
+                prefs.sessionPinned && status.chosenPackage == null ->
+                    getString(
+                        R.string.status_pinned_no_session,
+                        appLabel(prefs.pinnedSessionPackage)
+                    )
+
+                status.sessionCount == 0 -> getString(R.string.status_no_session)
+
+                else -> {
+                    // TITLE 与歌词行相同时（伪歌名漏网 / 判定尚未成立）不能把歌词当歌名展示，
+                    // 明说「TITLE 被播放器当歌词用」比展示一句歌词诚实。
+                    val titleText = if (status.titleIsLyric) {
+                        getString(R.string.status_title_is_lyric)
+                    } else {
+                        status.title ?: "-"
+                    }
+                    getString(
+                        R.string.status_session,
+                        titleText,
+                        status.artist ?: "-"
+                    ) + "\n" + getString(R.string.status_channel, channelLabel(status.hitSource))
                 }
-                getString(
-                    R.string.status_session,
-                    titleText,
-                    status.artist ?: "-"
-                ) + "\n" + getString(R.string.status_channel, channelLabel(status.hitSource))
             }
         }
 
@@ -2049,7 +2175,7 @@ class SettingsActivity : BaseActivity() {
         "L1" -> getString(R.string.channel_l1)
         "L2" -> getString(R.string.channel_l2)
         "ONLINE" -> getString(R.string.channel_online)
-        else -> getString(R.string.channel_none)
+        else -> getString(R.string.channel_no_session)
     }
 
     private fun toggleEdit() {
