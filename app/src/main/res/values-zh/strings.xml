@@ -370,11 +370,12 @@
 
     <!-- v1.2.54：折叠分组 / 标题块 / 分角色样式 -->
     <string name="overlay_group_lyric_text">歌词文字</string>
+    <string name="overlay_group_title">标题块</string>
     <string name="overlay_current_line">当前行</string>
     <string name="overlay_context_lines">其他行</string>
     <string name="overlay_current_size">当前行字号 正文的 %1$d%%</string>
     <string name="overlay_context_size">其他行字号 正文的 %1$d%%</string>
-    <string name="overlay_scale_hint">相对正文字号的百分比，100%% = 与正文一致</string>
+    <string name="overlay_scale_hint">以正文为 100%%，当前行与其他行各自可调</string>
     <string name="overlay_context_color">其他行颜色</string>
     <string name="overlay_context_color_sub">其他行使用单独的颜色（明暗仍由下面的压暗滑杆控制）</string>
     <string name="overlay_context_color_intro">上下句的色相；不透明度仍由「其他行压暗」滑杆决定</string>

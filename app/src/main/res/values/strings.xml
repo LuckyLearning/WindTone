@@ -401,11 +401,12 @@ The app cannot stop the OEM clearing third-party accessibility on boot; tap the 
 
     <!-- v1.2.54: collapsible groups, title block, per-role lyric styling -->
     <string name="overlay_group_lyric_text">Lyrics text</string>
+    <string name="overlay_group_title">Title block</string>
     <string name="overlay_current_line">Current line</string>
     <string name="overlay_context_lines">Other lines</string>
     <string name="overlay_current_size">Current line size %1$d%% of body</string>
     <string name="overlay_context_size">Other lines size %1$d%% of body</string>
-    <string name="overlay_scale_hint">Percentage of the body size: 100%% matches the body</string>
+    <string name="overlay_scale_hint">100%% matches the body size; current and other lines are adjusted separately</string>
     <string name="overlay_context_color">Other lines color</string>
     <string name="overlay_context_color_sub">Other lines use their own color (brightness still follows the dim slider)</string>
     <string name="overlay_context_color_intro">Hue for the other lyric lines; the dim slider below still controls their opacity</string>

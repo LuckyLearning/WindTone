@@ -712,7 +712,7 @@ internal fun SettingsOverlayPage(
 
         // ---------------- 标题（v1.2.54：独立成组，位置 / 对齐 / 颜色 / 大小 / 描边都可调） ----------------
         OverlayGroup(
-            title = stringResource(R.string.show_title_and_artist),
+            title = stringResource(R.string.overlay_group_title),
             subtitle = titleSummary(player),
             expanded = groupTitle,
             onToggle = { groupTitle = !groupTitle },

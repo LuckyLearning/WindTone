@@ -166,7 +166,7 @@
   <div class="board">
 
     <figure class="fig" id="scr-overlay-style">
-      <div class="cap"><b>㉖ 设置 → 歌词 → 悬浮窗样式（总览）</b><em>SettingsOverlayStylePage.kt · 预设网格 + 通用参数分组容器</em></div>
+      <div class="cap"><b>㉖ 设置 → 歌词 → 悬浮窗样式（总览）</b><em>SettingsOverlayPage.kt · 状态卡 + 输出屏幕 / 双套 + 预设网格 + 五个可折叠分组（v1.2.54）</em></div>
       <div class="phone">
         <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
         <div class="app">
@@ -240,9 +240,77 @@
       双套是「当前编辑：白天 / 夜间样式」一行说明 + 两条整组操作（复制到夜间 / 夜间恢复跟随白天，后者仅在夜间有自有值时出现）。
       <b>不提供「现在编辑哪一套」的切换开关</b> —— 编辑对象由主题决定，多一个开关就会出现「界面深色、却在编辑白天那套」的分裂状态。
       <b>全部预设只展示、无控制按钮</b>（D1）。
-      <br><b>文字描边（v1.2.53）</b>由「只有粗细」改为<b>开关 + 粗细</b>，开关排在滑杆<b>之前</b>：
+      <br>      <b>文字描边（v1.2.53）</b>由「只有粗细」改为<b>开关 + 粗细</b>，开关排在滑杆<b>之前</b>：
       先决定「要不要描边」再决定「多粗」。关掉后不画任何可读性阴影，配合「背景不透明度 0」
-      就是纯文字形态；宽度与颜色两行仍然可见（值不丢），重新打开即恢复上次粗细。</p>
+      就是纯文字形态；宽度与颜色两行仍然可见（值不丢），重新打开即恢复上次粗细。
+      <br><b>分组收展（v1.2.54）</b>：原先一个「高级参数」大开关兜住三十多项，展开就是一屏滑杆。
+      现在拆成<b>位置与尺寸 / 歌词文字 / 标题块 / 背景 / 行为</b>五组（车载模式另有「侧钮」组），
+      每组一行标题 + 副标题报当前关键值，各自收展（见 ㉖b）。</p>
+    </figure>
+
+    <figure class="fig" id="scr-overlay-groups">
+      <div class="cap"><b>㉖b 细参改为五个可折叠分组（v1.2.54）</b><em>OverlayGroup（ui/OverlayGroupRows.kt）· 每组一行标题 + 当前值摘要 + 展开箭头</em></div>
+      <div class="phone">
+        <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
+        <div class="app">
+          <div class="topbar"><div class="tb-row">
+            <button class="ibtn"><svg class="ic"><use href="#i-back"/></svg></button>
+            <div class="lib-title" style="font-size:15px">悬浮窗样式</div>
+            <button class="ibtn"><svg class="ic"><use href="#i-reset"/></svg></button>
+          </div></div>
+          <div class="list" style="padding:12px 14px;overflow:hidden">
+            <div class="sw-row">
+              <div class="sw-main"><div class="sw-t">桌面悬浮歌词</div><div class="sw-s">运行中 · 已授权「显示在其他应用上层」</div></div>
+              <span class="switch"><i></i></span>
+            </div>
+
+            <div class="sw-row" style="margin-top:6px">
+              <div class="sw-main"><div class="sw-t" style="font-weight:700">位置与尺寸</div><div class="sw-s">单条 · 宽 80% · 3 行</div></div>
+              <span style="color:var(--on-surface-variant);font-size:15px">⌄</span>
+            </div>
+
+            <div class="sw-row" style="margin-top:6px">
+              <div class="sw-main"><div class="sw-t" style="font-weight:700">歌词文字</div><div class="sw-s">字号 20sp · 居中</div></div>
+              <span style="color:var(--on-surface-variant);font-size:15px">⌃</span>
+            </div>
+            <div class="sw-row"><div class="sw-main"><div class="sw-t">正文字号 20sp</div></div><div class="slider" style="width:120px;flex:none"><span class="fill" style="width:28%"></span><span class="knob" style="left:28%"></span></div></div>
+            <div class="sw-row"><div class="sw-main"><div class="sw-t">水平对齐</div></div><div class="chips" style="flex:none"><span class="fchip">居左</span><span class="fchip on">居中</span></div></div>
+            <div class="section-label" style="margin-top:8px">当前行</div>
+            <div class="sw-row"><div class="sw-main"><div class="sw-t">当前行字号 正文的 130%</div></div><div class="slider" style="width:120px;flex:none"><span class="fill" style="width:58%"></span><span class="knob" style="left:58%"></span></div></div>
+            <div class="section-label" style="margin-top:8px">其他行</div>
+            <div class="sw-row"><div class="sw-main"><div class="sw-t">其他行字号 正文的 80%</div></div><div class="slider" style="width:120px;flex:none"><span class="fill" style="width:20%"></span><span class="knob" style="left:20%"></span></div></div>
+            <div class="sw-row"><div class="sw-main"><div class="sw-t">其他行颜色</div><div class="sw-s">使用单独的颜色</div></div><span style="width:20px;height:20px;border-radius:6px;background:#8A8F98;flex:none"></span></div>
+            <div class="sw-row"><div class="sw-main"><div class="sw-t">文字描边</div><div class="sw-s">压在浅色画面上也读得清</div></div><span class="switch"><i></i></span></div>
+
+            <div class="sw-row" style="margin-top:6px">
+              <div class="sw-main"><div class="sw-t" style="font-weight:700">标题块</div><div class="sw-s">下方 · 居右 · 正文的 62%</div></div>
+              <span style="color:var(--on-surface-variant);font-size:15px">⌄</span>
+            </div>
+
+            <div class="sw-row">
+              <div class="sw-main"><div class="sw-t" style="font-weight:700">背景</div><div class="sw-s">不透明度 55%</div></div>
+              <span style="color:var(--on-surface-variant);font-size:15px">⌄</span>
+            </div>
+
+            <div class="sw-row">
+              <div class="sw-main"><div class="sw-t" style="font-weight:700">行为</div><div class="sw-s">暂停后淡出 · 淡入 160ms</div></div>
+              <span style="color:var(--on-surface-variant);font-size:15px">⌄</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="note"><b>为什么分组：</b>原来一个大开关展开后要翻十几屏才找得到「当前行颜色」，改完一项还得滚回去看同类项。
+      分组后每组只占一行高度，要不要展开由用户点。<b>收起时副标题报当前关键值</b>
+      （「单条 · 宽 80% · 3 行」「下方 · 居右 · 正文的 62%」）—— 不展开也能确认是不是自己要的那档。
+      <br><b>不起效的就收起（同一版的口径）：</b>
+      ① 背景不透明度 = 0 时，颜色 / 圆角 / 边框三项收起（板都看不见了）；
+      ② 文字描边关掉时，粗细与颜色收起；
+      ③ 标题关掉时，位置 / 对齐 / 大小 / 颜色 / 描边全收起；
+      ④ 只有一行歌词时，「其他行」整组收起（没有上下句可调）；
+      ⑤ 手机模式下「侧钮」整组不出现（车上才挂那几颗钮）。
+      <br><b>样式规则：</b>组标题用 <code>titleSmall / SemiBold</code>，副标题 <code>labelSmall / onSurfaceVariant</code>，
+      箭头用 24dp 的 <code>KeyboardArrowUp / Down</code>；展开后的行仍是既有的 <code>SliderRow / ActionRow / SwitchRow / ChoiceRow</code>，
+      不引入新行规格。</p>
     </figure>
 
     <figure class="fig" id="scr-overlay-preset-detail">

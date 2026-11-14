@@ -182,14 +182,16 @@ class SettingsScreenTest {
     }
 
     /**
-     * v1.1.78：进入悬浮歌词子页后展开「高级参数」。
+     * v1.1.78：进入悬浮歌词子页后展开细参。v1.2.54 起细参按语义拆成五个可折叠分组。
      *
-     * 预设网格上线后，21 项细参（行数 / 字号 / 背景 / 行为…）默认收进折叠区，
-     * 直接 scrollTo 找不到 —— 先点开再找，与真实用户的操作路径一致。
+     * 默认只展开「歌词文字」一组，这里把其余四组点开（多次点击会收起，
+     * 所以「歌词文字」不能碰）。等价于旧版那个「高级参数」大开关。
      */
     private fun expandOverlayAdvanced() {
-        compose.onNodeWithText("高级参数").performScrollTo().performClick()
-        compose.waitForIdle()
+        listOf("位置与尺寸", "标题块", "背景", "行为").forEach { group ->
+            compose.onNodeWithText(group).performScrollTo().performClick()
+            compose.waitForIdle()
+        }
     }
 
     /**
@@ -561,6 +563,69 @@ class SettingsScreenTest {
 
         compose.onNodeWithText("正文字号 28sp", substring = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("小", substring = false).assertDoesNotExist()
+    }
+
+    /**
+     * v1.2.54：标题块的四类可调项（位置 / 对齐 / 颜色 / 描边）都要能摸到。
+     *
+     * 这些行藏在「标题块」分组里，而分组默认收起 —— 少挂一条回调、少一行 UI，
+     * 编译期完全看不出来，只有用户点开才发现「没有这个设置」。所以按用户路径走一遍。
+     */
+    @Test
+    fun overlayTitleBlockExposesPositionAlignColorAndOutline() {
+        render(
+            player = PlayerUiState(
+                lyricOverlay = true,
+                lyricOverlayShowTitle = true,
+            ),
+        )
+        openOverlayPage()
+        expandOverlayAdvanced()
+
+        listOf("标题位置", "标题对齐", "标题颜色", "标题描边").forEach { title ->
+            compose.onNodeWithText(title, substring = true).performScrollTo().assertIsDisplayed()
+        }
+        // 三档对齐的档位文案要真的出现（不是只有一个标题行）
+        compose.onNodeWithText("居右", substring = false).performScrollTo().assertIsDisplayed()
+    }
+
+    /** v1.2.54：标题关掉时，标题块里的位置 / 对齐 / 颜色 / 描边必须全部收起 */
+    @Test
+    fun overlayTitleBlockCollapsesWhenTitleOff() {
+        render(player = PlayerUiState(lyricOverlay = true, lyricOverlayShowTitle = false))
+        openOverlayPage()
+        expandOverlayAdvanced()
+
+        compose.onNodeWithText("标题位置", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("标题描边", substring = true).assertDoesNotExist()
+    }
+
+    /**
+     * v1.2.54：当前行 / 其他行分开调；只有一行歌词时「其他行」整块收起。
+     *
+     * 这正对应「不起效的就收起」：一行字幕没有「上下一句」，留着一组滑杆
+     * 只会让人反复调却什么也看不到。
+     */
+    @Test
+    fun overlayPerRoleStylingHidesContextRowsForSingleLine() {
+        render(player = PlayerUiState(lyricOverlay = true, lyricOverlayLines = 1))
+        openOverlayPage()
+        expandOverlayAdvanced()
+
+        compose.onNodeWithText("当前行字号", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("其他行字号", substring = true).assertDoesNotExist()
+    }
+
+    /** v1.2.54：行数 >1 时「其他行」的三项（颜色 / 字号 / 压暗）出现 */
+    @Test
+    fun overlayPerRoleStylingShowsContextRowsForMultiLine() {
+        render(player = PlayerUiState(lyricOverlay = true, lyricOverlayLines = 3))
+        openOverlayPage()
+        expandOverlayAdvanced()
+
+        listOf("其他行颜色", "其他行字号", "上下句亮度").forEach { title ->
+            compose.onNodeWithText(title, substring = true).performScrollTo().assertIsDisplayed()
+        }
     }
 
     // ================================================================ v1.1.16 继续上次播放
