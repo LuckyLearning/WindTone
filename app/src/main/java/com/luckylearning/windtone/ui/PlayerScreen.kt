@@ -75,6 +75,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -94,6 +95,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.luckylearning.windtone.R
+import com.luckylearning.windtone.data.AudioInspector
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.data.OverlayPreset
 import com.luckylearning.windtone.data.PlayerPane
@@ -107,11 +109,21 @@ import com.luckylearning.windtone.ui.theme.windShadow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /** 车载模式：歌词态无操作多久后收起顶栏 / 控制键 / 状态行（毫秒） */
 private const val CAR_IMMERSIVE_DELAY_MS = 5_000L
+
+/**
+ * 信息页数据在「翻页落位 + 让出一帧」之后还要再等这么久才开始查（毫秒）。
+ *
+ * 不是为了省事，而是把这条链排到落位动画与它引发的那次重组之后：音频参数解析要
+ * 解 3 秒 PCM 做 FFT（云盘曲目还会走网络），和落位动画抢核会直接掉帧。
+ * 120ms 足够覆盖一次 16ms 帧 + 重组 + 布局，用户也感知不到（页面本来就有内容）。
+ */
+private const val INFO_FACTS_DELAY_MS = 120L
 
 /**
  * 车机播放页的控制键尺寸（v1.1.23 收紧）。
@@ -151,11 +163,18 @@ fun PlayerScreen(
      */
     onPlayerPane: (PlayerPane) -> Unit = {},
     /**
-     * 读取「歌曲信息」页的派生数据（歌单归属 / 播放统计 / 音频参数）。
+     * 读取「歌曲信息」页的**轻量**派生数据（歌单归属 / 播放统计 / 标签）。
      *
-     * 只在信息页真正可见时调用一次：这三张表没必要为了「可能翻过去」而提前查。
+     * 只在信息页真正可见时调用一次：这几张表没必要为了「可能翻过去」而提前查。
      */
     loadSongFacts: suspend (Song) -> SongFacts = { SongFacts() },
+    /**
+     * 读取「歌曲信息」页的**重量**派生数据：音频技术参数（开 MediaExtractor，
+     * 无损容器还要解码 3 秒 PCM 判假无损）。
+     *
+     * 单独一路、在轻量数据落地后才调 —— 它和首帧渲染 / 翻页动画抢资源最狠。
+     */
+    loadSongAudioInfo: suspend (Song) -> AudioInspector.Info? = { null },
     /**
      * true = 作为宽屏右栏的**面板**（平板双栏）；false = 手机上的全屏覆盖层。
      * 面板态没有「收起播放页」这回事——它本来就不是盖上去的，箭头点了没反应。
@@ -393,18 +412,40 @@ fun PlayerScreen(
     // 只有真正读它的进度条 / 时间文字 / 歌词面板会重组。
     val progressState = progressFlow.collectAsStateWithLifecycle()
 
-    // ------------------------------------------------------ 歌曲信息页数据（v1.2.55）
+    // ------------------------------------------------------ 歌曲信息页数据（v1.2.55 / v1.2.57 分段）
     //
-    // 只在信息页真正可见时拉一次：歌单归属 / 播放统计 / 音频参数是三条不同的查询，
-    // 为了「可能翻过去」提前查是纯浪费（音频参数还要开一次 MediaExtractor）。
+    // 只在信息页真正可见时拉一次：为了「可能翻过去」提前查是纯浪费。
     // `remember` 的 key 用 stableKey —— 换歌时旧数据自动作废，不会把上一首的
     // 播放次数挂在新歌名下。
+    //
+    // ⚠️ v1.2.57：数据分两段，且**不许在第一时间开始**。
+    //   · 第一段（歌单 / 统计 / 标签）只查库与 Prefs，几十毫秒，先让页面有内容；
+    //   · 第二段（音频参数 + 假无损频谱）要开 MediaExtractor、解 3 秒 PCM 做 FFT，
+    //     云盘曲目还会触发网络 Range。它是翻到信息页那一下卡顿的主因，所以：
+    //     ① 等横向位移归零（翻页动画落位）—— 点击跳页时本来就是 0，不额外等；
+    //     ② 再让一帧，把首帧画完（进播放页就停在信息页时，effect 早于首帧渲染）；
+    //     ③ 再延迟 [INFO_FACTS_DELAY_MS]，把落位后的那次重组也排开；
+    //     ④ 最后才在后台低优先级线程上解析（见 `PlayerViewModel.loadSongAudioInfo`）。
     var songFacts by remember(song?.stableKey) { mutableStateOf<SongFacts?>(null) }
     LaunchedEffect(song?.stableKey, currentPane) {
-        val s = song
-        if (currentPane == PlayerPane.INFO && s != null && songFacts == null) {
-            songFacts = loadSongFacts(s)
+        val s = song ?: return@LaunchedEffect
+        if (currentPane != PlayerPane.INFO) return@LaunchedEffect
+
+        // 翻回已经加载过的歌：轻量数据还在，只补可能没拿到的音频参数。
+        // 缓存命中时这步几乎立即返回，不必再等落位 / 延迟。
+        val cached = songFacts
+        if (cached != null) {
+            if (cached.audio == null) songFacts = cached.copy(audio = loadSongAudioInfo(s))
+            return@LaunchedEffect
         }
+
+        snapshotFlow { swipeOffset.value }.first { it == 0f }
+        withFrameNanos { }
+        delay(INFO_FACTS_DELAY_MS)
+
+        val light = loadSongFacts(s)
+        songFacts = light
+        songFacts = light.copy(audio = loadSongAudioInfo(s))
     }
 
     // G6：看歌词时屏幕常亮。Compose foundation 的 Modifier.keepScreenOn 在本 BOM 下解析不到，

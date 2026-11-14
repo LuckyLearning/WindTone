@@ -2,9 +2,11 @@ package com.luckylearning.windtone.ui
 
 import android.app.Application
 import android.net.Uri
+import android.os.Process
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.luckylearning.windtone.MusicApp
+import com.luckylearning.windtone.data.AudioInfoCache
 import com.luckylearning.windtone.data.AudioInspector
 import com.luckylearning.windtone.data.SongFacts
 import com.luckylearning.windtone.data.ThemeMode
@@ -33,6 +35,9 @@ class PlayerViewModel(private val app: Application) :
     private val engine = container.playback
     private val messages = container.messages
 
+    /** 音频技术参数缓存：三页横滑来回翻时不重复解析（含「解析失败」的结论） */
+    private val audioInfoCache = AudioInfoCache()
+
     val player: StateFlow<PlayerUiState> = engine.player
 
     val progress: StateFlow<PlaybackProgress> = engine.progress
@@ -50,11 +55,16 @@ class PlayerViewModel(private val app: Application) :
     val overlayHealth: StateFlow<LyricOverlayBus.Health> = container.playback.overlayHealth
 
     /**
-     * 读取「歌曲信息」页需要的派生数据（歌单归属 / 播放统计 / 音频技术参数）。
+     * 读取「歌曲信息」页需要的**轻量**派生数据（歌单归属 / 播放统计 / 标签）。
      *
      * 只在信息页可见时调用一次。刻意做成挂起函数而不是状态流：
      * 页内没有「数据实时变化」的诉求，进页拉一次、离页丢弃最简单，
      * 也不会为了一个弹页把三张表全订阅起来。
+     *
+     * ⚠️ v1.2.57 起**不再包含音频技术参数**：那一步要开 `MediaExtractor`，
+     * 无损容器还要解码 3 秒 PCM 判假无损（云盘曲目会触发网络 Range），
+     * 是本页最重的一环。现在它单独走 [loadSongAudioInfo]，由界面在轻量数据
+     * 落地之后再补 —— 先让页面有内容，重活不许和首帧 / 翻页动画抢资源。
      */
     suspend fun loadSongFacts(song: Song): SongFacts = withContext(Dispatchers.IO) {
         val songId = song.dbId
@@ -74,12 +84,39 @@ class PlayerViewModel(private val app: Application) :
             playCount = state?.playCount ?: 0,
             lastPlayedAt = state?.lastPlayedAt ?: 0L,
             playedMs = state?.playedMs ?: 0L,
-            audio = AudioInspector.inspect(app, song),
             genre = tagged.genre,
             year = tagged.year,
             albumArtist = tagged.albumArtist,
             discNumber = tagged.discNumber,
         )
+    }
+
+    /**
+     * 读取「歌曲信息」页的**重量**派生数据：音频技术参数（容器 / 编码 / 采样率 /
+     * 位深 / 码率 / 大小 / 假无损结论）。
+     *
+     * 两点刻意为之：
+     *  1. **低优先级线程**：解析要解 3 秒 PCM 做 FFT，CPU 占用不小；不降优先级的话
+     *     在车机（4 核 A55 一类）上会和界面抢核，翻页落位那一下直接掉帧。
+     *     同一线程池的其它 IO 任务很多，所以跑完必须把原优先级还回去。
+     *  2. **结果进内存缓存**（[AudioInfoCache]）：三页横滑很容易来回翻，
+     *     同一首歌不重复解析；`null` 也缓存，避免反复重试注定失败的解析。
+     */
+    suspend fun loadSongAudioInfo(song: Song): AudioInspector.Info? {
+        audioInfoCache.get(song.stableKey)?.let { return it.info }
+        val info = withContext(Dispatchers.IO) {
+            val tid = Process.myTid()
+            val original = runCatching { Process.getThreadPriority(tid) }.getOrDefault(Process.THREAD_PRIORITY_DEFAULT)
+            runCatching { Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND) }
+            try {
+                AudioInspector.inspect(app, song)
+            } finally {
+                // Dispatchers.IO 的线程是复用的：不还回去会连带拖慢后面的数据库 / 文件读写
+                runCatching { Process.setThreadPriority(original) }
+            }
+        }
+        audioInfoCache.put(song.stableKey, info)
+        return info
     }
 
     /** 把当前歌词导出成 LRC 文件（带翻译行的双语歌词会同时导出） */

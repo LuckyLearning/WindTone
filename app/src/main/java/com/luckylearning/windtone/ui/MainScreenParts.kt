@@ -113,6 +113,7 @@ internal fun PlayerPane(
             onOpenSettings = onOpenSettings,
             onPlayerPane = playerVm::setPlayerPane,
             loadSongFacts = playerVm::loadSongFacts,
+            loadSongAudioInfo = playerVm::loadSongAudioInfo,
             pane = onExportLyrics == null,
         )
     }

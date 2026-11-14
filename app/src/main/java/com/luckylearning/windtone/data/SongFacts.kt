@@ -17,7 +17,15 @@ data class SongFacts(
     val lastPlayedAt: Long = 0L,
     /** 累计收听时长（毫秒） */
     val playedMs: Long = 0L,
-    /** 音频技术参数；文件不可读 / 远程曲时为 null */
+    /**
+     * 音频技术参数；文件不可读 / 远程曲时为 null。
+     *
+     * **二级字段**（v1.2.57）：解析要开 `MediaExtractor`，无损容器还要解码 3 秒 PCM
+     * 判假无损（云盘曲目会触发网络 Range），是本页最重的一步。所以它单独后补 ——
+     * [SongFacts] 先带 `audio = null` 交给界面把已有字段显示出来，解析完再
+     * `copy(audio = ...)` 补上。看到 null 只代表「还没解析完 / 解析失败」，
+     * 不代表这首歌没有参数。
+     */
     val audio: AudioInspector.Info? = null,
     // ---- 标签：这几个字段不入 Room（见 Song 的字段注释），从 Prefs 侧缓存盖回来。
     //      Song 快照里可能已经是 null（比如从数据库直接构造的队列项），
