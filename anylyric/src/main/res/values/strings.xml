@@ -33,6 +33,8 @@
     <string name="channel_mode_pinned">Pinned: %1$s</string>
     <string name="channel_hint">Music usually goes through one player in a car. Automatic picks whichever session is playing, and navigation prompts or leftover sessions can steal it; pinning reads only that one and shows nothing while it has no session.</string>
     <string name="channel_dialog_title">Player channel</string>
+    <string name="channel_dialog_desc">Only this app is read. While it has no media session, no lyrics are shown.</string>
+    <string name="channel_done">Done</string>
     <string name="channel_auto">Automatic</string>
     <string name="channel_auto_hint">Pick from whichever session is playing</string>
     <string name="channel_no_session">No active media session right now. Start playing something, then come back.</string>

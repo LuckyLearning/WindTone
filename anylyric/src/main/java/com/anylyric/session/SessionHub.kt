@@ -1678,30 +1678,29 @@ class SessionHub private constructor(context: Context) {
         }
     }
 
-    /** 设置页「播放器频道」列表用的一条。 */
-    data class SessionInfo(
-        val packageName: String,
-        val title: String?,
-        val playing: Boolean
-    )
-
     /**
      * 当前活跃的媒体会话快照。
      *
      * 一次 `getActiveSessions` + 每个会话读一次元数据，都是跨进程调用 ——
      * **只在打开选择对话框时调**，不要放进每秒刷新。
+     *
+     * 同一个应用常挂多个会话（阅读类尤其明显），这里按包名合并 ——
+     * 否则选择列表里会出现两条一模一样的「番茄小说」。合并只在展示层，
+     * 取歌词时仍按包保留全部会话（见 [SessionPin.narrow]）。
      */
-    fun activeSessionInfos(): List<SessionInfo> = querySessions().map { controller ->
-        val state = runCatching { controller.playbackState?.state }.getOrNull()
-        val title = runCatching {
-            controller.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
-        }.getOrNull()
-        SessionInfo(
-            packageName = controller.packageName,
-            title = title,
-            playing = state == PlaybackState.STATE_PLAYING
-        )
-    }
+    fun activeSessionInfos(): List<SessionInfo> = SessionPin.collapse(
+        querySessions().map { controller ->
+            val state = runCatching { controller.playbackState?.state }.getOrNull()
+            val title = runCatching {
+                controller.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
+            }.getOrNull()
+            SessionInfo(
+                packageName = controller.packageName,
+                title = title,
+                playing = state == PlaybackState.STATE_PLAYING
+            )
+        }
+    )
 
     /**
      * 从候选会话里挑一个。

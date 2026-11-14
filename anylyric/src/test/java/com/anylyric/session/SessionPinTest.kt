@@ -42,4 +42,53 @@ class SessionPinTest {
             SessionPin.narrow(dup, "com.kugou") { it }
         )
     }
+
+    // ---------------------------------------------------------------- 选择列表去重
+
+    private fun info(pkg: String, title: String? = null, playing: Boolean = false) =
+        SessionInfo(packageName = pkg, title = title, playing = playing)
+
+    @Test
+    fun `same package collapses to one row keeping the playing session`() {
+        // 真机现场：番茄小说同时挂两个会话，列表里出现两条一模一样的「番茄小说」。
+        val list = SessionPin.collapse(
+            listOf(
+                info("com.dragon.read", title = "第 12 章", playing = false),
+                info("com.dragon.read", title = "第 12 章", playing = true)
+            )
+        )
+        assertEquals(1, list.size)
+        assertTrue(list.single().playing)
+    }
+
+    @Test
+    fun `collapsed row prefers the one with a title when none is playing`() {
+        val list = SessionPin.collapse(
+            listOf(
+                info("com.salt.music", title = null, playing = false),
+                info("com.salt.music", title = "晴天", playing = false)
+            )
+        )
+        assertEquals("晴天", list.single().title)
+    }
+
+    @Test
+    fun `playing sessions come first but order within a rank is preserved`() {
+        val list = SessionPin.collapse(
+            listOf(
+                info("com.dragon.read", title = "x", playing = false),
+                info("com.luna.music", title = "y", playing = true),
+                info("com.kugou", title = "z", playing = false)
+            )
+        )
+        assertEquals(
+            listOf("com.luna.music", "com.dragon.read", "com.kugou"),
+            list.map { it.packageName }
+        )
+    }
+
+    @Test
+    fun `empty input stays empty`() {
+        assertTrue(SessionPin.collapse(emptyList()).isEmpty())
+    }
 }

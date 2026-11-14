@@ -22,13 +22,17 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.text.Editable
 import android.text.InputType
+import android.text.SpannableString
+import android.text.Spanned
 import android.text.TextUtils
 import android.text.TextWatcher
+import android.text.style.ForegroundColorSpan
 import android.util.LruCache
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.VelocityTracker
 import android.view.View
+import android.view.View.MeasureSpec
 import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
@@ -40,7 +44,6 @@ import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ListView
-import android.widget.RadioButton
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.Switch
@@ -125,6 +128,9 @@ class SettingsActivity : BaseActivity() {
      * 也不会因为增删一项就漏掉同步。
      */
     private val uiRefreshers = mutableListOf<() -> Unit>()
+
+    /** 应用图标缓存（32dp）。「按应用隐藏」列表与「播放器频道」对话框共用一份。 */
+    private val appIconCache = LruCache<String, Drawable>(ICON_CACHE_SIZE)
 
     /** 首次观察到「已授权未绑定」的时刻，用来判断自动恢复是否已经失败。 */
     private var firstUnboundAt = 0L
@@ -1475,11 +1481,11 @@ class SettingsActivity : BaseActivity() {
      *
      * 图标走 [LruCache]：一次滚动最多同时看到七八行，缓存 48 个足够来回翻，
      * 又不会像「全量缓存几百个图标」那样在车机的小内存里常驻十几 MB。
+     * 缓存挂在页面上（[appIconCache]）而不是适配器里：频道对话框也要用同一份。
      */
     private inner class HideAppsAdapter : BaseAdapter() {
         private var items: List<AppEntry> = emptyList()
         private var manualPkg: String? = null
-        private val iconCache = LruCache<String, Drawable>(ICON_CACHE_SIZE)
 
         fun submit(list: List<AppEntry>, manual: String?) {
             items = list
@@ -1517,7 +1523,7 @@ class SettingsActivity : BaseActivity() {
             val item = items.getOrNull(position - offset()) ?: return row
             label.text = item.label
             check.isChecked = item.pkg in prefs.hiddenApps
-            icon.setImageDrawable(iconFor(item.pkg))
+            icon.setImageDrawable(appIcon(item.pkg))
             row.setOnClickListener {
                 toggleHiddenApp(item.pkg)
                 notifyDataSetChanged()
@@ -1548,18 +1554,6 @@ class SettingsActivity : BaseActivity() {
                 isClickable = false
                 isFocusable = false
             })
-        }
-
-        /** 图标按 32dp 重新画一张：直接用原始图标（常见 192px）会在列表里白占几 MB。 */
-        private fun iconFor(pkg: String): Drawable? {
-            iconCache.get(pkg)?.let { return it }
-            val size = dp(32)
-            val source = runCatching { packageManager.getApplicationIcon(pkg) }.getOrNull()
-                ?: return null
-            val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-            source.setBounds(0, 0, size, size)
-            source.draw(Canvas(bitmap))
-            return BitmapDrawable(resources, bitmap).also { iconCache.put(pkg, it) }
         }
     }
 
@@ -1600,88 +1594,176 @@ class SettingsActivity : BaseActivity() {
      */
     private fun showChannelDialog() {
         val sessions = hub.activeSessionInfos()
-        val pinned = prefs.pinnedSessionPackage
+
+        // 每一行登记一个「按当前选中项重画自己」的闭包：点一下立刻换勾与底色，
+        // 不重建对话框 —— 重建会闪一下，车机上还容易丢滚动位置。
+        val repainters = ArrayList<() -> Unit>()
 
         val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val radios = ArrayList<RadioButton>()
 
-        fun addRow(pkg: String, title: String, subtitle: String) {
-            val radio = RadioButton(this).apply {
-                isChecked = pkg == pinned
-                // 整行可点：单选按钮自己接管点击会出现「点字没反应」
-                isClickable = false
-                isFocusable = false
+        fun addRow(pkg: String, name: String, subtitle: CharSequence, icon: Drawable?) {
+            // 勾自己做，不用平台 RadioButton：它的圆点是系统蓝，与强调色不一致，
+            // 而且会自己吃点击（出现「点字没反应、点圈才有」）。
+            val mark = TextView(this).apply {
+                textSize = 12f
+                gravity = Gravity.CENTER
+                setTextColor(0xFFFFFFFF.toInt())
             }
             val texts = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                addView(text(title, 15f))
-                addView(text(subtitle, 11f, secondary = true))
+                addView(text(name, 15f))
+                addView(
+                    text(subtitle, 11.5f, secondary = true).apply { setPadding(0, dp(2), 0, 0) }
+                )
+            }
+            val appIconView = if (icon != null) {
+                ImageView(this).apply { setImageDrawable(icon) }
+            } else {
+                // 没有图标的那一行（自动选择）留同样的空位，文字才对得齐。
+                View(this)
             }
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                minimumHeight = dp(56)
+                minimumHeight = dp(58)
                 isClickable = true
                 isFocusable = true
-                setPadding(dp(4), dp(2), dp(4), dp(2))
-                addView(radio)
+                setPadding(dp(10), dp(6), dp(10), dp(6))
+                addView(appIconView, LinearLayout.LayoutParams(dp(30), dp(30)))
                 addView(
                     texts,
                     LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                        .apply { marginStart = dp(12) }
                 )
+                addView(mark, LinearLayout.LayoutParams(dp(24), dp(24)))
                 setOnClickListener {
-                    radios.forEach { it.isChecked = false }
-                    radio.isChecked = true
+                    if (prefs.pinnedSessionPackage == pkg) return@setOnClickListener
                     prefs.pinnedSessionPackage = pkg
                     hub.onSessionPinnedChanged()
+                    repainters.forEach { it() }
                 }
             }
-            radios += radio
+
+            repainters += {
+                val selected = prefs.pinnedSessionPackage == pkg
+                row.background = if (selected) pill(tint(colorAccent, 0x1A), dp(12).toFloat()) else null
+                if (selected) {
+                    mark.text = "✓"
+                    mark.background = pill(colorAccent, dp(12).toFloat())
+                } else {
+                    mark.text = ""
+                    mark.background = GradientDrawable().apply {
+                        shape = GradientDrawable.OVAL
+                        setColor(Color.TRANSPARENT)
+                        setStroke(dp(1).coerceAtLeast(1), colorCardStroke)
+                    }
+                }
+            }
+
             list.addView(row)
-            list.addView(divider(4, 4))
         }
 
-        addRow("", getString(R.string.channel_auto), getString(R.string.channel_auto_hint))
-        list.addView(divider(8, 8))
+        addRow("", getString(R.string.channel_auto), getString(R.string.channel_auto_hint), null)
+        list.addView(divider(6, 6))
+
         if (sessions.isEmpty()) {
-            list.addView(hint(getString(R.string.channel_no_session)))
+            list.addView(
+                text(getString(R.string.channel_no_session), 12.5f, secondary = true).apply {
+                    setPadding(dp(10), dp(8), dp(10), dp(10))
+                }
+            )
         } else {
             sessions.forEach { info ->
+                val state = getString(
+                    if (info.playing) R.string.channel_playing else R.string.channel_paused
+                )
+                // 包名与状态同一行，状态单独染色：正在播放绿、已暂停次要灰。
+                // 列表已按包名去重（见 SessionPin.collapse），不会出现同一个应用两行。
+                val subtitle = SpannableString(
+                    getString(R.string.channel_subtitle, info.packageName, state)
+                ).apply {
+                    val start = indexOf(state)
+                    if (start >= 0) {
+                        setSpan(
+                            ForegroundColorSpan(if (info.playing) colorOk else colorSecondaryText),
+                            start,
+                            start + state.length,
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                        )
+                    }
+                }
                 addRow(
                     info.packageName,
                     appLabel(info.packageName),
-                    getString(
-                        R.string.channel_subtitle,
-                        info.packageName,
-                        getString(
-                            if (info.playing) R.string.channel_playing else R.string.channel_paused
-                        )
-                    )
+                    subtitle,
+                    appIcon(info.packageName)
                 )
             }
         }
 
-        val scroll = ScrollView(this).apply { addView(list) }
-        val listHeight = (resources.displayMetrics.heightPixels * 0.5f).toInt()
-            .coerceAtMost(dp(400))
-        val root = LinearLayout(this).apply {
+        repainters.forEach { it() }
+
+        val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(2), 0, dp(10))
+            addView(text(getString(R.string.channel_dialog_title), 19f, bold = true))
             addView(
-                scroll,
-                LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    listHeight
-                )
+                text(getString(R.string.channel_dialog_desc), 11.5f, secondary = true).apply {
+                    setPadding(0, dp(4), 0, 0)
+                }
             )
         }
 
+        // 内容多高就多高，最多 58% 屏高 —— 原来固定写死 50% 屏高，
+        // 只有三四个会话时底下白着一大片（用户截图里的样子）。
+        val scroll = CappedScrollView(
+            this,
+            (resources.displayMetrics.heightPixels * 0.58f).toInt()
+        ).apply { addView(list) }
+
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(header)
+            addView(scroll)
+        }
+
         AlertDialog.Builder(this)
-            .setTitle(getString(R.string.channel_dialog_title))
             .setView(root)
-            .setPositiveButton(getString(R.string.hide_apps_close), null)
+            .setPositiveButton(getString(R.string.channel_done), null)
             .setOnDismissListener { if (!isFinishing && !isDestroyed) refresh() }
             .show()
     }
+
+    /**
+     * 包名 → 32dp 图标（LRU）。
+     *
+     * 列表与频道路由共用一份缓存：同一个应用在「按应用隐藏」和「播放器频道」
+     * 里各画一张 192px 原图，是白白多出来的几 MB。
+     */
+    private fun appIcon(pkg: String): Drawable? {
+        appIconCache.get(pkg)?.let { return it }
+        val size = dp(32)
+        val source = runCatching { packageManager.getApplicationIcon(pkg) }.getOrNull()
+            ?: return null
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        source.setBounds(0, 0, size, size)
+        source.draw(Canvas(bitmap))
+        return BitmapDrawable(resources, bitmap).also { appIconCache.put(pkg, it) }
+    }
+
+    /** ScrollView 没有 maxHeight：内容矮时按内容，超过上限才滚。 */
+    private inner class CappedScrollView(context: Context, private val maxPx: Int) :
+        ScrollView(context) {
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            super.onMeasure(
+                widthMeasureSpec,
+                MeasureSpec.makeMeasureSpec(maxPx, MeasureSpec.AT_MOST)
+            )
+        }
+    }
+
+    /** 按透明度给颜色做一层淡底（选中行的背景）。 */
+    private fun tint(color: Int, alpha: Int): Int = (color and 0x00FFFFFF) or (alpha shl 24)
 
     /** 本应用是否已在电池优化白名单里。ROM 裁掉该服务时按「不在」处理。 */
     private fun batteryIgnoring(): Boolean = try {

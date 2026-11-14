@@ -32,6 +32,8 @@
     <string name="channel_mode_pinned">已锁定：%1$s</string>
     <string name="channel_hint">车机上音乐一般固定走同一个播放器。自动模式从正在播放的会话里挑，可能被导航语音或残留会话抢走；锁定后只读这一个，它没有会话时不会显示歌词。</string>
     <string name="channel_dialog_title">播放器频道</string>
+    <string name="channel_dialog_desc">只读这一个应用；它没有媒体会话时不显示歌词。</string>
+    <string name="channel_done">完成</string>
     <string name="channel_auto">自动选择</string>
     <string name="channel_auto_hint">从正在播放的会话里挑一个</string>
     <string name="channel_no_session">当前没有活跃的媒体会话。先放一首歌，再打开这里。</string>
