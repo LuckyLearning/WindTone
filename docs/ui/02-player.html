@@ -40,7 +40,8 @@
   <div class="legend">
     <b>三页横滑（v1.2.55）</b>：播放页中部是三张横排的页 —— <b>第 1 页 歌曲信息 → 第 2 页 图片 + 当前一句 → 第 3 页 歌词</b>。
     <b>左右滑翻页</b>；在<b>第 3 页继续左滑 = 下一首</b>，在<b>第 1 页继续右滑 = 上一首</b>，切歌后<b>回到第 2 页</b>。
-    翻页阈值取屏宽 18%（比切歌时代的 12% 更钝：误翻会打断正在读的那一句），或者甩得够快（900px/s）也算；
+    翻页阈值取 <b>min(屏宽 18%, 96dp)</b>（比切歌时代的 12% 更钝：误翻会打断正在读的那一句；宽屏按比例要划 300dp，故加上限），
+    或者甩得够快（900px/s 且至少划动 24px）也算；
     位移与速度冲突时<b>以位移为准</b>（甩出去又拉回来，本意就是不动）。首尾页越界时跟手乘 0.32 阻力、夹在屏宽 30% 内 ——
     拖不动多少，但手指能感到「这里到头了」。<br>
     <b>纵向不再切歌</b>：歌词页的 <code>LazyColumn</code> 本身就是纵向滚动，旧实现靠「滚到边界才认上下滑」绕开冲突，
@@ -304,7 +305,7 @@
 </figure>
 
 <figure class="fig" id="scr-player-vol">
-  <div class="cap"><b>⑭ 播放页 · 音量浮层</b><em>PlayerScreen.kt · 上下滑手势反馈（约 1.2s 后消失）</em></div>
+  <div class="cap"><b>⑭ 播放页 · 音量浮层（历史版式）</b><em>PlayerScreen.kt · 纵向滑动手势已于 2026-10-30 删除，此屏仅留作版式参考</em></div>
   <div class="phone">
     <div class="statusbar"><span>9:41</span><span class="sb-icons" style="align-items:flex-end"><i style="width:3px;height:5px;border-radius:1px"></i><i style="width:3px;height:7px;border-radius:1px"></i><i style="width:3px;height:9px;border-radius:1px"></i><i class="sb-bat" style="margin-left:4px"></i></span></div>
     <div class="app">
@@ -320,7 +321,7 @@
             <div class="cov cov-292 c3"><svg><use href="#i-note"/></svg></div>
             <div class="cover-album">What's Going On…?</div>
             <div class="cover-file">富士山下.mp3 · 320 kbps</div>
-            <div class="ghost-chip">双击暂停 · 左右滑切歌 · 上下滑调音量</div>
+            <div class="ghost-chip">双击暂停 · 左右滑翻页</div>
           </div>
           <div class="vol-hud"><svg class="ic"><use href="#i-vol"/></svg><b>62%</b></div>
         </div>
@@ -349,7 +350,7 @@
       </div>
     </div>
   </div>
-  <p class="note"><b>关键点：</b>封面区手势：双击暂停 / 左右滑切歌 / 上下滑调音量（每 42px 一档，向上增大）；<b>左右滑与歌词态、车机共用同一套判据</b>（位移 ≥ 屏宽 12% 或甩速 ≥ 900px/s，跟手平移 + 松手回弹，2026-10-28 统一，旧版这里的固定 90px 阈值已废弃）；音量浮层为反色卡片（inverseSurface 92%）居中显示百分比。</p>
+  <p class="note"><b>关键点（手势已改）：</b>当前三页横滑模型下，封面区<b>双击暂停 / 左右滑翻页 / 纵向不设手势</b>；判据为「位移 ≥ min(屏宽 18%, 96dp)」或「甩速 ≥ 900px/s 且至少划动 24px」，位移优先，松手后滑到目标页或回弹；首尾页越界带 0.32 阻力。图中的音量浮层与「上下滑调音量（每 42px 一档）」是 <b>2026-10-30 之前</b>的旧版式，纵滑手势已整体删除，音量走系统音量键 / 车机旋钮；这一屏保留只为记录浮层配色与版式，不代表当前交互。</p>
 </figure>
 
 <figure class="fig" id="scr-player-nolyric">

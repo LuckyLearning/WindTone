@@ -126,6 +126,21 @@ class PlayerSwipeTest {
         )
     }
 
+    /**
+     * 甩速兜底必须配最小位移：按下即抬的抖动在 VelocityTracker 里也可能报几千 px/s，
+     * 不设防就会在歌词页「碰一下切下一首」。
+     */
+    @Test
+    fun `极短抖动即使甩速极高也不翻页不切歌`() {
+        assertEquals(PageSwipe.Stay, PlayerSwipe.resolvePage(-8f, width, -5000f, PlayerPane.LYRICS))
+        assertEquals(PageSwipe.Stay, PlayerSwipe.resolvePage(8f, width, 5000f, PlayerPane.INFO))
+        // 刚好到最小位移则仍按甩速翻页
+        assertEquals(
+            PageSwipe.To(PlayerPane.LYRICS),
+            PlayerSwipe.resolvePage(-PlayerSwipe.MinMovePx, width, -1200f, PlayerPane.ART),
+        )
+    }
+
     // ---------------------------------------------------------------- 跟手
 
     @Test

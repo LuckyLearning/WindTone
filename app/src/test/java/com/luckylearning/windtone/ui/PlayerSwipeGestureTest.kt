@@ -112,6 +112,23 @@ class PlayerSwipeGestureTest {
     }
 
     /**
+     * 落位动画（260ms）没跑完就再滑一次：onDragStart 的 offset.stop() 会取消
+     * animateTo，若「提交页号」写在动画之后，协程就地终止，页号永远停在旧页 ——
+     * 连滑几下翻不过去。打断时必须由 onDragStart 把待提交的动作补交掉。
+     */
+    @Test
+    fun `落位动画被打断也要提交页号`() {
+        val rec = render(PlayerPane.ART)
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag("pager").performTouchInput { swipeLeft() }
+        compose.mainClock.advanceTimeBy(50L) // 动画只走了一小段就再次按下
+        compose.onNodeWithTag("pager").performTouchInput { swipeLeft() }
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        assertEquals(PageSwipe.Skip(SwipeSwitch.NEXT), rec.last)
+    }
+
+    /**
      * 连续两次同向滑动必须按**翻页后**的页号判定（v1.2.55 首发回归）。
      *
      * 生产代码传的是 `{ PlayerPane.of(state.playerPane) }`，`state` 是普通值参数；

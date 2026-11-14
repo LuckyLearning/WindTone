@@ -194,7 +194,7 @@ LibraryViewModel   PlayerViewModel    UpdateViewModel    SettingsViewModel
 | **音效** | 音效方案一键包（8 条，`SoundSchemes`）、均衡器（16 个内置预设 + 5/6/10 段自定义）、低音增强、虚拟环绕、响度增强、**混响**（`AudioFx`，基于系统 `AudioEffect`，见 §6.10）；播放过渡：切歌淡入淡出 + 曲间音量平衡 + A/B 对比原声（`TrackVolume`，v1.1.52） |
 | **歌单/收藏** | 自建歌单（增删改、排序）、收藏、最近播放、最常播放、播放统计（次数/累计时长） |
 | **数据维护** | 诊断页「数据与存储」：曲库/目录/歌单/缓存占用快照、清理失效歌曲、清空封面缓存、重置用户数据（保留曲库） |
-| **个性化** | 封面主色动态主题、Material 3 色板、浮动迷你条、封面上下滑调音量、迷你条拖拽跳转 |
+| **个性化** | 封面主色动态主题、Material 3 色板、浮动迷你条、播放页三页横滑、迷你条拖拽跳转 |
 | **系统集成** | 桌面小组件（上一首/播放/下一首）、快捷设置磁贴、崩溃日志本地留存与导出 |
 | **更新** | 读公共分发仓库 `latest.json` → 下载 APK（进度条，多线路）→ SHA-256 校验 → FileProvider 交系统安装器 |
 
@@ -429,7 +429,7 @@ ui/                       ── 展示层 ──
                           收藏 / 播放队列 / 播放设置三键竖排在**最左一列**（`CarSideActions`），
                           顶栏只剩「收起箭头 + 居中歌名/歌手」，底部控制行只剩「播放模式 + ⏮⏯⏭」。
                           改版式时这三处必须一起动，漏一处就会出现「同一个入口两处」或主键不居中。
-  PlayerScreenParts.kt    播放页自绘零件（PlaybackSlider / TimeLabel / CoverPane，2026-10-21 拆出）
+  PlayerScreenParts.kt    播放页自绘零件（PlaybackSlider / TimeLabel / 播放模式图标，2026-10-21 拆出；封面页在 PlayerPanes.kt）
   LyricsPane.kt           歌词面板（滚动居中、当前行高亮、偏移调节）
   SheetsPlayback.kt        播放域弹层（队列、睡眠定时、播放设置）
   SheetsSong.kt            单曲域弹层（长按操作、音频信息、编辑歌曲信息）

@@ -35,7 +35,7 @@
 | scr-emptyscan | ⑪ 空状态 · 未扫到音频 / 无匹配结果 | 手机 | 01-main.html | Common.EmptyHint（黑胶插画 128dp） | 已有 |  |
 | scr-player-lyrics | ⑫ 播放页 · 歌词态（默认） | 手机 | 02-player.html | PlayerScreen.kt · LyricsPane（showLyrics = true） | 已有 |  |
 | scr-player-car | ⑫D 播放页 · 沉浸态（歌词态 · 5 秒无操作） | 手机 | 02-player.html | PlayerScreen.kt · immersive —— 歌词态 5 秒无操作触发（手机 / 车机通用）；车机横屏见第六节 ㊲（v3 布局：左导航 + 内容区 + 底部播放条） | 已有 |  |
-| scr-player-cover | ⑬ 播放页 · 封面态（含播放模式提示） | 手机 | 02-player.html | PlayerScreen.kt · PlayerScreenParts.kt(CoverPane) + modeHint | 已有 |  |
+| scr-player-cover | ⑬ 播放页 · 封面态（含播放模式提示） | 手机 | 02-player.html | PlayerScreen.kt · PlayerPanes.kt(CoverLyricPane) + modeHint | 已有 |  |
 | scr-player-vol | ⑭ 播放页 · 音量浮层 | 手机 | 02-player.html | PlayerScreen.kt · 上下滑手势反馈（约 1.2s 后消失） | 已有 |  |
 | scr-player-nolyric | ⑮ 播放页 · 暂无歌词 | 手机 | 02-player.html | LyricsPane.kt · NoLyricsHint | 已有 |  |
 | scr-player-plain | ⑯ 播放页 · 纯文本歌词 / 加载中 | 手机 | 02-player.html | LyricsPane.kt · PlainLyrics · LyricsLoading | 已有 |  |
@@ -74,7 +74,7 @@
 | scr-car-library | ㊱ 车机 · 全部歌曲 · 最近播放（v3 布局 · 现行） | 车机 | 06-car.html | CarLibraryScreen.kt —— 左导航 188px + 内容区 + 底部常驻播放条 92px | 已有 |  |
 | scr-car-albums | ㊱B 车机 · 专辑（网格 · v3 布局） | 车机 | 06-car.html | CarLibraryScreen.kt —— 同一导航壳，内容区换成 6 列封面网格；「歌手」同构 | 已有 |  |
 | scr-car-player-full | ㊲ 车机 · 播放页 · 歌词态（v3 布局） | 车机 | 06-car.html | PlayerScreen.kt —— 导航壳保留，内容区换成歌词 + 进度 + 大控制键；5 秒无触摸收成沉浸态 | 已有 |  |
-| scr-car-player-cover | ㊲A 车机 · 播放页 · 封面态 | 车机 | 06-car.html | PlayerScreen.kt · PlayerScreenParts.kt(CoverPane) —— 歌词↔封面切换；含播放模式提示（顺序 / 单曲 / 随机） | 已有 |  |
+| scr-car-player-cover | ㊲A 车机 · 播放页 · 封面态 | 车机 | 06-car.html | PlayerScreen.kt · PlayerPanes.kt(CoverLyricPane) —— 歌词↔封面切换；含播放模式提示（顺序 / 单曲 / 随机） | 已有 |  |
 | scr-car-player-nolyr | ㊲B 车机 · 播放页 · 暂无歌词 | 车机 | 06-car.html | PlayerScreen.kt —— 本地无 .lrc / 内嵌歌词时的占位态，绝不联网抓取 | 已有 |  |
 | scr-car-player-vol | ㊲C 车机 · 播放页 · 音量浮层 | 车机 | 06-car.html | PlayerScreen.kt · VolumeHud —— 方向盘音量键 / 旋钮触发，2 秒无操作自动消失 | 已有 |  |
 | scr-car-player-immersive | ㊲D 车机 · 播放页 · 沉浸态（歌词态 · 5 秒无触摸） | 车机 | 06-car.html | PlayerScreen.kt · immersive —— 歌词态 5 秒无触摸触发（手机 / 车机通用）；车机收起左导航与控制键，歌词铺满全宽 | 已有 |  |

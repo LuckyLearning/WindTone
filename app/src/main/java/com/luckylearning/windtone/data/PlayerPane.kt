@@ -7,7 +7,7 @@ package com.luckylearning.windtone.data
  * 下一首，所以「页」和「曲」在同一根横轴上，用户不需要记两套手势。
  *
  * [index] 与 `SettingsDefaults.PLAYER_PANE` 是同一套编号（落盘用的是 Int），
- * 两者一致由 `PlayerPaneTest` 对质 —— 这里刻意不把常量本身放进枚举，
+ * 两者一致由 `PlayerSwipeTest` 对质 —— 这里刻意不把常量本身放进枚举，
  * 因为 `const val` 不能引用 enum 的非常量属性。
  */
 enum class PlayerPane(val index: Int) {

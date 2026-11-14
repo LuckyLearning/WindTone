@@ -72,6 +72,15 @@ internal object PlayerSwipe {
     const val FlingVelocity: Float = 900f
 
     /**
+     * 甩速判定要求的最小位移（px）。
+     *
+     * `VelocityTracker` 在「按下即抬」的抖动下也可能报出几千 px/s；只卡速度会让
+     * 一次轻微碰触在歌词页直接变成「下一首」。位移达标才允许用速度兜底。
+     * 与 AnyLyric 的 `SwipeNav.MIN_MOVE_PX` 对齐。
+     */
+    const val MinMovePx: Float = 24f
+
+    /**
      * 位移阈值的**上限**（dp）。
      *
      * 纯按比例有个致命副作用：车机中部宽 1000~1700dp，18% 就是 180~307dp —— 那已经不叫
@@ -117,7 +126,7 @@ internal object PlayerSwipe {
         if (widthPx <= 0f) return PageSwipe.Stay
         val threshold = minOf(widthPx * PageThresholdRatio, maxThresholdPx)
         val farEnough = abs(dragPx) >= threshold
-        val fastEnough = abs(velocityX) >= FlingVelocity
+        val fastEnough = abs(dragPx) >= MinMovePx && abs(velocityX) >= FlingVelocity
         if (!farEnough && !fastEnough) return PageSwipe.Stay
         val dir = if (farEnough) dragPx else velocityX
         return if (dir < 0f) {
@@ -189,20 +198,35 @@ internal fun Modifier.playerSwipePages(
     return pointerInput(Unit) {
         val tracker = VelocityTracker()
         var accum = 0f
-        // 拖动起点处的位移：上一段归位动画没跑完就被新拖动打断时，
-        // 从这里接着跟手，页面不会先跳回 0 再走。
-        var startOffset = 0f
         var paneAtStart = PlayerPane.ART
         val settle = tween<Float>(PlayerSwipe.SettleMs, easing = AppVisual.Motion.Ease)
 
+        // 上一段落位动画的「提交」回调。提交写在 animateTo 之后是有风险的：
+        // 260ms 内再次按下时 onDragStart 会 offset.stop()，animateTo 抛
+        // CancellationException，协程就地终止 —— 页号永远停在旧页，下一次拖动
+        // 仍按旧页判定，连滑几下翻不过去。所以把待提交的动作存一份，
+        // 打断时由 onDragStart 同步补交（committed 保证只提交一次）。
+        var pendingCommit: (() -> Unit)? = null
+        var pendingPane: PlayerPane? = null
+
         detectHorizontalDragGestures(
             onDragStart = {
+                val unfinished = pendingCommit
+                if (unfinished != null) {
+                    unfinished()
+                    pendingCommit = null
+                    // UI 状态（StateFlow → 重组）此刻还没追上，用手势层自己算出的
+                    // 结算页当起点，否则本次拖动又会按旧页判定。
+                    paneAtStart = pendingPane ?: paneLatest.value()
+                    pendingPane = null
+                    scope.launch(start = CoroutineStart.UNDISPATCHED) { offset.snapTo(0f) }
+                } else {
+                    paneAtStart = paneLatest.value()
+                }
                 accum = 0f
-                paneAtStart = paneLatest.value()
-                startOffset = offset.value
                 tracker.resetTracking()
-                // 上一段归位动画可能还没跑完：让它停下，从当前位移继续跟手，
-                // 否则 snapTo 会和 animateTo 抢同一个 Animatable。
+                // 上一段归位动画可能还没跑完：让它停下，否则 snapTo 会和
+                // animateTo 抢同一个 Animatable。
                 scope.launch(start = CoroutineStart.UNDISPATCHED) { offset.stop() }
             },
             onHorizontalDrag = { change, dragAmount ->
@@ -211,7 +235,7 @@ internal fun Modifier.playerSwipePages(
                 change.consume()
                 scope.launch(start = CoroutineStart.UNDISPATCHED) {
                     offset.snapTo(
-                        PlayerSwipe.followPx(startOffset + accum, size.width.toFloat(), paneAtStart),
+                        PlayerSwipe.followPx(accum, size.width.toFloat(), paneAtStart),
                     )
                 }
             },
@@ -221,31 +245,56 @@ internal fun Modifier.playerSwipePages(
                 // 阈值上限按 dp 换算：宽屏（车机）上不能让用户划 300dp 才算翻页
                 val maxThresholdPx = PlayerSwipe.PageThresholdMaxDp.dp.toPx()
                 val result = PlayerSwipe.resolvePage(accum, width, vx, paneAtStart, maxThresholdPx)
-                scope.launch {
-                    when (result) {
-                        PageSwipe.Stay -> offset.animateTo(0f, settle)
 
-                        is PageSwipe.To -> {
-                            // 先滑到目标页的位置，再换页 —— 换页时 offset 归零，
-                            // 两者在同一帧生效，视觉上就是一整张翻过去。
-                            offset.animateTo(
-                                PlayerSwipe.settlePx(paneAtStart, result.target, width),
-                                settle,
-                            )
+                if (result is PageSwipe.Stay) {
+                    scope.launch { offset.animateTo(0f, settle) }
+                } else {
+                    // 同步登记提交动作；动画协程正常跑完会自己调一次，被打断则由
+                    // onDragStart 补交。committed 防「两边都调到」导致 Skip 切两首歌。
+                    var committed = false
+                    val commit = {
+                        if (!committed) {
+                            committed = true
                             settleLatest.value(result)
-                            offset.snapTo(0f)
                         }
+                    }
+                    pendingCommit = commit
+                    pendingPane = when (result) {
+                        is PageSwipe.To -> result.target
+                        is PageSwipe.Skip -> PlayerPane.ART // 切歌后固定回图片页
+                        PageSwipe.Stay -> paneAtStart
+                    }
 
-                        is PageSwipe.Skip -> {
-                            // 越过这张 → 当前页滑出屏幕，切歌，新页（图片页）从反侧滑入。
-                            val outPx = if (result.dir == SwipeSwitch.NEXT) -width else width
-                            offset.animateTo(outPx, settle)
-                            settleLatest.value(result)
-                            offset.snapTo(-outPx)
-                            offset.animateTo(
-                                0f,
-                                tween(PlayerSwipe.SkipSettleMs, easing = AppVisual.Motion.Ease),
-                            )
+                    scope.launch {
+                        when (result) {
+                            PageSwipe.Stay -> Unit // 上面已处理
+
+                            is PageSwipe.To -> {
+                                // 先滑到目标页的位置，再换页 —— 换页时 offset 归零，
+                                // 两者在同一帧生效，视觉上就是一整张翻过去。
+                                offset.animateTo(
+                                    PlayerSwipe.settlePx(paneAtStart, result.target, width),
+                                    settle,
+                                )
+                                commit()
+                                pendingCommit = null
+                                pendingPane = null
+                                offset.snapTo(0f)
+                            }
+
+                            is PageSwipe.Skip -> {
+                                // 越过这张 → 当前页滑出屏幕，切歌，新页（图片页）从反侧滑入。
+                                val outPx = if (result.dir == SwipeSwitch.NEXT) -width else width
+                                offset.animateTo(outPx, settle)
+                                commit()
+                                pendingCommit = null
+                                pendingPane = null
+                                offset.snapTo(-outPx)
+                                offset.animateTo(
+                                    0f,
+                                    tween(PlayerSwipe.SkipSettleMs, easing = AppVisual.Motion.Ease),
+                                )
+                            }
                         }
                     }
                 }
