@@ -80,6 +80,8 @@ object OnlineLyricsFetcher {
      * @param onResult 在主线程回调，只在拿到**非空**歌词时调用。
      * @param onMiss   在主线程回调，表示这首歌这一轮没取到（可能已落盘失败缓存）。
      *                 调用方据此安排重试，不要把它当成「永远没有」。
+     * @return false 表示**这首歌已经有一次请求在跑**，本次既没发起也不会回调。
+     *         调用方必须据此把自己的「请求中」标志复位，否则那首歌再也不会重试。
      */
     fun request(
         title: String,
@@ -87,11 +89,11 @@ object OnlineLyricsFetcher {
         durationMs: Long,
         onResult: (List<LyricLine>) -> Unit,
         onMiss: () -> Unit = {}
-    ) {
+    ): Boolean {
         val cleanTitle = title.trim()
         if (cleanTitle.isEmpty()) {
             main.post(onMiss)
-            return
+            return true
         }
         val cleanArtist = artist.trim()
         val key = LyricStore.key(cleanTitle, cleanArtist)
@@ -102,10 +104,10 @@ object OnlineLyricsFetcher {
             if (hit != null && now - hit.atMs < if (hit.lines == null) FAIL_TTL_MS else OK_TTL_MS) {
                 val lines = hit.lines
                 if (lines != null) main.post { onResult(lines) } else main.post(onMiss)
-                return
+                return true
             }
-            // 同一首歌正在取：不重复发起，也不回调 —— 上层下一轮刷新会再进来。
-            if (pendingKey == key) return
+            // 同一首歌正在取：不重复发起，也不回调 —— 上层据此复位标志后稍后再来。
+            if (pendingKey == key) return false
             pendingKey = key
         }
 
@@ -119,6 +121,7 @@ object OnlineLyricsFetcher {
                 if (lines.isNullOrEmpty()) onMiss() else onResult(lines)
             }
         }
+        return true
     }
 
     /** 开关关闭时清空内存与磁盘缓存。 */

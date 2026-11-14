@@ -1665,7 +1665,7 @@ class SessionHub private constructor(context: Context) {
             Probe.write("歌词", "online request #$onlineAttempts: $cleanTitle / $cleanArtist")
         }
 
-        OnlineLyricsFetcher.request(
+        val accepted = OnlineLyricsFetcher.request(
             cleanTitle,
             cleanArtist,
             durationMs,
@@ -1699,6 +1699,14 @@ class SessionHub private constructor(context: Context) {
                 }
             }
         )
+        if (!accepted) {
+            // 这首歌已有一次请求在跑（换歌再换回来会撞上）：本次不算一次尝试，
+            // 复位后 2 秒再看。不处理就会一直卡在「请求中」，那首歌再也不会重试。
+            onlineInFlight = false
+            if (onlineAttempts > 0) onlineAttempts--
+            onlineNextAtMs = SystemClock.elapsedRealtime() + ONLINE_BUSY_RETRY_MS
+            scheduleOnlineRetry(ONLINE_BUSY_RETRY_MS)
+        }
     }
 
     /** 回调到达时这首歌还是屏上那首吗。以**展示用**歌名/歌手为准。 */
@@ -2170,6 +2178,9 @@ class SessionHub private constructor(context: Context) {
 
         /** 失败后的退避，按尝试次数取；数组比算法更容易照着实测调。 */
         private val ONLINE_BACKOFF_MS = longArrayOf(6_000L, 15_000L, 30_000L, 60_000L)
+
+        /** 撞上「同一首歌正在取词」时的复查间隔。 */
+        private const val ONLINE_BUSY_RETRY_MS = 2_000L
 
         /** 车机直连通道（BYD 媒体中心 SDK）的来源标识；不需要通知使用权。 */
         private const val EXTERNAL_SOURCE = "BYD"
