@@ -80,6 +80,7 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:requestLegacyExternalStorage="true"
+        android:resizeableActivity="true"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="false"
         android:theme="@style/Theme.MusicPlayer">
@@ -98,11 +99,38 @@
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />
 
+        <!--
+          车机「7 分屏」接入（2026-11-14，参考 Cardash 的实现）。
+
+          车机分屏选择器读的是这条元数据，而不是包名白名单 —— 这也是为什么同为
+          侧载应用的 Cardash 能出现在选择器里。取值用 `@integer/` 引用，
+          按系统版本分档（12L=1，更早=0），理由见 res/values(-v32)/integers.xml。
+
+          ⚠️ 只声明不等于「适配好了」：
+            · 分屏后窗口宽度可能只剩三成（约 384dp），界面必须能降级
+              —— 判据在 `FormFactor.resolve`（宽 < 600dp 的车机窗口按手机版式渲染）；
+            · 三分宽时不做任何降级就会出现「208dp 侧栏 + 176dp 内容」的不可用状态。
+        -->
+        <meta-data
+            android:name="BYD_SUPPORT_SPLIT_ACTIVITY"
+            android:value="@integer/byd_support_split_activity" />
+
+        <!--
+          多窗口下允许「两个应用同时 resumed」（Android 10+ 的 multi-resume）。
+          没有这条，分屏时只要用户点另一侧，本应用就进 paused：播放不受影响（引擎在
+          前台服务里），但封面动画、歌词自动滚动这类跟帧的逻辑会停住 —— 分屏看歌词
+          正好最需要它继续走。
+        -->
+        <meta-data
+            android:name="android.allow_multiple_resumed_activities"
+            android:value="true" />
+
         <activity
             android:name=".MainActivity"
-            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|density"
             android:exported="true"
             android:launchMode="singleTop"
+            android:resizeableActivity="true"
             android:theme="@style/Theme.MusicPlayer"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>

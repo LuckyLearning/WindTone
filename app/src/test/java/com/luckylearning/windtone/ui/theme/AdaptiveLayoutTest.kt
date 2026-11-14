@@ -69,10 +69,47 @@ class AdaptiveLayoutTest {
 
     @Test
     fun `形态优先级在密度表里保持一致`() {
-        // 用户显式拨车载模式：即便设备不是车机、屏幕是手机尺寸，也走车机密度
-        val forced = densityOf(Case(360f, 780f, true, false))
+        // 用户显式拨车载模式：设备不是车机、屏幕是手机尺寸，也走车机密度。
+        // 用横屏尺寸（车载模式本身会强制横屏），竖屏窄窗属于下面的「窄窗回落」。
+        val forced = densityOf(Case(780f, 420f, true, false))
         assertEquals(UiFormFactor.CAR, forced.formFactor)
         assertEquals(56f, forced.dockReserved.value, 0f)
         assertTrue(forced.touchMin.value >= 56f)
+    }
+
+    // ------------------------------------------------------------ 7 分屏窄窗（2026-11-14）
+    //
+    // 车机 3:7 分屏后本应用可能只拿到三成宽（DiLink 5 上约 384dp）。
+    // CAR 版式自带 208dp 常驻侧栏，384dp 扣掉侧栏只剩 176dp —— 不可用而不是难看。
+    // 所以窄窗直接换 PHONE 版式（抽屉导航 + 单列播放页）。
+
+    @Test
+    fun `车机三成宽（7 分屏）改用手机版式，不再留 208dp 侧栏`() {
+        val d = densityOf(Case(384f, 480f, false, true))
+        assertEquals(UiFormFactor.PHONE, d.formFactor)
+        assertEquals(0f, d.navWidth.value, 0f)
+        assertEquals(0f, d.dockReserved.value, 0f)
+    }
+
+    @Test
+    fun `车机七成宽仍走车机版式`() {
+        // 70% 的分屏（约 896dp）放得下侧栏 + 内容，保持车机 UI 不要误降级
+        val d = densityOf(Case(896f, 480f, false, true))
+        assertEquals(UiFormFactor.CAR, d.formFactor)
+        assertEquals(56f, d.dockReserved.value, 0f)
+    }
+
+    @Test
+    fun `窄窗回落对显式车载模式同样生效`() {
+        // 车机上用户多半开着「车载模式」。若不回退，三分宽里仍是 208dp 侧栏 —— 正是要修的场景。
+        // （手机上开了车载模式会被强制横屏，宽度碰不到 600dp 以下，所以这条对手机无副作用。）
+        val d = densityOf(Case(384f, 480f, true, true))
+        assertEquals(UiFormFactor.PHONE, d.formFactor)
+        assertEquals(0f, d.navWidth.value, 0f)
+    }
+
+    @Test
+    fun `窄窗阈值只作用于车机语义 —— 窄手机仍是手机`() {
+        assertEquals(UiFormFactor.PHONE, densityOf(Case(360f, 780f, false, false)).formFactor)
     }
 }

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      比亚迪车机「7 分屏」接入开关（默认 0 = 不声明）。
+
+      ## 这是一条厂商私有约定，不是 AOSP 标准
+
+      2026-11-14 从 Cardash（com.zhangshuai.cardash，同样侧载）的清单里挖出来的：
+      车机的分屏选择器**不是**按包名白名单写死的，而是读 `AndroidManifest.xml` 里
+      `<application>` 下这条元数据：
+
+          <meta-data android:name="BYD_SUPPORT_SPLIT_ACTIVITY"
+                     android:value="@integer/byd_support_split_activity"/>
+
+      `android:value` 用 `@integer/...` 引用，真正的取值按系统版本分档
+      （见 values-v32/integers.xml）—— 分屏是 Android 12L（API 32）才有的能力，
+      低版本系统读到 0 就不会把本应用列进去。
+
+      ⚠️ 这条推翻了 `docs/竞品调研-车机音乐应用.md` 2026-10-19 的结论
+      （「选择器是白名单制，侧载应用无入口」）。当时只看了选择器里那 10 个预置应用
+      就下了结论，没查第三方应用的清单声明。
+    -->
+    <integer name="byd_support_split_activity">0</integer>
+</resources>

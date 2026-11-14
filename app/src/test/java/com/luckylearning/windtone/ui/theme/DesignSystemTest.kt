@@ -18,12 +18,15 @@ class DesignSystemTest {
     // ---------------------------------------------------------------- 形态判定
 
     @Test
-    fun `显式车载模式优先级最高`() {
+    fun `显式车载模式优先于「不是车机」这件事`() {
+        // 手机横置当车机用：设备不是车机，但用户手拨了车载模式 → 车机版式。
+        // （2026-11-14 起宽度 360dp 的竖屏不再走这里：窄窗回落会按手机版式渲染，
+        //   见 `窄窗回落` 相关用例 —— 实际 App 里车载模式本就强制横屏，撞不到那种宽度。）
         assertEquals(
             UiFormFactor.CAR,
             FormFactor.resolve(
-                widthDp = 360f,
-                heightDp = 780f,
+                widthDp = 780f,
+                heightDp = 420f,
                 carMode = true,
                 carHardware = false,
             ),

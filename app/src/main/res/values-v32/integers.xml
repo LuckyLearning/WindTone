@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Android 12L（API 32）起车机才有多窗口分屏，「7 分屏」选择器也只在这类系统上存在。
+      因此这里把开关置 1 —— 12L 以下的系统读到的仍是 values/integers.xml 里的 0。
+
+      分档而不是一律置 1 的理由：老系统（DiLink 4 / Android 10 车机）读到 1 会以为
+      自己该按分屏适配，实际没有分屏入口，白白让界面按窄窗规则降级。
+    -->
+    <integer name="byd_support_split_activity">1</integer>
+</resources>
