@@ -98,6 +98,16 @@ class Prefs(context: Context) {
     val sessionPinned: Boolean
         get() = pinnedSessionPackage.isNotBlank()
 
+    /**
+     * 设置页上次停留的标签页（存枚举名，认不出就回「概览」）。
+     *
+     * 车机上翻到「外观」调字号是常事，下次进来直接回到那一页，省一次点击；
+     * 存字符串而不是序号，将来标签顺序调整也不会串页。
+     */
+    var settingsTab: String
+        get() = sp.getString(KEY_SETTINGS_TAB, "").orEmpty()
+        set(value) = sp.edit().putString(KEY_SETTINGS_TAB, value).apply()
+
     /** 悬浮层输出到哪块屏幕。默认主屏。 */
     var displayId: Int
         get() = sp.getInt(KEY_DISPLAY_ID, DEFAULT_DISPLAY_ID)
@@ -258,6 +268,7 @@ class Prefs(context: Context) {
         private const val KEY_HIDDEN_APPS = "hidden_apps"
         private const val KEY_A11Y_REQUESTED = "a11y_requested"
         private const val KEY_PINNED_SESSION = "pinned_session_package"
+        private const val KEY_SETTINGS_TAB = "settings_tab"
         private const val KEY_DISPLAY_ID = "display_id"
 
         private const val KEY_PRESET = "style_preset"

@@ -171,6 +171,11 @@
 
 
     <string name="settings_version">版本 %1$s</string>
+    <string name="tab_overview">概览</string>
+    <string name="tab_look">外观</string>
+    <string name="tab_lyrics">歌词</string>
+    <string name="tab_runtime">运行</string>
+    <string name="tab_more">更多</string>
     <string name="settings_about">不播放声音、不申请音频焦点、不控制播放、不读文件；只有检查更新时才联网。</string>
     <string name="section_about">关于与更新</string>
     <string name="update_version_line">版本 %1$s</string>

@@ -7,6 +7,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
@@ -29,6 +30,7 @@ import android.view.ViewGroup
 import android.widget.BaseAdapter
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -63,9 +65,10 @@ import java.io.File
 import java.util.Locale
 
 /**
- * 唯一主界面：状态与权限、悬浮窗、外观、颜色、标题、行为、开机与后台、诊断、关于与更新。
+ * 唯一主界面，按五个标签页组织：概览（状态与播放器频道）、外观（窗口/样式/配色）、
+ * 歌词（标题与行为）、运行（后台保活/按应用隐藏）、更多（诊断与更新）。
  *
- * 三条设计约束（0.2.6 重排时定下）：
+ * 三条设计约束（0.2.6 重排时定下，0.2.17 拆页后仍然有效）：
  *  · 分区卡片**自带标题**，不用浮在卡片外的分区标签 —— 双栏时标签会和内容错位；
  *  · 一屏只有一个主操作（进入编辑态），其余都是文字按钮或胶囊，视觉上不抢；
  *  · 每个可调项都能单独恢复默认，重置只在「已经改过」时出现，平时不占视线。
@@ -135,7 +138,7 @@ class SettingsActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         hub = SessionHub.get(this)
         prefs = hub.prefs()
-        setContentView(buildContent())
+        setContentView(buildContent(savedInstanceState))
     }
 
     override fun onResume() {
@@ -177,17 +180,41 @@ class SettingsActivity : BaseActivity() {
 
     // ---------------------------------------------------------------- 页面骨架
 
-    private fun buildContent(): View {
+    /**
+     * 五个标签页。
+     *
+     * 0.2.6 起这个页面是一屏到底，到 0.2.17 已经堆了 11 张卡 —— 车机上要翻很久才能
+     * 找到想改的那一项（用户原话「放一页上要翻滚好久」）。按「现在怎么样 / 长什么样 /
+     * 显示什么 / 怎么活下来 / 出问题看哪」拆成五页，每页最多三张卡，横屏双栏一屏放下。
+     */
+    private enum class SettingsTab(val labelRes: Int) {
+        OVERVIEW(R.string.tab_overview),
+        LOOK(R.string.tab_look),
+        LYRICS(R.string.tab_lyrics),
+        RUNTIME(R.string.tab_runtime),
+        MORE(R.string.tab_more)
+    }
+
+    private var currentTab = SettingsTab.OVERVIEW
+
+    /**
+     * 每个标签页的 ScrollView。
+     *
+     * 页面**只建一次**，切页只改可见性：滚动位置、开关状态、输入框内容全都天然保留，
+     * 也就不会出现「切回来发现某个开关被重置」这种鬼故事。
+     */
+    private val tabPages = LinkedHashMap<SettingsTab, ScrollView>()
+
+    /** 每页上次的滚动位置（像素）。切走前存，切回来后恢复。 */
+    private val tabScroll = HashMap<SettingsTab, Int>()
+
+    private val tabLabels = LinkedHashMap<SettingsTab, TextView>()
+    private val tabUnderlines = LinkedHashMap<SettingsTab, View>()
+
+    private fun buildContent(savedInstanceState: Bundle?): View {
         uiRefreshers.clear()
 
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(20), dp(18), dp(32))
-        }
-
-        root.addView(header())
-
-        // 先把每张卡片建出来（同一段 View 只能有一个父容器），再决定单栏还是双栏。
+        // 先把每张卡片建出来（同一段 View 只能有一个父容器），再决定放进哪一页。
         val status = buildStatusCard()
         val channel = buildChannelCard()
         val window = buildWindowCard()
@@ -200,40 +227,209 @@ class SettingsActivity : BaseActivity() {
         val diag = buildDiagCard()
         val update = buildUpdateCard()
 
-        if (isWide()) {
-            // 车机横屏：两栏能少滚一半。左栏是「窗在哪、长什么样」，右栏是「写什么、怎么更新」。
-            val left = column()
-            listOf(status, channel, window, look, colors).forEach { left.addView(it) }
-            val right = column()
-            listOf(title, behavior, keepAlive, hideApps, diag, update).forEach { right.addView(it) }
-            root.addView(
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+
+        // 页头与标签条常驻：翻内容时不用先滚回顶部才知道自己在哪一页。
+        val top = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(20), dp(18), 0)
+        }
+        top.addView(header())
+        top.addView(tabBar())
+        root.addView(top)
+
+        val content = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            )
+        }
+        // 横屏双栏的分法按页定：左栏是「摆哪儿、长什么样」，右栏是「读什么、怎么更新」。
+        addPage(content, page(SettingsTab.OVERVIEW, listOf(status), listOf(channel)))
+        addPage(content, page(SettingsTab.LOOK, listOf(window, look), listOf(colors)))
+        addPage(content, page(SettingsTab.LYRICS, listOf(title), listOf(behavior)))
+        addPage(content, page(SettingsTab.RUNTIME, listOf(keepAlive), listOf(hideApps)))
+        addPage(content, page(SettingsTab.MORE, listOf(diag), listOf(update)))
+        root.addView(content)
+
+        restoreTab(saved = savedInstanceState)
+        return root
+    }
+
+    private fun addPage(container: FrameLayout, page: ScrollView) {
+        tabPages[page.tag as SettingsTab] = page
+        container.addView(page)
+    }
+
+    /**
+     * 一页内容。
+     *
+     * 横屏且右栏有内容时并排两栏；否则按「左 → 右」顺序单栏排下去。
+     * 每页自己滚动 —— 标签条不动，切换成本只有一次可见性变化。
+     */
+    private fun page(tab: SettingsTab, left: List<View>, right: List<View>): ScrollView {
+        val inner = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(4), dp(18), dp(24))
+        }
+        if (isWide() && right.isNotEmpty()) {
+            val leftColumn = column()
+            left.forEach { leftColumn.addView(it) }
+            val rightColumn = column()
+            right.forEach { rightColumn.addView(it) }
+            inner.addView(
                 LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
-                    addView(left, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) })
-                    addView(right, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(6) })
-                    layoutParams = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    addView(
+                        leftColumn,
+                        LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                            .apply { marginEnd = dp(6) }
+                    )
+                    addView(
+                        rightColumn,
+                        LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                            .apply { marginStart = dp(6) }
                     )
                 }
             )
         } else {
-            listOf(
-                status, channel, window, look, colors, title, behavior,
-                keepAlive, hideApps, diag, update
-            ).forEach { root.addView(it) }
+            (left + right).forEach { inner.addView(it) }
         }
 
-        root.addView(
-            text(getString(R.string.settings_about), 11.5f, secondary = true).apply {
-                setPadding(dp(6), dp(6), dp(6), dp(6))
-            }
-        )
+        // 「关于」是页脚性质的一句话，只挂在最后一页底部，不单独占一张卡。
+        if (tab == SettingsTab.MORE) {
+            inner.addView(
+                text(getString(R.string.settings_about), 11.5f, secondary = true).apply {
+                    setPadding(dp(6), dp(6), dp(6), dp(6))
+                }
+            )
+        }
 
         return ScrollView(this).apply {
+            tag = tab
             isFillViewport = true
-            addView(root)
+            visibility = View.GONE
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            addView(inner)
         }
+    }
+
+    /**
+     * 标签条。
+     *
+     * 五个标签平分宽度，竖屏也放得下，不需要横滑；选中态是「文字变蓝 + 2dp 下划线」，
+     * 车机上扫一眼就能定位，比图标省矢量资源，也不必担心 ROM 把图标渲染歪。
+     */
+    private fun tabBar(): View {
+        val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        SettingsTab.values().forEach { tab ->
+            val label = text(getString(tab.labelRes), 13.5f).apply {
+                gravity = Gravity.CENTER
+                setPadding(0, dp(10), 0, dp(9))
+            }
+            val underline = View(this).apply {
+                setBackgroundColor(colorAccent)
+                visibility = View.GONE
+            }
+            val cell = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                isClickable = true
+                isFocusable = true
+                addView(
+                    label,
+                    LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    )
+                )
+                // 下划线常驻占位（只改可见性），避免选中/未选中之间高度跳 2dp。
+                addView(
+                    underline,
+                    LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        dp(2).coerceAtLeast(1)
+                    )
+                )
+                setOnClickListener { selectTab(tab) }
+            }
+            bar.addView(cell, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            tabLabels[tab] = label
+            tabUnderlines[tab] = underline
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(bar)
+            addView(
+                View(this@SettingsActivity).apply {
+                    setBackgroundColor(colorCardStroke)
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        dp(1).coerceAtLeast(1)
+                    )
+                }
+            )
+        }
+    }
+
+    /**
+     * 切页。
+     *
+     * 只改可见性，不重建页面；当前页的滚动位置在切走**之前**存下来，切回来再恢复。
+     * 顺手把这一页记进 [Prefs.settingsTab]：下次打开设置页直接回到上次那页。
+     */
+    private fun selectTab(
+        tab: SettingsTab,
+        restoreScroll: Boolean = true,
+        storeCurrent: Boolean = true
+    ) {
+        if (storeCurrent) tabPages[currentTab]?.let { tabScroll[currentTab] = it.scrollY }
+        currentTab = tab
+        prefs.settingsTab = tab.name
+        tabPages.forEach { (key, page) ->
+            page.visibility = if (key == tab) View.VISIBLE else View.GONE
+        }
+        tabLabels.forEach { (key, label) ->
+            label.setTextColor(if (key == tab) colorAccent else colorSecondaryText)
+            label.setTypeface(null, if (key == tab) Typeface.BOLD else Typeface.NORMAL)
+        }
+        tabUnderlines.forEach { (key, line) ->
+            line.visibility = if (key == tab) View.VISIBLE else View.GONE
+        }
+        if (!restoreScroll) return
+        // GONE 的 ScrollView 没有真实高度，必须等这一帧布局完成后再 scrollTo。
+        val page = tabPages[tab] ?: return
+        page.post { page.scrollTo(0, tabScroll[tab] ?: 0) }
+    }
+
+    /**
+     * 决定进来先看哪一页：旋转重建时以 [savedInstanceState] 为准（用户刚在调的尺寸被
+     * 重新布局打断，位置不能跳），冷启动时用上次停留的那页。
+     */
+    private fun restoreTab(saved: Bundle?) {
+        val name = saved?.getString(KEY_TAB) ?: prefs.settingsTab
+        val tab = SettingsTab.values().firstOrNull { it.name == name } ?: SettingsTab.OVERVIEW
+        saved?.getIntArray(KEY_SCROLL)?.let { values ->
+            SettingsTab.values().forEachIndexed { index, key ->
+                if (index < values.size) tabScroll[key] = values[index]
+            }
+        }
+        currentTab = SettingsTab.OVERVIEW
+        // 刚恢复出来的滚动位置不能被「切页前存一次」覆盖掉，所以这里不存。
+        selectTab(tab, restoreScroll = saved != null, storeCurrent = false)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        tabPages[currentTab]?.let { tabScroll[currentTab] = it.scrollY }
+        outState.putString(KEY_TAB, currentTab.name)
+        outState.putIntArray(
+            KEY_SCROLL,
+            SettingsTab.values().map { tabScroll[it] ?: 0 }.toIntArray()
+        )
     }
 
     private fun column(): LinearLayout = LinearLayout(this).apply {
@@ -2334,5 +2530,9 @@ class SettingsActivity : BaseActivity() {
         private const val MAX_POLL_TICKS = 8
 
         private const val UNBOUND_TIMEOUT_MS = 9_000L
+
+        /** 旋转重建时保存当前标签页与各页滚动位置（Int 快照，见项目红线）。 */
+        private const val KEY_TAB = "settings_tab"
+        private const val KEY_SCROLL = "settings_tab_scroll"
     }
 }

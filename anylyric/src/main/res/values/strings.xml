@@ -173,6 +173,12 @@
 
 
     <string name="settings_version">Version %1$s</string>
+    <!-- Settings tabs: five pages instead of one long scroll. -->
+    <string name="tab_overview">Overview</string>
+    <string name="tab_look">Look</string>
+    <string name="tab_lyrics">Lyrics</string>
+    <string name="tab_runtime">Running</string>
+    <string name="tab_more">More</string>
     <string name="settings_about">Plays no audio, requests no audio focus, controls nothing, reads no files. Network is used only to check for updates.</string>
     <string name="section_about">About &amp; updates</string>
     <string name="update_version_line">Version %1$s</string>
