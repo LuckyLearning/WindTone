@@ -180,6 +180,11 @@
               <div class="sw-main"><div class="sw-t">桌面悬浮歌词</div><div class="sw-s">运行中 · 已授权「显示在其他应用上层」· 歌词：我把心事写进旋律里面</div></div>
               <span class="switch"><i></i></span>
             </div>
+            <div class="section-label" style="margin-top:14px">输出屏幕</div>
+            <div class="sw-row"><div class="sw-main"><div class="sw-t">输出屏幕</div><div class="sw-s">悬浮歌词画在哪块屏幕上；车机带副驾屏 / 头枕屏时用</div></div><div class="chips" style="flex:none"><span class="fchip on">内置屏幕</span><span class="fchip">副驾屏</span></div></div>
+            <div class="section-label" style="margin-top:14px">白天 / 夜间两套</div>
+            <div class="sw-row"><div class="sw-main"><div class="sw-t" style="color:var(--primary)">当前编辑：白天样式</div><div class="sw-s">外观分两套，跟随主题自动切换；夜里改过的那几项只在夜间生效，其余仍跟随白天</div></div></div>
+            <div class="sw-row"><div class="sw-main"><div class="sw-t">把白天样式复制到夜间</div><div class="sw-s">复制后夜间自成一套，再改白天不影响夜间</div></div></div>
             <div class="section-label" style="margin-top:14px">样式预设 · 手机（4 套）</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
               <div class="tile" style="border-color:var(--primary)">
@@ -230,6 +235,10 @@
       <p class="note"><b>分组容器版式（改动 ③）：</b>子页从「通铺列表」改为三段式——
       <b>状态卡</b>（开关 + 运行态 + 当前歌词预览）/ <b>预设网格</b>（手机 4 套 2 列 + 车机 3 套 3 列，选中描边 primary，车机组仅车机模式显示）/
       <b>通用参数</b>（滑杆行、chips 行、开关行同规格混排）。所有行高、圆角（14dp）、间距（12dp）统一。
+      <br><b>输出屏幕与白天 / 夜间两套（v1.2.52）</b>摆在<b>样式预设之前</b>：用户先要确认「我改的是哪一套、
+      画在哪块屏」，再去挑样式。两节都是普通设置行，不新增样式：输出屏幕是 chips 行（只有一块屏时整节不出现）；
+      双套是「当前编辑：白天 / 夜间样式」一行说明 + 两条整组操作（复制到夜间 / 夜间恢复跟随白天，后者仅在夜间有自有值时出现）。
+      <b>不提供「现在编辑哪一套」的切换开关</b> —— 编辑对象由主题决定，多一个开关就会出现「界面深色、却在编辑白天那套」的分裂状态。
       <b>全部预设只展示、无控制按钮</b>（D1）。</p>
     </figure>
 
