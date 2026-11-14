@@ -5,6 +5,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -59,6 +60,8 @@ import com.anylyric.overlay.LineMode
 import com.anylyric.overlay.OverlayDefaults
 import com.anylyric.overlay.OverlayStyle
 import com.anylyric.overlay.Preset
+import com.anylyric.overlay.SizeBounds
+import com.anylyric.overlay.SizeSlider
 import com.anylyric.overlay.TitlePos
 import com.anylyric.service.ServiceWatchdog
 import com.anylyric.session.SessionHub
@@ -549,6 +552,9 @@ class SettingsActivity : BaseActivity() {
     /**
      * 决定当前标签页要不要显示「调参预览」。
      *
+     * 悬浮窗卡片（编辑按钮 + 宽高滑杆）就在外观页，所以调大小时窗口本来就浮在上面 ——
+     * 看不见窗口滑滑杆等于盲调。窗口在预览态是 NOT_TOUCHABLE，触摸穿透到下面的滑杆，挡不住操作。
+     *
      * 对话框打开期间会临时关掉（见 [showColorDialog]）：悬浮窗是 `TYPE_APPLICATION_OVERLAY`，
      * 永远在 Activity 的对话框之上，取色滑杆被压住就没法用了。
      */
@@ -670,15 +676,24 @@ class SettingsActivity : BaseActivity() {
         rows += editButton
         rows += hint(getString(R.string.position_edit_hint))
         rows += spacer(12)
-        // 宽高不再用加减号：尺寸靠拖四角，这里只显示结果。
-        // 两套入口（步进器 + 拖角）同时存在时，用户永远不知道哪个才是准的。
-        rows += valueRow(
-            getString(R.string.window_size),
-            value = {
-                val (w, h) = hub.overlay().windowSize()
-                if (w <= 0 || h <= 0) getString(R.string.window_size_auto)
-                else getString(R.string.window_size_value, w.toString(), h.toString())
-            }
+
+        // 宽高用滑杆调，不再靠拖四角：四角在真机上很难对准（车机手指更粗），
+        // 而且调完说不出「现在到底多大」。滑杆 0 档是自适应，往右是固定像素。
+        rows += sizeRow(
+            label = getString(R.string.window_width),
+            vertical = false,
+            ratioMin = OverlayDefaults.WIDTH_MIN,
+            ratioMax = OverlayDefaults.WIDTH_MAX,
+            current = { prefs.style().widthRatio },
+            onChange = { setWidthRatio(it) }
+        )
+        rows += sizeRow(
+            label = getString(R.string.window_height),
+            vertical = true,
+            ratioMin = OverlayDefaults.HEIGHT_MIN,
+            ratioMax = OverlayDefaults.HEIGHT_MAX,
+            current = { prefs.style().heightRatio },
+            onChange = { setHeightRatio(it) }
         )
         rows += hint(getString(R.string.window_size_hint))
         rows += divider()
@@ -703,6 +718,136 @@ class SettingsActivity : BaseActivity() {
         rows += hint(getString(R.string.position_hint))
 
         return cardSection(getString(R.string.section_window), null, rows)
+    }
+
+    /**
+     * 宽 / 高滑杆。
+     *
+     * 拖动过程**不走** [editStyle]：那里面会 `refresh()`，每次滚动都重刷整页状态、
+     * 还会把滑杆位置按落盘值重设一遍，手感是「拇指被往回拽」。这里只写 prefs + 重排窗口，
+     * 松手时再 refresh 一次对齐其它行。
+     */
+    private fun sizeRow(
+        label: String,
+        vertical: Boolean,
+        ratioMin: Float,
+        ratioMax: Float,
+        current: () -> Float,
+        onChange: (Float) -> Unit
+    ): View {
+        val valueView = text("", 13f, bold = true).apply { gravity = Gravity.END }
+
+        fun bounds(): SizeBounds = hub.overlay().sizeBounds()
+
+        /** 一次手势里只查一次可用区：`frame()` 要算 insets，60 次/秒纯属白花。 */
+        var gestureBounds: SizeBounds? = null
+
+        fun currentBounds(): SizeBounds = gestureBounds ?: bounds()
+
+        fun pxOf(ratio: Float): Int {
+            if (ratio <= 0f) return 0
+            return (currentBounds().area(vertical) * ratio).toInt()
+        }
+
+        /** 比例 → 滑杆档位。0 比例单独占 0 档（自适应）。 */
+        fun progressOf(ratio: Float): Int {
+            if (ratio <= 0f) return SizeSlider.AUTO
+            val b = currentBounds()
+            return SizeSlider.progressOf(pxOf(ratio), b.min(vertical), b.max(vertical))
+        }
+
+        fun labelOf(ratio: Float): String = if (ratio <= 0f) {
+            getString(R.string.window_size_auto)
+        } else {
+            getString(R.string.window_size_px, pxOf(ratio))
+        }
+
+        val seek = SeekBar(this).apply {
+            max = SizeSlider.STEPS
+            progress = progressOf(current())
+            minimumHeight = dp(40)
+            // 连续轨道：默认 splitTrack 会在 thumb 处断开，看着像两颗分离的点。
+            splitTrack = false
+            progressTintList = ColorStateList.valueOf(colorAccent)
+            thumbTintList = ColorStateList.valueOf(colorAccent)
+            // 未选中轨道要自己给色：某些 ROM 的默认值是近乎透明的黑，深色主题下等于看不见。
+            progressBackgroundTintList = ColorStateList.valueOf(
+                if (isNight) 0x33FFFFFF else 0x1F000000
+            )
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    if (!fromUser) return
+                    if (progress == SizeSlider.AUTO) {
+                        valueView.text = getString(R.string.window_size_auto)
+                        onChange(0f)
+                        return
+                    }
+                    val b = currentBounds()
+                    val px = SizeSlider.pxOf(progress, b.min(vertical), b.max(vertical))
+                    val ratio = (px.toFloat() / b.area(vertical).coerceAtLeast(1))
+                        .coerceIn(ratioMin, ratioMax)
+                    valueView.text = getString(R.string.window_size_px, px)
+                    onChange(ratio)
+                }
+
+                override fun onStartTrackingTouch(bar: SeekBar?) {
+                    gestureBounds = bounds()
+                }
+
+                // 松手才整体刷新：拖动中刷新会重设滑杆位置，手感被打断。
+                override fun onStopTrackingTouch(bar: SeekBar?) {
+                    gestureBounds = null
+                    refresh()
+                }
+            })
+        }
+        valueView.text = labelOf(current())
+
+        uiRefreshers += {
+            val ratio = current()
+            valueView.text = labelOf(ratio)
+            val target = progressOf(ratio)
+            // 程序化设置不会回调 fromUser，可以放心对齐，不必另设同步标志。
+            if (seek.progress != target) seek.progress = target
+        }
+
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(4), 0, dp(2))
+            addView(
+                LinearLayout(this@SettingsActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    addView(
+                        text(label, 14f),
+                        LinearLayout.LayoutParams(
+                            0,
+                            LinearLayout.LayoutParams.WRAP_CONTENT,
+                            1f
+                        )
+                    )
+                    addView(valueView)
+                }
+            )
+            addView(
+                seek,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            )
+        }
+    }
+
+    /** 滑杆的落盘：写比例 + 标记自定义预设，然后让窗口按新尺寸重排。 */
+    private fun setWidthRatio(ratio: Float) {
+        prefs.saveStyle(prefs.style().copy(widthRatio = ratio, preset = Preset.CUSTOM))
+        hub.applyStyle()
+    }
+
+    private fun setHeightRatio(ratio: Float) {
+        prefs.saveStyle(prefs.style().copy(heightRatio = ratio, preset = Preset.CUSTOM))
+        hub.applyStyle()
     }
 
     /** 只有真有多块屏幕时才出现，避免手机上多一行没用的设置。 */
@@ -1869,27 +2014,6 @@ class SettingsActivity : BaseActivity() {
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
         }
-
-    /**
-     * 只读的「标签 —— 值」行。
-     *
-     * 给尺寸这类**由拖拽决定、没有可点控件**的项用：既然用户只能在窗口上拖，
-     * 这里就不该摆一个假装能点的胶囊，免得点下去没反应。
-     */
-    private fun valueRow(label: String, value: () -> String): View {
-        val valueView = text(value(), 13f, bold = true).apply { gravity = Gravity.END }
-        uiRefreshers += { valueView.text = value() }
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = dp(40)
-            addView(
-                text(label, 14f),
-                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            )
-            addView(valueView)
-        }
-    }
 
     private fun stepButton(symbol: String, action: () -> Unit): TextView = TextView(this).apply {
         text = symbol

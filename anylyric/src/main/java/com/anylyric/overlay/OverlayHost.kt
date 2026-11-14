@@ -89,19 +89,10 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
     private var dragOriginY = 0
     private var dragging = false
 
-    /** 拖角改尺寸：-1 表示没在拖角。0 左上 / 1 右上 / 2 左下 / 3 右下。 */
-    private var resizeCorner = -1
-    private var resizeStartX = 0f
-    private var resizeStartY = 0f
-    private var resizing = false
-    private var resizeW = 0
-    private var resizeH = 0
-    private val resizeOrigin = Rect()
-
     /**
      * 按下瞬间的可用矩形。
      *
-     * 拖动与拖角过程中屏幕范围不会变（方向变了系统会先发 CANCEL），
+     * 拖动过程中屏幕范围不会变（方向变了系统会先发 CANCEL），
      * 而在 MOVE 里每秒查六十次 `currentWindowMetrics` + insets 纯属白花 —— 按下时算一次即可。
      */
     private var dragFrame = OverlayGeometry.Frame(0, 0, 0, 0)
@@ -139,7 +130,7 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
     private val exitEdit = Runnable { setEditable(false) }
 
     private val longPress = Runnable {
-        if (editable && !dragging && !menuOpen && resizeCorner < 0) openMenu()
+        if (editable && !dragging && !menuOpen) openMenu()
     }
 
     private val hideExpired = Runnable {
@@ -296,8 +287,6 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         editable = false
         menuOpen = false
         dragging = false
-        resizeCorner = -1
-        resizing = false
     }
 
     /**
@@ -890,21 +879,6 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
                 }
                 if (lp == null) return@OnTouchListener false
 
-                // 角上优先判定「改大小」：四角本来就是给缩放留的，且比拖动更不容易误触
-                val corner = renderer.hitCorner(event.x, event.y)
-                if (corner >= 0) {
-                    resizeCorner = corner
-                    resizing = false
-                    resizeStartX = event.rawX
-                    resizeStartY = event.rawY
-                    resizeOrigin.set(lp.x, lp.y, lp.x + renderer.width, lp.y + renderer.height)
-                    resizeW = renderer.width
-                    resizeH = renderer.height
-                    handler.removeCallbacks(longPress)
-                    handler.removeCallbacks(exitEdit)
-                    return@OnTouchListener true
-                }
-
                 dragStartX = event.rawX
                 dragStartY = event.rawY
                 dragOriginX = lp.x
@@ -919,40 +893,6 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
 
             MotionEvent.ACTION_MOVE -> {
                 if (lp == null || menuOpen) return@OnTouchListener true
-
-                if (resizeCorner >= 0) {
-                    val dx = (event.rawX - resizeStartX).toInt()
-                    val dy = (event.rawY - resizeStartY).toInt()
-                    if (!resizing && (abs(dx) > DRAG_SLOP || abs(dy) > DRAG_SLOP)) resizing = true
-                    if (!resizing) return@OnTouchListener true
-
-                    val box = dragFrame
-                    val minW = renderer.minWidthPx()
-                    val minH = renderer.minHeightPx()
-                    val originW = resizeOrigin.width()
-                    val originH = resizeOrigin.height()
-                    val leftEdge = resizeCorner == 0 || resizeCorner == 2
-                    val topEdge = resizeCorner <= 1
-
-                    val w = (if (leftEdge) originW - dx else originW + dx)
-                        .coerceIn(minW, box.width.coerceAtLeast(minW))
-                    val h = (if (topEdge) originH - dy else originH + dy)
-                        .coerceIn(minH, box.height.coerceAtLeast(minH))
-                    val x = if (leftEdge) resizeOrigin.left + (originW - w) else resizeOrigin.left
-                    val y = if (topEdge) resizeOrigin.top + (originH - h) else resizeOrigin.top
-
-                    lp.x = x.coerceIn(box.left, (box.right - w).coerceAtLeast(box.left))
-                    lp.y = y.coerceIn(box.top, (box.bottom - h).coerceAtLeast(box.top))
-                    resizeW = w
-                    resizeH = h
-                    renderer.previewSize(w, h)
-                    try {
-                        windowManager?.updateViewLayout(v, lp)
-                    } catch (_: Throwable) {
-                        return@OnTouchListener true
-                    }
-                    return@OnTouchListener true
-                }
 
                 val dx = event.rawX - dragStartX
                 val dy = event.rawY - dragStartY
@@ -981,18 +921,6 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
                 handler.removeCallbacks(longPress)
                 if (menuOpen) return@OnTouchListener true
                 if (lp == null) return@OnTouchListener true
-
-                if (resizeCorner >= 0) {
-                    val wasResizing = resizing
-                    resizeCorner = -1
-                    resizing = false
-                    renderer.previewSize(0, 0)
-                    if (wasResizing) persistSize()
-                    handler.removeCallbacks(exitEdit)
-                    armEditTimeout()
-                    v.post(placeTask)
-                    return@OnTouchListener true
-                }
 
                 if (dragging) {
                     val box = frame()
@@ -1024,21 +952,32 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         }
     }
 
-    /** 把拖出来的像素尺寸换算成比例落盘，并标记为自定义预设。 */
-    private fun persistSize() {
+    /**
+     * 宽高滑杆的可调范围（像素）。
+     *
+     * 下限取「渲染器算出的最小可读尺寸」与「比例下限」的较大者：前者保证字不被裁，
+     * 后者保证落盘的 ratio 一定过 [OverlayDefaults.sanitize]（否则滑到最小、存进去却被
+     * 抬高一截，下次进来位置对不上）。上限就是比例上限。
+     */
+    fun sizeBounds(): SizeBounds {
         val box = frame()
-        if (box.width <= 0 || box.height <= 0 || resizeW <= 0 || resizeH <= 0) return
-        val style = prefs.style()
-        prefs.saveStyle(
-            style.copy(
-                widthRatio = (resizeW.toFloat() / box.width)
-                    .coerceIn(OverlayDefaults.WIDTH_MIN, OverlayDefaults.WIDTH_MAX),
-                heightRatio = (resizeH.toFloat() / box.height)
-                    .coerceIn(OverlayDefaults.HEIGHT_MIN, OverlayDefaults.HEIGHT_MAX),
-                preset = Preset.CUSTOM
-            )
+        val renderer = view
+        val minW = maxOf(
+            renderer?.minWidthPx() ?: 0,
+            (box.width * OverlayDefaults.WIDTH_MIN).toInt()
+        ).coerceAtMost(box.width)
+        val minH = maxOf(
+            renderer?.minHeightPx() ?: 0,
+            (box.height * OverlayDefaults.HEIGHT_MIN).toInt()
+        ).coerceAtMost(box.height)
+        return SizeBounds(
+            areaW = box.width,
+            areaH = box.height,
+            minW = minW.coerceAtLeast(1),
+            maxW = (box.width * OverlayDefaults.WIDTH_MAX).toInt().coerceAtLeast(minW),
+            minH = minH.coerceAtLeast(1),
+            maxH = (box.height * OverlayDefaults.HEIGHT_MAX).toInt().coerceAtLeast(minH)
         )
-        applyStyle()
     }
 
     private fun openMenu() {
@@ -1127,7 +1066,7 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         /**
          * 编辑态无操作自动退出。
          *
-         * 编辑态是**唯一**会吃触摸的状态（拖位置、拖四角、点「完成」都靠它），
+         * 编辑态是**唯一**会吃触摸的状态（拖位置、点「完成」都靠它），
          * 所以这个值等价于「用户最多被挡多久」。原来 60 秒：调完尺寸顺手去导航上点一下，
          * 正好落在歌词框里就点不动，而且还要再等半分钟 —— 现场反馈就是「悬浮窗挡点击」。
          * 缩到 12 秒，且每次抬手都会重新计时（见 touchListener）。
@@ -1136,4 +1075,23 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
 
         private const val HIDE_FOR_MS = 10 * 60 * 1000L
     }
+}
+
+/**
+ * 设置页宽高滑杆的可用范围（像素）。
+ *
+ * `area*` 是可用区尺寸，用来把滑杆的位置换算回比例；`min*` 已经包含
+ * 「字不能被裁」与「比例下限」两条约束，滑杆只需要照着铺。
+ */
+data class SizeBounds(
+    val areaW: Int,
+    val areaH: Int,
+    val minW: Int,
+    val maxW: Int,
+    val minH: Int,
+    val maxH: Int
+) {
+    fun area(vertical: Boolean): Int = if (vertical) areaH else areaW
+    fun min(vertical: Boolean): Int = if (vertical) minH else minW
+    fun max(vertical: Boolean): Int = if (vertical) maxH else maxW
 }

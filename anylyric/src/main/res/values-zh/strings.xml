@@ -76,10 +76,11 @@
     <string name="appearance_overflow_wrap">换行</string>
     <string name="appearance_overflow_scroll">单行滚动</string>
     <string name="appearance_overflow_hint">单行滚动只留一句、横向循环；悬浮窗高度不再随歌词长短变化。</string>
-    <string name="window_size">当前大小</string>
-    <string name="window_size_value">%1$s × %2$s 像素</string>
+    <string name="window_width">宽度</string>
+    <string name="window_height">高度</string>
+    <string name="window_size_px">%1$d 像素</string>
     <string name="window_size_auto">自适应</string>
-    <string name="window_size_hint">拖动窗口移动位置，拖任意一角改大小。拖出来的尺寸会被固定下来，歌词长短变化不再改变框的大小。</string>
+    <string name="window_size_hint">拖动滑杆调大小，窗口会跟着变。最左端是自适应，框按文字收窄；设成固定高度后，歌词长短就不会再改变它。</string>
     <string name="window_reset_size">恢复默认大小</string>
     <string name="appearance_align">对齐</string>
     <string name="appearance_opacity">背景不透明度</string>
@@ -110,7 +111,7 @@
     <string name="align_center">中</string>
     <string name="align_end">右</string>
 
-    <string name="position_edit_hint">位置不合适时，进入编辑态拖动；拖四角可改大小</string>
+    <string name="position_edit_hint">位置不合适时，进入编辑态拖动；大小在上面用滑杆调</string>
     <string name="position_reset">恢复默认位置与大小</string>
     <string name="position_hint">长按悬浮窗可锁定位置、临时隐藏 10 分钟、打开设置或复制当前歌词。位置与大小都按比例保存，换分辨率不会跑偏。</string>
     <string name="position_display">显示屏幕</string>
@@ -119,10 +120,10 @@
     <string name="handle_collapse">收起悬浮窗</string>
     <string name="handle_expand">展开悬浮窗</string>
 
-    <string name="edit_hint_bar">拖动移动 · 拖角改大小 · 长按更多</string>
+    <string name="edit_hint_bar">拖动移动 · 长按更多</string>
 
     <!-- 没有会话时进入编辑态的示例窗 -->
-    <string name="edit_preview_line">示例歌词 · 拖动四角调整大小</string>
+    <string name="edit_preview_line">示例歌词 · 大小在设置里调</string>
     <string name="edit_preview_hint">长按可打开更多操作</string>
     <string name="edit_needs_overlay">请先授予悬浮窗权限，再来调整大小和位置。</string>
     <string name="edit_menu_lock">锁定位置</string>

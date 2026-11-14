@@ -50,10 +50,6 @@ class LyricRenderer(context: Context) : View(context) {
     private var fixedWidthPx = 0
     private var fixedHeightPx = 0
 
-    /** 拖角改尺寸期间的临时尺寸，松手后由样式比例接管。 */
-    private var previewW = 0
-    private var previewH = 0
-
     private var primaryText = ""
 
     /**
@@ -160,7 +156,6 @@ class LyricRenderer(context: Context) : View(context) {
     private val measureBold = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.DEFAULT_BOLD }
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val dashPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val handlePaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val doneBgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val checkPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -253,15 +248,6 @@ class LyricRenderer(context: Context) : View(context) {
         if (next == leftInsetPx) return
         leftInsetPx = next
         rebuild()
-    }
-
-    /** 拖角过程中的实时尺寸。传 0,0 取消临时尺寸。 */
-    fun previewSize(w: Int, h: Int) {
-        if (w == previewW && h == previewH) return
-        previewW = w.coerceAtLeast(0)
-        previewH = h.coerceAtLeast(0)
-        requestLayout()
-        invalidate()
     }
 
     fun setMenuLabels(labels: List<String>) {
@@ -680,32 +666,7 @@ class LyricRenderer(context: Context) : View(context) {
         return if (index in glyphs.indices) index else -1
     }
 
-    /**
-     * 四角把手命中判定：0 左上 / 1 右上 / 2 左下 / 3 右下，未命中返回 -1。
-     *
-     * 只在编辑态生效 —— 非编辑态窗口根本不接收触摸。
-     */
-    fun hitCorner(x: Float, y: Float): Int {
-        if (!editing || mode == Mode.MENU) return -1
-        val r = CORNER_TOUCH_DP * density
-        val w = width.toFloat()
-        val h = height.toFloat()
-        var best = -1
-        var bestDist = r * r
-        // 直接用角标算坐标，不再每次按下都 new 一个 floatArrayOf(8 项)
-        for (i in 0 until 4) {
-            val dx = x - if (i % 2 == 0) 0f else w
-            val dy = y - if (i < 2) 0f else h
-            val d = dx * dx + dy * dy
-            if (d <= bestDist) {
-                bestDist = d
-                best = i
-            }
-        }
-        return best
-    }
-
-    /** 当前可用窗口的最小尺寸，拖角时用来兜底，避免把自己拖成一条线。 */
+    /** 当前可用窗口的最小尺寸，设置页滑杆靠它兜底，避免把自己调成一条线。 */
     fun minWidthPx(): Int =
         (widthOf("字字字", spToPx(style.fontSp), style.bold) + paddingH * 2f + leftInsetPx).toInt()
 
@@ -718,15 +679,10 @@ class LyricRenderer(context: Context) : View(context) {
         val fallbackW = (contentWidth + paddingH * 2f + leftInsetPx).toInt().coerceIn(1, 4000)
         val fallbackH = (contentHeight + chrome + paddingV * 2f + hint).toInt().coerceIn(1, 2000)
 
-        val w = when {
-            previewW > 0 -> previewW
-            fixedWidthPx > 0 -> fixedWidthPx
-            else -> fallbackW
-        }
+        val w = if (fixedWidthPx > 0) fixedWidthPx else fallbackW
         val h = when {
-            previewH > 0 -> previewH
             // 固定高度是**严格**的：换行数、切单行滚动、换句都不改窗口高度，否则
-            // 「拖好的框自己长高一截」看起来像设置没保存。只有编辑态例外 ——
+            // 「调好的框自己长高一截」看起来像设置没保存。只有编辑态例外 ——
             // 底部 28dp 的提示条必须能塞进去，不然它会压住最后一行字。
             fixedHeightPx > 0 ->
                 if (hint > 0) maxOf(fixedHeightPx, fallbackH) else fixedHeightPx
@@ -901,6 +857,12 @@ class LyricRenderer(context: Context) : View(context) {
         }
     }
 
+    /**
+     * 编辑态的外框：只画一圈虚线。
+     *
+     * 以前四角各有一个白点提示「可以拖大」，现在大小改在设置页用滑杆调，
+     * 圆点只会让人去按一个按不动的地方，所以一并去掉。
+     */
     private fun drawEditFrame(canvas: Canvas, w: Float, h: Float) {
         val inset = 1.5f * density
         dashPaint.color = 0x99FFFFFF.toInt()
@@ -909,15 +871,6 @@ class LyricRenderer(context: Context) : View(context) {
         dashPaint.pathEffect = dashEffect
         rect.set(inset, inset, w - inset, h - inset)
         canvas.drawRoundRect(rect, radius(), radius(), dashPaint)
-
-        handlePaint.color = 0xE6FFFFFF.toInt()
-        val r = 3.2f * density
-        val pad = 3f * density
-        for (cx in floatArrayOf(pad, w - pad)) {
-            for (cy in floatArrayOf(pad, h - pad)) {
-                canvas.drawCircle(cx, cy, r, handlePaint)
-            }
-        }
     }
 
     private fun drawHintBar(canvas: Canvas, w: Float, h: Float) {
@@ -972,9 +925,6 @@ class LyricRenderer(context: Context) : View(context) {
     }
 
     private companion object {
-        /** 四角把手的触摸半径。车机手指粗，比视觉半径大得多。 */
-        const val CORNER_TOUCH_DP = 22f
-
         /** 标题与歌词之间的间隙。固定 dp：标题字号改了间隙不该跟着翻倍。 */
         const val TITLE_GAP_DP = 6f
 

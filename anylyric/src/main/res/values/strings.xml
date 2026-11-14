@@ -77,10 +77,11 @@
     <string name="appearance_overflow_wrap">Wrap</string>
     <string name="appearance_overflow_scroll">Scroll</string>
     <string name="appearance_overflow_hint">Scroll keeps one line and moves it sideways; the frame height no longer changes with the lyric.</string>
-    <string name="window_size">Current size</string>
-    <string name="window_size_value">%1$s × %2$s px</string>
+    <string name="window_width">Width</string>
+    <string name="window_height">Height</string>
+    <string name="window_size_px">%1$d px</string>
     <string name="window_size_auto">Auto</string>
-    <string name="window_size_hint">Drag the overlay to move it; drag any corner to resize. The size you drag is kept — longer or shorter lyrics never change the frame.</string>
+    <string name="window_size_hint">Drag the slider to resize; the overlay follows while you drag. Far left is Auto — the frame hugs the text. A fixed height stays fixed, so longer or shorter lyrics never change it.</string>
     <string name="window_reset_size">Reset size</string>
     <string name="appearance_align">Alignment</string>
     <string name="appearance_opacity">Background opacity</string>
@@ -111,7 +112,7 @@
     <string name="align_center">Center</string>
     <string name="align_end">Right</string>
 
-    <string name="position_edit_hint">Drag to move, drag a corner to resize</string>
+    <string name="position_edit_hint">Enter edit mode to drag the overlay where you want it; size is set with the sliders above</string>
     <string name="position_reset">Reset position &amp; size</string>
     <string name="position_hint">Long press the overlay to lock it, hide it for 10 minutes, open settings or copy the current line. Position and size are stored as ratios, so they survive resolution changes.</string>
     <string name="position_display">Screen</string>
@@ -120,10 +121,10 @@
     <string name="handle_collapse">Collapse overlay</string>
     <string name="handle_expand">Expand overlay</string>
 
-    <string name="edit_hint_bar">Drag to move · corner to resize · long press for more</string>
+    <string name="edit_hint_bar">Drag to move · long press for more</string>
 
     <!-- 没有会话时进入编辑态的示例窗 -->
-    <string name="edit_preview_line">Sample lyrics — drag a corner to resize</string>
+    <string name="edit_preview_line">Sample lyrics — set the size in Settings</string>
     <string name="edit_preview_hint">Long press for more actions</string>
     <string name="edit_needs_overlay">Grant the overlay permission first, then adjust size and position.</string>
     <string name="edit_menu_lock">Lock position</string>

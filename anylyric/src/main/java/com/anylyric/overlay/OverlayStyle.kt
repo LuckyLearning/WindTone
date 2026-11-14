@@ -62,7 +62,7 @@ enum class LineMode(val id: String) {
  * @param widthRatio 窗口宽度占比；**0 表示自适应**（按文字宽度收窄）。
  * @param heightRatio 窗口高度占比；**0 表示自适应**（按行数收窄）。
  *   非 0 时高度是**严格的固定值**：换行数、切单行滚动、换句都不再改变窗口高度，
- *   内容在框内垂直居中。用户拖过角就一定落进这个状态（见 OverlayHost.persistSize）。
+ *   内容在框内垂直居中。设置页的宽高滑杆（[SizeSlider]）写的就是这两个值。
  *
  * @param maxLines 歌词总行数上限（含当前行折出来的行与副行）。1~4，默认 2。
  * @param lineMode 超长句的排布方式：[LineMode.WRAP] 折行 / [LineMode.SCROLL] 单行滚动。
