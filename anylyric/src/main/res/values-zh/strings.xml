@@ -81,7 +81,6 @@
     <string name="window_size_px">%1$d 像素</string>
     <string name="window_size_auto">自适应</string>
     <string name="window_size_hint">拖动滑杆调大小，窗口会跟着变。最左端是自适应，框按文字收窄；设成固定高度后，歌词长短就不会再改变它。</string>
-    <string name="window_reset_size">恢复默认大小</string>
     <string name="appearance_align">对齐</string>
     <string name="appearance_opacity">背景不透明度</string>
     <string name="appearance_corner">圆角</string>
@@ -94,9 +93,6 @@
     <string name="color_saturation">饱和度</string>
     <string name="color_brightness">亮度</string>
     <string name="color_default">默认</string>
-    <string name="appearance_width">宽度</string>
-    <string name="appearance_height">高度</string>
-    <string name="appearance_auto">自适应</string>
     <string name="appearance_stroke">文字描边</string>
     <string name="appearance_bold">加粗</string>
     <string name="appearance_fade">切换淡入</string>
@@ -171,7 +167,6 @@
     <string name="status_session">正在播放：%1$s — %2$s</string>
     <string name="status_channel">通道：%1$s</string>
 
-    <string name="channel_none">无</string>
     <string name="channel_l0">L0 元数据键</string>
     <string name="channel_l0b">播放状态扩展</string>
     <string name="channel_online">在线补词</string>
@@ -272,7 +267,6 @@
     <string name="perm_unbound_failed_hint">自动重连在这台设备上没有生效。点「系统设置」，进到 AnyLyric 的通知使用权页，把开关关掉再打开一次 —— 这是系统层面的卡顿，不是权限缺失。</string>
     <string name="display_font_value">%1$s 磅</string>
     <string name="display_edit_exit">退出编辑态</string>
-    <string name="edit_needs_session">先播放音乐，再进入编辑态。</string>
     <string name="edit_entered">已进入编辑态：拖动即可移动。</string>
     <string name="edit_exited">已退出编辑态：触摸重新穿透。</string>
     <string name="diag_evidence_label">证据：%1$s</string>
