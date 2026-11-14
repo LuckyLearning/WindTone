@@ -53,6 +53,23 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
     private var editable = false
     private var menuOpen = false
 
+    /**
+     * 设置页的「调参预览」态（0.2.19）。
+     *
+     * 用户反馈「修改悬浮窗时看不到它」：设置页本身会让悬浮窗让位，于是调字号、调宽度
+     * 全是盲调。预览态下即使本应用界面在前台也照常显示（窗口仍是 NOT_TOUCHABLE，
+     * 不挡任何点击），只在外观 / 歌词这两个真正会改样子的标签页里打开。
+     */
+    private var previewing = false
+
+    /**
+     * 本应用设置页是否在前台。
+     *
+     * 只用来决定「编辑态要不要自动超时」：用户正在设置页里慢慢调尺寸时，
+     * 12 秒一到框就消失，比什么都不做更让人恼火。离开设置页时页面自己会退出编辑态。
+     */
+    private var hostUiVisible = false
+
     /** 收起态：歌词窗被移除，只留左侧把手。 */
     private var collapsed = false
 
@@ -112,6 +129,12 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
 
     /** 打开设置页。用回调而不是直接 startActivity，避免 overlay 反向依赖 ui 包。 */
     var onOpenSettings: (() -> Unit)? = null
+
+    /**
+     * 编辑态进出后的通知。上层据此重算「本应用界面要不要让位」——
+     * 否则从长按菜单点「完成」退出编辑后，窗口会一直浮在设置页上，直到下一次刷新。
+     */
+    var onEditStateChanged: ((Boolean) -> Unit)? = null
 
     private val exitEdit = Runnable { setEditable(false) }
 
@@ -570,8 +593,15 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         val lp = params
         if (current == null || lp == null) {
             editable = value
-            // 还没挂上窗口（无会话 / 刚被移除）：让上层重新渲染一次，由 show 决定是否创建
-            if (value) onRequestRender?.invoke()
+            if (!value) return
+            // 没有窗口也要给一个可拖的预览窗（0.2.19）。
+            // 以前这里只回调上层重新渲染：没有会话 / 刚被隐藏时就什么都不会出现，
+            // 用户点了「进入编辑态」却在屏幕上找不到框，只能以为功能坏了。
+            if (!addPreviewWindow()) onRequestRender?.invoke()
+            view?.setEditing(true)
+            view?.post(placeTask)
+            armEditTimeout()
+            onEditStateChanged?.invoke(true)
             return
         }
 
@@ -587,6 +617,7 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
             removeHandle()
             collapsed = false
             onRequestRender?.invoke()
+            onEditStateChanged?.invoke(false)
             return
         }
 
@@ -601,9 +632,83 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         current.setEditing(true)
         // 编辑态收起把手：拖角时它会碍事，而且此时不需要「收起」
         removeHandle()
-        handler.postDelayed(exitEdit, EDIT_TIMEOUT_MS)
+        armEditTimeout()
         current.post(placeTask)
+        onEditStateChanged?.invoke(true)
     }
+
+    /**
+     * 编辑态的自动退出倒计时。
+     *
+     * 设置页在前台时不排计时器：用户正点着字号、来回拖角，中途框自己消失是纯干扰。
+     * 离开设置页时 `SettingsActivity.onStop` 会主动退出编辑态，不会一直吃触摸。
+     */
+    private fun armEditTimeout() {
+        handler.removeCallbacks(exitEdit)
+        if (hostUiVisible) return
+        handler.postDelayed(exitEdit, EDIT_TIMEOUT_MS)
+    }
+
+    /** 设置页进出前台时同步，只影响「编辑态会不会超时」。 */
+    fun setHostUiVisible(visible: Boolean) {
+        if (hostUiVisible == visible) return
+        hostUiVisible = visible
+        if (visible) {
+            handler.removeCallbacks(exitEdit)
+        } else if (editable) {
+            armEditTimeout()
+        }
+    }
+
+    /**
+     * 调参预览：设置页停在外观 / 歌词页时打开，切走就关。
+     *
+     * 与「编辑态」的区别：预览**不接收触摸**（窗口照旧 NOT_TOUCHABLE），
+     * 所以它能一直浮在设置页上面给用户看效果，而不会把开关和滑杆挡住。
+     */
+    fun setPreviewing(value: Boolean) {
+        if (previewing == value) return
+        previewing = value
+        if (value) return
+        // 关掉预览时若正在编辑，交给编辑态决定显隐，别把正在拖的框藏了
+        if (editable) return
+        view?.post(placeTask)
+    }
+
+    fun isPreviewing(): Boolean = previewing
+
+    /**
+     * 建一个「示例歌词」窗口，供没有会话时进入编辑态使用。
+     *
+     * 特意不写进 [lastPrimary]：它不是真歌词，写进去以后第一句真歌词若恰好同文本
+     * 会被 [show] 判成「没变」而不再重绘。
+     */
+    private fun addPreviewWindow(): Boolean {
+        val added = addView(
+            context.getString(R.string.edit_preview_line),
+            listOf(context.getString(R.string.edit_preview_hint)),
+            null,
+            LyricRenderer.Mode.CONTENT
+        )
+        if (!added) return false
+        lastPrimary = ""
+        lastSecondary = emptyList()
+        lastTitle = null
+        lastMode = LyricRenderer.Mode.CONTENT
+        return true
+    }
+
+    /**
+     * 设置页调参预览用：没有歌词可显示时给一句示例，让用户能看着真实字效调样式。
+     *
+     * 与编辑态的示例窗是同一段文字 —— 两处写不同内容会让人以为「编辑时和预览时不一样」。
+     */
+    fun showSample() = show(
+        context.getString(R.string.edit_preview_line),
+        listOf(context.getString(R.string.edit_preview_hint)),
+        null,
+        LyricRenderer.Mode.CONTENT
+    )
 
     /** 样式变更后重算尺寸与位置。同一次调用里也负责「换了输出屏幕就重建窗口」。 */
     fun applyStyle() {
@@ -884,7 +989,7 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
                     renderer.previewSize(0, 0)
                     if (wasResizing) persistSize()
                     handler.removeCallbacks(exitEdit)
-                    handler.postDelayed(exitEdit, EDIT_TIMEOUT_MS)
+                    armEditTimeout()
                     v.post(placeTask)
                     return@OnTouchListener true
                 }
@@ -911,7 +1016,7 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
 
                 // 重新计时：一直在操作不该被「60 秒无操作」打断
                 handler.removeCallbacks(exitEdit)
-                handler.postDelayed(exitEdit, EDIT_TIMEOUT_MS)
+                armEditTimeout()
                 true
             }
 
@@ -950,7 +1055,7 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         val renderer = view ?: return
         renderer.setContent(lastPrimary, lastSecondary, lastTitle, lastMode)
         handler.removeCallbacks(exitEdit)
-        handler.postDelayed(exitEdit, EDIT_TIMEOUT_MS)
+        armEditTimeout()
         renderer.post(placeTask)
     }
 

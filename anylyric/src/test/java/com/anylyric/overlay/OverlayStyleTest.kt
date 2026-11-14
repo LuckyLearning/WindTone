@@ -157,5 +157,22 @@ class OverlayStyleTest {
         assertEquals(Align.END, Align.of("end"))
         assertEquals(TitlePos.BOTTOM, TitlePos.of("bottom"))
         assertEquals(TitlePos.TOP, TitlePos.of(null))
+        assertEquals(LineMode.SCROLL, LineMode.of("scroll"))
+        assertEquals(LineMode.WRAP, LineMode.of(null))
+        assertEquals(LineMode.WRAP, LineMode.of("marquee?"))
+    }
+
+    /** 默认折行：不能因为新增了单行滚动就把老用户的观感悄悄改掉。 */
+    @Test
+    fun defaultLineModeIsWrap() {
+        assertEquals(LineMode.WRAP, OverlayDefaults.STYLE.lineMode)
+        assertEquals(LineMode.WRAP, OverlayDefaults.LINE_MODE)
+    }
+
+    /** 标准化只夹数值，不能把用户选的超长句策略重置回折行。 */
+    @Test
+    fun sanitizeKeepsLineMode() {
+        val safe = OverlayDefaults.sanitize(OverlayStyle(lineMode = LineMode.SCROLL))
+        assertEquals(LineMode.SCROLL, safe.lineMode)
     }
 }

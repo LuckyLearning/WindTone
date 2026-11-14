@@ -55,6 +55,7 @@ import com.anylyric.data.ListenerState
 import com.anylyric.data.Prefs
 import com.anylyric.diag.Probe
 import com.anylyric.overlay.Align
+import com.anylyric.overlay.LineMode
 import com.anylyric.overlay.OverlayDefaults
 import com.anylyric.overlay.OverlayStyle
 import com.anylyric.overlay.Preset
@@ -178,6 +179,8 @@ class SettingsActivity : BaseActivity() {
 
     override fun onStop() {
         super.onStop()
+        // 离开设置页就收起调参预览：回到播放器 / 导航后，窗口该由「按应用隐藏」正常决定。
+        hub.setPreviewVisible(false)
         // 编辑态是唯一吃触摸的状态。用户从设置页离开（回桌面、切导航）时若还停在编辑态，
         // 那段窗口会继续拦截落在歌词框里的点击，现场看起来就是「悬浮窗挡着点不动」。
         // 旋转重建属于同一次操作，不该打断正在调的尺寸，这里跳过。
@@ -502,6 +505,9 @@ class SettingsActivity : BaseActivity() {
         if (storeCurrent) tabPages[currentTab]?.let { tabScroll[currentTab] = it.scrollY }
         currentTab = tab
         prefs.settingsTab = tab.name
+        // 外观 / 歌词两页会改悬浮窗的样子：让窗口浮在页面上方做实时预览。
+        // 其它页（状态、运行、更多）不预览 —— 没有可调的外观项，露着只会挡住列表。
+        syncPreviewForTab()
         tabPages.forEach { (key, page) ->
             if (key == tab) {
                 page.visibility = View.VISIBLE
@@ -538,6 +544,18 @@ class SettingsActivity : BaseActivity() {
         if (!restoreScroll) return
         // GONE 的 ScrollView 没有真实高度，必须等这一帧布局完成后再 scrollTo。
         page.post { page.scrollTo(0, tabScroll[tab] ?: 0) }
+    }
+
+    /**
+     * 决定当前标签页要不要显示「调参预览」。
+     *
+     * 对话框打开期间会临时关掉（见 [showColorDialog]）：悬浮窗是 `TYPE_APPLICATION_OVERLAY`，
+     * 永远在 Activity 的对话框之上，取色滑杆被压住就没法用了。
+     */
+    private fun syncPreviewForTab() {
+        hub.setPreviewVisible(
+            currentTab == SettingsTab.LOOK || currentTab == SettingsTab.LYRICS
+        )
     }
 
     /**
@@ -652,22 +670,17 @@ class SettingsActivity : BaseActivity() {
         rows += editButton
         rows += hint(getString(R.string.position_edit_hint))
         rows += spacer(12)
-        rows += stepperRow(
-            label = getString(R.string.appearance_width),
-            value = { ratioLabel(prefs.style().widthRatio) },
-            isDefault = { prefs.style().widthRatio <= 0f },
-            minus = { stepWidth(-WIDTH_STEP) },
-            plus = { stepWidth(WIDTH_STEP) },
-            reset = { editStyle { it.copy(widthRatio = OverlayDefaults.WIDTH_RATIO) } }
+        // 宽高不再用加减号：尺寸靠拖四角，这里只显示结果。
+        // 两套入口（步进器 + 拖角）同时存在时，用户永远不知道哪个才是准的。
+        rows += valueRow(
+            getString(R.string.window_size),
+            value = {
+                val (w, h) = hub.overlay().windowSize()
+                if (w <= 0 || h <= 0) getString(R.string.window_size_auto)
+                else getString(R.string.window_size_value, w.toString(), h.toString())
+            }
         )
-        rows += stepperRow(
-            label = getString(R.string.appearance_height),
-            value = { ratioLabel(prefs.style().heightRatio) },
-            isDefault = { prefs.style().heightRatio <= 0f },
-            minus = { stepHeight(-HEIGHT_STEP) },
-            plus = { stepHeight(HEIGHT_STEP) },
-            reset = { editStyle { it.copy(heightRatio = OverlayDefaults.HEIGHT_RATIO) } }
-        )
+        rows += hint(getString(R.string.window_size_hint))
         rows += divider()
         rows += switchRow(
             label = getString(R.string.position_handle),
@@ -755,7 +768,7 @@ class SettingsActivity : BaseActivity() {
             reset = { editStyle { it.copy(fontSp = OverlayDefaults.FONT_SP) } }
         )
         // 行数是**歌词总行数**：当前行折行也算在内，副行按剩余预算往下铺。
-        rows += stepperRow(
+        val linesRow = stepperRow(
             label = getString(R.string.appearance_lines),
             value = { getString(R.string.appearance_lines_value, prefs.style().maxLines.toString()) },
             isDefault = { prefs.style().maxLines == OverlayDefaults.MAX_LINES },
@@ -763,7 +776,35 @@ class SettingsActivity : BaseActivity() {
             plus = { editStyle { it.copy(maxLines = it.maxLines + 1) } },
             reset = { editStyle { it.copy(maxLines = OverlayDefaults.MAX_LINES) } }
         )
-        rows += hint(getString(R.string.appearance_lines_hint))
+        rows += linesRow
+        val linesHint = hint(getString(R.string.appearance_lines_hint))
+        rows += linesHint
+        // 单行滚动只用一行，行数调了也不生效 —— 整行藏起来，别让人以为设置丢了。
+        uiRefreshers += {
+            val hide = prefs.style().lineMode == LineMode.SCROLL
+            linesRow.visibility = if (hide) View.GONE else View.VISIBLE
+            linesHint.visibility = if (hide) View.GONE else View.VISIBLE
+        }
+
+        rows += spacer(12)
+        rows += labeled(
+            getString(R.string.appearance_overflow),
+            chipRow(
+                options = listOf(
+                    getString(R.string.appearance_overflow_wrap),
+                    getString(R.string.appearance_overflow_scroll)
+                ),
+                current = { if (prefs.style().lineMode == LineMode.SCROLL) 1 else 0 },
+                onPick = { index ->
+                    editStyle {
+                        it.copy(
+                            lineMode = if (index == 1) LineMode.SCROLL else LineMode.WRAP
+                        )
+                    }
+                }
+            )
+        )
+        rows += hint(getString(R.string.appearance_overflow_hint))
 
         rows += spacer(12)
         rows += labeled(
@@ -1829,6 +1870,27 @@ class SettingsActivity : BaseActivity() {
             )
         }
 
+    /**
+     * 只读的「标签 —— 值」行。
+     *
+     * 给尺寸这类**由拖拽决定、没有可点控件**的项用：既然用户只能在窗口上拖，
+     * 这里就不该摆一个假装能点的胶囊，免得点下去没反应。
+     */
+    private fun valueRow(label: String, value: () -> String): View {
+        val valueView = text(value(), 13f, bold = true).apply { gravity = Gravity.END }
+        uiRefreshers += { valueView.text = value() }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = dp(40)
+            addView(
+                text(label, 14f),
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            )
+            addView(valueView)
+        }
+    }
+
     private fun stepButton(symbol: String, action: () -> Unit): TextView = TextView(this).apply {
         text = symbol
         textSize = 18f
@@ -2086,6 +2148,9 @@ class SettingsActivity : BaseActivity() {
         })
         render()
 
+        // 取色期间收起预览：悬浮窗永远盖在对话框上方，会压住滑杆。
+        // 关掉对话框后再放回来，用户正好看到新颜色。
+        hub.setPreviewVisible(false)
         AlertDialog.Builder(this)
             .setTitle(getString(R.string.appearance_color_custom).removeSuffix("…"))
             .setView(body)
@@ -2098,6 +2163,7 @@ class SettingsActivity : BaseActivity() {
                 onPick(Color.HSVToColor(hsv))
                 refresh()
             }
+            .setOnDismissListener { if (!isFinishing && !isDestroyed) syncPreviewForTab() }
             .show()
     }
 
@@ -2119,33 +2185,6 @@ class SettingsActivity : BaseActivity() {
             orientation = LinearLayout.VERTICAL
             addView(title)
             addView(seek)
-        }
-    }
-
-    private fun ratioLabel(value: Float): String =
-        if (value <= 0f) getString(R.string.appearance_auto)
-        else getString(R.string.appearance_percent, (value * 100).toInt().toString())
-
-    /**
-     * 百分比的加减。自适应（0）起步时给一个合理基准值，否则「加」按下去毫无反应，
-     * 用户会以为按钮坏了。
-     */
-    private fun stepWidth(delta: Float) {
-        editStyle {
-            val base = if (it.widthRatio > 0f) it.widthRatio else WIDTH_AUTO_BASE
-            it.copy(
-                widthRatio = (base + delta).coerceIn(OverlayDefaults.WIDTH_MIN, OverlayDefaults.WIDTH_MAX)
-            )
-        }
-    }
-
-    private fun stepHeight(delta: Float) {
-        editStyle {
-            val base = if (it.heightRatio > 0f) it.heightRatio else HEIGHT_AUTO_BASE
-            it.copy(
-                heightRatio = (base + delta)
-                    .coerceIn(OverlayDefaults.HEIGHT_MIN, OverlayDefaults.HEIGHT_MAX)
-            )
         }
     }
 
@@ -2620,11 +2659,13 @@ class SettingsActivity : BaseActivity() {
     }
 
     private fun toggleEdit() {
-        if (!hub.overlay().isEditable() && !hub.overlay().isAttached()) {
-            toast(getString(R.string.edit_needs_session))
+        val next = !hub.overlay().isEditable()
+        // 从前这里要求「先播放音乐」—— 0.2.19 起没有会话也能进编辑态：窗口会显示
+        // 一句示例歌词供拖动，样式调好了等有歌时直接生效。真正的前提只有悬浮窗权限。
+        if (next && !Settings.canDrawOverlays(this)) {
+            toast(getString(R.string.edit_needs_overlay))
             return
         }
-        val next = !hub.overlay().isEditable()
         hub.overlay().setEditable(next)
         // 设置页本身会让悬浮窗让位；进编辑态必须立刻把窗口放回来，否则用户拖的是空气。
         hub.refreshHideState()
@@ -2757,11 +2798,6 @@ class SettingsActivity : BaseActivity() {
         private val ALIGN_ORDER = listOf(Align.START, Align.CENTER, Align.END)
 
         /** 从「自适应」起步时的基准比例：宽 60% / 高 14%，都是车机上常见的合理值。 */
-        private const val WIDTH_AUTO_BASE = 0.60f
-        private const val HEIGHT_AUTO_BASE = 0.14f
-        private const val WIDTH_STEP = 0.04f
-        private const val HEIGHT_STEP = 0.02f
-
         /** 超过这个宽度就摆双栏。车机横屏（约 640dp+）受益最大，手机竖屏仍是单栏。 */
         private const val WIDE_SCREEN_DP = 600
 

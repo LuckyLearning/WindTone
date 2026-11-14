@@ -128,6 +128,18 @@ class LyricRenderer(context: Context) : View(context) {
     private var paddingV = 10f * density
 
     /**
+     * 单行滚动（[LineMode.SCROLL]）状态。
+     *
+     * 只在「这一句确实比内容区宽」时才起动画：否则跑马灯会在短句上变成静止的偏移，
+     * 看起来像文字没对齐。动画本身只 `invalidate` 这一个 View，不改窗口尺寸。
+     */
+    private var scrollAnimator: ValueAnimator? = null
+    private var scrollOffset = 0f
+    private var scrollNeeded = false
+    private var scrollCycleMs = 0L
+    private var scrollDistance = 0f
+
+    /**
      * [secondary] 标记「其它行」：颜色取 style.secondaryColor，不透明度再乘 secondaryAlpha。
      *
      * [width] 在构造时算好并跟着对象走：绘制时每帧再量一次 `measureText` 是纯浪费，
@@ -308,12 +320,14 @@ class LyricRenderer(context: Context) : View(context) {
         if (nowHidden == wasHidden) return
         if (nowHidden) {
             stopFade()
+            stopScroll()
             collapsedDirty = false
             // 必须主动 invalidate：不可见状态靠「不画」清 surface，得先触发一次绘制。
             invalidate()
         } else {
             // 隐藏期间没换句就直接重绘，省掉一次折行 + requestLayout。
             if (collapsedDirty) rebuild() else invalidate()
+            syncScroll()
             collapsedDirty = false
         }
     }
@@ -348,6 +362,7 @@ class LyricRenderer(context: Context) : View(context) {
         val crossfade = nextMode == Mode.CONTENT &&
             mode == Mode.CONTENT &&
             !editing &&
+            style.lineMode == LineMode.WRAP &&
             style.fadeMs > 0 &&
             glyphs.isNotEmpty()
 
@@ -417,6 +432,7 @@ class LyricRenderer(context: Context) : View(context) {
 
     override fun onDetachedFromWindow() {
         stopFade()
+        stopScroll()
         super.onDetachedFromWindow()
     }
 
@@ -482,24 +498,35 @@ class LyricRenderer(context: Context) : View(context) {
             }
 
             Mode.CONTENT -> {
-                // 当前行可以先占满预算（长句折成 3 行是合理的），剩下的才留给上下文行；
-                // 上下文行是一**组**，按剩余预算逐条铺 —— 只铺一条就是「永远只有两行」的老 bug。
-                val rows = LinePlan.build(primaryText, secondaryLines, style.maxLines) { text, lines, sub ->
-                    val size = if (sub) secondarySize else primarySize
-                    TextWrap.wrap(text, limit, lines) { s ->
-                        widthOf(s, size, !sub && style.bold)
-                    }
-                }
-                val subAlpha = (style.secondaryAlpha * 255f).toInt().coerceIn(0, 255)
-                for (row in rows) {
-                    if (row.secondary) {
-                        glyphs += glyph(row.text, secondarySize, subAlpha, false, secondary = true)
-                        glyphTops += y
-                        y += secondarySize * 1.45f
-                    } else {
-                        glyphs += glyph(row.text, primarySize, 255, style.bold)
-                        glyphTops += y
+                // 单行滚动：只画当前句，**不折行**。副行整组让位 —— 滚动行本身就在动，
+                // 再叠一行上下文会让人分不清哪句是「现在唱到的地方」。
+                if (style.lineMode == LineMode.SCROLL) {
+                    val text = primaryText.trim()
+                    if (text.isNotEmpty()) {
+                        glyphs += glyph(text, primarySize, 255, style.bold)
+                        glyphTops += 0f
                         y += primarySize * 1.38f
+                    }
+                } else {
+                    // 当前行可以先占满预算（长句折成 3 行是合理的），剩下的才留给上下文行；
+                    // 上下文行是一**组**，按剩余预算逐条铺 —— 只铺一条就是「永远只有两行」的老 bug。
+                    val rows = LinePlan.build(primaryText, secondaryLines, style.maxLines) { text, lines, sub ->
+                        val size = if (sub) secondarySize else primarySize
+                        TextWrap.wrap(text, limit, lines) { s ->
+                            widthOf(s, size, !sub && style.bold)
+                        }
+                    }
+                    val subAlpha = (style.secondaryAlpha * 255f).toInt().coerceIn(0, 255)
+                    for (row in rows) {
+                        if (row.secondary) {
+                            glyphs += glyph(row.text, secondarySize, subAlpha, false, secondary = true)
+                            glyphTops += y
+                            y += secondarySize * 1.45f
+                        } else {
+                            glyphs += glyph(row.text, primarySize, 255, style.bold)
+                            glyphTops += y
+                            y += primarySize * 1.38f
+                        }
                     }
                 }
             }
@@ -528,8 +555,65 @@ class LyricRenderer(context: Context) : View(context) {
 
         requestLayout()
         invalidate()
+        syncScroll()
         // 字形已经按最新内容重建过：收起期间攒下的 dirty 一并清掉。
         collapsedDirty = false
+    }
+
+    /**
+     * 按最新内容决定「要不要滚」。
+     *
+     * 三个条件同时成立才滚：单行模式、当前是正常歌词、这句比内容区宽。
+     * 任一不成立就停掉动画并归零 —— 留着偏移量会让下一句直接从一个奇怪的位置开始。
+     */
+    private fun syncScroll() {
+        val first = glyphs.firstOrNull()
+        if (first == null ||
+            style.lineMode != LineMode.SCROLL ||
+            mode != Mode.CONTENT ||
+            hidden ||
+            editing ||
+            !Marquee.needsScroll(first.width, contentWidth)
+        ) {
+            stopScroll()
+            return
+        }
+
+        scrollDistance = Marquee.distance(first.width, contentWidth)
+        scrollCycleMs = Marquee.durationMs(
+            first.width, contentWidth, Marquee.SPEED_DP_PER_SEC * density
+        )
+        // 每次重建都从头滚：换句后从上一句的偏移接着跑，会让人以为新句子「缺了前半截」。
+        scrollNeeded = true
+        startScroll()
+    }
+
+    private fun startScroll() {
+        val animator = scrollAnimator ?: ValueAnimator().also { scrollAnimator = it }
+        animator.removeAllListeners()
+        animator.removeAllUpdateListeners()
+        animator.cancel()
+        if (scrollCycleMs <= 0L || scrollDistance <= 0f) return
+        animator.setFloatValues(0f, scrollDistance)
+        animator.duration = scrollCycleMs
+        animator.interpolator = null
+        // 无限循环：repeatMode 的 RESTART 会先把值弹回 0，正好接上「尾句+空档」的起点。
+        animator.repeatCount = ValueAnimator.INFINITE
+        animator.repeatMode = ValueAnimator.RESTART
+        animator.addUpdateListener {
+            scrollOffset = it.animatedValue as Float
+            invalidate()
+        }
+        animator.start()
+    }
+
+    private fun stopScroll() {
+        scrollNeeded = false
+        scrollOffset = 0f
+        scrollAnimator?.let {
+            it.removeAllUpdateListeners()
+            it.cancel()
+        }
     }
 
     /** 标题按可用宽度截断：宁可「歌名 · 歌…」也不要让窗口为了它整块变宽。 */
@@ -641,8 +725,11 @@ class LyricRenderer(context: Context) : View(context) {
         }
         val h = when {
             previewH > 0 -> previewH
+            // 固定高度是**严格**的：换行数、切单行滚动、换句都不改窗口高度，否则
+            // 「拖好的框自己长高一截」看起来像设置没保存。只有编辑态例外 ——
+            // 底部 28dp 的提示条必须能塞进去，不然它会压住最后一行字。
             fixedHeightPx > 0 ->
-                maxOf(fixedHeightPx, (contentHeight + chrome + paddingV * 2f + hint).toInt())
+                if (hint > 0) maxOf(fixedHeightPx, fallbackH) else fixedHeightPx
 
             else -> fallbackH
         }
@@ -681,7 +768,9 @@ class LyricRenderer(context: Context) : View(context) {
         drawTitle(canvas, w, h)
 
         val fading = fadeCount > 0 && fadeElapsed < 1f
-        if (fading) {
+        if (scrollNeeded) {
+            drawScrolling(canvas)
+        } else if (fading) {
             // 旧行在前 35% 里退干净，新行从 12% 才开始浮上来。
             // 两条曲线刻意错开：全程同步交叉会让两句话叠在一起，看起来像重影。
             val out = (1f - fadeElapsed / 0.35f).coerceIn(0f, 1f)
@@ -767,6 +856,32 @@ class LyricRenderer(context: Context) : View(context) {
         // 描边先画、填充后画：这是真轮廓，不是把文字偏移复制一遍当阴影。
         if (style.stroke) canvas.drawText(glyph.text, x, baseline, strokePaint)
         canvas.drawText(glyph.text, x, baseline, textPaint)
+    }
+
+    /**
+     * 单行滚动：把整句按 [scrollOffset] 左移，并在尾部再画一份接上，形成无缝循环。
+     *
+     * 必须 `clipRect`：窗口宽度是固定的，不裁的话文字会画到背景圆角外面去。
+     * 只在内容区里裁，标题与编辑提示不受影响。
+     */
+    private fun drawScrolling(canvas: Canvas) {
+        val glyph = glyphs.firstOrNull() ?: return
+        if (contentWidth <= 0f) return
+        val top = contentTop
+        val gap = Marquee.gap(contentWidth)
+        configureText(glyph, 1f)
+        val baseline = top - textPaint.fontMetrics.ascent
+
+        canvas.save()
+        canvas.clipRect(textLeft, top, textLeft + contentWidth, top + contentHeight)
+        // 两份之间的间距 = 整句宽 + 空档；偏移量走完一整轮时第二份正好接管第一份的起点
+        for (i in 0..1) {
+            val x = textLeft - scrollOffset + i * (glyph.width + gap)
+            if (x > textLeft + contentWidth) break
+            if (style.stroke) canvas.drawText(glyph.text, x, baseline, strokePaint)
+            canvas.drawText(glyph.text, x, baseline, textPaint)
+        }
+        canvas.restore()
     }
 
     private fun drawMenu(canvas: Canvas) {

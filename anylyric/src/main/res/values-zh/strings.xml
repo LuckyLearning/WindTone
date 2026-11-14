@@ -72,6 +72,15 @@
     <string name="appearance_font">字号</string>
     <string name="appearance_lines">行数</string>
     <string name="appearance_lines_value">%1$s 行</string>
+    <string name="appearance_overflow">超长句</string>
+    <string name="appearance_overflow_wrap">换行</string>
+    <string name="appearance_overflow_scroll">单行滚动</string>
+    <string name="appearance_overflow_hint">单行滚动只留一句、横向循环；悬浮窗高度不再随歌词长短变化。</string>
+    <string name="window_size">当前大小</string>
+    <string name="window_size_value">%1$s × %2$s 像素</string>
+    <string name="window_size_auto">自适应</string>
+    <string name="window_size_hint">拖动窗口移动位置，拖任意一角改大小。拖出来的尺寸会被固定下来，歌词长短变化不再改变框的大小。</string>
+    <string name="window_reset_size">恢复默认大小</string>
     <string name="appearance_align">对齐</string>
     <string name="appearance_opacity">背景不透明度</string>
     <string name="appearance_corner">圆角</string>
@@ -111,6 +120,11 @@
     <string name="handle_expand">展开悬浮窗</string>
 
     <string name="edit_hint_bar">拖动移动 · 拖角改大小 · 长按更多</string>
+
+    <!-- 没有会话时进入编辑态的示例窗 -->
+    <string name="edit_preview_line">示例歌词 · 拖动四角调整大小</string>
+    <string name="edit_preview_hint">长按可打开更多操作</string>
+    <string name="edit_needs_overlay">请先授予悬浮窗权限，再来调整大小和位置。</string>
     <string name="edit_menu_lock">锁定位置</string>
     <string name="edit_menu_hide">隐藏 10 分钟</string>
     <string name="edit_menu_settings">打开设置</string>

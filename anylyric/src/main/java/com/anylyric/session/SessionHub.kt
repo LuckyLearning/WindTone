@@ -288,6 +288,9 @@ class SessionHub private constructor(context: Context) {
         if (prefs.debugEnabled) startResourceTicker()
         // 菜单关闭、隐藏到期、换了输出屏幕：都需要上层重新算一遍内容再决定是否重建窗口
         overlay.onRequestRender = { requestRefresh(REASON_UI) }
+        // 编辑态进出会改变「本应用界面要不要让位」：退出编辑时窗口该重新藏起来，
+        // 否则从长按菜单点「完成」后，框会一直压在设置页上。
+        overlay.onEditStateChanged = { applyHideState() }
         overlay.onOpenSettings = {
             try {
                 appContext.startActivity(
@@ -719,7 +722,22 @@ class SessionHub private constructor(context: Context) {
      */
     fun setOwnUiVisible(visible: Boolean) {
         ownUiCount = if (visible) ownUiCount + 1 else (ownUiCount - 1).coerceAtLeast(0)
+        overlay.setHostUiVisible(ownUiCount > 0)
         applyHideState()
+    }
+
+    /**
+     * 设置页停在外观 / 歌词页时的调参预览：让悬浮窗浮在页面上方，改动立刻可见。
+     *
+     * 窗口在预览态仍是 NOT_TOUCHABLE，所以能看效果但不挡开关和滑杆。
+     */
+    fun setPreviewVisible(visible: Boolean) {
+        if (overlay.isPreviewing() == visible) return
+        overlay.setPreviewing(visible)
+        applyHideState()
+        // 窗口不在（本应用界面让位时被拆过 / 刚启动还没建）就补一次渲染：
+        // 否则用户停在外观页却仍然看不到框，等于预览没打开。
+        if (visible && !overlay.hasWindow()) requestRefresh("preview_on")
     }
 
     /**
@@ -739,10 +757,11 @@ class SessionHub private constructor(context: Context) {
      * 「临时隐藏」状态 —— 两个来源各自撤销时不会互相把对方的状态覆盖掉。
      */
     private fun applyHideState() {
-        // 编辑态例外：用户正在设置页里拖位置、调大小，这时把窗口藏起来等于让人对着空气操作。
-        // 名单命中仍然优先（[byApp] 不看编辑态）—— 用户既然勾了「这些应用里别挡」，
+        // 编辑态 / 调参预览例外：用户正在设置页里拖位置、调大小、改字号，
+        // 这时把窗口藏起来等于让人对着空气操作。
+        // 名单命中仍然优先（[byApp] 不看这两个开关）—— 用户既然勾了「这些应用里别挡」，
         // 编辑态也不该成为例外。
-        val byOwnUi = ownUiCount > 0 && !overlay.isEditable()
+        val byOwnUi = ownUiCount > 0 && !overlay.isEditable() && !overlay.isPreviewing()
         val byApp = prefs.hideByAppActive &&
             overlayHiddenFor(ForegroundApps.currentPkg, prefs.hiddenApps)
         val hide = byOwnUi || byApp
@@ -1316,6 +1335,15 @@ class SessionHub private constructor(context: Context) {
         Perf.onRender()
 
         if (currentLines.isEmpty()) {
+            // 编辑态下**永远**留着窗口：用户可能只是想调样式，此刻没有会话不代表
+            // 该把框收走。没有会话时 OverlayHost 已经建了一个示例窗，这里返回即可。
+            if (overlay.isEditable()) return
+            // 设置页正在「调参预览」：给一句示例歌词，让用户看着真实字效改字号、配色。
+            // 放在 hideWhenNoLyrics 之前 —— 预览是用户显式打开的，比那个开关优先。
+            if (overlay.isPreviewing()) {
+                overlay.showSample()
+                return
+            }
             if (prefs.hideWhenNoLyrics) {
                 overlay.hide()
                 return

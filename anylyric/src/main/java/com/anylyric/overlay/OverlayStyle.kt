@@ -41,8 +41,31 @@ enum class TitlePos(val id: String) {
 }
 
 /**
+ * 一句歌词比窗口还宽时怎么办。
+ *
+ *  · [WRAP]   —— 折成多行，用掉 [OverlayStyle.maxLines] 的行数预算（默认）；
+ *  · [SCROLL] —— 保持单行，横向循环滚动（跑马灯）；副行不参与，窗口总高度也因此稳定。
+ *
+ * 为什么单独做成枚举而不是一个布尔：以后还会有「缩写省略」「两行对切」这类第三种形态，
+ * 布尔到那时就得再加一个，界面还得再改一遍。
+ */
+enum class LineMode(val id: String) {
+    WRAP("wrap"),
+    SCROLL("scroll");
+
+    companion object {
+        fun of(id: String?): LineMode = values().firstOrNull { it.id == id } ?: WRAP
+    }
+}
+
+/**
  * @param widthRatio 窗口宽度占比；**0 表示自适应**（按文字宽度收窄）。
  * @param heightRatio 窗口高度占比；**0 表示自适应**（按行数收窄）。
+ *   非 0 时高度是**严格的固定值**：换行数、切单行滚动、换句都不再改变窗口高度，
+ *   内容在框内垂直居中。用户拖过角就一定落进这个状态（见 OverlayHost.persistSize）。
+ *
+ * @param maxLines 歌词总行数上限（含当前行折出来的行与副行）。1~4，默认 2。
+ * @param lineMode 超长句的排布方式：[LineMode.WRAP] 折行 / [LineMode.SCROLL] 单行滚动。
  *
  * 宽高都存「占可用区的比例」而不是像素，理由与位置一致：车机与手机分辨率差两三倍，
  * 存像素在另一台机器上不是过宽就是被裁。
@@ -57,6 +80,7 @@ data class OverlayStyle(
     val fontSp: Float = OverlayDefaults.FONT_SP,
     val bold: Boolean = OverlayDefaults.BOLD,
     val maxLines: Int = OverlayDefaults.MAX_LINES,
+    val lineMode: LineMode = OverlayDefaults.LINE_MODE,
     val opacity: Float = OverlayDefaults.OPACITY,
     val cornerDp: Float = OverlayDefaults.CORNER_DP,
     val stroke: Boolean = OverlayDefaults.STROKE,
@@ -91,6 +115,9 @@ object OverlayDefaults {
     const val MAX_LINES = 2
     const val LINES_MIN = 1
     const val LINES_MAX = 4
+
+    /** 默认折行：绝大多数歌曲一句就是一行，只有长句才用得上滚动。 */
+    val LINE_MODE = LineMode.WRAP
     const val OPACITY = 0.55f
     const val CORNER_DP = 14f
     const val CORNER_MAX = 28f
@@ -148,6 +175,7 @@ object OverlayDefaults {
         fontSp = FONT_SP,
         bold = BOLD,
         maxLines = MAX_LINES,
+        lineMode = LINE_MODE,
         opacity = OPACITY,
         cornerDp = CORNER_DP,
         stroke = STROKE,

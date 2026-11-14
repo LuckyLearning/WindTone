@@ -3,6 +3,7 @@ package com.anylyric.data
 import android.content.Context
 import android.content.SharedPreferences
 import com.anylyric.overlay.Align
+import com.anylyric.overlay.LineMode
 import com.anylyric.overlay.OverlayDefaults
 import com.anylyric.overlay.OverlayStyle
 import com.anylyric.overlay.Preset
@@ -189,6 +190,7 @@ class Prefs(context: Context) {
             fontSp = sp.getFloat(KEY_FONT, OverlayDefaults.FONT_SP),
             bold = sp.getBoolean(KEY_BOLD, OverlayDefaults.BOLD),
             maxLines = sp.getInt(KEY_LINES, OverlayDefaults.MAX_LINES),
+            lineMode = LineMode.of(sp.getString(KEY_LINE_MODE, null)),
             opacity = sp.getFloat(KEY_OPACITY, OverlayDefaults.OPACITY),
             cornerDp = sp.getFloat(KEY_CORNER, OverlayDefaults.CORNER_DP),
             stroke = sp.getBoolean(KEY_STROKE, OverlayDefaults.STROKE),
@@ -216,6 +218,7 @@ class Prefs(context: Context) {
             .putFloat(KEY_FONT, safe.fontSp)
             .putBoolean(KEY_BOLD, safe.bold)
             .putInt(KEY_LINES, safe.maxLines)
+            .putString(KEY_LINE_MODE, safe.lineMode.id)
             .putFloat(KEY_OPACITY, safe.opacity)
             .putFloat(KEY_CORNER, safe.cornerDp)
             .putBoolean(KEY_STROKE, safe.stroke)
@@ -288,6 +291,7 @@ class Prefs(context: Context) {
         private const val KEY_FONT = "font_sp"
         private const val KEY_BOLD = "style_bold"
         private const val KEY_LINES = "style_lines"
+        private const val KEY_LINE_MODE = "style_line_mode"
         private const val KEY_OPACITY = "style_opacity"
         private const val KEY_CORNER = "style_corner_dp"
         private const val KEY_STROKE = "style_stroke"
