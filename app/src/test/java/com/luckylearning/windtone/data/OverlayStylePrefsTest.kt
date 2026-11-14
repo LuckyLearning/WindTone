@@ -246,4 +246,38 @@ class OverlayStylePrefsTest {
         prefs.themeMode = ThemeMode.LIGHT
         assertFalse("夜间单独开过，不影响白天", prefs.lyricOverlayStrokeEnabled)
     }
+
+    /**
+     * v1.2.54：标题块与分角色样式同样分两套。
+     *
+     * 这里挑「位置」与「其他行字号」做代表：位置是离散档位（写错会静默落到 0），
+     * 字号是数值（写错会被夹取成边界值），两者都能覆盖「分流没接上」的典型症状。
+     */
+    @Test
+    fun `标题位置与分角色字号分两套`() {
+        listOf(
+            Prefs.KEY_LYRIC_OVERLAY_TITLE_POS,
+            Prefs.KEY_LYRIC_OVERLAY_TITLE_ALIGN,
+            Prefs.KEY_LYRIC_OVERLAY_TITLE_C,
+            Prefs.KEY_LYRIC_OVERLAY_TITLE_STROKE_ON,
+            Prefs.KEY_LYRIC_OVERLAY_CURRENT_SCALE,
+            Prefs.KEY_LYRIC_OVERLAY_CONTEXT_SCALE,
+            Prefs.KEY_LYRIC_OVERLAY_CONTEXT_C,
+        ).forEach { key ->
+            assertTrue("外观键应分两套：$key", key in Prefs.STYLE_KEYS)
+        }
+
+        prefs.themeMode = ThemeMode.LIGHT
+        prefs.lyricOverlayTitlePos = 1
+        prefs.lyricOverlayContextScale = 140
+        prefs.themeMode = ThemeMode.DARK
+        assertEquals("夜间没写过就继承白天", 1, prefs.lyricOverlayTitlePos)
+        assertEquals("夜间没写过就继承白天", 140, prefs.lyricOverlayContextScale)
+
+        prefs.lyricOverlayTitlePos = 0
+        prefs.lyricOverlayContextScale = 80
+        prefs.themeMode = ThemeMode.LIGHT
+        assertEquals("夜间单独改过，不影响白天", 1, prefs.lyricOverlayTitlePos)
+        assertEquals("夜间单独改过，不影响白天", 140, prefs.lyricOverlayContextScale)
+    }
 }

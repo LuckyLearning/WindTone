@@ -390,7 +390,7 @@ The app cannot stop the OEM clearing third-party accessibility on boot; tap the 
     <string name="outline_color">Outline color</string>
     <string name="color_of_the_text_outline">Color of the text outline; a dark outline with light text is the usual choice</string>
     <string name="show_title_and_artist">Show title and artist</string>
-    <string name="adds_two_small_lines_at">Adds two small lines at the top of the overlay (title / artist) above the lyrics</string>
+    <string name="adds_two_small_lines_at">Adds two small lines for the song title and artist; whether they sit above or below the lyrics is set below</string>
     <string name="lyrics_only_no_title_lines">Lyrics only, no title lines</string>
     <string name="title_size_of_body">Title size %1$s%% of body</string>
     <string name="affects_only_the_two_small">Affects only the two small title lines; 40–100%%, default 62%%</string>
@@ -398,6 +398,42 @@ The app cannot stop the OEM clearing third-party accessibility on boot; tap the 
     <string name="title_only_a_more_compact">Title only, a more compact header</string>
     <string name="artist_only">Artist only</string>
     <string name="both_title_and_artist_default">Both title and artist (default)</string>
+
+    <!-- v1.2.54: collapsible groups, title block, per-role lyric styling -->
+    <string name="overlay_group_lyric_text">Lyrics text</string>
+    <string name="overlay_current_line">Current line</string>
+    <string name="overlay_context_lines">Other lines</string>
+    <string name="overlay_current_size">Current line size %1$d%% of body</string>
+    <string name="overlay_context_size">Other lines size %1$d%% of body</string>
+    <string name="overlay_scale_hint">Percentage of the body size: 100%% matches the body</string>
+    <string name="overlay_context_color">Other lines color</string>
+    <string name="overlay_context_color_sub">Other lines use their own color (brightness still follows the dim slider)</string>
+    <string name="overlay_context_color_intro">Hue for the other lyric lines; the dim slider below still controls their opacity</string>
+    <string name="overlay_title_position">Title position</string>
+    <string name="overlay_title_position_sub">Whether the title / artist lines sit above or below the lyrics</string>
+    <string name="overlay_title_pos_top">Above</string>
+    <string name="overlay_title_pos_bottom">Below</string>
+    <string name="overlay_title_align">Title alignment</string>
+    <string name="overlay_title_align_sub">Independent from the lyric alignment</string>
+    <string name="overlay_align_left">Left</string>
+    <string name="overlay_align_center">Center</string>
+    <string name="overlay_align_right">Right</string>
+    <string name="overlay_title_color">Title color</string>
+    <string name="overlay_title_color_sub">The title uses its own color</string>
+    <string name="overlay_title_color_intro">Color of the title / artist lines; pick any hue here</string>
+    <string name="overlay_title_outline">Title outline</string>
+    <string name="overlay_title_outline_on">The title gets an outline, which keeps it readable over light content</string>
+    <string name="overlay_title_outline_off">No outline (default), the title is plain text</string>
+    <string name="overlay_title_outline_dp">Title outline %1$d dp</string>
+    <string name="overlay_title_outline_color">Title outline color</string>
+    <string name="overlay_summary_full">Full height · %1$d%% wide · %2$d%% tall</string>
+    <string name="overlay_summary_strip">Single strip · %1$d%% wide · %2$s</string>
+    <string name="overlay_summary_text">%1$dsp · %2$s</string>
+    <string name="overlay_summary_title_off">Hidden</string>
+    <string name="overlay_summary_title">%1$s · %2$s · %3$d%% of body</string>
+    <string name="overlay_summary_bg_none">No backdrop (pure text)</string>
+    <string name="overlay_summary_bg">Opacity %1$d%%</string>
+    <string name="overlay_summary_behavior">When paused: %1$s · Fade %2$dms</string>
     <string name="background">Background</string>
     <string name="background_opacity">Background opacity %1$s%%</string>
     <string name="t_0_no_backdrop_the_background_label">0%% = no backdrop: the background disappears and text switches to a hard outline (still legible on light backgrounds)</string>

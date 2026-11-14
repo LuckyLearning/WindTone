@@ -109,6 +109,28 @@ class SettingsDefaultsTest {
             SettingsDefaults.OVERLAY_FULL_OFFSET_PERCENT,
         )
         check("lyricOverlayTextColor", prefs.lyricOverlayTextColor, SettingsDefaults.OVERLAY_TEXT_COLOR)
+        // v1.2.54：标题块与分角色样式
+        check("lyricOverlayTitlePos", prefs.lyricOverlayTitlePos, SettingsDefaults.OVERLAY_TITLE_POS)
+        check("lyricOverlayTitleAlign", prefs.lyricOverlayTitleAlign, SettingsDefaults.OVERLAY_TITLE_ALIGN)
+        check("lyricOverlayTitleColor", prefs.lyricOverlayTitleColor, SettingsDefaults.OVERLAY_TITLE_COLOR)
+        check(
+            "lyricOverlayTitleStrokeEnabled",
+            prefs.lyricOverlayTitleStrokeEnabled,
+            SettingsDefaults.OVERLAY_TITLE_STROKE_ON,
+        )
+        check(
+            "lyricOverlayTitleStrokeWidthDp",
+            prefs.lyricOverlayTitleStrokeWidthDp,
+            SettingsDefaults.OVERLAY_TITLE_STROKE_WIDTH_DP,
+        )
+        check(
+            "lyricOverlayTitleStrokeColor",
+            prefs.lyricOverlayTitleStrokeColor,
+            SettingsDefaults.OVERLAY_TITLE_STROKE_COLOR,
+        )
+        check("lyricOverlayCurrentScale", prefs.lyricOverlayCurrentScale, SettingsDefaults.OVERLAY_CURRENT_SCALE)
+        check("lyricOverlayContextScale", prefs.lyricOverlayContextScale, SettingsDefaults.OVERLAY_CONTEXT_SCALE)
+        check("lyricOverlayContextColor", prefs.lyricOverlayContextColor, SettingsDefaults.OVERLAY_CONTEXT_COLOR)
         check("lyricOverlayHiddenApps", prefs.lyricOverlayHiddenApps, SettingsDefaults.OVERLAY_HIDDEN_APPS)
         check("foregroundLogEnabled", prefs.foregroundLogEnabled, SettingsDefaults.FOREGROUND_LOG_ENABLED)
         // v1.1.31：调试分区出厂隐藏（关于连点 5 次才显示）

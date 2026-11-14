@@ -271,6 +271,17 @@ fun SettingsScreen(
     onLyricOverlayStrokeColor: (Int) -> Unit,
     onLyricOverlayFadeMs: (Int) -> Unit,
     onLyricOverlayTitleMode: (Int) -> Unit,
+    /** v1.2.54 标题块：位置（0 上 / 1 下）、对齐（0 中 / 1 左 / 2 右）、颜色、描边 */
+    onLyricOverlayTitlePos: (Int) -> Unit = {},
+    onLyricOverlayTitleAlign: (Int) -> Unit = {},
+    onLyricOverlayTitleColor: (Int) -> Unit = {},
+    onLyricOverlayTitleStrokeEnabled: (Boolean) -> Unit = {},
+    onLyricOverlayTitleStrokeWidthDp: (Int) -> Unit = {},
+    onLyricOverlayTitleStrokeColor: (Int) -> Unit = {},
+    /** v1.2.54 分角色：当前行 / 其他行的字号百分比与其他行颜色 */
+    onLyricOverlayCurrentScale: (Int) -> Unit = {},
+    onLyricOverlayContextScale: (Int) -> Unit = {},
+    onLyricOverlayContextColor: (Int) -> Unit = {},
     /** 悬浮窗歌词文字颜色 —— v1.1.4 */
     onLyricOverlayTextColor: (Int) -> Unit,
     /** 「不显示悬浮窗的应用」名单（v1.1.29） */
@@ -564,6 +575,15 @@ fun SettingsScreen(
                             onLyricOverlayStrokeColor = onLyricOverlayStrokeColor,
                             onLyricOverlayFadeMs = onLyricOverlayFadeMs,
                             onLyricOverlayTitleMode = onLyricOverlayTitleMode,
+                            onLyricOverlayTitlePos = onLyricOverlayTitlePos,
+                            onLyricOverlayTitleAlign = onLyricOverlayTitleAlign,
+                            onLyricOverlayTitleColor = onLyricOverlayTitleColor,
+                            onLyricOverlayTitleStrokeEnabled = onLyricOverlayTitleStrokeEnabled,
+                            onLyricOverlayTitleStrokeWidthDp = onLyricOverlayTitleStrokeWidthDp,
+                            onLyricOverlayTitleStrokeColor = onLyricOverlayTitleStrokeColor,
+                            onLyricOverlayCurrentScale = onLyricOverlayCurrentScale,
+                            onLyricOverlayContextScale = onLyricOverlayContextScale,
+                            onLyricOverlayContextColor = onLyricOverlayContextColor,
                             onLyricOverlayTextColor = onLyricOverlayTextColor,
                             onLyricOverlayHiddenApps = onLyricOverlayHiddenApps,
                             onApplyOverlayPreset = onApplyOverlayPreset,

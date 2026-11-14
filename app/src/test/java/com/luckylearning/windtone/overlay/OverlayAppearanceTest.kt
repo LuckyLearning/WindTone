@@ -27,6 +27,28 @@ class OverlayAppearanceTest {
         assertEquals(Gravity.CENTER, OverlayAppearance.alignGravity(2))
     }
 
+    /**
+     * v1.2.54：标题三档对齐。
+     *
+     * 与歌词的两档对齐**刻意分开**：歌词只有居中 / 居左，标题多一档居右，
+     * 两个函数各自忽略对方的档位（歌词传 2 仍居中，标题传 2 才靠右）。
+     */
+    @Test
+    fun `alignGravity3 三档各自落到对应 gravity`() {
+        assertEquals(
+            Gravity.START or Gravity.CENTER_VERTICAL,
+            OverlayAppearance.alignGravity3(OverlayPositioner.ALIGN_LEFT),
+        )
+        assertEquals(Gravity.CENTER, OverlayAppearance.alignGravity3(OverlayPositioner.ALIGN_CENTER))
+        assertEquals(
+            Gravity.END or Gravity.CENTER_VERTICAL,
+            OverlayAppearance.alignGravity3(OverlayPositioner.ALIGN_RIGHT),
+        )
+        // 越界值必须回落到居中，不能发散成别的对齐
+        assertEquals(Gravity.CENTER, OverlayAppearance.alignGravity3(-1))
+        assertEquals(Gravity.CENTER, OverlayAppearance.alignGravity3(9))
+    }
+
     @Test
     fun `titleTextSp 是正文乘百分比，不再有档位倍率`() {
         // 正文 20sp、标题 62% = 12.4sp

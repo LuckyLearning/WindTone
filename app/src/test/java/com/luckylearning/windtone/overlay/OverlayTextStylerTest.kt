@@ -167,4 +167,87 @@ class OverlayTextStylerTest {
             contextAlphaOf(80) > contextAlphaOf(OverlayLegibility.DEFAULT_DIM_PERCENT),
         )
     }
+
+    // ------------------------------------------------ v1.2.54 分角色样式
+
+    @Test
+    fun `当前行字号百分比落到 RelativeSizeSpan`() {
+        // 单条模式：当前行 150% → 1.5 倍；不设时走纯字符串快路径（见上面的用例）
+        val result = OverlayTextStyler.build(
+            listOf(OverlayTextComposer.StyledLine("now", OverlayTextComposer.Role.CURRENT)),
+            fullHeight = false,
+            baseColor = white,
+            noBackdrop = false,
+            currentScalePercent = 150,
+        ) as Spanned
+        val size = result.getSpans(0, result.length, RelativeSizeSpan::class.java).single()
+        assertEquals(1.5f, size.sizeChange, 0.0001f)
+    }
+
+    @Test
+    fun `全屏模式当前行字号是基线 1_13 乘用户百分比`() {
+        // 全屏的「当前行比别的行大 13%」是形态基线，用户百分比在它之上叠乘：
+        // 120% → 1.13 × 1.2 ≈ 1.356，调小到 80% → 1.13 × 0.8 ≈ 0.904
+        fun scaleOf(percent: Int): Float {
+            val result = OverlayTextStyler.build(
+                listOf(
+                    OverlayTextComposer.StyledLine("now", OverlayTextComposer.Role.CURRENT),
+                    OverlayTextComposer.StyledLine("next", OverlayTextComposer.Role.CONTEXT),
+                ),
+                fullHeight = true,
+                baseColor = white,
+                noBackdrop = false,
+                currentScalePercent = percent,
+            ) as Spanned
+            // 当前行是第 0 段，取覆盖起点 0 的那个 span
+            return result
+                .getSpans(0, 3, RelativeSizeSpan::class.java)
+                .single().sizeChange
+        }
+        assertEquals(1.13f * 1.2f, scaleOf(120), 0.0001f)
+        assertEquals(1.13f * 0.8f, scaleOf(80), 0.0001f)
+    }
+
+    @Test
+    fun `其他行字号百分比只作用在上下句与译文`() {
+        val result = OverlayTextStyler.build(
+            listOf(
+                OverlayTextComposer.StyledLine("now", OverlayTextComposer.Role.CURRENT),
+                OverlayTextComposer.StyledLine("prev", OverlayTextComposer.Role.CONTEXT),
+            ),
+            fullHeight = false,
+            baseColor = white,
+            noBackdrop = false,
+            contextScalePercent = 80,
+        ) as Spanned
+        val spans = result.getSpans(0, result.length, RelativeSizeSpan::class.java)
+        assertEquals("只该有一处缩放 span（上下句）", 1, spans.size)
+        assertEquals(0.8f, spans[0].sizeChange, 0.0001f)
+        assertEquals(
+            "缩放 span 必须落在上下句那一段，而不是当前行",
+            "prev",
+            result.subSequence(result.getSpanStart(spans[0]), result.getSpanEnd(spans[0])).toString(),
+        )
+    }
+
+    @Test
+    fun `其他行颜色只换色相，不透明度仍按压暗算`() {
+        val gray = 0xFF888888.toInt()
+        val result = OverlayTextStyler.build(
+            listOf(
+                OverlayTextComposer.StyledLine("now", OverlayTextComposer.Role.CURRENT),
+                OverlayTextComposer.StyledLine("prev", OverlayTextComposer.Role.CONTEXT),
+            ),
+            fullHeight = false,
+            baseColor = white,
+            noBackdrop = false,
+            contextColor = gray,
+        ) as Spanned
+        val color = result
+            .getSpans(0, result.length, ForegroundColorSpan::class.java)
+            .single().foregroundColor
+        // RGB 换成用户选的灰，alpha 仍是默认压暗 42% 对应的 150
+        assertEquals(gray and 0x00FFFFFF, color and 0x00FFFFFF)
+        assertEquals(150, color ushr 24)
+    }
 }
