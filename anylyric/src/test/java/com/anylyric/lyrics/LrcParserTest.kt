@@ -102,4 +102,57 @@ class LrcParserTest {
     fun buildReturnsEmptyForEmptyInput() {
         assertEquals("", LrcParser.build(emptyList()))
     }
+
+    // ------------------------------------------------ 无时间轴文本（0.2.24，Cardash 口径）
+
+    @Test
+    fun spreadGivesEveryLineTwoSeconds() {
+        val lines = LrcParser.spread("第一句\n第二句\n第三句")
+        assertEquals(3, lines.size)
+        assertEquals(0L, lines[0].timeMs)
+        assertEquals(2_000L, lines[1].timeMs)
+        assertEquals(4_000L, lines[2].timeMs)
+        assertEquals("第三句", lines[2].text)
+    }
+
+    @Test
+    fun spreadSkipsMetaAndBlankLines() {
+        val lines = LrcParser.spread("[ti:某歌]\n[ar:某人]\n\n第一句\n   \n第二句")
+        assertEquals(2, lines.size)
+        assertEquals("第一句", lines[0].text)
+        assertEquals(2_000L, lines[1].timeMs)
+    }
+
+    @Test
+    fun spreadRejectsSingleLine() {
+        // 单行多半是「纯音乐，请欣赏」这类提示语，不是歌词。
+        assertTrue(LrcParser.spread("纯音乐，请欣赏").isEmpty())
+        assertTrue(LrcParser.spread("").isEmpty())
+        assertTrue(LrcParser.spread(null).isEmpty())
+    }
+
+    // ------------------------------------------------ 首行「歌名 - 歌手」（0.2.24）
+
+    @Test
+    fun stripTitleLineDropsKugouHeader() {
+        // 酷狗的 LRC 首行实测就是这一行，画出来等于第一句是歌名。
+        val lines = LrcParser.parse(
+            "[00:00.00]周杰伦 - 稻香\n[00:12.00]对这个世界如果你有太多的抱怨"
+        )
+        val cleaned = LrcParser.stripTitleLine(lines, "稻香", "周杰伦")
+        assertEquals(1, cleaned.size)
+        assertEquals("对这个世界如果你有太多的抱怨", cleaned[0].text)
+    }
+
+    @Test
+    fun stripTitleLineKeepsRealFirstLyric() {
+        val lines = LrcParser.parse("[00:00.50]对这个世界如果你有太多的抱怨\n[00:05.00]第二句")
+        assertEquals(lines, LrcParser.stripTitleLine(lines, "稻香", "周杰伦"))
+    }
+
+    @Test
+    fun stripTitleLineIgnoresLateLines() {
+        val lines = LrcParser.parse("[00:30.00]周杰伦 - 稻香\n[00:35.00]第二句")
+        assertEquals(lines, LrcParser.stripTitleLine(lines, "稻香", "周杰伦"))
+    }
 }

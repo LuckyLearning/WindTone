@@ -4,27 +4,44 @@ import java.security.MessageDigest
 import kotlin.math.abs
 
 /**
- * 歌名 / 歌手 / 时长三者的匹配规则（全部纯函数，可直接单测）。
+ * 歌名 / 歌手 / 时长的匹配规则（全部纯函数，可直接单测）。
  *
- * 为什么要有这一层：在线歌词库的搜索是**关键词**搜索，返回的是「含这些字的一堆歌」，
- * 而不是「这首歌」。取第一条的实现看起来能用，实际命中率很低 ——
- * 「不悟兰因 - AkI阿杰」这种把歌手塞进标题的写法、歌名里的 `(Live)` `【伴奏】`、
- * 同名不同人、副歌剪辑版，都会把第一条顶成别人的歌。而**匹配错**比**没匹配**更糟：
- * 屏上会滚一段不属于当前这首歌的词，用户只会认为整个功能不可靠。
+ * 0.2.24 起**按 Cardash 的判据重写**（`g/R3.b`）：它的取词之所以稳，不是接口选得好，
+ * 而是「先筛后排」的关系反过来 ——
  *
- * 所以规则是：先洗（[coreTitle] / [normalize]），再打分（[score]），够 [SCORE_FLOOR]
- * 才采用，否则宁可判「没找到」，交给下一次重试。
+ *  · **先筛**：标题归一后必须相等或互相包含，否则这条候选根本不进入评比。
+ *    这一条是硬门槛，也是防止滚别人歌词的唯一阀门。
+ *  · **再排**：标题 +5 / 包含 +2、歌手命中 +3、时长 <4s +3 / <10s +1 / 其它 -3，
+ *    取最高分。**没有总分门槛** —— 只要标题对得上就算有词。
+ *
+ * 旧实现是「七十分制 + 55 分及格」，时长差 60 秒直接 -45。真机结果是「明明有词却
+ * 一直显示暂无歌词」：车机播放器报的标题常带 `- 歌手`、时长偶尔缺省，几条一叠加
+ * 就掉到线下。Cardash 的做法是只要标题对就用，宁可时间轴略有偏差也不给空屏。
+ *
+ * 归一化（去括号说明、砍 `feat.`、按 ` - ` 拆两半、只留字母数字）保留 AnyLyric 原有的
+ * 清洗能力 —— 这一层比 Cardash 的「只去空白与标点」更强，不与它的判据冲突。
  */
 object LyricMatch {
 
-    /** 打分下限。低于它一律视为「不是这首歌」。 */
-    const val SCORE_FLOOR = 55
+    /**
+     * 标题命中即采用。
+     *
+     * 判定看的是「非 0」而不是某个分数线：0 只有一个含义 —— 标题对不上。
+     * 分数可能是负数（标题包含 +2 配时长 -3），那仍然是一首**标题对得上**的歌，
+     * 只是版本时长不同，照样给词（Cardash 同款取舍）。
+     */
+    fun acceptable(score: Int): Boolean = score != 0
 
-    private const val TITLE_EXACT = 62
-    private const val TITLE_CONTAINS = 44
-    private const val ARTIST_EXACT = 24
-    private const val ARTIST_CONTAINS = 14
-    private const val ARTIST_UNKNOWN = 10
+    private const val TITLE_EXACT = 5
+    private const val TITLE_CONTAINS = 2
+    private const val ARTIST_HIT = 3
+
+    /** 时长三档（毫秒差按秒折算后比较）。 */
+    private const val DUR_CLOSE_SEC = 4L
+    private const val DUR_NEAR_SEC = 10L
+    private const val DUR_CLOSE = 3
+    private const val DUR_NEAR = 1
+    private const val DUR_FAR = -3
 
     /**
      * 去掉标题里的「噪声片段」，但保留正文。
@@ -157,10 +174,13 @@ object LyricMatch {
     }
 
     /**
-     * 候选打分：标题为主（0–62），歌手加分（0–24），时长纠偏（-16–14）。
+     * 候选打分（Cardash 口径）。
      *
-     * 时长是**最可靠的一条独立证据**：同名同歌手还有「剪辑版 / 演唱会版 / 加速版」，
-     * 差出半分钟以上的基本不是同一段音频。
+     * 0 分 = **标题对不上，直接淘汰**。非 0 的最小值是 2（标题被包含），
+     * 最大值 11（标题一致 + 歌手一致 + 时长差 4 秒内）。
+     *
+     * 时长在这里只影响排序，不做否决：同名同歌手的现场版与录音室版时长能差半分钟，
+     * Cardash 的选择是「照样给词」，因为「时间轴略偏」比「没有词」体验好。
      */
     fun score(
         candidateTitle: String?,
@@ -180,51 +200,50 @@ object LyricMatch {
                 if (s > titleBest) titleBest = s
             }
         }
-        val total = titleBest + artistScore(artist, candidateArtist) +
+        if (titleBest == 0) return 0
+        // 括号里是版本标记（`(治愈版)` `(Live)` `(伴奏)`）时降一分：洗掉括号是为了
+        // **搜得到**，但排序时原版必须排在翻唱 / 剪辑前面。真机原案：网易第一条是
+        // 「稻香(治愈版)」，洗成「稻香」后与原版同分并先出现，而它是一份空歌词，
+        // 于是明明有词却一直显示「暂无歌词」。
+        if (titleBest == TITLE_EXACT &&
+            (title?.let { it != coreTitle(it) } == true ||
+                candidateTitle?.let { it != coreTitle(it) } == true)
+        ) {
+            titleBest = TITLE_EXACT - 1
+        }
+        return titleBest + artistScore(artist, candidateArtist) +
             durationScore(durationSec, candidateDurationSec)
-        return total.coerceIn(0, 100)
     }
 
-    fun acceptable(score: Int): Boolean = score >= SCORE_FLOOR
-
+    /**
+     * 标题对不上就是 0 —— 这是**唯一的硬门槛**。
+     *
+     * 单字标题不参与包含判定：`稻` 会命中一大片歌名，靠歌手与时长也压不住。
+     */
     private fun pairScore(a: String, b: String): Int {
         if (a == b) return TITLE_EXACT
         val shorter = if (a.length <= b.length) a else b
         val longer = if (a.length <= b.length) b else a
-        if (shorter.length >= 2 && longer.contains(shorter)) {
-            // 「晴天」命中「晴天娃娃」不该和「晴天」一样高：长度差越大越可疑。
-            val ratio = shorter.length.toFloat() / longer.length
-            return (TITLE_CONTAINS * ratio).toInt().coerceAtLeast(18)
-        }
-        var hit = 0
-        for (ch in shorter) {
-            if (longer.contains(ch)) hit++
-        }
-        return hit * 30 / shorter.length.coerceAtLeast(1)
+        if (shorter.length >= 2 && longer.contains(shorter)) return TITLE_CONTAINS
+        return 0
     }
 
     private fun artistScore(query: String?, candidate: String?): Int {
         val a = normalize(coreTitle(query))
-        if (a.isEmpty()) return ARTIST_UNKNOWN
+        if (a.isEmpty()) return 0
         val b = normalize(coreTitle(candidate))
         if (b.isEmpty()) return 0
-        if (a == b) return ARTIST_EXACT
-        if (a.length >= 2 && (a.contains(b) || b.contains(a))) return ARTIST_CONTAINS
+        if (a == b || a.contains(b) || b.contains(a)) return ARTIST_HIT
         return 0
     }
 
     private fun durationScore(targetSec: Long, candidateSec: Long): Int {
-        if (targetSec <= 0 || candidateSec <= 0) return 0
+        if (targetSec <= 0L || candidateSec <= 0L) return 0
         val diff = abs(targetSec - candidateSec)
         return when {
-            diff <= 3 -> 14
-            diff <= 8 -> 9
-            diff <= 15 -> 3
-            diff <= 30 -> 0
-            diff <= 60 -> -25
-            // 差出一分钟以上基本是另一个录音（现场版 / 加长版 / DJ 版）。
-            // 这种词的**时间轴对不上**，比没有词更糟，所以直接压到线下。
-            else -> -45
+            diff < DUR_CLOSE_SEC -> DUR_CLOSE
+            diff < DUR_NEAR_SEC -> DUR_NEAR
+            else -> DUR_FAR
         }
     }
 }

@@ -699,8 +699,13 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         LyricRenderer.Mode.CONTENT
     )
 
-    /** 样式变更后重算尺寸与位置。同一次调用里也负责「换了输出屏幕就重建窗口」。 */
-    fun applyStyle() {
+    /**
+     * 样式变更后重算尺寸与位置。同一次调用里也负责「换了输出屏幕就重建窗口」。
+     *
+     * @param dark 显式指定读哪一套（日/夜）。只在「系统深浅刚变」时传：
+     *             那一刻 `appContext.resources` 还没更新，由 [Prefs.styleIsDark] 判会取错套。
+     */
+    fun applyStyle(dark: Boolean? = null) {
         if (view != null && attachedDisplayId != prefs.displayId) {
             hide()
             onRequestRender?.invoke()
@@ -711,7 +716,7 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
             onRequestRender?.invoke()
             return
         }
-        current.applyStyle(prefs.style())
+        current.applyStyle(if (dark == null) prefs.style() else prefs.style(dark))
         applyLayoutLimits(current)
         syncHandle()
         current.post(placeTask)

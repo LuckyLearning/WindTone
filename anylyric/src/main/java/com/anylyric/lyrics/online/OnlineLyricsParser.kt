@@ -1,5 +1,6 @@
 package com.anylyric.lyrics.online
 
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Base64
 
@@ -129,5 +130,97 @@ object OnlineLyricsParser {
     fun neteaseLyric(json: String): String? {
         val root = runCatching { JSONObject(json) }.getOrNull() ?: return null
         return root.optJSONObject("lrc")?.optString("lyric")?.takeIf { it.isNotBlank() }
+    }
+
+    /** 汽水音乐歌词：`data.lyric.content` → `lyric.content` → `lrc_content`（Cardash 的兜底顺序）。 */
+    fun qishuiLyric(json: String): String? {
+        val root = runCatching { JSONObject(json) }.getOrNull() ?: return null
+        root.optJSONObject("data")?.optJSONObject("lyric")
+            ?.optString("content")?.takeIf { it.isNotBlank() }?.let { return it }
+        root.optJSONObject("lyric")
+            ?.optString("content")?.takeIf { it.isNotBlank() }?.let { return it }
+        return root.optString("lrc_content").takeIf { it.isNotBlank() }
+    }
+
+    // ------------------------------------------------------------ 通用候选收集
+
+    private const val MAX_SCAN_DEPTH = 8
+
+    /** 标题键，按优先级取第一个非空（Cardash `R3.k`）。 */
+    private val TITLE_KEYS = arrayOf("name", "track_name", "title", "FileName", "songname", "filename")
+
+    /** id 键，按优先级取第一个非空（Cardash `R3.c`）。 */
+    private val ID_KEYS = arrayOf("id", "track_id", "FileHash", "filehash", "hash")
+
+    /**
+     * 从任意响应里递归收集「像一首歌」的对象（Cardash `R3.c` 的做法）。
+     *
+     * 为什么不用逐个接口写死结构：三家源的字段名各不相同（`songname` / `name` /
+     * `track_name` / `FileName`），同一家换个接口又换一套。Cardash 只用一条规则 ——
+     * 「有标题、有 id」就算候选 —— 就同时吃下了搜索、歌词候选与汽水三种结构，
+     * 新增一家源不用再写解析器。**这是它取词稳的结构性原因之一。**
+     */
+    fun candidates(json: String): List<SongCandidate> {
+        val root = runCatching { JSONObject(json) }.getOrNull() ?: return emptyList()
+        val out = ArrayList<SongCandidate>(8)
+        collect(root, out, 0)
+        return out
+    }
+
+    private fun collect(node: Any?, out: MutableList<SongCandidate>, depth: Int) {
+        if (depth > MAX_SCAN_DEPTH) return
+        when (node) {
+            is JSONObject -> {
+                val title = firstString(node, TITLE_KEYS)
+                val id = firstString(node, ID_KEYS)
+                if (title.isNotEmpty() && id.isNotEmpty()) {
+                    out += SongCandidate(id, title, artistsOf(node), durationSecOf(node))
+                }
+                val keys = node.keys()
+                while (keys.hasNext()) collect(node.opt(keys.next()), out, depth + 1)
+            }
+            is JSONArray -> {
+                for (i in 0 until node.length()) collect(node.opt(i), out, depth + 1)
+            }
+        }
+    }
+
+    private fun firstString(node: JSONObject, keys: Array<String>): String {
+        for (key in keys) {
+            val value = node.opt(key)
+            if (value is String && value.isNotBlank()) return value.trim()
+            if (value is Number) return value.toString()
+        }
+        return ""
+    }
+
+    /** 歌手：`artist` / `singername` / `artists[].name` / `ar[].name`，多个用 `/` 连起来。 */
+    private fun artistsOf(node: JSONObject): String {
+        val parts = ArrayList<String>(4)
+        for (key in arrayOf("artist", "singername")) {
+            val value = node.optString(key).trim()
+            if (value.isNotEmpty()) parts += value
+        }
+        for (key in arrayOf("artists", "ar")) {
+            val arr = node.optJSONArray(key) ?: continue
+            for (i in 0 until arr.length()) {
+                val name = arr.optJSONObject(i)?.optString("name")?.trim().orEmpty()
+                if (name.isNotEmpty()) parts += name
+            }
+        }
+        return parts.joinToString("/")
+    }
+
+    /** 时长：`duration` / `dt` / `duration_ms`，小于 10000 的按秒算（Cardash 同款量级判断）。 */
+    private fun durationSecOf(node: JSONObject): Long {
+        val raw = node.optLong(
+            "duration",
+            node.optLong("dt", node.optLong("duration_ms", 0L))
+        )
+        return when {
+            raw <= 0L -> 0L
+            raw < 10_000L -> raw
+            else -> raw / 1_000L
+        }
     }
 }

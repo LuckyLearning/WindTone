@@ -213,8 +213,15 @@ class Prefs(context: Context) {
      * 夜间那套**从未写过**时以日间那套为种子 —— 用户第一次切到夜间看到的是自己调好的
      * 排版与字号，而不是一堆出厂值；一旦在夜间改过任意一项就固化，之后各管各的。
      */
-    fun style(): OverlayStyle {
-        val dark = styleIsDark()
+    fun style(): OverlayStyle = style(styleIsDark())
+
+    /**
+     * 读指定那套外观。
+     *
+     * @param dark 由调用方显式给出，用于「配置变化回调里判暗」—— 回调早于 Resources
+     *             更新，此刻 [styleIsDark] 读 `appContext.resources` 会拿到旧值。
+     */
+    fun style(dark: Boolean): OverlayStyle {
         val cached = if (dark) darkStyleCache else lightStyleCache
         if (cached != null) return cached
         val seed = if (dark) readStyle(dark = false, seed = null) else null

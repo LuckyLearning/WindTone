@@ -7,12 +7,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 歌名匹配规则。
+ * 歌名匹配规则（0.2.24 起按 Cardash 口径）。
  *
  * 这里的每一条都对应一次真机上「词是别人的」或「明明有词却取不到」：
  *  · 括号里的 `(Live)` `【伴奏】` 会把标题洗得搜不到；
  *  · `周杰伦 - 稻香` 与 `稻香` 只取整串时互不命中；
- *  · 同名不同人、剪辑版只靠标题分不开，必须有歌手与时长参与打分。
+ *  · 同名不同人、剪辑版只靠标题分不开，必须有歌手与时长参与打分；
+ *  · **标题对不上就一律淘汰**，这是唯一的硬门槛（0 分）。
  */
 class LyricMatchTest {
 
@@ -65,8 +66,17 @@ class LyricMatchTest {
 
     @Test
     fun `exact title artist and duration scores full`() {
+        // 标题 5 + 歌手 3 + 时长 3（差 1 秒）
         val score = LyricMatch.score("稻香", "周杰伦", 270, "稻香", "周杰伦", 269)
-        assertEquals(100, score)
+        assertEquals(11, score)
+    }
+
+    @Test
+    fun `title only still accepted without artist or duration`() {
+        // 车机上歌手字段常常是播放器名、时长也常常缺省：这两项都没有也必须能用。
+        val score = LyricMatch.score("稻香", "", 0, "稻香", "", 0)
+        assertEquals(5, score)
+        assertTrue(LyricMatch.acceptable(score))
     }
 
     @Test
@@ -81,6 +91,7 @@ class LyricMatchTest {
     @Test
     fun `different song is rejected`() {
         val score = LyricMatch.score("晴天", "周杰伦", 269, "稻香", "周杰伦", 270)
+        assertEquals(0, score)
         assertFalse(LyricMatch.acceptable(score))
     }
 
@@ -92,11 +103,12 @@ class LyricMatchTest {
     }
 
     @Test
-    fun `duration far off pulls the score below the floor`() {
+    fun `duration far off lowers score but still accepted`() {
+        // Cardash 的取舍：标题与歌手都对、只是版本时长不同 —— 给词，不给空屏。
         val close = LyricMatch.score("稻香", "周杰伦", 271, "稻香", "周杰伦", 270)
         val far = LyricMatch.score("稻香", "周杰伦", 420, "稻香", "周杰伦", 270)
         assertTrue(close > far)
-        assertFalse(LyricMatch.acceptable(far))
+        assertTrue(LyricMatch.acceptable(far))
     }
 
     @Test
@@ -104,5 +116,31 @@ class LyricMatchTest {
         val exact = LyricMatch.score("晴天", "周杰伦", 269, "晴天", "周杰伦", 269)
         val longer = LyricMatch.score("晴天娃娃", "周杰伦", 269, "晴天", "周杰伦", 269)
         assertTrue(exact > longer)
+    }
+
+    @Test
+    fun `bracketed version scores below the same bare title`() {
+        // 真机原案：网易第一条是「稻香(治愈版)」，洗掉括号后与原版同分并先出现，
+        // 而它的歌词是空的 —— 结果明明有词却一直「暂无歌词」。
+        val bare = LyricMatch.score("稻香", "周杰伦", 269, "稻香", "周杰伦", 269)
+        val versioned = LyricMatch.score("稻香(治愈版)", "周杰伦", 269, "稻香", "周杰伦", 269)
+        assertTrue(bare > versioned)
+        assertTrue(LyricMatch.acceptable(versioned))
+    }
+
+    @Test
+    fun `single character title does not match by containment`() {
+        // 「稻」会命中一大片歌名，靠歌手与时长压不住，只能整串相等才算。
+        val score = LyricMatch.score("稻田", "", 0, "稻", "", 0)
+        assertEquals(0, score)
+        assertFalse(LyricMatch.acceptable(score))
+    }
+
+    @Test
+    fun `missing candidate duration does not lose the whole score`() {
+        val withDuration = LyricMatch.score("稻香", "周杰伦", 270, "稻香", "周杰伦", 270)
+        val without = LyricMatch.score("稻香", "周杰伦", 0, "稻香", "周杰伦", 270)
+        assertEquals(3, withDuration - without)
+        assertTrue(LyricMatch.acceptable(without))
     }
 }

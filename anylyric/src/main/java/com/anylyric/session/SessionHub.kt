@@ -38,6 +38,7 @@ import com.anylyric.lyrics.TitleTimeline
 import com.anylyric.lyrics.online.OnlineLyricsFetcher
 import com.anylyric.lyrics.TitleVerdict
 import com.anylyric.lyrics.TrackContext
+import com.anylyric.theme.ThemeMode
 import com.anylyric.lyrics.sources.ExtrasSource
 import com.anylyric.lyrics.sources.L0MetadataSource
 import com.anylyric.lyrics.sources.L1TitleStreamSource
@@ -134,8 +135,17 @@ class SessionHub private constructor(context: Context) {
 
     private var currentLines: List<LyricLine> = emptyList()
 
-    /** 在线补词的结果；只在本地通道全 miss 时使用。 */
+    /** 在线补词的结果；本地弱命中（见 [localWeakHit]）时也会用它。 */
     private var onlineLines: List<LyricLine> = emptyList()
+
+    /**
+     * 本地这条通道给的词算不算「弱命中」：行数少（三行通知）或没有时间轴。
+     *
+     * 弱命中照样先显示，但要**同时**去在线补一份完整的，在线结果回来后以它为准 ——
+     * 这就是 Cardash 的「补充」：本地只有几行也能滚，但当前行永远跟着播放器推送走，
+     * 一旦播放器少推一次，句就错位了。
+     */
+    private var localWeakHit = false
 
     /**
      * 当前正在取词的那首歌（[LyricStore.key]）。换歌时归零，见 [resetOnlineState]。
@@ -337,6 +347,9 @@ class SessionHub private constructor(context: Context) {
     private var clockRawState = PlayState.NONE
     private var clockRawSpeed = Float.MIN_VALUE
 
+    /** 上一次报给时钟的时长。它变了也要重新锚定，否则外推会被夹在旧时长的末尾。 */
+    private var clockRawDuration = Long.MIN_VALUE
+
     /** TITLE 最近一次变化的时刻，用于区分「还在等第一句」与「这播放器没有歌词通道」。 */
     private var lastTitleChangeAt = SystemClock.elapsedRealtime()
 
@@ -379,14 +392,13 @@ class SessionHub private constructor(context: Context) {
 
         // 主题跟随系统（ThemeMode.AUTO）时，系统切夜间不会重建本进程的界面，
         // 但歌词外观是按主题分两套存的 —— 不在这里换一次，悬浮窗会一直挂着白天的配色。
-        // 只在「真的换了深浅」时才重排，避免每次字体缩放/旋转都白跑一遍 applyStyle。
+        //
+        // 判暗用回调给的 newConfig，**不读 appContext.resources**：配置变化的回调
+        // 早于 Resources 更新，读 Context 会拿到旧值，于是切了夜色却什么都没发生。
         lastStyleDark = prefs.styleIsDark()
         appContext.registerComponentCallbacks(object : ComponentCallbacks {
             override fun onConfigurationChanged(newConfig: Configuration) {
-                val dark = prefs.styleIsDark()
-                if (dark == lastStyleDark) return
-                lastStyleDark = dark
-                applyStyle()
+                syncTheme(darkOf(newConfig))
             }
 
             override fun onLowMemory() = Unit
@@ -1057,9 +1069,34 @@ class SessionHub private constructor(context: Context) {
         requestRefresh("pinned_changed")
     }
 
-    /** 样式变更（字号／预设／透明度／行数…）立即生效，不重建窗口。 */
-    fun applyStyle() {
-        overlay.applyStyle()
+    /**
+     * 系统深浅变了（或主题模式被改成「跟随系统」）时，把悬浮窗外观换到对应那套。
+     *
+     * 只比一个布尔：没有真的换套就什么都不做，避免字体缩放 / 旋转也白跑一遍 applyStyle。
+     */
+    private fun syncTheme(dark: Boolean) {
+        if (dark == lastStyleDark) return
+        lastStyleDark = dark
+        if (Probe.enabled) Probe.write("外观", "theme switched dark=$dark")
+        applyStyle(dark)
+    }
+
+    /** 从一份 Configuration 判暗：LIGHT/DARK 是用户显式选择，只有 AUTO 才看系统。 */
+    private fun darkOf(config: Configuration): Boolean = when (prefs.themeMode) {
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+        ThemeMode.AUTO -> (config.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+            Configuration.UI_MODE_NIGHT_YES
+    }
+
+    /**
+     * 样式变更（字号／预设／透明度／行数…）立即生效，不重建窗口。
+     *
+     * @param dark 只在「系统深浅刚变」时传：那一刻 Resources 还没更新，
+     *             让 OverlayHost 直接读指定那套，避免取到旧颜色。
+     */
+    fun applyStyle(dark: Boolean? = null) {
+        overlay.applyStyle(dark)
         // 「无歌词时隐藏」这类策略属于渲染阶段判定，样式改完必须重算一次。
         // 没有会话时不重算：否则用户一改样式，屏上会凭空多出一个「暂无歌词」。
         // 车机直连（externalOnly）没有 controller 但**有内容**，必须重算 ——
@@ -1139,11 +1176,14 @@ class SessionHub private constructor(context: Context) {
         val playState = mapState(state?.state ?: PlaybackState.STATE_NONE)
         val position = state?.position ?: -1L
         val speed = state?.playbackSpeed ?: 1f
-        if (position != clockRawPosition || playState != clockRawState || speed != clockRawSpeed) {
+        if (position != clockRawPosition || playState != clockRawState ||
+            speed != clockRawSpeed || externalDuration != clockRawDuration
+        ) {
             clockRawPosition = position
             clockRawState = playState
             clockRawSpeed = speed
-            clock.update(position, speed, playState)
+            clockRawDuration = externalDuration
+            clock.update(position, speed, playState, externalDuration)
         }
         lastPlayState = playState
 
@@ -1183,6 +1223,11 @@ class SessionHub private constructor(context: Context) {
     /** 全量重算：会话 → 状态 → 责任链 → 渲染。只在事件合并之后、主线程上跑。 */
     private fun refreshNow(reason: String) {
         Perf.onRefresh()
+
+        // 车机上系统换主题不一定下发 config change（DiLink 只改自己那套界面），
+        // 于是 ComponentCallbacks 收不到。刷新是高频路径，这里顺手比对一次布尔，
+        // 成本可以忽略，却能保证「系统切夜间 → 悬浮窗换夜间那套」最终一定生效。
+        syncTheme(prefs.styleIsDark())
 
         if (!listenerConnected) {
             if (Permissions.isListenerGranted(appContext) != true) {
@@ -1283,16 +1328,24 @@ class SessionHub private constructor(context: Context) {
         val rawPosition = playbackState?.position ?: -1L
         val rawSpeed = playbackState?.playbackSpeed ?: 1f
 
+        val rawDuration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
+        // 有的播放器把时长按「秒」上报（240 而不是 240000）。不到 10 秒的音乐不存在，
+        // 这个量级只可能是单位错了 —— 不修正时进度会被夹在开头、行推进永远停在第一句。
+        val duration = if (rawDuration in 1..9_999L) rawDuration * 1_000L else rawDuration
+
         // 只有「确实变了」才重新锚定时钟。读缓存后同一个进度会被反复看到，
         // 若每次都锚定，外推永远等于原值 —— 歌词会卡在当前句不动。
+        // duration 一并传入：外推结果要夹在时长内（Cardash `N3.b` 的同款夹取）。
         if (rawPosition != clockRawPosition ||
             playState != clockRawState ||
-            rawSpeed != clockRawSpeed
+            rawSpeed != clockRawSpeed ||
+            duration != clockRawDuration
         ) {
             clockRawPosition = rawPosition
             clockRawState = playState
             clockRawSpeed = rawSpeed
-            clock.update(rawPosition, rawSpeed, playState)
+            clockRawDuration = duration
+            clock.update(rawPosition, rawSpeed, playState, duration)
         }
         observePosition(rawPosition, playState)
 
@@ -1307,10 +1360,6 @@ class SessionHub private constructor(context: Context) {
             metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST),
             metadata?.getString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE)
         )
-        val rawDuration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
-        // 有的播放器把时长按「秒」上报（240 而不是 240000）。不到 10 秒的音乐不存在，
-        // 这个量级只可能是单位错了 —— 不修正时进度会被夹在开头、行推进永远停在第一句。
-        val duration = if (rawDuration in 1..9_999L) rawDuration * 1_000L else rawDuration
         val mediaId = metadata?.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
 
         // 换歌判定：同一会话内 mediaId / duration / album / track 变了才清掉粘住的标题。
@@ -1473,8 +1522,14 @@ class SessionHub private constructor(context: Context) {
             val outcome = chain.resolve(trackContext)
             val costMs = (SystemClock.elapsedRealtimeNanos() - startedAt) / 1_000_000
             val hit = outcome.hit
-            if (hit != null) {
-                onlineLines = emptyList()
+            // 本地「弱命中」：只有几行、或者没有时间轴（L2 的三行通知）。
+            // Cardash 的补充就建立在这个判断上 —— 有本地词也照样去在线要一份完整的，
+            // 因为三行通知只能跟着播放器的推送节奏滚，当前行本来就容易对不上。
+            localWeakHit = hit != null &&
+                (hit.lines.size < MIN_LOCAL_LINES || hit.lines.any { it.timeMs == null })
+
+            if (hit != null && (!localWeakHit || onlineLines.isEmpty())) {
+                if (!localWeakHit) onlineLines = emptyList()
                 hitSource = hit.sourceId
                 setCurrentLines(hit.lines, hit.currentLineIndex)
             } else if (onlineLines.isNotEmpty()) {
@@ -1502,7 +1557,8 @@ class SessionHub private constructor(context: Context) {
                 }
             }
             // 在线匹配用**展示用**歌名/歌手：它才是用户看到的真实曲目信息。
-            if (hit == null) maybeRequestOnline(displayTitle, displayArtist, duration)
+            // 弱命中同样要补：本地那几行不足以撑起整首。
+            if (hit == null || localWeakHit) maybeRequestOnline(displayTitle, displayArtist, duration)
 
             if (Probe.enabled) {
                 Probe.attempts = outcome.attempts
@@ -1777,6 +1833,8 @@ class SessionHub private constructor(context: Context) {
         val cleanArtist = artist?.trim().orEmpty()
         val key = LyricStore.key(cleanTitle, cleanArtist)
         if (key.isBlank()) return
+        // 同一首已经有词了就别再要：弱命中场景下 refresh 每次都走到这里。
+        if (onlineLines.isNotEmpty() && onlineKey == key) return
 
         if (key != onlineKey) {
             onlineKey = key
@@ -1806,7 +1864,9 @@ class SessionHub private constructor(context: Context) {
                 onlineInFlight = false
                 if (!prefs.onlineLyrics) return@request
                 if (!isCurrentSong(cleanTitle, cleanArtist)) return@request
-                if (hitSource != null) {
+                // 本地是「够了」的强命中就不要再覆盖：本地词（尤其播放器自己给的）
+                // 比在线抓的更准。弱命中（三行通知 / 无轴）则相反 —— 在线那份有整段时间轴。
+                if (hitSource != null && !localWeakHit) {
                     if (Probe.enabled) {
                         Probe.write("歌词", "online result ignored (local hit=$hitSource)")
                     }
@@ -2328,6 +2388,14 @@ class SessionHub private constructor(context: Context) {
 
         /** 撞上「同一首歌正在取词」时的复查间隔。 */
         private const val ONLINE_BUSY_RETRY_MS = 2_000L
+
+        /**
+         * 本地词少于这么几行就算「弱命中」，要去在线补一份。
+         *
+         * 通知通道最多给三行（`lrc_line_1..3`），四行以上基本是完整歌词；
+         * 定 4 是为了让「三行通知」必然进入补词流程。
+         */
+        private const val MIN_LOCAL_LINES = 4
 
         /** 车机直连通道（BYD 媒体中心 SDK）的来源标识；不需要通知使用权。 */
         private const val EXTERNAL_SOURCE = "BYD"

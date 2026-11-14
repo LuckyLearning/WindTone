@@ -12,34 +12,41 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.util.LinkedHashMap
-import java.util.concurrent.Callable
-import java.util.concurrent.ExecutorCompletionService
 import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 
 /**
- * 在线补词：本地通道全 miss 时，按「歌名 + 歌手」去酷狗、网易云找一份带时间轴的歌词。
+ * 在线补词：本地通道全 miss 时，按「歌名 + 歌手」去酷狗、网易云、汽水找一份歌词。
  *
- * 这里决定「歌词稳不稳」，四个决定都是一次真机教训：
+ * 0.2.24 起**按 Cardash（`g/R3`）的链路重排**。它取词稳，靠的是四条结构与顺序，
+ * 而不是某个接口：
  *
- *  1. **先查盘、再联网**（[LyricStore]）：取到过一次就永久可用。只有内存缓存时，
- *     每次冷启动都要重新联网，网络抖一下就是「暂无歌词」。
- *  2. **两家并行**（[net] 两个线程）：串行时最坏要等 12 秒，车机上就是「半天不出词」；
- *     并行取先回来的那份，另一份立刻取消，正常 1–2 秒出词。
- *  3. **按分数挑，不取第一条**（[LyricMatch]）：搜索是关键词匹配，第一条经常是翻唱、
- *     剪辑版或同名别的歌。宁可判「没找到」让上层重试，也不要滚别人的词。
- *  4. **失败只记 45 秒**：以前失败也缓存 30 分钟，一次网络抖动会把整首歌锁成「无词」。
+ *  1. **三家串行、优先级固定**（酷狗 → 网易云 → 汽水）。旧实现是酷狗与网易并行、
+ *     谁先回来用谁 —— 网络快的那家未必是匹配最准的那家，于是同一首歌会在
+ *     「词很准」和「整首差半句」之间反复横跳。顺序固定后行为可预期，
+ *     也从根上减少「当前行对不上」。
+ *  2. **先筛后排**：候选必须过 [LyricMatch] 的标题判定，再按时长挑最接近的。
+ *     没有总分门槛 —— Cardash 的取舍是「宁可时间轴略偏，也不给空屏」。
+ *  3. **响应结构不写死**：三家字段名各不相同，统一用
+ *     [OnlineLyricsParser.candidates] 的「有标题、有 id 就是候选」规则吃下来。
+ *  4. **纯文本也能用**：解析不出时间轴时按 2 秒一句铺开（[LrcParser.spread]），
+ *     而不是当「没取到」。
  *
- * 资源约束：单次请求单线程调度（[worker]），并发上限 2 个 HTTP；响应有界；
- * 总预算 [MAX_TOTAL_MS]；内存缓存 LRU 有界。
+ * 缓存与重试保持原样：先查盘（[LyricStore]）、成功后落盘、失败只挡 45 秒，
+ * 上层有 4 次退避重试 + 网络恢复清零。
  */
 object OnlineLyricsFetcher {
 
-    private const val CONNECT_TIMEOUT_MS = 2_500
-    private const val READ_TIMEOUT_MS = 4_000
+    private const val CONNECT_TIMEOUT_MS = 3_000
+    private const val READ_TIMEOUT_MS = 5_000
 
-    /** 一次取词的总预算：两家并行，谁先回来用谁。 */
-    private const val MAX_TOTAL_MS = 9_000L
+    /** 一次取词的总预算。三家串行，任何一家超时就换下一家，不会无限等。 */
+    private const val MAX_TOTAL_MS = 15_000L
+
+    /** 每家最多试几个关键词：完整「歌名 歌手」+ 纯歌名，再多只是把等待时间拉长。 */
+    private const val MAX_QUERIES = 2
+
+    /** 每个关键词最多试几条候选：第一名可能没带词，试到第 3 条还不行为止。 */
+    private const val MAX_CANDIDATES = 3
 
     private const val MAX_RESPONSE_BYTES = 512 * 1024
     private const val MAX_CACHE = 24
@@ -52,14 +59,13 @@ object OnlineLyricsFetcher {
 
     private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 12) AnyLyric/1.0"
 
+    /** 汽水接口对 Referer 有校验，缺了会直接返回空。 */
+    private const val QISHUI_REFERER = "https://www.qishui.com/"
+
     private val main = Handler(Looper.getMainLooper())
 
     private val worker = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "anylyric-online").apply { isDaemon = true }
-    }
-
-    private val net = Executors.newFixedThreadPool(2) { runnable ->
-        Thread(runnable, "anylyric-fetch").apply { isDaemon = true }
     }
 
     private class Entry(val lines: List<LyricLine>?, val atMs: Long)
@@ -144,127 +150,202 @@ object OnlineLyricsFetcher {
         // 1. 磁盘：第二次听同一首歌永远走这里，不联网。
         val cached = LyricStore.load(key)
         if (cached != null) {
-            val parsed = LrcParser.parse(cached)
-            if (parsed.isNotEmpty()) return parsed
+            val restored = toLines(cached, title, artist)
+            if (restored.isNotEmpty()) return restored
         }
-        // 2. 网络：两家并行。
-        val lines = fetchAll(title, artist, durationMs / 1000L) ?: return null
-        if (lines.isNotEmpty()) LyricStore.save(key, LrcParser.build(lines))
-        return lines
-    }
-
-    private fun fetchAll(title: String, artist: String, targetSec: Long): List<LyricLine>? {
-        val completion = ExecutorCompletionService<List<LyricLine>?>(net)
-        val kugou = completion.submit(Callable { fetchKugou(title, artist, targetSec) })
-        val netease = completion.submit(Callable { fetchNetease(title, artist, targetSec) })
+        // 2. 网络：三家按优先级串行（Cardash 的顺序：酷狗 → 网易云 → 汽水）。
+        val targetSec = durationMs / 1000L
         val deadline = System.currentTimeMillis() + MAX_TOTAL_MS
-        var result: List<LyricLine>? = null
-        var received = 0
-        while (received < 2 && result == null) {
-            val remain = deadline - System.currentTimeMillis()
-            if (remain <= 0) break
-            val future = completion.poll(remain, TimeUnit.MILLISECONDS) ?: break
-            received++
-            val lines = runCatching { future.get() }.getOrNull()
-            if (!lines.isNullOrEmpty()) result = lines
-        }
-        // 已经拿到就不要再等另一家：它的 socket 会自己超时结束。
-        kugou.cancel(true)
-        netease.cancel(true)
-        return result
+        val text = fetchKugou(title, artist, targetSec, deadline)
+            ?: fetchNetease(title, artist, targetSec, deadline)
+            ?: fetchQishui(title, artist, targetSec, deadline)
+            ?: return null
+
+        val lines = toLines(text, title, artist)
+        if (lines.isNotEmpty()) LyricStore.save(key, LrcParser.build(lines))
+        return lines.ifEmpty { null }
     }
 
-    private fun fetchKugou(title: String, artist: String, targetSec: Long): List<LyricLine>? {
-        for (query in LyricMatch.queries(title, artist)) {
+    /**
+     * 原始响应 → 行表：有轴按轴，没轴按 2 秒一句铺开，最后剔掉开头的「歌名 - 歌手」行。
+     *
+     * 三者顺序不能换：先解析才知道有没有轴；先铺开才轮得上剔标题行（纯文本同样有这行）。
+     */
+    private fun toLines(text: String, title: String, artist: String): List<LyricLine> {
+        val parsed = LrcParser.parse(text)
+        val lines = parsed.ifEmpty { LrcParser.spread(text) }
+        return LrcParser.stripTitleLine(lines, title, artist)
+    }
+
+    private fun fetchKugou(
+        title: String,
+        artist: String,
+        targetSec: Long,
+        deadline: Long
+    ): String? {
+        for (query in LyricMatch.queries(title, artist).take(MAX_QUERIES)) {
             val search = httpGet(
                 "https://mobileservice.kugou.com/api/v3/search/song" +
                     "?format=json&keyword=${encode(query)}&page=1&pagesize=10",
-                MAX_TOTAL_MS
+                deadline
             ) ?: continue
-            val song = pickBest(
-                OnlineLyricsParser.kugouSongs(search), title, artist, targetSec
-            ) { Triple(it.title, it.artist, it.durationSec) } ?: continue
+            // 结构变了也不怕：认不出专用字段就退回通用候选收集。
+            val songs = ranked(
+                OnlineLyricsParser.kugouSongs(search)
+                    .ifEmpty { OnlineLyricsParser.candidates(search) },
+                title, artist, targetSec
+            ) { Triple(it.title, it.artist, it.durationSec) }
 
-            val seconds = if (song.durationSec > 0) song.durationSec else targetSec
-            val lyricSearch = httpGet(
-                "https://lyrics.kugou.com/search?ver=1&man=yes&client=pc" +
-                    "&keyword=${encode(song.title.ifBlank { title })}" +
-                    "&duration=$seconds&hash=${encode(song.id)}",
-                MAX_TOTAL_MS
-            ) ?: continue
-            val candidate = pickBest(
-                OnlineLyricsParser.kugouLyricCandidates(lyricSearch), title, artist, targetSec
-            ) { Triple(it.title, it.artist, it.durationSec) } ?: continue
-
-            val download = httpGet(
-                "https://lyrics.kugou.com/download?ver=1&client=pc" +
-                    "&id=${encode(candidate.id)}&accesskey=${encode(candidate.accessKey)}" +
-                    "&fmt=lrc&charset=utf8",
-                MAX_TOTAL_MS
-            ) ?: continue
-            val lrc = OnlineLyricsParser.kugouContent(download) ?: continue
-            val lines = LrcParser.parse(lrc)
-            if (lines.isNotEmpty()) return lines
+            for (song in songs.take(MAX_CANDIDATES)) {
+                val lrc = kugouLyricFor(song, title, artist, targetSec, deadline)
+                if (lrc != null) return lrc
+            }
         }
         return null
     }
 
-    private fun fetchNetease(title: String, artist: String, targetSec: Long): List<LyricLine>? {
-        for (query in LyricMatch.queries(title, artist)) {
+    /** 一首酷狗候选的取词：歌词搜索 → 按 hash/时长挑条目 → 下载 LRC。 */
+    private fun kugouLyricFor(
+        song: SongCandidate,
+        title: String,
+        artist: String,
+        targetSec: Long,
+        deadline: Long
+    ): String? {
+        val seconds = if (song.durationSec > 0) song.durationSec else targetSec
+        val lyricSearch = httpGet(
+            "https://lyrics.kugou.com/search?ver=1&man=yes&client=pc" +
+                "&keyword=${encode(song.title.ifBlank { title })}" +
+                "&duration=$seconds&hash=${encode(song.id)}",
+            deadline
+        ) ?: return null
+        val candidates = ranked(
+            OnlineLyricsParser.kugouLyricCandidates(lyricSearch),
+            title, artist, targetSec
+        ) { Triple(it.title, it.artist, it.durationSec) }
+
+        for (candidate in candidates.take(MAX_CANDIDATES)) {
+            val download = httpGet(
+                "https://lyrics.kugou.com/download?ver=1&client=pc" +
+                    "&id=${encode(candidate.id)}&accesskey=${encode(candidate.accessKey)}" +
+                    "&fmt=lrc&charset=utf8",
+                deadline
+            ) ?: continue
+            val lrc = OnlineLyricsParser.kugouContent(download) ?: continue
+            if (toLines(lrc, title, artist).isNotEmpty()) return lrc
+        }
+        return null
+    }
+
+    private fun fetchNetease(
+        title: String,
+        artist: String,
+        targetSec: Long,
+        deadline: Long
+    ): String? {
+        for (query in LyricMatch.queries(title, artist).take(MAX_QUERIES)) {
             val search = httpGet(
                 "https://music.163.com/api/search/get/web" +
                     "?s=${encode(query)}&type=1&limit=10&offset=0",
-                MAX_TOTAL_MS
+                deadline
             ) ?: continue
-            val song = pickBest(
-                OnlineLyricsParser.neteaseSongs(search), title, artist, targetSec
-            ) { Triple(it.title, it.artist, it.durationSec) } ?: continue
+            val songs = ranked(
+                OnlineLyricsParser.neteaseSongs(search)
+                    .ifEmpty { OnlineLyricsParser.candidates(search) },
+                title, artist, targetSec
+            ) { Triple(it.title, it.artist, it.durationSec) }
 
-            val lyric = httpGet(
-                "https://music.163.com/api/song/lyric?id=${encode(song.id)}&lv=1&kv=1&tv=-1",
-                MAX_TOTAL_MS
-            ) ?: continue
-            val text = OnlineLyricsParser.neteaseLyric(lyric) ?: continue
-            val lines = LrcParser.parse(text)
-            if (lines.isNotEmpty()) return lines
+            // 逐个试：网易大量「XX(治愈版)」候选没有歌词，排第一不代表有词。
+            for (song in songs.take(MAX_CANDIDATES)) {
+                val lyric = httpGet(
+                    "https://music.163.com/api/song/lyric" +
+                        "?id=${encode(song.id)}&lv=1&kv=1&tv=-1",
+                    deadline
+                ) ?: continue
+                val text = OnlineLyricsParser.neteaseLyric(lyric) ?: continue
+                if (toLines(text, title, artist).isNotEmpty()) return text
+            }
         }
         return null
     }
 
     /**
-     * 在候选里按 [LyricMatch.score] 取最高分，且必须过 [LyricMatch.SCORE_FLOOR]。
+     * 汽水音乐：Cardash 的第三个源。
      *
-     * 注意这里返回 null 的含义是「候选都不像这首歌」，而不是「接口没返回」——
-     * 两者在上层都表现为一次 miss，但原因会写进探测日志。
+     * 实测（2026-11-14）：`luna/pc/search/track` 对匿名请求返回 200 + 空体
+     * （抖音系接口后来加了签名校验），所以这条链路目前大概率取不到词。
+     * 保留它有两个理由：参数一旦恢复可用就直接生效；它排在最后，
+     * 只有前两家都失败才会走到，代价是两次空请求。
      */
-    private fun <T> pickBest(
+    private fun fetchQishui(
+        title: String,
+        artist: String,
+        targetSec: Long,
+        deadline: Long
+    ): String? {
+        for (query in LyricMatch.queries(title, artist).take(MAX_QUERIES)) {
+            val search = httpGet(
+                "https://api.qishui.com/luna/pc/search/track" +
+                    "?q=${encode(query)}&cursor=0&search_method=input" +
+                    "&aid=386088&device_platform=web&channel=pc_web",
+                deadline,
+                QISHUI_REFERER
+            ) ?: continue
+            val songs = ranked(
+                OnlineLyricsParser.candidates(search), title, artist, targetSec
+            ) { Triple(it.title, it.artist, it.durationSec) }
+
+            for (song in songs.take(MAX_CANDIDATES)) {
+                val detail = httpGet(
+                    "https://api.qishui.com/luna/pc/track_v2" +
+                        "?track_id=${encode(song.id)}&media_type=track" +
+                        "&aid=386088&device_platform=web&channel=pc_web",
+                    deadline,
+                    QISHUI_REFERER
+                ) ?: continue
+                val text = OnlineLyricsParser.qishuiLyric(detail) ?: continue
+                if (toLines(text, title, artist).isNotEmpty()) return text
+            }
+        }
+        return null
+    }
+
+    /**
+     * 按 [LyricMatch.score] 降序返回**合格**候选（标题对不上的已剔除）。
+     *
+     * 返回列表而不是单个最佳：Cardash 只取第一名，因为它的标题清洗很轻、
+     * 第一名通常是原版；我们的清洗更激进（去括号），同名候选会并列，
+     * 而排在前面的那条未必**带歌词**。逐个试最多 [MAX_CANDIDATES] 条，
+     * 既保留排序意图，又不会因为一条空词把整首判死。
+     */
+    private fun <T> ranked(
         candidates: List<T>,
         title: String,
         artist: String,
         targetSec: Long,
         fields: (T) -> Triple<String, String, Long>
-    ): T? {
-        var best: T? = null
-        var bestScore = 0
+    ): List<T> {
+        val scored = ArrayList<Pair<T, Int>>(candidates.size)
         for (candidate in candidates) {
             val (cTitle, cArtist, cDur) = fields(candidate)
             val score = LyricMatch.score(cTitle, cArtist, cDur, title, artist, targetSec)
-            if (score > bestScore) {
-                bestScore = score
-                best = candidate
-            }
+            if (!LyricMatch.acceptable(score)) continue
+            scored += candidate to score
         }
-        return if (best != null && LyricMatch.acceptable(bestScore)) best else null
+        scored.sortByDescending { it.second }
+        return scored.map { it.first }
     }
 
     private fun encode(text: String): String = URLEncoder.encode(text, "UTF-8")
 
     /**
-     * @param budgetMs 本次调用允许消耗的时间；按剩余预算收紧 connect/read 超时。
+     * @param deadline 本次取词的总截止时刻；按剩余预算收紧 connect/read 超时。
+     * @param referer  部分源（汽水）要求带 Referer，缺了直接空响应。
      */
-    private fun httpGet(url: String, budgetMs: Long): String? {
-        if (budgetMs <= 0L) return null
-        val timeout = budgetMs.coerceAtMost(READ_TIMEOUT_MS.toLong()).toInt().coerceAtLeast(500)
+    private fun httpGet(url: String, deadline: Long, referer: String? = null): String? {
+        val budget = deadline - System.currentTimeMillis()
+        if (budget <= 0L) return null
+        val timeout = budget.coerceAtMost(READ_TIMEOUT_MS.toLong()).toInt().coerceAtLeast(500)
         var conn: HttpURLConnection? = null
         return try {
             val c = URL(url).openConnection() as HttpURLConnection
@@ -275,6 +356,7 @@ object OnlineLyricsFetcher {
             c.instanceFollowRedirects = true
             c.setRequestProperty("User-Agent", USER_AGENT)
             c.setRequestProperty("Accept", "application/json")
+            if (referer != null) c.setRequestProperty("Referer", referer)
             if (c.responseCode !in 200..299) return null
             c.inputStream.use { input ->
                 val out = ByteArrayOutputStream(16 * 1024)

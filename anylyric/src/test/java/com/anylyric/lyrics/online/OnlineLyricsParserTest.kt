@@ -110,4 +110,47 @@ class OnlineLyricsParserTest {
         assertTrue(OnlineLyricsParser.kugouLyricCandidates("""{}""").isEmpty())
         assertTrue(OnlineLyricsParser.neteaseSongs("""{"result":{}}""").isEmpty())
     }
+
+    // ------------------------------------------------ 通用候选 / 汽水（0.2.24）
+
+    @Test
+    fun `generic candidates read nested search payloads`() {
+        // Cardash 的规则：有标题 + 有 id 就是候选，不关心嵌在哪一层、字段叫什么。
+        val json = """{"result":{"tracks":[
+            {"track_id":"T1","track_name":"稻香","artists":[{"name":"周杰伦"}],"duration_ms":269500},
+            {"id":2,"title":"晴天","artist":"周杰伦","duration":269}
+        ]}}"""
+        val songs = OnlineLyricsParser.candidates(json)
+        assertEquals(2, songs.size)
+        assertEquals("T1", songs[0].id)
+        assertEquals("稻香", songs[0].title)
+        assertEquals("周杰伦", songs[0].artist)
+        assertEquals(269L, songs[0].durationSec)
+        assertEquals(269L, songs[1].durationSec)
+    }
+
+    @Test
+    fun `generic candidates skip objects without id`() {
+        val json = """{"data":[{"name":"只有标题"},{"name":"齐全","hash":"H"}]}"""
+        val songs = OnlineLyricsParser.candidates(json)
+        assertEquals(1, songs.size)
+        assertEquals("H", songs[0].id)
+    }
+
+    @Test
+    fun `qishui lyric reads nested content then falls back`() {
+        assertEquals(
+            "[00:01.00]第一句",
+            OnlineLyricsParser.qishuiLyric("""{"data":{"lyric":{"content":"[00:01.00]第一句"}}}""")
+        )
+        assertEquals(
+            "[00:02.00]第二句",
+            OnlineLyricsParser.qishuiLyric("""{"lyric":{"content":"[00:02.00]第二句"}}""")
+        )
+        assertEquals(
+            "[00:03.00]第三句",
+            OnlineLyricsParser.qishuiLyric("""{"lrc_content":"[00:03.00]第三句"}""")
+        )
+        assertNull(OnlineLyricsParser.qishuiLyric("""{"data":{}}"""))
+    }
 }

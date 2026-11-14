@@ -90,6 +90,35 @@ object LrcParser {
     }
 
     /**
+     * 去掉在线 LRC 开头的「歌名 - 歌手」行。
+     *
+     * 酷狗的 LRC 第一行常常是 `[00:00.00]周杰伦 - 稻香`（2026-11 实测「稻香」就是这样），
+     * 画出来等于整首歌从第一句起就写着歌名，用户看到的第一反应就是「当前行对不上」。
+     *
+     * 判据刻意保守：只在**开头 2 秒内**、且该行归一后包含完整歌名（歌手也包含或未知）、
+     * 长度也不比「歌名+歌手+分隔符」长太多时才删一行。宁可漏删，不能误删真歌词。
+     */
+    fun stripTitleLine(
+        lines: List<LyricLine>,
+        title: String?,
+        artist: String?
+    ): List<LyricLine> {
+        if (lines.size < 2) return lines
+        val first = lines.first()
+        val time = first.timeMs ?: return lines
+        if (time > 2_000L) return lines
+        val titleN = LyricMatch.normalize(LyricMatch.coreTitle(title))
+        if (titleN.length < 2) return lines
+        val artistN = LyricMatch.normalize(LyricMatch.coreTitle(artist))
+        val textN = LyricMatch.normalize(first.text)
+        if (!textN.contains(titleN)) return lines
+        if (artistN.isNotEmpty() && !textN.contains(artistN)) return lines
+        // 长句里恰好出现歌名（「我唱了一首稻香」）不是标题行。
+        if (textN.length > titleN.length + artistN.length + 8) return lines
+        return lines.drop(1)
+    }
+
+    /**
      * 内容特征判定：是否像一段带时间轴的歌词。
      * 用于 L0 / L2 在没有明确键名时做兜底识别，必须配合「解析出 >= 2 行」再采纳。
      */
@@ -97,6 +126,31 @@ object LrcParser {
         if (raw.isNullOrBlank()) return false
         if (!raw.contains('[') || !raw.contains(']')) return false
         return TIME_TAG.containsMatchIn(raw)
+    }
+
+    /**
+     * 无时间轴的整段文本 → 按固定间隔铺成行（Cardash `T2` 的 2000ms 口径）。
+     *
+     * 在线源偶尔只给纯文本（VIP 歌、新歌最常见）。旧实现解析出 0 行就判「没取到」，
+     * 于是同一首歌永远停在「暂无歌词」；现在宁可给一份按 2 秒一句推进的词 ——
+     * 时间轴不准，但用户能跟着唱，而且落盘后每次进歌都是同一份，不会忽有忽无。
+     *
+     * 少于 2 行不算歌词：单行多半是「纯音乐，请欣赏」这类提示语。
+     */
+    fun spread(raw: String?, stepMs: Long = 2_000L): List<LyricLine> {
+        if (raw.isNullOrBlank()) return emptyList()
+        val step = stepMs.coerceAtLeast(200L)
+        val out = ArrayList<LyricLine>(32)
+        var index = 0
+        for (rawLine in raw.lineSequence()) {
+            val text = rawLine.trim()
+            if (text.isEmpty()) continue
+            // `[ti:…]` `[ar:…]` `[by:…]` 这类元信息不是歌词
+            if (text.startsWith("[") && text.endsWith("]")) continue
+            out += LyricLine(index * step, text)
+            index++
+        }
+        return if (out.size >= 2) out else emptyList()
     }
 
     private fun toMs(min: String, sec: String, frac: String?): Long {
