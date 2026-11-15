@@ -108,3 +108,19 @@ internal fun overlayHiddenForForeground(pkg: String?, hiddenApps: Set<String>): 
  */
 internal fun foregroundDetectionNeeded(hiddenApps: Set<String>, logEnabled: Boolean): Boolean =
     hiddenApps.isNotEmpty() || logEnabled
+
+/**
+ * 「前台应用记录」此刻是否真的该写盘（v1.2.59）。
+ *
+ * 记录是**调试工具**：开关 UI 只在 `debugUnlocked` 为真时渲染。但用户开过记录、
+ * 再把「显示调试功能」关掉后，`foregroundLogEnabled` 会残留为 true —— 若运行时只看它，
+ * 无障碍服务每换一次前台就写一次盘、UsageStats 还照 1.5s 轮询，等于「调试没开还在监听耗资源」。
+ *
+ * 所以运行时的判据必须是「**调试已解锁 且 记录开关打开**」。
+ * 抽成纯函数，便于单测四种组合；三处运行时（无障碍写日志 / 轮询写日志 / 轮询是否启动）共用。
+ *
+ * ⚠️ 只门控**记录**，不门控 [ForegroundAppState.report]：按应用隐藏是正式功能，
+ * 隐藏名单非空时 [foregroundDetectionNeeded] 仍会照常启动检测。
+ */
+internal fun foregroundRecordingActive(debugUnlocked: Boolean, logEnabled: Boolean): Boolean =
+    debugUnlocked && logEnabled

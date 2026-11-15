@@ -27,7 +27,10 @@ class ForegroundAppService : AccessibilityService() {
         if (shouldIgnoreForegroundEvent(pkg, imePackages())) return
         if (!ForegroundAppState.report(pkg)) return
 
-        if (Prefs(applicationContext).foregroundLogEnabled) {
+        // 记录是调试工具：调试没解锁时即使 foregroundLogEnabled 残留为 true 也不写盘。
+        // 注意 report(pkg) 已在上方执行 —— 按应用隐藏是正式功能，不受这里门控影响。
+        val prefs = Prefs(applicationContext)
+        if (foregroundRecordingActive(prefs.debugUnlocked, prefs.foregroundLogEnabled)) {
             ForegroundAppLog.append(
                 applicationContext,
                 pkg,

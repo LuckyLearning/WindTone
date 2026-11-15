@@ -199,6 +199,10 @@ class OverlaySettings(
     override fun setDebugUnlocked(enabled: Boolean) {
         settings.setDebugUnlocked(enabled)
         state.update { it.copy(debugUnlocked = enabled) }
+        // 关掉调试要「立刻」停掉前台应用记录的写盘/轮询，而不是等下一次外观变更：
+        // 记录运行判据是 foregroundRecordingActive(debugUnlocked, logEnabled)，
+        // 由服务在 appearance 变更时重新评估，所以这里 bump 一次让它马上生效。
+        LyricOverlayBridge.bumpAppearance()
     }
 
     override fun setLyricOverlayWidthPercent(percent: Int) {

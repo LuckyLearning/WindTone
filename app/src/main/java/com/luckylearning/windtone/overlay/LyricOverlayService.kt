@@ -1293,7 +1293,9 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         if (!ForegroundAppDetector.usageStatsGrantedCached(this)) return
         foregroundJob = scope.launch {
             ForegroundAppDetector.pollLoop(this@LyricOverlayService) { pkg ->
-                if (Prefs(this@LyricOverlayService).foregroundLogEnabled) {
+                // 只在「调试已解锁 且 记录开关打开」时写盘：关掉调试即停，别后台偷偷记录
+                val prefs = Prefs(this@LyricOverlayService)
+                if (foregroundRecordingActive(prefs.debugUnlocked, prefs.foregroundLogEnabled)) {
                     ForegroundAppLog.append(this@LyricOverlayService, pkg, ForegroundAppLog.labelOf(this@LyricOverlayService, pkg))
                 }
             }

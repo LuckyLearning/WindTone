@@ -111,6 +111,26 @@ class ForegroundAppStateTest {
         assertTrue(foregroundDetectionNeeded(emptySet(), logEnabled = true))
         assertFalse(foregroundDetectionNeeded(emptySet(), logEnabled = false))
     }
+
+    @Test
+    fun `调试未解锁时即使记录开关残留也不记录`() {
+        // 关掉调试后 foregroundLogEnabled 可能残留为 true —— 运行判据必须再与 debugUnlocked 相与
+        assertFalse(foregroundRecordingActive(debugUnlocked = false, logEnabled = true))
+        assertFalse(foregroundRecordingActive(debugUnlocked = false, logEnabled = false))
+        // 只有「调试已解锁 且 记录打开」才真正记录
+        assertTrue(foregroundRecordingActive(debugUnlocked = true, logEnabled = true))
+        assertFalse(foregroundRecordingActive(debugUnlocked = true, logEnabled = false))
+    }
+
+    @Test
+    fun `调试关闭且无隐藏名单时不为记录启动检测`() {
+        // 组合语义：记录日志经 foregroundRecordingActive 降级为 false 后，
+        // 没有隐藏名单 → 检测完全不启动（一个字节都不查）
+        val logEnabled = foregroundRecordingActive(debugUnlocked = false, logEnabled = true)
+        assertFalse(foregroundDetectionNeeded(emptySet(), logEnabled = logEnabled))
+        // 但隐藏名单非空时仍要检测（按应用隐藏是正式功能，不受调试门控影响）
+        assertTrue(foregroundDetectionNeeded(setOf("com.byd.avm"), logEnabled = logEnabled))
+    }
 }
 
 /**

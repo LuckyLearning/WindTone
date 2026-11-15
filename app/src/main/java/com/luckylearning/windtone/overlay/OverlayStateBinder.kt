@@ -155,7 +155,12 @@ class OverlayStateBinder(
                 // 两者都关了就撤掉轮询协程，并把残留包名清掉。
                 host.syncForegroundTracking(
                     hiddenApps = prefs.lyricOverlayHiddenApps,
-                    logEnabled = prefs.foregroundLogEnabled,
+                    // 记录是调试工具：调试没解锁时即使 foregroundLogEnabled 残留为 true，
+                    // 也不该为「记录」去启动 1.5s 轮询（无隐藏名单时等于白耗资源）。
+                    logEnabled = foregroundRecordingActive(
+                        debugUnlocked = prefs.debugUnlocked,
+                        logEnabled = prefs.foregroundLogEnabled,
+                    ),
                 )
                 if (host.desiredVisible != visible) {
                     com.luckylearning.windtone.diag.DiagLog.log(
