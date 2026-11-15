@@ -142,6 +142,59 @@ object OnlineLyricsParser {
         return root.optString("lrc_content").takeIf { it.isNotBlank() }
     }
 
+    // ------------------------------------------------------------ 开放 API
+
+    /** LRCLIB 的一条命中：候选信息 + 它自带的词。 */
+    data class LrclibTrack(
+        val candidate: SongCandidate,
+        /** `syncedLyrics` 优先；没有轴时退回 `plainLyrics`。都没有就是 null。 */
+        val lyric: String?
+    )
+
+    /**
+     * LRCLIB 搜索响应：**顶层是数组**，每条都直接带 `syncedLyrics` / `plainLyrics`。
+     *
+     * 这一点和另三家不同 —— 它不需要「搜索 → 再按 id 取词」两跳，一次请求就把
+     * 候选和词都拿回来了，所以它是所有源里最省请求的一家。
+     * 纯音乐（`instrumental: true`）没有词，直接丢掉，别让它占掉候选位置。
+     */
+    fun lrclibTracks(json: String): List<LrclibTrack> {
+        val arr = runCatching { JSONArray(json) }.getOrNull() ?: return emptyList()
+        val out = ArrayList<LrclibTrack>(arr.length())
+        for (i in 0 until arr.length()) {
+            val item = arr.optJSONObject(i) ?: continue
+            if (item.optBoolean("instrumental", false)) continue
+            val title = item.optString("trackName").ifBlank { item.optString("name") }
+            if (title.isBlank()) continue
+            val synced = item.optString("syncedLyrics").takeIf { it.isNotBlank() }
+            val plain = item.optString("plainLyrics").takeIf { it.isNotBlank() }
+            out += LrclibTrack(
+                candidate = SongCandidate(
+                    id = item.opt("id")?.toString().orEmpty(),
+                    title = title,
+                    artist = item.optString("artistName"),
+                    durationSec = item.optLong("duration", 0L)
+                ),
+                lyric = synced ?: plain
+            )
+        }
+        return out
+    }
+
+    /**
+     * lyrics.ovh：`{"lyrics": "..."}`，**只有纯文本**，没有时间轴。
+     *
+     * 响应里偶尔会把整段藏进 `error`（查不到时 404 + `{"error":"No lyrics found"}`），
+     * 所以取不到就返回 null，交给上层当 miss。
+     */
+    fun lyricsOvh(json: String): String? {
+        val root = runCatching { JSONObject(json) }.getOrNull() ?: return null
+        return root.optString("lyrics")
+            .replace("\r\n", "\n")
+            .trim()
+            .takeIf { it.isNotBlank() }
+    }
+
     // ------------------------------------------------------------ 通用候选收集
 
     private const val MAX_SCAN_DEPTH = 8

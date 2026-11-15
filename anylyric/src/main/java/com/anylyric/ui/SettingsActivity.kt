@@ -60,6 +60,8 @@ import com.anylyric.data.Permissions
 import com.anylyric.data.Prefs
 import com.anylyric.diag.Probe
 import com.anylyric.lyrics.LyricStore
+import com.anylyric.lyrics.online.OnlineLyricsFetcher
+import com.anylyric.lyrics.online.OnlineSource
 import com.anylyric.overlay.Align
 import com.anylyric.overlay.LineMode
 import com.anylyric.overlay.OverlayDefaults
@@ -69,6 +71,7 @@ import com.anylyric.overlay.SizeBounds
 import com.anylyric.overlay.SizeSlider
 import com.anylyric.overlay.TitlePos
 import com.anylyric.service.ServiceWatchdog
+import com.anylyric.session.LyricVariantInfo
 import com.anylyric.session.SessionHub
 import com.anylyric.theme.ThemeMode
 import com.anylyric.theme.ThemeSwitch
@@ -676,10 +679,11 @@ class SettingsActivity : BaseActivity() {
         statusBanner = text("", 15f, bold = true)
         statusLine = text("", 12f, secondary = true).apply { setPadding(0, dp(4), 0, 0) }
 
-        // 歌词版本（0.2.26）：在线补词按「歌名 + 歌手」搜，第一条可能是翻唱/现场版，
-        // 时间轴与正在放的完全不同。给一个就地切换的入口，不必去删缓存重来。
+        // 歌词版本（0.2.26，0.2.27 改成下拉）：在线补词按「歌名 + 歌手」搜，
+        // 第一条可能是翻唱/现场版，时间轴与正在放的完全不同。点开列出现有每一版
+        // （带来源与首句预览），选中即落盘 —— 下次这首歌首选就是它。
         variantLine = text("", 12f, secondary = true)
-        variantButton = textButton(getString(R.string.lyric_variant_switch)) { onSwitchVariant() }
+        variantButton = textButton(getString(R.string.lyric_variant_pick)) { showVariantDialog() }
         variantRow = row(variantLine, variantButton)
 
         notificationState = text("", 13f, bold = true)
@@ -1319,6 +1323,68 @@ class SettingsActivity : BaseActivity() {
                 hub.onOnlineLyricsChanged()
             }
         )
+
+        // 歌词来源（0.2.27）：手动指定后只跑那一家；自动时按下面的顺序依次尝试。
+        // 胶囊里「自动」永远排第一 —— 它是默认值，也是唯一需要看顺序的那个模式。
+        //
+        // 整块跟着「在线补词」开关显隐：关着时根本不联网找，调来源等于对着空气调，
+        // 与「按应用隐藏」那张卡同一套约定。
+        val sourceChoices = ArrayList<OnlineSource?>(OnlineSource.DEFAULT_ORDER.size + 1)
+        sourceChoices.add(null)
+        sourceChoices.addAll(OnlineSource.DEFAULT_ORDER)
+        val sourceBlock = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            addView(
+                labeled(
+                    getString(R.string.behavior_source),
+                    chipRow(
+                        options = sourceChoices.map { source ->
+                            if (source == null) getString(R.string.source_auto)
+                            else sourceName(source)
+                        },
+                        current = { sourceChoices.indexOf(prefs.onlineSource) },
+                        onPick = { index ->
+                            prefs.onlineSource = sourceChoices[index]
+                            hub.onOnlineSourceChanged()
+                        }
+                    )
+                )
+            )
+            addView(hint(getString(R.string.behavior_source_hint)))
+        }
+
+        // 自动顺序：手动指定了源时顺序不影响任何东西，同样跟着显隐，
+        // 免得人对着一个不起作用的列表调半天。
+        val orderLine = text("", 12f, secondary = true).apply { setPadding(0, 0, 0, dp(2)) }
+        val orderBlock = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(2), 0, dp(2))
+            addView(
+                row(
+                    text(getString(R.string.behavior_order), 14f),
+                    textButton(getString(R.string.behavior_order_button)) { showOrderDialog() }
+                )
+            )
+            addView(orderLine)
+        }
+        sourceBlock.addView(orderBlock)
+        rows += sourceBlock
+        // 只在顺序真的变了时拼字符串：refresh 会被轮询反复调到，
+        // 每秒拼一次「酷狗 → 网易云 → …」是白喂 GC。
+        var shownOrder = ""
+        uiRefreshers += {
+            sourceBlock.visibility = if (prefs.onlineLyrics) View.VISIBLE else View.GONE
+            val encoded = OnlineSource.encodeOrder(prefs.onlineSourceOrder)
+            if (encoded != shownOrder) {
+                shownOrder = encoded
+                orderLine.text = prefs.onlineSourceOrder.joinToString(" → ") { sourceName(it) }
+            }
+            orderBlock.visibility = if (prefs.onlineSource == null) View.VISIBLE else View.GONE
+        }
 
         // 歌词缓存（0.2.25）：上限可调；关掉在线补词不影响已缓存的词。
         rows += divider()
@@ -2864,7 +2930,13 @@ class SettingsActivity : BaseActivity() {
         val variant = hub.lyricVariantLabel()
         variantRow.visibility = if (variant != null) View.VISIBLE else View.GONE
         if (variant != null) {
-            variantLine.text = getString(R.string.lyric_variant_label, variant)
+            // 带着来源一起显示：用户判断「这版对不对」靠的就是「谁给的」+ 首句长什么样。
+            val from = hub.lyricVariantSource()?.let { sourceName(it) }
+            variantLine.text = if (from != null) {
+                getString(R.string.lyric_variant_label_with_source, variant, from)
+            } else {
+                getString(R.string.lyric_variant_label, variant)
+            }
         }
 
         applyListenerState(listener, degradedWorking, externalWorking)
@@ -2902,21 +2974,177 @@ class SettingsActivity : BaseActivity() {
         }
     }
 
-    // ---------------------------------------------------------------- 歌词版本
+    // ---------------------------------------------------------------- 歌词版本与来源
 
     /**
-     * 「换一版歌词」（0.2.26）。
+     * 「选择歌词版本」下拉（0.2.27）。
      *
-     * 本地已经有下一版时立刻切（毫秒级）；没有就联网再找一版，回来自动切过去。
-     * 两条路径都给一句提示 —— 按钮点完没有任何反馈，人只会反复点。
+     * 为什么从「换一版」改成列表：用户真正需要的是**直接点某一版**，而不是在不知道
+     * 下一版长什么样的情况下盲切。每一行给三样东西 —— 序号、来源、首句预览，
+     * 底部再给「获取更多版本」（首次只取 3 版，更多要用户明确要）。
      */
-    private fun onSwitchVariant() {
-        if (hub.nextLyricVariant()) {
-            toast(getString(R.string.lyric_variant_switched, hub.lyricVariantLabel() ?: "-"))
-        } else {
-            toast(getString(R.string.lyric_variant_fetching))
+    private fun showVariantDialog() {
+        val variants = hub.lyricVariants()
+        if (variants.isEmpty()) {
+            toast(getString(R.string.variant_dialog_empty))
+            return
         }
-        refresh()
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(4), dp(6), dp(4), dp(2))
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.variant_dialog_title)
+            .setView(ScrollView(this).apply { addView(box) })
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+
+        variants.forEach { info ->
+            box.addView(
+                variantItem(info) {
+                    if (hub.selectLyricVariant(info.index)) {
+                        toast(
+                            getString(
+                                R.string.lyric_variant_switched,
+                                hub.lyricVariantLabel() ?: "-"
+                            )
+                        )
+                    }
+                    dialog.dismiss()
+                    refresh()
+                }
+            )
+        }
+        if (variants.size < OnlineLyricsFetcher.MAX_VARIANTS) {
+            box.addView(
+                textButton(getString(R.string.variant_dialog_more)) {
+                    dialog.dismiss()
+                    if (hub.requestMoreVariants()) {
+                        toast(getString(R.string.variant_more_requested))
+                    } else {
+                        toast(getString(R.string.variant_no_more))
+                    }
+                    refresh()
+                }
+            )
+        }
+        dialog.show()
+    }
+
+    /** 版本列表里的一行：`第 2 版 · 酷狗 · 46 行` + 首句预览（当前那版加底色）。 */
+    private fun variantItem(info: LyricVariantInfo, onPick: () -> Unit): View =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(11), dp(16), dp(11))
+            isClickable = true
+            isFocusable = true
+            if (info.current) background = pill(chipIdle, dp(8).toFloat())
+            addView(
+                text(
+                    getString(
+                        R.string.variant_dialog_item,
+                        info.index + 1,
+                        variantSourceLabel(info.source, info.fromCache),
+                        info.lineCount.toString()
+                    ),
+                    14f,
+                    bold = info.current
+                )
+            )
+            if (info.preview.isNotBlank()) {
+                addView(
+                    text(info.preview.take(28), 11.5f, secondary = true).apply {
+                        setPadding(0, dp(3), 0, 0)
+                    }
+                )
+            }
+            setOnClickListener { onPick() }
+        }
+
+    /**
+     * 「自动顺序」调整（0.2.27）。
+     *
+     * 用上下箭头而不是拖拽：车机上拖拽的命中率很差，而这里最多五个条目，
+     * 点两下箭头已经够快。顺序只在「自动」模式下生效（手动指定时只有一个源）。
+     */
+    private fun showOrderDialog() {
+        var order = prefs.onlineSourceOrder
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(4), dp(6), dp(4), dp(2))
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.order_dialog_title)
+            .setView(ScrollView(this).apply { addView(box) })
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                prefs.onlineSourceOrder = order
+                hub.onOnlineSourceChanged()
+                refresh()
+            }
+            .setNeutralButton(R.string.order_dialog_reset) { _, _ ->
+                prefs.onlineSourceOrder = OnlineSource.DEFAULT_ORDER
+                hub.onOnlineSourceChanged()
+                refresh()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+
+        fun render() {
+            box.removeAllViews()
+            order.forEachIndexed { index, source ->
+                box.addView(
+                    orderItem(index, source, order) { moved ->
+                        order = moved
+                        render()
+                    }
+                )
+            }
+            box.addView(
+                hint(getString(R.string.order_dialog_hint)).apply {
+                    setPadding(dp(16), dp(10), dp(16), 0)
+                }
+            )
+        }
+        render()
+        dialog.show()
+    }
+
+    /** 顺序列表里的一行：`2. 网易云  ↑ ↓`。首尾各少一个方向的箭头。 */
+    private fun orderItem(
+        position: Int,
+        source: OnlineSource,
+        order: List<OnlineSource>,
+        onMove: (List<OnlineSource>) -> Unit
+    ): View = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(dp(16), dp(4), dp(8), dp(4))
+        addView(
+            text("${position + 1}. ${sourceName(source)}", 14f),
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        )
+        if (position > 0) addView(stepButton("↑") { onMove(OnlineSource.move(order, source, -1)) })
+        if (position < order.lastIndex) {
+            addView(stepButton("↓") { onMove(OnlineSource.move(order, source, 1)) })
+        }
+    }
+
+    /** 在线源在界面上的名字。出现的两处（来源胶囊、版本列表）共用这一份映射。 */
+    private fun sourceName(source: OnlineSource): String = getString(
+        when (source) {
+            OnlineSource.KUGOU -> R.string.source_kugou
+            OnlineSource.NETEASE -> R.string.source_netease
+            OnlineSource.LRCLIB -> R.string.source_lrclib
+            OnlineSource.LYRICS_OVH -> R.string.source_lyricsovh
+            OnlineSource.QISHUI -> R.string.source_qishui
+        }
+    )
+
+    /** 版本列表里的来源列：明确知道就写源名，只有本机缓存时如实说是缓存。 */
+    private fun variantSourceLabel(source: OnlineSource?, fromCache: Boolean): String = when {
+        source != null -> sourceName(source)
+        fromCache -> getString(R.string.variant_source_cache)
+        else -> getString(R.string.variant_source_unknown)
     }
 
     // ---------------------------------------------------------------- 样式操作

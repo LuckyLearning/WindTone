@@ -153,4 +153,51 @@ class OnlineLyricsParserTest {
         )
         assertNull(OnlineLyricsParser.qishuiLyric("""{"data":{}}"""))
     }
+
+    // ------------------------------------------------------- 开放 API（0.2.27）
+
+    @Test
+    fun `lrclib search returns tracks with their own lyrics`() {
+        val json = """
+            [
+              {"id":11,"trackName":"稻香","artistName":"周杰伦","duration":223,
+               "instrumental":false,"plainLyrics":"第一句","syncedLyrics":"[00:12.00]第一句"},
+              {"id":12,"trackName":"稻香 (Live)","artistName":"周杰伦","duration":240,
+               "instrumental":false,"plainLyrics":"现场第一句","syncedLyrics":null}
+            ]
+        """.trimIndent()
+        val tracks = OnlineLyricsParser.lrclibTracks(json)
+        assertEquals(2, tracks.size)
+        assertEquals("稻香", tracks[0].candidate.title)
+        assertEquals("周杰伦", tracks[0].candidate.artist)
+        assertEquals(223L, tracks[0].candidate.durationSec)
+        // 有轴优先，没轴退回纯文本 —— 两家字段都要吃下来。
+        assertEquals("[00:12.00]第一句", tracks[0].lyric)
+        assertEquals("现场第一句", tracks[1].lyric)
+    }
+
+    @Test
+    fun `lrclib skips instrumental and untitled entries`() {
+        val json = """
+            [
+              {"id":1,"trackName":"纯音乐","artistName":"X","instrumental":true,
+               "plainLyrics":null,"syncedLyrics":null},
+              {"id":2,"artistName":"X","plainLyrics":"没有歌名"}
+            ]
+        """.trimIndent()
+        assertTrue(OnlineLyricsParser.lrclibTracks(json).isEmpty())
+    }
+
+    @Test
+    fun `lrclib tolerates an error object instead of array`() {
+        // 接口限流时会返回对象而不是数组；当成空列表，别抛异常把整轮取词打断。
+        assertTrue(OnlineLyricsParser.lrclibTracks("""{"code":429,"message":"slow down"}""").isEmpty())
+    }
+
+    @Test
+    fun `lyrics ovh reads lyrics field and normalizes line endings`() {
+        val json = """{"lyrics":"第一句\r\n第二句\r\n\r\n"}"""
+        assertEquals("第一句\n第二句", OnlineLyricsParser.lyricsOvh(json))
+        assertNull(OnlineLyricsParser.lyricsOvh("""{"error":"No lyrics found"}"""))
+    }
 }

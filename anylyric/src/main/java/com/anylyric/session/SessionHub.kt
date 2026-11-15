@@ -36,6 +36,8 @@ import com.anylyric.lyrics.LyricTick
 import com.anylyric.lyrics.LyricsSourceChain
 import com.anylyric.lyrics.TitleTimeline
 import com.anylyric.lyrics.online.OnlineLyricsFetcher
+import com.anylyric.lyrics.online.OnlineSource
+import com.anylyric.lyrics.online.OnlineVariant
 import com.anylyric.lyrics.TitleVerdict
 import com.anylyric.lyrics.TrackContext
 import com.anylyric.theme.ThemeMode
@@ -152,12 +154,13 @@ class SessionHub private constructor(context: Context) {
     private var onlineLines: List<LyricLine> = emptyList()
 
     /**
-     * 这首歌取回来的**所有版本**（0.2.26）：`[0]` 是首选，其余供用户手动切换。
+     * 这首歌取回来的**所有版本**（0.2.26，0.2.27 起带来源）：`[0]` 是首选，其余供用户切换。
      *
      * 为什么要有它：在线搜出来的第一条未必是用户想听的那版 —— 同名翻唱 / 现场版 /
      * DJ 版的时间轴完全不同，一开场就整首错位，而旧实现只能删缓存重搜。
+     * 每版都带 [OnlineSource]，用户才能看出「这一版是哪个源给的」。
      */
-    private var onlineVariants: List<List<LyricLine>> = emptyList()
+    private var onlineVariants: List<OnlineVariant> = emptyList()
 
     /** 当前显示的是第几版。只在这首歌内有效，换歌归零。 */
     private var onlineVariantIndex = 0
@@ -169,6 +172,15 @@ class SessionHub private constructor(context: Context) {
      * 有这个标记就把索引直接落到**新拿到的**那一版，而不是原地不动。
      */
     private var variantSeek: Int? = null
+
+    /**
+     * 「获取更多」一次要几版。0 = 未指定（按 [variantSeek] 的 +1 语义走）。
+     *
+     * 用户点「更多」期待的是**一批**，不是「再多一版」：3 版 → 再点一次 4 版，
+     * 要点三次才到上限，手感很差。这里一次加 [MORE_VARIANT_BATCH] 版，上限仍是
+     * [OnlineLyricsFetcher.MAX_VARIANTS]。
+     */
+    private var variantWant = 0
 
     /**
      * 本地这条通道给的词算不算「弱命中」：行数少（三行通知）或没有时间轴。
@@ -2086,14 +2098,14 @@ class SessionHub private constructor(context: Context) {
             Probe.write("歌词", "online request #$onlineAttempts: $cleanTitle / $cleanArtist")
         }
 
-        // 要几版：首次就多要一版备着（用户随时可能点「换一版」）；正在换版时再 +1。
-        // 常态成本只多一次候选请求 —— 与「整首错位却没有任何补救手段」相比很划算。
+        // 要几版：首次取 FIRST_WANT（3 版，够换两次）；点「获取更多」时加一批。
+        // 常态成本只多一两次候选请求 —— 与「整首错位却没有任何补救手段」相比很划算。
         val want = when {
-            onlineVariants.isEmpty() -> DEFAULT_VARIANTS
-            variantSeek != null ->
-                (onlineVariants.size + 1).coerceAtMost(OnlineLyricsFetcher.MAX_VARIANTS)
+            variantSeek != null -> maxOf(onlineVariants.size + 1, variantWant)
+                .coerceAtMost(OnlineLyricsFetcher.MAX_VARIANTS)
 
-            else -> onlineVariants.size
+            onlineVariants.isNotEmpty() -> onlineVariants.size
+            else -> OnlineLyricsFetcher.FIRST_WANT
         }
 
         val accepted = OnlineLyricsFetcher.request(
@@ -2102,6 +2114,8 @@ class SessionHub private constructor(context: Context) {
             durationMs,
             allowNetwork = allowNetwork,
             want = want,
+            // 手动指定时只有一个源；自动时是用户排好的顺序（0.2.27）。
+            sources = prefs.onlineSourcePlan,
             onResult = { variants ->
                 onlineInFlight = false
                 if (!isCurrentSong(cleanTitle, cleanArtist)) return@request
@@ -2115,6 +2129,7 @@ class SessionHub private constructor(context: Context) {
                 }
                 val seek = variantSeek
                 variantSeek = null
+                variantWant = 0
                 onlineVariants = variants
                 onlineVariantIndex = when {
                     // 换版请求回来了：落到**新拿到的**那一版；一条新版本都没有就回第一版。
@@ -2124,10 +2139,12 @@ class SessionHub private constructor(context: Context) {
                 }
                 applyOnlineVariant()
                 if (Probe.enabled) {
+                    val current = onlineVariants.getOrNull(onlineVariantIndex)
                     Probe.write(
                         "歌词",
                         "online hit variant=${onlineVariantIndex + 1}/${variants.size} " +
-                            "lines=${variants[onlineVariantIndex].size}"
+                            "source=${current?.source?.id ?: CACHE_SOURCE_ID} " +
+                            "lines=${current?.lines?.size ?: 0}"
                     )
                 }
             },
@@ -2164,53 +2181,96 @@ class SessionHub private constructor(context: Context) {
     private fun isCurrentSong(title: String, artist: String): Boolean =
         lastTitle?.trim().orEmpty() == title && lastArtist?.trim().orEmpty() == artist
 
-    /** 把当前版本的词放上屏。首次到词与手动切版共用，保证两条路径行为一致。 */
+    /** 把当前版本的词放上屏。首次到词与手动选版共用，保证两条路径行为一致。 */
     private fun applyOnlineVariant() {
-        val lines = onlineVariants.getOrNull(onlineVariantIndex) ?: return
-        onlineLines = lines
-        setCurrentLines(lines, -1)
+        val variant = onlineVariants.getOrNull(onlineVariantIndex) ?: return
+        onlineLines = variant.lines
+        setCurrentLines(variant.lines, -1)
         hitSource = ONLINE_SOURCE
         render()
         scheduleLineTick()
     }
 
     /**
-     * 「换一版歌词」（0.2.26）。
+     * 选中某一版歌词（0.2.27，替代原来的「换一版」）。
      *
-     * 用户能用到它的场景很具体：在线补词按「歌名 + 歌手」搜，第一条有时是翻唱 / 现场 /
-     * DJ 版，时间轴与正在放的这版完全不同 —— 一开场整首错位。旧实现只能删缓存重搜，
-     * 而重搜回来的还是同一条。
+     * 两件事必须一起做，否则「切换后的歌词才是正确的需要保存的」这句就落空：
+     *  1. 立刻上屏；
+     *  2. **落盘覆盖**（[OnlineLyricsFetcher.remember]）—— 下次放同一首歌，
+     *     首选就是这一版，连来源标记一起回来。
      *
-     * 返回 true 表示**已经切好**（本地就有下一版）；false 表示本地没有更多、
-     * 需要联网再找一版（成功后会自动切过去），或当前根本没有在线词。
+     * 返回 false 表示索引不存在（列表刚被换歌清空之类），调用方不该报错。
      */
-    fun nextLyricVariant(): Boolean {
-        if (onlineVariants.isEmpty()) return false
-        val max = OnlineLyricsFetcher.MAX_VARIANTS
-        when (val next = VariantCycle.nextIndex(onlineVariantIndex, onlineVariants.size, max)) {
-            -1 -> Unit
-            else -> {
-                onlineVariantIndex = next
-                applyOnlineVariant()
-                return true
-            }
+    fun selectLyricVariant(index: Int): Boolean {
+        val variant = onlineVariants.getOrNull(index) ?: return false
+        onlineVariantIndex = index
+        applyOnlineVariant()
+        val title = lastTitle?.trim().orEmpty()
+        if (title.isNotEmpty()) {
+            OnlineLyricsFetcher.remember(title, lastArtist?.trim().orEmpty(), variant)
         }
+        if (Probe.enabled) {
+            Probe.write(
+                "歌词",
+                "variant selected ${index + 1}/${onlineVariants.size} " +
+                    "source=${variant.source?.id ?: CACHE_SOURCE_ID} (saved)"
+            )
+        }
+        return true
+    }
+
+    /**
+     * 获取更多版本（版本列表底部的「获取更多」）。
+     *
+     * 首次只取 [OnlineLyricsFetcher.FIRST_WANT] 版：一上来就跑五个源、每个源三条候选，
+     * 换歌时会明显卡一下。用户明确要「更多」时才把预算放大到 [OnlineLyricsFetcher.MAX_VARIANTS]。
+     *
+     * 返回 false 表示没有更多可取（已到上限 / 当前没有歌名）。
+     */
+    fun requestMoreVariants(): Boolean {
+        if (onlineVariants.size >= OnlineLyricsFetcher.MAX_VARIANTS) return false
         if (lastTitle?.trim().isNullOrEmpty()) return false
-        // 还有可能找到更多：标记目标序号后重走取词（want 会自动 +1）。
-        // **不清 onlineLines**：屏上先留着当前这版，新版到了再换，避免闪一下「暂无歌词」。
+        // 目标序号 = 当前版本数：取回来后自动落到第一个**新**版本上，
+        // 否则「点了获取更多，画面还停在原来那版」看起来像没生效。
         variantSeek = onlineVariants.size
+        variantWant = (onlineVariants.size + MORE_VARIANT_BATCH)
+            .coerceAtMost(OnlineLyricsFetcher.MAX_VARIANTS)
         onlineInFlight = false
         onlineAttempts = 0
         onlineNextAtMs = 0L
         mainHandler.removeCallbacks(onlineRetry)
-        requestRefresh("variant_switch")
-        return false
+        requestRefresh("variant_more")
+        return true
     }
 
     /** 设置页显示用：「第 2/3 版」；当前没有在线词时 null。 */
     fun lyricVariantLabel(): String? {
         if (onlineVariants.isEmpty() || hitSource != ONLINE_SOURCE) return null
         return "${onlineVariantIndex + 1}/${onlineVariants.size}"
+    }
+
+    /** 当前这一版词的来源；本机缓存来的或旧缓存（无标记）时为 null。 */
+    fun lyricVariantSource(): OnlineSource? =
+        onlineVariants.getOrNull(onlineVariantIndex)?.source
+
+    /**
+     * 版本列表（设置页下拉用）。
+     *
+     * 预览取第一句可读的歌词：用户认的是「这一版第一句长什么样」，
+     * 而不是「第 3 版」这种序号 —— 时间轴错的版本，首行往往一眼就能看出来。
+     */
+    fun lyricVariants(): List<LyricVariantInfo> {
+        if (hitSource != ONLINE_SOURCE) return emptyList()
+        return onlineVariants.mapIndexed { index, variant ->
+            LyricVariantInfo(
+                index = index,
+                source = variant.source,
+                fromCache = variant.fromCache,
+                lineCount = variant.lines.size,
+                preview = variant.lines.firstOrNull { it.text.isNotBlank() }?.text?.trim().orEmpty(),
+                current = index == onlineVariantIndex
+            )
+        }
     }
 
     private fun scheduleOnlineRetry(delayMs: Long) {
@@ -2224,6 +2284,7 @@ class SessionHub private constructor(context: Context) {
         onlineVariants = emptyList()
         onlineVariantIndex = 0
         variantSeek = null
+        variantWant = 0
         onlineKey = null
         onlineAttempts = 0
         onlineNextAtMs = 0L
@@ -2248,6 +2309,21 @@ class SessionHub private constructor(context: Context) {
         // （输入没变时责任链被指纹短路，currentLines 不会被重新计算）。
         keyValid = false
         requestRefresh("online_switch")
+    }
+
+    /**
+     * 设置页改「歌词来源」或「自动顺序」时调用（0.2.27）。
+     *
+     * 必须把内存缓存和本轮版本表一起清掉：源变了，旧的版本表就不代表「用户想找的东西」，
+     * 留着会出现「明明指定了 LRCLIB，列表里还是酷狗那三条」。
+     * **不动磁盘**：那是上一轮的成果，换回来还能用。
+     */
+    fun onOnlineSourceChanged() {
+        resetOnlineState()
+        OnlineLyricsFetcher.dropMemoryCache()
+        hitSource = null
+        keyValid = false
+        requestRefresh("online_source")
     }
 
     /** 设置页「清空缓存」：内存与磁盘一起清。屏上这句不动，下一句起重新取。 */
@@ -2752,6 +2828,9 @@ class SessionHub private constructor(context: Context) {
         /** 撞上「同一首歌正在取词」时的复查间隔。 */
         private const val ONLINE_BUSY_RETRY_MS = 2_000L
 
+        /** 「获取更多」一次多要几版（0.2.27）。首次 3 版 + 一批 3 版 = 上限 6 版。 */
+        private const val MORE_VARIANT_BATCH = 3
+
         /**
          * 本地词少于这么几行就算「弱命中」，要去在线补一份。
          *
@@ -2761,13 +2840,11 @@ class SessionHub private constructor(context: Context) {
         private const val MIN_LOCAL_LINES = 4
 
         /**
-         * 首次取词要几版（0.2.26）。
+         * 在线版本来路未知（本机缓存 / 旧版本写的缓存）时，探测报告里的占位。
          *
-         * 2 = 「首选 + 一版备用」。多要的这一版只在用户点「换一版」时才用到，
-         * 但**必须提前拿到**：等到用户发现错了再去联网，车机在地库里就没信号了。
-         * 成本只是同一家源多试一条候选。
+         * 不写 `null`：`source=` 后面空着看起来像字段没写进去，排查时反而多一次怀疑。
          */
-        private const val DEFAULT_VARIANTS = 2
+        private const val CACHE_SOURCE_ID = "cache"
 
         /** 车机直连通道（BYD 媒体中心 SDK）的来源标识；不需要通知使用权。 */
         private const val EXTERNAL_SOURCE = "BYD"

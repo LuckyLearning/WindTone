@@ -59,12 +59,23 @@ object LyricStore {
 
     fun load(key: String): String? {
         val dir = root ?: return null
-        return loadAt(dir, key)
+        return loadAt(dir, key)?.let { stripTag(it) }
     }
 
-    fun save(key: String, lrc: String) {
+    /**
+     * @param source 这一版词的来源 id（[com.anylyric.lyrics.online.OnlineSource.id]）。
+     *   写进文件头一行 `[by:AnyLyric/<id>]` —— 单独放边车文件会让淘汰与统计都要
+     *   维护两份，而 LRC 本来就允许 `[by:]` 这类元信息行，播放器与解析器都会忽略它。
+     */
+    fun save(key: String, lrc: String, source: String? = null) {
         val dir = root ?: return
-        saveAt(dir, key, lrc, limit)
+        saveAt(dir, key, tagged(lrc, source), limit)
+    }
+
+    /** 缓存里这一版词的来源 id；旧版本写的缓存没有标记，返回 null。 */
+    fun sourceOf(key: String): String? {
+        val dir = root ?: return null
+        return sourceAt(dir, key)
     }
 
     /** 设置里清空缓存时调用。 */
@@ -120,5 +131,35 @@ object LyricStore {
         files.sortedBy { it.lastModified() }
             .take(files.size - max)
             .forEach { runCatching { it.delete() } }
+    }
+
+    // ------------------------------------------------------------ 来源标记
+
+    /** 来源标记行的前缀。整行形如 `[by:AnyLyric/netease]`。 */
+    private const val TAG_HEAD = "[by:AnyLyric/"
+
+    internal fun tagged(lrc: String, source: String?): String =
+        if (source.isNullOrBlank()) lrc else TAG_HEAD + source + "]\n" + lrc
+
+    /**
+     * 去掉来源标记行。
+     *
+     * 解析器本来就会忽略 `[by:]`（没有时间戳），但**纯文本**路径（[LrcParser.spread]）
+     * 会把每个非空行都当成一句歌词 —— 不去掉的话，无轴歌词的第一句会变成
+     * 「[by:AnyLyric/netease]」。所以读盘时就剥掉，别把这件事留给下游。
+     */
+    internal fun stripTag(text: String): String {
+        if (!text.startsWith(TAG_HEAD)) return text
+        val end = text.indexOf(']')
+        if (end < 0) return text
+        return text.substring(end + 1).trimStart('\n', '\r')
+    }
+
+    internal fun sourceAt(dir: File, key: String): String? {
+        val raw = loadAt(dir, key) ?: return null
+        if (!raw.startsWith(TAG_HEAD)) return null
+        val end = raw.indexOf(']')
+        if (end <= TAG_HEAD.length) return null
+        return raw.substring(TAG_HEAD.length, end).trim().takeIf { it.isNotEmpty() }
     }
 }

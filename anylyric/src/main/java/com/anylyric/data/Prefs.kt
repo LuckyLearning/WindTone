@@ -9,6 +9,7 @@ import com.anylyric.overlay.OverlayDefaults
 import com.anylyric.overlay.OverlayStyle
 import com.anylyric.overlay.Preset
 import com.anylyric.overlay.TitlePos
+import com.anylyric.lyrics.online.OnlineSource
 import com.anylyric.theme.ThemeMode
 import com.anylyric.update.DownloadRoute
 
@@ -192,9 +193,33 @@ class Prefs(context: Context) {
         get() = sp.getInt(KEY_LYRIC_CACHE, CACHE_LIMIT_DEFAULT).coerceIn(0, CACHE_LIMIT_MAX)
         set(value) = sp.edit().putInt(KEY_LYRIC_CACHE, value.coerceIn(0, CACHE_LIMIT_MAX)).apply()
 
+    /**
+     * 手动指定的在线歌词源；null = 自动（按 [onlineSourceOrder] 依次尝试）。
+     *
+     * 用户原话：「在线源可以手动指定」。车机上各家的强弱很不一样 —— 同一首歌
+     * 可能只有某一家有正确版本，自动模式再聪明也猜不到用户要哪一家。
+     * 指定后**只跑这一家**：它取不到就宁可没有，也不偷偷换别家给一份错的。
+     */
+    var onlineSource: OnlineSource?
+        get() = OnlineSource.of(sp.getString(KEY_ONLINE_SOURCE, null))
+        set(value) = sp.edit().putString(KEY_ONLINE_SOURCE, value?.id.orEmpty()).apply()
+
+    /**
+     * 自动模式下的查找顺序（0.2.27）。
+     *
+     * 用户原话：「可以自由定义自动时的查找顺序」。存 id 串而不是序号，
+     * 将来新增/下线源时老配置不会串位（见 [OnlineSource.parseOrder]）。
+     */
+    var onlineSourceOrder: List<OnlineSource>
+        get() = OnlineSource.parseOrder(sp.getString(KEY_ONLINE_ORDER, null))
+        set(value) = sp.edit().putString(KEY_ONLINE_ORDER, OnlineSource.encodeOrder(value)).apply()
+
+    /** 实际要跑的源列表：手动指定时只有一个元素，自动时按用户顺序。 */
+    val onlineSourcePlan: List<OnlineSource>
+        get() = onlineSource?.let { listOf(it) } ?: onlineSourceOrder
+
     /** 最近一次「确认服务活着」的心跳时间，供看门狗判断是否掉线。 */
-    var lastAliveAt: Long
-        get() = sp.getLong(KEY_LAST_ALIVE, 0L)
+    var lastAliveAt: Long        get() = sp.getLong(KEY_LAST_ALIVE, 0L)
         private set(value) = sp.edit().putLong(KEY_LAST_ALIVE, value).apply()
 
     /** 进程内心跳节流：最多 [ALIVE_WRITE_INTERVAL_MS] 写一次盘。 */
@@ -464,6 +489,8 @@ class Prefs(context: Context) {
         private const val KEY_ONLINE_LYRICS = "online_lyrics_enabled"
         private const val KEY_OVERLAY_ENABLED = "overlay_enabled"
         private const val KEY_LYRIC_CACHE = "lyric_cache_limit"
+        private const val KEY_ONLINE_SOURCE = "online_source_pinned"
+        private const val KEY_ONLINE_ORDER = "online_source_order"
         private const val KEY_LAST_ALIVE = "last_alive_at"
 
         /** 心跳落盘间隔：看门狗的过期阈值是 20 分钟，5 分钟一次足够，且写盘量很小。 */

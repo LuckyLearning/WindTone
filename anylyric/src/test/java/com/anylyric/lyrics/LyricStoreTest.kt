@@ -101,4 +101,33 @@ class LyricStoreTest {
         assertEquals(2, count)
         assertEquals(8L, bytes)
     }
+
+    // ------------------------------------------------------ 来源标记（0.2.27）
+
+    @Test
+    fun `source tag survives write and read`() {
+        val key = LyricMatch.cacheKey("稻香", "周杰伦")
+        LyricStore.saveAt(dir, key, LyricStore.tagged("[00:01.000]第一句", "lrclib"))
+        assertEquals("lrclib", LyricStore.sourceAt(dir, key))
+        // 正文必须能原样取回：标签行只是文件头，不该混进歌词里。
+        assertEquals(
+            "[00:01.000]第一句",
+            LyricStore.loadAt(dir, key)?.let { LyricStore.stripTag(it) }
+        )
+    }
+
+    @Test
+    fun `untagged cache reports no source`() {
+        val key = LyricMatch.cacheKey("稻香", "周杰伦")
+        LyricStore.saveAt(dir, key, "[00:01.000]第一句")
+        assertNull(LyricStore.sourceAt(dir, key))
+        assertEquals("[00:01.000]第一句", LyricStore.stripTag(LyricStore.loadAt(dir, key)!!))
+    }
+
+    @Test
+    fun `stripTag leaves ordinary text untouched`() {
+        assertEquals("abc", LyricStore.stripTag("abc"))
+        // 标记行之后什么都没有时，剥完就是空串（别留下一行空白当歌词）。
+        assertEquals("", LyricStore.stripTag(LyricStore.tagged("", "kugou")))
+    }
 }
