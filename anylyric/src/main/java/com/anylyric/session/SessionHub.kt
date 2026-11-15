@@ -152,6 +152,25 @@ class SessionHub private constructor(context: Context) {
     private var onlineLines: List<LyricLine> = emptyList()
 
     /**
+     * 这首歌取回来的**所有版本**（0.2.26）：`[0]` 是首选，其余供用户手动切换。
+     *
+     * 为什么要有它：在线搜出来的第一条未必是用户想听的那版 —— 同名翻唱 / 现场版 /
+     * DJ 版的时间轴完全不同，一开场就整首错位，而旧实现只能删缓存重搜。
+     */
+    private var onlineVariants: List<List<LyricLine>> = emptyList()
+
+    /** 当前显示的是第几版。只在这首歌内有效，换歌归零。 */
+    private var onlineVariantIndex = 0
+
+    /**
+     * 「换一版」正在要更多版本时的目标序号（= 切换前的版本数）。
+     *
+     * 存在的原因：取词是异步的，回调回来时才知道到底有没有下一版 ——
+     * 有这个标记就把索引直接落到**新拿到的**那一版，而不是原地不动。
+     */
+    private var variantSeek: Int? = null
+
+    /**
      * 本地这条通道给的词算不算「弱命中」：行数少（三行通知）或没有时间轴。
      *
      * 弱命中照样先显示，但要**同时**去在线补一份完整的，在线结果回来后以它为准 ——
@@ -2044,7 +2063,8 @@ class SessionHub private constructor(context: Context) {
         val key = LyricStore.key(cleanTitle, cleanArtist)
         if (key.isBlank()) return
         // 同一首已经有词了就别再要：弱命中场景下 refresh 每次都走到这里。
-        if (onlineLines.isNotEmpty() && onlineKey == key) return
+        // 例外是「换一版」正在要更多版本（variantSeek）—— 那时必须重新走一遍取词。
+        if (onlineLines.isNotEmpty() && onlineKey == key && variantSeek == null) return
 
         if (key != onlineKey) {
             onlineKey = key
@@ -2066,12 +2086,23 @@ class SessionHub private constructor(context: Context) {
             Probe.write("歌词", "online request #$onlineAttempts: $cleanTitle / $cleanArtist")
         }
 
+        // 要几版：首次就多要一版备着（用户随时可能点「换一版」）；正在换版时再 +1。
+        // 常态成本只多一次候选请求 —— 与「整首错位却没有任何补救手段」相比很划算。
+        val want = when {
+            onlineVariants.isEmpty() -> DEFAULT_VARIANTS
+            variantSeek != null ->
+                (onlineVariants.size + 1).coerceAtMost(OnlineLyricsFetcher.MAX_VARIANTS)
+
+            else -> onlineVariants.size
+        }
+
         val accepted = OnlineLyricsFetcher.request(
             cleanTitle,
             cleanArtist,
             durationMs,
             allowNetwork = allowNetwork,
-            onResult = { lines ->
+            want = want,
+            onResult = { variants ->
                 onlineInFlight = false
                 if (!isCurrentSong(cleanTitle, cleanArtist)) return@request
                 // 本地是「够了」的强命中就不要再覆盖：本地词（尤其播放器自己给的）
@@ -2082,12 +2113,23 @@ class SessionHub private constructor(context: Context) {
                     }
                     return@request
                 }
-                onlineLines = lines
-                setCurrentLines(lines, -1)
-                hitSource = ONLINE_SOURCE
-                render()
-                scheduleLineTick()
-                if (Probe.enabled) Probe.write("歌词", "online hit lines=${lines.size}")
+                val seek = variantSeek
+                variantSeek = null
+                onlineVariants = variants
+                onlineVariantIndex = when {
+                    // 换版请求回来了：落到**新拿到的**那一版；一条新版本都没有就回第一版。
+                    seek != null && variants.size > seek -> seek
+                    seek != null -> 0
+                    else -> onlineVariantIndex.coerceIn(0, variants.lastIndex)
+                }
+                applyOnlineVariant()
+                if (Probe.enabled) {
+                    Probe.write(
+                        "歌词",
+                        "online hit variant=${onlineVariantIndex + 1}/${variants.size} " +
+                            "lines=${variants[onlineVariantIndex].size}"
+                    )
+                }
             },
             onMiss = {
                 onlineInFlight = false
@@ -2122,6 +2164,55 @@ class SessionHub private constructor(context: Context) {
     private fun isCurrentSong(title: String, artist: String): Boolean =
         lastTitle?.trim().orEmpty() == title && lastArtist?.trim().orEmpty() == artist
 
+    /** 把当前版本的词放上屏。首次到词与手动切版共用，保证两条路径行为一致。 */
+    private fun applyOnlineVariant() {
+        val lines = onlineVariants.getOrNull(onlineVariantIndex) ?: return
+        onlineLines = lines
+        setCurrentLines(lines, -1)
+        hitSource = ONLINE_SOURCE
+        render()
+        scheduleLineTick()
+    }
+
+    /**
+     * 「换一版歌词」（0.2.26）。
+     *
+     * 用户能用到它的场景很具体：在线补词按「歌名 + 歌手」搜，第一条有时是翻唱 / 现场 /
+     * DJ 版，时间轴与正在放的这版完全不同 —— 一开场整首错位。旧实现只能删缓存重搜，
+     * 而重搜回来的还是同一条。
+     *
+     * 返回 true 表示**已经切好**（本地就有下一版）；false 表示本地没有更多、
+     * 需要联网再找一版（成功后会自动切过去），或当前根本没有在线词。
+     */
+    fun nextLyricVariant(): Boolean {
+        if (onlineVariants.isEmpty()) return false
+        val max = OnlineLyricsFetcher.MAX_VARIANTS
+        when (val next = VariantCycle.nextIndex(onlineVariantIndex, onlineVariants.size, max)) {
+            -1 -> Unit
+            else -> {
+                onlineVariantIndex = next
+                applyOnlineVariant()
+                return true
+            }
+        }
+        if (lastTitle?.trim().isNullOrEmpty()) return false
+        // 还有可能找到更多：标记目标序号后重走取词（want 会自动 +1）。
+        // **不清 onlineLines**：屏上先留着当前这版，新版到了再换，避免闪一下「暂无歌词」。
+        variantSeek = onlineVariants.size
+        onlineInFlight = false
+        onlineAttempts = 0
+        onlineNextAtMs = 0L
+        mainHandler.removeCallbacks(onlineRetry)
+        requestRefresh("variant_switch")
+        return false
+    }
+
+    /** 设置页显示用：「第 2/3 版」；当前没有在线词时 null。 */
+    fun lyricVariantLabel(): String? {
+        if (onlineVariants.isEmpty() || hitSource != ONLINE_SOURCE) return null
+        return "${onlineVariantIndex + 1}/${onlineVariants.size}"
+    }
+
     private fun scheduleOnlineRetry(delayMs: Long) {
         mainHandler.removeCallbacks(onlineRetry)
         mainHandler.postDelayed(onlineRetry, delayMs.coerceAtLeast(1_000L))
@@ -2130,6 +2221,9 @@ class SessionHub private constructor(context: Context) {
     /** 换歌 / 服务回收：取词状态全部归零，连排队中的重试一起撤销。 */
     private fun resetOnlineState() {
         onlineLines = emptyList()
+        onlineVariants = emptyList()
+        onlineVariantIndex = 0
+        variantSeek = null
         onlineKey = null
         onlineAttempts = 0
         onlineNextAtMs = 0L
@@ -2665,6 +2759,15 @@ class SessionHub private constructor(context: Context) {
          * 定 4 是为了让「三行通知」必然进入补词流程。
          */
         private const val MIN_LOCAL_LINES = 4
+
+        /**
+         * 首次取词要几版（0.2.26）。
+         *
+         * 2 = 「首选 + 一版备用」。多要的这一版只在用户点「换一版」时才用到，
+         * 但**必须提前拿到**：等到用户发现错了再去联网，车机在地库里就没信号了。
+         * 成本只是同一家源多试一条候选。
+         */
+        private const val DEFAULT_VARIANTS = 2
 
         /** 车机直连通道（BYD 媒体中心 SDK）的来源标识；不需要通知使用权。 */
         private const val EXTERNAL_SOURCE = "BYD"

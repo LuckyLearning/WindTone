@@ -103,6 +103,11 @@ class SettingsActivity : BaseActivity() {
     // ---------------------------------------------------------------- 状态与权限
     private lateinit var statusBanner: TextView
     private lateinit var statusLine: TextView
+
+    /** 「歌词版本 1/2」+「换一版」：只在当前词来自在线补词时出现（0.2.26）。 */
+    private lateinit var variantRow: View
+    private lateinit var variantLine: TextView
+    private lateinit var variantButton: TextView
     private lateinit var notificationState: TextView
     private lateinit var notificationButton: TextView
     private lateinit var notificationSettingsButton: TextView
@@ -671,6 +676,12 @@ class SettingsActivity : BaseActivity() {
         statusBanner = text("", 15f, bold = true)
         statusLine = text("", 12f, secondary = true).apply { setPadding(0, dp(4), 0, 0) }
 
+        // 歌词版本（0.2.26）：在线补词按「歌名 + 歌手」搜，第一条可能是翻唱/现场版，
+        // 时间轴与正在放的完全不同。给一个就地切换的入口，不必去删缓存重来。
+        variantLine = text("", 12f, secondary = true)
+        variantButton = textButton(getString(R.string.lyric_variant_switch)) { onSwitchVariant() }
+        variantRow = row(variantLine, variantButton)
+
         notificationState = text("", 13f, bold = true)
         notificationButton = textButton(getString(R.string.perm_open)) { onNotificationAction() }
         // 「系统设置」入口必须常驻：自动重绑在部分 ROM 上无效，手工关开是最后的自救路径，
@@ -696,6 +707,7 @@ class SettingsActivity : BaseActivity() {
         return cardSection(getString(R.string.section_status), null, listOf(
             statusBanner,
             statusLine,
+            variantRow,
             divider(14, 12),
             text(getString(R.string.perm_notification_title), 14f),
             notificationDesc,
@@ -2848,6 +2860,13 @@ class SettingsActivity : BaseActivity() {
             }
         }
 
+        // 歌词版本：只有在线补词的词才谈得上「换一版」——本地/直连通道给的是唯一一份。
+        val variant = hub.lyricVariantLabel()
+        variantRow.visibility = if (variant != null) View.VISIBLE else View.GONE
+        if (variant != null) {
+            variantLine.text = getString(R.string.lyric_variant_label, variant)
+        }
+
         applyListenerState(listener, degradedWorking, externalWorking)
         applyPermissionState(overlayState, status.overlayGranted)
         notificationDesc.visibility =
@@ -2881,6 +2900,23 @@ class SettingsActivity : BaseActivity() {
         if (debugSwitch.isChecked != prefs.debugEnabled) {
             debugSwitch.isChecked = prefs.debugEnabled
         }
+    }
+
+    // ---------------------------------------------------------------- 歌词版本
+
+    /**
+     * 「换一版歌词」（0.2.26）。
+     *
+     * 本地已经有下一版时立刻切（毫秒级）；没有就联网再找一版，回来自动切过去。
+     * 两条路径都给一句提示 —— 按钮点完没有任何反馈，人只会反复点。
+     */
+    private fun onSwitchVariant() {
+        if (hub.nextLyricVariant()) {
+            toast(getString(R.string.lyric_variant_switched, hub.lyricVariantLabel() ?: "-"))
+        } else {
+            toast(getString(R.string.lyric_variant_fetching))
+        }
+        refresh()
     }
 
     // ---------------------------------------------------------------- 样式操作

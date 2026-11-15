@@ -48,6 +48,15 @@ object OnlineLyricsFetcher {
     /** 每个关键词最多试几条候选：第一名可能没带词，试到第 3 条还不行为止。 */
     private const val MAX_CANDIDATES = 3
 
+    /**
+     * 一首歌最多留几个「版本」供用户手动切换（0.2.26）。
+     *
+     * 现实问题：在线搜出来的第一条未必是用户想听的那版 —— 同名翻唱、现场版、DJ 版
+     * 的时间轴完全不同，一开场就「整首差半句」，而旧实现没有任何补救手段。
+     * 三家源 × 最多 3 条候选本来就有多个可用结果，留 3 个足够覆盖「原版 / 翻唱 / 伴奏」。
+     */
+    const val MAX_VARIANTS = 3
+
     private const val MAX_RESPONSE_BYTES = 512 * 1024
     private const val MAX_CACHE = 24
 
@@ -68,7 +77,7 @@ object OnlineLyricsFetcher {
         Thread(runnable, "anylyric-online").apply { isDaemon = true }
     }
 
-    private class Entry(val lines: List<LyricLine>?, val atMs: Long)
+    private class Entry(val variants: List<List<LyricLine>>?, val atMs: Long)
 
     private val cache = object : LinkedHashMap<String, Entry>(MAX_CACHE, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Entry>?): Boolean =
@@ -85,7 +94,10 @@ object OnlineLyricsFetcher {
      *
      * @param allowNetwork 为 false 时**只查磁盘缓存、不联网**（0.2.25）。关掉在线补词
      *             不等于丢掉已经取到的词：缓存是本地资源，开关只控制「要不要出门找」。
-     * @param onResult 在主线程回调，只在拿到**非空**歌词时调用。
+     * @param want 需要几**版**。默认 1；用户点「换一版」时传 2、3 —— 缓存里那版不够时
+     *             会继续往候选后面找，而不是把同一份再交一次（见 [resolve]）。
+     * @param onResult 在主线程回调，参数是**按优先级排好的版本表**（非空）。
+     *                 调用方取第 0 版显示，其余留给「换一版」。
      * @param onMiss   在主线程回调，表示这首歌这一轮没取到（可能已落盘失败缓存）。
      *                 调用方据此安排重试，不要把它当成「永远没有」。
      * @return false 表示**这首歌已经有一次请求在跑**，本次既没发起也不会回调。
@@ -96,7 +108,8 @@ object OnlineLyricsFetcher {
         artist: String,
         durationMs: Long,
         allowNetwork: Boolean = true,
-        onResult: (List<LyricLine>) -> Unit,
+        want: Int = 1,
+        onResult: (List<List<LyricLine>>) -> Unit,
         onMiss: () -> Unit = {}
     ): Boolean {
         val cleanTitle = title.trim()
@@ -107,13 +120,22 @@ object OnlineLyricsFetcher {
         val cleanArtist = artist.trim()
         val key = LyricStore.key(cleanTitle, cleanArtist)
         val now = System.currentTimeMillis()
+        val target = want.coerceIn(1, MAX_VARIANTS)
 
         synchronized(cache) {
             val hit = cache[key]
-            if (hit != null && now - hit.atMs < if (hit.lines == null) FAIL_TTL_MS else OK_TTL_MS) {
-                val lines = hit.lines
-                if (lines != null) main.post { onResult(lines) } else main.post(onMiss)
-                return true
+            if (hit != null && now - hit.atMs < if (hit.variants == null) FAIL_TTL_MS else OK_TTL_MS) {
+                val variants = hit.variants
+                if (variants.isNullOrEmpty()) {
+                    main.post(onMiss)
+                    return true
+                }
+                // 缓存里的版本够用就直接给；不够时**继续往下走**去联网补齐 ——
+                // 否则「换一版」永远只能拿到同一份。
+                if (variants.size >= target) {
+                    main.post { onResult(variants) }
+                    return true
+                }
             }
             // 同一首歌正在取：不重复发起，也不回调 —— 上层据此复位标志后稍后再来。
             if (pendingKey == key) return false
@@ -121,18 +143,21 @@ object OnlineLyricsFetcher {
         }
 
         worker.execute {
-            val lines = runCatching {
-                resolve(cleanTitle, cleanArtist, key, durationMs, allowNetwork)
+            val variants = runCatching {
+                resolve(cleanTitle, cleanArtist, key, durationMs, allowNetwork, target)
             }.getOrNull()
             synchronized(cache) {
                 // 只查盘失败不算「这首歌没有」：下一次开着网络还要再试。
-                if (lines != null || allowNetwork) {
-                    cache[key] = Entry(lines, System.currentTimeMillis())
+                if (!variants.isNullOrEmpty() || allowNetwork) {
+                    cache[key] = Entry(
+                        variants?.takeIf { it.isNotEmpty() },
+                        System.currentTimeMillis()
+                    )
                 }
                 if (pendingKey == key) pendingKey = null
             }
             main.post {
-                if (lines.isNullOrEmpty()) onMiss() else onResult(lines)
+                if (variants.isNullOrEmpty()) onMiss() else onResult(variants)
             }
         }
         return true
@@ -159,32 +184,66 @@ object OnlineLyricsFetcher {
 
     // ---------------------------------------------------------------- 取词
 
+    /**
+     * 取词主流程：返回**按优先级排好的版本表**（0.2.26 起不再只给一份）。
+     *
+     * 顺序仍然是「磁盘 → 酷狗 → 网易云 → 汽水」，但收集到 [want] 版就停手：
+     *  · `want = 1`（默认）→ 与旧实现完全一致，多一次候选就早退，常态成本不变；
+     *  · `want = 2/3`（用户点了「换一版」）→ 继续往后面的候选走，把不同版本带回来。
+     *
+     * 磁盘里**只存第 0 版**：切到别的版本是临时纠错，重启后回到首选才可预期。
+     */
     private fun resolve(
         title: String,
         artist: String,
         key: String,
         durationMs: Long,
-        allowNetwork: Boolean
-    ): List<LyricLine>? {
+        allowNetwork: Boolean,
+        want: Int
+    ): List<List<LyricLine>> {
+        val out = ArrayList<List<LyricLine>>(want)
         // 1. 磁盘：第二次听同一首歌永远走这里，不联网。
         val cached = LyricStore.load(key)
         if (cached != null) {
             val restored = toLines(cached, title, artist)
-            if (restored.isNotEmpty()) return restored
+            if (restored.isNotEmpty()) out += restored
         }
         // 只查缓存（在线补词关着）：到此为止，不出门。
-        if (!allowNetwork) return null
+        if (!allowNetwork) return out
+        if (out.size >= want) return out
+
         // 2. 网络：三家按优先级串行（Cardash 的顺序：酷狗 → 网易云 → 汽水）。
         val targetSec = durationMs / 1000L
         val deadline = System.currentTimeMillis() + MAX_TOTAL_MS
-        val text = fetchKugou(title, artist, targetSec, deadline)
-            ?: fetchNetease(title, artist, targetSec, deadline)
-            ?: fetchQishui(title, artist, targetSec, deadline)
-            ?: return null
+        collectKugou(title, artist, targetSec, deadline, out, want)
+        if (out.size < want) collectNetease(title, artist, targetSec, deadline, out, want)
+        if (out.size < want) collectQishui(title, artist, targetSec, deadline, out, want)
 
-        val lines = toLines(text, title, artist)
-        if (lines.isNotEmpty()) LyricStore.save(key, LrcParser.build(lines))
-        return lines.ifEmpty { null }
+        if (out.isNotEmpty() && cached == null) {
+            LyricStore.save(key, LrcParser.build(out[0]))
+        }
+        return out
+    }
+
+    /**
+     * 收一版，并挡掉与已有版本**内容相同**的那份。
+     *
+     * 去重是必须的：切到第 2 版时网络的第一条候选往往就是盘里那一版，
+     * 不去重会「点了换一版，画面一个字都没变」。
+     */
+    private fun addVariant(out: MutableList<List<LyricLine>>, lines: List<LyricLine>) {
+        if (lines.isEmpty()) return
+        for (existing in out) if (sameLines(existing, lines)) return
+        out += lines
+    }
+
+    /** 两份行表是不是同一份词：行数、首行、末行、首行时间都一致就认为是。 */
+    private fun sameLines(a: List<LyricLine>, b: List<LyricLine>): Boolean {
+        if (a.size != b.size || a.isEmpty()) return a.size == b.size
+        val first = a[0]
+        val otherFirst = b[0]
+        return first.text == otherFirst.text && first.timeMs == otherFirst.timeMs &&
+            a[a.lastIndex].text == b[b.lastIndex].text
     }
 
     /**
@@ -198,13 +257,16 @@ object OnlineLyricsFetcher {
         return LrcParser.stripTitleLine(lines, title, artist)
     }
 
-    private fun fetchKugou(
+    private fun collectKugou(
         title: String,
         artist: String,
         targetSec: Long,
-        deadline: Long
-    ): String? {
+        deadline: Long,
+        out: MutableList<List<LyricLine>>,
+        want: Int
+    ) {
         for (query in LyricMatch.queries(title, artist).take(MAX_QUERIES)) {
+            if (out.size >= want) return
             val search = httpGet(
                 "https://mobileservice.kugou.com/api/v3/search/song" +
                     "?format=json&keyword=${encode(query)}&page=1&pagesize=10",
@@ -218,11 +280,11 @@ object OnlineLyricsFetcher {
             ) { Triple(it.title, it.artist, it.durationSec) }
 
             for (song in songs.take(MAX_CANDIDATES)) {
-                val lrc = kugouLyricFor(song, title, artist, targetSec, deadline)
-                if (lrc != null) return lrc
+                if (out.size >= want) return
+                val lrc = kugouLyricFor(song, title, artist, targetSec, deadline) ?: continue
+                addVariant(out, toLines(lrc, title, artist))
             }
         }
-        return null
     }
 
     /** 一首酷狗候选的取词：歌词搜索 → 按 hash/时长挑条目 → 下载 LRC。 */
@@ -258,13 +320,16 @@ object OnlineLyricsFetcher {
         return null
     }
 
-    private fun fetchNetease(
+    private fun collectNetease(
         title: String,
         artist: String,
         targetSec: Long,
-        deadline: Long
-    ): String? {
+        deadline: Long,
+        out: MutableList<List<LyricLine>>,
+        want: Int
+    ) {
         for (query in LyricMatch.queries(title, artist).take(MAX_QUERIES)) {
+            if (out.size >= want) return
             val search = httpGet(
                 "https://music.163.com/api/search/get/web" +
                     "?s=${encode(query)}&type=1&limit=10&offset=0",
@@ -278,16 +343,16 @@ object OnlineLyricsFetcher {
 
             // 逐个试：网易大量「XX(治愈版)」候选没有歌词，排第一不代表有词。
             for (song in songs.take(MAX_CANDIDATES)) {
+                if (out.size >= want) return
                 val lyric = httpGet(
                     "https://music.163.com/api/song/lyric" +
                         "?id=${encode(song.id)}&lv=1&kv=1&tv=-1",
                     deadline
                 ) ?: continue
                 val text = OnlineLyricsParser.neteaseLyric(lyric) ?: continue
-                if (toLines(text, title, artist).isNotEmpty()) return text
+                addVariant(out, toLines(text, title, artist))
             }
         }
-        return null
     }
 
     /**
@@ -298,13 +363,16 @@ object OnlineLyricsFetcher {
      * 保留它有两个理由：参数一旦恢复可用就直接生效；它排在最后，
      * 只有前两家都失败才会走到，代价是两次空请求。
      */
-    private fun fetchQishui(
+    private fun collectQishui(
         title: String,
         artist: String,
         targetSec: Long,
-        deadline: Long
-    ): String? {
+        deadline: Long,
+        out: MutableList<List<LyricLine>>,
+        want: Int
+    ) {
         for (query in LyricMatch.queries(title, artist).take(MAX_QUERIES)) {
+            if (out.size >= want) return
             val search = httpGet(
                 "https://api.qishui.com/luna/pc/search/track" +
                     "?q=${encode(query)}&cursor=0&search_method=input" +
@@ -317,6 +385,7 @@ object OnlineLyricsFetcher {
             ) { Triple(it.title, it.artist, it.durationSec) }
 
             for (song in songs.take(MAX_CANDIDATES)) {
+                if (out.size >= want) return
                 val detail = httpGet(
                     "https://api.qishui.com/luna/pc/track_v2" +
                         "?track_id=${encode(song.id)}&media_type=track" +
@@ -325,10 +394,9 @@ object OnlineLyricsFetcher {
                     QISHUI_REFERER
                 ) ?: continue
                 val text = OnlineLyricsParser.qishuiLyric(detail) ?: continue
-                if (toLines(text, title, artist).isNotEmpty()) return text
+                addVariant(out, toLines(text, title, artist))
             }
         }
-        return null
     }
 
     /**

@@ -47,7 +47,7 @@ If that entry does not exist, it is fine: turn on “Start on boot” above and 
     <string name="channel_done">Done</string>
     <string name="channel_auto">Automatic</string>
     <string name="channel_auto_hint">Pick from whichever session is playing</string>
-    <string name="channel_no_session">No active media session right now. Start playing something, then come back.</string>
+    <string name="channel_no_session">No active media session right now. Some head units never expose one — if lyrics still appear, AnyLyric is reading notifications or the car\'s direct channel instead, and there is nothing to pin here.</string>
     <string name="channel_subtitle">%1$s · %2$s</string>
     <string name="channel_playing">playing</string>
     <string name="channel_paused">paused</string>
@@ -181,6 +181,10 @@ If that entry does not exist, it is fine: turn on “Start on boot” above and 
     <string name="status_no_session">No active player</string>
     <string name="status_session">Now: %1$s — %2$s</string>
     <string name="status_channel">Channel: %1$s</string>
+    <string name="lyric_variant_label">Lyrics version %1$s</string>
+    <string name="lyric_variant_switch">Next version</string>
+    <string name="lyric_variant_switched">Switched: version %1$s</string>
+    <string name="lyric_variant_fetching">Looking for another version…</string>
 
     <string name="channel_l0">L0 metadata key</string>
     <string name="channel_l0b">Playback state extras</string>

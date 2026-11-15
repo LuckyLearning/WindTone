@@ -46,7 +46,7 @@
     <string name="channel_done">完成</string>
     <string name="channel_auto">自动选择</string>
     <string name="channel_auto_hint">从正在播放的会话里挑一个</string>
-    <string name="channel_no_session">当前没有活跃的媒体会话。先放一首歌，再打开这里。</string>
+    <string name="channel_no_session">当前没有活跃的媒体会话。部分车机会完全隐藏会话 —— 如果歌词照样能出来，说明走的是通知或车机直连通道，这里没有可锁定的对象。</string>
     <string name="channel_subtitle">%1$s · %2$s</string>
     <string name="channel_playing">正在播放</string>
     <string name="channel_paused">已暂停</string>
@@ -180,6 +180,10 @@
     <string name="status_no_session">当前没有正在播放的应用</string>
     <string name="status_session">正在播放：%1$s — %2$s</string>
     <string name="status_channel">通道：%1$s</string>
+    <string name="lyric_variant_label">歌词版本 %1$s</string>
+    <string name="lyric_variant_switch">换一版</string>
+    <string name="lyric_variant_switched">已切换：第 %1$s 版</string>
+    <string name="lyric_variant_fetching">正在找下一版…</string>
 
     <string name="channel_l0">L0 元数据键</string>
     <string name="channel_l0b">播放状态扩展</string>
