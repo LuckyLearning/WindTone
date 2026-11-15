@@ -85,7 +85,16 @@ data class OverlayStyle(
     val cornerDp: Float = OverlayDefaults.CORNER_DP,
     val stroke: Boolean = OverlayDefaults.STROKE,
     val secondaryAlpha: Float = OverlayDefaults.SECONDARY_ALPHA,
+    /**
+     * 第一行歌词（正在唱的那句）的对齐。
+     *
+     * 三行各自独立（0.2.25）：标题、第一行、第二行互不牵连。用户原话是
+     * 「悬浮窗分 3 行，一行标题，2 行歌词，都支持位置居左中右」——
+     * 共用一份对齐时，车机上把标题放中间就必然把歌词也拽到中间，二者只能取一个。
+     */
     val align: Align = Align.START,
+    /** 第二行歌词（下一句）的对齐。默认跟第一行一致，见 [OverlayDefaults.SECONDARY_ALIGN]。 */
+    val secondaryAlign: Align = OverlayDefaults.SECONDARY_ALIGN,
     /**
      * 上下文行相对当前行向右错开的距离（dp），0 表示不错位。
      *
@@ -103,7 +112,9 @@ data class OverlayStyle(
     val titleEnabled: Boolean = OverlayDefaults.TITLE_ENABLED,
     val titleFontSp: Float = OverlayDefaults.TITLE_FONT_SP,
     val titleColor: Int = OverlayDefaults.TITLE_COLOR,
-    val titlePos: TitlePos = OverlayDefaults.TITLE_POS
+    val titlePos: TitlePos = OverlayDefaults.TITLE_POS,
+    /** 标题行对齐。默认居中：标题比歌词短，居中时两侧留白最均匀。 */
+    val titleAlign: Align = OverlayDefaults.TITLE_ALIGN
 )
 
 object OverlayDefaults {
@@ -128,6 +139,15 @@ object OverlayDefaults {
     /** 上下文行向右错位的默认值 / 上限（dp）。默认不错位。 */
     const val LINE_OFFSET_DP = 0f
     const val LINE_OFFSET_MAX = 48f
+
+    /**
+     * 三行各自默认对齐。
+     *
+     * 标题居中、两行歌词左对齐 —— 这是 0.2.24 及以前的实际长相（标题一直硬编码居中），
+     * 默认值必须与旧行为一致，否则升级完用户会发现「位置全变了」。
+     */
+    val TITLE_ALIGN = Align.CENTER
+    val SECONDARY_ALIGN = Align.START
     const val FADE_MS = 180
     const val FADE_MAX = 320
 
@@ -181,6 +201,7 @@ object OverlayDefaults {
         stroke = STROKE,
         secondaryAlpha = SECONDARY_ALPHA,
         align = Align.START,
+        secondaryAlign = SECONDARY_ALIGN,
         lineOffsetDp = LINE_OFFSET_DP,
         fadeMs = FADE_MS,
         primaryColor = PRIMARY_COLOR,
@@ -192,7 +213,8 @@ object OverlayDefaults {
         titleEnabled = TITLE_ENABLED,
         titleFontSp = TITLE_FONT_SP,
         titleColor = TITLE_COLOR,
-        titlePos = TITLE_POS
+        titlePos = TITLE_POS,
+        titleAlign = TITLE_ALIGN
     )
 
     /**
@@ -204,26 +226,30 @@ object OverlayDefaults {
     fun preset(preset: Preset, base: OverlayStyle): OverlayStyle = when (preset) {
         Preset.STRIPE -> base.copy(
             preset = preset, opacity = 0f, cornerDp = 0f, stroke = true,
-            maxLines = 2, secondaryAlpha = 0.85f, align = Align.START,
+            maxLines = 2, secondaryAlpha = 0.85f,
+            align = Align.START, secondaryAlign = Align.START,
             fadeMs = FADE_MS
         )
 
         Preset.GLASS -> base.copy(
             preset = preset, opacity = 0.55f, cornerDp = 14f, stroke = false,
-            maxLines = 2, secondaryAlpha = 0.58f, align = Align.START,
+            maxLines = 2, secondaryAlpha = 0.58f,
+            align = Align.START, secondaryAlign = Align.START,
             fadeMs = FADE_MS
         )
 
         Preset.SOLID -> base.copy(
             preset = preset, opacity = 0.86f, cornerDp = 8f, stroke = false,
-            maxLines = 2, secondaryAlpha = 0.70f, align = Align.START,
+            maxLines = 2, secondaryAlpha = 0.70f,
+            align = Align.START, secondaryAlign = Align.START,
             fadeMs = FADE_MS
         )
 
         // 导航态：只留一句，居中，行数固定 1 —— 行车中多一行都是干扰。
         Preset.NAVI -> base.copy(
             preset = preset, opacity = 0.86f, cornerDp = 20f, stroke = false,
-            maxLines = 1, secondaryAlpha = 0.70f, align = Align.CENTER,
+            maxLines = 1, secondaryAlpha = 0.70f,
+            align = Align.CENTER, secondaryAlign = Align.CENTER,
             fadeMs = 160
         )
 

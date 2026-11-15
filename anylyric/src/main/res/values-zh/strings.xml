@@ -91,7 +91,10 @@
     <string name="window_size_px">%1$d 像素</string>
     <string name="window_size_auto">自适应</string>
     <string name="window_size_hint">拖动滑杆调大小，窗口会跟着变。最左端是自适应，框按文字收窄；设成固定高度后，歌词长短就不会再改变它。</string>
-    <string name="appearance_align">对齐</string>
+    <string name="appearance_align_title">标题行</string>
+    <string name="appearance_align_primary">歌词第一行</string>
+    <string name="appearance_align_secondary">歌词第二行</string>
+    <string name="appearance_align_hint">悬浮窗一共三行：一行标题、两行歌词。三行各自对齐，比如标题放中间、歌词留左边。</string>
     <string name="appearance_opacity">背景不透明度</string>
     <string name="appearance_corner">圆角</string>
     <string name="appearance_color_primary">当前行颜色</string>
@@ -132,6 +135,7 @@
     <string name="edit_preview_line">示例歌词 · 大小在设置里调</string>
     <string name="edit_preview_hint">长按可打开更多操作</string>
     <string name="edit_needs_overlay">请先授予悬浮窗权限，再来调整大小和位置。</string>
+    <string name="edit_needs_enabled">请先打开「显示悬浮窗」，关着的时候没有窗口可调。</string>
     <string name="edit_menu_lock">锁定位置</string>
     <string name="edit_menu_hide">隐藏 10 分钟</string>
     <string name="edit_menu_settings">打开设置</string>
@@ -252,6 +256,8 @@
     <string name="route_git_mirror">gitmirror</string>
     <string name="route_git_mirror_hint">镜像节点。通常更慢，但别的线路不通时往往能连上。</string>
     <string name="section_window">悬浮窗</string>
+    <string name="window_enabled">显示悬浮窗</string>
+    <string name="window_enabled_hint">关掉后悬浮窗完全不显示（不再画在别的应用上面），下次打开软件仍是关闭状态；歌词照旧在后台获取。</string>
     <string name="section_colors">颜色</string>
     <string name="section_colors_hint">点任意一行都能取色，每项都能单独恢复默认。</string>
     <string name="section_title">标题</string>
@@ -261,6 +267,12 @@
     <string name="appearance_hide_empty_hint">取不到歌词时什么都不画；关掉则显示一行「暂无歌词」。</string>
     <string name="behavior_online_lyrics">在线补词</string>
     <string name="behavior_online_lyrics_hint">本地取不到时，按歌名与歌手去在线库找一份（只发歌名和歌手，不发别的内容）。取到一次就存到本机，同一首歌以后不再联网。默认开启。</string>
+    <string name="behavior_cache">歌词缓存</string>
+    <string name="behavior_cache_off">关闭</string>
+    <string name="behavior_cache_value">%1$s 首</string>
+    <string name="behavior_cache_usage">已缓存 %1$s 首 · %2$s KB</string>
+    <string name="behavior_cache_hint">取到过的歌词会存在本机，同一首歌再放直接读本地，不再联网。缓存与「在线补词」开关无关：关掉联网也能用已缓存的词。超出上限时先淘汰最久没用到的。</string>
+    <string name="behavior_cache_clear">清空缓存</string>
     <string name="position_handle_hint">左边缘的小把手，点一下收起或展开悬浮窗。</string>
     <string name="title_show">显示歌名与歌手</string>
     <string name="title_show_hint">「歌名 · 歌手」居中显示在歌词上方或下方。</string>

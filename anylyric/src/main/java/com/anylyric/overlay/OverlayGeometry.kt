@@ -117,4 +117,26 @@ object OverlayGeometry {
 
     /** 把手落点：是否塞进歌词窗 + 横坐标。 */
     data class HandlePlacement(val inside: Boolean, val x: Int)
+
+    /**
+     * 一行文字在内容区里的横坐标。
+     *
+     * 三行（标题 / 第一行歌词 / 第二行歌词）各自调它，因此这里是**唯一**的对齐实现 ——
+     * 以前标题在渲染器里硬编码居中、歌词在 [LyricRenderer.drawGlyph] 里另算一套，
+     * 想给标题换对齐就得在两处各改一遍。
+     *
+     * 结果一律夹在 `[left, left + width - textWidth]` 内：字号调大或固定窗宽变窄时，
+     * 文字宁可从左边开始（右侧溢出被窗口裁掉），也不能算出越界坐标把字推到屏幕外。
+     *
+     * @param offset 只在 [Align.START] 下生效的右移量（上下文行错位）；0 = 不错位
+     */
+    fun textX(align: Align, left: Float, width: Float, textWidth: Float, offset: Float = 0f): Float {
+        val raw = when (align) {
+            Align.START -> left + offset
+            Align.CENTER -> left + (width - textWidth) / 2f
+            Align.END -> left + width - textWidth
+        }
+        val maxX = (left + width - textWidth).coerceAtLeast(left)
+        return raw.coerceIn(left, maxX)
+    }
 }

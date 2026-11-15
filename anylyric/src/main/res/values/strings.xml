@@ -92,7 +92,10 @@ If that entry does not exist, it is fine: turn on “Start on boot” above and 
     <string name="window_size_px">%1$d px</string>
     <string name="window_size_auto">Auto</string>
     <string name="window_size_hint">Drag the slider to resize; the overlay follows while you drag. Far left is Auto — the frame hugs the text. A fixed height stays fixed, so longer or shorter lyrics never change it.</string>
-    <string name="appearance_align">Alignment</string>
+    <string name="appearance_align_title">Title row</string>
+    <string name="appearance_align_primary">Lyric line 1</string>
+    <string name="appearance_align_secondary">Lyric line 2</string>
+    <string name="appearance_align_hint">The overlay has three rows: a title row and two lyric lines. Each one aligns on its own — e.g. title centered while the lyrics stay left.</string>
     <string name="appearance_opacity">Background opacity</string>
     <string name="appearance_corner">Corner radius</string>
     <string name="appearance_color_primary">Current line color</string>
@@ -133,6 +136,7 @@ If that entry does not exist, it is fine: turn on “Start on boot” above and 
     <string name="edit_preview_line">Sample lyrics — set the size in Settings</string>
     <string name="edit_preview_hint">Long press for more actions</string>
     <string name="edit_needs_overlay">Grant the overlay permission first, then adjust size and position.</string>
+    <string name="edit_needs_enabled">Turn on “Show overlay” first — with it off there is no window to adjust.</string>
     <string name="edit_menu_lock">Lock position</string>
     <string name="edit_menu_hide">Hide for 10 minutes</string>
     <string name="edit_menu_settings">Open settings</string>
@@ -255,6 +259,8 @@ If that entry does not exist, it is fine: turn on “Start on boot” above and 
     <string name="route_git_mirror">gitmirror</string>
     <string name="route_git_mirror_hint">Mirror node. Usually slower, often reachable when other lines fail.</string>
     <string name="section_window">Overlay window</string>
+    <string name="window_enabled">Show overlay</string>
+    <string name="window_enabled_hint">Off hides the overlay completely — nothing is drawn over other apps, and it stays off next time you open the app. Lyrics are still fetched in the background.</string>
     <string name="section_colors">Colors</string>
     <string name="section_colors_hint">Tap any row to pick a color. Each one has its own default.</string>
     <string name="section_title">Title</string>
@@ -264,6 +270,12 @@ If that entry does not exist, it is fine: turn on “Start on boot” above and 
     <string name="appearance_hide_empty_hint">Draw nothing when no lyrics are available. Off shows a small “No lyrics” note instead.</string>
     <string name="behavior_online_lyrics">Online lyrics fallback</string>
     <string name="behavior_online_lyrics_hint">When no local channel has the words, look them up by title and artist. Only those two fields are sent, and a match is stored on this device so the same song never goes online twice. On by default.</string>
+    <string name="behavior_cache">Lyric cache</string>
+    <string name="behavior_cache_off">Off</string>
+    <string name="behavior_cache_value">%1$s songs</string>
+    <string name="behavior_cache_usage">Cached: %1$s songs · %2$s KB</string>
+    <string name="behavior_cache_hint">Lyrics fetched once are kept on this device, so replaying a song shows words instantly and never goes online again. The cache works even with the online fallback off. Oldest entries are dropped first.</string>
+    <string name="behavior_cache_clear">Clear cache</string>
     <string name="position_handle_hint">A small tab on the left edge. Tap it to collapse or expand the overlay.</string>
     <string name="title_show">Show song title</string>
     <string name="title_show_hint">“Song · Artist”, centered above or below the lyrics.</string>

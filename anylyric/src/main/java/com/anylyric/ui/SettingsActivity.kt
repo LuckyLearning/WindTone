@@ -59,6 +59,7 @@ import com.anylyric.data.PermissionGate
 import com.anylyric.data.Permissions
 import com.anylyric.data.Prefs
 import com.anylyric.diag.Probe
+import com.anylyric.lyrics.LyricStore
 import com.anylyric.overlay.Align
 import com.anylyric.overlay.LineMode
 import com.anylyric.overlay.OverlayDefaults
@@ -714,6 +715,18 @@ class SettingsActivity : BaseActivity() {
         editButton = primaryButton(getString(R.string.display_edit)) { toggleEdit() }
 
         val rows = ArrayList<View>(12)
+        // 总开关放最上面（0.2.25）：它是这一页所有参数的「前提」——
+        // 关着的时候下面那些宽高、对齐、透明度全部不起作用，藏到底部会让人白调半天。
+        rows += switchRow(
+            label = getString(R.string.window_enabled),
+            hintText = getString(R.string.window_enabled_hint),
+            current = { prefs.overlayEnabled },
+            onChange = { checked ->
+                prefs.overlayEnabled = checked
+                hub.onOverlayEnabledChanged()
+            }
+        )
+        rows += divider()
         rows += editButton
         rows += hint(getString(R.string.position_edit_hint))
         rows += spacer(12)
@@ -992,19 +1005,39 @@ class SettingsActivity : BaseActivity() {
         )
         rows += hint(getString(R.string.appearance_overflow_hint))
 
+        // 三行各自对齐（0.2.25）：标题 / 第一行歌词 / 第二行歌词互不牵连。
+        // 以前共用一份 align，把标题放中间就必然把歌词也拽到中间 —— 二者只能取一个。
         rows += spacer(12)
+        val alignLabels = listOf(
+            getString(R.string.align_start),
+            getString(R.string.align_center),
+            getString(R.string.align_end)
+        )
         rows += labeled(
-            getString(R.string.appearance_align),
+            getString(R.string.appearance_align_title),
             chipRow(
-                options = listOf(
-                    getString(R.string.align_start),
-                    getString(R.string.align_center),
-                    getString(R.string.align_end)
-                ),
+                options = alignLabels,
+                current = { prefs.style().titleAlign.ordinal },
+                onPick = { index -> editStyle { it.copy(titleAlign = ALIGN_ORDER[index]) } }
+            )
+        )
+        rows += labeled(
+            getString(R.string.appearance_align_primary),
+            chipRow(
+                options = alignLabels,
                 current = { prefs.style().align.ordinal },
                 onPick = { index -> editStyle { it.copy(align = ALIGN_ORDER[index]) } }
             )
         )
+        rows += labeled(
+            getString(R.string.appearance_align_secondary),
+            chipRow(
+                options = alignLabels,
+                current = { prefs.style().secondaryAlign.ordinal },
+                onPick = { index -> editStyle { it.copy(secondaryAlign = ALIGN_ORDER[index]) } }
+            )
+        )
+        rows += hint(getString(R.string.appearance_align_hint))
 
         rows += spacer(6)
         rows += stepperRow(
@@ -1274,6 +1307,47 @@ class SettingsActivity : BaseActivity() {
                 hub.onOnlineLyricsChanged()
             }
         )
+
+        // 歌词缓存（0.2.25）：上限可调；关掉在线补词不影响已缓存的词。
+        rows += divider()
+        rows += labeled(
+            getString(R.string.behavior_cache),
+            chipRow(
+                options = Prefs.CACHE_LIMITS.map { limit ->
+                    if (limit <= 0) {
+                        getString(R.string.behavior_cache_off)
+                    } else {
+                        getString(R.string.behavior_cache_value, limit.toString())
+                    }
+                },
+                current = { Prefs.CACHE_LIMITS.indexOf(prefs.lyricCacheLimit) },
+                onPick = { index -> hub.setCacheLimit(Prefs.CACHE_LIMITS[index]) }
+            )
+        )
+        val usage = text("", 11.5f, secondary = true)
+        rows += usage
+        // 统计要列目录，不能跟着每秒刷新跑：10 秒一次足够看出「涨没涨」。
+        var usageAt = 0L
+        fun refreshUsage() {
+            val (count, bytes) = LyricStore.stats()
+            usage.text = getString(
+                R.string.behavior_cache_usage, count.toString(), (bytes / 1024L).toString()
+            )
+        }
+        uiRefreshers += {
+            val now = SystemClock.elapsedRealtime()
+            if (now - usageAt >= 10_000L) {
+                usageAt = now
+                refreshUsage()
+            }
+        }
+        rows += hint(getString(R.string.behavior_cache_hint))
+        rows += textButton(getString(R.string.behavior_cache_clear)) {
+            hub.clearLyricCache()
+            usageAt = SystemClock.elapsedRealtime()
+            refreshUsage()
+            refresh()
+        }
 
         return cardSection(getString(R.string.section_behavior), null, rows)
     }
@@ -2924,6 +2998,11 @@ class SettingsActivity : BaseActivity() {
         // 一句示例歌词供拖动，样式调好了等有歌时直接生效。真正的前提只有悬浮窗权限。
         if (next && !Settings.canDrawOverlays(this)) {
             toast(getString(R.string.edit_needs_overlay))
+            return
+        }
+        // 总开关关着时窗口根本不存在，进编辑态等于对空气拖动。
+        if (next && !prefs.overlayEnabled) {
+            toast(getString(R.string.edit_needs_enabled))
             return
         }
         hub.overlay().setEditable(next)

@@ -71,4 +71,34 @@ class LyricStoreTest {
         assertEquals(listOf("k4.lrc", "k5.lrc"), left)
         assertTrue(files.first().exists().not())
     }
+
+    /** 上限 0 = 不缓存（0.2.25 设置里的「关闭」）：连写都不写。 */
+    @Test
+    fun `zero limit writes nothing`() {
+        val key = LyricMatch.cacheKey("稻香", "周杰伦")
+        LyricStore.saveAt(dir, key, "[00:01.000]第一句\n", max = 0)
+        assertNull(LyricStore.loadAt(dir, key))
+        assertEquals(0, dir.listFiles()?.size ?: 0)
+    }
+
+    /** 自定义上限：写第 4 首时，最旧的那首被淘汰。 */
+    @Test
+    fun `saveAt honours custom limit`() {
+        for (i in 1..4) {
+            LyricStore.saveAt(dir, "k$i", "[00:01.000]第 $i 句\n", max = 3)
+            // 串行写入可能落在同一毫秒，显式拉开时间戳才能验证「淘汰最旧」。
+            File(dir, "k$i.lrc").setLastModified(1_000L * i)
+        }
+        val left = dir.listFiles()!!.map { it.name }.sorted()
+        assertEquals(listOf("k2.lrc", "k3.lrc", "k4.lrc"), left)
+    }
+
+    @Test
+    fun `stats counts files and bytes`() {
+        LyricStore.saveAt(dir, "a", "12345", max = 10)
+        LyricStore.saveAt(dir, "b", "123", max = 10)
+        val (count, bytes) = LyricStore.statsAt(dir)
+        assertEquals(2, count)
+        assertEquals(8L, bytes)
+    }
 }

@@ -520,8 +520,9 @@ class LyricRenderer(context: Context) : View(context) {
 
         contentHeight = y
 
-        // 错位只在左对齐下生效；上下文行整体右移，宽度也要跟着算进来，否则自适应时会被裁。
-        val lineOffsetPx = if (style.align == Align.START) style.lineOffsetDp * density else 0f
+        // 错位只在第二行**自己**是左对齐时生效；宽度也要跟着算进来，否则自适应时会被裁。
+        val lineOffsetPx =
+            if (style.secondaryAlign == Align.START) style.lineOffsetDp * density else 0f
         var width = glyphs.maxOfOrNull {
             it.width + if (it.secondary) lineOffsetPx else 0f
         } ?: 0f
@@ -758,7 +759,7 @@ class LyricRenderer(context: Context) : View(context) {
     }
 
     /**
-     * 标题行：`歌名 · 歌手`，永远居中，字号与颜色独立于正文。
+     * 标题行：`歌名 · 歌手`，字号与颜色独立于正文，**对齐也独立**（[OverlayStyle.titleAlign]）。
      *
      * 为什么单独一个绘制函数而不是塞进 [glyphs]：
      *  · 它不参与交叉淡入（换歌时淡入的是歌词，标题一跳到底反而更清楚）；
@@ -777,21 +778,25 @@ class LyricRenderer(context: Context) : View(context) {
 
         titlePaint.textSize = titleSize
         titlePaint.typeface = Typeface.DEFAULT
-        titlePaint.textAlign = Paint.Align.CENTER
+        // 统一用 LEFT 描点 + 自己算 x：这样填充与描边共用同一个起点，
+        // 不会出现「描边按一种对齐、填充按另一种」的错位。
+        titlePaint.textAlign = Paint.Align.LEFT
         titlePaint.color = style.titleColor
         val baseline = top - titlePaint.fontMetrics.ascent
-        val cx = paddingH + leftInsetPx + contentWidth / 2f
+        val x = OverlayGeometry.textX(
+            style.titleAlign, textLeft, contentWidth, measureTitle(line)
+        )
 
         if (style.stroke) {
             titleStrokePaint.textSize = titleSize
             titleStrokePaint.typeface = Typeface.DEFAULT
-            titleStrokePaint.textAlign = Paint.Align.CENTER
+            titleStrokePaint.textAlign = Paint.Align.LEFT
             titleStrokePaint.color = style.strokeColor
             titleStrokePaint.style = Paint.Style.STROKE
             titleStrokePaint.strokeWidth = titleSize * 0.085f
-            canvas.drawText(line, cx, baseline, titleStrokePaint)
+            canvas.drawText(line, x, baseline, titleStrokePaint)
         }
-        canvas.drawText(line, cx, baseline, titlePaint)
+        canvas.drawText(line, x, baseline, titlePaint)
     }
 
     private fun drawGlyph(canvas: Canvas, glyph: Glyph, top: Float, alphaScale: Float) {
@@ -799,16 +804,11 @@ class LyricRenderer(context: Context) : View(context) {
         val baseline = top - textPaint.fontMetrics.ascent
         val glyphWidth = glyph.width
         val baseX = textLeft
-        val offset =
-            if (glyph.secondary && style.align == Align.START) style.lineOffsetDp * density else 0f
-        val rawX = when (style.align) {
-            Align.START -> baseX + offset
-            Align.CENTER -> baseX + (contentWidth - glyphWidth) / 2f
-            Align.END -> baseX + contentWidth - glyphWidth
-        }
-        // 错位不能把字顶出内容区：固定宽度 + 长句时，右移量被夹回去。
-        val maxX = (baseX + contentWidth - glyphWidth).coerceAtLeast(baseX)
-        val x = rawX.coerceIn(baseX, maxX)
+        // 第二行歌词有自己的对齐（0.2.25）：错位只在它自己是左对齐时才生效，
+        // 否则「居中 + 右移」会让整行看起来没对齐。
+        val align = if (glyph.secondary) style.secondaryAlign else style.align
+        val offset = if (glyph.secondary && align == Align.START) style.lineOffsetDp * density else 0f
+        val x = OverlayGeometry.textX(align, baseX, contentWidth, glyphWidth, offset)
         // 描边先画、填充后画：这是真轮廓，不是把文字偏移复制一遍当阴影。
         if (style.stroke) canvas.drawText(glyph.text, x, baseline, strokePaint)
         canvas.drawText(glyph.text, x, baseline, textPaint)

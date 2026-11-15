@@ -197,6 +197,11 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
     ) {
         // 「隐藏 10 分钟」期间的任何刷新都不该把窗口又拉回来
         if (SystemClock.elapsedRealtime() < hiddenUntil) return
+        // 总开关关着：一个窗口都不建（缓存里那几句内容也不必记，开关一开上层会重推）。
+        if (!prefs.overlayEnabled) {
+            if (view != null || handle != null) hide()
+            return
+        }
 
         val changed = primary != lastPrimary ||
             secondary != lastSecondary ||
@@ -426,8 +431,27 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
 
     fun isSuppressed(): Boolean = suppressed
 
+    /**
+     * 总开关（0.2.25）：关 → 立刻拆窗（歌词窗与把手一起），开 → 让上层重推一次内容。
+     *
+     * 不复用 [setCollapsed]：收起只是「画空」，窗口与把手还在；总开关要的是
+     * **完全不占屏幕、不占一块 Surface** —— 车机上少一层窗口是实打实的显存与合成开销。
+     */
+    fun setEnabled(enabled: Boolean) {
+        if (!enabled) {
+            hide()
+            return
+        }
+        syncHandle()
+        onRequestRender?.invoke()
+    }
+
     /** 与设置项的开关同步：关掉时把手立刻消失，开着且有窗口时补上。 */
     fun syncHandle() {
+        if (!prefs.overlayEnabled) {
+            removeHandle()
+            return
+        }
         if (!prefs.handleEnabled) {
             removeHandle()
             if (collapsed) {
@@ -459,7 +483,7 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
 
     private fun ensureHandle(): CollapseHandle? {
         handle?.let { return it }
-        if (!prefs.handleEnabled || editable || suppressed) return null
+        if (!prefs.overlayEnabled || !prefs.handleEnabled || editable || suppressed) return null
         refreshWindowManager()
         val h = CollapseHandle(context).apply {
             collapsed = this@OverlayHost.collapsed

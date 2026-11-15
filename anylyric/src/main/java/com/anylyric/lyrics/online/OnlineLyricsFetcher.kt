@@ -83,6 +83,8 @@ object OnlineLyricsFetcher {
     /**
      * 请求一首歌的在线歌词。
      *
+     * @param allowNetwork 为 false 时**只查磁盘缓存、不联网**（0.2.25）。关掉在线补词
+     *             不等于丢掉已经取到的词：缓存是本地资源，开关只控制「要不要出门找」。
      * @param onResult 在主线程回调，只在拿到**非空**歌词时调用。
      * @param onMiss   在主线程回调，表示这首歌这一轮没取到（可能已落盘失败缓存）。
      *                 调用方据此安排重试，不要把它当成「永远没有」。
@@ -93,6 +95,7 @@ object OnlineLyricsFetcher {
         title: String,
         artist: String,
         durationMs: Long,
+        allowNetwork: Boolean = true,
         onResult: (List<LyricLine>) -> Unit,
         onMiss: () -> Unit = {}
     ): Boolean {
@@ -118,9 +121,14 @@ object OnlineLyricsFetcher {
         }
 
         worker.execute {
-            val lines = runCatching { resolve(cleanTitle, cleanArtist, key, durationMs) }.getOrNull()
+            val lines = runCatching {
+                resolve(cleanTitle, cleanArtist, key, durationMs, allowNetwork)
+            }.getOrNull()
             synchronized(cache) {
-                cache[key] = Entry(lines, System.currentTimeMillis())
+                // 只查盘失败不算「这首歌没有」：下一次开着网络还要再试。
+                if (lines != null || allowNetwork) {
+                    cache[key] = Entry(lines, System.currentTimeMillis())
+                }
                 if (pendingKey == key) pendingKey = null
             }
             main.post {
@@ -130,12 +138,22 @@ object OnlineLyricsFetcher {
         return true
     }
 
-    /** 开关关闭时清空内存与磁盘缓存。 */
-    fun clear() {
+    /**
+     * 只清内存结果，**不动磁盘缓存**。
+     *
+     * 关掉「在线补词」时用它：那一开关管的是「要不要联网」，不是「要不要保留已有的词」。
+     * 连盘一起清会让屏上原本有词的歌立刻变「暂无歌词」，看起来像数据被开关删了。
+     */
+    fun dropMemoryCache() {
         synchronized(cache) {
             cache.clear()
             pendingKey = null
         }
+    }
+
+    /** 彻底清空（内存 + 磁盘）。设置页「清空缓存」用。 */
+    fun clear() {
+        dropMemoryCache()
         LyricStore.clear()
     }
 
@@ -145,7 +163,8 @@ object OnlineLyricsFetcher {
         title: String,
         artist: String,
         key: String,
-        durationMs: Long
+        durationMs: Long,
+        allowNetwork: Boolean
     ): List<LyricLine>? {
         // 1. 磁盘：第二次听同一首歌永远走这里，不联网。
         val cached = LyricStore.load(key)
@@ -153,6 +172,8 @@ object OnlineLyricsFetcher {
             val restored = toLines(cached, title, artist)
             if (restored.isNotEmpty()) return restored
         }
+        // 只查缓存（在线补词关着）：到此为止，不出门。
+        if (!allowNetwork) return null
         // 2. 网络：三家按优先级串行（Cardash 的顺序：酷狗 → 网易云 → 汽水）。
         val targetSec = durationMs / 1000L
         val deadline = System.currentTimeMillis() + MAX_TOTAL_MS

@@ -170,6 +170,28 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_ONLINE_LYRICS, true)
         set(value) = sp.edit().putBoolean(KEY_ONLINE_LYRICS, value).apply()
 
+    /**
+     * 悬浮窗总开关（0.2.25）。
+     *
+     * 用户原话：「增加个开关，打开软件时悬浮窗显示隐藏通过开关控制」。关掉后
+     * **什么都不画** —— 歌词照旧在后台取、责任链照旧跑，只是不建窗口。
+     * 与「收起」的区别：收起是临时让位（点把手就回来、不落盘），这里是持久状态
+     * （下次打开软件仍然关着），所以它必须落盘。
+     */
+    var overlayEnabled: Boolean
+        get() = sp.getBoolean(KEY_OVERLAY_ENABLED, true)
+        set(value) = sp.edit().putBoolean(KEY_OVERLAY_ENABLED, value).apply()
+
+    /**
+     * 歌词磁盘缓存上限（按「首」计）。0 = 不缓存。
+     *
+     * 缓存本身就是「同一首歌第二次不用再联网」，但它要占盘 —— 车机存储小，
+     * 所以给一个可调上限（[CACHE_LIMITS]），默认 [CACHE_LIMIT_DEFAULT] 首。
+     */
+    var lyricCacheLimit: Int
+        get() = sp.getInt(KEY_LYRIC_CACHE, CACHE_LIMIT_DEFAULT).coerceIn(0, CACHE_LIMIT_MAX)
+        set(value) = sp.edit().putInt(KEY_LYRIC_CACHE, value.coerceIn(0, CACHE_LIMIT_MAX)).apply()
+
     /** 最近一次「确认服务活着」的心跳时间，供看门狗判断是否掉线。 */
     var lastAliveAt: Long
         get() = sp.getLong(KEY_LAST_ALIVE, 0L)
@@ -232,7 +254,21 @@ class Prefs(context: Context) {
 
     private fun styleKey(dark: Boolean, base: String): String = if (dark) "d_$base" else base
 
-    private fun readStyle(dark: Boolean, seed: OverlayStyle?): OverlayStyle = OverlayDefaults.sanitize(
+    private fun readStyle(dark: Boolean, seed: OverlayStyle?): OverlayStyle {
+        val align = Align.of(sp.getString(styleKey(dark, KEY_ALIGN), seed?.align?.id))
+        // 第二行的对齐（0.2.25）：老版本只有一份对齐，读不到就跟着第一行 ——
+        // 升级后不该突然出现两种对齐（那看起来就是「位置自己变了」）。
+        // 本套单独改过第一行时也必须跟本套，不能跟继承来的种子，否则改完第一行第二行不动。
+        val storedSecondary = sp.getString(styleKey(dark, KEY_SECONDARY_ALIGN), null)
+        val secondaryAlign = when {
+            storedSecondary != null -> Align.of(storedSecondary)
+            sp.contains(styleKey(dark, KEY_ALIGN)) -> align
+            else -> seed?.secondaryAlign ?: align
+        }
+        val titleAlign = Align.of(
+            sp.getString(styleKey(dark, KEY_TITLE_ALIGN), seed?.titleAlign?.id)
+        )
+        return OverlayDefaults.sanitize(
         OverlayStyle(
             preset = Preset.of(
                 sp.getString(styleKey(dark, KEY_PRESET), seed?.preset?.id)
@@ -260,7 +296,8 @@ class Prefs(context: Context) {
                 styleKey(dark, KEY_SECONDARY_ALPHA),
                 seed?.secondaryAlpha ?: OverlayDefaults.SECONDARY_ALPHA
             ),
-            align = Align.of(sp.getString(styleKey(dark, KEY_ALIGN), seed?.align?.id)),
+            align = align,
+            secondaryAlign = secondaryAlign,
             lineOffsetDp = sp.getFloat(
                 styleKey(dark, KEY_LINE_OFFSET),
                 seed?.lineOffsetDp ?: OverlayDefaults.LINE_OFFSET_DP
@@ -303,9 +340,11 @@ class Prefs(context: Context) {
             ),
             titlePos = TitlePos.of(
                 sp.getString(styleKey(dark, KEY_TITLE_POS), seed?.titlePos?.id)
-            )
+            ),
+            titleAlign = titleAlign
         )
-    )
+        )
+    }
 
     /** 写当前主题那一套；另一套保持原样。 */
     fun saveStyle(style: OverlayStyle) {
@@ -322,6 +361,7 @@ class Prefs(context: Context) {
             .putBoolean(styleKey(dark, KEY_STROKE), safe.stroke)
             .putFloat(styleKey(dark, KEY_SECONDARY_ALPHA), safe.secondaryAlpha)
             .putString(styleKey(dark, KEY_ALIGN), safe.align.id)
+            .putString(styleKey(dark, KEY_SECONDARY_ALIGN), safe.secondaryAlign.id)
             .putFloat(styleKey(dark, KEY_LINE_OFFSET), safe.lineOffsetDp)
             .putInt(styleKey(dark, KEY_FADE), safe.fadeMs)
             .putInt(styleKey(dark, KEY_PRIMARY_COLOR), safe.primaryColor)
@@ -334,6 +374,7 @@ class Prefs(context: Context) {
             .putFloat(styleKey(dark, KEY_TITLE_FONT), safe.titleFontSp)
             .putInt(styleKey(dark, KEY_TITLE_COLOR), safe.titleColor)
             .putString(styleKey(dark, KEY_TITLE_POS), safe.titlePos.id)
+            .putString(styleKey(dark, KEY_TITLE_ALIGN), safe.titleAlign.id)
             .apply()
         // 两套一起失效：夜间没单独设置过时是「继承日间」，只清一边会读到过期值。
         lightStyleCache = null
@@ -402,6 +443,8 @@ class Prefs(context: Context) {
         private const val KEY_STROKE = "style_stroke"
         private const val KEY_SECONDARY_ALPHA = "style_secondary_alpha"
         private const val KEY_ALIGN = "style_align"
+        private const val KEY_SECONDARY_ALIGN = "style_secondary_align"
+        private const val KEY_TITLE_ALIGN = "style_title_align"
         private const val KEY_LINE_OFFSET = "style_line_offset_dp"
         private const val KEY_FADE = "style_fade_ms"
         private const val KEY_PRIMARY_COLOR = "style_primary_color"
@@ -419,6 +462,8 @@ class Prefs(context: Context) {
         private const val KEY_BOOT_AUTOSTART = "boot_autostart"
         private const val KEY_WATCHDOG = "watchdog_enabled"
         private const val KEY_ONLINE_LYRICS = "online_lyrics_enabled"
+        private const val KEY_OVERLAY_ENABLED = "overlay_enabled"
+        private const val KEY_LYRIC_CACHE = "lyric_cache_limit"
         private const val KEY_LAST_ALIVE = "last_alive_at"
 
         /** 心跳落盘间隔：看门狗的过期阈值是 20 分钟，5 分钟一次足够，且写盘量很小。 */
@@ -430,5 +475,10 @@ class Prefs(context: Context) {
         private const val KEY_RATIO_Y_LAND = "ratio_y_land"
 
         const val DEFAULT_DISPLAY_ID = 0
+
+        /** 缓存上限可选项（首）。0 = 不缓存；界面上按这个顺序排胶囊。 */
+        val CACHE_LIMITS = intArrayOf(0, 120, 240, 480, 1000)
+        const val CACHE_LIMIT_DEFAULT = 240
+        const val CACHE_LIMIT_MAX = 2000
     }
 }

@@ -165,4 +165,34 @@ class OverlayGeometryTest {
         )
         assertEquals(false, leave.inside)
     }
+
+    // ----------------------------------------------------------- 三行各自对齐（0.2.25）
+
+    @Test
+    fun textXFollowsEachRowAlignment() {
+        // 内容区 left=20、宽 300、文字宽 100
+        assertEquals(20f, OverlayGeometry.textX(Align.START, 20f, 300f, 100f), 0.001f)
+        assertEquals(120f, OverlayGeometry.textX(Align.CENTER, 20f, 300f, 100f), 0.001f)
+        assertEquals(220f, OverlayGeometry.textX(Align.END, 20f, 300f, 100f), 0.001f)
+    }
+
+    /** 错位只在左对齐下参与计算：居中/右对齐时给 offset 也必须落在正中/右端。 */
+    @Test
+    fun textXIgnoresOffsetWhenNotStart() {
+        assertEquals(120f, OverlayGeometry.textX(Align.CENTER, 20f, 300f, 100f, 30f), 0.001f)
+        assertEquals(220f, OverlayGeometry.textX(Align.END, 20f, 300f, 100f, 30f), 0.001f)
+    }
+
+    @Test
+    fun textXOffsetIsClampedInsideContent() {
+        // 文字 100 宽 + 错位 300：右移量被夹到「刚好贴右边缘」
+        assertEquals(220f, OverlayGeometry.textX(Align.START, 20f, 300f, 100f, 300f), 0.001f)
+    }
+
+    /** 文字比内容区还宽（大字号 + 固定窄窗）：从左边开始画，绝不返回越界坐标。 */
+    @Test
+    fun textXKeepsWideTextAtLeftEdge() {
+        assertEquals(20f, OverlayGeometry.textX(Align.CENTER, 20f, 300f, 480f), 0.001f)
+        assertEquals(20f, OverlayGeometry.textX(Align.END, 20f, 300f, 480f), 0.001f)
+    }
 }

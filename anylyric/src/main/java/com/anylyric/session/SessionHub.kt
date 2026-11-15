@@ -363,6 +363,9 @@ class SessionHub private constructor(context: Context) {
         Probe.setEnabled(prefs.debugEnabled)
         // 歌词磁盘缓存：取到过一次就永久可用，冷启动/重绑都不必重新联网。
         OnlineLyricsFetcher.bind(appContext)
+        // 上限跟着设置走（0 = 不缓存）：进程刚起来时先收敛一次，
+        // 用户上次调小过上限、之后又听过歌，多余的文件在这里被淘汰掉。
+        LyricStore.setLimit(prefs.lyricCacheLimit)
         // 「网回来了」= 之前那些取词失败不算数（开机 / 出地库是最常见的一幕）。
         NetworkWatch.start(appContext) { onNetworkAvailable() }
         if (prefs.debugEnabled) startResourceTicker()
@@ -1105,6 +1108,17 @@ class SessionHub private constructor(context: Context) {
     }
 
     /**
+     * 设置页切换「显示悬浮窗」时调用（0.2.25）。
+     *
+     * 关：立刻拆窗，歌词照旧在后台取（开关只影响画不画）。
+     * 开：让悬浮层与上层各刷一次，把当前这句歌词补出来。
+     */
+    fun onOverlayEnabledChanged() {
+        overlay.setEnabled(prefs.overlayEnabled)
+        if (prefs.overlayEnabled) requestRefresh("overlay_switch")
+    }
+
+    /**
      * 事件合并入口。
      *
      * 播放器换一句歌词会连发 `state` + `metadata` 两三个回调（真机上一帧内能到 5 个），
@@ -1827,7 +1841,10 @@ class SessionHub private constructor(context: Context) {
      * 换歌后到达的旧结果直接丢弃。期间本地通道已命中的也不覆盖：本地词更准。
      */
     private fun maybeRequestOnline(title: String?, artist: String?, durationMs: Long) {
-        if (!prefs.onlineLyrics) return
+        // 关掉在线补词**不等于**关掉缓存：已取到的词仍然要能用（0.2.25）。
+        // 两个都关（在线关 + 缓存上限 0）时才真的什么都不做。
+        val allowNetwork = prefs.onlineLyrics
+        if (!allowNetwork && prefs.lyricCacheLimit <= 0) return
         val cleanTitle = title?.trim().orEmpty()
         if (cleanTitle.isEmpty()) return
         val cleanArtist = artist?.trim().orEmpty()
@@ -1860,9 +1877,9 @@ class SessionHub private constructor(context: Context) {
             cleanTitle,
             cleanArtist,
             durationMs,
+            allowNetwork = allowNetwork,
             onResult = { lines ->
                 onlineInFlight = false
-                if (!prefs.onlineLyrics) return@request
                 if (!isCurrentSong(cleanTitle, cleanArtist)) return@request
                 // 本地是「够了」的强命中就不要再覆盖：本地词（尤其播放器自己给的）
                 // 比在线抓的更准。弱命中（三行通知 / 无轴）则相反 —— 在线那份有整段时间轴。
@@ -1882,6 +1899,12 @@ class SessionHub private constructor(context: Context) {
             onMiss = {
                 onlineInFlight = false
                 if (!isCurrentSong(cleanTitle, cleanArtist)) return@request
+                // 只查了缓存（在线补词关着）：miss 是正常结果，不排重试 ——
+                // 排了也只是每 6/15/30/60 秒白读一次盘。
+                if (!allowNetwork) {
+                    if (Probe.enabled) Probe.write("歌词", "cache miss, online off")
+                    return@request
+                }
                 val backoff = ONLINE_BACKOFF_MS[
                     (onlineAttempts - 1).coerceIn(0, ONLINE_BACKOFF_MS.lastIndex)
                 ]
@@ -1921,17 +1944,45 @@ class SessionHub private constructor(context: Context) {
         mainHandler.removeCallbacks(onlineRetry)
     }
 
-    /** 设置页切换在线补词时调用：关掉要立刻释放缓存与已显示的结果。 */
+    /**
+     * 设置页切换在线补词时调用。
+     *
+     * 关掉只清**内存里**这一轮的结果与在跑请求，**不动磁盘缓存**（0.2.25）：
+     * 缓存是本地资源，关掉联网不该把已经取到的词一起删掉 —— 那会让屏上原本有词的歌
+     * 立刻变「暂无歌词」，看起来像开关把数据清了。想清盘有独立入口（[setCacheLimit]）。
+     */
     fun onOnlineLyricsChanged() {
         if (!prefs.onlineLyrics) {
             resetOnlineState()
-            OnlineLyricsFetcher.clear()
+            OnlineLyricsFetcher.dropMemoryCache()
             hitSource = null
         }
         // 强制下一轮重跑责任链：否则关掉开关后，旧的在线歌词会一直留在屏上
         // （输入没变时责任链被指纹短路，currentLines 不会被重新计算）。
         keyValid = false
         requestRefresh("online_switch")
+    }
+
+    /** 设置页「清空缓存」：内存与磁盘一起清。屏上这句不动，下一句起重新取。 */
+    fun clearLyricCache() {
+        OnlineLyricsFetcher.clear()
+        if (Probe.enabled) Probe.write("歌词", "cache cleared by user")
+    }
+
+    /** 设置页改缓存上限：0 = 不缓存并清空，其它值立即收敛到新预算。 */
+    fun setCacheLimit(limit: Int) {
+        prefs.lyricCacheLimit = limit
+        LyricStore.setLimit(prefs.lyricCacheLimit)
+        if (limit <= 0) {
+            resetOnlineState()
+            OnlineLyricsFetcher.dropMemoryCache()
+            // 盘上已经空了，但屏上那份来自缓存的行也要跟着走：重跑一次责任链。
+            if (hitSource == ONLINE_SOURCE) {
+                hitSource = null
+                keyValid = false
+                requestRefresh("cache_limit")
+            }
+        }
     }
 
     /**
