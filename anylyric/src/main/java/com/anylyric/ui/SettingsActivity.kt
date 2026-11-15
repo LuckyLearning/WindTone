@@ -1338,6 +1338,18 @@ class SettingsActivity : BaseActivity() {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
+            // 「优先用在线歌词」排第一：它决定用谁，来源与顺序只是「怎么找」。
+            addView(
+                switchRow(
+                    label = getString(R.string.behavior_online_override),
+                    hintText = getString(R.string.behavior_online_override_hint),
+                    current = { prefs.onlineOverridesLocal },
+                    onChange = { checked ->
+                        prefs.onlineOverridesLocal = checked
+                        hub.onOnlineOverrideChanged()
+                    }
+                )
+            )
             addView(
                 labeled(
                     getString(R.string.behavior_source),

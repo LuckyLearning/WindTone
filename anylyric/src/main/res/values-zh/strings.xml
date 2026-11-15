@@ -279,6 +279,8 @@
     <string name="appearance_hide_empty_hint">取不到歌词时什么都不画；关掉则显示一行「暂无歌词」。</string>
     <string name="behavior_online_lyrics">在线补词</string>
     <string name="behavior_online_lyrics_hint">本地取不到时，按歌名与歌手去在线库找一份（只发歌名和歌手，不发别的内容）。取到一次就存到本机，同一首歌以后不再联网。默认开启。</string>
+    <string name="behavior_online_override">优先用在线歌词</string>
+    <string name="behavior_online_override_hint">播放器自己给了歌词，也优先用在线解析到的那一份。车机播放器给的常常没有时间轴、或者配的是另一个版本，这时在线那份反而更贴；默认关闭，本地词通常与音频同源。</string>
     <string name="behavior_source">歌词来源</string>
     <string name="behavior_source_hint">「自动」按下面的顺序依次尝试；手动指定某一家后只用它 —— 它取不到就宁可没有，也不会偷偷换别家给一份错的。取到的词都会存在本机。</string>
     <string name="behavior_order">自动顺序</string>

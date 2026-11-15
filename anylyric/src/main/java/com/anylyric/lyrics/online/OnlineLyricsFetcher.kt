@@ -46,35 +46,30 @@ object OnlineLyricsFetcher {
      */
     private const val MAX_TOTAL_MS = 18_000L
 
+    /**
+     * 用户主动点「获取更多」时的预算。
+     *
+     * 比常态宽：那一轮每个源都要往后翻台（可能翻到第 2 页），按常态预算会中途被截断，
+     * 表现就是「点了更多，只多出一版」。这是用户主动等待的操作，长一点可以接受。
+     */
+    private const val MORE_TOTAL_MS = 24_000L
+
     /** 每家最多试几个关键词：完整「歌名 歌手」+ 纯歌名，再多只是把等待时间拉长。 */
     private const val MAX_QUERIES = 2
 
-    /** 每个关键词最多试几条候选：第一名可能没带词，试到第 3 条还不行为止。 */
-    private const val MAX_CANDIDATES = 3
+    /** 一首候选歌最多试几个歌词文件（酷狗「歌词搜索」那一层，不是搜索候选层）。 */
+    private const val MAX_LYRIC_FILES = 3
 
-    /**
-     * **每个源**最多贡献几版。
-     *
-     * 不设这个上限的话，排第一的那家只要有词就能把 `want` 吃满，
-     * 用户点开版本列表看到的永远是同一家的三个翻唱 —— 换源等于白换。
-     */
-    private const val MAX_PER_SOURCE = 2
-
-    /**
-     * 首次取几版（0.2.27）。
-     *
-     * 用户原话：「最开始只请求3个，更多时可以获取更多」。3 版正好覆盖
-     * 「原版 / 翻唱 / 伴奏」这三种常见情况，又不会一上来就连跑五家。
-     */
+    /** 首次取几版（用户原话：「最开始只请求3个」）。 */
     const val FIRST_WANT = 3
 
     /**
-     * 版本上限（点「获取更多」时的天花板）。
+     * 版本数上限。
      *
-     * 现实问题：在线搜出来的第一条未必是用户想听的那版 —— 同名翻唱、现场版、DJ 版
-     * 的时间轴完全不同，一开场就「整首差半句」，而旧实现没有任何补救手段。
+     * 用户原话：「更多上限不限制」。所以这里**不是**产品上限，只是防跑飞的档板
+     * （见 [OnlineScan.SAFETY_MAX]）；UI 只要没到这个数就一直给「获取更多」。
      */
-    const val MAX_VARIANTS = 6
+    const val MAX_VARIANTS = OnlineScan.SAFETY_MAX
 
     private const val MAX_RESPONSE_BYTES = 512 * 1024
     private const val MAX_CACHE = 24
@@ -116,6 +111,9 @@ object OnlineLyricsFetcher {
      * @param want 需要几**版**。首次 [FIRST_WANT]，点「获取更多」时递增到 [MAX_VARIANTS]。
      * @param sources 按顺序尝试的源。**只有一个元素 = 用户手动指定**，此时缓存里
      *             来自别家的词不再优先（否则「指定源」对已缓存的歌等于没生效）。
+     * @param known 屏上**已经有的**版本表。点「获取更多」时必须传：一是不能把已经
+     *             取到的版本弄丢，二是游标要靠它算「这个源已经取到几版」，
+     *             否则每次都会从第一条候选重来，去重一挡就永远没有新增。
      * @param onResult 在主线程回调，参数是**按优先级排好的版本表**（非空）。
      * @param onMiss   在主线程回调，表示这首歌这一轮没取到（可能已落盘失败缓存）。
      * @return false 表示**这首歌已经有一次请求在跑**，本次既没发起也不会回调。
@@ -127,6 +125,7 @@ object OnlineLyricsFetcher {
         allowNetwork: Boolean = true,
         want: Int = FIRST_WANT,
         sources: List<OnlineSource> = OnlineSource.DEFAULT_ORDER,
+        known: List<OnlineVariant> = emptyList(),
         onResult: (List<OnlineVariant>) -> Unit,
         onMiss: () -> Unit = {}
     ): Boolean {
@@ -144,7 +143,11 @@ object OnlineLyricsFetcher {
 
         synchronized(cache) {
             val hit = cache[key]
-            if (hit != null && now - hit.atMs < if (hit.variants == null) FAIL_TTL_MS else OK_TTL_MS) {
+            // 已经有一批版本在手上（「获取更多」）：不走缓存短路，直接去后面翻。
+            if (known.isEmpty() &&
+                hit != null &&
+                now - hit.atMs < if (hit.variants == null) FAIL_TTL_MS else OK_TTL_MS
+            ) {
                 val variants = usingSource(hit.variants, plan)
                 if (variants.isNullOrEmpty()) {
                     // 缓存里有词、但来源被用户排除了：不能直接判 miss，
@@ -165,7 +168,7 @@ object OnlineLyricsFetcher {
 
         worker.execute {
             val variants = runCatching {
-                resolve(cleanTitle, cleanArtist, key, durationMs, allowNetwork, target, plan)
+                resolve(cleanTitle, cleanArtist, key, durationMs, allowNetwork, target, plan, known)
             }.getOrNull()
             synchronized(cache) {
                 // 只查盘失败不算「这首歌没有」：下一次开着网络还要再试。
@@ -250,16 +253,19 @@ object OnlineLyricsFetcher {
         durationMs: Long,
         allowNetwork: Boolean,
         want: Int,
-        plan: List<OnlineSource>
+        plan: List<OnlineSource>,
+        known: List<OnlineVariant>
     ): List<OnlineVariant> {
-        val out = ArrayList<OnlineVariant>(want)
+        // 先把屏上已有的接过来：点「获取更多」时它们必须留着，
+        // 同时它们就是每个源的游标（见 collect 里的 cursor）。
+        val out = ArrayList<OnlineVariant>(want).apply { addAll(known) }
         val pinned = plan.size == 1
 
         // 1. 磁盘：第二次听同一首歌永远走这里，不联网。
         val cached = LyricStore.load(key)
         if (cached != null) {
             val restored = toLines(cached, title, artist)
-            if (restored.isNotEmpty()) {
+            if (restored.isNotEmpty() && out.none { sameLines(it.lines, restored) }) {
                 val source = OnlineSource.of(LyricStore.sourceOf(key))
                 // 手动指定了源：盘上那份若明确来自别家，就不再拿来顶 ——
                 // 否则「指定只用 LRCLIB」对已经缓存过的歌完全没效果。
@@ -274,8 +280,10 @@ object OnlineLyricsFetcher {
         if (out.size >= want) return out
 
         // 2. 网络：按用户给的顺序串行，凑够 [want] 版就停。
+        // 用户主动要「更多」时预算放宽：那轮每个源都要往后翻一页，常态预算会从中间截断。
         val targetSec = durationMs / 1000L
-        val deadline = System.currentTimeMillis() + MAX_TOTAL_MS
+        val budget = if (want > FIRST_WANT) MORE_TOTAL_MS else MAX_TOTAL_MS
+        val deadline = System.currentTimeMillis() + budget
         for (source in plan) {
             if (out.size >= want) break
             if (System.currentTimeMillis() >= deadline) break
@@ -283,15 +291,24 @@ object OnlineLyricsFetcher {
         }
 
         // 磁盘只存第 0 版：它才是「下次直接能用」的那份。已经是盘里那份就不必重写。
+        // 「获取更多」那一轮不写盘：盘上那份是首选，不该被一次「翻更多」改掉
+        // （用户真要换首选，走 selectLyricVariant → remember）。
         val first = out.firstOrNull()
         val alreadyOnDisk = first != null && first.fromCache
-        if (first != null && !alreadyOnDisk) {
+        if (first != null && !alreadyOnDisk && known.isEmpty()) {
             LyricStore.save(key, LrcParser.build(first.lines), first.source?.id)
         }
         return out
     }
 
-    /** 一次取词里每个源最多贡献 [MAX_PER_SOURCE] 版。 */
+    /**
+     * 跑一个源。
+     *
+     * 每个源自己算两件事，五个实现共用同一套语义（见 [OnlineScan]）：
+     *  · **游标** = 这个源已经贡献过几版 → 跳过前 N 条候选、并决定翻到第几页；
+     *  · **配额** = 本次还能再收几版（[OnlineScan.quota]，每源 2 版）。
+     * 没有游标就会「点一次更多，回来的还是刚才那几条」—— 去重把它们全挡掉了。
+     */
     private fun collect(
         source: OnlineSource,
         title: String,
@@ -301,24 +318,27 @@ object OnlineLyricsFetcher {
         out: MutableList<OnlineVariant>,
         want: Int
     ) {
-        val limit = minOf(want, out.size + MAX_PER_SOURCE)
         when (source) {
             OnlineSource.KUGOU ->
-                collectKugou(title, artist, targetSec, deadline, out, limit)
+                collectKugou(title, artist, targetSec, deadline, out, want)
 
             OnlineSource.NETEASE ->
-                collectNetease(title, artist, targetSec, deadline, out, limit)
+                collectNetease(title, artist, targetSec, deadline, out, want)
 
             OnlineSource.LRCLIB ->
-                collectLrclib(title, artist, targetSec, deadline, out, limit)
+                collectLrclib(title, artist, targetSec, deadline, out, want)
 
             OnlineSource.LYRICS_OVH ->
-                collectLyricsOvh(title, artist, deadline, out, limit)
+                collectLyricsOvh(title, artist, deadline, out, want)
 
             OnlineSource.QISHUI ->
-                collectQishui(title, artist, targetSec, deadline, out, limit)
+                collectQishui(title, artist, targetSec, deadline, out, want)
         }
     }
+
+    /** 这个源已经贡献了几版 = 下一次该从第几条候选开始看。 */
+    private fun cursor(out: List<OnlineVariant>, source: OnlineSource): Int =
+        out.count { it.source == source }
 
     private fun collectKugou(
         title: String,
@@ -326,13 +346,17 @@ object OnlineLyricsFetcher {
         targetSec: Long,
         deadline: Long,
         out: MutableList<OnlineVariant>,
-        limit: Int
+        want: Int
     ) {
+        val skip = cursor(out, OnlineSource.KUGOU)
+        var left = OnlineScan.quota(want, out.size)
         for (query in LyricMatch.queries(title, artist).take(MAX_QUERIES)) {
-            if (out.size >= limit) return
+            if (left <= 0) return
+            val page = OnlineScan.pageFor(skip)
             val search = httpGet(
                 "https://mobileservice.kugou.com/api/v3/search/song" +
-                    "?format=json&keyword=${encode(query)}&page=1&pagesize=10",
+                    "?format=json&keyword=${encode(query)}" +
+                    "&page=$page&pagesize=${OnlineScan.PAGE_SIZE}",
                 deadline
             ) ?: continue
             // 结构变了也不怕：认不出专用字段就退回通用候选收集。
@@ -342,10 +366,12 @@ object OnlineLyricsFetcher {
                 title, artist, targetSec
             ) { Triple(it.title, it.artist, it.durationSec) }
 
-            for (song in songs.take(MAX_CANDIDATES)) {
-                if (out.size >= limit) return
+            // 跳过这个源已经取过的那几条：不跳就会把同样的候选再下载一遍，纯浪费。
+            // 注意这里只能跳**页内**那几条 —— 页码已经整页跳过了。
+            for (song in songs.drop(OnlineScan.inPageSkip(skip))) {
+                if (left <= 0) return
                 val lrc = kugouLyricFor(song, title, artist, targetSec, deadline) ?: continue
-                addVariant(out, toLines(lrc, title, artist), OnlineSource.KUGOU)
+                if (addVariant(out, toLines(lrc, title, artist), OnlineSource.KUGOU)) left--
             }
         }
     }
@@ -370,7 +396,7 @@ object OnlineLyricsFetcher {
             title, artist, targetSec
         ) { Triple(it.title, it.artist, it.durationSec) }
 
-        for (candidate in candidates.take(MAX_CANDIDATES)) {
+        for (candidate in candidates.take(MAX_LYRIC_FILES)) {
             val download = httpGet(
                 "https://lyrics.kugou.com/download?ver=1&client=pc" +
                     "&id=${encode(candidate.id)}&accesskey=${encode(candidate.accessKey)}" +
@@ -389,13 +415,16 @@ object OnlineLyricsFetcher {
         targetSec: Long,
         deadline: Long,
         out: MutableList<OnlineVariant>,
-        limit: Int
+        want: Int
     ) {
+        val skip = cursor(out, OnlineSource.NETEASE)
+        var left = OnlineScan.quota(want, out.size)
         for (query in LyricMatch.queries(title, artist).take(MAX_QUERIES)) {
-            if (out.size >= limit) return
+            if (left <= 0) return
             val search = httpGet(
                 "https://music.163.com/api/search/get/web" +
-                    "?s=${encode(query)}&type=1&limit=10&offset=0",
+                    "?s=${encode(query)}&type=1&limit=${OnlineScan.PAGE_SIZE}" +
+                    "&offset=${skip / OnlineScan.PAGE_SIZE * OnlineScan.PAGE_SIZE}",
                 deadline
             ) ?: continue
             val songs = ranked(
@@ -405,15 +434,16 @@ object OnlineLyricsFetcher {
             ) { Triple(it.title, it.artist, it.durationSec) }
 
             // 逐个试：网易大量「XX(治愈版)」候选没有歌词，排第一不代表有词。
-            for (song in songs.take(MAX_CANDIDATES)) {
-                if (out.size >= limit) return
+            // 同酷狗：offset 已经跳过整页，页内只跳余数。
+            for (song in songs.drop(OnlineScan.inPageSkip(skip))) {
+                if (left <= 0) return
                 val lyric = httpGet(
                     "https://music.163.com/api/song/lyric" +
                         "?id=${encode(song.id)}&lv=1&kv=1&tv=-1",
                     deadline
                 ) ?: continue
                 val text = OnlineLyricsParser.neteaseLyric(lyric) ?: continue
-                addVariant(out, toLines(text, title, artist), OnlineSource.NETEASE)
+                if (addVariant(out, toLines(text, title, artist), OnlineSource.NETEASE)) left--
             }
         }
     }
@@ -431,10 +461,12 @@ object OnlineLyricsFetcher {
         targetSec: Long,
         deadline: Long,
         out: MutableList<OnlineVariant>,
-        limit: Int
+        want: Int
     ) {
+        var skip = cursor(out, OnlineSource.LRCLIB)
+        var left = OnlineScan.quota(want, out.size)
         for (query in LyricMatch.queries(title, artist).take(MAX_QUERIES)) {
-            if (out.size >= limit) return
+            if (left <= 0) return
             val search = httpGet(
                 "https://lrclib.net/api/search?q=${encode(query)}",
                 deadline
@@ -444,10 +476,13 @@ object OnlineLyricsFetcher {
             val sorted = ranked(tracks, title, artist, targetSec) {
                 Triple(it.candidate.title, it.candidate.artist, it.candidate.durationSec)
             }
-            for (track in sorted.take(MAX_CANDIDATES)) {
-                if (out.size >= limit) return
+            // 这个接口没有分页参数：一页就把匹配项全给了，所以只能按游标往后挪。
+            val start = skip.coerceAtMost(sorted.size)
+            skip -= start
+            for (track in sorted.drop(start)) {
+                if (left <= 0) return
                 val text = track.lyric ?: continue
-                addVariant(out, toLines(text, title, artist), OnlineSource.LRCLIB)
+                if (addVariant(out, toLines(text, title, artist), OnlineSource.LRCLIB)) left--
             }
         }
     }
@@ -463,11 +498,13 @@ object OnlineLyricsFetcher {
         artist: String,
         deadline: Long,
         out: MutableList<OnlineVariant>,
-        limit: Int
+        want: Int
     ) {
         if (artist.isBlank()) return
-        // 关键词换不换都不影响结果（路径用的是原始歌名/歌手），所以只走一趟。
-        if (out.size >= limit) return
+        // 这家按「歌手/歌名」只返回一份词，没有候选列表 —— 取过一次就没有更多了，
+        // 所以游标不为 0 时直接跳过，别再发一次同样的请求。
+        if (cursor(out, OnlineSource.LYRICS_OVH) > 0) return
+        if (OnlineScan.quota(want, out.size) <= 0) return
         val body = httpGet(
             "https://api.lyrics.ovh/v1/${encodePath(artist)}/${encodePath(title)}",
             deadline
@@ -490,10 +527,12 @@ object OnlineLyricsFetcher {
         targetSec: Long,
         deadline: Long,
         out: MutableList<OnlineVariant>,
-        limit: Int
+        want: Int
     ) {
+        var skip = cursor(out, OnlineSource.QISHUI)
+        var left = OnlineScan.quota(want, out.size)
         for (query in LyricMatch.queries(title, artist).take(MAX_QUERIES)) {
-            if (out.size >= limit) return
+            if (left <= 0) return
             val search = httpGet(
                 "https://api.qishui.com/luna/pc/search/track" +
                     "?q=${encode(query)}&cursor=0&search_method=input" +
@@ -505,8 +544,10 @@ object OnlineLyricsFetcher {
                 OnlineLyricsParser.candidates(search), title, artist, targetSec
             ) { Triple(it.title, it.artist, it.durationSec) }
 
-            for (song in songs.take(MAX_CANDIDATES)) {
-                if (out.size >= limit) return
+            val start = skip.coerceAtMost(songs.size)
+            skip -= start
+            for (song in songs.drop(start)) {
+                if (left <= 0) return
                 val detail = httpGet(
                     "https://api.qishui.com/luna/pc/track_v2" +
                         "?track_id=${encode(song.id)}&media_type=track" +
@@ -515,7 +556,7 @@ object OnlineLyricsFetcher {
                     QISHUI_REFERER
                 ) ?: continue
                 val text = OnlineLyricsParser.qishuiLyric(detail) ?: continue
-                addVariant(out, toLines(text, title, artist), OnlineSource.QISHUI)
+                if (addVariant(out, toLines(text, title, artist), OnlineSource.QISHUI)) left--
             }
         }
     }
@@ -525,15 +566,19 @@ object OnlineLyricsFetcher {
      *
      * 去重是必须的：换源 / 要更多版本时，别的源的第一条候选往往就是盘里那一版，
      * 不去重会「点了换一版，画面一个字都没变」。
+     *
+     * @return 真的收进去了才是 true —— 调用方靠它扣减配额，
+     *   否则重复项也算一次，点了「更多」却只多出零条。
      */
     private fun addVariant(
         out: MutableList<OnlineVariant>,
         lines: List<LyricLine>,
         source: OnlineSource
-    ) {
-        if (lines.isEmpty()) return
-        for (existing in out) if (sameLines(existing.lines, lines)) return
+    ): Boolean {
+        if (lines.isEmpty()) return false
+        for (existing in out) if (sameLines(existing.lines, lines)) return false
         out += OnlineVariant(lines, source)
+        return true
     }
 
     /** 两份行表是不是同一份词：行数、首行、末行、首行时间都一致就认为是。 */
@@ -576,7 +621,7 @@ object OnlineLyricsFetcher {
      *
      * 返回列表而不是单个最佳：Cardash 只取第一名，因为它的标题清洗很轻、
      * 第一名通常是原版；我们的清洗更激进（去括号），同名候选会并列，
-     * 而排在前面的那条未必**带歌词**。逐个试最多 [MAX_CANDIDATES] 条，
+     * 而排在前面的那条未必**带歌词**。逐个试（每次这个源最多 [OnlineScan.PER_SOURCE] 条），
      * 既保留排序意图，又不会因为一条空词把整首判死。
      */
     private fun <T> ranked(

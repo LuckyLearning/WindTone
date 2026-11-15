@@ -282,6 +282,8 @@ If that entry does not exist, it is fine: turn on “Start on boot” above and 
     <string name="appearance_hide_empty_hint">Draw nothing when no lyrics are available. Off shows a small “No lyrics” note instead.</string>
     <string name="behavior_online_lyrics">Online lyrics fallback</string>
     <string name="behavior_online_lyrics_hint">When no local channel has the words, look them up by title and artist. Only those two fields are sent, and a match is stored on this device so the same song never goes online twice. On by default.</string>
+    <string name="behavior_online_override">Prefer online lyrics</string>
+    <string name="behavior_online_override_hint">Use the online copy even when the player supplies its own lyrics. Turn this on when the player\'s lyrics are unsynced or come from another edition — the online timeline is often closer to the audio.</string>
     <string name="behavior_source">Lyric sources</string>
     <string name="behavior_source_hint">Auto tries the list below in order. Picking one pins it — if that source has no lyrics nothing else is tried, so you never get another artist\'s words by surprise. Matches are stored on this device either way.</string>
     <string name="behavior_order">Auto order</string>

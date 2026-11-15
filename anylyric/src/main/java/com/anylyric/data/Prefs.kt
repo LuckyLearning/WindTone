@@ -172,6 +172,20 @@ class Prefs(context: Context) {
         set(value) = sp.edit().putBoolean(KEY_ONLINE_LYRICS, value).apply()
 
     /**
+     * 优先使用在线歌词（0.2.27）。
+     *
+     * 用户原话：「可以使用在线歌词替代本地歌词，做个开关直接用在线解析到的歌词」。
+     * 开着的语义很绝对：只要在线那份存在，就不看本地通道 —— 哪怕本地给的是完整带轴的。
+     * 关着保持旧行为（本地**强**命中优先，只有本地弱命中或全 miss 才用在线）。
+     *
+     * 默认关闭：本地词（尤其播放器自己给的那份）通常与音频同源，时间轴最贴；
+     * 在线那份再准也是别人的版本，不该默认反客为主。
+     */
+    var onlineOverridesLocal: Boolean
+        get() = sp.getBoolean(KEY_ONLINE_OVERRIDE, false)
+        set(value) = sp.edit().putBoolean(KEY_ONLINE_OVERRIDE, value).apply()
+
+    /**
      * 悬浮窗总开关（0.2.25）。
      *
      * 用户原话：「增加个开关，打开软件时悬浮窗显示隐藏通过开关控制」。关掉后
@@ -487,6 +501,7 @@ class Prefs(context: Context) {
         private const val KEY_BOOT_AUTOSTART = "boot_autostart"
         private const val KEY_WATCHDOG = "watchdog_enabled"
         private const val KEY_ONLINE_LYRICS = "online_lyrics_enabled"
+        private const val KEY_ONLINE_OVERRIDE = "online_overrides_local"
         private const val KEY_OVERLAY_ENABLED = "overlay_enabled"
         private const val KEY_LYRIC_CACHE = "lyric_cache_limit"
         private const val KEY_ONLINE_SOURCE = "online_source_pinned"

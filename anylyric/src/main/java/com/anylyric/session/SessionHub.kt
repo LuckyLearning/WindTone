@@ -1766,7 +1766,11 @@ class SessionHub private constructor(context: Context) {
             localWeakHit = hit != null &&
                 (hit.lines.size < MIN_LOCAL_LINES || hit.lines.any { it.timeMs == null })
 
-            if (hit != null && (!localWeakHit || onlineLines.isEmpty())) {
+            // 「优先用在线歌词」开着且已经有在线词时，本地通道一律让位（0.2.27）。
+            // 判断放在这里而不是藏在条件里，是因为下面两处都要用它，容易只改一处。
+            val preferOnline = prefs.onlineOverridesLocal && onlineLines.isNotEmpty()
+
+            if (hit != null && !preferOnline && (!localWeakHit || onlineLines.isEmpty())) {
                 if (!localWeakHit) onlineLines = emptyList()
                 hitSource = hit.sourceId
                 setCurrentLines(hit.lines, hit.currentLineIndex)
@@ -1796,7 +1800,10 @@ class SessionHub private constructor(context: Context) {
             }
             // 在线匹配用**展示用**歌名/歌手：它才是用户看到的真实曲目信息。
             // 弱命中同样要补：本地那几行不足以撑起整首。
-            if (hit == null || localWeakHit) maybeRequestOnline(displayTitle, displayArtist, duration)
+            // 「优先用在线」开着时，本地强命中也要去要在线的那份 —— 否则这个开关等于没开。
+            if (hit == null || localWeakHit || prefs.onlineOverridesLocal) {
+                maybeRequestOnline(displayTitle, displayArtist, duration)
+            }
 
             if (Probe.enabled) {
                 Probe.attempts = outcome.attempts
@@ -2116,12 +2123,15 @@ class SessionHub private constructor(context: Context) {
             want = want,
             // 手动指定时只有一个源；自动时是用户排好的顺序（0.2.27）。
             sources = prefs.onlineSourcePlan,
+            // 屏上已有的版本表：既不能丢，也是每个源的「已取到几版」游标。
+            known = onlineVariants,
             onResult = { variants ->
                 onlineInFlight = false
                 if (!isCurrentSong(cleanTitle, cleanArtist)) return@request
                 // 本地是「够了」的强命中就不要再覆盖：本地词（尤其播放器自己给的）
                 // 比在线抓的更准。弱命中（三行通知 / 无轴）则相反 —— 在线那份有整段时间轴。
-                if (hitSource != null && !localWeakHit) {
+                // 唯一例外是「优先用在线」开着：那时用户已经明确要求用在线那份。
+                if (hitSource != null && !localWeakHit && !prefs.onlineOverridesLocal) {
                     if (Probe.enabled) {
                         Probe.write("歌词", "online result ignored (local hit=$hitSource)")
                     }
@@ -2132,9 +2142,11 @@ class SessionHub private constructor(context: Context) {
                 variantWant = 0
                 onlineVariants = variants
                 onlineVariantIndex = when {
-                    // 换版请求回来了：落到**新拿到的**那一版；一条新版本都没有就回第一版。
+                    // 换版 / 更多请求回来了：落到**新拿到的**那一版。
                     seek != null && variants.size > seek -> seek
-                    seek != null -> 0
+                    // 一条新版本都没有（源已经翻到底）：**留在当前这一版**。
+                    // 这里以前回 0 —— 对「换一版」是「循环回第一版」，但对「获取更多」
+                    // 就成了「点了更多，屏上突然跳回第一版」，看起来像点错了地方。
                     else -> onlineVariantIndex.coerceIn(0, variants.lastIndex)
                 }
                 applyOnlineVariant()
@@ -2222,10 +2234,15 @@ class SessionHub private constructor(context: Context) {
     /**
      * 获取更多版本（版本列表底部的「获取更多」）。
      *
-     * 首次只取 [OnlineLyricsFetcher.FIRST_WANT] 版：一上来就跑五个源、每个源三条候选，
-     * 换歌时会明显卡一下。用户明确要「更多」时才把预算放大到 [OnlineLyricsFetcher.MAX_VARIANTS]。
+     * 用户原话：「上限不限制，点一次获取更多就没个源查 2 个，再点再查」。
+     * 所以这里**没有次数字数上限**（只有 [OnlineLyricsFetcher.MAX_VARIANTS] 这道防跑飞档板），
+     * 每点一次就让每个源往后各翻 2 条：游标在 fetcher 里按「这个源已贡献几版」自动推进，
+     * 所以第二次点拿到的不会是第一次那几条。
      *
-     * 返回 false 表示没有更多可取（已到上限 / 当前没有歌名）。
+     * [variantWant] 直接给到上限值 = 「能取多少取多少」：只有它足够大，
+     * 才不会在第一个源收满 2 版后就提前结束整个循环。
+     *
+     * 返回 false 表示确实没得取了（没有歌名 / 已到档板）。
      */
     fun requestMoreVariants(): Boolean {
         if (onlineVariants.size >= OnlineLyricsFetcher.MAX_VARIANTS) return false
@@ -2233,8 +2250,7 @@ class SessionHub private constructor(context: Context) {
         // 目标序号 = 当前版本数：取回来后自动落到第一个**新**版本上，
         // 否则「点了获取更多，画面还停在原来那版」看起来像没生效。
         variantSeek = onlineVariants.size
-        variantWant = (onlineVariants.size + MORE_VARIANT_BATCH)
-            .coerceAtMost(OnlineLyricsFetcher.MAX_VARIANTS)
+        variantWant = OnlineLyricsFetcher.MAX_VARIANTS
         onlineInFlight = false
         onlineAttempts = 0
         onlineNextAtMs = 0L
@@ -2324,6 +2340,26 @@ class SessionHub private constructor(context: Context) {
         hitSource = null
         keyValid = false
         requestRefresh("online_source")
+    }
+
+    /**
+     * 设置页切换「优先用在线歌词」时调用（0.2.27）。
+     *
+     * 关掉必须立刻把在线那份撤下：不清 `onlineLines`，下一轮责任链还会用它，
+     * 表现就是「开关关了，屏上还是在线那份」。
+     * 打开则把重试计数清零并主动跑一轮 —— 本地强命中时再也不会自然触发取词，
+     * 不主动要一次就得等到下一首。
+     */
+    fun onOnlineOverrideChanged() {
+        if (!prefs.onlineOverridesLocal) {
+            onlineLines = emptyList()
+        } else {
+            onlineAttempts = 0
+            onlineNextAtMs = 0L
+            mainHandler.removeCallbacks(onlineRetry)
+        }
+        keyValid = false
+        requestRefresh("online_override")
     }
 
     /** 设置页「清空缓存」：内存与磁盘一起清。屏上这句不动，下一句起重新取。 */
@@ -2827,9 +2863,6 @@ class SessionHub private constructor(context: Context) {
 
         /** 撞上「同一首歌正在取词」时的复查间隔。 */
         private const val ONLINE_BUSY_RETRY_MS = 2_000L
-
-        /** 「获取更多」一次多要几版（0.2.27）。首次 3 版 + 一批 3 版 = 上限 6 版。 */
-        private const val MORE_VARIANT_BATCH = 3
 
         /**
          * 本地词少于这么几行就算「弱命中」，要去在线补一份。
