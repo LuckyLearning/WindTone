@@ -106,6 +106,9 @@ object Probe {
             sb.appendLine("  pinned=${s.pinnedPackage} matched=${s.pinnedPackage == s.chosenPackage}")
         }
         sb.appendLine("  title=${oneLine(s.title)} artist=${oneLine(s.artist)} duration=${s.durationMs}")
+        // 全部会话一览（仅在调试打开时采集）：回答「装了这个播放器，它到底在不在列表里」。
+        if (s.sessionDigest != null) sb.appendLine("  all=${s.sessionDigest}")
+        if (s.noticeSource != null) sb.appendLine("  notice=${oneLine(s.noticeSource)}")
         // 直连通道紧跟会话：没有通知使用权时，这一行是「还有没有别的东西在供数据」的唯一线索。
         if (s.externalSource != null) {
             sb.appendLine("[EXTERNAL] car_direct=${s.externalSource}")

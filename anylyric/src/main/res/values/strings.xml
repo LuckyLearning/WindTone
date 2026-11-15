@@ -316,4 +316,5 @@ If that entry does not exist, it is fine: turn on “Start on boot” above and 
     <string name="diag_code_pinned_no_session">A player is pinned under Player channel, but it has no media session right now. Set it back to Automatic, or start playback in that player.</string>
     <string name="diag_code_external_only">Working through the car\'s direct channel. Notification access is not granted (this head unit blocks that page), but the car\'s media service hands over the song info and lyrics without any permission — lyrics are coming from %1$s.</string>
     <string name="diag_code_ok">Working as designed. Lyrics are being taken from %1$s.</string>
+    <string name="diag_code_notice_only">Working from the player\'s media notification: this app publishes no media session (or only a stopped one), so the song name and lyrics are read from the notification bar (%1$s). This path has no playback position, so timed lyrics stay on the current line instead of scrolling.</string>
 </resources>

@@ -105,6 +105,19 @@ class SessionHub private constructor(context: Context) {
     private val notificationTexts = HashMap<String, Map<String, String>>()
 
     /**
+     * packageName -> 最近的**媒体**通知（0.2.26）。
+     *
+     * 与 [notificationTexts] 分开存是有意的：后者是所有通知的原文（歌词层要用），
+     * 这里只留「能当播放源」的那几条（歌名 + 歌手 + 正文），供两种场景兜底：
+     *  · 会话在、但元数据里没有 TITLE（车机上的第三方播放器常见）；
+     *  · 连会话都没有，只剩通知（不发标准 MediaSession 的播放器）。
+     */
+    private val mediaNotices = HashMap<String, NoticeTrack>()
+
+    /** 当前正在用的那条媒体通知；只用它判「内容有没有变」，不参与任何判定。 */
+    private var noticeSource: NoticeTrack? = null
+
+    /**
      * packageName -> 上一次通知的**原始** 5 个文本字段（未 trim）。
      *
      * 存在的唯一目的是「零分配地判断这条通知有没有变」：播放器每 250ms 刷一条通知，
@@ -236,6 +249,8 @@ class SessionHub private constructor(context: Context) {
     private var lastPlayState = PlayState.NONE
     private var lastSessionCount = 0
     private var lastPlayingCount = 0
+    /** 调试打开时采集的全量会话摘要；关着时保持 null，不为诊断多付一次跨进程读元数据。 */
+    private var lastSessionDigest: String? = null
     private var lastMetadataKeys: List<String> = emptyList()
 
     /** 上次完整 `getActiveSessions()` 的时刻，用于节流 binder 查询。 */
@@ -894,6 +909,8 @@ class SessionHub private constructor(context: Context) {
             notificationTexts[pkg] = fields
         }
 
+        rememberMediaNotice(pkg, notification, extras, fields, now)
+
         if (Probe.enabled) {
             Probe.write("通知", "pkg=$pkg fields=${fields.keys.joinToString(",")}")
         }
@@ -904,6 +921,77 @@ class SessionHub private constructor(context: Context) {
         }
 
         requestRefresh(REASON_NOTIFICATION)
+    }
+
+    /**
+     * 记下「能当播放源」的媒体通知（0.2.26）。
+     *
+     * 只认两类：`CATEGORY_TRANSPORT` 或带 `EXTRA_MEDIA_SESSION` —— 这是媒体通知的
+     * 两个官方标记，能挡住新闻、聊天这些同样带标题的普通通知。
+     * 标题被认成应用名（酷我 / QQ 音乐的常驻通知）时**保留上一次的标题**，
+     * 不能让它把正在播的那条覆盖成空。
+     */
+    private fun rememberMediaNotice(
+        pkg: String,
+        notification: Notification,
+        extras: android.os.Bundle,
+        fields: Map<String, String>,
+        now: Long
+    ) {
+        val isMedia = notification.category == Notification.CATEGORY_TRANSPORT ||
+            extras.containsKey(Notification.EXTRA_MEDIA_SESSION)
+        if (!isMedia) return
+
+        val existing = mediaNotices[pkg]
+        val title = NoticeTrackPick.usableTitle(
+            fields[Notification.EXTRA_TITLE],
+            AppLabels.of(appContext, pkg)
+        ) ?: existing?.title ?: return
+
+        // 正文：展开态优先（多行歌词常在这里），其次单行正文。
+        val rawBody = fields[Notification.EXTRA_BIG_TEXT] ?: fields[Notification.EXTRA_TEXT]
+        val body = rawBody?.trim()?.takeIf { it.isNotEmpty() && it != title }
+        // 单行正文在媒体通知里几乎都是「歌手 - 专辑」，当歌手用；多行是歌词，不当歌手。
+        val artist = rawBody
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() && it != title && !it.contains('\n') }
+            ?: existing?.artist
+
+        // 内容没变就别刷新时间：否则播放器每 250ms 刷一条通知，这条「通知源」
+        // 永远不会老化，退出后还会顶着歌名。
+        if (existing != null && existing.title == title &&
+            existing.body == body && existing.artist == artist
+        ) {
+            return
+        }
+        mediaNotices[pkg] = NoticeTrack(pkg, title, artist, body, now)
+        if (mediaNotices.size > MAX_NOTIFICATION_PACKAGES) {
+            // 只留最新的一条之外全清：与 notificationTexts 同样的粗粒度处理，
+            // 出现 16 个以上「同时在发媒体通知」的应用本身就不是正常状态。
+            val oldest = mediaNotices.values.minByOrNull { it.updatedAtMs }
+            if (oldest != null) mediaNotices.remove(oldest.pkg)
+        }
+        if (Probe.enabled) {
+            Probe.write("通知通道", "media pkg=$pkg title=$title artist=${artist ?: "-"}")
+        }
+    }
+
+    /**
+     * 通知被取消（0.2.26）：播放器退出时会撤掉自己的媒体通知。
+     *
+     * 必须在这里立刻清掉，而不是等 [NoticeTrackPick.FRESH_MS] 自然过期 ——
+     * 否则退出后的两分钟里，屏上还挂着它的歌名。
+     */
+    fun onNotificationRemoved(sbn: StatusBarNotification?) {
+        val pkg = sbn?.packageName ?: return
+        if (pkg == appContext.packageName) return
+        lastNotificationFields.remove(pkg)
+        notificationTexts.remove(pkg)
+        val had = mediaNotices.remove(pkg) != null
+        if (had || noticeSource?.pkg == pkg) {
+            if (noticeSource?.pkg == pkg) noticeSource = null
+            requestRefresh("notification_removed")
+        }
     }
 
     /**
@@ -964,6 +1052,11 @@ class SessionHub private constructor(context: Context) {
         detachController()
         // 在线结果跟着服务生命周期释放；磁盘缓存留着，重绑后不必重抓。
         resetOnlineState()
+        // 通知类旁路也一起清：服务销毁后收不到新通知，旧值不再可信。
+        mediaNotices.clear()
+        notificationTexts.clear()
+        lastNotificationFields.clear()
+        noticeSource = null
         // BYD 外部源也一起清掉：服务销毁后它不再可信，重绑时会重新推。
         externalTitle = null
         externalArtist = null
@@ -1234,6 +1327,68 @@ class SessionHub private constructor(context: Context) {
         return true
     }
 
+    /**
+     * 用一条**媒体通知**当播放源（0.2.26）。
+     *
+     * 两条入口：完全没有标准会话，或当前会话已经停了而别的播放器在发通知。
+     * 只做最小闭环 —— 通知给歌名与（可能多行的）正文，正文多行就当逐行歌词；
+     * 没有词就拿歌名去在线补一份。**不设进度**：这条通道本来就没有 position，
+     * 带时间轴的歌词会停在第一句，比错位好。
+     *
+     * @param fixed 已经判定接管的那条通知；null = 自己从候选里挑
+     */
+    private fun refreshFromNotice(reason: String, fixed: NoticeTrack? = null): Boolean {
+        val notice = fixed ?: NoticeTrackPick.pick(
+            mediaNotices.values,
+            SystemClock.elapsedRealtime(),
+            prefs.pinnedSessionPackage.ifBlank { null }
+        ) ?: run {
+            noticeSource = null
+            return false
+        }
+        val previous = noticeSource
+        noticeSource = notice
+        externalOnly = false
+
+        val changed = previous == null ||
+            previous.pkg != notice.pkg ||
+            previous.title != notice.title ||
+            previous.body != notice.body
+
+        if (changed) {
+            val lines = ExternalLyrics.parse(notice.body)
+            // 没有时间轴时锚第一行：通知正文的第一行就是当前句（与 L2 同一条约定）。
+            setCurrentLines(lines, if (lines.size > 1) 0 else -1)
+            hitSource = if (lines.isEmpty()) null else NOTICE_SOURCE
+            // 这条通道拿不到进度：把时钟钉回 0。否则带时间轴的词会沿用**上一个会话**
+            // 的进度，直接停在中间某一句 —— 比停在第一句更像故障。
+            clockRawPosition = 0L
+            clockRawState = PlayState.PAUSED
+            clockRawSpeed = 1f
+            clockRawDuration = 0L
+            clock.update(0L, 1f, PlayState.PAUSED, 0L)
+            lastTitle = notice.title
+            lastArtist = notice.artist
+            lastRawTitle = notice.title
+            lastVerdict = TitleVerdict.UNKNOWN
+            lastIdentity = null
+            labelCache = null
+            if (Probe.enabled) {
+                Probe.write(
+                    "歌词",
+                    "notice-only pkg=${notice.pkg} lines=${lines.size} reason=$reason"
+                )
+            }
+        }
+        // 重试也要能跑：与 externalOnly 同一条道理，请求放在「换歌判定」之外。
+        if (hitSource == null) maybeRequestOnline(notice.title, notice.artist, 0L)
+
+        publishSnapshot(null, notice.title, 0L)
+        render()
+        scheduleLineTick()
+        return true
+    }
+
     /** 全量重算：会话 → 状态 → 责任链 → 渲染。只在事件合并之后、主线程上跑。 */
     private fun refreshNow(reason: String) {
         Perf.onRefresh()
@@ -1293,6 +1448,7 @@ class SessionHub private constructor(context: Context) {
                 lastPlayingCount = it.count { c ->
                     c.playbackState?.state == PlaybackState.STATE_PLAYING
                 }
+                if (Probe.enabled) lastSessionDigest = digestSessions(it)
             }
         } else {
             null
@@ -1318,6 +1474,14 @@ class SessionHub private constructor(context: Context) {
 
         val active = controller
         if (active == null) {
+            // 没有标准会话 ≠ 没有在放（0.2.26）。车机上有两类播放器读不到会话：
+            //  · 完全不发 MediaSession，只在通知栏给歌名（第三方车机版常见）；
+            //  · 会话建了但没 setActive，getActiveSessions 里永远看不到它。
+            // 旧实现在这里直接清屏隐藏 —— 于是这两个通道拿到的数据全白费，
+            // 用户看到的就是「连歌名都没识别到」。按可信度依次兜底：车机直连 → 媒体通知。
+            if (refreshFromExternalOnly(reason)) return
+            if (refreshFromNotice(reason)) return
+            noticeSource = null
             setCurrentLines(emptyList())
             hitSource = null
             lastTitle = null
@@ -1336,9 +1500,29 @@ class SessionHub private constructor(context: Context) {
 
         // 两处都优先取回调缓存：换会话时 [bind] 已经把缓存清掉，这里自然退回主动查询。
         val playbackState = if (callbackStateValid) callbackState else active.playbackState
-        val metadata = if (callbackMetadataValid) callbackMetadata else active.metadata
         val playState = mapState(playbackState?.state ?: PlaybackState.STATE_NONE)
         lastPlayState = playState
+
+        // 通知接管（0.2.26）：绑定的会话没在放、另一条媒体通知却还在更新 —— 用户其实
+        // 已经切到那个 App，只是它不发标准会话。不接管就是「屏上挂着上一个 App 的歌名」。
+        // 只在「没在播 / 播着但说不出歌名」时才考虑，真的两个播放器同时在放时不抢。
+        if (playState != PlayState.PLAYING || lastTitle.isNullOrBlank()) {
+            val takeover = NoticeTrackPick.pick(
+                mediaNotices.values,
+                now,
+                prefs.pinnedSessionPackage.ifBlank { null }
+            )?.takeIf {
+                NoticeTrackPick.shouldTakeOver(
+                    active.packageName,
+                    playState == PlayState.PLAYING,
+                    lastTitle,
+                    it
+                )
+            }
+            if (takeover != null && refreshFromNotice(reason, takeover)) return
+        }
+
+        val metadata = if (callbackMetadataValid) callbackMetadata else active.metadata
         val rawPosition = playbackState?.position ?: -1L
         val rawSpeed = playbackState?.playbackSpeed ?: 1f
 
@@ -1365,14 +1549,23 @@ class SessionHub private constructor(context: Context) {
 
         // 标准元数据不止 TITLE / ARTIST：车机上不少播放器只填 DISPLAY_TITLE /
         // ALBUM_ARTIST / DISPLAY_SUBTITLE，只认前两个就会「时不时取不到」。
+        // 再退一步用**同一包的媒体通知**（0.2.26）：酷我 / QQ 音乐车机版这类播放器
+        // 的元数据经常是空壳，歌名只出现在通知栏里 —— 没有这一步就是「连歌名都识别不到」。
+        val ownNotice = mediaNotices[active.packageName]
+        val noticeTitle = NoticeTrackPick.usableTitle(
+            ownNotice?.title,
+            AppLabels.of(appContext, active.packageName)
+        )
         val standardTitle = TitleResolver.firstNonBlank(
             metadata?.getString(MediaMetadata.METADATA_KEY_TITLE),
-            metadata?.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
+            metadata?.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE),
+            noticeTitle
         )
         val standardArtist = TitleResolver.firstNonBlank(
             metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST),
             metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST),
-            metadata?.getString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE)
+            metadata?.getString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE),
+            ownNotice?.artist?.takeIf { it != noticeTitle }
         )
         val mediaId = metadata?.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
 
@@ -2190,6 +2383,11 @@ class SessionHub private constructor(context: Context) {
             hideByOwnUi = ownUiCount > 0,
             // 「idle」不写进报告：非 BYD 设备上它没有信息量，只会让报告更长。
             externalSource = BydMediaController.statusLabel().takeIf { it != "idle" },
+            // 正在靠媒体通知工作时报出是哪个包、哪首歌 —— 否则 sessions=0 hit=NOTICE 无法解释。
+            noticeSource = noticeSource
+                ?.takeIf { it.pkg != controller?.packageName }
+                ?.let { "${it.pkg}:${it.title}" },
+            sessionDigest = if (Probe.enabled) lastSessionDigest else null,
             displayCount = displayCount(),
             fontScale = appContext.resources.configuration.fontScale
         )
@@ -2244,6 +2442,21 @@ class SessionHub private constructor(context: Context) {
             emptyList()
         }
     }
+
+    /**
+     * 全部会话的一行摘要（只在调试打开时调用）。
+     *
+     * 这是排查「装了这个播放器却读不到」最省事的一条：包名在不在列表里、状态是几、
+     * 有没有标题，一眼就能分清是「会话根本不存在」还是「会话在但没数据」。
+     */
+    private fun digestSessions(sessions: List<MediaController>): String =
+        sessions.joinToString(" | ") { c ->
+            val state = runCatching { c.playbackState?.state }.getOrNull() ?: -1
+            val title = runCatching {
+                c.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
+            }.getOrNull()
+            "${c.packageName}:$state:${if (title.isNullOrBlank()) "-" else title.take(16)}"
+        }.ifEmpty { "(none)" }
 
     /**
      * 当前活跃的媒体会话快照。
@@ -2329,6 +2542,11 @@ class SessionHub private constructor(context: Context) {
         titleStream.reset()
         lastVerdict = TitleVerdict.UNKNOWN
         lastTitle = null
+        // 粘住的标题必须一起清（0.2.26）：它只在**同一个会话内**有意义 —— 换歌瞬间
+        // 元数据为空时顶一下。换了会话还留着，就成了「切到酷我，屏上仍是上一个 App
+        // 的歌名」，而且新会话若一直不给 TITLE，这个旧值永远不会被替换掉。
+        stickyTitle = null
+        stickyArtist = null
         setCurrentLines(emptyList())
         hitSource = null
         keyValid = false
@@ -2450,6 +2668,14 @@ class SessionHub private constructor(context: Context) {
 
         /** 车机直连通道（BYD 媒体中心 SDK）的来源标识；不需要通知使用权。 */
         private const val EXTERNAL_SOURCE = "BYD"
+
+        /**
+         * 「只有媒体通知、没有会话」时的来源标识（0.2.26）。
+         *
+         * 单独一个而不是复用 [EXTERNAL_SOURCE]：诊断报告里必须能区分「车厂 SDK 给的」
+         * 与「从通知栏读来的」—— 后者没有进度，歌词停着不动是预期行为，不是时钟故障。
+         */
+        private const val NOTICE_SOURCE = "NOTICE"
 
         /** 状态／元数据回调里，两次完整会话查询的最小间隔。 */
         private const val QUERY_MIN_INTERVAL_MS = 3_000L

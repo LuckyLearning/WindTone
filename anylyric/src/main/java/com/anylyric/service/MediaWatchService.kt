@@ -95,6 +95,17 @@ class MediaWatchService : NotificationListenerService() {
         SessionHub.get(this).onNotificationPosted(sbn)
     }
 
+    /**
+     * 通知被撤掉也要转手（0.2.26）。
+     *
+     * 播放器退出时会取消自己的媒体通知 —— 这是「它已经不放了」最及时的一条信号，
+     * 比等通知自然过期快两分钟。
+     */
+    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
+        super.onNotificationRemoved(sbn)
+        SessionHub.get(this).onNotificationRemoved(sbn)
+    }
+
     override fun onDestroy() {
         stopSessionWatch()
         SessionHub.get(this).detach()

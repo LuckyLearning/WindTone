@@ -77,6 +77,17 @@ data class ProbeSnapshot(
      */
     val externalSource: String? = null,
 
+    /**
+     * 媒体通知兜底（0.2.26）。
+     *
+     * `pkg:标题` 表示「没有会话 / 会话已停，正在用这条通知当播放源」。这条要报出来，
+     * 否则报告里 `sessions=0 hit=NOTICE` 会被判成 NO_SESSION —— 明明在工作。
+     */
+    val noticeSource: String? = null,
+
+    /** 全部活跃会话的一行摘要：`包名:状态:标题`。用来回答「那个播放器到底在不在列表里」。 */
+    val sessionDigest: String? = null,
+
     val displayCount: Int = 1,
     val fontScale: Float = 1f
 )
@@ -111,6 +122,16 @@ enum class DiagCode {
      * 报成 PERMISSION_LISTENER 会让用户以为「没授权就等于不能用」，然后一直去修一个修不好的开关。
      */
     EXTERNAL_ONLY,
+
+    /**
+     * 没有可用的媒体会话，但靠播放器自己的**媒体通知**在工作（0.2.26）。
+     *
+     * 车机上的第三方播放器（酷我、QQ 音乐车机版）常常不发标准会话：它们只在通知栏
+     * 给歌名。这不是故障，但也不能报成 OK —— 这条通道没有播放进度，
+     * 带时间轴的歌词会停在当前句不动，用户需要知道「为什么歌词不滚」。
+     */
+    NOTIFY_ONLY,
+
     OK
 }
 
@@ -170,6 +191,13 @@ object DiagRules {
 
         // 锁定了播放器、但它没有会话：这条要在「没有会话」之前判 ——
         // 车机上通常别的会话（导航）还在，用户看到的却是空窗，说明的必须是「锁定的那个没在放」。
+        // 通知兜底能出词时不算：那个播放器只是不发会话，本身在正常工作。
+        s.chosenPackage == null && s.noticeSource != null && s.hitSource != null ->
+            Diagnosis(
+                DiagCode.NOTIFY_ONLY,
+                "sessions=${s.sessionCount}, notice=${s.noticeSource}, hit=${s.hitSource}"
+            )
+
         s.pinnedPackage != null && s.chosenPackage == null ->
             Diagnosis(
                 DiagCode.PINNED_NO_SESSION,
@@ -177,10 +205,11 @@ object DiagRules {
                     "playing=${s.playingCount}"
             )
 
-        s.sessionCount == 0 ->
+        s.sessionCount == 0 && s.noticeSource == null ->
             Diagnosis(DiagCode.NO_SESSION, "sessions=0")
 
-        s.playingCount == 0 ->
+        // 有会话但都没在播：通知兜底正在出词时不算（见 NOTIFY_ONLY）。
+        s.playingCount == 0 && s.noticeSource == null ->
             Diagnosis(DiagCode.SESSION_INACTIVE, "sessions=${s.sessionCount}, playing=0")
 
         s.pseudoTitle && s.hitSource == "L1" && s.l1OnlyOnPause ->

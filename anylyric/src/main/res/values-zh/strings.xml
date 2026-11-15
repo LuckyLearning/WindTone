@@ -313,4 +313,5 @@
     <string name="diag_code_pinned_no_session">「播放器频道」里锁定了一个播放器，但它当前没有媒体会话。改回自动，或先在它里面放首歌。</string>
     <string name="diag_code_external_only">正在走车机直连通道。通知使用权没有授权（这台车机的授权页被车厂拦住了），但车机自己的媒体服务不需要权限就能把歌名与歌词交过来 —— 歌词来自 %1$s。</string>
     <string name="diag_code_ok">工作正常，歌词正在从 %1$s 获取。</string>
+    <string name="diag_code_notice_only">正在用播放器的媒体通知工作：这个应用没有发布媒体会话（或会话已停），歌名与歌词是从通知栏读到的（来源 %1$s）。这条通道拿不到播放进度，带时间轴的歌词会停在当前句、不会自己滚动。</string>
 </resources>
