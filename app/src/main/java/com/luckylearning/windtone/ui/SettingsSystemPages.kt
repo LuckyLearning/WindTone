@@ -106,7 +106,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luckylearning.windtone.playback.Pitch
 import com.luckylearning.windtone.ui.theme.windShadow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -479,11 +481,22 @@ internal fun SettingsDiagnosisPage(
             title = stringResource(R.string.diag_pack_title),
             subtitle = stringResource(R.string.diag_pack_subtitle),
             onClick = {
-                val report = DiagnosticsReport.build(
-                    DiagnosticsReport.collect(context, player, library),
-                )
-                DiagnosticsReport.saveToFile(context, report)
-                diagReport = report
+                // collect / build / save 全是重活且都会阻塞调用线程：
+                //   · ForegroundProbe 会 fork 一个 logcat 子进程并 waitFor()；
+                //   · MemoryProbe 逐行解析整份 /proc/self/smaps（1~2MB 文本、上百条映射）；
+                //   · 最后还要把数 MB 文本 writeText 到外部存储。
+                // 这段原先直接跑在 Compose 的 onClick（主线程）里，数百毫秒到数秒的阻塞 ——
+                // 前台服务在跑时足以触发 ANR。整体挪到 IO，完成后回主线程赋值。
+                scope.launch {
+                    val report = withContext(Dispatchers.IO) {
+                        val built = DiagnosticsReport.build(
+                            DiagnosticsReport.collect(context, player, library),
+                        )
+                        DiagnosticsReport.saveToFile(context, built)
+                        built
+                    }
+                    diagReport = report
+                }
             },
             chevron = true,
         )

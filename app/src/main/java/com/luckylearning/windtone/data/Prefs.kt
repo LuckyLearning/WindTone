@@ -1921,11 +1921,11 @@ class Prefs private constructor(context: Context) {
             ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_FADE, v) }
         }
 
-    /** 标题显示内容：0 歌名 + 歌手 / 1 只歌名 / 2 只歌手 */
+    /** 标题显示内容：0 歌名 + 歌手 / 1 只歌名 / 2 只歌手 / 3 单行「歌名 - 歌手」（超 10 字仅歌名） */
     var lyricOverlayTitleMode: Int
-        get() = sp.getInt(KEY_LYRIC_OVERLAY_TITLE_MODE, SettingsDefaults.OVERLAY_TITLE_MODE).coerceIn(0, 2)
+        get() = sp.getInt(KEY_LYRIC_OVERLAY_TITLE_MODE, SettingsDefaults.OVERLAY_TITLE_MODE).coerceIn(0, 3)
         set(value) {
-            val v = value.coerceIn(0, 2)
+            val v = value.coerceIn(0, 3)
             sp.edit().putInt(KEY_LYRIC_OVERLAY_TITLE_MODE, v).apply()
             ioScope.launch { store.putInt(KEY_LYRIC_OVERLAY_TITLE_MODE, v) }
         }

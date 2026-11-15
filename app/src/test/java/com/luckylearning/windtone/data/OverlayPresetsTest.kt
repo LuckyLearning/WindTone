@@ -11,7 +11,7 @@ import org.junit.Test
  * 悬浮歌词「样式预设」的数据层测试（v1.1.78）。
  *
  * 覆盖的是方案 §八的参数分层模型（R1~R5）在数据侧的关键不变量：
- *  - 七套预设快照完整、id 唯一、手机 4 + 车机 3（G3 口径）；
+ *  - 八套预设快照完整、id 唯一、手机 5 + 车机 3（G3 口径）；
  *  - 「套用 → 反推」闭环：任意预设转成参数快照后必须精确命中自身
  *    （套用即写盘 R1 与反推匹配 R5 共用 toParams，两边走样 = 功能坏了）；
  *  - 展示名三分：命中预设 / 出厂默认「默认预设」/ 其余「自定义」（FR-01 / RK-4）；
@@ -23,8 +23,8 @@ class OverlayPresetsTest {
 
     @Test
     fun `presets pool is phone four plus car three with unique ids`() {
-        assertEquals(7, OverlayPreset.ALL.size)
-        assertEquals(4, OverlayPreset.PHONE.size)
+        assertEquals(8, OverlayPreset.ALL.size)
+        assertEquals(5, OverlayPreset.PHONE.size)
         assertEquals(3, OverlayPreset.CAR.size)
         assertEquals(OverlayPreset.ALL.size, OverlayPreset.ALL.map { it.id }.toSet().size)
         assertTrue(OverlayPreset.PHONE.none { it.carOnly })
@@ -167,11 +167,14 @@ class OverlayPresetsTest {
             params.textSp, params.align, params.textColor, params.currentColor,
             params.dimPercent, params.strokeWidthDp, params.strokeColor, params.lineSpacingDp,
             params.showTitle, params.titleSp, params.titleMode,
+            params.titlePos, params.titleAlign, params.titleStrokeOn,
+            params.titleStrokeWidthDp, params.titleStrokeColor,
+            params.currentSp, params.contextSp,
             params.bgAlphaPercent, params.bgColor, params.cornerRadiusDp,
             params.borderWidthDp, params.borderColor,
             params.pauseMode, params.fadeMs,
         )
-        assertEquals(23, values.size)
+        assertEquals(30, values.size)
         assertEquals(params, OverlayPreset.byId("C1")!!.toParams())
         // FR-05: Params 不含隐藏名单等全局键
         assertTrue(params.javaClass.declaredFields.none { it.name.contains("hidden", ignoreCase = true) })
@@ -180,5 +183,21 @@ class OverlayPresetsTest {
     @Test
     fun `car presets remain exactly three for FR-07 cards`() {
         assertEquals(listOf("C1", "C2", "C3"), OverlayPreset.CAR.map { it.id })
+    }
+
+    @Test
+    fun `P5 stroke overlay preset matches design contract`() {
+        val p5 = OverlayPreset.byId("P5")!!
+        assertEquals("描边浮层", p5.name)
+        assertEquals(2, p5.lines)
+        assertEquals(0, p5.bgAlphaPercent)   // 透明无底板
+        assertEquals(0, p5.borderWidthDp)     // 无边框
+        assertEquals(3, p5.titleMode)         // 单行「歌名 - 歌手」
+        assertEquals(1, p5.titlePos)          // 歌词下方
+        assertEquals(2, p5.titleAlign)        // 居右 → 右下角
+        assertTrue(p5.titleStrokeOn)          // 标题描边保证白底可读
+        assertEquals(24, p5.currentSp)        // 当前行放大
+        assertEquals(0, p5.contextSp)         // 其他行跟随正文
+        assertFalse(p5.carOnly)
     }
 }

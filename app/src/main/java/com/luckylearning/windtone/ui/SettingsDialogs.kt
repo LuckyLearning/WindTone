@@ -345,6 +345,7 @@ internal enum class OverlayChoice(
             ChoiceOption(0, AppStrings.s(R.string.title_artist), AppStrings.s(R.string.default_both_lines)),
             ChoiceOption(1, AppStrings.s(R.string.title_only), AppStrings.s(R.string.drops_the_artist_line_for)),
             ChoiceOption(2, AppStrings.s(R.string.artist_only), AppStrings.s(R.string.drops_the_title_line)),
+            ChoiceOption(3, AppStrings.s(R.string.title_artist_truncated), AppStrings.s(R.string.title_artist_truncated_sub)),
         ),
     ),
 }
@@ -367,4 +368,4 @@ internal fun overlayLinesHint(lines: Int): String = when (lines) {
 /** 设置页行尾摘要用的短标签（与弹层选项一一对应，按档位下标取） */
 internal val OVERLAY_ALIGN_LABELS = listOf(AppStrings.s(R.string.center), AppStrings.s(R.string.align_left))
 internal val OVERLAY_PAUSE_LABELS = listOf(AppStrings.s(R.string.fade_out), AppStrings.s(R.string.hide))
-internal val OVERLAY_TITLE_MODE_LABELS = listOf(AppStrings.s(R.string.title_artist), AppStrings.s(R.string.title_only_2), AppStrings.s(R.string.artist_only_2))
+internal val OVERLAY_TITLE_MODE_LABELS = listOf(AppStrings.s(R.string.title_artist), AppStrings.s(R.string.title_only_2), AppStrings.s(R.string.artist_only_2), AppStrings.s(R.string.title_artist_truncated))

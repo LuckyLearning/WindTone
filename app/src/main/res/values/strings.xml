@@ -553,6 +553,8 @@ The app cannot stop the OEM clearing third-party accessibility on boot; tap the 
     <string name="current_context">Current + context</string>
     <string name="title_only_2">Title only</string>
     <string name="artist_only_2">Artist only</string>
+    <string name="title_artist_truncated">Title - artist</string>
+    <string name="title_artist_truncated_sub">One line; over 10 chars shows title only</string>
     <string name="appearance">Appearance</string>
     <string name="theme_colors_car_mode">Theme mode · Theme colors · Car mode</string>
     <string name="playback">Playback</string>

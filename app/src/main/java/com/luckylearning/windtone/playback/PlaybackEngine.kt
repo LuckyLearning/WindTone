@@ -14,6 +14,8 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import com.luckylearning.windtone.data.AudioInspector
 import com.luckylearning.windtone.data.BootStatus
 import com.luckylearning.windtone.data.CoverRepository
@@ -295,6 +297,29 @@ class PlaybackEngine(
     private var introAppliedMediaId: String? = null
     /** H2：本曲是否已触发片尾切歌 */
     private var outroFiredMediaId: String? = null
+
+    /**
+     * 上一次 `onMediaItemTransition` 收到的 mediaId。
+     *
+     * 用来区分「真的换歌」与「同一首歌换包装」：封面回填 / 云盘直链补链 / 内嵌图回填
+     * 都是 `replaceMediaItem` + `reason == PLAYLIST_CHANGED`，mediaId 不变。
+     * 只有后者才允许跳过清 A-B / 复位片头片尾标记。
+     */
+    private var lastTransitionMediaId: String? = null
+
+    /**
+     * 下一次 `onMediaItemTransition` 属于「同曲替换」。
+     *
+     * 由四处 `replaceMediaItem`（云盘补链 / 直链刷新 / 内嵌图回填 / 封面回填）在调用前置位，
+     * 回调里消费一次。**不能只靠 `reason == PLAYLIST_CHANGED` 判断**：用户从列表重新点
+     * 同一首歌时 `setMediaItems` 同样报 PLAYLIST_CHANGED 且 mediaId 相同，那种情况必须
+     * 照旧清 A-B 循环（重新开始播放）—— 所以需要调用点显式声明「这是换包装不是换歌」。
+     */
+    private var nextTransitionIsSameItemReplace = false
+
+    /** `ensureController()` 的单飞锁：并发进入只允许建一个 controller（见该方法注释） */
+    private val controllerLock = Mutex()
+
     /** 本次恢复是否**强制**起播（开机后台播放用；不受「打开应用继续上次播放」开关限制） */
     private var forceAutoplayOnRestore = false
 
@@ -521,10 +546,21 @@ class PlaybackEngine(
             // H4：锁屏歌词只改 metadata 的 replaceMediaItem 也会触发本回调；
             // 若照常清 A-B / 重载歌词，等于每换一行歌词就「切歌」一次。
             if (LockScreenLyricPublisher.isUpdating) return
-            LockScreenLyricPublisher.reset()
-            clearAbLoopInternal()
-            introAppliedMediaId = null
-            outroFiredMediaId = null
+            // 同曲替换（封面回填 / 云盘补链 / 内嵌图回填）走 PLAYLIST_CHANGED，且 mediaId
+            // 不变 —— 这是「换包装不换歌」，不该清用户的 A-B 循环（一次封面加载就能把已设好
+            // 的逐句循环静默清空），也不该复位片头/片尾标记（否则片头会被重跳一次）。
+            // 其余同步动作照旧执行，只是把这三项清理限定在「真的换歌」。
+            val sameItem = nextTransitionIsSameItemReplace &&
+                mediaItem?.mediaId != null &&
+                mediaItem.mediaId == lastTransitionMediaId
+            nextTransitionIsSameItemReplace = false
+            lastTransitionMediaId = mediaItem?.mediaId
+            if (!sameItem) {
+                LockScreenLyricPublisher.reset()
+                clearAbLoopInternal()
+                introAppliedMediaId = null
+                outroFiredMediaId = null
+            }
 
             val c = controller ?: return
             _player.update {
@@ -819,6 +855,7 @@ class PlaybackEngine(
                 ?: continue
             val playingThis = at == c2.currentMediaItemIndex
             val pos = if (playingThis) c2.currentPosition.coerceAtLeast(0L) else 0L
+            nextTransitionIsSameItemReplace = true
             c2.replaceMediaItem(at, PlaybackConnection.toMediaItem(song))
             if (playingThis) {
                 c2.seekTo(at, pos)
@@ -852,11 +889,18 @@ class PlaybackEngine(
         CloudUrlMemo.remember(refreshed.stableKey, refreshed.uri.toString())
         val c = controller ?: return
         val at = (0 until c.mediaItemCount).firstOrNull { c.getMediaItemAt(it).mediaId == song.stableKey } ?: return
+        // 换直链是一次网络往返，期间用户的意图可能已经变了：按了暂停、被导航播报
+        // 抢走焦点、睡眠定时到点、或者干脆切到了别的歌。原先这里无条件
+        // `seekTo + prepare + play()`，会把上面每一种情况都覆盖掉 ——
+        // 症状就是「我明明暂停了，它自己又响起来」。
+        val wasCurrent = at == c.currentMediaItemIndex
+        val wasPlaying = c.playWhenReady
         val position = c.currentPosition.coerceAtLeast(0L)
+        nextTransitionIsSameItemReplace = true
         c.replaceMediaItem(at, PlaybackConnection.toMediaItem(refreshed))
-        c.seekTo(at, position)
+        if (wasCurrent) c.seekTo(at, position)
         c.prepare()
-        c.play()
+        if (wasPlaying) c.play()
         currentQueue = currentQueue.map { if (it.stableKey == song.stableKey) refreshed else it }
         _player.update { it.copy(current = refreshed) }
     }
@@ -889,6 +933,7 @@ class PlaybackEngine(
                 val at = (0 until c.mediaItemCount).firstOrNull { c.getMediaItemAt(it).mediaId == song.stableKey }
                     ?: return@let
                 runCatching {
+                    nextTransitionIsSameItemReplace = true
                     c.replaceMediaItem(at, PlaybackConnection.withArtwork(c.getMediaItemAt(at), bytes))
                 }
             }
@@ -915,27 +960,42 @@ class PlaybackEngine(
 
     // ================================================================ 连接与恢复
 
+    /**
+     * 拿到（必要时建立）与播放服务的控制器。
+     *
+     * **必须单飞**：冷启动时至少有两条路径会同时进来 —— `restoreQueueIfNeeded()`
+     * （恢复队列 / 断点续播）以及用户或界面触发的 `setSpeed()` / `playQueue()`。
+     * 原先的 `controller?.let { return it }` 与 `connection.connect()` 之间没有任何互斥，
+     * 而 `connect()` 内部同样无并发保护，于是两次 `buildAsync()` 都会走完：
+     * 后完成的那份覆盖 `controller` 字段，先完成的那份既没有 `releaseFuture` 也没
+     * `removeListener` —— 多一个绑定的会话连接（把 `PlaybackService` 钉住不放），
+     * 而且它的监听器仍在往 `_player` 写状态。
+     */
     private suspend fun ensureController(): MediaController? {
         controller?.let { return it }
-        return runCatching { connection.connect() }.onFailure { Log.e(TAG, "连接播放服务失败", it) }
-            .getOrNull()
-            ?.also {
-                controller = it
-                it.addListener(playerListener)
-                // 服务刚起来时套用一次持久化的开关
-                PlayerHandle.setSkipSilence(prefs.skipSilence)
-                applyPlaybackParams(it)
-                _player.update { s ->
-                    s.copy(
-                        isPlaying = it.isPlaying,
-                        repeatMode = it.repeatMode,
-                        shuffle = it.shuffleModeEnabled,
-                        durationMs = it.duration.coerceAtLeast(0L),
-                        queueSize = it.mediaItemCount,
-                        speed = it.playbackParameters.speed,
-                    )
+        return controllerLock.withLock {
+            // 进锁后再看一眼：并发的另一条路径可能已经建好了
+            controller?.let { return@withLock it }
+            runCatching { connection.connect() }.onFailure { Log.e(TAG, "连接播放服务失败", it) }
+                .getOrNull()
+                ?.also {
+                    controller = it
+                    it.addListener(playerListener)
+                    // 服务刚起来时套用一次持久化的开关
+                    PlayerHandle.setSkipSilence(prefs.skipSilence)
+                    applyPlaybackParams(it)
+                    _player.update { s ->
+                        s.copy(
+                            isPlaying = it.isPlaying,
+                            repeatMode = it.repeatMode,
+                            shuffle = it.shuffleModeEnabled,
+                            durationMs = it.duration.coerceAtLeast(0L),
+                            queueSize = it.mediaItemCount,
+                            speed = it.playbackParameters.speed,
+                        )
+                    }
                 }
-            }
+        }
     }
 
     /**
@@ -2008,6 +2068,7 @@ class PlaybackEngine(
             val packed = withContext(Dispatchers.Default) {
                 CoverRepository.downscaleForNotification(bytes)
             } ?: return@launch
+            nextTransitionIsSameItemReplace = true
             runCatching { c.replaceMediaItem(index, PlaybackConnection.withArtwork(item, packed)) }
         }
     }
@@ -2041,7 +2102,7 @@ class PlaybackEngine(
         if (mediaId != null) introAppliedMediaId = mediaId
     }
 
-    /** H2：片尾窗口内切下一首；每曲最多触发一次 */
+    /** H2：片尾窗口内切下一首；每曲最多触发一次。**调用方负责保证当前确实在播** */
     private fun maybeApplyOutroSkip(c: MediaController, positionMs: Long) {
         val mediaId = c.currentMediaItem?.mediaId
         if (mediaId != null && mediaId == outroFiredMediaId) return
@@ -2050,8 +2111,10 @@ class PlaybackEngine(
         if (!IntroOutroSkip.shouldSkipOutro(positionMs, duration, prefs.skipOutroSeconds)) return
         if (mediaId != null) outroFiredMediaId = mediaId
         runCatching {
+            // 这里**不要**再 `play()`：`seekToNextMediaItem()` 本身保持 playWhenReady，
+            // 以前那句 `if (!c.playWhenReady) c.play()` 会把用户的暂停覆盖掉
+            // （片尾窗口内按暂停 → 被无视 → 下一首直接响）。
             c.seekToNextMediaItem()
-            if (!c.playWhenReady) c.play()
         }
     }
 
@@ -2092,8 +2155,11 @@ class PlaybackEngine(
                 if (abSeek != null) {
                     runCatching { c.seekTo(abSeek) }
                 }
-                maybeApplyOutroSkip(c, pos)
                 val playing = c.isPlaying
+                // H2：片尾跳过只在**真的在播**时判定。原先无条件调用，加上函数内部的
+                // `play()` 兜底，用户在片尾窗口内按暂停会被覆盖并直接切歌起播。
+                // 放在 playing 之后还能省掉一次跨进程 isPlaying。
+                if (playing) maybeApplyOutroSkip(c, pos)
                 val now = SystemClock.elapsedRealtime()
 
                 // 缓冲位置：只给进度条画缓冲段用，2s 一取

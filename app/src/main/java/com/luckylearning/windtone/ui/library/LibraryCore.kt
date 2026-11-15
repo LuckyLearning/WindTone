@@ -66,6 +66,14 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
 
     private val scope get() = session.scope
 
+    /**
+     * 分组刷新的代际号。
+     *
+     * [refreshGroups] 现在把计算放到 `Dispatchers.Default`，多次调用会并发；
+     * 只让**最后一次**的结果落地，避免「先发后到」把新视图的分组列表覆盖成旧的。
+     */
+    private var groupGeneration = 0
+
     /** 当前正在跑的音乐库扫描任务；范围/目录变化时先取消它，避免过期结果回写 */
     private var scanJob: Job? = null
 
@@ -613,12 +621,15 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
 
     internal fun refreshGroups() {
         val view = _library.value.view
-        val songs = browseSongs()
-        if (songs.isEmpty()) {
-            _library.update { if (it.groups.isEmpty()) it else it.copy(groups = emptyList()) }
-            return
-        }
-        val groups: List<GroupInfo> = when (view) {
+        // 整库 groupBy + 拼音排序，在万首级曲库上是几十到上百毫秒的活。原先这里由
+        // Compose 点击回调（切视图 / 改排序 / 改格式筛选）直接调用 → 落在主线程；
+        // 同文件 applyLibrary / setQuery 都刻意切了 Dispatchers.Default，这里是漏改。
+        // 改为 Default 计算，并用代际号丢弃「先发后到」的过期结果。
+        val snapshot = _library.value
+        val generation = ++groupGeneration
+        scope.launch(Dispatchers.Default) {
+        val songs = applyLibraryFormatFilter(snapshot.songs, snapshot.formatFilter)
+        val groups: List<GroupInfo> = if (songs.isEmpty()) emptyList() else when (view) {
             LibraryView.ALBUM -> songs.groupBy { it.albumOrUnknown }.map { (k, list) ->
                 GroupInfo(k, k, list.firstOrNull()?.artistOrUnknown.orEmpty(), list.size, list.first())
             }
@@ -665,7 +676,9 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
         
             }
         }
+        if (generation != groupGeneration) return@launch
         _library.update { if (it.groups == ordered) it else it.copy(groups = ordered) }
+        }
     }
 
     override fun openGroup(group: GroupInfo) {

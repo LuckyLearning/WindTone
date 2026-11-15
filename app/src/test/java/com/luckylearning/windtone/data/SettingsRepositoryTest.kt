@@ -178,7 +178,7 @@ class SettingsRepositoryTest {
         assertEquals(SettingsDefaults.OVERLAY_DIM_RANGE.first, settings.setLyricOverlayDimPercent(1))
         assertEquals(SettingsDefaults.OVERLAY_STROKE_WIDTH_RANGE.last, settings.setLyricOverlayStrokeWidthDp(50))
         assertEquals(SettingsDefaults.OVERLAY_FADE_RANGE.first, settings.setLyricOverlayFadeMs(-1))
-        assertEquals(2, settings.setLyricOverlayTitleMode(9))
+        assertEquals(3, settings.setLyricOverlayTitleMode(9))
         assertEquals(0, settings.setLyricOverlayTitleMode(-1))
         // 落盘的也必须是夹取后的值（最后一次写的是下界 / 0 档）
         assertEquals(SettingsDefaults.OVERLAY_CORNER_RADIUS_RANGE.last, prefs.lyricOverlayCornerRadiusDp)

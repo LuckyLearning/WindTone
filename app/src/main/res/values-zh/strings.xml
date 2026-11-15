@@ -522,6 +522,8 @@
     <string name="current_context">当前行 + 上下文</string>
     <string name="title_only_2">只歌名</string>
     <string name="artist_only_2">只歌手</string>
+    <string name="title_artist_truncated">歌名 - 歌手</string>
+    <string name="title_artist_truncated_sub">单行显示；歌名加歌手超过 10 字只留歌名</string>
     <string name="appearance">外观</string>
     <string name="theme_colors_car_mode">主题模式 · 主题取色 · 车载模式</string>
     <string name="playback">播放</string>

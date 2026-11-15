@@ -837,6 +837,7 @@ internal fun SettingsOverlayPage(
                     subtitle = when (player.lyricOverlayTitleMode) {
                         1 -> stringResource(R.string.title_only_a_more_compact)
                         2 -> stringResource(R.string.artist_only)
+                        3 -> stringResource(R.string.title_artist_truncated)
                         else -> stringResource(R.string.both_title_and_artist_default)
                     },
                     onClick = { overlayChoice = OverlayChoice.TITLE_MODE },

@@ -13,9 +13,11 @@ import android.os.PowerManager
 import android.os.Process
 import android.provider.Settings
 import android.util.Log
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 
 /**
  * 前台应用检测的两个通道的「可用性探测 + 轮询」（v1.1.29，设计见 docs/设计-悬浮窗按应用隐藏.md）。
@@ -590,8 +592,14 @@ internal object ForegroundAppDetector {
      * `LyricOverlayService` 启动；协程一取消就退，不再查一个字节。
      */
     suspend fun pollLoop(context: Context, onSwitch: (String) -> Unit) {
+        val appContext = context.applicationContext
         while (currentCoroutineContext().isActive) {
-            val pkg = currentForegroundPackage(context)
+            // `queryEvents` 是跨进程 Binder 调用（要取回最近 10 秒窗口里的全部事件）。
+            // 调用方 `LyricOverlayService` 的 scope 是 `Dispatchers.Main.immediate`，
+            // 原先这里每 1.5 秒就在主线程做一次 IPC —— 车机上常年不停，
+            // 与 Compose 帧、悬浮窗 `updateViewLayout` 抢同一根线程，属于
+            // 「逻辑正确但一定掉帧」。查询放 IO，状态写回留在主线程。
+            val pkg = withContext(Dispatchers.IO) { currentForegroundPackage(appContext) }
             if (pkg != null && ForegroundAppState.report(pkg)) {
                 onSwitch(pkg)
             }

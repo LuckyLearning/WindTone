@@ -440,6 +440,11 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         unbindDisplayConfigCallbacks()
         runCatching { unregisterReceiver(screenReceiver) }
         scope.cancel()
+        // 侧钮是**独立窗口**，四颗（收起 / 播放 / 暂停 / 无障碍）都必须显式摘掉。
+        // detachWindow() 只负责歌词窗与前三颗（v1.1.91 的历史代码），第 4 颗无障碍钮是
+        // v1.2.38 才加的，只登记在 detachHandles() 里 —— 这里不调 detachHandles 就是
+        // 「关掉悬浮窗后那颗钮永久留在桌面最上层 + 整个 Service 被 WindowManagerGlobal 拖住」。
+        detachHandles()
         detachWindow()
         LyricOverlayBus.clear()
         ForegroundAppState.reset()
@@ -725,9 +730,9 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             } else {
                 initialFrame.height
             },
-            // TYPE_APPLICATION_OVERLAY 是 Android 8.0+ 唯一允许第三方应用使用的
-            // 系统级悬浮窗类型，需要 SYSTEM_ALERT_WINDOW 授权。
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            // 类型按系统版本分流，见 overlayWindowType()：API 26+ 用
+            // TYPE_APPLICATION_OVERLAY，7.x 退 TYPE_PHONE。都要 SYSTEM_ALERT_WINDOW 授权。
+            overlayWindowType(),
             baseFlags(),
             PixelFormat.TRANSLUCENT,
         ).apply {
@@ -829,6 +834,25 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+
+    /**
+     * 悬浮窗窗口类型。
+     *
+     * `TYPE_APPLICATION_OVERLAY` 是 **API 26（Android 8.0）才有**的，也是 8.0 起第三方
+     * 应用唯一能用的系统级悬浮窗类型；但本项目 `minSdk = 24`。在 7.0 / 7.1 上直接用它
+     * 会让 `addView` 抛 `WindowManager.BadTokenException: permission denied for window type 2038`：
+     * 主窗那次被 `try/catch(Throwable)` 兜住 → 走「记录 + 关开关 + stopSelf」，
+     * 四颗侧钮被 `runCatching` 静默吞掉 —— 对用户是「开了立刻自己关掉」，不是降级。
+     *
+     * 旧系统退到 `TYPE_PHONE`：它同样受 `SYSTEM_ALERT_WINDOW` 保护，语义与 ADD 一致。
+     */
+    private fun overlayWindowType(): Int =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        } else {
+            @Suppress("DEPRECATION")
+            WindowManager.LayoutParams.TYPE_PHONE
+        }
 
     // ------------------------------------------------------------------ 定位
 
@@ -1644,14 +1668,9 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
     override fun applyTitle(content: LyricOverlayBus.Content, prefs: Prefs): Boolean {
         val tv = titleView ?: return false
         val text = if (prefs.lyricOverlayShowTitle) {
-            // v1.1.52：标题内容可选 —— 只歌名 / 只歌手 / 两者（默认）。
-            // 各行仍可能为空：歌手拿不到时（`<unknown>` 已被上游清成空串）只显示剩下那行。
-            val parts = when (prefs.lyricOverlayTitleMode) {
-                1 -> listOf(content.title)
-                2 -> listOf(content.artist)
-                else -> listOf(content.title, content.artist)
-            }
-            parts.filter { it.isNotBlank() }.joinToString("\n")
+            // v1.1.52：标题内容可选 —— 只歌名 / 只歌手 / 两者（默认）/ 单行「歌名 - 歌手」。
+            // 歌手拿不到时（`<unknown>` 已被上游清成空串）按模式各自兜底（见 [OverlayTitleFormat]）。
+            OverlayTitleFormat.format(prefs.lyricOverlayTitleMode, content.title, content.artist)
         } else {
             ""
         }
@@ -1866,8 +1885,13 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         val lp = WindowManager.LayoutParams(
             size,
             size,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            overlayWindowType(),
+            // 必须带 FLAG_NOT_TOUCH_MODAL：缺了它这颗钮就是「模态窗口」，
+            // InputDispatcher 会把落点在其矩形之外的触摸当成被遮挡而丢弃 ——
+            // 车机上表现为「侧钮在时整屏点不动」。主窗的 baseFlags() 一直是有的，
+            // 四颗侧钮当初漏了，v1.2.57 之前只在车机会暴露（唯一挂钮的场景）。
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT,
         ).apply {
@@ -1916,8 +1940,13 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         val lp = WindowManager.LayoutParams(
             size,
             size,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            overlayWindowType(),
+            // 必须带 FLAG_NOT_TOUCH_MODAL：缺了它这颗钮就是「模态窗口」，
+            // InputDispatcher 会把落点在其矩形之外的触摸当成被遮挡而丢弃 ——
+            // 车机上表现为「侧钮在时整屏点不动」。主窗的 baseFlags() 一直是有的，
+            // 四颗侧钮当初漏了，v1.2.57 之前只在车机会暴露（唯一挂钮的场景）。
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT,
         ).apply {
@@ -1952,8 +1981,13 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         val lp = WindowManager.LayoutParams(
             size,
             size,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            overlayWindowType(),
+            // 必须带 FLAG_NOT_TOUCH_MODAL：缺了它这颗钮就是「模态窗口」，
+            // InputDispatcher 会把落点在其矩形之外的触摸当成被遮挡而丢弃 ——
+            // 车机上表现为「侧钮在时整屏点不动」。主窗的 baseFlags() 一直是有的，
+            // 四颗侧钮当初漏了，v1.2.57 之前只在车机会暴露（唯一挂钮的场景）。
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT,
         ).apply {
@@ -2001,8 +2035,13 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
         val lp = WindowManager.LayoutParams(
             size,
             size,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            overlayWindowType(),
+            // 必须带 FLAG_NOT_TOUCH_MODAL：缺了它这颗钮就是「模态窗口」，
+            // InputDispatcher 会把落点在其矩形之外的触摸当成被遮挡而丢弃 ——
+            // 车机上表现为「侧钮在时整屏点不动」。主窗的 baseFlags() 一直是有的，
+            // 四颗侧钮当初漏了，v1.2.57 之前只在车机会暴露（唯一挂钮的场景）。
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT,
         ).apply {

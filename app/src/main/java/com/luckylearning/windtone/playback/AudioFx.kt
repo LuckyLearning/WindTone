@@ -647,16 +647,17 @@ object AudioFx {
      * 高音快捷旋钮：把 4 kHz 及以上的频段收成同一增益。
      * 曲线变了，内置预设和用户预设、方案一并离开。
      */
+    /** 高音增益（mB）：与 [setBandLevel] 同理，关闭态只落曲线、不写硬件 */
     fun setTrebleGainMb(gainMb: Int) {
-        val eq = equalizer ?: return
         val s = _state.value
         if (s.bandCount <= 0) return
         val levels = EqTone.applyTreble(s.bandLevels, s.bandCenterHz, gainMb, s.bandMinMb, s.bandMaxMb)
-        applyBands(eq, levels)
+        equalizer?.let { applyBands(it, levels) }
         prefs?.eqPresetId = ""
         prefs?.eqBands = encodeBands(levels)
         clearActiveSchemeId()
         _state.value = s.copy(bandLevels = levels, presetId = "", schemeId = "")
+        syncSoftEqCurve()
     }
 
     fun release() {
@@ -703,12 +704,22 @@ object AudioFx {
         }
     }
 
+    /**
+     * 拖某个频段。
+     *
+     * **关闭态也要落盘 + 更新状态**：`setEnabled(false)` 走 A6 语义已经
+     * `releaseEffects()`，`equalizer` 为 null。原先这里首行 `val eq = equalizer ?: return`
+     * 直接短路，结果滑块拖了立刻弹回（值来自 `_state`）、预设点了没反应，
+     * 而且新曲线根本不进 Prefs —— 用户以为「先选好再开」是无效操作。
+     * 现在没有效果器时只跳过「写硬件」这一步，曲线照样记下来，
+     * 下次 `setEnabled(true)` → `attach()` → `bindEffectsConfigured(prefs, …)` 会读到它。
+     */
     fun setBandLevel(band: Int, levelMb: Int) {
-        val eq = equalizer ?: return
         val s = _state.value
+        if (band < 0 || band >= s.bandLevels.size) return
         val clamped = levelMb.coerceIn(s.bandMinMb, s.bandMaxMb)
         val levels = s.bandLevels.copyOf().also { it[band] = clamped }
-        applyBands(eq, levels)
+        equalizer?.let { applyBands(it, levels) }
         // 手动拖滑块 = 离开预设，进入自定义
         prefs?.eqPresetId = ""
         prefs?.eqBands = encodeBands(levels)
@@ -721,13 +732,17 @@ object AudioFx {
     /**
      * 应用内置预设：按设备实际频段中心频率插值出曲线，直接写频段
      * （不再走 [Equalizer.usePreset]——平台预设名各 ROM 不同且无法本地化）。
+     *
+     * 与 [setBandLevel] 同理：关闭态下没有 `equalizer`，只记曲线不写硬件。
      */
     fun setPreset(id: String) {
-        val eq = equalizer ?: return
         val s = _state.value
         val preset = EqPresets.byId(id) ?: return
+        // 还没拿到设备频段（从未 attach 过 / 设备不支持）时算不出曲线：
+        // 此时写 Prefs 会把用户已有的 eqBands 覆盖成空串，宁可什么都不做。
+        if (s.bandCenterHz.isEmpty()) return
         val levels = EqPresets.curveFor(preset, s.bandCenterHz)
-        applyBands(eq, levels)
+        equalizer?.let { applyBands(it, levels) }
         prefs?.eqPresetId = preset.id
         prefs?.eqBands = encodeBands(levels)
         clearActiveSchemeId()

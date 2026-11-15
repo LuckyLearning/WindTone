@@ -7,7 +7,6 @@ import com.luckylearning.windtone.data.model.SongSource
 import com.luckylearning.windtone.data.model.TrackFragment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
 import org.json.JSONArray
@@ -533,9 +532,19 @@ class AliyunDrive(
         }
     }
 
-    private fun requireToken(): String =
+    /**
+     * 取一次可用 token。
+     *
+     * **必须是 suspend**：provider 在令牌快过期时会在内部发起网络刷新（最多 4~6 条串行请求）。
+     * 曾经这里用 `runBlocking { tokenProvider() }`，后果有两个：
+     *  1. 不响应调用方协程的取消 —— 退出云盘页 / 切歌后，扫描与补链任务仍会卡住几十秒；
+     *  2. 阻塞的正是 `Dispatchers.IO` 的线程，而被等待的内层协程也要 IO 线程，
+     *     并发补链（窗口多首 + 歌词侧车 + Binder 解析）叠加时会线程池饥饿，
+     *     表现为「点播放没反应」。
+     */
+    private suspend fun requireToken(): String =
         // provider 返回 null = 未登录（AliyunAuth.accessToken 的约定）
-        runBlocking { tokenProvider() } ?: error("尚未登录阿里云盘")
+        tokenProvider() ?: error("尚未登录阿里云盘")
 
     companion object {
         private const val BASE = AliyunEndpoints.API_BASE

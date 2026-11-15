@@ -424,6 +424,16 @@ fun MainScreen(
     // 抽屉最后注册 = 优先级最高：抽屉开着时返回键只收抽屉，不会顺带退出别的层。
     BackHandler(enabled = drawerOpen) { drawerOpen = false }
 
+    // 一级列表的滚动位置托管：按视图各存一份，切视图（歌曲↔专辑↔歌手↔文件夹↔歌单）
+    // 或进详情再返回时，列表都回到用户之前滚动到的位置。
+    //
+    // ⚠️ 必须声明在**本函数最外层**，不能放进 `listArea` 的 lambda，也不能放进 `when`：
+    //   · 进详情时 `when` 的其它分支会离开组合；
+    //   · 展开播放页 320ms 后 `underlyingVisible` 会把整个 `listArea()` 摘掉。
+    // 两种情况只要让 holder 一起被 forget，它存下的 `LazyListState` 就一起没了 ——
+    // 用户看到的是「关掉播放页，曲库跳回顶部」，并伴随整页重新组合与封面重新解码。
+    val listStateHolder = rememberSaveableStateHolder()
+
     /** 一级列表 + 详情：手机与宽屏左栏共用同一份内容 */
     val listArea: @Composable () -> Unit = {
         Box(
@@ -456,11 +466,6 @@ fun MainScreen(
                     )
                 }
         ) {
-            // 一级列表的滚动位置托管：按视图各存一份，切视图（歌曲↔专辑↔歌手↔
-            // 文件夹↔歌单）或进详情再返回时，列表都回到用户之前滚动到的位置。
-            // 必须声明在 when 之外 —— 进详情时下面的 else 分支会离开组合，
-            // holder 若随之被 forget，存下的位置会一起丢掉。
-            val listStateHolder = rememberSaveableStateHolder()
             // P2-4：主内容区的分支收敛到纯函数（MainNavigation.kt），便于单测与扩展。
             when (
                 mainRouteOf(

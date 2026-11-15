@@ -53,6 +53,21 @@
       只在设置里开启了「车载模式」时才动作；不开启时收到开机广播什么都不做。
     -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!--
+      悬浮窗「按应用隐藏」的第二条检测通道（UsageStats）。
+
+      ⚠️ 这条**只声明、不代表已授权**，普通用户仍需去「设置 → 应用 → 特殊权限 →
+      使用情况访问」手动打开。但它必须出现在清单里，否则系统那个列表里**根本不会列出
+      本应用**，用户无从授权 —— 结果是 AppOps 恒为 MODE_DEFAULT，`usageStatsGranted()`
+      永远是 false，整条 UsageStats 通道变成不可达代码，而看护通知里「去开使用情况访问」
+      把用户送进一个没有本应用条目的页面。
+      无障碍通道不可用在 DiLink 上是常态，所以这条兜底不是可选项。
+    -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+
     <!-- 仅声明、默认不授予：有 adb 的用户可 pm grant 后让 AccessibilityWatchdog 开机自动写回无障碍；
          普通车机（宋 L DM-i 2026 等收紧扫码后）拿不到，看护仍走通知一键恢复。 -->
     <uses-permission

@@ -108,14 +108,6 @@ class AliyunAuth(context: Context) {
     private val sp = context.applicationContext
         .getSharedPreferences("aliyundrive_auth", Context.MODE_PRIVATE)
 
-    /**
-     * 刷新互斥锁：同一时刻只允许一个协程换令牌。
-     *
-     * 没有它的话，播放一首歌时并发的多个请求（取直链 / 预取 / 封面）会各自发现令牌快过期，
-     * 同时拿同一个 refresh_token 去换 —— 阿里是轮换制，服务端连着轮换两次，
-     * 我们只存得下最后一次响应，中间那个随即失效，于是下一次请求就永久 401。
-     */
-    private val refreshMutex = Mutex()
 
     /** 是否带了自己的应用凭据（有就能直连官方接口，没有就走 OpenList 在线接口） */
     fun hasClientCredentials(): Boolean =
@@ -357,6 +349,23 @@ class AliyunAuth(context: Context) {
     }
 
     private companion object {
+        /**
+         * 刷新互斥锁：同一时刻只允许一个协程换令牌。
+         *
+         * 没有它的话，播放一首歌时并发的多个请求（取直链 / 预取 / 封面）会各自发现令牌快过期，
+         * 同时拿同一个 refresh_token 去换 —— 阿里是轮换制，服务端连着轮换两次，
+         * 我们只存得下最后一次响应，中间那个随即失效，于是下一次请求就永久 401。
+         *
+         * ⚠️ **这把锁必须放在 companion 里（进程级），不能是实例字段**：
+         * [AliyunAuth] 在工程里会被 new 多次 —— `PlaybackEngine`（恢复队列 / 补链 / 刷新直链）、
+         * `PlaybackService`（Binder 解析 mediaItem）、`AliyunEnricher`（每首歌的侧车歌词）、
+         * `AliyunPanPage`、`SettingsOnlinePage` 各持一份。实例级的 `Mutex` 等于没有锁：
+         * 两个实例仍会同时拿同一个 refresh_token 去换，症状就是上面说的「永久失效」。
+         * 所有实例共用同一个 SharedPreferences 文件（`getSharedPreferences` 返回同一实例），
+         * 所以串行化之后读写天然一致。
+         */
+        val refreshMutex = Mutex()
+
         const val KEY_ACCESS = "access_token"
         const val KEY_REFRESH = "refresh_token"
         const val KEY_EXPIRES_AT = "expires_at"

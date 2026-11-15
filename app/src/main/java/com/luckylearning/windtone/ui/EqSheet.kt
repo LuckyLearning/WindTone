@@ -40,6 +40,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -277,6 +278,13 @@ private fun AbCompareButton() {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     LaunchedEffect(pressed) { AudioFx.setBypassed(pressed) }
+    // 必须兜一次「离开组合时恢复」：按住期间如果这个按钮被移除（顶部 EQ 总开关关掉 →
+    // 外层 `if (state.enabled)` 不再渲染它，或弹层被系统/手势收起），
+    // `LaunchedEffect` 的协程被取消，松手事件永远不会来 —— 效果器就永久停在旁路，
+    // 此后 EQ / 低音 / 混响全部静默失效，用户只能再进一次均衡器按一下才好。
+    DisposableEffect(Unit) {
+        onDispose { AudioFx.setBypassed(false) }
+    }
     Button(
         onClick = { /* 按住即生效，点击无动作 */ },
         interactionSource = interaction,

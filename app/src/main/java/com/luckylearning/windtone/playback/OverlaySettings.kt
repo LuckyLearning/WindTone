@@ -408,6 +408,13 @@ class OverlaySettings(
         // 落到设置上换算成绝对磅值 —— v1.2.54 起标题字号是独立 sp。
         val titleSp = settings.setOverlayTitleSp((textSp * preset.titlePercent + 50) / 100)
         val titleMode = settings.setLyricOverlayTitleMode(preset.titleMode)
+        val titlePos = settings.setLyricOverlayTitlePos(preset.titlePos)
+        val titleAlign = settings.setLyricOverlayTitleAlign(preset.titleAlign)
+        val titleStrokeOn = settings.setLyricOverlayTitleStrokeEnabled(preset.titleStrokeOn)
+        val titleStrokeWidth = settings.setLyricOverlayTitleStrokeWidthDp(preset.titleStrokeWidthDp)
+        val titleStrokeColor = settings.setLyricOverlayTitleStrokeColor(preset.titleStrokeColor)
+        val currentSp = settings.setLyricOverlayCurrentSp(preset.currentSp)
+        val contextSp = settings.setLyricOverlayContextSp(preset.contextSp)
         val bgAlpha = settings.setOverlayBgAlphaPercent(preset.bgAlphaPercent)
         settings.setOverlayBgColor(preset.bgColor)
         val corner = settings.setLyricOverlayCornerRadiusDp(preset.cornerRadiusDp)
@@ -433,6 +440,13 @@ class OverlaySettings(
                 lyricOverlayShowTitle = preset.showTitle,
                 lyricOverlayTitleSp = titleSp,
                 lyricOverlayTitleMode = titleMode,
+                lyricOverlayTitlePos = titlePos,
+                lyricOverlayTitleAlign = titleAlign,
+                lyricOverlayTitleStrokeEnabled = titleStrokeOn,
+                lyricOverlayTitleStrokeWidthDp = titleStrokeWidth,
+                lyricOverlayTitleStrokeColor = titleStrokeColor,
+                lyricOverlayCurrentSp = currentSp,
+                lyricOverlayContextSp = contextSp,
                 lyricOverlayBgAlphaPercent = bgAlpha,
                 // Prefs 的 bgColor setter 只保留 RGB，读回同一个值避免 UI 与落盘不一致
                 lyricOverlayBgColor = prefs.lyricOverlayBgColor,

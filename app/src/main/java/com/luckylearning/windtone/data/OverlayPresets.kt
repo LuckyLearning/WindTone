@@ -61,6 +61,21 @@ data class OverlayPreset(
      */
     val titlePercent: Int,
     val titleMode: Int,
+    // ---- 标题位置 / 描边 / 分角色字号（v1.2.x 新增；均带出厂默认，既有预设构造不受影响）----
+    /** 标题块位置：0 歌词上方 / 1 歌词下方（预设可携带，便于「一套样式」自洽） */
+    val titlePos: Int = SettingsDefaults.OVERLAY_TITLE_POS,
+    /** 标题块对齐：0 居中 / 1 居左 / 2 居右 */
+    val titleAlign: Int = SettingsDefaults.OVERLAY_TITLE_ALIGN,
+    /** 标题描边开关 */
+    val titleStrokeOn: Boolean = SettingsDefaults.OVERLAY_TITLE_STROKE_ON,
+    /** 标题描边宽度（dp） */
+    val titleStrokeWidthDp: Int = SettingsDefaults.OVERLAY_TITLE_STROKE_WIDTH_DP,
+    /** 标题描边颜色 */
+    val titleStrokeColor: Int = SettingsDefaults.OVERLAY_TITLE_STROKE_COLOR,
+    /** 当前行字号（sp）：0 = 跟随正文 */
+    val currentSp: Int = SettingsDefaults.OVERLAY_CURRENT_SP,
+    /** 其他行字号（sp）：0 = 跟随正文 */
+    val contextSp: Int = SettingsDefaults.OVERLAY_CONTEXT_SP,
     // ---- 背景 ----
     val bgAlphaPercent: Int,
     val bgColor: Int,
@@ -219,6 +234,47 @@ data class OverlayPreset(
             fadeMs = 160,
         )
 
+        /**
+         * P5 描边浮层：透明无底板 + 白字黑描边单方案，黑/白底板通吃。
+         * 当前行放大、其他行正常；标题置歌词下方居右，单行「歌名 - 歌手」，
+         * 歌名+歌手合计超 10 字仅显示歌名。满足「一套样式在白/黑底板都正确显示」。
+         */
+        val P5 = OverlayPreset(
+            id = "P5",
+            name = "描边浮层",
+            tagline = "透明无框·白黑通吃·当前行放大",
+            lines = 2,
+            widthPercent = 82,
+            boxHeightPercent = 0,
+            xPercent = 50,
+            yPercent = 12,
+            textSp = 20,
+            align = 0,
+            textColor = 0xFFFFFFFF.toInt(),
+            currentColor = 0,
+            dimPercent = 42,
+            strokeWidthDp = 2, // 显式 2dp 黑描边：白字黑描边单方案，白/黑底板都读得清
+            strokeColor = 0xFF000000.toInt(),
+            lineSpacingDp = 4,
+            showTitle = true,
+            titlePercent = 62,
+            titleMode = 3, // 单行「歌名 - 歌手」，超 10 字仅歌名
+            titlePos = 1, // 歌词下方
+            titleAlign = 2, // 居右 → 右下角
+            titleStrokeOn = true,
+            titleStrokeWidthDp = 2,
+            titleStrokeColor = 0xFF000000.toInt(),
+            currentSp = 24, // 当前行放大些
+            contextSp = 0, // 其他行跟随正文（正常字号）
+            bgAlphaPercent = 0, // 透明无底板
+            bgColor = 0xFF101014.toInt(),
+            cornerRadiusDp = 0,
+            borderWidthDp = 0,
+            borderColor = 0x66FFFFFF.toInt(),
+            pauseMode = 0,
+            fadeMs = 160,
+        )
+
         // ============================================================
         // 车机三套（C1~C3，carOnly；D3 拍板按车机场景设计。
         // v1.1.78 已进预设池（车载模式下速选面板 / 设置网格可见可套用）。
@@ -319,7 +375,7 @@ data class OverlayPreset(
         )
 
         /** 全部七套：手机 4 + 车机 3（方案 G3 口径） */
-        val ALL: List<OverlayPreset> = listOf(P1, P2, P3, P4, C1, C2, C3)
+        val ALL: List<OverlayPreset> = listOf(P1, P2, P3, P4, P5, C1, C2, C3)
 
         /** 手机预设池（车载模式之外可见） */
         val PHONE: List<OverlayPreset> = ALL.filterNot { it.carOnly }
@@ -359,6 +415,13 @@ data class OverlayPresetParams(
      */
     val titleSp: Int,
     val titleMode: Int,
+    val titlePos: Int,
+    val titleAlign: Int,
+    val titleStrokeOn: Boolean,
+    val titleStrokeWidthDp: Int,
+    val titleStrokeColor: Int,
+    val currentSp: Int,
+    val contextSp: Int,
     val bgAlphaPercent: Int,
     val bgColor: Int,
     val cornerRadiusDp: Int,
@@ -387,6 +450,13 @@ fun OverlayPreset.toParams() = OverlayPresetParams(
     // 62% × 20sp ≈ 12sp：四舍五入后与用户面默认值（OVERLAY_TITLE_SP）一致
     titleSp = (textSp * titlePercent + 50) / 100,
     titleMode = titleMode,
+    titlePos = titlePos,
+    titleAlign = titleAlign,
+    titleStrokeOn = titleStrokeOn,
+    titleStrokeWidthDp = titleStrokeWidthDp,
+    titleStrokeColor = titleStrokeColor,
+    currentSp = currentSp,
+    contextSp = contextSp,
     bgAlphaPercent = bgAlphaPercent,
     bgColor = bgColor,
     cornerRadiusDp = cornerRadiusDp,
@@ -419,6 +489,13 @@ val OVERLAY_FACTORY_PARAMS = OverlayPresetParams(
     showTitle = SettingsDefaults.OVERLAY_SHOW_TITLE, // false
     titleSp = SettingsDefaults.OVERLAY_TITLE_SP, // 12
     titleMode = SettingsDefaults.OVERLAY_TITLE_MODE, // 0
+    titlePos = SettingsDefaults.OVERLAY_TITLE_POS,
+    titleAlign = SettingsDefaults.OVERLAY_TITLE_ALIGN,
+    titleStrokeOn = SettingsDefaults.OVERLAY_TITLE_STROKE_ON,
+    titleStrokeWidthDp = SettingsDefaults.OVERLAY_TITLE_STROKE_WIDTH_DP,
+    titleStrokeColor = SettingsDefaults.OVERLAY_TITLE_STROKE_COLOR,
+    currentSp = SettingsDefaults.OVERLAY_CURRENT_SP,
+    contextSp = SettingsDefaults.OVERLAY_CONTEXT_SP,
     bgAlphaPercent = SettingsDefaults.OVERLAY_BG_ALPHA_PERCENT, // 55
     bgColor = SettingsDefaults.OVERLAY_BG_COLOR,
     cornerRadiusDp = SettingsDefaults.OVERLAY_CORNER_RADIUS_DP, // 14
