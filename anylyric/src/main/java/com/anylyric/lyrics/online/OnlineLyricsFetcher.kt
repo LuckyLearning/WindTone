@@ -3,6 +3,7 @@ package com.anylyric.lyrics.online
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import com.anylyric.lyrics.KrcParser
 import com.anylyric.lyrics.LrcParser
 import com.anylyric.lyrics.LyricLine
 import com.anylyric.lyrics.LyricMatch
@@ -397,6 +398,11 @@ object OnlineLyricsFetcher {
         ) { Triple(it.title, it.artist, it.durationSec) }
 
         for (candidate in candidates.take(MAX_LYRIC_FILES)) {
+            // 先试 KRC（0.2.27）：同一个下载接口只把 fmt 换成 krc，就能拿到**字级时间**
+            // ——这是五个源里唯一能匿名拿到的真逐字。解不出来（格式变了 / 这条候选没有
+            // krc）就照旧走下面的 lrc，行为与以前完全一致。
+            kugouKrcLines(candidate, deadline)?.let { return LrcParser.build(it) }
+
             val download = httpGet(
                 "https://lyrics.kugou.com/download?ver=1&client=pc" +
                     "&id=${encode(candidate.id)}&accesskey=${encode(candidate.accessKey)}" +
@@ -407,6 +413,31 @@ object OnlineLyricsFetcher {
             if (toLines(lrc, title, artist).isNotEmpty()) return lrc
         }
         return null
+    }
+
+    /**
+     * 酷狗 KRC → 行表（带字级时间）。任何一步不成立都返回 null，让调用方回退 LRC。
+     *
+     * 要求至少有一行带字级：全部没有字级的 KRC 与普通 lrc 等价，
+     * 那就没必要绕这一圈（还多一次请求）。
+     */
+    private fun kugouKrcLines(
+        candidate: KugouLyricCandidate,
+        deadline: Long
+    ): List<LyricLine>? {
+        val download = runCatching {
+            httpGet(
+                "https://lyrics.kugou.com/download?ver=1&client=pc" +
+                    "&id=${encode(candidate.id)}&accesskey=${encode(candidate.accessKey)}" +
+                    "&fmt=krc&charset=utf8",
+                deadline
+            )
+        }.getOrNull() ?: return null
+        val raw = OnlineLyricsParser.kugouContentBytes(download) ?: return null
+        val text = KrcParser.decodeBytes(raw) ?: return null
+        val lines = KrcParser.parse(text)
+        if (lines.size < 2) return null
+        return lines.takeIf { list -> list.any { it.words != null } }
     }
 
     private fun collectNetease(

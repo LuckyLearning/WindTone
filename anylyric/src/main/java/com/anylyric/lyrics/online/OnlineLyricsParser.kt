@@ -113,15 +113,22 @@ object OnlineLyricsParser {
     }
 
     /** 酷狗下载：`content` 是 base64 编码的 LRC 文本。 */
-    fun kugouContent(json: String): String? {
+    /**
+     * 酷狗 `content` 字段的**原始字节**（0.2.27）。
+     *
+     * 单独一个函数是因为 KRC 是二进制（"krc1" 头 + XOR + zlib），
+     * 先 `String(...)` 再转回去会把字节弄坏，逐字就再也解不出来了。
+     */
+    fun kugouContentBytes(json: String): ByteArray? {
         val root = runCatching { JSONObject(json) }.getOrNull() ?: return null
         val content = root.optString("content").takeIf { it.isNotBlank() } ?: return null
         // MIME 解码器会忽略换行等非字母表字符：酷狗偶尔把 base64 折行返回，
         // 标准解码器遇到换行会直接抛异常。
-        return runCatching {
-            String(Base64.getMimeDecoder().decode(content), Charsets.UTF_8)
-        }.getOrNull()
+        return runCatching { Base64.getMimeDecoder().decode(content) }.getOrNull()
     }
+
+    fun kugouContent(json: String): String? =
+        kugouContentBytes(json)?.let { String(it, Charsets.UTF_8) }
 
     /** 网易云搜索：第一首歌的 id。 */
     fun neteaseSongId(json: String): String? = neteaseSongs(json).firstOrNull()?.id
