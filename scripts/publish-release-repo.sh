@@ -14,18 +14,13 @@
 #        notes.md
 #        checksums.txt
 #      v1.1.29/ …
-#    AnyLyric/                ← 同一个脚本发布多个软件，靠 APP_DIR 区分
-#      latest.json
-#      v0.1.0/
-#        AnyLyric-v0.1.0.apk
 #
-#  由 .github/workflows/android-release.yml（APP_DIR=WindTone）与
-#  .github/workflows/anylyric-release.yml（APP_DIR=AnyLyric）在打 tag 时调用；
+#  由 .github/workflows/android-release.yml（APP_DIR=WindTone）在打 tag 时调用；
 #  本地也能手动跑（需要环境变量 RELEASE_REPO_TOKEN）。
+#  AnyLyric 已独立到 https://github.com/LuckyLearning/anylyric，用它自己仓库里的脚本发布。
 #
-#  ⚠️ 公共仓库每次都是「孤立提交 + force push 覆盖」，两条流水线并发会互相吞掉
-#  对方的版本目录。所以两个 workflow 的发布 job 共用 concurrency group
-#  `public-release-repo`（cancel-in-progress: false）串行执行。
+#  ⚠️ 公共仓库每次都是「孤立提交 + force push 覆盖」。AnyLyric 独立后与它跨仓库，
+#  concurrency group 不会互相排队，两边发版需错开。
 #
 #  用法：
 #    VERSION=1.1.30 CODE=40 NOTES_PATH=/tmp/body.md DIST_DIR=dist MIN_SDK=24 \
@@ -112,9 +107,8 @@ git add -A
 git commit -q -m "release: $APP_DIR v$VERSION (code $CODE)"
 
 echo "→ 推送公共仓库 ..."
-# 不吞推送的报错：2026-11-12 首次 AnyLyric 发版就栽在这 —— push 的真实原因是
-# RELEASE_REPO_TOKEN 失效（401），但输出被丢进 /dev/null，脚本只剩一句
-# 「大概是分支保护」，排查方向直接被带偏。现在原样打印 git 的报错。
+# 不吞推送的报错：push 的真实原因（401/403）曾被 /dev/null 吞掉，只剩一句
+# 「大概是分支保护」，排查方向被带偏。现在原样打印 git 的报错。
 PUSH_LOG="$(mktemp)"
 if ! git -c credential.helper= push -f origin snapshot:main >"$PUSH_LOG" 2>&1; then
   echo "✗ 推送公共仓库失败，git 原始输出：" >&2

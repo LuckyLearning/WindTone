@@ -22,7 +22,6 @@ ABI_ORDER = ["arm64-v8a", "armeabi-v7a", "x86_64", "x86", "universal"]
 # 新增软件时只在这里加一行，其它全由脚本推导。
 APP_DISPLAY = {
     "WindTone": ("听风 WindTone", "Android 本地音乐播放器"),
-    "AnyLyric": ("AnyLyric", "车机歌词悬浮窗（旁听媒体会话）"),
 }
 
 
@@ -50,7 +49,7 @@ def main():
     ap.add_argument("--tag", required=True)
     ap.add_argument("--published", required=True)
     ap.add_argument("--notes", required=True)
-    # 不同软件的最低系统版本不同（WindTone 24 / AnyLyric 31），必须由调用方给出
+    # 最低系统版本由调用方给出（WindTone 24）
     ap.add_argument("--min-sdk", type=int, default=24)
     args = ap.parse_args()
 
@@ -132,7 +131,7 @@ Release/
 
 ## 下载
 
-每个版本目录下按 CPU 架构分 4 个包（轻量应用如 `AnyLyric` 只有一个通用包，不分架构）：
+每个版本目录下按 CPU 架构分 4 个包：
 
 | 安装包 | 适用设备 |
 |---|---|

@@ -7,20 +7,13 @@
 #    bash scripts/render-release-notes.sh -o body.md          # 渲染并写入文件
 #    bash scripts/render-release-notes.sh 1.0.7 9 body.md     # 显式指定版本/versionCode/输出
 #
-#  多应用（2026-11-12 起支持 AnyLyric）：
-#    bash scripts/render-release-notes.sh \
-#      --gradle anylyric/build.gradle.kts \
-#      --template .github/release-notes/anylyric-template.md \
-#      --version-key anyLyricVersionName --code-key anyLyricVersionCode \
-#      0.1.0 1 body.md
-#
 #  取值规则：
 #    · 版本号 / versionCode 省略时从 --gradle 指定的构建文件读取（默认 :app）
 #    · 正文来源优先级：--template 指定文件 > .github/release-notes/v{版本}.md > 默认模板
 #    · 占位符：{version} {version_code} {date}
 #
-#  CI（android-release.yml / anylyric-release.yml）与本地发版脚本共用本脚本，
-#  避免多处各写一份 sed 逻辑而漂移。**内容由模板决定，不需要人/AI 每次生成。**
+#  CI 与本地发版脚本共用本脚本，避免多处各写一份 sed 逻辑而漂移。
+#  AnyLyric 已独立到 https://github.com/LuckyLearning/anylyric，模板与脚本随它迁移。
 # ===================================================================
 set -euo pipefail
 

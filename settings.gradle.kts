@@ -20,5 +20,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "WindTone"
 include(":app")
-// AnyLyric：WindTone 的轻量歌词悬浮窗分支（独立包名 com.anylyric，与 :app 零依赖）
-include(":anylyric")
+// AnyLyric 已独立为 standalone 仓库：https://github.com/LuckyLearning/anylyric
