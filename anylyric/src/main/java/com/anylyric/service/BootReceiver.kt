@@ -4,8 +4,10 @@ import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import android.service.notification.NotificationListenerService
 import com.anylyric.accessibility.AccessibilityWatchdog
+import com.anylyric.data.PermissionWake
 import com.anylyric.data.Prefs
 import com.anylyric.session.SessionHub
 
@@ -32,7 +34,18 @@ class BootReceiver : BroadcastReceiver() {
         // 无障碍服务在部分 ROM（HONOR/MagicOS）更新应用后会被关掉；开过机就试一次写回。
         // 没有 WRITE_SECURE_SETTINGS 时内部直接返回 false，不做任何事。
         AccessibilityWatchdog.tryAutoRestore(context)
-        if (!BootPolicy.shouldRebind(intent.action, Prefs(context).bootAutostart)) return
+
+        val prefs = Prefs(context)
+        // 开机权限自动拉起（0.2.29）：与「开机自启」解耦 —— 那个管服务接回，
+        // 这个管「缺权限时把人送到设置页」。两者可以只开一个。
+        if (PermissionWake.shouldWake(
+                intent.action, prefs.bootPermissionWake, SystemClock.elapsedRealtime()
+            )
+        ) {
+            PermissionWake.wakeIfNeeded(context)
+        }
+
+        if (!BootPolicy.shouldRebind(intent.action, prefs.bootAutostart)) return
         // 先把中枢拉起来：有些车机根本没开放「通知使用权」，requestRebind 必然无果，
         // 但车机直连通道（BYD 媒体中心 SDK）不需要权限 —— 它挂在 SessionHub 的 init 里，
         // 不在这一步创建就一直不会启动，开机后自然什么都不出现。

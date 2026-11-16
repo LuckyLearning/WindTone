@@ -103,10 +103,30 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.AnyLyric">
 
+        <!--
+          DiLink 7 分屏声明（0.2.29）。
+
+          「7 分屏」是比亚迪的分屏框架：系统把屏幕切成 3/7 或 7 分屏的格子，
+          再把应用塞进去。应用这边只需要**声明自己能进**，进不进由框架决定 ——
+          没有这个 meta-data 时，框架会认为本应用不支持，格子里永远只有系统应用。
+
+          值按 API 分档（values = 0，values-v32 = 1）：这套框架只存在于 API 32+
+          的 DiLink 版本，低版本读到 1 会让系统按「支持分屏」重新排列，
+          反而把本来全屏的页面塞进格子。
+
+          ⚠️ 与本应用的悬浮窗没有直接关系：悬浮窗是独立的 overlay 窗口，
+          不受分屏影响。这条声明影响的是**设置页/校准页**能不能进格子 ——
+          进了格子才能在导航旁边调参数。
+        -->
+        <meta-data
+            android:name="BYD_SUPPORT_SPLIT_ACTIVITY"
+            android:value="@integer/byd_support_split_activity" />
+
         <activity
             android:name=".ui.SettingsActivity"
             android:exported="true"
-            android:label="@string/app_name">
+            android:label="@string/app_name"
+            android:resizeableActivity="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -116,7 +136,20 @@
         <activity
             android:name=".ui.DiagActivity"
             android:exported="false"
-            android:label="@string/diag_title" />
+            android:label="@string/diag_title"
+            android:resizeableActivity="true" />
+
+        <!--
+          开机权限确认页（0.2.29）。由 BootReceiver 在缺权限时拉起。
+          noHistory + excludeFromRecents：它是一次性的确认，不该留在返回栈或最近任务里
+          —— 否则用户从系统设置返回时会看到一个「已经过时」的权限列表。
+        -->
+        <activity
+            android:name=".ui.PermissionWakeActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@style/Theme.AnyLyric.Dialog" />
 
         <!--
           给系统安装器发安装包 URI。exported=false + grantUriPermissions=true：
@@ -157,6 +190,13 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <!--
+                  USER_PRESENT（0.2.29）：车机开机后常常先停在锁屏/待机页，
+                  BOOT_COMPLETED 到达时启动 Activity 会被系统丢掉；解锁这一刻才是
+                  能可靠拉起界面的时机。冷启动后只在 10 分钟内响应（PermissionWake.shouldWake），
+                  否则每次解锁都会弹一次权限页。
+                -->
+                <action android:name="android.intent.action.USER_PRESENT" />
             </intent-filter>
         </receiver>
 

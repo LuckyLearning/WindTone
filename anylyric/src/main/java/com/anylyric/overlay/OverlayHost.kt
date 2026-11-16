@@ -832,6 +832,9 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
     }
 
     /** 可用矩形：屏幕范围扣掉系统栏与额外留白。 */
+    /** 上一次算出来的状态栏高度（px）。`frame()` 每次都会刷新。 */
+    private var lastTopInset = 0
+
     private fun frame(): OverlayGeometry.Frame {
         val metrics = context.resources.displayMetrics
         var width = metrics.widthPixels
@@ -849,19 +852,39 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
                     WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()
                 )
                 left = insets.left
-                top = insets.top
+                lastTopInset = insets.top
+                // 状态栏那一行要不要放开（0.2.29）：车厂常把「状态栏 + 顶栏空白」整体
+                // 报成 statusBars，那条线上方看起来还有几十像素，实际永远进不去。
+                // 默认放开，让用户能拖到最顶；关掉时退回「从状态栏下沿开始」。
+                top = if (prefs.overlayIgnoreTopInset) 0 else insets.top
                 right = insets.right
                 bottom = insets.bottom
             }
         } catch (_: Throwable) {
             // 部分 ROM 上 currentWindowMetrics 会抛异常：退回资源里的屏幕尺寸，仍可用
         }
-        val pad = (EDGE_PAD_DP * density).toInt()
-        return OverlayGeometry.frame(width, height, left, top, right, bottom, pad)
+        // 0.2.28：不再在系统栏 insets 之外额外内缩 10dp（原 EDGE_PAD_DP）。
+        // 车机上那条可用带本来就只有几十像素高，上下各留 10dp 的直接后果是
+        // 「怎么拖都上不去」（用户真机反馈）。系统栏 inset 仍然保留 ——
+        // 那是系统自己的区域，窗口压上去也会被它盖住，没有意义。
+        return OverlayGeometry.frame(width, height, left, top, right, bottom, 0)
     }
 
     private fun maxWidthPx(box: OverlayGeometry.Frame): Int =
         (box.width * MAX_WIDTH_RATIO).toInt().coerceAtLeast((120 * density).toInt())
+
+    /**
+     * 「状态栏下沿」在可用区里占的比例（0~1）。
+     *
+     * 「顶部横条」用它而不是 0：放开状态栏之后 0 是屏幕最顶，窗口会被系统状态栏
+     * 遮掉一部分（overlay 层级在 TYPE_STATUS_BAR 之下）。快捷位置该给一个
+     * **不会被遮**的落点，真想贴到最顶的用户自己拖过去。
+     */
+    fun safeTopRatio(): Float {
+        val box = frame()
+        if (box.height <= 0) return 0f
+        return (lastTopInset.toFloat() / box.height).coerceIn(0f, 0.5f)
+    }
 
     /**
      * 把「宽度 / 高度比例」翻译成固定像素后交给渲染器；比例 0 表示自适应。
@@ -1102,9 +1125,6 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
     }
 
     companion object {
-        /** 边缘留白，避免贴着状态栏或屏幕边。 */
-        private const val EDGE_PAD_DP = 10f
-
         /** 窗口最宽占可用宽度的比例。 */
         private const val MAX_WIDTH_RATIO = 0.92f
 

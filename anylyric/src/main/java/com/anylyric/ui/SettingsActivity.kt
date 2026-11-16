@@ -7,6 +7,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -71,6 +72,7 @@ import com.anylyric.overlay.OverlayStyle
 import com.anylyric.overlay.Preset
 import com.anylyric.overlay.SizeBounds
 import com.anylyric.overlay.SizeSlider
+import com.anylyric.overlay.StatusBarLyrics
 import com.anylyric.overlay.TitlePos
 import com.anylyric.service.ServiceWatchdog
 import com.anylyric.session.LyricOffsetStore
@@ -296,6 +298,7 @@ class SettingsActivity : BaseActivity() {
         val secondaryCard = buildSecondaryCard()
         val title = buildTitleCard()
         val word = buildWordCard()
+        val statusBarLyric = buildStatusBarLyricCard()
         val behavior = buildBehaviorCard()
         val calibrate = buildCalibrateCard()
         val calibrateHelp = buildCalibrateHelpCard()
@@ -339,8 +342,11 @@ class SettingsActivity : BaseActivity() {
                 listOf(title, containerCard, theme)
             )
         )
-        // 歌词页：左栏「怎么显示」（逐字 / 译文），右栏「从哪取词」（在线源 / 缓存）。
-        addPage(content, page(SettingsTab.LYRICS, listOf(word), listOf(behavior)))
+        // 歌词页：左栏「怎么显示」（状态栏歌词 / 逐字与译文），右栏「从哪取词」。
+        addPage(
+            content,
+            page(SettingsTab.LYRICS, listOf(statusBarLyric, word), listOf(behavior))
+        )
         addPage(
             content,
             page(SettingsTab.CALIBRATE, listOf(calibrate), listOf(calibrateHelp))
@@ -782,6 +788,35 @@ class SettingsActivity : BaseActivity() {
         rows += divider()
         rows += editButton
         rows += hint(getString(R.string.position_edit_hint))
+
+        // 快捷位置（0.2.28）：一键把歌词条摆到「顶部横条 / 居中 / 底部」。
+        // 车机分屏后顶部常留一条窄带（用户截图里圈的就是它），手动拖很难正好卡进去：
+        // 窗口有最小高度、拖到边缘还会被吸回 —— 所以给三个明确的落点。
+        rows += labeled(
+            getString(R.string.position_quick),
+            chipRow(
+                options = listOf(
+                    getString(R.string.position_quick_top),
+                    getString(R.string.position_quick_center),
+                    getString(R.string.position_quick_bottom)
+                ),
+                current = { quickPositionIndex() },
+                onPick = { index -> applyQuickPosition(index) }
+            )
+        )
+        rows += hint(getString(R.string.position_quick_hint))
+        // 状态栏那一行能不能放（0.2.29）：车厂常把「状态栏 + 顶栏空白」整体报成
+        // statusBars，可用区上边界因此比肉眼看到的状态栏还低，表现为「怎么拖都上不去」。
+        rows += switchRow(
+            label = getString(R.string.window_ignore_top_inset),
+            hintText = getString(R.string.window_ignore_top_inset_hint),
+            current = { prefs.overlayIgnoreTopInset },
+            onChange = { checked ->
+                prefs.overlayIgnoreTopInset = checked
+                // 可用区变了，窗口要按新边界重摆一次（applyStyle 里会 post placeTask）。
+                hub.applyStyle()
+            }
+        )
         rows += spacer(12)
 
         // 宽高用滑杆调，不再靠拖四角：四角在真机上很难对准（车机手指更粗），
@@ -1029,6 +1064,52 @@ class SettingsActivity : BaseActivity() {
                 }
             )
         )
+    }
+
+    /** 当前是横屏吗。位置按横竖屏分别存（车机横屏与手机竖屏的最优位置不一样）。 */
+    private fun landscapeNow(): Boolean =
+        resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    /** 快捷位置当前命中哪一档；都不命中（用户拖过）返回 -1，三个胶囊都不高亮。 */
+    private fun quickPositionIndex(): Int {
+        val y = prefs.ratioY(landscapeNow())
+        // 「顶部」的参照是状态栏下沿（放开状态栏时的安全落点），不是屏幕最顶。
+        val safeTop = hub.overlay().safeTopRatio()
+        return when {
+            y <= safeTop + 0.02f -> 0
+            y in 0.48f..0.52f -> 1
+            y >= 0.98f -> 2
+            else -> if (y < 0.26f) 0 else if (y > 0.74f) 2 else -1
+        }
+    }
+
+    /**
+     * 快捷位置。
+     *
+     * 「顶部横条」不只是把窗口挪上去：它还顺手切成**单行 + 隐藏标题 + 铺满宽度**。
+     * 理由很实在 —— 车机分屏后顶部那条带只有 60~70px 高，而一行 22sp 的歌词本身
+     * 就要 44px，加上标题行两边一挤就塞不进去。用户真要标题，再去标题卡打开即可。
+     */
+    private fun applyQuickPosition(index: Int) {
+        val landscape = landscapeNow()
+        if (index == 0) {
+            // 落在状态栏下沿而不是 y=0：放开状态栏后 0 会被系统状态栏遮住一部分。
+            prefs.setRatio(0.5f, hub.overlay().safeTopRatio(), landscape)
+            editStyle {
+                it.copy(
+                    widthRatio = 0.96f,
+                    heightRatio = 0f,
+                    maxLines = 1,
+                    titleEnabled = false,
+                    align = Align.CENTER,
+                    secondaryAlign = Align.CENTER
+                )
+            }
+            toast(getString(R.string.position_quick_top_done))
+            return
+        }
+        prefs.setRatio(0.5f, if (index == 1) 0.5f else 1f, landscape)
+        hub.applyStyle()
     }
 
     private fun resetWindow() {
@@ -1392,14 +1473,6 @@ class SettingsActivity : BaseActivity() {
                 )
             )
             addView(
-                switchRow(
-                    label = getString(R.string.title_bold),
-                    hintText = null,
-                    current = { prefs.style().titleBold },
-                    onChange = { checked -> editStyle { it.copy(titleBold = checked) } }
-                )
-            )
-            addView(
                 labeled(
                     getString(R.string.appearance_align_title),
                     chipRow(
@@ -1438,6 +1511,171 @@ class SettingsActivity : BaseActivity() {
         }
 
         return cardSection(getString(R.string.section_title), null, rows)
+    }
+
+    // ---------------------------------------------------------------- 状态栏歌词（0.2.29）
+
+    /**
+     * 状态栏歌词：盖在通知栏上的独立一条。
+     *
+     * 与悬浮窗**零交叉** —— 独立开关、独立样式字段（sbl*）、独立窗口
+     * （`TYPE_ACCESSIBILITY_OVERLAY`）。它能盖住通知栏，靠的是无障碍覆盖层的层级
+     * （20）高于状态栏（14）；普通悬浮窗是 2，再怎么调位置也盖不住。
+     *
+     * 所以这张卡一个 OverlayStyle 字段都不碰，反过来悬浮窗的外观卡也不会影响这里。
+     */
+    private fun buildStatusBarLyricCard(): View {
+        val rows = ArrayList<View>(16)
+        rows += switchRow(
+            label = getString(R.string.sbl_enabled),
+            hintText = getString(R.string.sbl_enabled_hint),
+            current = { prefs.statusBarLyric },
+            onChange = { checked ->
+                prefs.statusBarLyric = checked
+                if (checked && !StatusBarLyrics.isAvailable()) {
+                    toast(getString(R.string.sbl_need_a11y))
+                }
+                hub.onStatusBarLyricChanged()
+            }
+        )
+        // 无障碍没开时整组不会有任何可见效果：显式提示，而不是把卡片藏起来
+        // （藏起来会让人以为「这版没有这个功能」）。
+        val a11yNote = hint(getString(R.string.sbl_a11y_missing))
+        rows += a11yNote
+        uiRefreshers += {
+            a11yNote.visibility = if (prefs.statusBarLyric && !StatusBarLyrics.isAvailable()) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+        }
+
+        val details = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+        // 每次改动都走同一条出口：重算窗口样式 + 让会话层再推一帧文本。
+        fun apply() = hub.onStatusBarLyricChanged()
+
+        details.addView(divider())
+        details.addView(
+            stepperRow(
+                label = getString(R.string.sbl_font),
+                value = {
+                    getString(
+                        R.string.display_font_value,
+                        prefs.sblFontSp.toInt().toString()
+                    )
+                },
+                isDefault = { prefs.sblFontSp == 16f },
+                minus = { prefs.sblFontSp = (prefs.sblFontSp - 1f).coerceAtLeast(9f); apply() },
+                plus = { prefs.sblFontSp = (prefs.sblFontSp + 1f).coerceAtMost(30f); apply() },
+                reset = { prefs.sblFontSp = 16f; apply() }
+            )
+        )
+        details.addView(
+            switchRow(
+                label = getString(R.string.sbl_bold),
+                hintText = null,
+                current = { prefs.sblBold },
+                onChange = { checked -> prefs.sblBold = checked; apply() }
+            )
+        )
+        details.addView(
+            colorRow(
+                getString(R.string.sbl_color),
+                current = { prefs.sblColor },
+                default = 0xFFFFFFFF.toInt(),
+                onPick = { color -> prefs.sblColor = color; apply() }
+            )
+        )
+        details.addView(
+            colorRow(
+                getString(R.string.sbl_next_color),
+                current = { prefs.sblNextColor },
+                default = 0xFFC8C8C8.toInt(),
+                onPick = { color -> prefs.sblNextColor = color; apply() }
+            )
+        )
+        details.addView(
+            colorRow(
+                getString(R.string.sbl_bg_color),
+                current = { prefs.sblBgColor },
+                default = 0xFF000000.toInt(),
+                onPick = { color -> prefs.sblBgColor = color; apply() }
+            )
+        )
+        details.addView(
+            stepperRow(
+                label = getString(R.string.sbl_bg_alpha),
+                value = {
+                    getString(
+                        R.string.appearance_percent,
+                        (prefs.sblBgAlpha * 100).toInt().toString()
+                    )
+                },
+                isDefault = { prefs.sblBgAlpha == 0.35f },
+                minus = {
+                    prefs.sblBgAlpha = (prefs.sblBgAlpha - 0.05f).coerceAtLeast(0f); apply()
+                },
+                plus = {
+                    prefs.sblBgAlpha = (prefs.sblBgAlpha + 0.05f).coerceAtMost(1f); apply()
+                },
+                reset = { prefs.sblBgAlpha = 0.35f; apply() }
+            )
+        )
+        details.addView(
+            stepperRow(
+                label = getString(R.string.sbl_offset),
+                value = { getString(R.string.window_size_px, prefs.sblOffsetY) },
+                isDefault = { prefs.sblOffsetY == 0 },
+                minus = {
+                    prefs.sblOffsetY = (prefs.sblOffsetY - 4).coerceAtLeast(-40); apply()
+                },
+                plus = {
+                    prefs.sblOffsetY = (prefs.sblOffsetY + 4).coerceAtMost(160); apply()
+                },
+                reset = { prefs.sblOffsetY = 0; apply() }
+            )
+        )
+        details.addView(hint(getString(R.string.sbl_offset_hint)))
+        details.addView(
+            stepperRow(
+                label = getString(R.string.sbl_split),
+                value = {
+                    getString(
+                        R.string.appearance_percent,
+                        (prefs.sblSplit * 100).toInt().toString()
+                    )
+                },
+                isDefault = { prefs.sblSplit == 0.6f },
+                minus = {
+                    prefs.sblSplit = (prefs.sblSplit - 0.05f).coerceAtLeast(0.3f); apply()
+                },
+                plus = {
+                    prefs.sblSplit = (prefs.sblSplit + 0.05f).coerceAtMost(0.8f); apply()
+                },
+                reset = { prefs.sblSplit = 0.6f; apply() }
+            )
+        )
+        details.addView(hint(getString(R.string.sbl_split_hint)))
+        details.addView(
+            switchRow(
+                label = getString(R.string.sbl_show_next),
+                hintText = null,
+                current = { prefs.sblShowNext },
+                onChange = { checked -> prefs.sblShowNext = checked; apply() }
+            )
+        )
+        rows += details
+        uiRefreshers += {
+            details.visibility = if (prefs.statusBarLyric) View.VISIBLE else View.GONE
+        }
+
+        return cardSection(getString(R.string.section_status_bar), null, rows)
     }
 
     // ---------------------------------------------------------------- 逐字与译文（0.2.28）
@@ -2012,6 +2250,15 @@ class SettingsActivity : BaseActivity() {
             hintText = getString(R.string.autostart_boot_hint),
             current = { prefs.bootAutostart },
             onChange = { checked -> prefs.bootAutostart = checked }
+        )
+        rows += divider()
+        // 开机权限确认（0.2.29）：与上面那条「开机自启」是两件事 ——
+        // 那个把服务接回来，这个在缺权限时把用户送到设置页。
+        rows += switchRow(
+            label = getString(R.string.behavior_boot_permission),
+            hintText = getString(R.string.behavior_boot_permission_hint),
+            current = { prefs.bootPermissionWake },
+            onChange = { checked -> prefs.bootPermissionWake = checked }
         )
         rows += divider()
         rows += switchRow(

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    DiLink 7 分屏声明（0.2.29）—— API 32 及以上给 1（支持）。
+
+    为什么按 API 分档：车厂这套分屏框架只在 API 32+ 的 DiLink 版本上存在，
+    低版本读到 1 会让系统按「支持分屏」去排列，反而把一个本来全屏的页面塞进格子。
+    声明为 1 只是「我允许被放进去」，真正进不进由车机的分屏框架决定。
+-->
+<resources>
+    <integer name="byd_support_split_activity">1</integer>
+</resources>

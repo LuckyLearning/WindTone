@@ -151,6 +151,17 @@ class Prefs(context: Context) {
         set(value) = sp.edit().putBoolean(KEY_BOOT_AUTOSTART, value).apply()
 
     /**
+     * 开机后自动拉起「权限确认页」（0.2.29）。默认开。
+     *
+     * 只在真的缺权限时才弹，齐了完全不打扰。单独一个开关而不是塞进「开机自启」：
+     * 那个管的是「重启后自己把服务接回去」，这个管的是「缺权限时把人送到设置页」，
+     * 两件事可以只想做一件。
+     */
+    var bootPermissionWake: Boolean
+        get() = sp.getBoolean(KEY_BOOT_PERMISSION_WAKE, true)
+        set(value) = sp.edit().putBoolean(KEY_BOOT_PERMISSION_WAKE, value).apply()
+
+    /**
      * 静默掉线看门狗：每 15 分钟检查一次心跳，过期就 requestRebind。
      *
      * 默认关闭。通知使用权被 ROM 省电策略杀掉时不一定回调 onListenerDisconnected，
@@ -197,6 +208,77 @@ class Prefs(context: Context) {
     var overlayEnabled: Boolean
         get() = sp.getBoolean(KEY_OVERLAY_ENABLED, true)
         set(value) = sp.edit().putBoolean(KEY_OVERLAY_ENABLED, value).apply()
+
+    /**
+     * 允许把歌词放到状态栏那一行（0.2.29）。
+     *
+     * 默认开。关着时可用区从状态栏下沿开始 —— 那条线在车机上往往比肉眼看到的状态栏
+     * 高出几十像素（车厂常把「状态栏 + 顶栏空白」整体报成 statusBars），
+     * 结果就是「怎么拖都上不去」（用户真机反馈）。
+     *
+     * 打开后窗口能到 y=0，但**盖不住状态栏**：overlay 的窗口层级低于 TYPE_STATUS_BAR，
+     * 系统状态栏会画在它上面。所以能看到的效果是「窗口顶部被状态栏遮住一部分」。
+     */
+    var overlayIgnoreTopInset: Boolean
+        get() = sp.getBoolean(KEY_IGNORE_TOP_INSET, true)
+        set(value) = sp.edit().putBoolean(KEY_IGNORE_TOP_INSET, value).apply()
+
+    // ---------------------------------------------------------------- 状态栏歌词（0.2.29）
+    //
+    // 刻意与悬浮窗的 OverlayStyle 完全分开：它是另一条窗口通路（TYPE_ACCESSIBILITY_OVERLAY），
+    // 位置、尺寸、可调项都不同。共用字段只会让「改一个动两个」。
+
+    /**
+     * 状态栏歌词总开关。默认关 —— 它要盖在系统状态栏上，属于「明确要才开」的功能；
+     * 而且依赖无障碍服务（那个窗口类型只有无障碍服务能添加）。
+     */
+    var statusBarLyric: Boolean
+        get() = sp.getBoolean(KEY_SBL_ENABLED, false)
+        set(value) = sp.edit().putBoolean(KEY_SBL_ENABLED, value).apply()
+
+    /** 字号（sp）。条高由它撑出来，状态栏高度不同的车机靠偏移对齐。 */
+    var sblFontSp: Float
+        get() = sp.getFloat(KEY_SBL_FONT, 16f)
+        set(value) = sp.edit().putFloat(KEY_SBL_FONT, value).apply()
+
+    /** 左侧「当前行」颜色。 */
+    var sblColor: Int
+        get() = sp.getInt(KEY_SBL_COLOR, 0xFFFFFFFF.toInt())
+        set(value) = sp.edit().putInt(KEY_SBL_COLOR, value).apply()
+
+    /** 右侧「下一句」颜色。默认比当前行暗一档，保持主次。 */
+    var sblNextColor: Int
+        get() = sp.getInt(KEY_SBL_NEXT_COLOR, 0xFFC8C8C8.toInt())
+        set(value) = sp.edit().putInt(KEY_SBL_NEXT_COLOR, value).apply()
+
+    var sblBold: Boolean
+        get() = sp.getBoolean(KEY_SBL_BOLD, false)
+        set(value) = sp.edit().putBoolean(KEY_SBL_BOLD, value).apply()
+
+    /** 背景色。状态栏本来就是黑的，默认纯黑 + 半透明即可。 */
+    var sblBgColor: Int
+        get() = sp.getInt(KEY_SBL_BG_COLOR, 0xFF000000.toInt())
+        set(value) = sp.edit().putInt(KEY_SBL_BG_COLOR, value).apply()
+
+    /** 背景不透明度。默认 0.35：能压住状态栏原本的图标，又不至于变成一条黑杠。 */
+    var sblBgAlpha: Float
+        get() = sp.getFloat(KEY_SBL_BG_ALPHA, 0.35f)
+        set(value) = sp.edit().putFloat(KEY_SBL_BG_ALPHA, value).apply()
+
+    /** 垂直偏移（px）。0 = 紧贴屏幕最顶；部分车机状态栏更高，需要往下挪一点。 */
+    var sblOffsetY: Int
+        get() = sp.getInt(KEY_SBL_OFFSET_Y, 0)
+        set(value) = sp.edit().putInt(KEY_SBL_OFFSET_Y, value).apply()
+
+    /** 左右分栏：左侧当前行占的宽度比例（0.3~0.8）。 */
+    var sblSplit: Float
+        get() = sp.getFloat(KEY_SBL_SPLIT, 0.6f)
+        set(value) = sp.edit().putFloat(KEY_SBL_SPLIT, value).apply()
+
+    /** 右侧是否显示下一句。关掉就是整行只放当前行。 */
+    var sblShowNext: Boolean
+        get() = sp.getBoolean(KEY_SBL_SHOW_NEXT, true)
+        set(value) = sp.edit().putBoolean(KEY_SBL_SHOW_NEXT, value).apply()
 
     /**
      * 歌词磁盘缓存上限（按「首」计）。0 = 不缓存。
@@ -664,6 +746,7 @@ class Prefs(context: Context) {
         private const val KEY_HANDLE = "overlay_handle_enabled"
         private const val KEY_UPDATE_ROUTE = "update_route"
         private const val KEY_BOOT_AUTOSTART = "boot_autostart"
+        private const val KEY_BOOT_PERMISSION_WAKE = "boot_permission_wake"
         private const val KEY_WATCHDOG = "watchdog_enabled"
         private const val KEY_ONLINE_LYRICS = "online_lyrics_enabled"
         private const val KEY_ONLINE_OVERRIDE = "online_overrides_local"
@@ -675,6 +758,19 @@ class Prefs(context: Context) {
         private const val KEY_OFFSET_DEFAULT = "lyric_offset_default"
         private const val KEY_SHOW_TRANSLATION = "show_translation"
         private const val KEY_WORD_BY_WORD = "word_by_word"
+        private const val KEY_IGNORE_TOP_INSET = "overlay_ignore_top_inset"
+
+        // 状态栏歌词（0.2.29），与悬浮窗样式完全独立
+        private const val KEY_SBL_ENABLED = "sbl_enabled"
+        private const val KEY_SBL_FONT = "sbl_font_sp"
+        private const val KEY_SBL_COLOR = "sbl_color"
+        private const val KEY_SBL_NEXT_COLOR = "sbl_next_color"
+        private const val KEY_SBL_BOLD = "sbl_bold"
+        private const val KEY_SBL_BG_COLOR = "sbl_bg_color"
+        private const val KEY_SBL_BG_ALPHA = "sbl_bg_alpha"
+        private const val KEY_SBL_OFFSET_Y = "sbl_offset_y"
+        private const val KEY_SBL_SPLIT = "sbl_split"
+        private const val KEY_SBL_SHOW_NEXT = "sbl_show_next"
         private const val KEY_CALIBRATE_ON_LAUNCH = "calibrate_on_launch"
         private const val KEY_LAST_ALIVE = "last_alive_at"
 

@@ -28,6 +28,7 @@ import com.anylyric.diag.Perf
 import com.anylyric.diag.Probe
 import com.anylyric.diag.ProbeSnapshot
 import com.anylyric.diag.ResourceSampler
+import com.anylyric.overlay.StatusBarLyrics
 import com.anylyric.lyrics.ExternalLyrics
 import com.anylyric.lyrics.LyricLine
 import com.anylyric.lyrics.LyricResult
@@ -101,7 +102,17 @@ class SessionHub private constructor(context: Context) {
      * 用计数而不是布尔：设置页 → 诊断页这种「先 onStart 新的、后 onStop 旧的」顺序下，
      * 布尔会先置 true 再被旧的 onStop 置 false，悬浮窗就在两页之间闪一下。
      */
-    private var ownUiCount = 0
+    /**
+     * 本应用界面正开着几层（由 [com.anylyric.ui.BaseActivity] 的 onStart/onStop 驱动）。
+     *
+     * 0.2.29 起它**只**告诉悬浮层「设置页还开着」，那只影响编辑态的自动超时，
+     * **不再影响显隐**。用户原话：「开关打开后，在当前 app 中要显示，不区分情况」。
+     *
+     * 让位原本的理由是「悬浮窗压着滑块，开关点不到」—— 但非编辑态的窗口挂着
+     * FLAG_NOT_TOUCHABLE，点击本来就穿透。所以那条理由从一开始就只对编辑态成立，
+     * 而编辑态本来就不该让位（用户正在拖它）。
+     */
+    private var ownUiVisibleCount = 0
 
     /** 前台应用变化：只重算一次隐藏态，不做任何其它事。 */
     private val foregroundListener: (String?) -> Unit = { applyHideState() }
@@ -1163,13 +1174,17 @@ class SessionHub private constructor(context: Context) {
     /**
      * 本应用界面进出屏（由 [com.anylyric.ui.BaseActivity] 的 onStart/onStop 驱动）。
      *
-     * 这一条**不需要任何权限**：自己的设置页、诊断页本来就该让出屏幕 ——
-     * 悬浮窗压在上面时，滑块和开关根本点不到。
+     * 只同步给悬浮层做「编辑态别自动超时」，**不参与显隐判断**（0.2.29）。
      */
     fun setOwnUiVisible(visible: Boolean) {
-        ownUiCount = if (visible) ownUiCount + 1 else (ownUiCount - 1).coerceAtLeast(0)
-        overlay.setHostUiVisible(ownUiCount > 0)
-        applyHideState()
+        val next = if (visible) {
+            ownUiVisibleCount + 1
+        } else {
+            (ownUiVisibleCount - 1).coerceAtLeast(0)
+        }
+        if (next == ownUiVisibleCount) return
+        ownUiVisibleCount = next
+        overlay.setHostUiVisible(ownUiVisibleCount > 0)
     }
 
     /**
@@ -1207,10 +1222,11 @@ class SessionHub private constructor(context: Context) {
         // 这时把窗口藏起来等于让人对着空气操作。
         // 名单命中仍然优先（[byApp] 不看这两个开关）—— 用户既然勾了「这些应用里别挡」，
         // 编辑态也不该成为例外。
-        val byOwnUi = ownUiCount > 0 && !overlay.isEditable() && !overlay.isPreviewing()
+        // 0.2.29：不再因「本应用界面可见」而让位（用户明确要求「不区分情况」）。
+        // 只剩用户自己配置的「按应用隐藏」—— 那是他主动勾的名单，与自身界面无关。
         val byApp = prefs.hideByAppActive &&
             overlayHiddenFor(ForegroundApps.currentPkg, prefs.hiddenApps)
-        val hide = byOwnUi || byApp
+        val hide = byApp
         // 两个来源叠加时结果常常不变（例如已在名单应用里，又点开了自己的设置页）：
         // 结果没变就什么都不做，连一次窗口 API 调用都不发。
         if (overlay.isSuppressed() == hide) return
@@ -1221,7 +1237,7 @@ class SessionHub private constructor(context: Context) {
             Probe.write(
                 "隐藏",
                 if (hide) {
-                    "悬浮窗让位（自身界面=$byOwnUi 名单命中=$byApp 前台=${ForegroundApps.currentPkg}）"
+                    "悬浮窗隐藏（名单命中=$byApp 前台=${ForegroundApps.currentPkg}）"
                 } else {
                     "悬浮窗恢复（前台=${ForegroundApps.currentPkg ?: "-"}）"
                 }
@@ -1270,8 +1286,27 @@ class SessionHub private constructor(context: Context) {
      * @param dark 只在「系统深浅刚变」时传：那一刻 Resources 还没更新，
      *             让 OverlayHost 直接读指定那套，避免取到旧颜色。
      */
+    /**
+     * 状态栏歌词的开关或样式变了（0.2.29）。
+     *
+     * 与悬浮窗样式完全分开：那条通路不看 [Prefs.style]，只读自己那组字段，
+     * 所以这里既不重排悬浮窗、也不碰 OverlayStyle。
+     */
+    fun onStatusBarLyricChanged() {
+        StatusBarLyrics.applyStyle()
+        render()
+    }
+
+    /** 无障碍服务断开时调用：把状态栏那条拆掉，别留一条盖在通知栏上的残影。 */
+    fun onStatusBarLyricUnavailable() {
+        StatusBarLyrics.detach()
+    }
+
     fun applyStyle(dark: Boolean? = null) {
         overlay.applyStyle(dark)
+        // 0.2.27：换屏（把悬浮窗从主屏挪到仪表盘）之后，「是否让位」的答案会变 ——
+        // 让位判据里含 displayId，必须跟着重算，否则会停在上一次的结论上。
+        applyHideState()
         // 「无歌词时隐藏」这类策略属于渲染阶段判定，样式改完必须重算一次。
         // 没有会话时不重算：否则用户一改样式，屏上会凭空多出一个「暂无歌词」。
         // 车机直连（externalOnly）没有 controller 但**有内容**，必须重算 ——
@@ -2145,6 +2180,9 @@ class SessionHub private constructor(context: Context) {
         syncOffset()
 
         if (currentLines.isEmpty()) {
+            // 状态栏歌词条（0.2.29）：没有歌词就把那条清掉。它是独立窗口，
+            // 不会因为悬浮窗这边「保留窗口给编辑态」而跟着留一条空杠在状态栏上。
+            StatusBarLyrics.update(null, null)
             // 编辑态下**永远**留着窗口：用户可能只是想调样式，此刻没有会话不代表
             // 该把框收走。没有会话时 OverlayHost 已经建了一个示例窗，这里返回即可。
             if (overlay.isEditable()) return
@@ -2209,9 +2247,13 @@ class SessionHub private constructor(context: Context) {
 
         // 副行是一**组**相邻行：用户把行数调到 3、4 时要看到更多歌词，
         // 只给一条文本的话预算再多也只有两行可画（0.2.5 及以前的真实表现）。
+        val lines = contextLines(safe)
+        // 状态栏歌词条（0.2.29）：另一条完全独立的窗口通路（TYPE_ACCESSIBILITY_OVERLAY）。
+        // 只推真实歌词行 —— 提示语不推，那条位置太显眼，写「正在获取歌词…」尤其刺眼。
+        StatusBarLyrics.update(currentLines[safe].text, lines.firstOrNull())
         push(
             currentLines[safe].text,
-            contextLines(safe),
+            lines,
             titleForOverlay(),
             prompt = false,
             words = if (prefs.wordByWord) currentLines[safe].words else null,
@@ -3011,7 +3053,8 @@ class SessionHub private constructor(context: Context) {
             foregroundHidden = prefs.hideByAppActive &&
                 overlayHiddenFor(ForegroundApps.currentPkg, prefs.hiddenApps),
             overlaySuppressed = overlay.isSuppressed(),
-            hideByOwnUi = ownUiCount > 0,
+            // 0.2.29 起不再有「自身界面让位」，这个字段恒为 false，只为诊断格式稳定保留。
+            hideByOwnUi = false,
             // 「idle」不写进报告：非 BYD 设备上它没有信息量，只会让报告更长。
             externalSource = carBridge?.statusLabel()?.takeIf { it != "idle" },
             statsDigest = statsText(),

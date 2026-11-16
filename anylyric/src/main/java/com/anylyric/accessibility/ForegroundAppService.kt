@@ -10,6 +10,7 @@ import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import android.view.inputmethod.InputMethodManager
 import com.anylyric.data.Prefs
+import com.anylyric.overlay.StatusBarLyrics
 import com.anylyric.diag.Probe
 import com.anylyric.session.SessionHub
 
@@ -137,6 +138,9 @@ class ForegroundAppService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         ForegroundApps.serviceConnected = true
+        // 状态栏歌词走的就是无障碍覆盖层（TYPE_ACCESSIBILITY_OVERLAY），
+        // 只有无障碍服务能把那种窗口加上去 —— 连上的这一刻是唯一的入口。
+        StatusBarLyrics.attach(this)
         // 连上过一次 = 用户确实开过这个服务。记下来，以后系统把它关掉时
         // AccessibilityWatchdog 才有依据去尝试自动写回（否则等于替没开过的人做主）。
         runCatching { prefs.accessibilityRequested = true }
@@ -158,6 +162,8 @@ class ForegroundAppService : AccessibilityService() {
 
     override fun onDestroy() {
         ForegroundApps.serviceConnected = false
+        // 服务没了，a11y 覆盖层也就加不上去：先把状态栏歌词那条拆干净再走。
+        StatusBarLyrics.detach()
         handler.removeCallbacks(commitTick)
         lastNotificationKey = null
         // 进程内状态一起清：服务被销毁后那个包名不再可信，留着会让悬浮窗一上来就被藏住。
@@ -167,6 +173,7 @@ class ForegroundAppService : AccessibilityService() {
 
     override fun onUnbind(intent: Intent?): Boolean {
         ForegroundApps.serviceConnected = false
+        StatusBarLyrics.detach()
         handler.removeCallbacks(commitTick)
         stabilizer.reset()
         lastReported = null

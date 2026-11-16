@@ -487,7 +487,9 @@ class LyricRenderer(context: Context) : View(context) {
         }
         val promptSize = primarySize * 0.74f
         paddingH = 16f * density
-        paddingV = 10f * density
+        // 单行时上下内边距收紧（0.2.28）：横条场景（投到车机顶部那条空白带）里
+        // 上下各 10dp 换来的就是「塞不进去」—— 带子只有 60~70px，一行字本身就要 44px。
+        paddingV = if (style.maxLines == 1) 6f * density else 10f * density
 
         val limit = contentLimit()
         glyphs.clear()
