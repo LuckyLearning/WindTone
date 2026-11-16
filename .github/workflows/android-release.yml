@@ -137,9 +137,6 @@ jobs:
 
       - name: 收集产物并计算校验值
         id: apk
-        env:
-          # mapping 归档要用版本号命名（mapping 与 APK 一一对应）
-          VERSION_NAME: ${{ steps.ver.outputs.name }}
         run: |
           mkdir -p dist
           shopt -s nullglob
@@ -166,17 +163,8 @@ jobs:
             echo "$n  $b  $s"
           done
           echo "count=$(ls dist/*.apk | wc -l)" >> "$GITHUB_OUTPUT"
-
-          # v1.1.97：混淆后的崩溃栈必须靠这份 mapping 还原，**与 APK 同等重要**。
-          # 命名带版本号——mapping 与 APK 一一对应，混用会还原出错误的名字。
-          MAP="app/build/outputs/mapping/release/mapping.txt"
-          if [ -f "$MAP" ]; then
-            cp "$MAP" "dist/mapping-v${VERSION_NAME}.txt"
-            echo "mapping 已归档：mapping-v${VERSION_NAME}.txt（$(stat -c%s "dist/mapping-v${VERSION_NAME}.txt") 字节）"
-          else
-            echo "::error::未找到 mapping.txt —— 开了混淆却没有它，线上崩溃将无法还原"
-            exit 1
-          fi
+          # 2026-11-16 起不再归档/发布 mapping（混淆映射含代码结构，不对外分发）。
+          # 本地构建仍会生成 app/build/outputs/mapping/release/mapping.txt，仅供内部崩溃还原。
 
       # ⚠️ 这一步只是「归档」，**Release 不依赖它**（下面同一个 job 直接用 dist/*.apk 发布）。
       # 2026-10-30 事故：账号的 artifact 存储配额被历史产物占满（100+ 个、约 540MB），
@@ -191,7 +179,6 @@ jobs:
           name: WindTone-v${{ steps.ver.outputs.name }}
           path: |
             dist/*.apk
-            dist/mapping-v*.txt
           if-no-files-found: error
           retention-days: 7
 
@@ -219,7 +206,6 @@ jobs:
           name: 听风 WindTone ${{ github.ref_name }}
           files: |
             dist/*.apk
-            dist/mapping-v*.txt
           body_path: ${{ steps.notes.outputs.path }}
           fail_on_unmatched_files: true
 

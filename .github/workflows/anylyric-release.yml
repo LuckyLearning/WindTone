@@ -4,7 +4,7 @@ name: AnyLyric Release
 #
 # 为什么单独一份（不复用 android-release.yml）：
 #  · 版本线独立（0.x），与 WindTone 的 1.2.x 互不干涉，tag 前缀也必须分开；
-#  · 产物只有一个通用包（不做 abiSplits），不产出 mapping 之外的额外资产；
+#  · 产物只有一个通用包（不做 abiSplits），无额外资产；
 #  · 只需要 :anylyric 一个 module，构建分钟数远低于 WindTone。
 #
 # tag 前缀用 `anylyric-v*` 而不是 `v*`：`v*` 归 WindTone，两者不能互相触发。
@@ -164,8 +164,6 @@ jobs:
 
       - name: 收集产物并计算校验值
         id: apk
-        env:
-          VERSION_NAME: ${{ steps.ver.outputs.name }}
         run: |
           mkdir -p dist
           shopt -s nullglob
@@ -189,15 +187,8 @@ jobs:
             echo "| \`$n\` | $b 字节 | \`$s\` |" >> "$GITHUB_STEP_SUMMARY"
             echo "$n  $b  $s"
           done
-
-          # AnyLyric 开了 R8（isMinifyEnabled = true），混淆后的崩溃栈要靠这份 mapping 还原
-          MAP="anylyric/build/outputs/mapping/release/mapping.txt"
-          if [ -f "$MAP" ]; then
-            cp "$MAP" "dist/mapping-anylyric-v${VERSION_NAME}.txt"
-            echo "mapping 已归档：mapping-anylyric-v${VERSION_NAME}.txt"
-          else
-            echo "::warning::未找到 mapping.txt —— 开了混淆却没产物，崩溃栈将无法还原"
-          fi
+          # 2026-11-16 起不再归档/发布 mapping（混淆映射含代码结构，不对外分发）。
+          # 本地构建仍会生成 anylyric/build/outputs/mapping/release/mapping.txt，仅供内部崩溃还原。
 
       # 归档失败不挡发版（artifact 配额曾被历史产物占满，见 android-release.yml 同名步骤注释）
       - name: 上传构建产物（归档，失败不阻塞发版）
@@ -207,7 +198,6 @@ jobs:
           name: AnyLyric-v${{ steps.ver.outputs.name }}
           path: |
             dist/*.apk
-            dist/mapping-anylyric-v*.txt
           if-no-files-found: error
           retention-days: 7
 
@@ -238,7 +228,6 @@ jobs:
           name: AnyLyric v${{ steps.ver.outputs.name }}
           files: |
             dist/*.apk
-            dist/mapping-anylyric-v*.txt
           body_path: ${{ steps.notes.outputs.path }}
           fail_on_unmatched_files: true
 
