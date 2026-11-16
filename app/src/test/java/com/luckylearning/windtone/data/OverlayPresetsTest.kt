@@ -170,11 +170,12 @@ class OverlayPresetsTest {
             params.titlePos, params.titleAlign, params.titleStrokeOn,
             params.titleStrokeWidthDp, params.titleStrokeColor,
             params.currentSp, params.contextSp,
+            params.wordSungColor, params.wordUnsungAlpha,
             params.bgAlphaPercent, params.bgColor, params.cornerRadiusDp,
             params.borderWidthDp, params.borderColor,
             params.pauseMode, params.fadeMs,
         )
-        assertEquals(30, values.size)
+        assertEquals(32, values.size)
         assertEquals(params, OverlayPreset.byId("C1")!!.toParams())
         // FR-05: Params 不含隐藏名单等全局键
         assertTrue(params.javaClass.declaredFields.none { it.name.contains("hidden", ignoreCase = true) })

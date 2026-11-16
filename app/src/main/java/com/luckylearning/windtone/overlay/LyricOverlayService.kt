@@ -163,6 +163,13 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
     /** 真正显示歌词的子 View */
     override var lyricView: TextView? = null
 
+    /**
+     * 最近一次真正写进 TextView 的行（逐字轻量重绘用）。
+     * 60ms 定时器拿它重建 span —— 只换字色，不重新组装角色 / 不走过淡入淡出。
+     */
+    private var lastRenderedLines: List<OverlayTextComposer.StyledLine> = emptyList()
+    private var lastRenderedFullHeight: Boolean = false
+
     /** 顶部「歌名 / 歌手」两行小字（v1.1.15，可选显示） */
     private var titleView: TextView? = null
 
@@ -1744,6 +1751,10 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             return false
         }
 
+        // 缓存本次要画的行，供 60ms 逐字通道只重建字色 span
+        lastRenderedLines = lines
+        lastRenderedFullHeight = fullHeight
+
         val spanned = OverlayTextStyler.build(
             lines,
             fullHeight,
@@ -1794,6 +1805,48 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
             tv.text = spanned
             tv.alpha = targetAlpha
         }
+        return true
+    }
+
+    /**
+     * 逐字轻量重绘（60ms，由 [OverlayStateBinder] 的独立时钟驱动）。
+     *
+     * 只重建「字色」span 并直接 setText —— 不走过淡入淡出、不碰 renderDeduper、
+     * 不重新 compose 行。当前行没有字轴时直接返回 false（一个 span 都不分配）。
+     * 文案本身不变（`tv.text.toString()` 相同），所以不会触发折行 / 测量。
+     */
+    override fun renderWordSpan(progressMs: Long): Boolean {
+        val tv = lyricView ?: return false
+        val lines = lastRenderedLines
+        // 只有当前行带字轴时才值得重绘（其余情况 60ms 空转，零分配）
+        if (lines.none { it.words?.isNotEmpty() == true }) return false
+        val prefs = Prefs(this)
+        val baseColor = if (appliedTextColor != COLOR_NOT_APPLIED) {
+            appliedTextColor
+        } else {
+            prefs.lyricOverlayTextColor
+        }
+        val noBackdrop = OverlayBackground.legibilityKey(prefs.lyricOverlayBgAlphaPercent) ==
+            OverlayAppearance.BACKDROP_NONE
+        val spanned = OverlayTextStyler.build(
+            lines,
+            lastRenderedFullHeight,
+            baseColor,
+            noBackdrop,
+            currentColor = prefs.lyricOverlayCurrentColor,
+            dimPercent = prefs.lyricOverlayDimPercent,
+            textSp = prefs.lyricOverlayTextSp,
+            currentSp = prefs.lyricOverlayCurrentSp,
+            contextSp = prefs.lyricOverlayContextSp,
+            contextColor = prefs.lyricOverlayContextColor,
+            wordByWord = true,
+            progressMs = progressMs,
+            wordSungColor = prefs.wordSungColor,
+            wordUnsungAlpha = prefs.wordUnsungAlpha,
+        )
+        // 文案未变（只有 span 变）：直接 setText，避免 animate 链与去重；
+        // setText 同字符串时 TextView 不会重新测量，成本只是重建 span 对象。
+        tv.setText(spanned, TextView.BufferType.SPANNABLE)
         return true
     }
 

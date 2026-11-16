@@ -35,7 +35,11 @@ class ForegroundAppLogFileTest {
         settle()
     }
 
-    private fun settle(ms: Long = 250) = runBlocking { delay(ms) }
+    /** 先把已排队的异步写入排空，再给文件 I/O 留一点余量；固定 sleep 在大批量写入时会不够。 */
+    private fun settle(ms: Long = 250) = runBlocking {
+        ForegroundAppLog.awaitPending()
+        delay(ms)
+    }
 
     @Test
     fun `连续同一个包名只记一条`() {
@@ -78,6 +82,18 @@ class ForegroundAppLogFileTest {
         settle()
         ForegroundAppLog.clear(ctx)
         settle()
+        assertTrue(ForegroundAppLog.read(ctx).isEmpty())
+    }
+
+    @Test
+    fun `clear 之后迟到的异步写入不会复活`() {
+        // 不清空就断言：故意让一批写入还在队列里时直接 clear（真实用户也会这么点）
+        repeat(50) { ForegroundAppLog.append(ctx, "com.late$it", null) }
+        ForegroundAppLog.clear(ctx)
+        runBlocking {
+            ForegroundAppLog.awaitPending()
+            delay(250)
+        }
         assertTrue(ForegroundAppLog.read(ctx).isEmpty())
     }
 

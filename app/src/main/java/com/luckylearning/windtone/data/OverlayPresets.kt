@@ -76,6 +76,11 @@ data class OverlayPreset(
     val currentSp: Int = SettingsDefaults.OVERLAY_CURRENT_SP,
     /** 其他行字号（sp）：0 = 跟随正文 */
     val contextSp: Int = SettingsDefaults.OVERLAY_CONTEXT_SP,
+    // ---- 逐字歌词样式（v1.2.x 新增；带出厂默认，既有预设构造不受影响）----
+    /** 已唱字颜色（ARGB）：0 = 跟随当前行色 */
+    val wordSungColor: Int = SettingsDefaults.OVERLAY_WORD_SUNG_COLOR,
+    /** 未唱字不透明度（0.1–1） */
+    val wordUnsungAlpha: Float = SettingsDefaults.WORD_UNSUNG_ALPHA_DEFAULT,
     // ---- 背景 ----
     val bgAlphaPercent: Int,
     val bgColor: Int,
@@ -422,6 +427,8 @@ data class OverlayPresetParams(
     val titleStrokeColor: Int,
     val currentSp: Int,
     val contextSp: Int,
+    val wordSungColor: Int,
+    val wordUnsungAlpha: Float,
     val bgAlphaPercent: Int,
     val bgColor: Int,
     val cornerRadiusDp: Int,
@@ -457,6 +464,8 @@ fun OverlayPreset.toParams() = OverlayPresetParams(
     titleStrokeColor = titleStrokeColor,
     currentSp = currentSp,
     contextSp = contextSp,
+    wordSungColor = wordSungColor,
+    wordUnsungAlpha = wordUnsungAlpha,
     bgAlphaPercent = bgAlphaPercent,
     bgColor = bgColor,
     cornerRadiusDp = cornerRadiusDp,
@@ -496,6 +505,8 @@ val OVERLAY_FACTORY_PARAMS = OverlayPresetParams(
     titleStrokeColor = SettingsDefaults.OVERLAY_TITLE_STROKE_COLOR,
     currentSp = SettingsDefaults.OVERLAY_CURRENT_SP,
     contextSp = SettingsDefaults.OVERLAY_CONTEXT_SP,
+    wordSungColor = SettingsDefaults.OVERLAY_WORD_SUNG_COLOR, // 0 = 跟随当前行色
+    wordUnsungAlpha = SettingsDefaults.WORD_UNSUNG_ALPHA_DEFAULT, // 0.55
     bgAlphaPercent = SettingsDefaults.OVERLAY_BG_ALPHA_PERCENT, // 55
     bgColor = SettingsDefaults.OVERLAY_BG_COLOR,
     cornerRadiusDp = SettingsDefaults.OVERLAY_CORNER_RADIUS_DP, // 14

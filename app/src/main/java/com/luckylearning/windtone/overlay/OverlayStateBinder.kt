@@ -10,6 +10,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import com.luckylearning.windtone.R
 import com.luckylearning.windtone.ui.AppStrings
@@ -272,12 +273,36 @@ class OverlayStateBinder(
                 }
             }
         }
+        // 逐字：独立的 60ms 轻量循环，只读本地 wordClock（播放域每 500ms 推一次进度
+        // + 本地时间戳），在这里外推到帧精度并让宿主只重设字色 span。
+        // 不进上面那路 combine：它带的是「换句 / 改样式」的低频事件，逐字是句内高频，
+        // 混进去会让 paint 指纹每 60ms 变一次、整窗重组（明示禁止）。
+        wordJob?.cancel()
+        wordJob = scope.launch {
+            while (isActive) {
+                val clock = LyricOverlayBus.wordClock.value
+                val prefs = host.prefs()
+                if (prefs.lyricOverlay && prefs.wordByWord && clock.playing && host.lyricView != null) {
+                    val progress = WordClockMath.extrapolate(clock, android.os.SystemClock.elapsedRealtime())
+                    if (progress >= 0L) host.renderWordSpan(progress)
+                }
+                kotlinx.coroutines.delay(WORD_TICK_MS)
+            }
+        }
+    }
+
+    /** 逐字重绘节拍（60ms ≈ 16fps，参照 anylyric 0.2.28） */
+    private var wordJob: Job? = null
+    private companion object {
+        const val WORD_TICK_MS = 60L
     }
 
     /** 取消订阅（服务销毁时调用） */
     fun dispose() {
         job?.cancel()
         job = null
+        wordJob?.cancel()
+        wordJob = null
         visibilitySyncedOnce = false
         lastPaintKey = null
         // A-OV1 的快速判同状态必须一起清：重订阅后若留着上一轮的引用，
@@ -345,6 +370,14 @@ class OverlayStateBinder(
         fun applyPosition()
         /** @return true 若文案/样式真的写进了 TextView（字未变则 false） */
         fun renderLines(tv: TextView, lines: List<OverlayTextComposer.StyledLine>, emphasize: Boolean, full: Boolean): Boolean
+
+        /**
+         * 逐字轻量重绘（60ms）：用最近一次渲染的行与字轴，只重设 span 的字色，
+         * 不重走 compose / 淡入淡出 / renderDeduper。宿主内部自行判「当前行有无字轴」，
+         * 无则返回 false（不碰 TextView）。
+         */
+        fun renderWordSpan(progressMs: Long): Boolean
+
         fun updateGeometryReport()
         fun refreshModeChrome()
         fun armEditingTimeout()

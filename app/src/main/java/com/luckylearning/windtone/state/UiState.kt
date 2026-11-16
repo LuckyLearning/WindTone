@@ -602,6 +602,10 @@ data class PlayerUiState(
     val lyricOverlayCurrentSp: Int = SettingsDefaults.OVERLAY_CURRENT_SP,
     val lyricOverlayContextSp: Int = SettingsDefaults.OVERLAY_CONTEXT_SP,
     val lyricOverlayContextColor: Int = SettingsDefaults.OVERLAY_CONTEXT_COLOR,
+    /** 逐字歌词：开关全局；两个样式项随日夜两套 */
+    val wordByWord: Boolean = SettingsDefaults.OVERLAY_WORD_BY_WORD,
+    val wordSungColor: Int = SettingsDefaults.OVERLAY_WORD_SUNG_COLOR,
+    val wordUnsungAlpha: Float = SettingsDefaults.WORD_UNSUNG_ALPHA_DEFAULT,
     /** 悬浮窗里的歌词文字颜色（ARGB，默认纯白） */
     val lyricOverlayTextColor: Int = SettingsDefaults.OVERLAY_TEXT_COLOR,
     /** 悬浮歌词是否处于「调整位置」模式（临时可拖动，会话级，不落盘） */
@@ -670,6 +674,8 @@ fun PlayerUiState.overlayPresetParams() = com.luckylearning.windtone.data.Overla
     titleStrokeColor = lyricOverlayTitleStrokeColor,
     currentSp = lyricOverlayCurrentSp,
     contextSp = lyricOverlayContextSp,
+    wordSungColor = wordSungColor,
+    wordUnsungAlpha = wordUnsungAlpha,
     bgAlphaPercent = lyricOverlayBgAlphaPercent,
     bgColor = lyricOverlayBgColor,
     cornerRadiusDp = lyricOverlayCornerRadiusDp,

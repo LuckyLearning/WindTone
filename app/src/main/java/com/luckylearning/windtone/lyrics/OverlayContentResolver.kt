@@ -39,6 +39,14 @@ object OverlayContentResolver {
         val idle: Boolean = false,
         val prevLines: List<String> = emptyList(),
         val nextLines: List<String> = emptyList(),
+        /**
+         * 当前行的字级时间轴（逐字歌词用）。**不参与文案去重**：
+         * 它只随「换句」变化，句内推进靠服务侧 60ms 时钟按 [lineStartMs] 自算。
+         * null / 空 = 这一行没有字级信息，逐字退化成整行。
+         */
+        val currentWords: List<LyricWord>? = null,
+        /** 当前行的起始时间（毫秒），逐字时钟据此把播放进度换算成已唱字数 */
+        val lineStartMs: Long = -1L,
     ) {
         /** 有没有东西可显示；空则表示窗口应当隐藏 */
         val visible: Boolean get() = current.isNotBlank()
@@ -62,11 +70,17 @@ object OverlayContentResolver {
         positionMs: Long,
         offsetMs: Int,
         title: String,
+        /**
+         * 逐字开关（默认 false = 关闭，既有调用方 / 单测不受影响）。
+         * 打开时对没有字级轴的行按行时长补「伪字级」，保证每句都能逐字亮。
+         */
+        wordByWord: Boolean = false,
     ): Resolved {
         // 没有时间轴歌词：跟不了节拍，显示歌名比显示一句静止的歌词有用
         if (lyrics.isEmpty || !lyrics.synced) return titleOnly(title)
 
-        val lines = lyrics.lines
+        // 补伪字级：纯函数，不开时原样返回同一实例（零分配）
+        val lines = WordTiming.withDerivedWords(lyrics.lines, wordByWord)
         val i = lyrics.indexAt(positionMs + offsetMs)
 
         // 前奏：还没到第一句。显示歌名，并把第一句当作「下一句」预告
@@ -93,6 +107,9 @@ object OverlayContentResolver {
             // 下一句要从「时间轴上当前位置之后」开始找：间奏时 i 停在空行上，
             // 真正的下一句在空行之后，而不是 anchor 之后。
             nextLines = collect(lines, maxOf(i, anchor) + 1, 1),
+            // 字级轴只在「正在演唱这一行」时带出（间奏回溯的空行不做逐字染色）
+            currentWords = if (anchor == i) line.words else null,
+            lineStartMs = line.timeMs,
         )
     }
 

@@ -139,6 +139,10 @@ internal fun SettingsOverlayPage(
     onLyricOverlayCurrentSp: (Int) -> Unit = {},
     onLyricOverlayContextSp: (Int) -> Unit = {},
     onLyricOverlayContextColor: (Int) -> Unit = {},
+    /** 逐字歌词：开关（全局）+ 已唱颜色 / 未唱不透明度（随日夜两套） */
+    onWordByWord: (Boolean) -> Unit = {},
+    onWordSungColor: (Int) -> Unit = {},
+    onWordUnsungAlpha: (Float) -> Unit = {},
     onLyricOverlayTextColor: (Int) -> Unit,
     /** 「不显示悬浮窗的应用」名单（v1.1.29）；整体写回，弹窗内逐个勾选 */
     onLyricOverlayHiddenApps: (Set<String>) -> Unit,
@@ -177,6 +181,8 @@ internal fun SettingsOverlayPage(
     var contextColorPickerShown by remember { mutableStateOf(false) }
     var titleColorPickerShown by remember { mutableStateOf(false) }
     var titleStrokeColorPickerShown by remember { mutableStateOf(false) }
+    // 逐字：已唱字颜色（0 = 跟随当前行色）
+    var wordSungColorPickerShown by remember { mutableStateOf(false) }
     // 「全部恢复默认」的二次确认
     var showResetAll by remember { mutableStateOf(false) }
     // v1.2.54：细参从「一个大折叠」改成按语义分组的折叠 —— 每组各开各关，
@@ -187,7 +193,11 @@ internal fun SettingsOverlayPage(
     // 预设 / 输出屏幕 / 明暗两套收进「外观与预设」，全屏形态与位置调整收进「位置与尺寸」。
     var groupStyle by rememberSaveable { mutableStateOf(false) }
     var groupPosition by rememberSaveable { mutableStateOf(false) }
+    // 文字类四卡（参照 anylyric 按「改谁」分卡）：正文 / 副行 / 标题 / 窗框。
+    // 每卡只放那一个对象自己的可调项，顺序统一为 字号→加粗→颜色→透明度→对齐
+    // （WindTone 没有独立的加粗开关，正文恒亮不加透明度 —— 有意的不对称）。
     var groupText by rememberSaveable { mutableStateOf(true) }
+    var groupSecondary by rememberSaveable { mutableStateOf(false) }
     var groupTitle by rememberSaveable { mutableStateOf(false) }
     var groupBackground by rememberSaveable { mutableStateOf(false) }
     var groupBehavior by rememberSaveable { mutableStateOf(false) }
@@ -582,18 +592,17 @@ internal fun SettingsOverlayPage(
         }
         } // 位置与尺寸
 
-        // ---------------- 歌词文字 ----------------
+        // ---------------- 正文（四卡重组：正文 / 副行 / 标题 / 窗框，参照 anylyric 按「改谁」分卡）----------------
+        // 每卡只放那一个对象自己的可调项；顺序统一 字号→加粗→颜色→透明度→对齐，
+        // WindTone 无独立加粗开关、正文恒亮（有意的不对称，与 anylyric 一致）。
         OverlayGroup(
-            title = stringResource(R.string.overlay_group_lyric_text),
+            title = stringResource(R.string.overlay_group_body),
             subtitle = textSummary(player),
             expanded = groupText,
             onToggle = { groupText = !groupText },
         ) {
-        // 「只有一行歌词」时，有两项根本无从作用：
-        //  · 其他行（颜色 / 字号 / 压暗）—— 没有上下句可调；
-        //  · 行距 —— 一行字之间没有「行与行之间」。
-        // 两者共用一个判据，免得哪天一处改了另一处没跟上。
-        // 全屏形态永远有多行；行数「自动」(0) 按高度反推、可能多行，所以保留。
+        // 副行项已搬到下面的「副行」卡，本卡只剩正文与当前行；
+        // 但「只有一行歌词」仍需这个判据来决定当前行字号步进的起点提示。
         val multiLine = player.lyricOverlayFullHeight || player.lyricOverlayLines != 1
         // v1.2.54：字号一律用**磅值 + −/＋ 步进**，取消滑杆与上下限
         // （用户原话：「字号大小不按区间，用磅，没有区间限制，参考 anylyric」）。
@@ -681,132 +690,128 @@ internal fun SettingsOverlayPage(
                 player.lyricOverlayCurrentSp != SettingsDefaults.OVERLAY_CURRENT_SP,
             ) { onLyricOverlayCurrentSp(SettingsDefaults.OVERLAY_CURRENT_SP) },
         )
-        // 只有一行歌词时，「其他行」没有任何一行可作用 —— 整块收起（v1.2.54）。
-        if (multiLine) {
-            GroupLabel(stringResource(R.string.overlay_context_lines))
+        // ---- 逐字歌词（参照 anylyric 0.2.28）：唱到哪个字亮哪个字 ----
+        // 开关放全局；「已唱颜色 / 未唱不透明度」是样式项，随日夜两套。
+        GroupLabel(stringResource(R.string.overlay_group_word))
+        SwitchRow(
+            title = stringResource(R.string.word_by_word),
+            subtitle = stringResource(R.string.word_by_word_hint),
+            checked = player.wordByWord,
+            onCheckedChange = onWordByWord,
+            onReset = resetAction(player.wordByWord != SettingsDefaults.OVERLAY_WORD_BY_WORD) {
+                onWordByWord(SettingsDefaults.OVERLAY_WORD_BY_WORD)
+            },
+        )
+        if (player.wordByWord) {
             ActionRow(
-                title = stringResource(R.string.overlay_context_color),
-                subtitle = if (player.lyricOverlayContextColor == 0) {
+                title = stringResource(R.string.word_sung_color),
+                subtitle = if (player.wordSungColor == 0) {
                     stringResource(R.string.follows_the_text_color_above)
                 } else {
-                    stringResource(R.string.overlay_context_color_sub)
+                    stringResource(R.string.word_sung_color_sub)
                 },
-                onClick = { contextColorPickerShown = true },
-                swatch = if (player.lyricOverlayContextColor == 0) {
-                    player.lyricOverlayTextColor
-                } else {
-                    player.lyricOverlayContextColor
-                },
+                onClick = { wordSungColorPickerShown = true },
+                swatch = if (player.wordSungColor == 0) {
+                    if (player.lyricOverlayCurrentColor != 0) player.lyricOverlayCurrentColor
+                    else player.lyricOverlayTextColor
+                } else player.wordSungColor,
                 chevron = true,
                 onReset = resetAction(
-                    player.lyricOverlayContextColor != SettingsDefaults.OVERLAY_CONTEXT_COLOR,
-                ) { onLyricOverlayContextColor(SettingsDefaults.OVERLAY_CONTEXT_COLOR) },
-            )
-            StepperRow(
-                title = stringResource(R.string.overlay_context_size),
-                subtitle = stringResource(R.string.overlay_step_hint),
-                valueLabel = lineSizeLabel(player.lyricOverlayContextSp, player.lyricOverlayTextSp),
-                onDecrease = {
-                    onLyricOverlayContextSp(
-                        stepDown(player.lyricOverlayContextSp, player.lyricOverlayTextSp),
-                    )
-                },
-                onIncrease = {
-                    onLyricOverlayContextSp(
-                        stepUp(player.lyricOverlayContextSp, player.lyricOverlayTextSp),
-                    )
-                },
-                onReset = resetAction(
-                    player.lyricOverlayContextSp != SettingsDefaults.OVERLAY_CONTEXT_SP,
-                ) { onLyricOverlayContextSp(SettingsDefaults.OVERLAY_CONTEXT_SP) },
+                    player.wordSungColor != SettingsDefaults.OVERLAY_WORD_SUNG_COLOR,
+                ) { onWordSungColor(SettingsDefaults.OVERLAY_WORD_SUNG_COLOR) },
             )
             SliderRow(
-                title = stringResource(R.string.context_line_brightness, player.lyricOverlayDimPercent),
-                subtitle = stringResource(R.string.brightness_kept_for_context_lines),
-                value = player.lyricOverlayDimPercent.toFloat(),
-                range = SettingsDefaults.OVERLAY_DIM_RANGE.first.toFloat()..
-                    SettingsDefaults.OVERLAY_DIM_RANGE.last.toFloat(),
-                onValueChange = { onLyricOverlayDimPercent(it.roundToInt().coerceIn(
-                    SettingsDefaults.OVERLAY_DIM_RANGE.first,
-                    SettingsDefaults.OVERLAY_DIM_RANGE.last,
-                )) },
+                title = stringResource(
+                    R.string.word_unsung_alpha,
+                ),
+                subtitle = stringResource(R.string.word_unsung_alpha_sub),
+                value = player.wordUnsungAlpha,
+                range = SettingsDefaults.WORD_UNSUNG_ALPHA_MIN..SettingsDefaults.WORD_UNSUNG_ALPHA_MAX,
+                onValueChange = { onWordUnsungAlpha(it) },
                 onReset = resetAction(
-                    player.lyricOverlayDimPercent != SettingsDefaults.OVERLAY_DIM_PERCENT,
-                ) { onLyricOverlayDimPercent(SettingsDefaults.OVERLAY_DIM_PERCENT) },
+                    player.wordUnsungAlpha != SettingsDefaults.WORD_UNSUNG_ALPHA_DEFAULT,
+                ) { onWordUnsungAlpha(SettingsDefaults.WORD_UNSUNG_ALPHA_DEFAULT) },
             )
         }
-        // 行距同理：只有一行时收起（v1.2.54 第二版新增的联动）。
-        if (multiLine) {
-        SliderRow(
-            title = if (player.lyricOverlayLineSpacingDp == 0) {
-                stringResource(R.string.lyric_line_spacing_compact)
+        } // 正文
+
+        // ---------------- 副行（四卡重组：从原「歌词文字」拆出其他行 + 行距）----------------
+        // 只有一行歌词时，其他行与行距都无从作用 —— 整卡收起。
+        val multiLine = player.lyricOverlayFullHeight || player.lyricOverlayLines != 1
+        OverlayGroup(
+            title = stringResource(R.string.overlay_group_secondary),
+            subtitle = stringResource(R.string.overlay_secondary_summary),
+            expanded = groupSecondary,
+            onToggle = { groupSecondary = !groupSecondary },
+        ) {
+            if (multiLine) {
+                // 顺序：字号 → 颜色 → 透明度（压暗）
+                StepperRow(
+                    title = stringResource(R.string.overlay_context_size),
+                    subtitle = stringResource(R.string.overlay_step_hint),
+                    valueLabel = lineSizeLabel(player.lyricOverlayContextSp, player.lyricOverlayTextSp),
+                    onDecrease = { onLyricOverlayContextSp(stepDown(player.lyricOverlayContextSp, player.lyricOverlayTextSp)) },
+                    onIncrease = { onLyricOverlayContextSp(stepUp(player.lyricOverlayContextSp, player.lyricOverlayTextSp)) },
+                    onReset = resetAction(
+                        player.lyricOverlayContextSp != SettingsDefaults.OVERLAY_CONTEXT_SP,
+                    ) { onLyricOverlayContextSp(SettingsDefaults.OVERLAY_CONTEXT_SP) },
+                )
+                ActionRow(
+                    title = stringResource(R.string.overlay_context_color),
+                    subtitle = if (player.lyricOverlayContextColor == 0) {
+                        stringResource(R.string.follows_the_text_color_above)
+                    } else {
+                        stringResource(R.string.overlay_context_color_sub)
+                    },
+                    onClick = { contextColorPickerShown = true },
+                    swatch = if (player.lyricOverlayContextColor == 0) {
+                        player.lyricOverlayTextColor
+                    } else player.lyricOverlayContextColor,
+                    chevron = true,
+                    onReset = resetAction(
+                        player.lyricOverlayContextColor != SettingsDefaults.OVERLAY_CONTEXT_COLOR,
+                    ) { onLyricOverlayContextColor(SettingsDefaults.OVERLAY_CONTEXT_COLOR) },
+                )
+                SliderRow(
+                    title = stringResource(R.string.context_line_brightness, player.lyricOverlayDimPercent),
+                    subtitle = stringResource(R.string.brightness_kept_for_context_lines),
+                    value = player.lyricOverlayDimPercent.toFloat(),
+                    range = SettingsDefaults.OVERLAY_DIM_RANGE.first.toFloat()..
+                        SettingsDefaults.OVERLAY_DIM_RANGE.last.toFloat(),
+                    onValueChange = { onLyricOverlayDimPercent(it.roundToInt().coerceIn(
+                        SettingsDefaults.OVERLAY_DIM_RANGE.first,
+                        SettingsDefaults.OVERLAY_DIM_RANGE.last,
+                    )) },
+                    onReset = resetAction(
+                        player.lyricOverlayDimPercent != SettingsDefaults.OVERLAY_DIM_PERCENT,
+                    ) { onLyricOverlayDimPercent(SettingsDefaults.OVERLAY_DIM_PERCENT) },
+                )
+                SliderRow(
+                    title = if (player.lyricOverlayLineSpacingDp == 0) {
+                        stringResource(R.string.lyric_line_spacing_compact)
+                    } else {
+                        stringResource(R.string.lyric_line_spacing_dp, player.lyricOverlayLineSpacingDp)
+                    },
+                    subtitle = stringResource(R.string.gap_between_lyric_lines_reduce),
+                    value = player.lyricOverlayLineSpacingDp.toFloat(),
+                    range = SettingsDefaults.OVERLAY_LINE_SPACING_RANGE.first.toFloat()..
+                        SettingsDefaults.OVERLAY_LINE_SPACING_RANGE.last.toFloat(),
+                    onValueChange = { onLyricOverlayLineSpacingDp(it.roundToInt().coerceIn(
+                        SettingsDefaults.OVERLAY_LINE_SPACING_RANGE.first,
+                        SettingsDefaults.OVERLAY_LINE_SPACING_RANGE.last,
+                    )) },
+                    onReset = resetAction(
+                        player.lyricOverlayLineSpacingDp != SettingsDefaults.OVERLAY_LINE_SPACING_DP,
+                    ) { onLyricOverlayLineSpacingDp(SettingsDefaults.OVERLAY_LINE_SPACING_DP) },
+                )
             } else {
-                stringResource(R.string.lyric_line_spacing_dp, player.lyricOverlayLineSpacingDp)
-            },
-            subtitle = stringResource(R.string.gap_between_lyric_lines_reduce),
-            value = player.lyricOverlayLineSpacingDp.toFloat(),
-            range = SettingsDefaults.OVERLAY_LINE_SPACING_RANGE.first.toFloat()..
-                SettingsDefaults.OVERLAY_LINE_SPACING_RANGE.last.toFloat(),
-            onValueChange = { onLyricOverlayLineSpacingDp(it.roundToInt().coerceIn(
-                SettingsDefaults.OVERLAY_LINE_SPACING_RANGE.first,
-                SettingsDefaults.OVERLAY_LINE_SPACING_RANGE.last,
-            )) },
-            onReset = resetAction(
-                player.lyricOverlayLineSpacingDp != SettingsDefaults.OVERLAY_LINE_SPACING_DP,
-            ) { onLyricOverlayLineSpacingDp(SettingsDefaults.OVERLAY_LINE_SPACING_DP) },
-        )
-        } // multiLine
-        // 描边总开关（v1.2.53）：先决定「要不要描边」，再决定「多粗 / 什么色」。
-        // v1.2.54：关掉时粗细与颜色两行**收起**（不起效就收起），
-        // 值仍留在盘上，重新打开还是上次那套。
-        SwitchRow(
-            title = stringResource(R.string.text_outline),
-            subtitle = if (player.lyricOverlayStrokeEnabled) {
-                stringResource(R.string.outline_keeps_text_readable)
-            } else {
-                stringResource(R.string.outline_off_pure_text)
-            },
-            checked = player.lyricOverlayStrokeEnabled,
-            onCheckedChange = onLyricOverlayStrokeEnabled,
-            onReset = resetAction(
-                player.lyricOverlayStrokeEnabled != SettingsDefaults.OVERLAY_STROKE_ENABLED,
-            ) { onLyricOverlayStrokeEnabled(SettingsDefaults.OVERLAY_STROKE_ENABLED) },
-        )
-        if (player.lyricOverlayStrokeEnabled) {
-            SliderRow(
-                title = if (player.lyricOverlayStrokeWidthDp == 0) {
-                    stringResource(R.string.text_outline_auto)
-                } else {
-                    stringResource(R.string.text_outline_dp, player.lyricOverlayStrokeWidthDp)
-                },
-                subtitle = if (player.lyricOverlayStrokeWidthDp == 0) {
-                    stringResource(R.string.auto_3dp_without_a_backdrop)
-                } else {
-                    stringResource(R.string.outline_width_around_the_text)
-                },
-                value = player.lyricOverlayStrokeWidthDp.toFloat(),
-                range = SettingsDefaults.OVERLAY_STROKE_WIDTH_RANGE.first.toFloat()..
-                    SettingsDefaults.OVERLAY_STROKE_WIDTH_RANGE.last.toFloat(),
-                onValueChange = { onLyricOverlayStrokeWidthDp(it.roundToInt().coerceIn(
-                    SettingsDefaults.OVERLAY_STROKE_WIDTH_RANGE.first,
-                    SettingsDefaults.OVERLAY_STROKE_WIDTH_RANGE.last,
-                )) },
-                onReset = resetAction(
-                    player.lyricOverlayStrokeWidthDp != SettingsDefaults.OVERLAY_STROKE_WIDTH_DP,
-                ) { onLyricOverlayStrokeWidthDp(SettingsDefaults.OVERLAY_STROKE_WIDTH_DP) },
-            )
-            ActionRow(
-                title = stringResource(R.string.outline_color),
-                subtitle = stringResource(R.string.color_of_the_text_outline),
-                onClick = { strokeColorPickerShown = true },
-                swatch = player.lyricOverlayStrokeColor,
-                chevron = true,
-                onReset = resetAction(
-                    player.lyricOverlayStrokeColor != SettingsDefaults.OVERLAY_STROKE_COLOR,
-                ) { onLyricOverlayStrokeColor(SettingsDefaults.OVERLAY_STROKE_COLOR) },
-            )
-        }
-        } // 歌词文字
+                Text(
+                    text = stringResource(R.string.overlay_secondary_single_line_hint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } // 副行
 
         // ---------------- 标题（v1.2.54：独立成组，位置 / 对齐 / 颜色 / 大小 / 描边都可调） ----------------
         OverlayGroup(
@@ -962,12 +967,13 @@ internal fun SettingsOverlayPage(
             }
         } // 标题
 
-        // ---------------- 背景 ----------------
+        // ---------------- 窗框（四卡重组：原「背景」卡 + 从文字卡移入的描边）----------------
         // v1.1.51：原来的「底板三档 + 自定义背景开关 + 色板 + 不透明度」四件套
         // 语义重复（同一个结果有两套开关），并成「颜色 + 不透明度」两项；
         // 0% 就是无底板，文字自动换硬描边，不再需要一个开关。
+        // 描边属于「框」不属于「字」，与 anylyric 的窗框卡归位一致。
         OverlayGroup(
-            title = stringResource(R.string.background),
+            title = stringResource(R.string.overlay_group_frame),
             subtitle = backgroundSummary(player),
             expanded = groupBackground,
             onToggle = { groupBackground = !groupBackground },
@@ -1058,6 +1064,56 @@ internal fun SettingsOverlayPage(
             )
         }
         } // 不透明度 > 0
+        // ---- 文字描边（从文字卡归位到窗框卡：描边属于「框」，与 anylyric 一致）----
+        // 先决定「要不要描边」，再决定「多粗 / 什么色」；关掉时两行收起。
+        // 描边总开关独立：关 = 纯文字，连可读性阴影都不画。
+        SwitchRow(
+            title = stringResource(R.string.text_outline),
+            subtitle = if (player.lyricOverlayStrokeEnabled) {
+                stringResource(R.string.outline_keeps_text_readable)
+            } else {
+                stringResource(R.string.outline_off_pure_text)
+            },
+            checked = player.lyricOverlayStrokeEnabled,
+            onCheckedChange = onLyricOverlayStrokeEnabled,
+            onReset = resetAction(
+                player.lyricOverlayStrokeEnabled != SettingsDefaults.OVERLAY_STROKE_ENABLED,
+            ) { onLyricOverlayStrokeEnabled(SettingsDefaults.OVERLAY_STROKE_ENABLED) },
+        )
+        if (player.lyricOverlayStrokeEnabled) {
+            SliderRow(
+                title = if (player.lyricOverlayStrokeWidthDp == 0) {
+                    stringResource(R.string.text_outline_auto)
+                } else {
+                    stringResource(R.string.text_outline_dp, player.lyricOverlayStrokeWidthDp)
+                },
+                subtitle = if (player.lyricOverlayStrokeWidthDp == 0) {
+                    stringResource(R.string.auto_3dp_without_a_backdrop)
+                } else {
+                    stringResource(R.string.outline_width_around_the_text)
+                },
+                value = player.lyricOverlayStrokeWidthDp.toFloat(),
+                range = SettingsDefaults.OVERLAY_STROKE_WIDTH_RANGE.first.toFloat()..
+                    SettingsDefaults.OVERLAY_STROKE_WIDTH_RANGE.last.toFloat(),
+                onValueChange = { onLyricOverlayStrokeWidthDp(it.roundToInt().coerceIn(
+                    SettingsDefaults.OVERLAY_STROKE_WIDTH_RANGE.first,
+                    SettingsDefaults.OVERLAY_STROKE_WIDTH_RANGE.last,
+                )) },
+                onReset = resetAction(
+                    player.lyricOverlayStrokeWidthDp != SettingsDefaults.OVERLAY_STROKE_WIDTH_DP,
+                ) { onLyricOverlayStrokeWidthDp(SettingsDefaults.OVERLAY_STROKE_WIDTH_DP) },
+            )
+            ActionRow(
+                title = stringResource(R.string.outline_color),
+                subtitle = stringResource(R.string.color_of_the_text_outline),
+                onClick = { strokeColorPickerShown = true },
+                swatch = player.lyricOverlayStrokeColor,
+                chevron = true,
+                onReset = resetAction(
+                    player.lyricOverlayStrokeColor != SettingsDefaults.OVERLAY_STROKE_COLOR,
+                ) { onLyricOverlayStrokeColor(SettingsDefaults.OVERLAY_STROKE_COLOR) },
+            )
+        }
         } // 背景
 
         // ---------------- 行为 ----------------
@@ -1299,6 +1355,20 @@ internal fun SettingsOverlayPage(
             showPresets = false,
             onPick = { argb -> onLyricOverlayCurrentColor(argb) },
             onDismiss = { currentColorPickerShown = false },
+        )
+    }
+    // 逐字：已唱字颜色（HSV 三滑杆，与当前行色同款取色器）
+    if (wordSungColorPickerShown) {
+        ColorPickerSheet(
+            title = stringResource(R.string.word_sung_color),
+            intro = stringResource(R.string.word_sung_color_sub),
+            value = if (player.wordSungColor == 0) {
+                if (player.lyricOverlayCurrentColor != 0) player.lyricOverlayCurrentColor
+                else player.lyricOverlayTextColor
+            } else player.wordSungColor,
+            showPresets = false,
+            onPick = { argb -> onWordSungColor(argb) },
+            onDismiss = { wordSungColorPickerShown = false },
         )
     }
     if (strokeColorPickerShown) {

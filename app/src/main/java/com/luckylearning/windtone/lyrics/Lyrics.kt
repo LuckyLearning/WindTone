@@ -16,13 +16,32 @@ enum class LyricSource(val label: String) {
     EMBEDDED("内嵌歌词"),
 }
 
+/**
+ * 一个字（或不可切分的字组）及其起始时间。
+ *
+ * 参照 anylyric 0.2.28 的同名模型：中文增强 LRC / KRC 的字级时间都是按字给的，
+ * 所以这里的最小单位就是「字」而非「词」。`text` 可以是一个英文单词（含尾随空格），
+ * 只要它对应一个时间点即可 —— 逐字高亮按 [timeMs] 切段，不逐字 drawText。
+ */
+data class LyricWord(val text: String, val timeMs: Long)
+
 /** 一行歌词；timeMs < 0 表示无时间轴（纯文本歌词） */
 data class LyricLine(
     val timeMs: Long,
     val text: String,
     /** 双语歌词的翻译/音译副行 */
     val translation: String? = null,
-)
+    /**
+     * 字级时间轴（逐字歌词）。null = 这份歌词没有字级信息。
+     *
+     * 恢复约定（v1.2.x）：`text` 永远是**剥掉字级标签后的纯文本**，与 [words] 不能互相推导
+     * （英文尾随空格等）。逐字关闭时本字段允许有值但不消费，避免解析层与开关耦合。
+     */
+    val words: List<LyricWord>? = null,
+) {
+    /** 这一行是否带可用字级轴 */
+    val hasWords: Boolean get() = !words.isNullOrEmpty()
+}
 
 data class Lyrics(
     val lines: List<LyricLine> = emptyList(),

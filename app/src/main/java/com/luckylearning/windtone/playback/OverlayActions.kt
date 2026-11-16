@@ -140,6 +140,15 @@ interface OverlayActions {
     /** 其他行颜色：0 = 跟随歌词文字色（默认，再按压暗算不透明度），其余 ARGB */
     fun setLyricOverlayContextColor(value: Int)
 
+    /** 逐字歌词开关（默认关；全局单份） */
+    fun setWordByWord(enabled: Boolean)
+
+    /** 已唱字颜色（ARGB）：0 = 跟随当前行色 */
+    fun setWordSungColor(value: Int)
+
+    /** 未唱字不透明度（0.1–1） */
+    fun setWordUnsungAlpha(value: Float)
+
     /** 悬浮窗歌词文字颜色（ARGB） */
     fun setLyricOverlayTextColor(color: Int)
 

@@ -282,6 +282,10 @@ fun SettingsScreen(
     onLyricOverlayCurrentSp: (Int) -> Unit = {},
     onLyricOverlayContextSp: (Int) -> Unit = {},
     onLyricOverlayContextColor: (Int) -> Unit = {},
+    /** 逐字歌词：开关 + 已唱颜色 / 未唱不透明度 */
+    onWordByWord: (Boolean) -> Unit = {},
+    onWordSungColor: (Int) -> Unit = {},
+    onWordUnsungAlpha: (Float) -> Unit = {},
     /** 悬浮窗歌词文字颜色 —— v1.1.4 */
     onLyricOverlayTextColor: (Int) -> Unit,
     /** 「不显示悬浮窗的应用」名单（v1.1.29） */
@@ -584,6 +588,9 @@ fun SettingsScreen(
                             onLyricOverlayCurrentSp = onLyricOverlayCurrentSp,
                             onLyricOverlayContextSp = onLyricOverlayContextSp,
                             onLyricOverlayContextColor = onLyricOverlayContextColor,
+                            onWordByWord = onWordByWord,
+                            onWordSungColor = onWordSungColor,
+                            onWordUnsungAlpha = onWordUnsungAlpha,
                             onLyricOverlayTextColor = onLyricOverlayTextColor,
                             onLyricOverlayHiddenApps = onLyricOverlayHiddenApps,
                             onApplyOverlayPreset = onApplyOverlayPreset,

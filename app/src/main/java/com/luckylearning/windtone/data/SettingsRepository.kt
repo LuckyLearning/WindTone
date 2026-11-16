@@ -340,6 +340,24 @@ class SettingsRepository(val prefs: Prefs) {
         return prefs.lyricOverlayContextColor
     }
 
+    /** 逐字歌词开关（全局单份；切主题 / 套预设都不碰它） */
+    fun setWordByWord(enabled: Boolean): Boolean {
+        prefs.wordByWord = enabled
+        return prefs.wordByWord
+    }
+
+    /** @return 已唱字颜色：0 = 跟随当前行色 */
+    fun setWordSungColor(value: Int): Int {
+        prefs.wordSungColor = value
+        return prefs.wordSungColor
+    }
+
+    /** @return 未唱字不透明度（夹在 0.1–1） */
+    fun setWordUnsungAlpha(value: Float): Float {
+        prefs.wordUnsungAlpha = value
+        return prefs.wordUnsungAlpha
+    }
+
     fun setOverlayTextColor(color: Int) {
         prefs.lyricOverlayTextColor = color
     }

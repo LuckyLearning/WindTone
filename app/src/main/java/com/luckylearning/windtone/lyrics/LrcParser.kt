@@ -6,20 +6,25 @@ package com.luckylearning.windtone.lyrics
  *  - 标准时间轴 [mm:ss.xx] / [mm:ss.xxx] / [mm:ss] / [mm:ss:xx]
  *  - 一行多个时间标签 [00:12.00][01:20.00]歌词
  *  - 元信息 [ti:] [ar:] [al:] [by:] [offset:] [length:]
- *  - 增强型 LRC 的字级标签 <mm:ss.xx>：**只剥离、不解析**（见下）
+ *  - 增强型 LRC 的字级标签 <mm:ss.xx>：解析成 [LyricWord]（逐字歌词）
  *  - 双语歌词：同一时间戳（±50ms）连续两行，第二行并入第一行的翻译副行
  *  - 无时间轴的纯文本歌词（返回 synced = false）
  *
- * ⚠️ **v1.1.8 起不再解析字级时间轴** —— 逐字歌词功能已整体移除。增强型 LRC 仍被
- * 完整支持，只是当普通同步歌词用：行内的 `<mm:ss.xx>` 必须**剥离干净**（漏了的话
- * 歌词正文会直接把时间标签显示给用户），时间轴取行首的 `[mm:ss.xx]`。
+ * 字级解析的三条坑规则（参照 anylyric 0.2.28）：
+ *  ① 只有一行**单个** `[..]` 时间标签时才认字级 —— 一行多个 `[..]` 是同一句重复出现，
+ *     字级时间只对应其中一处，硬套会让另一处错位；
+ *  ② `[offset:]` 对字级同样生效（歌词整体提前，字级时间一并减）；
+ *  ③ 字级必须能拼回纯文本（`words.joinToString == text`），否则宁可丢逐字也不丢歌词 ——
+ *     被双语合并 / 空行过滤动过的行不满足这一条，此时退回纯文本行。
+ *
+ * 无论开关开不开，解析层都产出字级轴（有就存着）：开关是消费端的判据，不在这里耦合。
  */
 object LrcParser {
 
     private val TIME_TAG = Regex("\\[(\\d{1,4}):(\\d{1,2})(?:[.:](\\d{1,3}))?]")
     private val META_TAG = Regex("\\[(ti|ar|al|by|offset|length|re|ve|au|kana):([^]]*)]", RegexOption.IGNORE_CASE)
 
-    /** 增强 LRC 的字级标签：只用于从正文里剥离，不再产出时间轴 */
+    /** 增强 LRC 的字级标签（`<mm:ss.xx>`）：既用于解析字轴，也用于从正文剥离 */
     private val WORD_TAG = Regex("<(\\d{1,4}):(\\d{1,2})(?:[.:](\\d{1,3}))?>")
     private val ANY_BRACKET = Regex("\\[[^]]*]")
 
@@ -29,7 +34,7 @@ object LrcParser {
         var album: String? = null
         var offsetMs = 0
 
-        data class Stamp(val ms: Long, val text: String)
+        data class Stamp(val ms: Long, val text: String, val words: List<LyricWord>? = null)
 
         val timestamped = ArrayList<Stamp>(256)
         val plain = ArrayList<String>(256)
@@ -60,17 +65,25 @@ object LrcParser {
                 continue
             }
 
-            var text = line
-            for (t in times) text = text.replace(t.value, "")
+            var body = line
+            for (t in times) body = body.replace(t.value, "")
 
-            // 增强 LRC 的字级标签：剥离即可，不再解析成时间轴
-            text = WORD_TAG.replace(text, "")
+            // 字级轴：只有单个行首时间标签才认（坑规则①），且 [offset:] 对字级同样生效（②）。
+            // 解析出的 words 用原始 body（含字级标签）算，text 用剥离后的纯文本。
+            val words = if (times.size == 1) parseWords(body, offsetMs) else null
+            // 坑规则③：字级拼不回纯文本时宁可丢逐字（此处先按 text 校验一遍，
+            // 双语合并那一层的校验在下面构造 LyricLine 时再做）。
+            val usable = words?.takeIf { it.joinToString("") { w -> w.text } == body.let { b ->
+                WORD_TAG.replace(b, "").let { s -> ANY_BRACKET.replace(s, "").trim() }
+            } }
+
+            var text = WORD_TAG.replace(body, "")
             text = ANY_BRACKET.replace(text, "")
             text = text.trim()
 
             for (t in times) {
                 val ms = toMillis(t.groupValues[1], t.groupValues[2], t.groupValues[3]) ?: continue
-                timestamped.add(Stamp(ms, text))
+                timestamped.add(Stamp(ms, text, usable))
             }
         }
 
@@ -79,7 +92,7 @@ object LrcParser {
         if (synced) {
             val adjusted = timestamped.map { s ->
                 val t = s.ms - offsetMs
-                Stamp(if (t < 0) 0L else t, s.text)
+                Stamp(if (t < 0) 0L else t, s.text, s.words)
             }.sortedBy { it.ms }
 
             // 双语合并（v1.2.1 修正）：把「同一句的译文」认成副行，而不是多出一行歌词。
@@ -98,7 +111,7 @@ object LrcParser {
             while (i < adjusted.size) {
                 val cur = adjusted[i]
                 if (cur.text.isEmpty()) {
-                    merged.add(LyricLine(cur.ms, cur.text))
+                    merged.add(LyricLine(cur.ms, cur.text, words = cur.words))
                     i += 1
                     continue
                 }
@@ -116,7 +129,16 @@ object LrcParser {
                     }
                     break
                 }
-                merged.add(LyricLine(timeMs = cur.ms, text = cur.text, translation = translation))
+                // 双语合并动过的行 words 拼不回 text 时，宁可丢逐字也不丢歌词（坑规则③）
+                val safeWords = cur.words?.takeIf { it.joinToString("") { w -> w.text } == cur.text }
+                merged.add(
+                    LyricLine(
+                        timeMs = cur.ms,
+                        text = cur.text,
+                        translation = translation,
+                        words = safeWords,
+                    ),
+                )
                 i = j
             }
             lines = merged
@@ -150,6 +172,32 @@ object LrcParser {
 
     /** 判断一段文本是否含时间轴 */
     fun hasTimeline(raw: String): Boolean = TIME_TAG.containsMatchIn(raw)
+
+    /**
+     * 解析一行里的 `<mm:ss.xx>字<...>字` 字级时间轴。
+     *
+     * 每个字的时间 = 该标签时间 - [offsetMs]（与行首 `[..]` 同一口径），
+     * 字的文本 = 从本标签之后到下一标签之前的全部字符（含英文尾随空格）。
+     * 一个字都解不出时返回 null，交给上层按「伪字级」均分兜底。
+     */
+    private fun parseWords(body: String, offsetMs: Int): List<LyricWord>? {
+        val matches = WORD_TAG.findAll(body).toList()
+        if (matches.isEmpty()) return null
+        val out = ArrayList<LyricWord>(matches.size)
+        for ((index, match) in matches.withIndex()) {
+            val from = match.range.last + 1
+            val to = matches.getOrNull(index + 1)?.range?.first ?: body.length
+            if (to <= from) continue
+            val text = body.substring(from, to)
+            if (text.isBlank()) continue
+            val t = toMillis(
+                match.groupValues[1], match.groupValues[2], match.groupValues[3],
+            ) ?: continue
+            val shifted = t - offsetMs
+            out += LyricWord(text, if (shifted < 0L) 0L else shifted)
+        }
+        return out.ifEmpty { null }
+    }
 
     private fun toMillis(min: String, sec: String, frac: String): Long? {
         val m = min.toLongOrNull() ?: return null

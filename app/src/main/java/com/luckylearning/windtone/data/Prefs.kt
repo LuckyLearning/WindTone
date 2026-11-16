@@ -462,6 +462,27 @@ object SettingsDefaults {
      */
     const val OVERLAY_CONTEXT_COLOR = 0
 
+    // ---- 逐字歌词（参照 anylyric 0.2.28）----
+
+    /**
+     * 逐字歌词开关，**默认关**：60ms 重绘是真实开销，很短的句子逐字扫过去只剩闪烁。
+     *
+     * 放在 Prefs 全局而不是样式预设：预设是「外观皮肤」，而这是「功能开关」——
+     * 若混进预设，切一套预设就会把逐字悄悄关掉。
+     */
+    const val OVERLAY_WORD_BY_WORD = false
+
+    /**
+     * 已唱字的颜色（ARGB）：0 = 跟随当前行颜色（默认）。
+     * 用 0 当哨兵而不是布尔：颜色本身不会是 0（全透明黑没意义）。
+     */
+    const val OVERLAY_WORD_SUNG_COLOR = 0
+
+    /** 未唱字的不透明度（0.1–1）：默认 0.55，亮暗对比看得出来又不至于读不出。 */
+    const val WORD_UNSUNG_ALPHA_DEFAULT = 0.55f
+    const val WORD_UNSUNG_ALPHA_MIN = 0.1f
+    const val WORD_UNSUNG_ALPHA_MAX = 1f
+
     /**
      * 悬浮窗宽度（屏幕宽度的百分比，1..100）。
      *
@@ -2033,6 +2054,38 @@ class Prefs private constructor(context: Context) {
         }
 
     /**
+     * 逐字歌词开关（默认关）。全局单份，不随预设 / 主题变 —— 切主题或套预设
+     * 都不该把用户刚打开的逐字悄悄关掉。
+     */
+    var wordByWord: Boolean
+        get() = sp.getBoolean(KEY_WORD_BY_WORD, SettingsDefaults.OVERLAY_WORD_BY_WORD)
+        set(value) {
+            sp.edit().putBoolean(KEY_WORD_BY_WORD, value).apply()
+            ioScope.launch { store.putBoolean(KEY_WORD_BY_WORD, value) }
+        }
+
+    /** 已唱字颜色（ARGB）：0 = 跟随当前行色（默认） */
+    var wordSungColor: Int
+        get() = sp.getInt(KEY_WORD_SUNG_COLOR, SettingsDefaults.OVERLAY_WORD_SUNG_COLOR)
+        set(value) {
+            sp.edit().putInt(KEY_WORD_SUNG_COLOR, value).apply()
+            ioScope.launch { store.putInt(KEY_WORD_SUNG_COLOR, value) }
+        }
+
+    /** 未唱字不透明度：夹在 [SettingsDefaults.WORD_UNSUNG_ALPHA_MIN, MAX]，防全透明读不出 */
+    var wordUnsungAlpha: Float
+        get() = sp.getFloat(KEY_WORD_UNSUNG_ALPHA, SettingsDefaults.WORD_UNSUNG_ALPHA_DEFAULT)
+            .coerceIn(SettingsDefaults.WORD_UNSUNG_ALPHA_MIN, SettingsDefaults.WORD_UNSUNG_ALPHA_MAX)
+        set(value) {
+            val v = value.coerceIn(
+                SettingsDefaults.WORD_UNSUNG_ALPHA_MIN,
+                SettingsDefaults.WORD_UNSUNG_ALPHA_MAX,
+            )
+            sp.edit().putFloat(KEY_WORD_UNSUNG_ALPHA, v).apply()
+            ioScope.launch { store.putFloat(KEY_WORD_UNSUNG_ALPHA, v) }
+        }
+
+    /**
      * 悬浮歌词窗内文字的对齐：0 居中（默认）/ 1 居左。
      *
      * 2026-10-16 起语义收窄：**只管歌词文字在窗口内部怎么排**
@@ -2657,6 +2710,11 @@ class Prefs private constructor(context: Context) {
         const val KEY_LYRIC_OVERLAY_CONTEXT_SP = "lyric_overlay_context_sp"
         const val KEY_LYRIC_OVERLAY_CONTEXT_C = "lyric_overlay_context_color"
 
+        /** 逐字歌词：开关全局单份；两个样式项随外观分日夜两套（见 STYLE_KEYS） */
+        const val KEY_WORD_BY_WORD = "overlay_word_by_word"
+        const val KEY_WORD_SUNG_COLOR = "overlay_word_sung_color"
+        const val KEY_WORD_UNSUNG_ALPHA = "overlay_word_unsung_alpha"
+
         // ---- 6. 前台检测与调试 ----
         const val KEY_LYRIC_OVERLAY_HIDDEN_APPS = "lyric_overlay_hidden_apps"
         const val KEY_FOREGROUND_LOG_ENABLED = "foreground_log_enabled"
@@ -2718,6 +2776,10 @@ class Prefs private constructor(context: Context) {
             KEY_LYRIC_OVERLAY_CURRENT_SP,
             KEY_LYRIC_OVERLAY_CONTEXT_SP,
             KEY_LYRIC_OVERLAY_CONTEXT_C,
+            // 逐字的两个样式项属于「长什么样」，随日夜两套分流；
+            // 开关键 KEY_WORD_BY_WORD 刻意不在此（全局单份，切主题不会自己关掉）。
+            KEY_WORD_SUNG_COLOR,
+            KEY_WORD_UNSUNG_ALPHA,
             KEY_LYRIC_OVERLAY_DIM,
             KEY_LYRIC_OVERLAY_ALIGN,
             KEY_LYRIC_OVERLAY_LINE_SPACING,

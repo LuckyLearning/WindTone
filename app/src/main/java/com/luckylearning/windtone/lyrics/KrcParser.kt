@@ -12,10 +12,10 @@ import java.util.zip.Inflater
  *  - YRC（网易云音乐）：明文；
  *    行格式 `[start,duration](start,duration,0)字(...)`，也可为 `[start,duration]整行`
  *
- * ⚠️ **v1.1.8 起不再解析字级时间轴** —— 逐字歌词功能已整体移除。这两种格式仍然
- * 完整支持，只是当普通同步歌词用：行内的时间标签一律剥离，文本原样保留，
- * 时间轴取行首的 `start`。**不要再往这里加回字级解析**，除非逐字染色一并恢复
- * （两份实现必须同进同退，否则会重新出现「有数据但没人消费」的死代码）。
+ * 字级时间轴（逐字歌词）：KRC 的 `<start,dur,0>字` 与 YRC 的 `(start,dur,0)字`
+ * 都会解析成 [LyricWord]。注意 KRC / YRC 的字时间是**相对行起始的偏移**，
+ * 必须加 `lineStart` 才是绝对时间；`duration` 不用（切段只看下一个字的起点）。
+ * 若字级拼不回正文，宁可丢逐字也不丢歌词（退回纯文本行）。
  */
 object KrcParser {
 
@@ -28,7 +28,7 @@ object KrcParser {
     /** 行头：`[行起点,行时长]正文`（行时长已不再使用，能匹配上即可） */
     private val KRC_LINE = Regex("^\\[(\\d+),(\\d+)](.*)$")
 
-    /** 行内的字级标签：KRC 用尖括号、YRC 用圆括号 —— 只用于剥离 */
+    /** 行内的字级标签：KRC 用尖括号、YRC 用圆括号（第 1 捕获组 = 相对行起始的毫秒） */
     private val KRC_WORD = Regex("<(\\d+),(\\d+),\\d+>")
     private val YRC_WORD = Regex("\\((\\d+),(\\d+),\\d+\\)")
 
@@ -69,18 +69,30 @@ object KrcParser {
             val m = KRC_LINE.find(body) ?: continue
             val lineStart = m.groupValues[1].toLongOrNull() ?: continue
 
-            // 剥离行内的全部时间标签，剩下的就是这一行的正文
-            val plain = m.groupValues[3]
+            val wordBody = m.groupValues[3]
+            // 字级：KRC 尖括号 / YRC 圆括号，时间相对行起始 —— 加 lineStart 才是绝对时间
+            val words = parseWords(wordBody, lineStart)
+            val plain = wordBody
                 .replace(KRC_WORD, "")
                 .replace(YRC_WORD, "")
                 .trim()
-            if (plain.isNotEmpty()) lines.add(LyricLine(lineStart, plain))
+            if (plain.isNotEmpty()) {
+                // 拼不回正文就丢逐字（译文 / 元数据动过的行会走这里）
+                val safe = words?.takeIf { it.joinToString("") { w -> w.text } == plain }
+                lines.add(LyricLine(lineStart, plain, words = safe))
+            }
         }
 
         if (lines.isEmpty()) return Lyrics.EMPTY.copy(source = source)
         val adjusted = lines.map { l ->
             val t = l.timeMs - offset
-            l.copy(timeMs = if (t < 0) 0L else t)
+            // 行时间与字级时间必须同一口径：KRC 的 [offset:] 对两者都生效。
+            // 只平移行时间会让逐字高亮整体错位（尤其 offset 为负时）。
+            val shiftedWords = l.words?.map { w ->
+                val wt = w.timeMs - offset
+                w.copy(timeMs = if (wt < 0L) 0L else wt)
+            }
+            l.copy(timeMs = if (t < 0) 0L else t, words = shiftedWords)
         }.sortedBy { it.timeMs }
         return Lyrics(
             lines = adjusted,
@@ -91,6 +103,28 @@ object KrcParser {
             offsetMs = offset.toInt(),
             source = source,
         )
+    }
+
+    /**
+     * 解析 KRC / YRC 的行内字级标签。字时间 = `lineStart + 标签时间`（相对偏移）。
+     * 字的文本 = 本标签之后到下一标签之前的全部字符；解不出返回 null。
+     */
+    private fun parseWords(body: String, lineStart: Long): List<LyricWord>? {
+        // 两种括号按正文里出现的顺序统一收集，避免 KRC/YRC 混排时错位
+        val matches = (KRC_WORD.findAll(body).toList() + YRC_WORD.findAll(body).toList())
+            .sortedBy { it.range.first }
+        if (matches.isEmpty()) return null
+        val out = ArrayList<LyricWord>(matches.size)
+        for ((index, match) in matches.withIndex()) {
+            val from = match.range.last + 1
+            val to = matches.getOrNull(index + 1)?.range?.first ?: body.length
+            if (to <= from) continue
+            val text = body.substring(from, to)
+            if (text.isBlank()) continue
+            val relative = match.groupValues[1].toLongOrNull() ?: continue
+            out += LyricWord(text, lineStart + relative)
+        }
+        return out.ifEmpty { null }
     }
 
     /** KRC：XOR 解密 + zlib 解压 */

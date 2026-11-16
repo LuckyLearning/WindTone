@@ -189,7 +189,8 @@ class SettingsScreenTest {
      * 所以「歌词文字」不能碰）。等价于旧版那个「高级参数」大开关。
      */
     private fun expandOverlayAdvanced() {
-        listOf("外观与预设", "位置与尺寸", "标题块", "背景", "行为").forEach { group ->
+        // 四卡重组后：正文默认展开（不碰），其余展开；副行/标题/窗框分别点开
+        listOf("外观与预设", "位置与尺寸", "副行", "标题块", "窗框", "行为").forEach { group ->
             compose.onNodeWithText(group).performScrollTo().performClick()
             compose.waitForIdle()
         }
@@ -648,10 +649,10 @@ class SettingsScreenTest {
 
         openOverlayPage()
 
-        listOf("外观与预设", "位置与尺寸", "歌词文字", "标题块", "背景", "行为").forEach { card ->
+        listOf("外观与预设", "位置与尺寸", "正文", "副行", "标题块", "窗框", "行为").forEach { card ->
             compose.onNodeWithText(card).performScrollTo().assertIsDisplayed()
         }
-        // 默认只展开「歌词文字」，其余卡内细项一律不存在
+        // 默认只展开「正文」，其余卡内细项一律不存在
         listOf(
             "全屏高度",
             "悬浮歌词行数",

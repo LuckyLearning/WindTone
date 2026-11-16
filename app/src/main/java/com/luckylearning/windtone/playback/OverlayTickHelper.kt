@@ -62,6 +62,7 @@ object OverlayTickHelper {
             positionMs = positionMs,
             offsetMs = state.lyricOffsetMs,
             title = state.current?.title.orEmpty(),
+            wordByWord = state.wordByWord,
         )
         LyricOverlayBridge.publish(
             resolved = resolved,

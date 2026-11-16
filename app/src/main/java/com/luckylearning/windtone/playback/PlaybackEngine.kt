@@ -169,6 +169,9 @@ class PlaybackEngine(
             lyricOverlayCurrentSp = prefs.lyricOverlayCurrentSp,
             lyricOverlayContextSp = prefs.lyricOverlayContextSp,
             lyricOverlayContextColor = prefs.lyricOverlayContextColor,
+            wordByWord = prefs.wordByWord,
+            wordSungColor = prefs.wordSungColor,
+            wordUnsungAlpha = prefs.wordUnsungAlpha,
             // 车载模式：启动直接进播放页（跳过库主页）
             playerExpanded = prefs.carMode,
             speed = prefs.playbackSpeed,
@@ -1863,6 +1866,9 @@ class PlaybackEngine(
         overlaySettings.setLyricOverlayContextSp(value)
     override fun setLyricOverlayContextColor(value: Int) =
         overlaySettings.setLyricOverlayContextColor(value)
+    override fun setWordByWord(enabled: Boolean) = overlaySettings.setWordByWord(enabled)
+    override fun setWordSungColor(value: Int) = overlaySettings.setWordSungColor(value)
+    override fun setWordUnsungAlpha(value: Float) = overlaySettings.setWordUnsungAlpha(value)
 
     override fun canDrawOverlay(): Boolean = overlaySettings.canDrawOverlay()
     override fun setOverlayEditing(editing: Boolean) = overlaySettings.setOverlayEditing(editing)
@@ -2235,7 +2241,20 @@ class PlaybackEngine(
                 }
                 // 悬浮歌词：与进度同频驱动，去重在 LyricOverlayBridge 内部按内容比对完成。
                 // 转发逻辑抽到 OverlayTickHelper，开关关闭时直接跳过。
-                if (prefs.lyricOverlay) OverlayTickHelper.publishLyric(pos, playing, _player.value)
+                if (prefs.lyricOverlay) {
+                    OverlayTickHelper.publishLyric(pos, playing, _player.value)
+                    // 逐字：把本次已读到的 pos 与本地时间戳推到独立时钟（零额外 binder）。
+                    // 仅在开关打开时推，省掉关着时的一条 StateFlow 更新。
+                    // 必须与 OverlayContentResolver 同一口径：它用 pos + 用户歌词偏移选行，
+                    // 字级时间也在同一坐标系里，否则用户调偏移后「行对了、字错位」。
+                    if (prefs.wordByWord) {
+                        com.luckylearning.windtone.overlay.LyricOverlayBus.publishWordClock(
+                            progressMs = pos + _player.value.lyricOffsetMs,
+                            playing = playing,
+                            atRealtimeMs = now,
+                        )
+                    }
+                }
                 // H4：通知栏 / 锁屏 SYNOPSIS（与悬浮窗同源时间轴；不依赖悬浮窗开关）
                 // 发布侧按「文案 + 句内时间窗」去重：同句不 replaceMediaItem，也不反复跑 resolver。
                 // 没歌词时只在「上一首还有」的那一轮跑一次，把残留文案清掉。

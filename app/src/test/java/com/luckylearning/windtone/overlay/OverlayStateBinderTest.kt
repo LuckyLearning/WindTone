@@ -215,6 +215,8 @@ private class FakeHost(app: Application) : OverlayStateBinder.Host {
             return true
         }
 
+        override fun renderWordSpan(progressMs: Long): Boolean = false
+
         override fun updateGeometryReport() { geometryCount++ }
         override fun refreshModeChrome() {}
         override fun armEditingTimeout() {}

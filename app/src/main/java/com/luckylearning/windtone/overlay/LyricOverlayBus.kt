@@ -57,6 +57,25 @@ object LyricOverlayBus {
         val visible: Boolean get() = resolved.visible
     }
 
+    /**
+     * 逐字歌词的轻量进度时钟（独立通道，不进 [Content] / revision / paintKey）。
+     *
+     * 为什么独立：内容每 500ms 才推进一次（[com.luckylearning.windtone.playback.PlaybackEngine]
+     * 的 tick），但逐字要 60ms 刷一次。若把每帧进度塞进 Content，会让三层去重全部
+     * 失效、每 500ms 全量重组一次；若让服务每 60ms 读 `controller.currentPosition`，
+     * 又是每秒 16 次跨进程 binder 调用 —— 两条都是明示禁止的。
+     *
+     * 折中：播放域每个 500ms tick 把已读到的 pos 连同本地时间戳推来一次，
+     * 服务侧 60ms 定时器在**本地**用 `progressMs + (now - atRealtime)` 外推，
+     * 零 binder、零重组。暂停时 playing=false，服务侧冻结不外推。
+     */
+    data class WordClock(
+        val progressMs: Long = -1L,
+        /** 写入时的 SystemClock.elapsedRealtime()，用于本地外推 */
+        val atRealtimeMs: Long = 0L,
+        val playing: Boolean = false,
+    )
+
     /** 悬浮窗的运行状态（供设置页展示，也供播放域做失败回退） */
     enum class Status { IDLE, RUNNING, FAILED }
 
@@ -96,6 +115,10 @@ object LyricOverlayBus {
     /** 外观配置（字号 / 底板 / 暂停行为）的版本号；服务把它并进 collect，配置改完立即重绘 */
     private val _appearance = MutableStateFlow(0)
     val appearance: StateFlow<Int> = _appearance.asStateFlow()
+
+    /** 逐字进度的独立时钟（每 500ms 由播放域推一次，服务侧本地外推到 60ms） */
+    private val _wordClock = MutableStateFlow(WordClock())
+    val wordClock: StateFlow<WordClock> = _wordClock.asStateFlow()
 
     /** 悬浮窗健康状态；服务在关键节点上报，界面与播放域据此反馈/回退 */
     private val _health = MutableStateFlow(Health())
@@ -156,6 +179,14 @@ object LyricOverlayBus {
         // 只要它每 200ms 变一次，依赖 revision 的消费者就会被叫醒 5 次/秒。
         _content.value = Content(resolved, playing, title, artist)
         _revision.update { it + 1 }
+    }
+
+    /**
+     * 推送逐字进度时钟（播放域每个 tick 调一次，与 publish 共用已读到的 pos）。
+     * atRealtime 用本地单调时钟，服务侧据此外推，避免每帧跨进程读进度。
+     */
+    fun publishWordClock(progressMs: Long, playing: Boolean, atRealtimeMs: Long) {
+        _wordClock.value = WordClock(progressMs, atRealtimeMs, playing)
     }
 
     /** 进入 / 退出「调整位置」模式 */

@@ -36,10 +36,15 @@ object OverlayTextComposer {
     /**
      * @param text 该行文字
      * @param role 视觉角色
+     * @param words 字级时间轴（逐字歌词）：**只有当前行且未折行**时才非空；
+     *              其余行一律 null，渲染侧只对主角做分段染色。
+     * @param lineStartMs 当前行起点（毫秒），与 words 配套
      */
     data class StyledLine(
         val text: String,
         val role: Role,
+        val words: List<com.luckylearning.windtone.lyrics.LyricWord>? = null,
+        val lineStartMs: Long = -1L,
     )
 
     /**
@@ -70,6 +75,10 @@ object OverlayTextComposer {
             text = resolved.current,
             // 间奏 / 前奏时主角本身也是「不在唱的」，一并压暗，视线不会被它抢走
             role = if (resolved.idle) Role.CONTEXT else Role.CURRENT,
+            // 逐字轴只挂在「正在演唱的唯一主角」上；一行模式才逐字，
+            // 多行模式下主角可能折行，跨行算字偏移代价与收益不成比例。
+            words = resolved.currentWords?.takeIf { !resolved.idle && lineCount == 1 },
+            lineStartMs = resolved.lineStartMs,
         )
 
         return buildList {

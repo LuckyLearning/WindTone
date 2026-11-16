@@ -373,6 +373,19 @@
     <string name="overlay_summary_custom_preset">自定义</string>
     <string name="overlay_group_lyric_text">歌词文字</string>
     <string name="overlay_group_title">标题块</string>
+    <!-- 逐字歌词 + 按「改谁」分卡（参照 anylyric）-->
+    <string name="overlay_group_body">正文</string>
+    <string name="overlay_group_secondary">副行</string>
+    <string name="overlay_group_frame">窗框</string>
+    <string name="overlay_group_word">逐字歌词</string>
+    <string name="word_by_word">逐字歌词</string>
+    <string name="word_by_word_hint">唱到哪个字，哪个字亮。带字级时间的按它走，没有的按整句时长平均分。默认关闭 —— 很短的句子逐字扫过去只剩闪烁。</string>
+    <string name="word_sung_color">已唱颜色</string>
+    <string name="word_sung_color_sub">0 = 跟随当前行颜色；指定一个可让已唱的字更醒目</string>
+    <string name="word_unsung_alpha">未唱不透明度</string>
+    <string name="word_unsung_alpha_sub">还没唱到的字的透明度</string>
+    <string name="overlay_secondary_summary">当前行上下句的字号、颜色、亮度与行距</string>
+    <string name="overlay_secondary_single_line_hint">当前只显示一行歌词，没有上下句可调。切到 2 行及以上即可使用。</string>
     <string name="overlay_current_line">当前行</string>
     <string name="overlay_context_lines">其他行</string>
     <string name="overlay_current_size">当前行字号</string>

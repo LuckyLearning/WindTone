@@ -384,6 +384,26 @@ class OverlaySettings(
         previewOverlayAfterConfigChange()
     }
 
+    override fun setWordByWord(enabled: Boolean) {
+        val normalized = settings.setWordByWord(enabled)
+        state.update { it.copy(wordByWord = normalized) }
+        // 服务侧要据此起停 60ms 逐字通道 + 给无轴歌词补伪字级；外观版本一变即重算
+        com.luckylearning.windtone.overlay.LyricOverlayBridge.bumpAppearance()
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setWordSungColor(value: Int) {
+        val normalized = settings.setWordSungColor(value)
+        state.update { it.copy(wordSungColor = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
+    override fun setWordUnsungAlpha(value: Float) {
+        val normalized = settings.setWordUnsungAlpha(value)
+        state.update { it.copy(wordUnsungAlpha = normalized) }
+        previewOverlayAfterConfigChange()
+    }
+
     /**
      * 套用样式预设（v1.1.78）：24 项外观参数一次性批量写盘 + 一次状态合并 +
      * 一次预览收尾。逐项走 setter 会触发 20 多次 bumpAppearance / 起预览，
@@ -419,6 +439,9 @@ class OverlaySettings(
         val titleStrokeColor = settings.setLyricOverlayTitleStrokeColor(preset.titleStrokeColor)
         val currentSp = settings.setLyricOverlayCurrentSp(preset.currentSp)
         val contextSp = settings.setLyricOverlayContextSp(preset.contextSp)
+        // 逐字样式随预设走；开关键 wordByWord 刻意不碰（功能开关不属于皮肤）
+        val wordSungColor = settings.setWordSungColor(preset.wordSungColor)
+        val wordUnsungAlpha = settings.setWordUnsungAlpha(preset.wordUnsungAlpha)
         val bgAlpha = settings.setOverlayBgAlphaPercent(preset.bgAlphaPercent)
         settings.setOverlayBgColor(preset.bgColor)
         val corner = settings.setLyricOverlayCornerRadiusDp(preset.cornerRadiusDp)
@@ -451,6 +474,8 @@ class OverlaySettings(
                 lyricOverlayTitleStrokeColor = titleStrokeColor,
                 lyricOverlayCurrentSp = currentSp,
                 lyricOverlayContextSp = contextSp,
+                wordSungColor = wordSungColor,
+                wordUnsungAlpha = wordUnsungAlpha,
                 lyricOverlayBgAlphaPercent = bgAlpha,
                 // Prefs 的 bgColor setter 只保留 RGB，读回同一个值避免 UI 与落盘不一致
                 lyricOverlayBgColor = prefs.lyricOverlayBgColor,
@@ -561,6 +586,9 @@ class OverlaySettings(
                 lyricOverlayCurrentSp = prefs.lyricOverlayCurrentSp,
                 lyricOverlayContextSp = prefs.lyricOverlayContextSp,
                 lyricOverlayContextColor = prefs.lyricOverlayContextColor,
+                wordByWord = prefs.wordByWord,
+                wordSungColor = prefs.wordSungColor,
+                wordUnsungAlpha = prefs.wordUnsungAlpha,
                 lyricOverlayWidthPercent = prefs.lyricOverlayWidthPercent,
                 lyricOverlayBoxHeightPercent = prefs.lyricOverlayBoxHeightPercent,
                 lyricOverlayXPercent = prefs.lyricOverlayXPercent,

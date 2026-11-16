@@ -91,6 +91,45 @@ class LrcParserTest {
         assertEquals("你好", line.text)
         // 时间轴取行首标签，不是行内的字级标签
         assertEquals(12_000L, line.timeMs)
+        // 逐字恢复：字级时间轴同时解析出来（剥标签后的 text 与 words 拼回一致）
+        assertEquals(2, line.words!!.size)
+        assertEquals(LyricWord("你", 12_000L), line.words!![0])
+        assertEquals(LyricWord("好", 12_500L), line.words!![1])
+    }
+
+    @Test
+    fun wordTimingsShiftWithOffset() {
+        val lyrics = LrcParser.parse(
+            "[offset:500][00:12.00]<00:12.00>你<00:12.50>好",
+            LyricSource.SIDECAR_LRC,
+        )
+        val line = lyrics.lines[0]
+        assertEquals(11_500L, line.timeMs)
+        assertEquals(11_500L, line.words!![0].timeMs)
+        assertEquals(12_000L, line.words!![1].timeMs)
+    }
+
+    @Test
+    fun multipleLineTagsDoNotReuseWordTimings() {
+        // 一行多个 [..] = 同一句重复出现在多处，字级只对应其中一处，一律不认
+        val lyrics = LrcParser.parse(
+            "[00:12.00][01:20.00]<00:12.00>你<00:12.50>好",
+            LyricSource.SIDECAR_LRC,
+        )
+        assertEquals(2, lyrics.lines.size)
+        assertTrue(lyrics.lines.all { it.words == null })
+    }
+
+    @Test
+    fun wordTextKeepsTrailingSpaces() {
+        val lyrics = LrcParser.parse(
+            "[00:01.00]<00:01.00>Hello <00:01.40>world",
+            LyricSource.SIDECAR_LRC,
+        )
+        val line = lyrics.lines[0]
+        assertEquals("Hello world", line.text)
+        assertEquals(LyricWord("Hello ", 1_000L), line.words!![0])
+        assertEquals(LyricWord("world", 1_400L), line.words!![1])
     }
 
     @Test

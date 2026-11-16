@@ -5,14 +5,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * KRC / YRC 解析测试（**逐行**精度）。
+ * KRC / YRC 解析测试（逐行 + 字级）。
  *
- * v1.1.8 起逐字歌词功能整体移除，这两个格式仍完整支持，但一律降级成普通同步歌词：
- * 行内的字级时间标签必须被**剥离**，不能漏进正文（旧版曾把 `<00:12.34>退潮` 这种
- * 原始标签直接渲染给用户），时间轴取行首的 `start`。
+ * 行内字级标签既要**剥离干净**不能漏进正文（旧版曾把 `<00:12.34>退潮` 直接渲染给用户），
+ * 也要解析出 [LyricWord] 供逐字高亮消费；拼不回正文时宁可丢逐字也不丢歌词。
  *
- * 其中 [wordTagsAreStrippedNotDuplicated] 是回归测试：
- * 曾因「行尾剩余文本重复拼接到末字」导致每行最后一个字渲染成双份。
+ * [wordTagsAreStrippedNotDuplicated] 是回归测试：曾因「行尾剩余文本重复拼接到末字」
+ * 导致每行最后一个字渲染成双份。
  */
 class KrcParserTest {
 
@@ -27,6 +26,9 @@ class KrcParserTest {
         val line = lyrics.lines[0]
         assertEquals("你好", line.text)
         assertEquals(0L, line.timeMs)   // 时间轴取行首 start，而不是行内标签
+        assertEquals(2, line.words?.size)
+        assertEquals(0L, line.words!![0].timeMs)
+        assertEquals(500L, line.words!![1].timeMs)
     }
 
     @Test
@@ -50,6 +52,9 @@ class KrcParserTest {
         val line = lyrics.lines[0]
         assertEquals("HelloWorld", line.text)                 // 圆括号标签同样被剥离
         assertEquals(100L, line.timeMs)
+        assertEquals(2, line.words?.size)
+        assertEquals(200L, line.words!![0].timeMs)            // lineStart(100) + 相对(100)
+        assertEquals(800L, line.words!![1].timeMs)
     }
 
     @Test
@@ -70,6 +75,20 @@ class KrcParserTest {
         assertEquals("前", lyrics.lines[0].text)
         assertEquals(900L, lyrics.lines[0].timeMs)
         assertEquals(1_900L, lyrics.lines[1].timeMs)
+    }
+
+    @Test
+    fun appliesOffsetToWordTimesToo() {
+        val lyrics = KrcParser.parseText(
+            "[offset:100]\n[1000,1000]<0,500,0>你<500,500,0>好",
+            LyricSource.SIDECAR_KRC,
+        )
+        val line = lyrics.lines[0]
+        // [offset:] 必须同时平移行时间与字级时间，否则逐字高亮整体错位。
+        assertEquals(900L, line.timeMs)
+        assertEquals(2, line.words?.size)
+        assertEquals(900L, line.words!![0].timeMs)
+        assertEquals(1_400L, line.words!![1].timeMs)
     }
 
     @Test

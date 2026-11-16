@@ -132,6 +132,10 @@ class SettingsDefaultsTest {
         check("lyricOverlayCurrentSp", prefs.lyricOverlayCurrentSp, SettingsDefaults.OVERLAY_CURRENT_SP)
         check("lyricOverlayContextSp", prefs.lyricOverlayContextSp, SettingsDefaults.OVERLAY_CONTEXT_SP)
         check("lyricOverlayContextColor", prefs.lyricOverlayContextColor, SettingsDefaults.OVERLAY_CONTEXT_COLOR)
+        // 逐字歌词（开关全局 + 两个样式项随日夜两套）
+        check("wordByWord", prefs.wordByWord, SettingsDefaults.OVERLAY_WORD_BY_WORD)
+        check("wordSungColor", prefs.wordSungColor, SettingsDefaults.OVERLAY_WORD_SUNG_COLOR)
+        check("wordUnsungAlpha", prefs.wordUnsungAlpha, SettingsDefaults.WORD_UNSUNG_ALPHA_DEFAULT)
         check("lyricOverlayHiddenApps", prefs.lyricOverlayHiddenApps, SettingsDefaults.OVERLAY_HIDDEN_APPS)
         check("foregroundLogEnabled", prefs.foregroundLogEnabled, SettingsDefaults.FOREGROUND_LOG_ENABLED)
         // v1.1.31：调试分区出厂隐藏（关于连点 5 次才显示）

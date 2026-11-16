@@ -48,6 +48,64 @@ internal object OverlayTextStyler {
         (color and 0x00FFFFFF) or (alpha.coerceIn(0, 255) shl 24)
 
     /**
+     * 在当前行上叠加逐字的两段染色。
+     *
+     * - 已唱段：用 [wordSungColor]（0 = 跟随 [currentColor]，再跟随 TextView 文字色）；
+     * - 未唱段：用当前行色相、降到 [wordUnsungAlpha] 不透明度。
+     *
+     * @param offset 该行在整段 Spannable 里的起始下标（快路径 = 0）
+     */
+    private fun SpannableStringBuilder.applyWordSpans(
+        line: OverlayTextComposer.StyledLine,
+        baseColor: Int,
+        wordSungColor: Int,
+        wordUnsungAlpha: Float,
+        progressMs: Long,
+        currentColor: Int,
+        currentScale: Float,
+        offset: Int = 0,
+    ) {
+        val words = line.words ?: return
+        val sung = com.luckylearning.windtone.lyrics.WordTiming.sungChars(
+            words, progressMs, line.text.length,
+        )
+        // 当前行色相 = 当前行自定义色（若设）否则正文色；已唱可再单独指定强调色
+        val lineColor = if (currentColor != 0) currentColor else baseColor
+        val sungColor = if (wordSungColor != 0) wordSungColor else lineColor
+        // 已唱段：整段一个 ForegroundColorSpan（拼接点精确落在字边界）
+        if (sung > 0) {
+            setSpan(
+                ForegroundColorSpan(sungColor),
+                offset,
+                offset + sung,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+        }
+        // 未唱段：与当前行同色相，只降低不透明度 —— 不引入与主题冲突的新色相
+        if (sung < line.text.length) {
+            val unsungColor = withAlpha(
+                lineColor,
+                (255 * wordUnsungAlpha).toInt().coerceIn(25, 255),
+            )
+            setSpan(
+                ForegroundColorSpan(unsungColor),
+                offset + sung,
+                offset + line.text.length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+        }
+        // 字号倍率整行统一（当前行放大）——快路径里主逻辑未加，这里补上
+        if (offset == 0 && currentScale != 1f) {
+            setSpan(
+                RelativeSizeSpan(currentScale),
+                0,
+                line.text.length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+        }
+    }
+
+    /**
      * 组装可绘制文本。
      *
      * @param baseColor    用户选的正文色（全屏模式下配角/译文跟着它压暗）
@@ -58,6 +116,10 @@ internal object OverlayTextStyler {
      * @param currentSp 当前行字号（sp，v1.2.54）；**0 = 跟随正文**
      * @param contextSp 其他行字号（sp，v1.2.54）；**0 = 跟随正文**
      * @param contextColor 其他行颜色（v1.2.54）；0 = 跟随 [baseColor]，仍按压暗算不透明度
+     * @param wordByWord 逐字开关；仅当前行带字轴且此开关打开时分段染色
+     * @param progressMs 当前播放进度（逐字切段点；由服务侧 60ms 时钟推进）
+     * @param wordSungColor 已唱字颜色；0 = 跟随当前行色
+     * @param wordUnsungAlpha 未唱字不透明度（0.1–1）
      */
     fun build(
         lines: List<OverlayTextComposer.StyledLine>,
@@ -70,6 +132,10 @@ internal object OverlayTextStyler {
         currentSp: Int = SettingsDefaults.OVERLAY_CURRENT_SP,
         contextSp: Int = SettingsDefaults.OVERLAY_CONTEXT_SP,
         contextColor: Int = 0,
+        wordByWord: Boolean = false,
+        progressMs: Long = -1L,
+        wordSungColor: Int = SettingsDefaults.OVERLAY_WORD_SUNG_COLOR,
+        wordUnsungAlpha: Float = SettingsDefaults.WORD_UNSUNG_ALPHA_DEFAULT,
     ): CharSequence {
         if (lines.isEmpty()) return ""
         // v1.2.54：分角色字号是**绝对磅值**（0 = 跟随正文），渲染成 RelativeSizeSpan
@@ -87,24 +153,30 @@ internal object OverlayTextStyler {
         // 主角**不需要任何 span**（颜色由 TextView 的文字色决定），1 行模式正是
         // 最常见的字幕形态。用户设了「当前行颜色 / 字号」后主角要单独染 / 缩放，快路径作废。
         if (!fullHeight && only != null && only.role == OverlayTextComposer.Role.CURRENT) {
-            if (currentColor == 0 && !currentResized) return only.text
+            // 逐字开启且有字轴时不能走纯文本快路径 —— 已唱 / 未唱要分段染色
+            val wordMode = wordByWord && !only.words.isNullOrEmpty() && progressMs >= 0L
+            if (!wordMode && currentColor == 0 && !currentResized) return only.text
             return SpannableStringBuilder().apply {
                 append(only.text)
-                if (currentColor != 0) {
-                    setSpan(
-                        ForegroundColorSpan(currentColor),
-                        0,
-                        length,
-                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                    )
-                }
-                if (currentResized) {
-                    setSpan(
-                        RelativeSizeSpan(currentScale),
-                        0,
-                        length,
-                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                    )
+                if (wordMode) {
+                    applyWordSpans(only, baseColor, wordSungColor, wordUnsungAlpha, progressMs, currentColor, currentScale)
+                } else {
+                    if (currentColor != 0) {
+                        setSpan(
+                            ForegroundColorSpan(currentColor),
+                            0,
+                            length,
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                        )
+                    }
+                    if (currentResized) {
+                        setSpan(
+                            RelativeSizeSpan(currentScale),
+                            0,
+                            length,
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                        )
+                    }
                 }
             }
         }
@@ -147,8 +219,16 @@ internal object OverlayTextStyler {
                                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
                             )
                         }
-                        // v1.1.52：单独的当前行颜色；0 = 跟随 TextView 文字色，不加 span
-                        if (currentColor != 0) {
+                        // 逐字：只在当前行带字轴时把已唱 / 未唱分两段染色。
+                        // 已唱段覆盖 currentColor，未唱段降不透明度 —— 两段的拼接点
+                        // 用整段长度算（不逐字累加宽度，比例字体会有累计误差）。
+                        if (wordByWord && !line.words.isNullOrEmpty() && progressMs >= 0L) {
+                            applyWordSpans(
+                                line, baseColor, wordSungColor, wordUnsungAlpha, progressMs,
+                                currentColor, currentScale, offset = start,
+                            )
+                        } else if (currentColor != 0) {
+                            // v1.1.52：单独的当前行颜色；0 = 跟随 TextView 文字色，不加 span
                             setSpan(
                                 ForegroundColorSpan(currentColor),
                                 start,
