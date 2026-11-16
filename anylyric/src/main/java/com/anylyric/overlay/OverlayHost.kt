@@ -105,6 +105,9 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
     private var lastTitle: String? = null
     private var lastMode = LyricRenderer.Mode.CONTENT
 
+    /** 上一帧的字级时间轴。参与「内容有没有变」的判定：同一句补上字级也要重画。 */
+    private var lastWords: List<com.anylyric.lyrics.LyricWord>? = null
+
     private val handler = Handler(Looper.getMainLooper())
 
     /**
@@ -175,6 +178,21 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
      */
     fun hasWindow(): Boolean = view != null
 
+    /**
+     * 逐字进度（0.2.28）。
+     *
+     * 只写数字并重绘，**不重建字形**：这是每 60ms 一次的操作，
+     * 重建会连折行与测量一起重跑，车机上直接掉帧。
+     */
+    fun setProgress(ms: Long) {
+        view?.setProgress(ms)
+    }
+
+    /** 逐字开关同步给渲染器（渲染器不读 Prefs）。 */
+    fun setWordByWord(enabled: Boolean) {
+        view?.setWordByWord(enabled)
+    }
+
     fun isMeasured(): Boolean {
         val v = view ?: return false
         return v.width > 0 && v.height > 0
@@ -182,8 +200,13 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
 
     fun isEditable(): Boolean = editable
 
-    fun showContent(primary: String, secondary: List<String>, title: String?) =
-        show(primary, secondary, title, LyricRenderer.Mode.CONTENT)
+    fun showContent(
+        primary: String,
+        secondary: List<String>,
+        title: String?,
+        words: List<com.anylyric.lyrics.LyricWord>? = null,
+        progressMs: Long = -1L
+    ) = show(primary, secondary, title, LyricRenderer.Mode.CONTENT, words, progressMs)
 
     /** 空状态提示：小一号、降透明度，和真歌词区分开。 */
     fun showPrompt(primary: String, secondary: List<String>) =
@@ -193,7 +216,9 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         primary: String,
         secondary: List<String>,
         title: String?,
-        mode: LyricRenderer.Mode
+        mode: LyricRenderer.Mode,
+        words: List<com.anylyric.lyrics.LyricWord>? = null,
+        progressMs: Long = -1L
     ) {
         // 「隐藏 10 分钟」期间的任何刷新都不该把窗口又拉回来
         if (SystemClock.elapsedRealtime() < hiddenUntil) return
@@ -206,17 +231,20 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         val changed = primary != lastPrimary ||
             secondary != lastSecondary ||
             title != lastTitle ||
-            mode != lastMode
+            mode != lastMode ||
+            words != lastWords
         lastPrimary = primary
         lastSecondary = secondary
         lastTitle = title
         lastMode = mode
+        lastWords = words
 
         // 收起态 / 按应用隐藏：窗口与 View 都保留，只让渲染器不画。
         // 内容照记到 View（不重建），恢复时直接重画 —— 隐藏期间不能把窗口又建出来，
         // 否则在名单应用里会闪一下歌词。
         if (collapsed || suppressed) {
-            view?.setContent(primary, secondary, title, mode)
+            view?.setContent(primary, secondary, title, mode, words)
+            view?.setProgress(progressMs)
             return
         }
 
@@ -226,13 +254,15 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
 
         val current = view
         if (current == null) {
-            addView(primary, secondary, title, mode)
+            addView(primary, secondary, title, mode, words, progressMs)
             return
         }
         // 内容没变就不重绘、不重新排位置：播放器每 250ms 推一次状态，
         // 每句歌词能触发三四次刷新，白跑一次 layout 就是白烧一次车机 GPU。
+        // 进度必须**在 changed 判定之前**写：逐字要在同一句内持续推进，而那时内容没变。
+        current.setProgress(progressMs)
         if (!changed) return
-        current.setContent(primary, secondary, title, mode)
+        current.setContent(primary, secondary, title, mode, words)
         current.post(placeTask)
     }
 
@@ -240,7 +270,9 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
         primary: String,
         secondary: List<String>,
         title: String?,
-        mode: LyricRenderer.Mode
+        mode: LyricRenderer.Mode,
+        words: List<com.anylyric.lyrics.LyricWord>? = null,
+        progressMs: Long = -1L
     ): Boolean {
         refreshWindowManager()
 
@@ -248,8 +280,10 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
             setMenuLabels(menuLabels())
             setHint(context.getString(R.string.edit_hint_bar))
             applyStyle(prefs.style())
+            setWordByWord(prefs.wordByWord)
             setEditing(editable)
-            setContent(primary, secondary, title, mode)
+            setContent(primary, secondary, title, mode, words)
+            setProgress(progressMs)
         }
         applyLayoutLimits(renderer)
         // 在 layout 期间直接改窗口位置不安全，延到下一轮消息再摆
@@ -741,6 +775,7 @@ class OverlayHost(private val context: Context, private val prefs: Prefs) {
             return
         }
         current.applyStyle(if (dark == null) prefs.style() else prefs.style(dark))
+        current.setWordByWord(prefs.wordByWord)
         applyLayoutLimits(current)
         syncHandle()
         current.post(placeTask)

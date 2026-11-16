@@ -328,6 +328,19 @@ class Prefs(context: Context) {
         set(value) = sp.edit().putBoolean(KEY_SHOW_TRANSLATION, value).apply()
 
     /**
+     * 逐字歌词（0.2.28）。
+     *
+     * 默认关：它只有在**有字级时间轴**或行时长足够长时才好看，短句（「哦」「耶」）
+     * 逐字扫过去只剩闪烁。打开后没有字级信息的部分会按行时长均分，保证不漏。
+     *
+     * 放在 Prefs 而不是 OverlayStyle：样式是「日/夜两套」存的，混进去会出现
+     * 「切到夜间逐字自己关了」。
+     */
+    var wordByWord: Boolean
+        get() = sp.getBoolean(KEY_WORD_BY_WORD, false)
+        set(value) = sp.edit().putBoolean(KEY_WORD_BY_WORD, value).apply()
+
+    /**
      * 播放中打开 App 时默认进入「时间校准」页（0.2.27）。
      *
      * 用户 2026-11-16 的明确场景：悬浮窗投在**仪表盘**（副屏，不可触摸），
@@ -486,7 +499,30 @@ class Prefs(context: Context) {
             titlePos = TitlePos.of(
                 sp.getString(styleKey(dark, KEY_TITLE_POS), seed?.titlePos?.id)
             ),
-            titleAlign = titleAlign
+            titleAlign = titleAlign,
+            // 0.2.28：三行可调项对齐（副行补字号/加粗，标题补透明度/加粗）+ 逐字两项。
+            secondaryFontSp = sp.getFloat(
+                styleKey(dark, KEY_SECONDARY_FONT),
+                seed?.secondaryFontSp ?: OverlayDefaults.SECONDARY_FONT_SP
+            ),
+            secondaryBold = sp.getBoolean(
+                styleKey(dark, KEY_SECONDARY_BOLD),
+                seed?.secondaryBold ?: OverlayDefaults.SECONDARY_BOLD
+            ),
+            titleAlpha = sp.getFloat(
+                styleKey(dark, KEY_TITLE_ALPHA), seed?.titleAlpha ?: OverlayDefaults.TITLE_ALPHA
+            ),
+            titleBold = sp.getBoolean(
+                styleKey(dark, KEY_TITLE_BOLD), seed?.titleBold ?: OverlayDefaults.TITLE_BOLD
+            ),
+            wordSungColor = sp.getInt(
+                styleKey(dark, KEY_WORD_SUNG_COLOR),
+                seed?.wordSungColor ?: OverlayDefaults.WORD_SUNG_COLOR
+            ),
+            wordUnsungAlpha = sp.getFloat(
+                styleKey(dark, KEY_WORD_UNSUNG_ALPHA),
+                seed?.wordUnsungAlpha ?: OverlayDefaults.WORD_UNSUNG_ALPHA
+            )
         )
         )
     }
@@ -520,6 +556,12 @@ class Prefs(context: Context) {
             .putInt(styleKey(dark, KEY_TITLE_COLOR), safe.titleColor)
             .putString(styleKey(dark, KEY_TITLE_POS), safe.titlePos.id)
             .putString(styleKey(dark, KEY_TITLE_ALIGN), safe.titleAlign.id)
+            .putFloat(styleKey(dark, KEY_SECONDARY_FONT), safe.secondaryFontSp)
+            .putBoolean(styleKey(dark, KEY_SECONDARY_BOLD), safe.secondaryBold)
+            .putFloat(styleKey(dark, KEY_TITLE_ALPHA), safe.titleAlpha)
+            .putBoolean(styleKey(dark, KEY_TITLE_BOLD), safe.titleBold)
+            .putInt(styleKey(dark, KEY_WORD_SUNG_COLOR), safe.wordSungColor)
+            .putFloat(styleKey(dark, KEY_WORD_UNSUNG_ALPHA), safe.wordUnsungAlpha)
             .apply()
         // 两套一起失效：夜间没单独设置过时是「继承日间」，只清一边会读到过期值。
         lightStyleCache = null
@@ -613,6 +655,12 @@ class Prefs(context: Context) {
         private const val KEY_TITLE_FONT = "style_title_font_sp"
         private const val KEY_TITLE_COLOR = "style_title_color"
         private const val KEY_TITLE_POS = "style_title_pos"
+        private const val KEY_SECONDARY_FONT = "style_secondary_font_sp"
+        private const val KEY_SECONDARY_BOLD = "style_secondary_bold"
+        private const val KEY_TITLE_ALPHA = "style_title_alpha"
+        private const val KEY_TITLE_BOLD = "style_title_bold"
+        private const val KEY_WORD_SUNG_COLOR = "style_word_sung_color"
+        private const val KEY_WORD_UNSUNG_ALPHA = "style_word_unsung_alpha"
         private const val KEY_HANDLE = "overlay_handle_enabled"
         private const val KEY_UPDATE_ROUTE = "update_route"
         private const val KEY_BOOT_AUTOSTART = "boot_autostart"
@@ -626,6 +674,7 @@ class Prefs(context: Context) {
         private const val KEY_LYRIC_OFFSETS = "lyric_offsets"
         private const val KEY_OFFSET_DEFAULT = "lyric_offset_default"
         private const val KEY_SHOW_TRANSLATION = "show_translation"
+        private const val KEY_WORD_BY_WORD = "word_by_word"
         private const val KEY_CALIBRATE_ON_LAUNCH = "calibrate_on_launch"
         private const val KEY_LAST_ALIVE = "last_alive_at"
 

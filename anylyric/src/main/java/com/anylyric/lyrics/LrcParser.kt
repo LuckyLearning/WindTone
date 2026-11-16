@@ -20,8 +20,8 @@ object LrcParser {
     /** `[offset:+500]` / `[offset:-200]` */
     private val OFFSET_TAG = Regex("""\[offset:\s*([+-]?\d+)\s*]""", RegexOption.IGNORE_CASE)
 
-    /** 行内字级时间标签，如 `<00:12.34>` */
-    private val WORD_TAG = Regex("""<\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?>""")
+    /** 行内字级时间标签，如 `<00:12.34>`。捕获组用于取出字级时间。 */
+    private val WORD_TAG = Regex("""<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>""")
 
     fun parse(raw: String?): List<LyricLine> {
         if (raw.isNullOrBlank()) return emptyList()
@@ -42,8 +42,12 @@ object LrcParser {
 
             val text = WORD_TAG.replace(rest, "").trim()
             if (text.isEmpty()) continue
+            // 字级时间轴（0.2.28）：增强 LRC / KRC 用 `<mm:ss.xx>` 标每个字的起点。
+            // 只有一行一个时间标签时才认 —— 一行多个 `[..]` 是「同一句重复出现在多处」，
+            // 字级时间只对应其中一处，硬套会把另一处的时间弄错。
+            val words = if (times.size == 1) parseWords(rest, offset) else null
             for (t in times) {
-                collected += LyricLine((t - offset).coerceAtLeast(0L), text)
+                collected += LyricLine((t - offset).coerceAtLeast(0L), text, words = words)
             }
         }
         if (collected.isEmpty()) return emptyList()
@@ -69,24 +73,38 @@ object LrcParser {
         val sb = StringBuilder(lines.size * 24)
         for (line in lines) {
             val time = line.timeMs
-            if (time != null) {
-                val total = time.coerceAtLeast(0L)
-                val minutes = total / 60_000L
-                val seconds = (total % 60_000L) / 1_000L
-                val millis = total % 1_000L
-                sb.append('[')
-                if (minutes < 10) sb.append('0')
-                sb.append(minutes).append(':')
-                if (seconds < 10) sb.append('0')
-                sb.append(seconds).append('.')
-                if (millis < 100) sb.append('0')
-                if (millis < 10) sb.append('0')
-                sb.append(millis)
-                sb.append(']')
+            if (time != null) appendStamp(sb, time, '[', ']')
+            // 字级时间轴（0.2.28）必须原样写回：否则缓存一轮之后逐字就退化成逐行了。
+            // 但要求 words 拼起来**确实等于** text —— 中间被 stripTitleLine / 译文合并
+            // 动过的行不满足这个条件，那种情况退回纯文本，宁可丢逐字也不丢歌词。
+            val words = line.words
+            if (!words.isNullOrEmpty() && words.joinToString("") { it.text } == line.text) {
+                for (word in words) {
+                    appendStamp(sb, word.timeMs, '<', '>')
+                    sb.append(word.text)
+                }
+            } else {
+                sb.append(line.text)
             }
-            sb.append(line.text).append('\n')
+            sb.append('\n')
         }
         return sb.toString()
+    }
+
+    /** 写一个时间标签：`[mm:ss.SSS]` 或 `<mm:ss.SSS>`。毫秒固定三位，避免精度损失。 */
+    private fun appendStamp(sb: StringBuilder, timeMs: Long, open: Char, close: Char) {
+        val total = timeMs.coerceAtLeast(0L)
+        val minutes = total / 60_000L
+        val seconds = (total % 60_000L) / 1_000L
+        val millis = total % 1_000L
+        sb.append(open)
+        if (minutes < 10) sb.append('0')
+        sb.append(minutes).append(':')
+        if (seconds < 10) sb.append('0')
+        sb.append(seconds).append('.')
+        if (millis < 100) sb.append('0')
+        if (millis < 10) sb.append('0')
+        sb.append(millis).append(close)
     }
 
     /**
@@ -151,6 +169,34 @@ object LrcParser {
             index++
         }
         return if (out.size >= 2) out else emptyList()
+    }
+
+    /**
+     * 解析行内的字级时间轴。
+     *
+     * 每个 `<time>` 之后、下一个 `<time>` 之前的所有字符都属于该字 —— 这样
+     * `<00:12.00>我<00:12.30>们` 得到「我@12.00、们@12.30」，而
+     * `<00:12.00>Hello <00:12.50>world` 得到「Hello @12.00、world@12.50」（含空格）。
+     *
+     * 一个字都解不出来时返回 null（调用方据此退回「按行时间均分」）。
+     */
+    private fun parseWords(raw: String, offset: Long): List<LyricWord>? {
+        val matches = WORD_TAG.findAll(raw).toList()
+        if (matches.isEmpty()) return null
+        val out = ArrayList<LyricWord>(matches.size)
+        for ((index, match) in matches.withIndex()) {
+            val from = match.range.last + 1
+            val to = matches.getOrNull(index + 1)?.range?.first ?: raw.length
+            if (to <= from) continue
+            val text = raw.substring(from, to)
+            if (text.isBlank()) continue
+            // 与行首时间一致：`[offset:]` 表示「歌词整体提前」，字级时间同样要减。
+            val time = (toMs(
+                match.groupValues[1], match.groupValues[2], match.groupValues[3]
+            ) - offset).coerceAtLeast(0L)
+            out += LyricWord(text, time)
+        }
+        return out.ifEmpty { null }
     }
 
     private fun toMs(min: String, sec: String, frac: String?): Long {

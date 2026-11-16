@@ -31,6 +31,7 @@ import com.anylyric.diag.ResourceSampler
 import com.anylyric.lyrics.ExternalLyrics
 import com.anylyric.lyrics.LyricLine
 import com.anylyric.lyrics.LyricResult
+import com.anylyric.lyrics.LyricWord
 import com.anylyric.lyrics.LrcParser
 import com.anylyric.lyrics.LyricStore
 import com.anylyric.lyrics.LyricTick
@@ -359,6 +360,9 @@ class SessionHub private constructor(context: Context) {
     private var lastPushedSecondary: List<String> = emptyList()
     private var lastPushedTitle: String? = null
     private var lastPushedPrompt = false
+
+    /** 上一帧推下去的字级时间轴。同一句补上字级时也要重推，否则逐字不会生效。 */
+    private var lastPushedWords: List<LyricWord>? = null
 
     /**
      * 上下文行的缓存。
@@ -2022,7 +2026,7 @@ class SessionHub private constructor(context: Context) {
     /** 换歌词列表的唯一入口：顺带把「是否全带时间轴」算一次，别再每次渲染全表扫。 */
     private fun setCurrentLines(lines: List<LyricLine>, anchorIndex: Int = -1) {
         rawLines = lines
-        currentLines = mergeTranslations(lines)
+        currentLines = withWords(mergeTranslations(lines))
         currentAnchorIndex = anchorIndex
         lastLineIndex = -1
         var timed = currentLines.isNotEmpty()
@@ -2043,11 +2047,60 @@ class SessionHub private constructor(context: Context) {
      */
     fun onTranslationChanged() {
         if (rawLines.isEmpty()) return
-        currentLines = mergeTranslations(rawLines)
+        currentLines = withWords(mergeTranslations(rawLines))
         lastLineIndex = -1
         ctxIndex = -1
         render()
         scheduleLineTick()
+    }
+
+    /**
+     * 逐字开关变了（0.2.28）。
+     *
+     * 与「显示译文」同一套：用原始行表重算一次，不重新取词。
+     * 同时把开关同步给渲染器 —— 渲染器不读 Prefs（它是个 View，不该知道存储）。
+     */
+    fun onWordByWordChanged() {
+        overlay.setWordByWord(prefs.wordByWord)
+        if (rawLines.isEmpty()) return
+        currentLines = withWords(mergeTranslations(rawLines))
+        lastLineIndex = -1
+        ctxIndex = -1
+        render()
+        scheduleLineTick()
+    }
+
+    /**
+     * 给没有字级时间轴的歌词补一份「伪字级」。
+     *
+     * 在线源里带 `<mm:ss.xx>` 的只是少数，但用户一旦打开逐字，**每一句**都该有效果；
+     * 按行时长与字数均分虽然不是真实演唱时间，视觉上同样是「一个字一个字亮起来」，
+     * 比「有的句子逐字、有的句子整句跳」自然得多。
+     *
+     * 行时长 = 到下一行的时间，夹在 0.4~8 秒：太短会闪成噪点，太长会让最后几个字
+     * 迟迟不亮。没有下一行（最后一句）按 3 秒估。
+     */
+    private fun withWords(lines: List<LyricLine>): List<LyricLine> {
+        if (!prefs.wordByWord || lines.isEmpty()) return lines
+        var changed = false
+        val out = ArrayList<LyricLine>(lines.size)
+        for ((index, line) in lines.withIndex()) {
+            val start = line.timeMs
+            if (line.words != null || start == null) {
+                out += line
+                continue
+            }
+            val next = lines.getOrNull(index + 1)?.timeMs
+            val span = ((next ?: (start + 3_000L)) - start).coerceIn(400L, 8_000L)
+            val chars = line.text.length.coerceAtLeast(1)
+            val words = ArrayList<LyricWord>(chars)
+            for (i in 0 until chars) {
+                words += LyricWord(line.text[i].toString(), start + span * i / chars)
+            }
+            out += line.copy(words = words)
+            changed = true
+        }
+        return if (changed) out else lines
     }
 
     /**
@@ -2156,7 +2209,14 @@ class SessionHub private constructor(context: Context) {
 
         // 副行是一**组**相邻行：用户把行数调到 3、4 时要看到更多歌词，
         // 只给一条文本的话预算再多也只有两行可画（0.2.5 及以前的真实表现）。
-        push(currentLines[safe].text, contextLines(safe), titleForOverlay(), prompt = false)
+        push(
+            currentLines[safe].text,
+            contextLines(safe),
+            titleForOverlay(),
+            prompt = false,
+            words = if (prefs.wordByWord) currentLines[safe].words else null,
+            progressMs = if (prefs.wordByWord) shiftedPosition() else -1L
+        )
     }
 
     /**
@@ -2538,6 +2598,8 @@ class SessionHub private constructor(context: Context) {
             tickScheduled = false
             if (currentLines.isEmpty()) return
             Perf.onTick()
+            // 逐字：同一句内也要推进。只更新进度让渲染器重画，不重建字形。
+            if (prefs.wordByWord && currentLinesTimed) overlay.setProgress(shiftedPosition())
             // 行没换就什么都不做：二分结果与上次相同，重绘只会白跑一次绘制。
             // 只重新定位并推文本，不碰责任链：链的输入没有变化，重跑只会得到同样的行。
             if (currentIndex() != lastLineIndex) render()
@@ -2569,6 +2631,13 @@ class SessionHub private constructor(context: Context) {
         if (pos < 0L) return -1
         val shifted = (pos + currentOffsetMs).coerceAtLeast(0L)
         return clock.locate(currentLines, shifted)
+    }
+
+    /** 当前进度 + 偏移；-1 表示发布端没给进度。逐字绘制与行定位共用这一个口径。 */
+    private fun shiftedPosition(): Long {
+        val pos = clock.position()
+        if (pos < 0L) return -1L
+        return (pos + currentOffsetMs).coerceAtLeast(0L)
     }
 
     /** 播放器包名 —— 偏移键的一部分；车机直连与通知通道没有 controller。 */
@@ -2792,6 +2861,13 @@ class SessionHub private constructor(context: Context) {
         // 暂停时进度不动，行也不会换：定时器排上只会凭空唤醒。
         // 播放恢复时一定伴随一次状态回调，那时会重新排。
         if (lastPlayState != PlayState.PLAYING) return
+        // 逐字（0.2.28）：固定节拍，不按行边界 —— 一行唱 4 秒时按行边界排，
+        // 就是「4 秒才亮一个字」，逐字等于没有。
+        if (prefs.wordByWord && currentLinesTimed) {
+            tickScheduled = true
+            mainHandler.postDelayed(lineTicker, WORD_TICK_MS)
+            return
+        }
         val delay = LyricTick.nextDelayMs(currentLines, clock.position(), currentLinesTimed)
         if (delay < 0) return
         tickScheduled = true
@@ -2854,7 +2930,9 @@ class SessionHub private constructor(context: Context) {
         primary: String,
         secondary: List<String>,
         title: String?,
-        prompt: Boolean
+        prompt: Boolean,
+        words: List<LyricWord>? = null,
+        progressMs: Long = -1L
     ) {
         // 同一句反复推是最常见的情况（播放器状态回调比歌词变化频繁得多）：
         // 在这里挡掉，连悬浮层入口都不必进。
@@ -2862,19 +2940,21 @@ class SessionHub private constructor(context: Context) {
         // 这时候跳过推送就再没人去建窗口 —— 表现是「歌词永远不回来了」。
         if (overlay.hasWindow() &&
             primary == lastPushedPrimary && secondary == lastPushedSecondary &&
-            title == lastPushedTitle && prompt == lastPushedPrompt
+            title == lastPushedTitle && prompt == lastPushedPrompt &&
+            words == lastPushedWords
         ) return
         lastPushedPrimary = primary
         lastPushedSecondary = secondary
         lastPushedTitle = title
         lastPushedPrompt = prompt
+        lastPushedWords = words
 
         if (prompt) {
             overlay.showPrompt(primary, secondary)
         } else {
             // 真实歌词上屏才算「出词」，提示语不算 —— 否则「正在获取」会把出词率刷成 100%。
             stats.onFirstLine(SystemClock.elapsedRealtime())
-            overlay.showContent(primary, secondary, title)
+            overlay.showContent(primary, secondary, title, words, progressMs)
         }
         if (!Probe.enabled) return
         if (secondary.hashCode() * 31 + primary.hashCode() + title.hashCode() ==
@@ -3212,6 +3292,14 @@ class SessionHub private constructor(context: Context) {
 
         /** 撞上「同一首歌正在取词」时的复查间隔。 */
         private const val ONLINE_BUSY_RETRY_MS = 2_000L
+
+        /**
+         * 逐字模式的重绘节拍（0.2.28）。
+         *
+         * 60ms ≈ 16fps：字与字之间的间隔通常是 150~400ms，这个精度足够让「亮到哪个字」
+         * 跟得上，又不会把车机 CPU 拉满（一次重绘只画两段文字）。
+         */
+        private const val WORD_TICK_MS = 60L
 
         /**
          * 本地词少于这么几行就算「弱命中」，要去在线补一份。

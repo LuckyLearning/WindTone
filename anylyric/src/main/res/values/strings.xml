@@ -400,4 +400,21 @@ If that entry does not exist, it is fine: turn on “Start on boot” above and 
     <string name="search_result_item">#%1$d · %2$s · %3$d lines</string>
     <string name="search_applied">Switched to %1$s</string>
     <string name="status_manual">Manual: %1$s</string>
+
+    <!-- 0.2.28：样式按「改谁」重排 + 逐字 -->
+    <string name="section_text">Main line</string>
+    <string name="section_secondary">Next line</string>
+    <string name="section_frame">Frame</string>
+    <string name="section_word">Word by word</string>
+    <string name="appearance_secondary_font">Next line size</string>
+    <string name="appearance_secondary_bold">Bold next line</string>
+    <string name="appearance_secondary_alpha">Next line opacity</string>
+    <string name="title_alpha">Title opacity</string>
+    <string name="title_bold">Bold title</string>
+    <string name="value_auto">Auto</string>
+    <string name="word_by_word">Word-by-word lyrics</string>
+    <string name="word_by_word_hint">Light up each character as it is sung. Works with any lyrics: lines that carry per-character timings use them, the rest are spread evenly across the line. Off by default because very short lines end up blinking.</string>
+    <string name="word_sung_color">Sung colour</string>
+    <string name="word_unsung_alpha">Not-yet-sung opacity</string>
+    <string name="word_hint">Sung colour follows the main line colour by default; pick one here to make it stand out. Opacity applies to the characters that have not been sung yet.</string>
 </resources>

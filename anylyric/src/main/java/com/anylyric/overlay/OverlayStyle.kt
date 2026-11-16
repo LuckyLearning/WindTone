@@ -84,7 +84,22 @@ data class OverlayStyle(
     val opacity: Float = OverlayDefaults.OPACITY,
     val cornerDp: Float = OverlayDefaults.CORNER_DP,
     val stroke: Boolean = OverlayDefaults.STROKE,
+    /**
+     * 副行（下一句）的**整体不透明度**。
+     *
+     * 与 [secondaryFontSp] 分开：一个管「多亮」，一个管「多大」。
+     * 0.2.28 之前它叫 `secondaryAlpha` 且是副行唯一可调项 —— 字号与加粗都写死在渲染器里。
+     */
     val secondaryAlpha: Float = OverlayDefaults.SECONDARY_ALPHA,
+    /**
+     * 副行字号。**0 = 自动**（正文 × [OverlayDefaults.SECONDARY_SCALE]）。
+     *
+     * 0 作为「自动」的哨兵：默认值必须让「改正文大小时副行跟着变」，
+     * 否则用户调大正文，副行纹丝不动，看起来像坏了。
+     */
+    val secondaryFontSp: Float = OverlayDefaults.SECONDARY_FONT_SP,
+    /** 副行是否加粗。默认不加：副行是「下一句」，压过当前行会让人看错行。 */
+    val secondaryBold: Boolean = OverlayDefaults.SECONDARY_BOLD,
     /**
      * 第一行歌词（正在唱的那句）的对齐。
      *
@@ -112,9 +127,23 @@ data class OverlayStyle(
     val titleEnabled: Boolean = OverlayDefaults.TITLE_ENABLED,
     val titleFontSp: Float = OverlayDefaults.TITLE_FONT_SP,
     val titleColor: Int = OverlayDefaults.TITLE_COLOR,
+    /** 标题不透明度。默认不透明，但比正文低一档的重任由 [titleColor] 承担。 */
+    val titleAlpha: Float = OverlayDefaults.TITLE_ALPHA,
+    /** 标题是否加粗。默认不加：标题小一号又不粗，才不抢正文。 */
+    val titleBold: Boolean = OverlayDefaults.TITLE_BOLD,
     val titlePos: TitlePos = OverlayDefaults.TITLE_POS,
     /** 标题行对齐。默认居中：标题比歌词短，居中时两侧留白最均匀。 */
-    val titleAlign: Align = OverlayDefaults.TITLE_ALIGN
+    val titleAlign: Align = OverlayDefaults.TITLE_ALIGN,
+    // ---------------------------------------------------------------- 逐字（0.2.28）
+    /**
+     * 已唱的字用什么颜色。**0 = 跟随主色**（[primaryColor]）。
+     *
+     * 用 0 当哨兵而不是再引入一个「是否跟随」的布尔：颜色本身不可能为 0
+     * （0 是全透明黑，没有任何理由用它当歌词色）。
+     */
+    val wordSungColor: Int = OverlayDefaults.WORD_SUNG_COLOR,
+    /** 未唱的字相对主色的不透明度。默认 0.55：亮暗对比要看得出来，又不能读不出。 */
+    val wordUnsungAlpha: Float = OverlayDefaults.WORD_UNSUNG_ALPHA
 )
 
 object OverlayDefaults {
@@ -135,6 +164,18 @@ object OverlayDefaults {
     const val STROKE = false
     const val SECONDARY_ALPHA = 0.58f
     const val SECONDARY_ALPHA_MIN = 0.2f
+
+    /**
+     * 副行字号的「自动」比例与可调区间。
+     *
+     * 0.72 是 0.2.27 及以前渲染器里写死的值，必须保持一致 —— 否则升级完
+     * 所有人都会发现「副行突然变大了」。
+     */
+    const val SECONDARY_SCALE = 0.72f
+    const val SECONDARY_FONT_SP = 0f
+    const val SECONDARY_FONT_MIN = 10f
+    const val SECONDARY_FONT_MAX = 36f
+    const val SECONDARY_BOLD = false
 
     /** 上下文行向右错位的默认值 / 上限（dp）。默认不错位。 */
     const val LINE_OFFSET_DP = 0f
@@ -174,7 +215,14 @@ object OverlayDefaults {
 
     /** 标题默认不抢正文的视觉重量：白但偏灰一档。 */
     const val TITLE_COLOR = 0xFFE4E4E4.toInt()
+    const val TITLE_ALPHA = 1f
+    const val TITLE_BOLD = false
     val TITLE_POS = TitlePos.TOP
+
+    /** 逐字：0 = 已唱字跟随主色；未唱字默认降到 0.55 的不透明度。 */
+    const val WORD_SUNG_COLOR = 0
+    const val WORD_UNSUNG_ALPHA = 0.55f
+    const val WORD_UNSUNG_ALPHA_MIN = 0.1f
 
     /** 0 = 自适应宽度；非 0 = 占可用区宽度的比例。 */
     const val WIDTH_RATIO = 0f
@@ -200,6 +248,8 @@ object OverlayDefaults {
         cornerDp = CORNER_DP,
         stroke = STROKE,
         secondaryAlpha = SECONDARY_ALPHA,
+        secondaryFontSp = SECONDARY_FONT_SP,
+        secondaryBold = SECONDARY_BOLD,
         align = Align.START,
         secondaryAlign = SECONDARY_ALIGN,
         lineOffsetDp = LINE_OFFSET_DP,
@@ -213,8 +263,12 @@ object OverlayDefaults {
         titleEnabled = TITLE_ENABLED,
         titleFontSp = TITLE_FONT_SP,
         titleColor = TITLE_COLOR,
+        titleAlpha = TITLE_ALPHA,
+        titleBold = TITLE_BOLD,
         titlePos = TITLE_POS,
-        titleAlign = TITLE_ALIGN
+        titleAlign = TITLE_ALIGN,
+        wordSungColor = WORD_SUNG_COLOR,
+        wordUnsungAlpha = WORD_UNSUNG_ALPHA
     )
 
     /**
@@ -267,11 +321,14 @@ object OverlayDefaults {
         opacity = style.opacity.coerceIn(0f, 1f),
         cornerDp = style.cornerDp.coerceIn(0f, CORNER_MAX),
         secondaryAlpha = style.secondaryAlpha.coerceIn(SECONDARY_ALPHA_MIN, 1f),
+        secondaryFontSp = ratioOrAuto(style.secondaryFontSp, SECONDARY_FONT_MIN, SECONDARY_FONT_MAX),
         lineOffsetDp = style.lineOffsetDp.coerceIn(0f, LINE_OFFSET_MAX),
         fadeMs = style.fadeMs.coerceIn(0, FADE_MAX),
         widthRatio = ratioOrAuto(style.widthRatio, WIDTH_MIN, WIDTH_MAX),
         heightRatio = ratioOrAuto(style.heightRatio, HEIGHT_MIN, HEIGHT_MAX),
-        titleFontSp = style.titleFontSp.coerceIn(TITLE_FONT_MIN, TITLE_FONT_MAX)
+        titleFontSp = style.titleFontSp.coerceIn(TITLE_FONT_MIN, TITLE_FONT_MAX),
+        titleAlpha = style.titleAlpha.coerceIn(0.2f, 1f),
+        wordUnsungAlpha = style.wordUnsungAlpha.coerceIn(WORD_UNSUNG_ALPHA_MIN, 1f)
     )
 
     /** 0（或负数/NaN）保持 0 表示自适应；其余夹到 [min, max]。 */

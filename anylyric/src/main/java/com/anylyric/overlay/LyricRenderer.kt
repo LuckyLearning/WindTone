@@ -65,6 +65,20 @@ class LyricRenderer(context: Context) : View(context) {
     /** 标题行（歌名 · 歌手）。null 表示不显示。 */
     private var titleText: String? = null
 
+    /** 当前行的字级时间轴（0.2.28）。null = 这份歌词没有字级信息。 */
+    private var primaryWords: List<com.anylyric.lyrics.LyricWord>? = null
+
+    /**
+     * 当前播放进度（毫秒，与 `text.timeMs` 同一时间基准，已含用户偏移）。
+     *
+     * 由宿主在每次渲染 / 行推进时写入。逐字绘制只读它，不自己去问系统 ——
+     * 渲染器是个 View，拿不到播放状态。
+     */
+    private var progressMs: Long = -1L
+
+    /** 逐字是否开启。关闭时即使有 words 也按整行绘制（少两次 drawText）。 */
+    private var wordByWord = false
+
     /** 标题行最终画出来的文本（按可用宽度做过省略），在 [rebuild] 里算好。 */
     private var titleLine: String? = null
     private var titleSize = 0f
@@ -147,7 +161,13 @@ class LyricRenderer(context: Context) : View(context) {
         val alpha: Int,
         val bold: Boolean,
         val width: Float,
-        val secondary: Boolean = false
+        val secondary: Boolean = false,
+        /**
+         * 字级时间轴（0.2.28）。只有「当前行且没有折行」时才非空 ——
+         * 折行后每个字形只承载整句的一部分，逐字需要跨行算字符偏移，代价与收益不成比例，
+         * 所以长句直接退回整行显示。
+         */
+        val words: List<com.anylyric.lyrics.LyricWord>? = null
     )
 
     private val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG)
@@ -223,6 +243,28 @@ class LyricRenderer(context: Context) : View(context) {
     fun applyStyle(next: OverlayStyle) {
         style = OverlayDefaults.sanitize(next)
         rebuild()
+    }
+
+    /**
+     * 逐字开关（0.2.28）。
+     *
+     * 与样式分开传：它是「功能开关」（跟着用户走、不随明暗主题变），
+     * 而 [OverlayStyle] 是按日/夜两套存的。混在一起会出现「切到夜间逐字自己关了」。
+     */
+    fun setWordByWord(enabled: Boolean) {
+        if (wordByWord == enabled) return
+        wordByWord = enabled
+        rebuild()
+    }
+
+    /**
+     * 当前进度。只改数字并重绘，**不重建字形** —— 逐字是每几十毫秒一次的操作，
+     * 重建会连折行、测量一起重跑，车机上直接掉帧。
+     */
+    fun setProgress(ms: Long) {
+        if (ms == progressMs) return
+        progressMs = ms
+        if (wordByWord && mode == Mode.CONTENT && !hidden) invalidate()
     }
 
     /**
@@ -322,17 +364,25 @@ class LyricRenderer(context: Context) : View(context) {
      * @param secondary 副行文本，按显示顺序。条数不受限，[rebuild] 按行数预算截断
      * @param title 标题行（歌名 · 歌手）；null 或空串表示这帧没有标题
      */
-    fun setContent(primary: String, secondary: List<String>, title: String?, nextMode: Mode) {
+    fun setContent(
+        primary: String,
+        secondary: List<String>,
+        title: String?,
+        nextMode: Mode,
+        words: List<com.anylyric.lyrics.LyricWord>? = null
+    ) {
         if (hidden) {
             // 收起 / 按应用隐藏期间只记内容，不重建、不触发淡入；恢复时按 dirty 决定要不要 rebuild。
             val dirty = primary != primaryText ||
                 secondary != secondaryLines ||
                 title != titleText ||
-                nextMode != mode
+                nextMode != mode ||
+                words != primaryWords
             primaryText = primary
             secondaryLines.clear()
             secondaryLines.addAll(secondary)
             titleText = title
+            primaryWords = words
             mode = nextMode
             if (dirty) collapsedDirty = true
             return
@@ -340,7 +390,8 @@ class LyricRenderer(context: Context) : View(context) {
         val changed = primary != primaryText ||
             secondary != secondaryLines ||
             title != titleText ||
-            nextMode != mode
+            nextMode != mode ||
+            words != primaryWords
         if (!changed) return
 
         // 只有「真歌词换成真歌词」才值得做交叉淡入：提示语、菜单、编辑态都不淡入，
@@ -357,6 +408,7 @@ class LyricRenderer(context: Context) : View(context) {
         secondaryLines.clear()
         secondaryLines.addAll(secondary)
         titleText = title
+        primaryWords = words
         mode = nextMode
         rebuild()
         if (crossfade) {
@@ -426,7 +478,13 @@ class LyricRenderer(context: Context) : View(context) {
         style = OverlayDefaults.sanitize(style)
 
         val primarySize = spToPx(style.fontSp)
-        val secondarySize = primarySize * 0.72f
+        // 副行字号：0 = 自动（跟随正文比例）。比例取自 0.2.27 渲染器里写死的 0.72，
+        // 默认值与旧行为一致，升级后不会「副行突然变大」。
+        val secondarySize = if (style.secondaryFontSp > 0f) {
+            spToPx(style.secondaryFontSp)
+        } else {
+            primarySize * OverlayDefaults.SECONDARY_SCALE
+        }
         val promptSize = primarySize * 0.74f
         paddingH = 16f * density
         paddingV = 10f * density
@@ -496,20 +554,31 @@ class LyricRenderer(context: Context) : View(context) {
                 } else {
                     // 当前行可以先占满预算（长句折成 3 行是合理的），剩下的才留给上下文行；
                     // 上下文行是一**组**，按剩余预算逐条铺 —— 只铺一条就是「永远只有两行」的老 bug。
+                    val subBold = style.secondaryBold
                     val rows = LinePlan.build(primaryText, secondaryLines, style.maxLines) { text, lines, sub ->
                         val size = if (sub) secondarySize else primarySize
-                        TextWrap.wrap(text, limit, lines) { s ->
-                            widthOf(s, size, !sub && style.bold)
-                        }
+                        val bold = if (sub) subBold else style.bold
+                        TextWrap.wrap(text, limit, lines) { s -> widthOf(s, size, bold) }
                     }
                     val subAlpha = (style.secondaryAlpha * 255f).toInt().coerceIn(0, 255)
+                    // 逐字只在「当前行没有折行」时挂上去（见 Glyph.words 的说明）。
+                    val primaryRowCount = rows.count { !it.secondary }
+                    var primarySeen = 0
                     for (row in rows) {
                         if (row.secondary) {
-                            glyphs += glyph(row.text, secondarySize, subAlpha, false, secondary = true)
+                            glyphs += glyph(
+                                row.text, secondarySize, subAlpha, subBold, secondary = true
+                            )
                             glyphTops += y
                             y += secondarySize * 1.45f
                         } else {
-                            glyphs += glyph(row.text, primarySize, 255, style.bold)
+                            val span = if (primarySeen == 0 && primaryRowCount == 1) {
+                                primaryWords
+                            } else {
+                                null
+                            }
+                            glyphs += glyph(row.text, primarySize, 255, style.bold, words = span)
+                            primarySeen++
                             glyphTops += y
                             y += primarySize * 1.38f
                         }
@@ -606,14 +675,14 @@ class LyricRenderer(context: Context) : View(context) {
     /** 标题按可用宽度截断：宁可「歌名 · 歌…」也不要让窗口为了它整块变宽。 */
     private fun ellipsizeTitle(text: String, maxWidth: Float): String {
         titlePaint.textSize = titleSize
-        titlePaint.typeface = Typeface.DEFAULT
+        titlePaint.typeface = if (style.titleBold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
         if (titlePaint.measureText(text) <= maxWidth) return text
         return TextUtils.ellipsize(text, titlePaint, maxWidth, TextUtils.TruncateAt.END).toString()
     }
 
     private fun measureTitle(text: String): Float {
         titlePaint.textSize = titleSize
-        titlePaint.typeface = Typeface.DEFAULT
+        titlePaint.typeface = if (style.titleBold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
         return titlePaint.measureText(text)
     }
 
@@ -622,8 +691,9 @@ class LyricRenderer(context: Context) : View(context) {
         size: Float,
         alpha: Int,
         bold: Boolean,
-        secondary: Boolean = false
-    ): Glyph = Glyph(text, size, alpha, bold, widthOf(text, size, bold), secondary)
+        secondary: Boolean = false,
+        words: List<com.anylyric.lyrics.LyricWord>? = null
+    ): Glyph = Glyph(text, size, alpha, bold, widthOf(text, size, bold), secondary, words)
 
     private fun contentLimit(): Float {
         val base = if (fixedWidthPx > 0) {
@@ -777,11 +847,12 @@ class LyricRenderer(context: Context) : View(context) {
         }
 
         titlePaint.textSize = titleSize
-        titlePaint.typeface = Typeface.DEFAULT
+        titlePaint.typeface = if (style.titleBold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
         // 统一用 LEFT 描点 + 自己算 x：这样填充与描边共用同一个起点，
         // 不会出现「描边按一种对齐、填充按另一种」的错位。
         titlePaint.textAlign = Paint.Align.LEFT
-        titlePaint.color = style.titleColor
+        titlePaint.color = style.titleColor and 0x00FFFFFF
+        titlePaint.alpha = (style.titleAlpha * 255f).toInt().coerceIn(0, 255)
         val baseline = top - titlePaint.fontMetrics.ascent
         val x = OverlayGeometry.textX(
             style.titleAlign, textLeft, contentWidth, measureTitle(line)
@@ -789,9 +860,11 @@ class LyricRenderer(context: Context) : View(context) {
 
         if (style.stroke) {
             titleStrokePaint.textSize = titleSize
-            titleStrokePaint.typeface = Typeface.DEFAULT
+            titleStrokePaint.typeface =
+                if (style.titleBold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
             titleStrokePaint.textAlign = Paint.Align.LEFT
             titleStrokePaint.color = style.strokeColor
+            titleStrokePaint.alpha = (style.titleAlpha * 255f).toInt().coerceIn(0, 255)
             titleStrokePaint.style = Paint.Style.STROKE
             titleStrokePaint.strokeWidth = titleSize * 0.085f
             canvas.drawText(line, x, baseline, titleStrokePaint)
@@ -811,7 +884,56 @@ class LyricRenderer(context: Context) : View(context) {
         val x = OverlayGeometry.textX(align, baseX, contentWidth, glyphWidth, offset)
         // 描边先画、填充后画：这是真轮廓，不是把文字偏移复制一遍当阴影。
         if (style.stroke) canvas.drawText(glyph.text, x, baseline, strokePaint)
+
+        // 逐字（0.2.28）：有字级时间轴、开关打开、且拿到了有效进度时才分段。
+        val words = glyph.words
+        if (wordByWord && words != null && progressMs >= 0L && glyph.text.isNotEmpty()) {
+            drawWordParts(canvas, glyph, words, x, baseline, alphaScale)
+            return
+        }
         canvas.drawText(glyph.text, x, baseline, textPaint)
+    }
+
+    /**
+     * 把一句按「已唱 / 未唱」切成两段画。
+     *
+     * 只切两刀而不是每个字一次 `drawText`：一行十来个字就是十几次 native 调用，
+     * 且比例字体下逐字累加宽度会有累计误差；两段画的接缝精确落在字边界，
+     * 视觉上同样是「一个字一个字亮起来」。
+     */
+    private fun drawWordParts(
+        canvas: Canvas,
+        glyph: Glyph,
+        words: List<com.anylyric.lyrics.LyricWord>,
+        x: Float,
+        baseline: Float,
+        alphaScale: Float
+    ) {
+        var sungChars = 0
+        for (word in words) {
+            if (word.timeMs <= progressMs) sungChars += word.text.length else break
+        }
+        sungChars = sungChars.coerceIn(0, glyph.text.length)
+        val baseAlpha = (glyph.alpha * alphaScale).toInt().coerceIn(0, 255)
+
+        if (sungChars > 0) {
+            // 0 = 跟随主色（见 OverlayStyle.wordSungColor 的说明）。
+            val sungColor =
+                if (style.wordSungColor != 0) style.wordSungColor else style.primaryColor
+            textPaint.color = sungColor and 0x00FFFFFF
+            textPaint.alpha = baseAlpha
+            canvas.drawText(glyph.text.substring(0, sungChars), x, baseline, textPaint)
+        }
+        if (sungChars < glyph.text.length) {
+            val dx = if (sungChars == 0) {
+                x
+            } else {
+                x + widthOf(glyph.text.substring(0, sungChars), glyph.size, glyph.bold)
+            }
+            textPaint.color = style.primaryColor and 0x00FFFFFF
+            textPaint.alpha = (baseAlpha * style.wordUnsungAlpha).toInt().coerceIn(0, 255)
+            canvas.drawText(glyph.text.substring(sungChars), dx, baseline, textPaint)
+        }
     }
 
     /**

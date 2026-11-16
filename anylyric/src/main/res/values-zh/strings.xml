@@ -397,4 +397,21 @@
     <string name="search_result_item">第 %1$d 条 · %2$s · %3$d 行</string>
     <string name="search_applied">已换成 %1$s 的歌词</string>
     <string name="status_manual">手动：%1$s</string>
+
+    <!-- 0.2.28：样式按「改谁」重排 + 逐字 -->
+    <string name="section_text">正文</string>
+    <string name="section_secondary">副行</string>
+    <string name="section_frame">窗框</string>
+    <string name="section_word">逐字与译文</string>
+    <string name="appearance_secondary_font">副行字号</string>
+    <string name="appearance_secondary_bold">副行加粗</string>
+    <string name="appearance_secondary_alpha">副行不透明度</string>
+    <string name="title_alpha">标题不透明度</string>
+    <string name="title_bold">标题加粗</string>
+    <string name="value_auto">自动</string>
+    <string name="word_by_word">逐字歌词</string>
+    <string name="word_by_word_hint">唱到哪个字，哪个字亮。任何歌词都能用：带字级时间的按它走，没有的按整句时长平均分。默认关闭 —— 很短的句子逐字扫过去只剩闪烁。</string>
+    <string name="word_sung_color">已唱颜色</string>
+    <string name="word_unsung_alpha">未唱不透明度</string>
+    <string name="word_hint">已唱颜色默认跟随正文；在这里指定一个更醒目的色。不透明度作用在还没唱到的字上。</string>
 </resources>

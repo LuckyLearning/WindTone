@@ -291,10 +291,11 @@ class SettingsActivity : BaseActivity() {
         // 先把每张卡片建出来（同一段 View 只能有一个父容器），再决定放进哪一页。
         val status = buildStatusCard()
         val channel = buildChannelCard()
-        val window = buildWindowCard()
-        val look = buildLookCard()
-        val colors = buildColorCard()
+        val containerCard = buildContainerCard()
+        val textCard = buildTextCard()
+        val secondaryCard = buildSecondaryCard()
         val title = buildTitleCard()
+        val word = buildWordCard()
         val behavior = buildBehaviorCard()
         val calibrate = buildCalibrateCard()
         val calibrateHelp = buildCalibrateHelpCard()
@@ -328,8 +329,18 @@ class SettingsActivity : BaseActivity() {
         }
         // 横屏双栏的分法按页定：左栏是「摆哪儿、长什么样」，右栏是「读什么、怎么更新」。
         addPage(content, page(SettingsTab.OVERVIEW, listOf(status), listOf(channel)))
-        addPage(content, page(SettingsTab.LOOK, listOf(scope, window, look), listOf(theme, colors)))
-        addPage(content, page(SettingsTab.LYRICS, listOf(title), listOf(behavior)))
+        // 0.2.28 重排：外观页按「改谁」分卡 —— 左栏是两行文字（正文 / 副行），
+        // 右栏是标题、窗框与主题。每张卡内就是那个对象的全部可调项，不再跨卡找。
+        addPage(
+            content,
+            page(
+                SettingsTab.LOOK,
+                listOf(scope, textCard, secondaryCard),
+                listOf(title, containerCard, theme)
+            )
+        )
+        // 歌词页：左栏「怎么显示」（逐字 / 译文），右栏「从哪取词」（在线源 / 缓存）。
+        addPage(content, page(SettingsTab.LYRICS, listOf(word), listOf(behavior)))
         addPage(
             content,
             page(SettingsTab.CALIBRATE, listOf(calibrate), listOf(calibrateHelp))
@@ -753,7 +764,7 @@ class SettingsActivity : BaseActivity() {
 
     // ---------------------------------------------------------------- 悬浮窗
 
-    private fun buildWindowCard(): View {
+    private fun buildContainerCard(): View {
         editButton = primaryButton(getString(R.string.display_edit)) { toggleEdit() }
 
         val rows = ArrayList<View>(12)
@@ -813,7 +824,58 @@ class SettingsActivity : BaseActivity() {
         rows += textButton(getString(R.string.position_reset)) { resetWindow() }
         rows += hint(getString(R.string.position_hint))
 
-        return cardSection(getString(R.string.section_window), null, rows)
+        // 0.2.28 重排：属于「框」本身的项全部收在这一张卡里 ——
+        // 以前背景色和描边色在「颜色」卡、圆角和透明度在「外观」卡，
+        // 想调一个框要来回跑三张卡，还很容易漏掉「描边关了描边色就没用」。
+        rows += divider()
+        rows += stepperRow(
+            label = getString(R.string.appearance_opacity),
+            value = {
+                getString(
+                    R.string.appearance_percent,
+                    (prefs.style().opacity * 100).toInt().toString()
+                )
+            },
+            isDefault = { prefs.style().opacity == OverlayDefaults.OPACITY },
+            minus = { editStyle { it.copy(opacity = it.opacity - 0.05f) } },
+            plus = { editStyle { it.copy(opacity = it.opacity + 0.05f) } },
+            reset = { editStyle { it.copy(opacity = OverlayDefaults.OPACITY) } }
+        )
+        rows += stepperRow(
+            label = getString(R.string.appearance_corner),
+            value = {
+                getString(R.string.appearance_dp, prefs.style().cornerDp.toInt().toString())
+            },
+            isDefault = { prefs.style().cornerDp == OverlayDefaults.CORNER_DP },
+            minus = { editStyle { it.copy(cornerDp = it.cornerDp - 2f) } },
+            plus = { editStyle { it.copy(cornerDp = it.cornerDp + 2f) } },
+            reset = { editStyle { it.copy(cornerDp = OverlayDefaults.CORNER_DP) } }
+        )
+        rows += colorRow(
+            getString(R.string.appearance_color_bg),
+            current = { prefs.style().bgColor },
+            default = OverlayDefaults.BG_COLOR,
+            onPick = { color -> editStyle { it.copy(bgColor = color) } }
+        )
+        rows += switchRow(
+            label = getString(R.string.appearance_stroke),
+            hintText = getString(R.string.appearance_stroke_hint),
+            current = { prefs.style().stroke },
+            onChange = { checked -> editStyle { it.copy(stroke = checked) } }
+        )
+        val strokeColorRow = colorRow(
+            getString(R.string.appearance_color_stroke),
+            current = { prefs.style().strokeColor },
+            default = OverlayDefaults.STROKE_COLOR,
+            onPick = { color -> editStyle { it.copy(strokeColor = color) } }
+        )
+        rows += strokeColorRow
+        // 描边关着时描边色无效：整行隐藏，别留着让人以为改了有用。
+        uiRefreshers += {
+            strokeColorRow.visibility = if (prefs.style().stroke) View.VISIBLE else View.GONE
+        }
+
+        return cardSection(getString(R.string.section_frame), null, rows)
     }
 
     /**
@@ -982,7 +1044,14 @@ class SettingsActivity : BaseActivity() {
 
     // ---------------------------------------------------------------- 外观
 
-    private fun buildLookCard(): View {
+    /**
+     * 正文卡：正在唱的那一句。
+     *
+     * 0.2.28 按「改谁」重排：以前字号在这张卡、颜色在「颜色」卡、对齐在三合一组里，
+     * 想调一行的样子要跑三张卡，还经常漏项（副行只有透明度、标题没有透明度）。
+     * 现在每个对象一张卡，卡内就是它的**全部**可调项，三张卡的结构彼此对齐。
+     */
+    private fun buildTextCard(): View {
         val rows = ArrayList<View>(16)
 
         rows += labeled(
@@ -1008,6 +1077,33 @@ class SettingsActivity : BaseActivity() {
             plus = { editStyle { it.copy(fontSp = it.fontSp + 2f) } },
             reset = { editStyle { it.copy(fontSp = OverlayDefaults.FONT_SP) } }
         )
+        // 与「副行」「标题」两张卡保持同一顺序：字号 → 加粗 → 颜色 →（各自的附加项）→ 对齐。
+        // 三张卡的前三项完全一致，改样式时一眼能对照，不必在每张卡里重新找位置。
+        rows += switchRow(
+            label = getString(R.string.appearance_bold),
+            hintText = null,
+            current = { prefs.style().bold },
+            onChange = { checked -> editStyle { it.copy(bold = checked) } }
+        )
+        rows += colorRow(
+            getString(R.string.appearance_color_primary),
+            current = { prefs.style().primaryColor },
+            default = OverlayDefaults.PRIMARY_COLOR,
+            onPick = { color -> editStyle { it.copy(primaryColor = color) } }
+        )
+
+        // 对齐紧跟颜色：与「副行」「标题」两张卡取同一个位置。
+        // 正文没有「不透明度」那一项 —— 它就是正在唱的那句，永远全亮；这是有意的不对称。
+        rows += spacer(6)
+        rows += labeled(
+            getString(R.string.appearance_align_primary),
+            chipRow(
+                options = alignLabels(),
+                current = { prefs.style().align.ordinal },
+                onPick = { index -> editStyle { it.copy(align = ALIGN_ORDER[index]) } }
+            )
+        )
+
         // 行数是**歌词总行数**：当前行折行也算在内，副行按剩余预算往下铺。
         val linesRow = stepperRow(
             label = getString(R.string.appearance_lines),
@@ -1027,7 +1123,6 @@ class SettingsActivity : BaseActivity() {
             linesHint.visibility = if (hide) View.GONE else View.VISIBLE
         }
 
-        rows += spacer(12)
         rows += labeled(
             getString(R.string.appearance_overflow),
             chipRow(
@@ -1046,85 +1141,7 @@ class SettingsActivity : BaseActivity() {
             )
         )
         rows += hint(getString(R.string.appearance_overflow_hint))
-
-        // 三行各自对齐（0.2.25）：标题 / 第一行歌词 / 第二行歌词互不牵连。
-        // 以前共用一份 align，把标题放中间就必然把歌词也拽到中间 —— 二者只能取一个。
-        rows += spacer(12)
-        val alignLabels = listOf(
-            getString(R.string.align_start),
-            getString(R.string.align_center),
-            getString(R.string.align_end)
-        )
-        rows += labeled(
-            getString(R.string.appearance_align_title),
-            chipRow(
-                options = alignLabels,
-                current = { prefs.style().titleAlign.ordinal },
-                onPick = { index -> editStyle { it.copy(titleAlign = ALIGN_ORDER[index]) } }
-            )
-        )
-        rows += labeled(
-            getString(R.string.appearance_align_primary),
-            chipRow(
-                options = alignLabels,
-                current = { prefs.style().align.ordinal },
-                onPick = { index -> editStyle { it.copy(align = ALIGN_ORDER[index]) } }
-            )
-        )
-        rows += labeled(
-            getString(R.string.appearance_align_secondary),
-            chipRow(
-                options = alignLabels,
-                current = { prefs.style().secondaryAlign.ordinal },
-                onPick = { index -> editStyle { it.copy(secondaryAlign = ALIGN_ORDER[index]) } }
-            )
-        )
-        rows += hint(getString(R.string.appearance_align_hint))
-
-        rows += spacer(6)
-        rows += stepperRow(
-            label = getString(R.string.appearance_opacity),
-            value = { getString(R.string.appearance_percent, (prefs.style().opacity * 100).toInt().toString()) },
-            isDefault = { prefs.style().opacity == OverlayDefaults.OPACITY },
-            minus = { editStyle { it.copy(opacity = it.opacity - 0.05f) } },
-            plus = { editStyle { it.copy(opacity = it.opacity + 0.05f) } },
-            reset = { editStyle { it.copy(opacity = OverlayDefaults.OPACITY) } }
-        )
-        rows += stepperRow(
-            label = getString(R.string.appearance_corner),
-            value = { getString(R.string.appearance_dp, prefs.style().cornerDp.toInt().toString()) },
-            isDefault = { prefs.style().cornerDp == OverlayDefaults.CORNER_DP },
-            minus = { editStyle { it.copy(cornerDp = it.cornerDp - 2f) } },
-            plus = { editStyle { it.copy(cornerDp = it.cornerDp + 2f) } },
-            reset = { editStyle { it.copy(cornerDp = OverlayDefaults.CORNER_DP) } }
-        )
-        // 上下间距之外再给一个「左右错位」：下一句整体右移，形成阶梯感。
-        // 只在左对齐下生效，居中/右对齐时渲染器会忽略它。
-        rows += stepperRow(
-            label = getString(R.string.appearance_line_offset),
-            value = {
-                getString(R.string.appearance_dp, prefs.style().lineOffsetDp.toInt().toString())
-            },
-            isDefault = { prefs.style().lineOffsetDp == OverlayDefaults.LINE_OFFSET_DP },
-            minus = { editStyle { it.copy(lineOffsetDp = it.lineOffsetDp - 4f) } },
-            plus = { editStyle { it.copy(lineOffsetDp = it.lineOffsetDp + 4f) } },
-            reset = { editStyle { it.copy(lineOffsetDp = OverlayDefaults.LINE_OFFSET_DP) } }
-        )
-        rows += hint(getString(R.string.appearance_line_offset_hint))
-
-        rows += divider()
-        rows += switchRow(
-            label = getString(R.string.appearance_bold),
-            hintText = null,
-            current = { prefs.style().bold },
-            onChange = { checked -> editStyle { it.copy(bold = checked) } }
-        )
-        rows += switchRow(
-            label = getString(R.string.appearance_stroke),
-            hintText = getString(R.string.appearance_stroke_hint),
-            current = { prefs.style().stroke },
-            onChange = { checked -> editStyle { it.copy(stroke = checked) } }
-        )
+        // 描边开关与描边色一起搬去了「窗框」卡（它们属于框，不属于字）。
 
         rows += divider()
         rows += textButton(getString(R.string.appearance_reset)) {
@@ -1133,8 +1150,108 @@ class SettingsActivity : BaseActivity() {
             refresh()
         }
 
-        return cardSection(getString(R.string.section_appearance), null, rows)
+        return cardSection(getString(R.string.section_text), null, rows)
     }
+
+    /**
+     * 副行卡：下一句。
+     *
+     * 与正文**逐项对齐**：字号、加粗、颜色、对齐四样一一对应，另外多出透明度与缩进
+     * ——副行本来就要「比正文弱」，没有这两项就只能靠改颜色硬凑。
+     */
+    private fun buildSecondaryCard(): View {
+        val rows = ArrayList<View>(10)
+        rows += stepperRow(
+            label = getString(R.string.appearance_secondary_font),
+            value = {
+                val value = prefs.style().secondaryFontSp
+                if (value <= 0f) {
+                    getString(R.string.value_auto)
+                } else {
+                    getString(R.string.display_font_value, value.toInt().toString())
+                }
+            },
+            isDefault = { prefs.style().secondaryFontSp == OverlayDefaults.SECONDARY_FONT_SP },
+            // 0 = 自动。点加减时从「正文 × 0.72」起步，否则会卡在 0 上永远点不动。
+            minus = {
+                editStyle { it.copy(secondaryFontSp = stepSecondaryFont(it, -2f)) }
+            },
+            plus = {
+                editStyle { it.copy(secondaryFontSp = stepSecondaryFont(it, 2f)) }
+            },
+            reset = {
+                editStyle { it.copy(secondaryFontSp = OverlayDefaults.SECONDARY_FONT_SP) }
+            }
+        )
+        rows += switchRow(
+            label = getString(R.string.appearance_secondary_bold),
+            hintText = null,
+            current = { prefs.style().secondaryBold },
+            onChange = { checked -> editStyle { it.copy(secondaryBold = checked) } }
+        )
+        rows += colorRow(
+            getString(R.string.appearance_color_secondary),
+            current = { prefs.style().secondaryColor },
+            default = OverlayDefaults.SECONDARY_COLOR,
+            onPick = { color -> editStyle { it.copy(secondaryColor = color) } }
+        )
+        rows += stepperRow(
+            label = getString(R.string.appearance_secondary_alpha),
+            value = {
+                getString(
+                    R.string.appearance_percent,
+                    (prefs.style().secondaryAlpha * 100).toInt().toString()
+                )
+            },
+            isDefault = { prefs.style().secondaryAlpha == OverlayDefaults.SECONDARY_ALPHA },
+            minus = { editStyle { it.copy(secondaryAlpha = it.secondaryAlpha - 0.05f) } },
+            plus = { editStyle { it.copy(secondaryAlpha = it.secondaryAlpha + 0.05f) } },
+            reset = {
+                editStyle { it.copy(secondaryAlpha = OverlayDefaults.SECONDARY_ALPHA) }
+            }
+        )
+        rows += labeled(
+            getString(R.string.appearance_align_secondary),
+            chipRow(
+                options = alignLabels(),
+                current = { prefs.style().secondaryAlign.ordinal },
+                onPick = { index -> editStyle { it.copy(secondaryAlign = ALIGN_ORDER[index]) } }
+            )
+        )
+        rows += stepperRow(
+            label = getString(R.string.appearance_line_offset),
+            value = {
+                getString(
+                    R.string.appearance_dp,
+                    prefs.style().lineOffsetDp.toInt().toString()
+                )
+            },
+            isDefault = { prefs.style().lineOffsetDp == OverlayDefaults.LINE_OFFSET_DP },
+            minus = { editStyle { it.copy(lineOffsetDp = it.lineOffsetDp - 4f) } },
+            plus = { editStyle { it.copy(lineOffsetDp = it.lineOffsetDp + 4f) } },
+            reset = { editStyle { it.copy(lineOffsetDp = OverlayDefaults.LINE_OFFSET_DP) } }
+        )
+        rows += hint(getString(R.string.appearance_line_offset_hint))
+        return cardSection(getString(R.string.section_secondary), null, rows)
+    }
+
+    /** 副行字号的步进：0 表示自动，起步值取「正文 × 默认比例」。 */
+    private fun stepSecondaryFont(style: OverlayStyle, delta: Float): Float {
+        val base = if (style.secondaryFontSp > 0f) {
+            style.secondaryFontSp
+        } else {
+            style.fontSp * OverlayDefaults.SECONDARY_SCALE
+        }
+        return (base + delta).coerceIn(
+            OverlayDefaults.SECONDARY_FONT_MIN, OverlayDefaults.SECONDARY_FONT_MAX
+        )
+    }
+
+    private fun alignLabels(): List<String> = listOf(
+        getString(R.string.align_start),
+        getString(R.string.align_center),
+        getString(R.string.align_end)
+    )
 
     // ---------------------------------------------------------------- 主题
 
@@ -1203,46 +1320,8 @@ class SettingsActivity : BaseActivity() {
 
     // ---------------------------------------------------------------- 颜色
 
-    private fun buildColorCard(): View {
-        val rows = ArrayList<View>(8)
-
-        // 四项颜色都走同一套「色块 + 十六进制 + 点开取色器」，不再摆一排固定色板。
-        rows += colorRow(
-            getString(R.string.appearance_color_primary),
-            current = { prefs.style().primaryColor },
-            default = OverlayDefaults.PRIMARY_COLOR,
-            onPick = { color -> editStyle { it.copy(primaryColor = color) } }
-        )
-        rows += colorRow(
-            getString(R.string.appearance_color_secondary),
-            current = { prefs.style().secondaryColor },
-            default = OverlayDefaults.SECONDARY_COLOR,
-            onPick = { color -> editStyle { it.copy(secondaryColor = color) } }
-        )
-        rows += colorRow(
-            getString(R.string.appearance_color_bg),
-            current = { prefs.style().bgColor },
-            default = OverlayDefaults.BG_COLOR,
-            onPick = { color -> editStyle { it.copy(bgColor = color) } }
-        )
-        val strokeColorRow = colorRow(
-            getString(R.string.appearance_color_stroke),
-            current = { prefs.style().strokeColor },
-            default = OverlayDefaults.STROKE_COLOR,
-            onPick = { color -> editStyle { it.copy(strokeColor = color) } }
-        )
-        rows += strokeColorRow
-        // 描边关闭时描边色无效：整行隐藏，别留着让人以为改了有用。
-        uiRefreshers += {
-            strokeColorRow.visibility = if (prefs.style().stroke) View.VISIBLE else View.GONE
-        }
-
-        return cardSection(
-            getString(R.string.section_colors),
-            getString(R.string.section_colors_hint),
-            rows
-        )
-    }
+    // 0.2.28：「颜色」卡已拆开。正文色进「正文」卡、副行色进「副行」卡、
+    // 标题色进「标题」卡、背景与描边色进「窗框」卡 —— 每张卡自带自己那个对象的配色。
 
     // ---------------------------------------------------------------- 标题
 
@@ -1265,6 +1344,75 @@ class SettingsActivity : BaseActivity() {
             )
             addView(divider())
             addView(
+                stepperRow(
+                    label = getString(R.string.title_font),
+                    value = {
+                        getString(
+                            R.string.display_font_value,
+                            prefs.style().titleFontSp.toInt().toString()
+                        )
+                    },
+                    isDefault = { prefs.style().titleFontSp == OverlayDefaults.TITLE_FONT_SP },
+                    minus = { editStyle { it.copy(titleFontSp = it.titleFontSp - 1f) } },
+                    plus = { editStyle { it.copy(titleFontSp = it.titleFontSp + 1f) } },
+                    reset = { editStyle { it.copy(titleFontSp = OverlayDefaults.TITLE_FONT_SP) } }
+                )
+            )
+            // 与正文/副行同序：字号 → 加粗 → 颜色 → 透明度 → 对齐 →（标题特有）位置。
+            addView(
+                switchRow(
+                    label = getString(R.string.title_bold),
+                    hintText = null,
+                    current = { prefs.style().titleBold },
+                    onChange = { checked -> editStyle { it.copy(titleBold = checked) } }
+                )
+            )
+            addView(
+                colorRow(
+                    getString(R.string.title_color),
+                    current = { prefs.style().titleColor },
+                    default = OverlayDefaults.TITLE_COLOR,
+                    onPick = { color -> editStyle { it.copy(titleColor = color) } }
+                )
+            )
+            // 0.2.28 补齐：标题以前没有透明度和加粗，和正文/副行「可调项对不齐」。
+            addView(
+                stepperRow(
+                    label = getString(R.string.title_alpha),
+                    value = {
+                        getString(
+                            R.string.appearance_percent,
+                            (prefs.style().titleAlpha * 100).toInt().toString()
+                        )
+                    },
+                    isDefault = { prefs.style().titleAlpha == OverlayDefaults.TITLE_ALPHA },
+                    minus = { editStyle { it.copy(titleAlpha = it.titleAlpha - 0.05f) } },
+                    plus = { editStyle { it.copy(titleAlpha = it.titleAlpha + 0.05f) } },
+                    reset = { editStyle { it.copy(titleAlpha = OverlayDefaults.TITLE_ALPHA) } }
+                )
+            )
+            addView(
+                switchRow(
+                    label = getString(R.string.title_bold),
+                    hintText = null,
+                    current = { prefs.style().titleBold },
+                    onChange = { checked -> editStyle { it.copy(titleBold = checked) } }
+                )
+            )
+            addView(
+                labeled(
+                    getString(R.string.appearance_align_title),
+                    chipRow(
+                        options = alignLabels(),
+                        current = { prefs.style().titleAlign.ordinal },
+                        onPick = { index ->
+                            editStyle { it.copy(titleAlign = ALIGN_ORDER[index]) }
+                        }
+                    )
+                )
+            )
+            // 位置是标题特有的（歌词没有第二个位置可选），放最后，不打断上面的对齐结构。
+            addView(
                 labeled(
                     getString(R.string.title_position),
                     chipRow(
@@ -1283,30 +1431,6 @@ class SettingsActivity : BaseActivity() {
                     )
                 )
             )
-            addView(spacer(6))
-            addView(
-                stepperRow(
-                    label = getString(R.string.title_font),
-                    value = {
-                        getString(
-                            R.string.display_font_value,
-                            prefs.style().titleFontSp.toInt().toString()
-                        )
-                    },
-                    isDefault = { prefs.style().titleFontSp == OverlayDefaults.TITLE_FONT_SP },
-                    minus = { editStyle { it.copy(titleFontSp = it.titleFontSp - 1f) } },
-                    plus = { editStyle { it.copy(titleFontSp = it.titleFontSp + 1f) } },
-                    reset = { editStyle { it.copy(titleFontSp = OverlayDefaults.TITLE_FONT_SP) } }
-                )
-            )
-            addView(
-                colorRow(
-                    getString(R.string.title_color),
-                    current = { prefs.style().titleColor },
-                    default = OverlayDefaults.TITLE_COLOR,
-                    onPick = { color -> editStyle { it.copy(titleColor = color) } }
-                )
-            )
         }
         rows += details
         uiRefreshers += {
@@ -1314,6 +1438,90 @@ class SettingsActivity : BaseActivity() {
         }
 
         return cardSection(getString(R.string.section_title), null, rows)
+    }
+
+    // ---------------------------------------------------------------- 逐字与译文（0.2.28）
+
+    /**
+     * 逐字歌词 + 译文。
+     *
+     * 「显示译文」原来在「行为」卡里，和在线源、缓存上限这些「取什么词」的开关混在一起；
+     * 逐字与译文都是「词怎么呈现」，收进同一张卡。
+     */
+    private fun buildWordCard(): View {
+        val rows = ArrayList<View>(10)
+        rows += switchRow(
+            label = getString(R.string.word_by_word),
+            hintText = getString(R.string.word_by_word_hint),
+            current = { prefs.wordByWord },
+            onChange = { checked ->
+                prefs.wordByWord = checked
+                hub.onWordByWordChanged()
+            }
+        )
+        // 关着的时候下面两项无效：整组隐藏，别让人对着一堆不生效的开关调半天。
+        val details = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            addView(divider())
+            addView(
+                colorRow(
+                    getString(R.string.word_sung_color),
+                    // 0 = 跟随主色。取色器里显示的就是「当前实际看到的那个颜色」。
+                    current = {
+                        val color = prefs.style().wordSungColor
+                        if (color != 0) color else prefs.style().primaryColor
+                    },
+                    default = OverlayDefaults.WORD_SUNG_COLOR,
+                    onPick = { color -> editStyle { it.copy(wordSungColor = color) } }
+                )
+            )
+            addView(
+                stepperRow(
+                    label = getString(R.string.word_unsung_alpha),
+                    value = {
+                        getString(
+                            R.string.appearance_percent,
+                            (prefs.style().wordUnsungAlpha * 100).toInt().toString()
+                        )
+                    },
+                    isDefault = {
+                        prefs.style().wordUnsungAlpha == OverlayDefaults.WORD_UNSUNG_ALPHA
+                    },
+                    minus = {
+                        editStyle { it.copy(wordUnsungAlpha = it.wordUnsungAlpha - 0.05f) }
+                    },
+                    plus = {
+                        editStyle { it.copy(wordUnsungAlpha = it.wordUnsungAlpha + 0.05f) }
+                    },
+                    reset = {
+                        editStyle {
+                            it.copy(wordUnsungAlpha = OverlayDefaults.WORD_UNSUNG_ALPHA)
+                        }
+                    }
+                )
+            )
+            addView(hint(getString(R.string.word_hint)))
+        }
+        rows += details
+        uiRefreshers += {
+            details.visibility = if (prefs.wordByWord) View.VISIBLE else View.GONE
+        }
+
+        rows += divider()
+        rows += switchRow(
+            label = getString(R.string.behavior_translation),
+            hintText = getString(R.string.behavior_translation_hint),
+            current = { prefs.showTranslation },
+            onChange = { checked ->
+                prefs.showTranslation = checked
+                hub.onTranslationChanged()
+            }
+        )
+        return cardSection(getString(R.string.section_word), null, rows)
     }
 
     // ---------------------------------------------------------------- 行为
@@ -1347,19 +1555,6 @@ class SettingsActivity : BaseActivity() {
             onChange = { checked ->
                 prefs.onlineLyrics = checked
                 hub.onOnlineLyricsChanged()
-            }
-        )
-
-        rows += divider()
-        // 双语歌词（0.2.27）：把同一时间戳的第二行当译文，占副行第一格。
-        // 默认关 —— 同一时间戳多行也可能是合唱声部，无脑合并会吃掉歌词。
-        rows += switchRow(
-            label = getString(R.string.behavior_translation),
-            hintText = getString(R.string.behavior_translation_hint),
-            current = { prefs.showTranslation },
-            onChange = { checked ->
-                prefs.showTranslation = checked
-                hub.onTranslationChanged()
             }
         )
 
