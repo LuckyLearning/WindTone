@@ -84,6 +84,28 @@ class OverlayContentResolverTest {
         assertEquals("真正第一句", r.next)
     }
 
+    @Test
+    fun wordByWordWithBlankLinesDoesNotCrash() {
+        // 回归 v1.2.60 真机闪退：打开逐字开关 → 预览下发 → withDerivedWords 对空行
+        // 读 text[0] 抛 StringIndexOutOfBoundsException（崩溃栈落在主线程开关点击里）。
+        val lyrics = synced(
+            line(10, "第一句"),
+            LyricLine(timeMs = 20_000L, text = ""),
+            line(30, "第二句"),
+        )
+        val r = OverlayContentResolver.resolve(
+            lyrics,
+            positionMs = 11_000L,
+            offsetMs = 0,
+            title = "歌名",
+            wordByWord = true,
+        )
+        assertEquals("第一句", r.current)
+        assertEquals("第一句", r.currentWords!!.joinToString("") { it.text })
+        // 空行只是没有字级轴，不能把整份歌词弄丢
+        assertEquals(3, lyrics.lines.size)
+    }
+
     // ------------------------------------------------------------ 间奏空行（回归：曾整窗消失）
 
     @Test

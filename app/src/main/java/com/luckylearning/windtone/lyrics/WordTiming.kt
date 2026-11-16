@@ -35,7 +35,15 @@ object WordTiming {
             }
             val next = lines.getOrNull(index + 1)?.timeMs?.takeIf { it > start }
             val span = ((next ?: (start + LAST_LINE_SPAN_MS)) - start).coerceIn(MIN_SPAN_MS, MAX_SPAN_MS)
-            val chars = line.text.length.coerceAtLeast(1)
+            // LRC 里夹着空行（段间分隔 / 元数据占位）很常见。这里不能 `coerceAtLeast(1)`：
+            // chars=1 会去读 `line.text[0]`，空串直接抛 StringIndexOutOfBoundsException
+            // （v1.2.60 真机闪退：打开逐字开关 → 预览歌词 → 主线程崩在 withDerivedWords:41）。
+            // 空行没有字可均分，原样留下即可；后面渲染侧不会因为 words 为空而走到逐字分支。
+            val chars = line.text.length
+            if (chars == 0) {
+                out += line
+                continue
+            }
             val words = ArrayList<LyricWord>(chars)
             for (i in 0 until chars) {
                 words += LyricWord(line.text[i].toString(), start + span * i / chars)

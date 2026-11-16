@@ -96,6 +96,18 @@ class OverlayAppearanceTest {
     }
 
     @Test
+    fun `shadowSafeStrokeColor 只把全不透明描边色降一档alpha`() {
+        // v1.2.61：Paint.setShadowLayer 在描边色 alpha=255 时让阴影跟随文字 paint 的
+        // alpha —— 逐字未唱段带透明度，描边会一起淡掉（真机反馈「当前行也要有描边」）。
+        // 降到 254 后阴影 alpha 固定，文字透明度不再影响描边。
+        assertEquals(0xFE000000.toInt(), OverlayAppearance.shadowSafeStrokeColor(0xFF000000.toInt()))
+        assertEquals(0xFEFFFFFF.toInt(), OverlayAppearance.shadowSafeStrokeColor(0xFFFFFFFF.toInt()))
+        // 用户自选的半透明描边色原样保留（本来就与 paint alpha 解耦）
+        assertEquals(0x80345678.toInt(), OverlayAppearance.shadowSafeStrokeColor(0x80345678.toInt()))
+        assertEquals(0, OverlayAppearance.shadowSafeStrokeColor(0))
+    }
+
+    @Test
     fun `fullHeightLineSpacing 返回全屏行距`() {
         val (extra, mult) = OverlayAppearance.fullHeightLineSpacing()
         assertEquals(10, extra)

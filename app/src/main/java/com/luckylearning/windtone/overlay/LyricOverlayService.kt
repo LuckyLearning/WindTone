@@ -1524,7 +1524,9 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
                 dp(prefs.lyricOverlayTitleStrokeWidthDp).toFloat(),
                 0f,
                 0f,
-                prefs.lyricOverlayTitleStrokeColor,
+                // alpha=255 的描边色会让阴影跟随文字 paint 的 alpha；标题默认 78% 透明，
+                // 描边会跟着淡。降到 254 与文字解耦，见 OverlayAppearance.shadowSafeStrokeColor
+                OverlayAppearance.shadowSafeStrokeColor(prefs.lyricOverlayTitleStrokeColor),
             )
         } else {
             tv.setShadowLayer(0f, 0f, 0f, Color.TRANSPARENT)
@@ -1561,7 +1563,9 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
                 dp(manualStroke).toFloat(),
                 0f,
                 0f,
-                prefs.lyricOverlayStrokeColor,
+                // 逐字未唱段 / 压暗上下文带 alpha：纯黑描边色会跟着一起变淡，
+                // 当前行看起来就「没描边」。254 与文字 alpha 解耦，见 OverlayAppearance
+                OverlayAppearance.shadowSafeStrokeColor(prefs.lyricOverlayStrokeColor),
             )
         } else {
             val shadow = OverlayAppearance.shadowFor(backdrop)
@@ -1570,7 +1574,7 @@ class LyricOverlayService : Service(), OverlayStateBinder.Host {
                 dp(shadow.radiusDp).toFloat(),
                 0f,
                 dp(shadow.offsetYDp).toFloat(),
-                Color.argb(shadow.colorAlpha, 0, 0, 0),
+                OverlayAppearance.shadowSafeStrokeColor(Color.argb(shadow.colorAlpha, 0, 0, 0)),
             )
         }
         // 描边变了必须重画：span 里的颜色没变，但字形渲染变了

@@ -49,6 +49,22 @@ class WordTimingTest {
     }
 
     @Test
+    fun `空行不补出伪字级也不抛异常`() {
+        // 回归 v1.2.60：LRC 段间空行 text="" 时 chars=1 会读 text[0] 闪退。
+        // 逐字预览在主线程同步跑，这里必须连异常都不抛。
+        val lines = listOf(
+            LyricLine(1_000L, ""),
+            LyricLine(2_000L, "下一句"),
+            LyricLine(4_000L, ""),
+        )
+        val out = WordTiming.withDerivedWords(lines, enabled = true)
+        assertEquals(3, out.size)
+        assertEquals(null, out[0].words)
+        assertEquals(null, out[2].words)
+        assertEquals("下一句", out[1].words!!.joinToString("") { it.text })
+    }
+
+    @Test
     fun `无轴纯文本歌词不补算`() {
         val lines = listOf(LyricLine(-1L, "纯文本"))
         val out = WordTiming.withDerivedWords(lines, true)

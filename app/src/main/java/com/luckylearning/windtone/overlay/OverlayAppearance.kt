@@ -121,6 +121,19 @@ object OverlayAppearance {
     fun fullHeightLineSpacing(): Pair<Int, Float> =
         FULL_LINE_SPACING_EXTRA_DP to FULL_LINE_SPACING_MULT
 
+    /**
+     * 把描边色调成 `Paint.setShadowLayer` 的「alpha 解耦」写法。
+     *
+     * Android 的 `Paint.setShadowLayer` 有个反直觉规则（见方法注释）：
+     *  **描边色 alpha = 255 时，阴影 alpha 取 paint 的 alpha；非 255 时取描边色自己的 alpha。**
+     * 逐字未唱段（alpha 0.55）、压暗的上下句（alpha ≈ 0.59）都带透明度，
+     * 用纯黑 0xFF000000 时它们的描边会跟着一起淡掉，看起来「当前行没描边」。
+     * 把 255 降成 254（肉眼完全无差）后阴影 alpha 固定为 254，与文字透明度解耦，
+     * 每一行都有同样清晰的一圈描边 —— 这也是 P5「白字黑描边通吃白/黑底」的前提。
+     */
+    fun shadowSafeStrokeColor(argb: Int): Int =
+        if ((argb ushr 24) == 0xFF) (argb and 0xFEFFFFFF.toInt()) else argb
+
     /** [shadowFor] 的纯数据结果：投影半径（dp）、纵向偏移（dp）、阴影色 alpha（0..255） */
     data class ShadowSpec(val radiusDp: Int, val offsetYDp: Int, val colorAlpha: Int)
 }
