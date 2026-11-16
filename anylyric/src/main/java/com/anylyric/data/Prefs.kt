@@ -10,6 +10,7 @@ import com.anylyric.overlay.OverlayStyle
 import com.anylyric.overlay.Preset
 import com.anylyric.overlay.TitlePos
 import com.anylyric.lyrics.online.OnlineSource
+import com.anylyric.session.LyricOffsetStore
 import com.anylyric.theme.ThemeMode
 import com.anylyric.update.DownloadRoute
 
@@ -231,6 +232,111 @@ class Prefs(context: Context) {
     /** 实际要跑的源列表：手动指定时只有一个元素，自动时按用户顺序。 */
     val onlineSourcePlan: List<OnlineSource>
         get() = onlineSource?.let { listOf(it) } ?: onlineSourceOrder
+
+    // ------------------------------------------------------------ 时间校准（0.2.27）
+
+    /**
+     * 全局默认偏移。没单独调过的歌都用它。
+     *
+     * 存在意义：用户的听感偏好是稳定的（有人天生觉得歌词慢半拍），
+     * 逐首调太累；先把默认调对，个别歌再微调。
+     */
+    var defaultLyricOffsetMs: Int
+        get() = LyricOffsetStore.clamp(sp.getInt(KEY_OFFSET_DEFAULT, 0))
+        set(value) = sp.edit()
+            .putInt(KEY_OFFSET_DEFAULT, LyricOffsetStore.clamp(value))
+            .apply()
+
+    /** 整张偏移表的原始串（`LyricOffsetStore` 负责编解码与淘汰）。 */
+    private var lyricOffsetsEncoded: String
+        get() = sp.getString(KEY_LYRIC_OFFSETS, "").orEmpty()
+        set(value) = sp.edit().putString(KEY_LYRIC_OFFSETS, value).apply()
+
+    /**
+     * 这首歌实际生效的偏移。
+     *
+     * @param pkg 播放器包名 —— 必须参与，同一首歌在不同播放器上的进度偏差不同。
+     */
+    fun lyricOffsetMs(pkg: String?, title: String?, artist: String?): Int {
+        val key = LyricOffsetStore.keyOf(pkg, title, artist)
+        if (key.isEmpty()) return defaultLyricOffsetMs
+        return offsets()[key] ?: defaultLyricOffsetMs
+    }
+
+    /** 这首歌是否单独调过（界面上用来区分「跟随默认」和「已自定义」）。 */
+    fun hasOwnLyricOffset(pkg: String?, title: String?, artist: String?): Boolean {
+        val key = LyricOffsetStore.keyOf(pkg, title, artist)
+        return key.isNotEmpty() && offsets().containsKey(key)
+    }
+
+    fun setLyricOffsetMs(pkg: String?, title: String?, artist: String?, ms: Int) {
+        val key = LyricOffsetStore.keyOf(pkg, title, artist)
+        if (key.isEmpty()) return
+        synchronized(offsetLock) {
+            val encoded = LyricOffsetStore.put(lyricOffsetsEncoded, key, ms)
+            lyricOffsetsEncoded = encoded
+            offsetCache = LyricOffsetStore.decode(encoded)
+        }
+    }
+
+    /** 抹掉这首歌的偏移，回到「跟随默认」。 */
+    fun clearLyricOffset(pkg: String?, title: String?, artist: String?) {
+        val key = LyricOffsetStore.keyOf(pkg, title, artist)
+        if (key.isEmpty()) return
+        synchronized(offsetLock) {
+            val encoded = LyricOffsetStore.remove(lyricOffsetsEncoded, key)
+            lyricOffsetsEncoded = encoded
+            offsetCache = LyricOffsetStore.decode(encoded)
+        }
+    }
+
+    /** 已经调过的曲目数（设置页显示用）。 */
+    fun lyricOffsetCount(): Int = offsets().size
+
+    /**
+     * 全部清空：默认值也回 0。
+     *
+     * 「一键归零」是排查「到底是不是偏移导致对不上」的最快手段，
+     * 所以连默认值一起清，否则用户清了之后还差半拍会以为是没生效。
+     */
+    fun clearAllLyricOffsets() {
+        synchronized(offsetLock) {
+            lyricOffsetsEncoded = ""
+            offsetCache = LinkedHashMap()
+        }
+        sp.edit().putInt(KEY_OFFSET_DEFAULT, 0).apply()
+    }
+
+    private fun offsets(): MutableMap<String, Int> {
+        offsetCache?.let { return it }
+        synchronized(offsetLock) {
+            offsetCache?.let { return it }
+            val loaded = LyricOffsetStore.decode(sp.getString(KEY_LYRIC_OFFSETS, null))
+            offsetCache = loaded
+            return loaded
+        }
+    }
+
+    /**
+     * 双语歌词：把**同一时间戳的第二行**当作译文（0.2.27）。
+     *
+     * 默认关。很多 LRC 在同一时间戳写了两行，多数是「原文 + 译文」，
+     * 但也可能是合唱声部；不分青红皂白合并会把歌词吃掉，所以必须用户显式打开。
+     */
+    var showTranslation: Boolean
+        get() = sp.getBoolean(KEY_SHOW_TRANSLATION, false)
+        set(value) = sp.edit().putBoolean(KEY_SHOW_TRANSLATION, value).apply()
+
+    /**
+     * 播放中打开 App 时默认进入「时间校准」页（0.2.27）。
+     *
+     * 用户 2026-11-16 的明确场景：悬浮窗投在**仪表盘**（副屏，不可触摸），
+     * 主屏用来操作 —— 所以调整入口只能在这里，且应该一进来就是它。
+     * 默认开；关掉后恢复「上次停留的那页」。
+     */
+    var calibrateOnLaunch: Boolean
+        get() = sp.getBoolean(KEY_CALIBRATE_ON_LAUNCH, true)
+        set(value) = sp.edit().putBoolean(KEY_CALIBRATE_ON_LAUNCH, value).apply()
 
     /** 最近一次「确认服务活着」的心跳时间，供看门狗判断是否掉线。 */
     var lastAliveAt: Long        get() = sp.getLong(KEY_LAST_ALIVE, 0L)
@@ -460,6 +566,17 @@ class Prefs(context: Context) {
         @Volatile
         private var darkStyleCache: OverlayStyle? = null
 
+        /**
+         * 偏移表缓存：换歌、渲染、校准页刷新都会读。
+         *
+         * 与样式缓存同理放在 companion —— 服务与设置页各持有一个 [Prefs] 实例，
+         * 缓存不共用的话，校准页调完偏移服务那边读到的还是旧值。
+         */
+        @Volatile
+        private var offsetCache: MutableMap<String, Int>? = null
+
+        private val offsetLock = Any()
+
         private const val NAME = "anylyric"
         private const val KEY_DEBUG = "debug_enabled"
         private const val KEY_HIDE_NO_LYRICS = "hide_when_no_lyrics"
@@ -506,6 +623,10 @@ class Prefs(context: Context) {
         private const val KEY_LYRIC_CACHE = "lyric_cache_limit"
         private const val KEY_ONLINE_SOURCE = "online_source_pinned"
         private const val KEY_ONLINE_ORDER = "online_source_order"
+        private const val KEY_LYRIC_OFFSETS = "lyric_offsets"
+        private const val KEY_OFFSET_DEFAULT = "lyric_offset_default"
+        private const val KEY_SHOW_TRANSLATION = "show_translation"
+        private const val KEY_CALIBRATE_ON_LAUNCH = "calibrate_on_launch"
         private const val KEY_LAST_ALIVE = "last_alive_at"
 
         /** 心跳落盘间隔：看门狗的过期阈值是 20 分钟，5 分钟一次足够，且写盘量很小。 */

@@ -59,9 +59,11 @@ import com.anylyric.data.PermissionGate
 import com.anylyric.data.Permissions
 import com.anylyric.data.Prefs
 import com.anylyric.diag.Probe
+import com.anylyric.lyrics.LrcFile
 import com.anylyric.lyrics.LyricStore
 import com.anylyric.lyrics.online.OnlineLyricsFetcher
 import com.anylyric.lyrics.online.OnlineSource
+import com.anylyric.lyrics.online.OnlineVariant
 import com.anylyric.overlay.Align
 import com.anylyric.overlay.LineMode
 import com.anylyric.overlay.OverlayDefaults
@@ -71,6 +73,7 @@ import com.anylyric.overlay.SizeBounds
 import com.anylyric.overlay.SizeSlider
 import com.anylyric.overlay.TitlePos
 import com.anylyric.service.ServiceWatchdog
+import com.anylyric.session.LyricOffsetStore
 import com.anylyric.session.LyricVariantInfo
 import com.anylyric.session.SessionHub
 import com.anylyric.theme.ThemeMode
@@ -255,6 +258,13 @@ class SettingsActivity : BaseActivity() {
         OVERVIEW(R.string.tab_overview),
         LOOK(R.string.tab_look),
         LYRICS(R.string.tab_lyrics),
+
+        /**
+         * 时间校准（0.2.27）。单独一页是用户拍板的：悬浮窗投在**仪表盘**上
+         * （副屏、触摸不到），主屏只负责操作 —— 这个页面是唯一能调偏移的地方，
+         * 必须一进来就找得到，而不是藏在「歌词」页第二张卡里。
+         */
+        CALIBRATE(R.string.tab_calibrate),
         RUNTIME(R.string.tab_runtime),
         MORE(R.string.tab_more)
     }
@@ -286,6 +296,8 @@ class SettingsActivity : BaseActivity() {
         val colors = buildColorCard()
         val title = buildTitleCard()
         val behavior = buildBehaviorCard()
+        val calibrate = buildCalibrateCard()
+        val calibrateHelp = buildCalibrateHelpCard()
         val keepAlive = buildKeepAliveCard()
         val hideApps = buildHideAppsCard()
         val diag = buildDiagCard()
@@ -318,6 +330,10 @@ class SettingsActivity : BaseActivity() {
         addPage(content, page(SettingsTab.OVERVIEW, listOf(status), listOf(channel)))
         addPage(content, page(SettingsTab.LOOK, listOf(scope, window, look), listOf(theme, colors)))
         addPage(content, page(SettingsTab.LYRICS, listOf(title), listOf(behavior)))
+        addPage(
+            content,
+            page(SettingsTab.CALIBRATE, listOf(calibrate), listOf(calibrateHelp))
+        )
         addPage(content, page(SettingsTab.RUNTIME, listOf(keepAlive), listOf(hideApps)))
         addPage(content, page(SettingsTab.MORE, listOf(diag), listOf(update)))
         root.addView(content)
@@ -486,9 +502,13 @@ class SettingsActivity : BaseActivity() {
     private fun tabBar(): View {
         val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         SettingsTab.values().forEach { tab ->
-            val label = text(getString(tab.labelRes), 13.5f).apply {
+            val label = text(getString(tab.labelRes), 13f).apply {
                 gravity = Gravity.CENTER
                 setPadding(0, dp(10), 0, dp(9))
+                // 0.2.27 起是六个标签：窄屏（手机竖屏）上英文会折成两行，
+                // 标签条一变高就把下面的内容整体顶下去。单行截断最多丢几个字母，不会变形。
+                isSingleLine = true
+                ellipsize = TextUtils.TruncateAt.END
             }
             val underline = View(this).apply {
                 setBackgroundColor(colorAccent)
@@ -614,7 +634,13 @@ class SettingsActivity : BaseActivity() {
      * 重新布局打断，位置不能跳），冷启动时用上次停留的那页。
      */
     private fun restoreTab(saved: Bundle?) {
-        val name = saved?.getString(KEY_TAB) ?: prefs.settingsTab
+        // 冷启动 + 正在播放 + 开关开着 → 直接进「时间校准」（用户 2026-11-16 明确要求）。
+        // 重建（saved != null）必须尊重当前所在页，否则转屏会把人踢走。
+        val name = if (saved == null && prefs.calibrateOnLaunch && hub.isPlaying()) {
+            SettingsTab.CALIBRATE.name
+        } else {
+            saved?.getString(KEY_TAB) ?: prefs.settingsTab
+        }
         val tab = SettingsTab.values().firstOrNull { it.name == name } ?: SettingsTab.OVERVIEW
         saved?.getIntArray(KEY_SCROLL)?.let { values ->
             SettingsTab.values().forEachIndexed { index, key ->
@@ -1324,6 +1350,19 @@ class SettingsActivity : BaseActivity() {
             }
         )
 
+        rows += divider()
+        // 双语歌词（0.2.27）：把同一时间戳的第二行当译文，占副行第一格。
+        // 默认关 —— 同一时间戳多行也可能是合唱声部，无脑合并会吃掉歌词。
+        rows += switchRow(
+            label = getString(R.string.behavior_translation),
+            hintText = getString(R.string.behavior_translation_hint),
+            current = { prefs.showTranslation },
+            onChange = { checked ->
+                prefs.showTranslation = checked
+                hub.onTranslationChanged()
+            }
+        )
+
         // 歌词来源（0.2.27）：手动指定后只跑那一家；自动时按下面的顺序依次尝试。
         // 胶囊里「自动」永远排第一 —— 它是默认值，也是唯一需要看顺序的那个模式。
         //
@@ -1451,6 +1490,325 @@ class SettingsActivity : BaseActivity() {
      * （常驻后台省不了多少电反而容易被用户当成流氓行为）。这里只提供入口，
      * 状态永远以系统为准 —— 开关只是「申请」按钮，不是权威事实。
      */
+    // ---------------------------------------------------------------- 时间校准（0.2.27）
+
+    /**
+     * 时间校准卡（独立一页）。
+     *
+     * 场景来自用户原话（2026-11-16）：悬浮窗投在**仪表盘**上，那块屏触摸不到，
+     * 主屏还要显示导航等信息 —— 所以调偏移只能在这里，而且要能单手连点，
+     * 调完立刻在仪表盘上看到结果（[SessionHub.adjustOffset] 会就地重定位）。
+     */
+    private fun buildCalibrateCard(): View {
+        val track = text("", 15f, bold = true)
+        val value = text(LyricOffsetStore.label(0), 30f, bold = true).apply {
+            setPadding(0, dp(6), 0, 0)
+        }
+        val mode = text("", 11.5f, secondary = true)
+        val preview = text("", 12f, secondary = true).apply {
+            setPadding(dp(2), dp(2), 0, 0)
+        }
+        val defaultLine = text("", 12f, secondary = true)
+
+        val steps = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(6), 0, 0)
+            addView(offsetButton("-1s") { applyOffset(-LyricOffsetStore.BIG_STEP_MS) })
+            addView(offsetButton("-0.2s") { applyOffset(-LyricOffsetStore.STEP_MS) })
+            addView(offsetButton(getString(R.string.calibrate_reset)) { resetOffsetNow() })
+            addView(offsetButton("+0.2s") { applyOffset(LyricOffsetStore.STEP_MS) })
+            addView(offsetButton("+1s") { applyOffset(LyricOffsetStore.BIG_STEP_MS) })
+        }
+        // 最后一个不留右边距：留了整排会看着偏左（重排后视觉重心不在卡片中心）。
+        (steps.getChildAt(steps.childCount - 1).layoutParams as? LinearLayout.LayoutParams)
+            ?.let { it.marginEnd = 0 }
+
+        val rows = ArrayList<View>(12)
+        rows += track
+        rows += value
+        rows += mode
+        rows += divider(12, 8)
+        rows += steps
+        rows += hint(getString(R.string.calibrate_direction_hint))
+        rows += divider(12, 8)
+        rows += preview
+        rows += divider(12, 8)
+        rows += defaultLine
+        rows += row(
+            textButton(getString(R.string.calibrate_default_minus)) {
+                hub.adjustDefaultOffset(-LyricOffsetStore.STEP_MS)
+                refresh()
+            },
+            textButton(getString(R.string.calibrate_default_plus)) {
+                hub.adjustDefaultOffset(LyricOffsetStore.STEP_MS)
+                refresh()
+            }
+        )
+        rows += textButton(getString(R.string.calibrate_clear_all)) { confirmClearAll() }
+        // 本地统计（0.2.27）：用户调偏移时最想知道的就是「最近到底行不行」。
+        // 只在本进程内存里算，不落盘、不上报 —— 所以关掉应用就重来。
+        val statsLine = text(getString(R.string.calibrate_stats_none), 11.5f, secondary = true)
+            .apply { setPadding(dp(2), dp(6), 0, 0) }
+        rows += statsLine
+
+        uiRefreshers += {
+            val label = hub.offsetTargetLabel()
+            track.text = label ?: getString(R.string.calibrate_no_track)
+            value.text = LyricOffsetStore.label(hub.offsetMs())
+            mode.text = when {
+                label == null -> ""
+                hub.offsetFollowsDefault() -> getString(R.string.calibrate_follows_default)
+                else -> getString(R.string.calibrate_custom)
+            }
+            preview.text = previewText()
+            val stats = hub.statsSnapshot()
+            statsLine.text = when {
+                stats.sessions == 0 -> getString(R.string.calibrate_stats_none)
+                stats.p50FirstLineMs == null ->
+                    getString(R.string.calibrate_stats_no_lyrics, stats.sessions)
+
+                else -> getString(
+                    R.string.calibrate_stats_fmt,
+                    stats.sessions,
+                    (stats.hitRate * 100).toInt(),
+                    stats.p50FirstLineMs
+                )
+            }
+            defaultLine.text = getString(
+                R.string.calibrate_default_fmt,
+                LyricOffsetStore.label(hub.defaultOffsetMs()),
+                hub.offsetEntryCount()
+            )
+        }
+
+        return cardSection(getString(R.string.calibrate_section), null, rows)
+    }
+
+    /**
+     * 校准页右栏：方向说明 + 「重新搜索」。
+     *
+     * 方向写反是最容易发生、也最难自查的错误（调了没反应，只会以为功能坏了），
+     * 所以「早了就减、晚了就加」必须写在按钮旁边，而不是塞进长段落里。
+     */
+    private fun buildCalibrateHelpCard(): View {
+        val rows = ArrayList<View>(9)
+        rows += text(getString(R.string.calibrate_help_earlier), 13f, bold = true)
+        rows += hint(getString(R.string.calibrate_help_earlier_body))
+        rows += divider(10, 8)
+        rows += text(getString(R.string.calibrate_help_later), 13f, bold = true)
+        rows += hint(getString(R.string.calibrate_help_later_body))
+        rows += divider(12, 8)
+        rows += hint(getString(R.string.calibrate_help_scope))
+        rows += divider(12, 10)
+        rows += text(getString(R.string.calibrate_search_title), 14f, bold = true)
+        rows += hint(getString(R.string.calibrate_search_body))
+        rows += textButton(getString(R.string.calibrate_search_button)) { showSearchDialog() }
+        rows += textButton(getString(R.string.calibrate_import_lrc)) { pickLrcFile() }
+        rows += divider(12, 10)
+        rows += switchRow(
+            label = getString(R.string.calibrate_launch),
+            hintText = getString(R.string.calibrate_launch_hint),
+            current = { prefs.calibrateOnLaunch },
+            onChange = { prefs.calibrateOnLaunch = it }
+        )
+        return cardSection(getString(R.string.calibrate_help_section), null, rows)
+    }
+
+    /** 校准页的大按钮：车机上要够高够宽，五个并排也不能小于 44dp 的触摸目标。 */
+    private fun offsetButton(label: String, onClick: () -> Unit): TextView = TextView(this).apply {
+        text = label
+        textSize = 15f
+        setTypeface(typeface, Typeface.BOLD)
+        setTextColor(colorAccent)
+        gravity = Gravity.CENTER
+        background = pill(colorCardStroke, dp(12).toFloat())
+        isClickable = true
+        isFocusable = true
+        setOnClickListener { onClick() }
+        layoutParams = LinearLayout.LayoutParams(0, dp(56), 1f).apply { marginEnd = dp(6) }
+    }
+
+    /** 校准页实时预览：「0:42 · 第 12/46 行」+ 当前这一句。 */
+    private fun previewText(): String {
+        val pos = hub.positionMs()
+        val line = hub.livePreviewText()
+        val where = hub.liveLinePosition()
+        val sb = StringBuilder()
+        if (pos >= 0) sb.append(clockText(pos))
+        if (where != null) {
+            if (sb.isNotEmpty()) sb.append(" · ")
+            sb.append(getString(R.string.calibrate_line_pos, where.first, where.second))
+        }
+        if (!line.isNullOrBlank()) {
+            if (sb.isNotEmpty()) sb.append('\n')
+            sb.append('“').append(line.trim()).append('”')
+        }
+        if (sb.isEmpty()) sb.append(getString(R.string.calibrate_no_preview))
+        return sb.toString()
+    }
+
+    private fun clockText(ms: Long): String {
+        val total = (ms / 1000L).coerceAtLeast(0L)
+        val m = total / 60
+        val s = total % 60
+        return "$m:" + (if (s < 10) "0$s" else "$s")
+    }
+
+    private fun applyOffset(deltaMs: Int) {
+        val next = hub.adjustOffset(deltaMs)
+        toast(getString(R.string.calibrate_applied, LyricOffsetStore.label(next)))
+        refresh()
+    }
+
+    private fun resetOffsetNow() {
+        val next = hub.resetOffset()
+        toast(getString(R.string.calibrate_applied, LyricOffsetStore.label(next)))
+        refresh()
+    }
+
+    private fun confirmClearAll() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.calibrate_clear_all)
+            .setMessage(R.string.calibrate_clear_all_confirm)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.calibrate_clear_all) { _, _ ->
+                prefs.clearAllLyricOffsets()
+                toast(getString(R.string.calibrate_cleared))
+                refresh()
+            }
+            .show()
+    }
+
+    /**
+     * 手动搜歌词（0.2.27）。
+     *
+     * 自动识别错了（识别成上一首、标题带噪声、同名翻唱）时唯一的自救路径。
+     * 输入的关键词**只作用于这一次搜索**：不改全局「歌词来源」、不改自动顺序 ——
+     * 用户原话「区分一下」就是这个边界。
+     */
+    private fun showSearchDialog() {
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+        }
+        val titleInput = EditText(this).apply {
+            hint = getString(R.string.search_title_hint)
+            setSingleLine()
+            setText(hub.currentTitle().orEmpty())
+        }
+        val artistInput = EditText(this).apply {
+            hint = getString(R.string.search_artist_hint)
+            setSingleLine()
+            setText(hub.currentArtist().orEmpty())
+        }
+        column.addView(titleInput)
+        column.addView(artistInput)
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.search_dialog_title)
+            .setView(column)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.search_action) { _, _ ->
+                runManualSearch(
+                    titleInput.text.toString().trim(),
+                    artistInput.text.toString().trim()
+                )
+            }
+            .show()
+    }
+
+    private fun runManualSearch(title: String, artist: String) {
+        if (title.isEmpty()) {
+            toast(getString(R.string.search_need_title))
+            return
+        }
+        toast(getString(R.string.search_running))
+        val accepted = OnlineLyricsFetcher.request(
+            title = title,
+            artist = artist,
+            durationMs = hub.currentDurationMs(),
+            want = SEARCH_WANT,
+            sources = prefs.onlineSourcePlan,
+            onResult = { variants -> showSearchResult(title, artist, variants) },
+            onMiss = { toast(getString(R.string.search_empty)) }
+        )
+        // false = 这首歌已有一个请求在跑，本次既没发起也不会回调。
+        if (!accepted) toast(getString(R.string.search_busy))
+    }
+
+    private fun showSearchResult(title: String, artist: String, variants: List<OnlineVariant>) {
+        if (variants.isEmpty()) {
+            toast(getString(R.string.search_empty))
+            return
+        }
+        val items = variants.mapIndexed { index, variant ->
+            getString(
+                R.string.search_result_item,
+                index + 1,
+                variantSourceLabel(variant.source, variant.fromCache),
+                variant.lines.size
+            )
+        }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.search_result_title)
+            .setItems(items) { _, which ->
+                val variant = variants.getOrNull(which) ?: return@setItems
+                hub.applyManualChoice(title, artist, variant)
+                toast(
+                    getString(
+                        R.string.search_applied,
+                        variantSourceLabel(variant.source, variant.fromCache)
+                    )
+                )
+                refresh()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    /**
+     * 导入本地 .lrc（0.2.27）。
+     *
+     * 用 SAF（`ACTION_OPEN_DOCUMENT`）而不是读外部存储：**不申请存储权限**，
+     * 用户选哪个文件就只能读那一个 —— 与产品「不读本地文件」的既有边界不冲突
+     * （这是用户主动指定的一份文本，不是扫描曲库）。
+     *
+     * MIME 用通配类型（星号-斜杠-星号）：LRC 没有标准类型，有的车机报
+     * `text/x-lrc`、有的报 `application/octet-stream`，按类型过滤会把文件灰掉选不中。
+     */
+    private fun pickLrcFile() {
+        if (hub.currentTitle() == null) {
+            toast(getString(R.string.import_need_track))
+            return
+        }
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+        }
+        val ok = runCatching { startActivityForResult(intent, REQUEST_PICK_LRC) }.isSuccess
+        if (!ok) toast(getString(R.string.import_no_picker))
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_PICK_LRC || resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        val raw = runCatching {
+            contentResolver.openInputStream(uri)?.use { LrcFile.decode(it.readBytes()) }
+        }.getOrNull()
+        if (raw.isNullOrBlank()) {
+            toast(getString(R.string.import_failed))
+            return
+        }
+        if (hub.applyLocalLyrics(raw)) {
+            toast(getString(R.string.import_ok))
+            refresh()
+        } else {
+            // 解析出零行：多半是纯文本歌词（没有时间轴），或者选错了文件。
+            toast(getString(R.string.import_failed))
+        }
+    }
+
     private fun buildKeepAliveCard(): View {
         val rows = ArrayList<View>(6)
 
@@ -2938,6 +3296,13 @@ class SettingsActivity : BaseActivity() {
             }
         }
 
+        // 手动选曲标记（0.2.27）：屏上这份词是用户自己搜出来的，不是自动识别的。
+        // 不标的话，下次自动识别又变回错的，用户会以为「搜了没生效」。
+        hub.manualTrackLabel()?.let { manual ->
+            statusLine.text = statusLine.text.toString() + "\n" +
+                getString(R.string.status_manual, manual)
+        }
+
         // 歌词版本：只有在线补词的词才谈得上「换一版」——本地/直连通道给的是唯一一份。
         val variant = hub.lyricVariantLabel()
         variantRow.visibility = if (variant != null) View.VISIBLE else View.GONE
@@ -3265,6 +3630,10 @@ class SettingsActivity : BaseActivity() {
         "L1" -> getString(R.string.channel_l1)
         "L2" -> getString(R.string.channel_l2)
         "ONLINE" -> getString(R.string.channel_online)
+        // 这三种以前都落进 else，显示成「没有活跃会话」—— 明明正在出词，状态卡却说没会话。
+        "LOCAL" -> getString(R.string.channel_local)
+        "BYD" -> getString(R.string.channel_external)
+        "NOTICE" -> getString(R.string.channel_notice)
         else -> getString(R.string.channel_no_session)
     }
 
@@ -3526,5 +3895,16 @@ class SettingsActivity : BaseActivity() {
         /** 旋转重建时保存当前标签页与各页滚动位置（Int 快照，见项目红线）。 */
         private const val KEY_TAB = "settings_tab"
         private const val KEY_SCROLL = "settings_tab_scroll"
+
+        /**
+         * 手动搜索一次取几版。
+         *
+         * 比自动取词的 3 版多：手动搜说明用户已经认定「当前这份是错的」，
+         * 这时候多给几条候选比让他再点一次更省事。
+         */
+        private const val SEARCH_WANT = 6
+
+        /** 选本地 .lrc 的请求码。 */
+        private const val REQUEST_PICK_LRC = 0x4C52
     }
 }

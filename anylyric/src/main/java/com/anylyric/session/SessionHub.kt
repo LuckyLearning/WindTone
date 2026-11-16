@@ -31,6 +31,7 @@ import com.anylyric.diag.ResourceSampler
 import com.anylyric.lyrics.ExternalLyrics
 import com.anylyric.lyrics.LyricLine
 import com.anylyric.lyrics.LyricResult
+import com.anylyric.lyrics.LrcParser
 import com.anylyric.lyrics.LyricStore
 import com.anylyric.lyrics.LyricTick
 import com.anylyric.lyrics.LyricsSourceChain
@@ -47,7 +48,8 @@ import com.anylyric.lyrics.sources.L1TitleStreamSource
 import com.anylyric.lyrics.sources.L2NotificationSource
 import com.anylyric.overlay.OverlayHost
 import com.anylyric.service.BootPolicy
-import com.anylyric.service.BydMediaController
+import com.anylyric.service.BridgeRegistry
+import com.anylyric.service.CarBridge
 import com.anylyric.service.MediaWatchService
 import com.anylyric.ui.SettingsActivity
 import com.anylyric.util.AppLabels
@@ -132,6 +134,14 @@ class SessionHub private constructor(context: Context) {
     private val fieldBuffer = arrayOfNulls<CharSequence>(FIELD_KEYS.size + 1)
 
     private var controller: MediaController? = null
+
+    /**
+     * 当前设备可用的车型直连桥（0.2.27）；null = 这台机器没有这条通道。
+     *
+     * 以前这里直接写死 `BydMediaController`，加第二个车型就得改会话层。
+     * 现在由 [BridgeRegistry] 探测后给一个实现，SessionHub 只认 [CarBridge]。
+     */
+    private var carBridge: CarBridge? = null
     private var listenerConnected = false
 
     /**
@@ -278,6 +288,29 @@ class SessionHub private constructor(context: Context) {
      */
     private val pseudoPackages = LinkedHashSet<String>()
     private var lastPlayState = PlayState.NONE
+
+    /**
+     * 当前曲目的歌词时间偏移（毫秒，0.2.27）。
+     *
+     * 用户 2026-11-16 的真实场景：悬浮窗投在**仪表盘**（副屏，触摸不到），
+     * 只能在主屏的「时间校准」页调 —— 所以这个值必须能从 Activity 侧直接改，
+     * 改完立刻重定位，不需要任何会话事件。
+     *
+     * 键按「播放器 + 歌名 + 歌手」存（见 [LyricOffsetStore]）：同一首歌在酷我与
+     * QQ 音乐上的进度偏差本来就不同，只按歌名存会让「在这家调好在另一家又歪」。
+     */
+    private var currentOffsetMs: Int = 0
+
+    /** 上一次同步偏移时用的是哪首歌 —— 换歌（或换播放器）才重读，不每秒读 SP。 */
+    private var offsetPkg: String? = null
+    private var offsetTitle: String? = null
+    private var offsetArtist: String? = null
+
+    /** 本地会话统计（0.2.27）：出词率与首句延迟，只存内存。 */
+    private val stats = SessionStats()
+
+    /** 手动选曲的标记：非空表示屏上这份词是用户自己搜出来的。换歌即失效。 */
+    private var manualLabel: String? = null
     private var lastSessionCount = 0
     private var lastPlayingCount = 0
     /** 调试打开时采集的全量会话摘要；关着时保持 null，不为诊断多付一次跨进程读元数据。 */
@@ -336,6 +369,16 @@ class SessionHub private constructor(context: Context) {
     private var ctxIndex = -1
     private var ctxRef: List<LyricLine>? = null
     private var ctxResult: List<String> = emptyList()
+
+    /** 副行缓存生成时「显示译文」是开还是关 —— 开关一变必须重算，否则会一直用旧行。 */
+    private var ctxShowTranslation = false
+
+    /**
+     * 合并译文**之前**的原始行表。
+     *
+     * 只在「显示译文」开关切换时用来重算 —— 合并后的行表不能二次合并。
+     */
+    private var rawLines: List<LyricLine> = emptyList()
 
     /** `trackLabel()` 的缓存，随标题/歌手变化失效。 */
     private var labelCache: String? = null
@@ -460,7 +503,8 @@ class SessionHub private constructor(context: Context) {
         // 权限，把它挂在「需要权限的服务的 onCreate」上，等于让唯一能绕过权限的通道
         // 先过一遍拿不到的权限 —— 0.2.21 及以前的真机报告里它一次都没启动过。
         // start() 内部幂等，非 BYD 设备会立刻返回。
-        BydMediaController.start(appContext)
+        carBridge = BridgeRegistry.active(appContext)
+        carBridge?.start(appContext)
 
         // 首次拉取必须由这里发起。
         //
@@ -524,7 +568,7 @@ class SessionHub private constructor(context: Context) {
      * 「不需要权限的那条路到底通不通」。
      */
     fun externalStatusLabel(): String? =
-        BydMediaController.statusLabel().takeIf { it != "idle" }
+        carBridge?.statusLabel()?.takeIf { it != "idle" }
 
     /**
      * 调试开关的唯一切换点。
@@ -849,7 +893,7 @@ class SessionHub private constructor(context: Context) {
      */
     fun onA11yNotification(pkg: String?, title: String?, body: String?) {
         if (pkg == null) return
-        if (BydMediaController.statusLabel().startsWith("registered")) return
+        if (carBridge?.statusLabel()?.startsWith("registered") == true) return
         if (title == null && body == null) return
 
         var changed = false
@@ -1324,6 +1368,7 @@ class SessionHub private constructor(context: Context) {
             clock.update(position, speed, playState, externalDuration)
         }
         lastPlayState = playState
+        onPlayStateChanged(playState)
 
         if (title != externalKeyTitle ||
             lyricsText != externalKeyLyrics ||
@@ -1533,6 +1578,7 @@ class SessionHub private constructor(context: Context) {
         val playbackState = if (callbackStateValid) callbackState else active.playbackState
         val playState = mapState(playbackState?.state ?: PlaybackState.STATE_NONE)
         lastPlayState = playState
+        onPlayStateChanged(playState)
 
         // 通知接管（0.2.26）：绑定的会话没在放、另一条媒体通知却还在更新 —— 用户其实
         // 已经切到那个 App，只是它不发标准会话。不接管就是「屏上挂着上一个 App 的歌名」。
@@ -1975,11 +2021,12 @@ class SessionHub private constructor(context: Context) {
 
     /** 换歌词列表的唯一入口：顺带把「是否全带时间轴」算一次，别再每次渲染全表扫。 */
     private fun setCurrentLines(lines: List<LyricLine>, anchorIndex: Int = -1) {
-        currentLines = lines
+        rawLines = lines
+        currentLines = mergeTranslations(lines)
         currentAnchorIndex = anchorIndex
         lastLineIndex = -1
-        var timed = lines.isNotEmpty()
-        for (line in lines) {
+        var timed = currentLines.isNotEmpty()
+        for (line in currentLines) {
             if (line.timeMs == null) {
                 timed = false
                 break
@@ -1988,8 +2035,61 @@ class SessionHub private constructor(context: Context) {
         currentLinesTimed = timed
     }
 
+    /**
+     * 「显示译文」开关变了：用**原始行表**重算一次，不必重新取词。
+     *
+     * 必须留一份 [rawLines]：合并后的行表里译文已经被塞进 `translation` 字段，
+     * 再合并一次会把原文行弄丢（开关来回切几次歌词就空了）。
+     */
+    fun onTranslationChanged() {
+        if (rawLines.isEmpty()) return
+        currentLines = mergeTranslations(rawLines)
+        lastLineIndex = -1
+        ctxIndex = -1
+        render()
+        scheduleLineTick()
+    }
+
+    /**
+     * 把「同一时间戳的第二行」收成译文（0.2.27）。
+     *
+     * 只在用户打开「显示译文」时做：同时间戳多行也可能是合唱 / 多声部，
+     * 无条件合并会把本该显示的第二句歌词吃掉 —— 那比没有译文更糟。
+     * 时间戳相同才算译文，差 1ms 都算两句，避免把间奏的连续行误判。
+     */
+    private fun mergeTranslations(lines: List<LyricLine>): List<LyricLine> {
+        if (!prefs.showTranslation || lines.size < 2) return lines
+        var hasDuplicate = false
+        for (i in 0 until lines.size - 1) {
+            val a = lines[i].timeMs
+            if (a != null && a == lines[i + 1].timeMs) {
+                hasDuplicate = true
+                break
+            }
+        }
+        if (!hasDuplicate) return lines
+        val out = ArrayList<LyricLine>(lines.size)
+        var i = 0
+        while (i < lines.size) {
+            val cur = lines[i]
+            val next = lines.getOrNull(i + 1)
+            if (cur.timeMs != null && next != null && next.timeMs == cur.timeMs) {
+                out += cur.copy(translation = cur.translation ?: next.text)
+                i += 2
+            } else {
+                out += cur
+                i++
+            }
+        }
+        return out
+    }
+
     private fun render() {
         Perf.onRender()
+
+        // 换歌 / 换播放器时把偏移切过来。放在最前面：下面每一条分支都依赖它，
+        // 而且空列表分支（无词提示）也在用当前曲目信息。
+        syncOffset()
 
         if (currentLines.isEmpty()) {
             // 编辑态下**永远**留着窗口：用户可能只是想调样式，此刻没有会话不代表
@@ -2048,9 +2148,7 @@ class SessionHub private constructor(context: Context) {
             return
         }
 
-        val index = if (currentLinesTimed) {
-            clock.locate(currentLines, clock.position())
-        } else {
+        val index = if (currentLinesTimed) locateNow() else {
             currentAnchorIndex.takeIf { it >= 0 } ?: currentLines.lastIndex
         }
         val safe = index.coerceIn(0, currentLines.lastIndex)
@@ -2395,9 +2493,22 @@ class SessionHub private constructor(context: Context) {
      * 拿多了渲染器会丢掉，拿少了就会出现「4 行窗口只有 2 行字」。
      */
     private fun contextLines(index: Int): List<String> {
-        if (index == ctxIndex && currentLines === ctxRef) return ctxResult
+        val showTranslation = prefs.showTranslation
+        if (index == ctxIndex && currentLines === ctxRef &&
+            showTranslation == ctxShowTranslation
+        ) {
+            return ctxResult
+        }
         val out = ArrayList<String>(CONTEXT_MAX)
+        // 译文占副行第一格：开双语的人就是在看译文，排到下一句后面等于永远看不到
+        // （副行默认只有 1~2 行）。
+        if (showTranslation) {
+            currentLines.getOrNull(index)?.translation
+                ?.takeIf { it.isNotBlank() }
+                ?.let { out += it }
+        }
         for (step in 1..CONTEXT_MAX) {
+            if (out.size >= CONTEXT_MAX) break
             out += currentLines.getOrNull(index + step)?.text ?: break
         }
         if (out.isEmpty()) {
@@ -2408,6 +2519,7 @@ class SessionHub private constructor(context: Context) {
         }
         ctxIndex = index
         ctxRef = currentLines
+        ctxShowTranslation = showTranslation
         ctxResult = out
         return out
     }
@@ -2436,12 +2548,243 @@ class SessionHub private constructor(context: Context) {
     /** 当前应该显示的行号（与 [render] 的定位规则一致）。 */
     private fun currentIndex(): Int {
         if (currentLines.isEmpty()) return -1
-        val index = if (currentLinesTimed) {
-            clock.locate(currentLines, clock.position())
-        } else {
+        val index = if (currentLinesTimed) locateNow() else {
             currentAnchorIndex.takeIf { it >= 0 } ?: currentLines.lastIndex
         }
         return index.coerceIn(0, currentLines.lastIndex)
+    }
+
+    /**
+     * 按「当前进度 + 偏移」定位行。
+     *
+     * **偏移只改变查表用的时间点，不动时钟锚点**。若把偏移加进 [SessionClock]，
+     * 调偏移就等于伪造了一次进度更新：播放器下一次上报正常 position 时会被判成
+     * 「进度回跳」，画面会闪一下并重新锚定 —— 用户看到的是「每调一次就乱一下」。
+     *
+     * `position()` 返回 -1（发布端没给进度）时**必须原样返回 -1**：直接把 -1 加上
+     * 偏移会变成正数，于是「没有进度的流」会被定位到某一行歌词上。
+     */
+    private fun locateNow(): Int {
+        val pos = clock.position()
+        if (pos < 0L) return -1
+        val shifted = (pos + currentOffsetMs).coerceAtLeast(0L)
+        return clock.locate(currentLines, shifted)
+    }
+
+    /** 播放器包名 —— 偏移键的一部分；车机直连与通知通道没有 controller。 */
+    private fun currentPackageForOffset(): String? {
+        controller?.let { return it.packageName }
+        if (externalOnly) return EXTERNAL_SOURCE
+        return noticeSource?.pkg
+    }
+
+    /** 当前曲目变了才重读偏移。字段比较走引用/内容，代价可忽略（render 每秒数次）。 */
+    private fun syncOffset() {
+        val pkg = currentPackageForOffset()
+        if (pkg == offsetPkg && lastTitle == offsetTitle && lastArtist == offsetArtist) return
+        // 上一次同步过真正的曲目 → 这是一次换曲（首次同步不算）。
+        val trackChanged = offsetTitle != null || offsetArtist != null
+        offsetPkg = pkg
+        offsetTitle = lastTitle
+        offsetArtist = lastArtist
+        currentOffsetMs = prefs.lyricOffsetMs(pkg, lastTitle, lastArtist)
+        // 换曲：手动选的那份词只属于上一首，不能跟到下一首上。
+        if (trackChanged) manualLabel = null
+        if (trackChanged) {
+            // 换曲就是上一会话的终点：先收尾再重新计时，否则整段长途会被算成一次会话，
+            // 「出词率」会变成「整个行程有没有出过词」，毫无诊断价值。
+            val now = SystemClock.elapsedRealtime()
+            stats.onPlayStop(now)
+            if (lastPlayState == PlayState.PLAYING) stats.onPlayStart(now)
+        }
+    }
+
+    /** 播放状态切换时驱动会话计时（0.2.27）。 */
+    private fun onPlayStateChanged(playState: PlayState) {
+        val now = SystemClock.elapsedRealtime()
+        if (playState == PlayState.PLAYING) {
+            stats.onPlayStart(now)
+        } else {
+            stats.onPlayStop(now)
+        }
+    }
+
+    /** 诊断页 [STATS] 段用。没有会话时返回全零，界面据此显示「还没有样本」。 */
+    fun statsSnapshot(): SessionStats.Snapshot = stats.snapshot()
+
+    /** 报告里 [STATS] 的一行文本；没有样本时返回空串（报告会写 no samples yet）。 */
+    private fun statsText(): String {
+        val snap = stats.snapshot()
+        if (snap.sessions == 0) return ""
+        val p50 = snap.p50FirstLineMs?.toString() ?: "-"
+        val p90 = snap.p90FirstLineMs?.toString() ?: "-"
+        return "sessions=${snap.sessions} hit=${(snap.hitRate * 100).toInt()}% " +
+            "p50=${p50}ms p90=${p90}ms"
+    }
+
+    // ------------------------------------------------------------- 时间校准（0.2.27）
+
+    /** 当前生效的偏移（毫秒）。校准页每隔一段时间读它刷新大字。 */
+    fun offsetMs(): Int {
+        syncOffset()
+        return currentOffsetMs
+    }
+
+    /** 当前校对的曲目；没有歌名时 null（校准页据此显示空态）。 */
+    fun offsetTargetLabel(): String? = listOfNotNull(lastTitle, lastArtist)
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .joinToString(" — ")
+        .ifBlank { null }
+
+    /** 当前这首歌是不是「跟随全局默认」（没单独调过）。 */
+    fun offsetFollowsDefault(): Boolean =
+        !prefs.hasOwnLyricOffset(currentPackageForOffset(), lastTitle, lastArtist)
+
+    /**
+     * 调当前歌的偏移。
+     *
+     * 返回新值，调用方直接拿去刷新界面。**不改锚点**（见 [locateNow]），
+     * 调完立刻 `render()`，仪表盘上那一屏在下一帧就对上了。
+     */
+    fun adjustOffset(deltaMs: Int): Int {
+        val pkg = currentPackageForOffset()
+        val title = lastTitle?.trim().orEmpty()
+        if (title.isEmpty()) return currentOffsetMs
+        val base = prefs.lyricOffsetMs(pkg, title, lastArtist)
+        prefs.setLyricOffsetMs(pkg, title, lastArtist, base + deltaMs)
+        currentOffsetMs = prefs.lyricOffsetMs(pkg, title, lastArtist)
+        offsetPkg = pkg
+        offsetTitle = lastTitle
+        offsetArtist = lastArtist
+        render()
+        scheduleLineTick()
+        return currentOffsetMs
+    }
+
+    /** 本歌归零：抹掉自定义，回到跟随全局默认。 */
+    fun resetOffset(): Int {
+        val pkg = currentPackageForOffset()
+        prefs.clearLyricOffset(pkg, lastTitle, lastArtist)
+        currentOffsetMs = prefs.lyricOffsetMs(pkg, lastTitle, lastArtist)
+        render()
+        scheduleLineTick()
+        return currentOffsetMs
+    }
+
+    fun defaultOffsetMs(): Int = prefs.defaultLyricOffsetMs
+
+    /**
+     * 调全局默认。
+     *
+     * 只影响**没单独调过**的歌；已经自定义过的保持自己的值 —— 否则用户精心
+     * 调过的那几首会被一次「默认值微调」全部冲掉。
+     */
+    fun adjustDefaultOffset(deltaMs: Int): Int {
+        prefs.defaultLyricOffsetMs = prefs.defaultLyricOffsetMs + deltaMs
+        val follows = prefs.hasOwnLyricOffset(
+            currentPackageForOffset(), lastTitle, lastArtist
+        )
+        if (!follows) {
+            currentOffsetMs = prefs.defaultLyricOffsetMs
+            render()
+            scheduleLineTick()
+        }
+        return prefs.defaultLyricOffsetMs
+    }
+
+    /** 已调过的曲目数（校准页显示）。 */
+    fun offsetEntryCount(): Int = prefs.lyricOffsetCount()
+
+    /**
+     * 校准页的实时预览：当前这一句。
+     *
+     * 用户调偏移时看的是**仪表盘上的悬浮窗**，但主屏上也需要一个「我调到哪了」
+     * 的参照 —— 否则每调一次都要抬头看一眼。这里给的就是同一份定位结果。
+     */
+    fun livePreviewText(): String? {
+        if (currentLines.isEmpty()) return null
+        return currentLines.getOrNull(currentIndex())?.text
+    }
+
+    /** 当前进度（毫秒）；-1 表示发布端没给进度。 */
+    fun positionMs(): Long = clock.position()
+
+    /** 当前是第几行 / 共几行（1 起）；无法定位时 null。 */
+    fun liveLinePosition(): Pair<Int, Int>? {
+        if (currentLines.isEmpty()) return null
+        val idx = currentIndex()
+        if (idx < 0) return null
+        return (idx + 1) to currentLines.size
+    }
+
+    /** 正在播放吗。校准页用它判断「现在调有没有意义」，也用于启动默认页路由。 */
+    fun isPlaying(): Boolean = lastPlayState == PlayState.PLAYING
+
+    /** 当前歌名；校准页「重新搜索」用它预填输入框。 */
+    fun currentTitle(): String? = lastTitle?.trim()?.takeIf { it.isNotEmpty() }
+
+    fun currentArtist(): String? = lastArtist?.trim()?.takeIf { it.isNotEmpty() }
+
+    fun currentDurationMs(): Long = clock.duration()
+
+    /**
+     * 手动选定一版并立刻生效（0.2.27）。
+     *
+     * 与「歌词来源」设置**互不影响**：这里只是把这一首歌的一版固定下来，
+     * 不改全局的源选择、也不改自动顺序 —— 用户原话「区分一下」就是这个意思。
+     * 写盘走 [OnlineLyricsFetcher.remember]，所以下次同一首歌首选就是它。
+     */
+    fun applyManualChoice(title: String, artist: String, variant: OnlineVariant) {
+        if (variant.lines.isEmpty()) return
+        OnlineLyricsFetcher.remember(title, artist, variant)
+        onlineVariants = listOf(variant)
+        onlineVariantIndex = 0
+        onlineLines = variant.lines
+        setCurrentLines(variant.lines, -1)
+        hitSource = ONLINE_SOURCE
+        manualLabel = listOfNotNull(
+            title.trim().takeIf { it.isNotEmpty() },
+            artist.trim().takeIf { it.isNotEmpty() }
+        ).joinToString(" — ")
+        variantSeek = null
+        render()
+        scheduleLineTick()
+        if (Probe.enabled) {
+            Probe.write("歌词", "manual pick lines=${variant.lines.size} from=${variant.source?.id}")
+        }
+    }
+
+    /** 当前是否是「手动搜来的词」；状态卡据此加一个「手动」标记。 */
+    fun manualTrackLabel(): String? = manualLabel
+
+    /**
+     * 应用一份本地导入的 LRC（0.2.27）。
+     *
+     * 写进与在线缓存**同一个目录、同一个 key**：这样它天然享受缓存上限的淘汰规则，
+     * 也不用再维护第二套存储。来源标记写 `local`，读盘时能区分「这份不是网上抓的」。
+     *
+     * 返回 false = 解析不出任何一行（文件坏了、选错了文件、只有纯文本没有时间轴）。
+     */
+    fun applyLocalLyrics(raw: String): Boolean {
+        val title = lastTitle?.trim().orEmpty()
+        if (title.isEmpty()) return false
+        val lines = LrcParser.parse(raw)
+        if (lines.isEmpty()) return false
+        val key = LyricStore.key(title, lastArtist)
+        if (key.isNotBlank()) LyricStore.save(key, LrcParser.build(lines), LOCAL_SOURCE)
+        // 本地文件是用户亲手给的，优先级最高：清掉在线那份与手动标记，
+        // 否则下一轮责任链会把在线词又顶回来（看起来就是「导入了但没生效」）。
+        onlineLines = emptyList()
+        onlineVariants = emptyList()
+        onlineVariantIndex = 0
+        manualLabel = null
+        setCurrentLines(lines, -1)
+        hitSource = LOCAL_SOURCE
+        render()
+        scheduleLineTick()
+        if (Probe.enabled) Probe.write("歌词", "local file lines=${lines.size}")
+        return true
     }
 
     private fun scheduleLineTick() {
@@ -2529,6 +2872,8 @@ class SessionHub private constructor(context: Context) {
         if (prompt) {
             overlay.showPrompt(primary, secondary)
         } else {
+            // 真实歌词上屏才算「出词」，提示语不算 —— 否则「正在获取」会把出词率刷成 100%。
+            stats.onFirstLine(SystemClock.elapsedRealtime())
             overlay.showContent(primary, secondary, title)
         }
         if (!Probe.enabled) return
@@ -2588,7 +2933,8 @@ class SessionHub private constructor(context: Context) {
             overlaySuppressed = overlay.isSuppressed(),
             hideByOwnUi = ownUiCount > 0,
             // 「idle」不写进报告：非 BYD 设备上它没有信息量，只会让报告更长。
-            externalSource = BydMediaController.statusLabel().takeIf { it != "idle" },
+            externalSource = carBridge?.statusLabel()?.takeIf { it != "idle" },
+            statsDigest = statsText(),
             // 正在靠媒体通知工作时报出是哪个包、哪首歌 —— 否则 sessions=0 hit=NOTICE 无法解释。
             noticeSource = noticeSource
                 ?.takeIf { it.pkg != controller?.packageName }
@@ -2849,6 +3195,9 @@ class SessionHub private constructor(context: Context) {
 
         /** 在线补词的来源标识（进探测报告与状态卡）。 */
         private const val ONLINE_SOURCE = "ONLINE"
+
+        /** 本地导入的 .lrc 文件（0.2.27）—— 与在线来源区分，状态卡会写「本地文件」。 */
+        private const val LOCAL_SOURCE = "LOCAL"
 
         /**
          * 同一首歌最多取几次在线歌词。

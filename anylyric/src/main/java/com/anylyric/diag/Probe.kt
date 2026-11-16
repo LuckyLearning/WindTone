@@ -115,6 +115,12 @@ object Probe {
         }
         sb.appendLine()
 
+        // 本地统计（0.2.27）：不落盘、不上报，只在内存里滚最近 50 次会话。
+        // 放这里是因为它和 [SESSION] 回答的是同一类问题：现在到底好不好。
+        sb.appendLine("[STATS]")
+        sb.appendLine("  ${s.statsDigest?.takeIf { it.isNotBlank() } ?: "no samples yet"}")
+        sb.appendLine()
+
         sb.appendLine("[METADATA KEYS] count=${s.metadataKeys.size}")
         if (metadataPreview.isEmpty()) {
             sb.appendLine("  (none)")

@@ -197,6 +197,9 @@ If that entry does not exist, it is fine: turn on “Start on boot” above and 
     <string name="channel_l0">L0 metadata key</string>
     <string name="channel_l0b">Playback state extras</string>
     <string name="channel_online">Online lookup</string>
+    <string name="channel_local">Imported .lrc file</string>
+    <string name="channel_external">Car direct channel</string>
+    <string name="channel_notice">Media notification</string>
     <string name="channel_l1">L1 title stream</string>
     <string name="channel_l2">L2 notification text</string>
 
@@ -280,6 +283,8 @@ If that entry does not exist, it is fine: turn on “Start on boot” above and 
     <string name="appearance_lines_hint">Total lyric lines. The current line wraps first; whatever budget is left goes to the following lines.</string>
     <string name="appearance_stroke_hint">Draw a thin outline around the text. Almost required on a bright background.</string>
     <string name="appearance_hide_empty_hint">Draw nothing when no lyrics are available. Off shows a small “No lyrics” note instead.</string>
+    <string name="behavior_translation">Show translation line</string>
+    <string name="behavior_translation_hint">Some .lrc files put the original and the translation on two lines with the same timestamp. Turn this on to show the second line as a subtitle above the next lyric. Off by default: the same timestamp is sometimes a harmony part, and merging it would eat a lyric.</string>
     <string name="behavior_online_lyrics">Online lyrics fallback</string>
     <string name="behavior_online_lyrics_hint">When no local channel has the words, look them up by title and artist. Only those two fields are sent, and a match is stored on this device so the same song never goes online twice. On by default.</string>
     <string name="behavior_online_override">Prefer online lyrics</string>
@@ -344,4 +349,55 @@ If that entry does not exist, it is fine: turn on “Start on boot” above and 
     <string name="diag_code_external_only">Working through the car\'s direct channel. Notification access is not granted (this head unit blocks that page), but the car\'s media service hands over the song info and lyrics without any permission — lyrics are coming from %1$s.</string>
     <string name="diag_code_ok">Working as designed. Lyrics are being taken from %1$s.</string>
     <string name="diag_code_notice_only">Working from the player\'s media notification: this app publishes no media session (or only a stopped one), so the song name and lyrics are read from the notification bar (%1$s). This path has no playback position, so timed lyrics stay on the current line instead of scrolling.</string>
+
+    <!-- 时间校准（0.2.27） -->
+    <string name="tab_calibrate">Sync</string>
+    <string name="calibrate_section">Timing</string>
+    <string name="calibrate_no_track">Nothing is playing right now</string>
+    <string name="calibrate_follows_default">Following the default</string>
+    <string name="calibrate_custom">Calibrated for this player</string>
+    <string name="calibrate_reset">Reset</string>
+    <string name="calibrate_direction_hint">Lyrics ahead of the voice: tap - . Lyrics behind: tap + . Each tap is 0.2s.</string>
+    <string name="calibrate_applied">Now %1$s</string>
+    <string name="calibrate_default_fmt">Default %1$s · %2$d tracks calibrated</string>
+    <string name="calibrate_default_minus">Default -0.2s</string>
+    <string name="calibrate_default_plus">Default +0.2s</string>
+    <string name="calibrate_clear_all">Clear all</string>
+    <string name="calibrate_clear_all_confirm">Every track offset goes back to 0, including the global default.</string>
+    <string name="calibrate_cleared">All calibration cleared</string>
+    <string name="calibrate_line_pos">Line %1$d/%2$d</string>
+    <string name="calibrate_no_preview">No lyrics to preview yet</string>
+    <string name="calibrate_stats_none">No samples yet (a session must run 30s to count)</string>
+    <string name="calibrate_stats_no_lyrics">%1$d sessions, none produced lyrics</string>
+    <string name="calibrate_stats_fmt">Last %1$d sessions · lyrics %2$d%% · first line %3$d ms</string>
+    <string name="calibrate_help_section">How it works</string>
+    <string name="calibrate_help_earlier">Lyrics come early</string>
+    <string name="calibrate_help_earlier_body">The line jumps before you hear it: tap - to push the lyrics later.</string>
+    <string name="calibrate_help_later">Lyrics come late</string>
+    <string name="calibrate_help_later_body">The voice is already there and the line has not moved: tap + to pull the lyrics earlier.</string>
+    <string name="calibrate_help_scope">Offsets are stored per player, song and artist. The same track has a different lag in Kugou and in QQ Music, so they are kept apart. A calibrated track stays right next time.</string>
+    <string name="calibrate_search_title">Wrong song entirely?</string>
+    <string name="calibrate_search_body">If it is a different recording, or the whole timeline is off, do not nudge the offset. Search for the lyrics again.</string>
+    <string name="calibrate_search_button">Search for this song again</string>
+    <string name="calibrate_import_lrc">Import a local .lrc file</string>
+    <string name="import_need_track">Start a track first, then import</string>
+    <string name="import_ok">Imported and applied</string>
+    <string name="import_failed">No timed lyrics in that file (a .lrc text file is expected)</string>
+    <string name="import_no_picker">This head unit has no file picker</string>
+    <string name="calibrate_launch">Open this page while playing</string>
+    <string name="calibrate_launch_hint">When something is playing, launching the app lands here directly. Turn off to go back to the last page you used.</string>
+
+    <!-- 手动搜歌词（0.2.27） -->
+    <string name="search_dialog_title">Search lyrics</string>
+    <string name="search_title_hint">Title</string>
+    <string name="search_artist_hint">Artist (optional)</string>
+    <string name="search_action">Search</string>
+    <string name="search_need_title">Enter a title first</string>
+    <string name="search_running">Searching…</string>
+    <string name="search_empty">No usable lyrics found</string>
+    <string name="search_busy">Still searching, one moment</string>
+    <string name="search_result_title">Pick a version</string>
+    <string name="search_result_item">#%1$d · %2$s · %3$d lines</string>
+    <string name="search_applied">Switched to %1$s</string>
+    <string name="status_manual">Manual: %1$s</string>
 </resources>

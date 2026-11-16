@@ -196,6 +196,9 @@
     <string name="channel_l0">L0 元数据键</string>
     <string name="channel_l0b">播放状态扩展</string>
     <string name="channel_online">在线补词</string>
+    <string name="channel_local">导入的 .lrc 文件</string>
+    <string name="channel_external">车机直连</string>
+    <string name="channel_notice">媒体通知</string>
     <string name="channel_l1">L1 逐行标题流</string>
     <string name="channel_l2">L2 通知文本</string>
 
@@ -277,6 +280,8 @@
     <string name="appearance_lines_hint">歌词总行数。当前句折行优先，剩下的预算才给后续行。</string>
     <string name="appearance_stroke_hint">给文字描一圈细边。背景偏亮时基本必开。</string>
     <string name="appearance_hide_empty_hint">取不到歌词时什么都不画；关掉则显示一行「暂无歌词」。</string>
+    <string name="behavior_translation">显示译文行</string>
+    <string name="behavior_translation_hint">有些 .lrc 把原文和译文写成同一时间戳的两行。打开后第二行会作为译文显示在下一句歌词上方。默认关闭：同一时间戳有时是合唱声部，合并会吃掉一句歌词。</string>
     <string name="behavior_online_lyrics">在线补词</string>
     <string name="behavior_online_lyrics_hint">本地取不到时，按歌名与歌手去在线库找一份（只发歌名和歌手，不发别的内容）。取到一次就存到本机，同一首歌以后不再联网。默认开启。</string>
     <string name="behavior_online_override">优先用在线歌词</string>
@@ -341,4 +346,55 @@
     <string name="diag_code_external_only">正在走车机直连通道。通知使用权没有授权（这台车机的授权页被车厂拦住了），但车机自己的媒体服务不需要权限就能把歌名与歌词交过来 —— 歌词来自 %1$s。</string>
     <string name="diag_code_ok">工作正常，歌词正在从 %1$s 获取。</string>
     <string name="diag_code_notice_only">正在用播放器的媒体通知工作：这个应用没有发布媒体会话（或会话已停），歌名与歌词是从通知栏读到的（来源 %1$s）。这条通道拿不到播放进度，带时间轴的歌词会停在当前句、不会自己滚动。</string>
+
+    <!-- 时间校准（0.2.27） -->
+    <string name="tab_calibrate">校准</string>
+    <string name="calibrate_section">时间校准</string>
+    <string name="calibrate_no_track">当前没有正在播放的歌</string>
+    <string name="calibrate_follows_default">跟随全局默认</string>
+    <string name="calibrate_custom">已按这个播放器单独校准</string>
+    <string name="calibrate_reset">归零</string>
+    <string name="calibrate_direction_hint">歌词比声音早：点 - 往后推。比声音晚：点 + 往前拉。每点一次 0.2 秒。</string>
+    <string name="calibrate_applied">已调整：%1$s</string>
+    <string name="calibrate_default_fmt">全局默认 %1$s · 已校准 %2$d 首</string>
+    <string name="calibrate_default_minus">默认 -0.2s</string>
+    <string name="calibrate_default_plus">默认 +0.2s</string>
+    <string name="calibrate_clear_all">清空全部校准</string>
+    <string name="calibrate_clear_all_confirm">所有曲目的偏移都会回到 0，全局默认值也一起清掉。</string>
+    <string name="calibrate_cleared">已清空全部校准</string>
+    <string name="calibrate_line_pos">第 %1$d/%2$d 行</string>
+    <string name="calibrate_no_preview">还没有歌词可预览</string>
+    <string name="calibrate_stats_none">还没有样本（单曲播放满 30 秒才算一次）</string>
+    <string name="calibrate_stats_no_lyrics">最近 %1$d 次播放都没有出词</string>
+    <string name="calibrate_stats_fmt">最近 %1$d 次 · 出词 %2$d%% · 首句 %3$d 毫秒</string>
+    <string name="calibrate_help_section">怎么调</string>
+    <string name="calibrate_help_earlier">歌词比声音早</string>
+    <string name="calibrate_help_earlier_body">还没唱到，句子就先跳了：点 -，把歌词往后推。</string>
+    <string name="calibrate_help_later">歌词比声音晚</string>
+    <string name="calibrate_help_later_body">声音已经出来了，句子还没动：点 +，把歌词往前拉。</string>
+    <string name="calibrate_help_scope">偏移按「播放器 + 歌名 + 歌手」分开记：同一首歌在酷我和 QQ 音乐上的偏差本来就不一样。调过的歌下次自动就是对的。</string>
+    <string name="calibrate_search_title">整首都不对？</string>
+    <string name="calibrate_search_body">如果是另一版录音、或者整段时间轴完全不同，别调偏移，直接重新搜一份歌词。</string>
+    <string name="calibrate_search_button">重新搜索这首歌的歌词</string>
+    <string name="calibrate_import_lrc">导入本地 .lrc 文件</string>
+    <string name="import_need_track">先放一首歌，再导入</string>
+    <string name="import_ok">已导入并应用</string>
+    <string name="import_failed">这个文件里没有带时间轴的歌词（需要 .lrc 文本）</string>
+    <string name="import_no_picker">这台车机没有文件选择器</string>
+    <string name="calibrate_launch">播放中打开本应用直接进这一页</string>
+    <string name="calibrate_launch_hint">正在播放时启动应用会直接落到这里。关掉则回到上次停留的那一页。</string>
+
+    <!-- 手动搜歌词（0.2.27） -->
+    <string name="search_dialog_title">重新搜索歌词</string>
+    <string name="search_title_hint">歌名</string>
+    <string name="search_artist_hint">歌手（可留空）</string>
+    <string name="search_action">搜索</string>
+    <string name="search_need_title">先填歌名</string>
+    <string name="search_running">正在搜索…</string>
+    <string name="search_empty">没搜到可用歌词</string>
+    <string name="search_busy">上一轮还在搜，稍等一下</string>
+    <string name="search_result_title">选一版</string>
+    <string name="search_result_item">第 %1$d 条 · %2$s · %3$d 行</string>
+    <string name="search_applied">已换成 %1$s 的歌词</string>
+    <string name="status_manual">手动：%1$s</string>
 </resources>

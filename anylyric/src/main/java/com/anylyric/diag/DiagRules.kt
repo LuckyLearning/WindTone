@@ -88,6 +88,14 @@ data class ProbeSnapshot(
     /** 全部活跃会话的一行摘要：`包名:状态:标题`。用来回答「那个播放器到底在不在列表里」。 */
     val sessionDigest: String? = null,
 
+    /**
+     * 本地会话统计（0.2.27）：最近 50 次播放的出词率与首句延迟。
+     *
+     * 不落盘、不上传，只在本进程内存里算 —— 但没有它，用户在车里无法回答
+     * 「今天是不是比昨天差」。空串表示还没有够长的样本。
+     */
+    val statsDigest: String? = null,
+
     val displayCount: Int = 1,
     val fontScale: Float = 1f
 )

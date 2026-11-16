@@ -37,7 +37,20 @@ import com.anylyric.session.SessionHub
  * 于是「唯一不需要权限的通道」被「拿不到的权限」挡在门外。现在由 SessionHub 在
  * 应用启动时直接拉起来，授权状态与它无关。
  */
-object BydMediaController {
+object BydMediaController : CarBridge {
+
+    override val id: String = "byd"
+
+    /**
+     * 探测：能解析到 BYD 媒体控制服务，或设备品牌就是 BYD / DiLink。
+     *
+     * 与 [start] 内部的判定**必须一致** —— 否则会出现「注册表说没有桥、start 却能绑上」
+     * 或反过来「说有桥但永远 unavailable」，排查时极难自查。
+     */
+    override fun probe(context: Context): Boolean = runCatching {
+        context.applicationContext.packageManager
+            .resolveService(Intent(ACTION).setPackage(PACKAGE), 0) != null
+    }.getOrDefault(false) || isBydDevice()
 
     private const val TAG = "BydMediaController"
     private const val PACKAGE = "com.byd.mediacontroller"
@@ -82,7 +95,7 @@ object BydMediaController {
     /** 已经收到过多少次元数据回调；用来区分「绑上了但不推」和「根本没绑上」。 */
     @Volatile private var metadataCount = 0
 
-    fun statusLabel(): String = when (status) {
+    override fun statusLabel(): String = when (status) {
         STATUS_REGISTERED ->
             "registered(meta=$metadataCount, state=${if (lastState == null) "no" else "yes"})"
 
@@ -132,7 +145,7 @@ object BydMediaController {
     }
 
     /** 服务创建时调用；可重复调用，只有第一次真正绑定。 */
-    fun start(context: Context) {
+    override fun start(context: Context) {
         if (appContext != null) return
         val app = context.applicationContext
         val intent = Intent(ACTION).setPackage(PACKAGE)
@@ -204,7 +217,7 @@ object BydMediaController {
     }
 
     /** 服务销毁时解绑，避免进程退出后留下悬挂连接。 */
-    fun stop() {
+    override fun stop() {
         val app = appContext ?: return
         val conn = connection
         if (bound && conn != null) {

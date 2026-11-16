@@ -59,6 +59,9 @@ class SessionClock(private val nowMs: () -> Long) {
 
     fun state(): PlayState = state
 
+    /** 已知总时长（毫秒）；0 表示还没拿到。校准页用它按原曲时长重搜歌词。 */
+    fun duration(): Long = durationMs
+
     /** 返回 -1 表示发布端给了 `PLAYBACK_POSITION_UNKNOWN`，调用方应退化为静态显示。 */
     fun position(): Long {
         if (state == PlayState.NONE || state == PlayState.STOPPED) return -1L
