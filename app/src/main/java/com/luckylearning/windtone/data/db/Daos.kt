@@ -91,9 +91,26 @@ interface SongDao {
      * 本轮扫描没有见到的歌：置为「暂不可见」而不是删除。
      * 收藏 / 歌单 / 播放统计因此全部保留，文件回来后自动恢复。
      * 已被用户排除（[SongEntity.excluded]）的行跳过——否则它们会被误标成「文件不见了」。
+     *
+     * ⚠️ **只处理本地三种来源**。在线音源行（`source = 'ONLINE'`）的 `lastSeenAt` 恒为 0，
+     * 一旦被这条 SQL 扫到就会被标成「文件不见了」→ 随后 `deleteMissing()` 连歌带收藏
+     * 一起级联删掉。这不是理论风险：在线歌不在任何扫描结果里，所以「没见到」永远成立。
+     * 加 `source IN (...)` 是本功能与既有扫描语义之间唯一的隔离点，改动前先读
+     * `docs/规划-在线音乐与音源接入.md` §4.3。
      */
-    @Query("UPDATE songs SET missingSince = :now WHERE missingSince = 0 AND excluded = 0 AND lastSeenAt < :scanStart")
+    @Query(
+        "UPDATE songs SET missingSince = :now WHERE missingSince = 0 AND excluded = 0 " +
+            "AND lastSeenAt < :scanStart AND source IN ('MEDIA_STORE', 'FOLDER', 'FILE')",
+    )
     suspend fun markMissing(scanStart: Long, now: Long): Int
+
+    /** 在线音源的曲目（不在扫描结果里，扫描落库后要单独并回内存曲库，见 LibraryCore） */
+    @Query("SELECT * FROM songs WHERE source = 'ONLINE' AND missingSince = 0 AND excluded = 0")
+    suspend fun onlineVisible(): List<SongEntity>
+
+    /** 在线曲目的稳定键清单（清理 `online_tracks.json` 时用来算「还活着」的集合） */
+    @Query("SELECT uri FROM songs WHERE source = 'ONLINE'")
+    suspend fun onlineUris(): List<String>
 
     /** 用户主动「移出曲库 / 放回曲库」（批量，多选态与重复清理共用） */
     @Query("UPDATE songs SET excluded = :excluded WHERE id IN (:ids)")

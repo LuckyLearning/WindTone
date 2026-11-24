@@ -7,6 +7,9 @@ import com.luckylearning.windtone.data.aliyun.AliyunPlaybackWindow
 import com.luckylearning.windtone.data.db.toSong
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.data.model.TrackFragment
+import com.luckylearning.windtone.data.online.OnlineKeys
+import com.luckylearning.windtone.data.online.OnlineUrlMemo
+import com.luckylearning.windtone.data.online.ResolvedUrl
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.luckylearning.windtone.R
@@ -138,6 +141,16 @@ internal class LibraryBrowser(
      * null（纯测试构造）时云盘曲目一律回占位地址，由播放引擎的窗口补链。
      */
     private val cloudUrlResolver: (suspend (driveId: String, fileId: String) -> String?)? = null,
+    /**
+     * 在线音源曲目（mediaId 是稳定键 `lx:<源>:<id>`）的取直链回调。
+     * 由 [com.luckylearning.windtone.playback.PlaybackService] 注入；
+     * null（纯测试构造）时一律回占位地址，由播放引擎的窗口补链。
+     *
+     * 与 [cloudUrlResolver] 分开而不是合并成一个 `(String) -> String?`：
+     * 云盘取链需要「盘 + 文件」两个 id，在线需要「源内原始信息」（走 OnlineTrackStore），
+     * 合并只能靠字符串再解析一次，反而容易错。
+     */
+    private val onlineUrlResolver: (suspend (stableKey: String) -> ResolvedUrl?)? = null,
 ) {
 
     /**
@@ -264,6 +277,16 @@ internal class LibraryBrowser(
                 } else {
                     AliyunPlaybackWindow.pendingUri(fragment)
                 }
+                listOf(item.buildUpon().setUri(uri).build())
+            }
+            // 在线音源曲目必须**先于** looksLikeUri 判断：稳定键 `lx:kw:228908` 里的
+            // `lx` 恰好是一串「字母」，会被当成协议名直接塞给播放器，报
+            // MalformedURLException: unknown protocol: lx —— 与 v1.1.71 云盘那次同因。
+            OnlineKeys.isOnlineKey(mediaId) -> {
+                val memo = OnlineUrlMemo.peek(mediaId)
+                val url = memo?.url
+                    ?: if (isStart) onlineUrlResolver?.invoke(mediaId)?.url else null
+                val uri = if (url != null) Uri.parse(url) else OnlineKeys.pendingUri(mediaId)
                 listOf(item.buildUpon().setUri(uri).build())
             }
             looksLikeUri(mediaId) -> listOf(item.buildUpon().setUri(mediaId).build())

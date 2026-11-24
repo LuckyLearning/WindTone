@@ -68,6 +68,8 @@ object SongDeleter {
                 // 在线歌曲没有本地文件可删；它的「删除」语义是「从在线列表移除条目」，
                 // 不归文件删除器处理（因此这里明确返回 false，而不是让 when 落到 else）
                 SongSource.REMOTE -> false
+                // 在线音源曲目同理：没有本地文件，删除走 OnlineLibrary.remove（清行 + 清 raw）
+                SongSource.ONLINE -> false
             }
         }.getOrDefault(false)
         if (ok) deleteSidecarLyric(context, song)

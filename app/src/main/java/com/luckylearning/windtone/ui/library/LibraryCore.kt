@@ -356,8 +356,12 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
      *     或外置存储暂时挂载失败时，用户数据不会丢。
      */
     private suspend fun persistSongs(raw: List<Song>, scanStart: Long): List<Song> = withContext(Dispatchers.IO) {
-        if (raw.isEmpty()) return@withContext raw
         val dao = db.songDao()
+        // 在线音源曲目不在任何扫描结果里，必须单独并回来：否则每次扫描都会把它们
+        // 从内存曲库「扫掉」（行还在 DB 里，但界面与播放队列看不到），要到下次冷启动才复原。
+        // 它们与扫描结果在同一个列表里排序、同样参与搜索与分组 —— 这正是「同级」的含义。
+        val onlineSongs: suspend () -> List<Song> = { dao.onlineVisible().mapNotNull { it.toSong() } }
+        if (raw.isEmpty()) return@withContext onlineSongs()
         val folderIdByDocId = session.folders.folders.associate { it.docId to it.id }
         val existing = dao.allIdUri().associate { it.uri to it.id }
         // 用户主动「移出曲库」的歌：整行跳过，既不更新也不重置排除标记，
@@ -401,6 +405,8 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
                 out.add(song.copy(dbId = ids[i]))
             }
             dao.markMissing(scanStart, now)
+            // 扫描对账只处理本地来源（见 markMissing 的注释），在线曲目在这里补回内存列表
+            out.addAll(onlineSongs())
             session.folders.refreshFolderCounts()
         }
         out

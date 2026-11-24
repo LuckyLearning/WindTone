@@ -4,12 +4,18 @@ import android.net.Uri
 import androidx.compose.runtime.Immutable
 
 /**
- * 歌曲来源：系统媒体库 / SAF 导入的文件夹 / 直接文件路径（深度扫描）/ 在线列表（M3U·PLS）。
+ * 歌曲来源：系统媒体库 / SAF 导入的文件夹 / 直接文件路径（深度扫描）/ 在线列表（M3U·PLS）/
+ * 在线音源（洛雪协议）。
  *
- * [REMOTE] 是唯一「没有本地文件」的来源：它的 uri 是 http(s) 地址，歌词 / 内嵌封面 / 文件大小
- * 这些基于文件的能力对它一律不成立，界面与数据层必须显式判断，不能假设「有 uri 就有文件」。
+ * [REMOTE] 与 [ONLINE] 都是「没有本地文件」的来源，但两者**必须分开**：
+ *  - [REMOTE] 的 uri 就是最终可播地址（M3U 里写死的 http 直链），拿到即可播；
+ *  - [ONLINE] 的 uri 只是**身份**（`lx:kw:228908`），必须经音源解析出直链才能播，
+ *    而且直链有短时效、可能要换源。
+ *
+ * 混用会让播放链在每一处都要猜「这个地址能不能直接给播放器」，而这正是 v1.1.71
+ * 「unknown protocol」事故的成因。界面与数据层对两者都要显式判断，不能假设「有 uri 就有文件」。
  */
-enum class SongSource { MEDIA_STORE, FOLDER, FILE, REMOTE }
+enum class SongSource { MEDIA_STORE, FOLDER, FILE, REMOTE, ONLINE }
 
 /**
  * 标注 @Immutable：本类所有字段都是 val，且 `Uri` 本身不可变，
@@ -76,8 +82,33 @@ data class Song(
     val baseName: String
         get() = displayName.substringBeforeLast('.', displayName)
 
-    /** 阿里云盘用 fragment 里的盘编号和文件编号；其余来源仍用完整地址 */
+    /**
+     * 全局身份键，**所有用户数据与播放都靠它**。
+     *
+     *  - 阿里云盘：用 fragment 里的盘编号 + 文件编号（直链每次签名都不同，不能当身份）；
+     *  - 在线音源：uri 本身就是身份键 `lx:<源>:<id>`（直链同理不能当身份）；
+     *  - 其余来源：完整地址 `uri.toString()`，**一字不改**（老用户收藏全挂在这套算法上）。
+     *
+     * 新增来源时务必「分区」而不是改算法：本地分支一旦变动，已有收藏 / 歌单 / 队列 /
+     * 统计 / 歌词偏移会整体脱钩，且不可逆。
+     */
     val stableKey: String get() = TrackFragment.cacheKey(uri.fragment) ?: uri.toString()
 
     val hasSidecarLyric: Boolean get() = lrcUri != null
+
+    /**
+     * 在线音源曲目（`uri` = `lx:<源>:<id>`，需解析才能播）。
+     *
+     * 这个判断会出现在播放链、封面、歌词、删除、分享等十几处，所以收成一个属性：
+     * 写成 `source == SongSource.ONLINE` 散落各处，早晚会有人漏掉一处。
+     */
+    val isOnline: Boolean get() = source == SongSource.ONLINE
+
+    /**
+     * 曲目是否由**本机文件**承载（可读标签、可取内嵌封面、可删文件）。
+     *
+     * 本地扫描三种来源为真；M3U 远程项与在线音源项为假。
+     */
+    val isLocalFile: Boolean
+        get() = source == SongSource.MEDIA_STORE || source == SongSource.FOLDER || source == SongSource.FILE
 }

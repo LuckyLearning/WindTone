@@ -237,13 +237,17 @@ android {
 
     /**
      * ABI 分包（仅 `-PabiSplits=true` 时生效，见文件顶部的说明）。
-     * 保留 universal 包，作为「拿不准架构」与手动下载的兜底。
+     *
+     * **只出 arm64-v8a**（2026-11-24 用户拍板）：目标设备是 arm64 车机与手机，
+     * 32 位机型不再维护。这一条同时约束了后续引入的原生库（自定义音源运行时的 QuickJS
+     * 是 JNI，只需 arm64 的 so），不必为 v7a / x86 各背一份。
+     * universal 包保留：单 ABI 时它与 `-arm64-v8a` 内容一致，发版脚本不必改。
      */
     splits {
         abi {
             isEnable = abiSplitsEnabled
             reset()
-            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            include("arm64-v8a")
             isUniversalApk = true
         }
     }
@@ -337,6 +341,11 @@ dependencies {
 
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.guava)
+
+    // 在线音源域（搜索 / 取直链 / 歌词 / 封面）与自定义源脚本的 request 桥。
+    // 选它的理由是可取消 + 二进制响应 + 超时三件事都要自己写，且写不好就是长期负债；
+    // **播放链路不经过它**，仍走 Media3 内置 HTTP 栈（见 docs/规划-在线音乐与音源接入.md D4）。
+    implementation(libs.okhttp)
 
     // 单元测试（lyrics/ 包为纯 JVM 逻辑，可直接跑）
     testImplementation(libs.junit)

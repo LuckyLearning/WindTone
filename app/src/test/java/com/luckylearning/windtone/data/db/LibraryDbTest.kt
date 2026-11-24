@@ -269,4 +269,41 @@ class LibraryDbTest {
         db.searchHistoryDao().clear()
         assertEquals(0, db.searchHistoryDao().recent(10).size)
     }
+
+    // ------------------------------------------------------------ 在线音源与扫描对账
+
+    /**
+     * 在线音源曲目不在任何扫描结果里，`lastSeenAt` 恒为 0。
+     *
+     * 若 `markMissing` 不按来源过滤，每一轮扫描都会把它们标成「文件不见了」，
+     * 随后 `deleteMissing()` 会连歌带收藏一起级联删掉 —— 这是本功能最贵的一次事故。
+     */
+    @Test
+    fun scanReconciliationNeverTouchesOnlineSongs() = runBlocking {
+        val online = db.songDao().insert(
+            SongEntity(uri = "lx:kw:228908", source = "ONLINE", title = "晴天", lastSeenAt = 0L),
+        )
+        // 用户收藏了这首在线歌（外键挂在 songs.id 上）
+        db.songStateDao().ensure(online, now = 1L)
+        db.songStateDao().setFavorite(online, true, now = 1L)
+
+        // 一轮完整的扫描落库：只见到本地那首（lastSeenAt 是**上一轮**的时间，本轮没再见到）
+        val scanStart = 1_000L
+        db.songDao().insert(SongEntity(uri = "content://media/1.mp3", source = "FILE", title = "1", lastSeenAt = 0L))
+        db.songDao().markMissing(scanStart, now = 2_000L)
+
+        val onlineRow = db.songDao().byUri("lx:kw:228908")!!
+        assertEquals("在线曲目不能被标成软删", 0L, onlineRow.missingSince)
+        assertEquals("在线曲目应当出现在曲库里", listOf(online), db.songDao().onlineVisible().map { it.id })
+        assertTrue("收藏必须还挂在原主键上", db.songStateDao().favoriteOf(online) == true)
+
+        // 本地行照常软删（既有语义没有被削弱）：missingSince 记的是「本轮判定时间」
+        assertEquals(2_000L, db.songDao().byUri("content://media/1.mp3")!!.missingSince)
+
+        // 清理软删行：只清掉本地那首，在线行与它的收藏必须原地不动
+        assertEquals("只该清掉本地那首", 1, db.songDao().deleteMissing())
+        assertNull("本地软删行已被清理", db.songDao().byUri("content://media/1.mp3"))
+        assertNotNull("在线曲目不能被 deleteMissing 顺手清掉", db.songDao().byUri("lx:kw:228908"))
+        assertTrue("收藏也还在", db.songStateDao().favoriteOf(online) == true)
+    }
 }

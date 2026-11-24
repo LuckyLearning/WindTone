@@ -261,6 +261,7 @@ class MusicRepository(
             SongSource.FOLDER -> "导入文件夹"
             SongSource.FILE -> "本地文件"
             SongSource.REMOTE -> "在线"
+            SongSource.ONLINE -> "在线音源"
         }
 
         /**

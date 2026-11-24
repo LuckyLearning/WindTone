@@ -56,7 +56,8 @@ object FolderCover {
      * 纯文件 API，便于单测；真正读字节见 [readBytes]。
      */
     fun resolveFile(song: Song): File? {
-        if (song.source == SongSource.REMOTE) return null
+        // 没有本地文件的来源（M3U 远程项 / 在线音源项）不可能有同目录封面
+        if (!song.isLocalFile) return null
         val dirs = linkedSetOf<File>()
         song.path?.let { p ->
             File(p).parentFile?.let { dirs.add(it) }

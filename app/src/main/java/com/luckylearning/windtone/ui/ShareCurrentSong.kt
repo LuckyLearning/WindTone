@@ -46,6 +46,8 @@ object ShareCurrentSong {
      * - uri 本身是 http(s)
      */
     fun isCloudOrRemote(song: Song): Boolean {
+        // 在线音源：uri 只是身份键（lx:…），没有可分享的音频，只能分享文本
+        if (song.isOnline) return true
         if (song.source == SongSource.REMOTE) return true
         if (TrackFragment.parse(song.uri.fragment) != null) return true
         val scheme = song.uri.scheme?.lowercase() ?: return false
