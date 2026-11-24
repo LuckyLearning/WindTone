@@ -117,6 +117,27 @@ object OnlineCover {
             bmp
         }
 
+    /**
+     * 按**图片地址**直接取缩略图（歌单封面用）。
+     *
+     * 歌单不是曲目，没有 `OnlineTrack` 也没有 raw，不能走 [thumb] 那条链。
+     * 缓存键带 `url:` 前缀，与曲目缩略图共用同一张 LRU —— 两者都是「列表里的小图」，
+     * 分成两个缓存只会在两处各占一半额度。
+     */
+    suspend fun thumbUrl(url: String, targetPx: Int): android.graphics.Bitmap? =
+        withContext(Dispatchers.IO) {
+            if (!url.startsWith("http")) return@withContext null
+            val key = "url:$url@$targetPx"
+            synchronized(thumbCache) { thumbCache[key] }?.let { return@withContext it }
+            val bytes = withTimeoutOrNull(TIMEOUT_MS) {
+                runCatching { download(url) }.getOrNull()
+            } ?: return@withContext null
+            val bmp = com.luckylearning.windtone.data.CoverRepository.decodeScaled(bytes, targetPx)
+                ?: return@withContext null
+            synchronized(thumbCache) { thumbCache[key] = bmp }
+            bmp
+        }
+
     // ---------------------------------------------------------------- 分派
 
     /**

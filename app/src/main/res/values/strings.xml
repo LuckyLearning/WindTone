@@ -38,7 +38,7 @@
     <string name="view_genres">流派</string>
     <string name="view_years">年代</string>
     <string name="view_folders">文件夹</string>
-    <string name="view_playlists">歌单</string>
+    <string name="view_playlists">我的列表</string>
 
     <!-- ================================================================
          排序方式
@@ -50,7 +50,7 @@
     <string name="sort_date_added">按添加时间</string>
     <string name="sort_file_name">按文件名</string>
     <string name="sort_folder_path">按路径</string>
-    <string name="sort_playlist_order">按歌单内顺序</string>
+    <string name="sort_playlist_order">按列表内顺序</string>
     <string name="sort_folder_name">按文件夹名</string>
     <string name="sort_album_name">按专辑名</string>
     <string name="sort_artist_name">按歌手名</string>
@@ -93,7 +93,7 @@
     <string name="lib_import_folder">导入音乐目录…</string>
     <string name="lib_grant_audio_permission">授予音频读取权限</string>
     <string name="lib_rematch_lyrics">重新匹配 .lrc 歌词</string>
-    <string name="lib_import_m3u">导入 M3U 歌单…</string>
+    <string name="lib_import_m3u">导入 M3U 列表…</string>
     <string name="lib_deep_scan_on">深度扫描：已开启（点击管理）</string>
     <string name="lib_deep_scan_off">所有文件访问权限（深度扫描）</string>
     <string name="lib_listening_report">收听报告</string>
@@ -143,7 +143,7 @@
     <string name="set_lab_title">实验室功能</string>
     <string name="set_lab_desc">这里放还没有定型的功能：先跑一段时间，确认稳定、不会误伤日常使用之后，再移到正式位置。它们依然是正式实现，只是入口先放在这里。</string>
     <string name="set_lab_online_title">在线播放</string>
-    <string name="set_lab_online_subtitle">在线歌单 · 播放缓存 · 收听报告（阿里云盘已升为抽屉一级入口）</string>
+    <string name="set_lab_online_subtitle">在线列表 · 播放缓存 · 收听报告（阿里云盘已升为抽屉一级入口）</string>
     <string name="set_lab_menu_order_title">调整菜单顺序</string>
     <string name="set_lab_menu_order_subtitle">拖动不顺手时用上移 / 下移排列主页分类卡</string>
     <string name="set_tag_experimental">实验</string>
@@ -171,7 +171,7 @@
     <string name="duplicate_cleanup">重复歌曲清理</string>
     <string name="finds_duplicates_by_title_artist">按「标题 + 歌手 + 时长」找重复，每组留一首，其余移出曲库（不删文件）</string>
     <string name="clear_cover_cache">清空封面缓存</string>
-    <string name="only_deletes_regenerable_cover_images">只删掉本地可重新生成的封面图，不影响收藏与歌单</string>
+    <string name="only_deletes_regenerable_cover_images">只删掉本地可重新生成的封面图，不影响收藏与列表</string>
     <string name="clear_all_user_data_keeps">清空全部用户数据（保留曲库）</string>
     <string name="clear_library_and_imported_folders">清空曲库与导入目录（保留收藏与统计）</string>
     <string name="debug">调试</string>
@@ -268,7 +268,7 @@
     <string name="update_available">有新版本</string>
     <string name="no_data_is_collected_or">不采集、不上传任何信息。</string>
     <string name="clear_playback_stats">清空播放统计？</string>
-    <string name="clears_play_counts_total_listening">会清空播放次数、累计收听时长与「播放过的歌曲」；收藏与歌单保留。该操作不可撤销。</string>
+    <string name="clears_play_counts_total_listening">会清空播放次数、累计收听时长与「播放过的歌曲」；收藏与列表保留。该操作不可撤销。</string>
     <string name="clear_crash_log">清空崩溃日志？</string>
     <string name="to_report_a_problem_export">如果是要反馈问题，建议先「导出日志」再清空。</string>
     <string name="show_a_6_second_preview">显示预览 6 秒</string>
@@ -279,7 +279,7 @@
     <string name="skip_this_if_the_files">如果文件只是暂时不可用（外置存储未挂载、权限被撤销），先不要清理。该操作不可撤销。</string>
     <string name="clean_up">清理</string>
     <string name="clear_all_user_data">清空全部用户数据？</string>
-    <string name="the_library_and_imported_folders">曲库与已导入的目录会保留，歌单一旦清空无法恢复。该操作不可撤销。</string>
+    <string name="the_library_and_imported_folders">曲库与已导入的目录会保留，列表一旦清空无法恢复。该操作不可撤销。</string>
     <string name="clear_library_and_imported_folders_2">清空曲库与导入目录？</string>
     <string name="audio_files_on_storage_are">存储中的音频文件不会被删除。该操作不可撤销。</string>
     <string name="clear_library">清空曲库</string>
@@ -494,7 +494,7 @@
     <string name="downloaded_2">已下载 %1$s</string>
     <string name="package_ready">安装包已就绪</string>
     <string name="the_system_needs_permission_for">系统需要你允许「听风」安装应用，才能继续升级。点击「去授权」后打开对应开关即可。</string>
-    <string name="playlists_favorites_and_playback_stats">歌单、收藏、播放统计都会保留。</string>
+    <string name="playlists_favorites_and_playback_stats">列表、收藏、播放统计都会保留。</string>
     <string name="grant">去授权</string>
     <string name="install_now">立即安装</string>
     <string name="install_downloaded_update">安装已下载的更新包</string>
@@ -650,7 +650,7 @@
     <string name="minimum_duration_s">最短时长（秒）</string>
     <string name="ok">确定</string>
     <string name="sources">来源</string>
-    <string name="online_playlists_m3u">在线歌单（M3U）</string>
+    <string name="online_playlists_m3u">在线列表（M3U）</string>
     <string name="add_m3u_m3u8_or_pls">添加 m3u / m3u8 / pls 直链并播放</string>
     <string name="playback_cache">播放缓存</string>
     <string name="used">已用 %1$s</string>
@@ -676,7 +676,7 @@
     <string name="move_cards_on_the_settings">上移、下移调整设置主页的分类卡。子页里面的开关不参加排序。</string>
     <string name="move_up">上移</string>
     <string name="move_down">下移</string>
-    <string name="online_playlists">在线歌单</string>
+    <string name="online_playlists">在线列表</string>
     <string name="back">返回</string>
     <string name="player">播放页</string>
     <string name="s">%1$s 秒</string>
@@ -711,11 +711,11 @@
     <string name="in_foreground">当前前台：%1$s</string>
     <string name="nothing_recorded_yet_turn_on">还没有记录。先打开上面的「记录前台应用切换」，再正常用车；停车后回到这里，就能看到 360 影像等应用的包名，点右侧「加入名单」即可收起悬浮窗。</string>
     <string name="already_listed">已加入名单：%1$s</string>
-    <string name="playlists_favorites_playback_stats_and">歌单、收藏、播放统计、歌词等全部数据都只保存在本机；歌词优先读取音频同目录的 .lrc / .krc / .yrc 文件，其次读取音频内嵌歌词。\n联网行为只有一处：「检查更新 / 下载新版本」访问 GitHub 上的公共分发仓库（LuckyLearning/Release；先直连官方地址，连不上时自动切换第三方加速镜像，也可在「下载线路」中手动指定）。不采集、不上传任何信息。</string>
+    <string name="playlists_favorites_playback_stats_and">列表、收藏、播放统计、歌词等全部数据都只保存在本机；歌词优先读取音频同目录的 .lrc / .krc / .yrc 文件，其次读取音频内嵌歌词。\n联网行为只有一处：「检查更新 / 下载新版本」访问 GitHub 上的公共分发仓库（LuckyLearning/Release；先直连官方地址，连不上时自动切换第三方加速镜像，也可在「下载线路」中手动指定）。不采集、不上传任何信息。</string>
     <string name="clears_every_crash_record_stored">本机保存的崩溃记录会被全部删除，删除后无法找回。如果是要反馈问题，建议先「导出日志」再清空。</string>
-    <string name="removes_records_of_songs_whose">会删除「文件已不在本机」的歌曲记录，这些歌的收藏、播放统计、歌词偏移与歌单条目会随之消失。如果文件只是暂时不可用（外置存储未挂载、权限被撤销），先不要清理。该操作不可撤销。</string>
-    <string name="clears_favorites_playback_stats_per">会清空收藏、播放统计、逐曲歌词偏移、本地标签编辑、全部歌单、播放队列与搜索历史。曲库与已导入的目录会保留，歌单一旦清空无法恢复。该操作不可撤销。</string>
-    <string name="removes_every_song_record_and">会移除曲库里的全部歌曲记录与导入的目录（含已排出的目录），下次启动停在「请选择扫描范围」，需要重新选择要扫描的位置。\n\n收藏、播放统计、歌单与逐曲歌词偏移会保留 —— 重扫到同一批文件时它们会自动接上。\n\n存储中的音频文件不会被删除。该操作不可撤销。</string>
+    <string name="removes_records_of_songs_whose">会删除「文件已不在本机」的歌曲记录，这些歌的收藏、播放统计、歌词偏移与列表条目会随之消失。如果文件只是暂时不可用（外置存储未挂载、权限被撤销），先不要清理。该操作不可撤销。</string>
+    <string name="clears_favorites_playback_stats_per">会清空收藏、播放统计、逐曲歌词偏移、本地标签编辑、全部列表、播放队列与搜索历史。曲库与已导入的目录会保留，列表一旦清空无法恢复。该操作不可撤销。</string>
+    <string name="removes_every_song_record_and">会移除曲库里的全部歌曲记录与导入的目录（含已排出的目录），下次启动停在「请选择扫描范围」，需要重新选择要扫描的位置。\n\n收藏、播放统计、列表与逐曲歌词偏移会保留 —— 重扫到同一批文件时它们会自动接上。\n\n存储中的音频文件不会被删除。该操作不可撤销。</string>
     <string name="current_v_latest_v">当前 v%1$s → 最新 v%2$s%3$s</string>
     <string name="both_checking_and_downloading_use">检查更新与下载安装包都走这条线路：「自动」先直连 GitHub 官方地址，连不上时依次尝试加速镜像；手动选定则只走那一条。镜像有缓存，偶尔会慢或滞后，失败时换一条线路再试即可。</string>
     <string name="of_the_screen_width_leaving">屏宽的 %1$s%%，两侧共留出 %2$s%% 的余量供左右移动；宽度越窄，长句折行越早</string>
@@ -733,7 +733,7 @@
     <string name="could_not_open_the_system">未能打开系统授权页（本机 ROM 未提供该入口）。\n请手动前往：设置 → 应用 → 听风 → 权限 → 「显示悬浮窗」或「出现在其他应用上层」→ 允许。\n部分系统还需要同时允许「后台弹出界面」，否则授权后仍不显示。</string>
     <string name="permission_path_settings_apps_permissions">授权路径：设置 → 应用 → 权限 → 出现在其他应用上 → 允许。\n部分比亚迪车机（DiLink）需要把本应用加入白名单，或先强停一次应用进程，否则授权后界面可能黑屏或歌词不显示。</string>
     <string name="diagram_width_and_the_grey">示意图：宽 %1$s%%、%2$s；底部灰色是车机 Dock（56dp 内不画歌词）。实际效果退到桌面查看 —— 全屏歌词不会盖住这一页，否则没法边调边看。</string>
-    <string name="tapping_install_now_opens_the">点击「立即安装」会调起系统安装器，确认后即可完成升级。歌单、收藏、播放统计都会保留。</string>
+    <string name="tapping_install_now_opens_the">点击「立即安装」会调起系统安装器，确认后即可完成升级。列表、收藏、播放统计都会保留。</string>
     <string name="current_version_v">当前版本 v%1$s%2$s</string>
     <string name="how_many_lines_the_home">桌面悬浮歌词一次显示几行（当前行居中高亮，上下带上下文）。选「自动」时按悬浮窗高度算：窗口高就多给几行，窗口矮就只留当前句，不会被裁掉。选中后立刻给一次 6 秒预览。</string>
     <string name="how_lyric_text_is_laid">歌词文字在悬浮窗**内部**怎么排（窗口在屏幕上的位置由「调整悬浮歌词位置」自由拖动，与此无关）。居中适合每句都不长的歌词；居左更适合长句——每行都从同一条竖线起排，读起来比居中的参差边缘省力。</string>
@@ -764,11 +764,11 @@
     <string name="aliyun_cd_open_menu">打开菜单</string>
     <string name="aliyun_cd_more">更多操作</string>
     <string name="aliyun_menu_open_app">打开网盘 App</string>
-    <string name="aliyun_menu_scan_playlist">扫描为歌单（含 2 层子目录）</string>
+    <string name="aliyun_menu_scan_playlist">扫描为列表（含 2 层子目录）</string>
     <string name="aliyun_menu_probe">播放自检（测直链）</string>
     <string name="aliyun_menu_sign_out">退出登录</string>
     <string name="aliyun_progress_checking_token">正在校验令牌…</string>
-    <string name="aliyun_default_playlist_name">云盘歌单</string>
+    <string name="aliyun_default_playlist_name">云盘列表</string>
     <string name="aliyun_error_title">没能完成</string>
     <string name="aliyun_probe_title">播放自检</string>
     <string name="aliyun_got_it">知道了</string>
@@ -786,7 +786,7 @@
     <string name="aliyun_creds_configured">已配置应用凭据：令牌刷新直连官方接口，只保存在本机。</string>
     <string name="aliyun_creds_missing">未配置应用凭据：令牌刷新走 OpenList 在线接口，只保存在本机。</string>
     <string name="aliyun_current_drive">当前盘：%1$s</string>
-    <string name="aliyun_delete_playlist">删除歌单</string>
+    <string name="aliyun_delete_playlist">删除列表</string>
     <string name="aliyun_empty_folder">这个目录里没有内容。</string>
     <string name="aliyun_error_account_detail">读取账号信息失败：%1$s</string>
     <string name="aliyun_error_list_dir">列目录失败</string>
@@ -806,8 +806,8 @@
     <string name="aliyun_paste_token_title">粘贴刷新令牌</string>
     <string name="aliyun_play_all_count">播放本目录全部 · %1$d 首</string>
     <string name="aliyun_playlist_meta">%1$d 首 · 来源：%2$s</string>
-    <string name="aliyun_playlist_name_label">歌单名</string>
-    <string name="aliyun_playlists_header">云盘歌单（%1$d）</string>
+    <string name="aliyun_playlist_name_label">列表名</string>
+    <string name="aliyun_playlists_header">云盘列表（%1$d）</string>
     <string name="aliyun_probe_host">
 
 主机：%1$s</string>
@@ -830,8 +830,8 @@
     <string name="aliyun_rename">更多操作</string>
     <string name="aliyun_root_dir">根目录</string>
     <string name="aliyun_save">保存</string>
-    <string name="aliyun_save_as_playlist">保存为歌单</string>
-    <string name="aliyun_save_playlist_body">扫描结果已就绪，起个名字存下来。歌单只保存文件引用，播放时现取直链，文件被删除或移走后播放会自动跳过。</string>
+    <string name="aliyun_save_as_playlist">保存为列表</string>
+    <string name="aliyun_save_playlist_body">扫描结果已就绪，起个名字存下来。列表只保存文件引用，播放时现取直链，文件被删除或移走后播放会自动跳过。</string>
     <string name="aliyun_scan_auth">扫码授权</string>
     <string name="aliyun_scan_empty_dir">这个目录（含 2 层子目录）里没有音频文件</string>
     <string name="aliyun_scan_no_audio">没有扫到音频文件。</string>
@@ -917,28 +917,28 @@
     <string name="cd_back">返回</string>
     <string name="cd_more_actions">更多操作</string>
     <string name="cd_drag_reorder">拖动排序</string>
-    <string name="pl_add_song_title">把「%1$s」加入歌单</string>
-    <string name="pl_add_selected_title">把所选的 %1$d 首加入歌单</string>
-    <string name="pl_new_name_hint">新歌单名称</string>
-    <string name="pl_name_hint">歌单名称</string>
-    <string name="pl_new_ellipsis">新建歌单…</string>
-    <string name="pl_new_title">新建歌单</string>
+    <string name="pl_add_song_title">把「%1$s」加入列表</string>
+    <string name="pl_add_selected_title">把所选的 %1$d 首加入列表</string>
+    <string name="pl_new_name_hint">新列表名称</string>
+    <string name="pl_name_hint">列表名称</string>
+    <string name="pl_new_ellipsis">新建列表…</string>
+    <string name="pl_new_title">新建列表</string>
     <string name="pl_rename_ellipsis">重命名…</string>
     <string name="pl_remove_duplicates">移除重复歌曲</string>
     <string name="pl_export_m3u_ellipsis">导出为 M3U…</string>
-    <string name="pl_delete_playlist">删除歌单</string>
-    <string name="pl_rename_title">重命名歌单</string>
+    <string name="pl_delete_playlist">删除列表</string>
+    <string name="pl_rename_title">重命名列表</string>
     <string name="pl_confirm">确定</string>
-    <string name="pl_my_playlists">我的歌单</string>
+    <string name="pl_my_playlists">我的列表</string>
     <string name="pl_import_m3u">导入 M3U</string>
-    <string name="pl_empty_title">还没有自建歌单</string>
-    <string name="pl_empty_body">在歌曲列表点行尾「⋮」即可加入或新建歌单</string>
+    <string name="pl_empty_title">还没有自建列表</string>
+    <string name="pl_empty_body">在歌曲列表点行尾「⋮」即可加入或新建列表</string>
     <string name="pl_detail_reorder_hint">%1$d 首 · 长按行拖动排序</string>
     <string name="pl_empty_virtual_title">这个列表还是空的</string>
     <string name="pl_empty_virtual_body">多听几首歌，这里就会自动出现内容（或用启动器的「我的收藏」快捷方式）</string>
-    <string name="pl_empty_user_title">歌单是空的</string>
+    <string name="pl_empty_user_title">列表是空的</string>
     <string name="pl_empty_user_body">回到歌曲列表点行尾「⋮」即可加入</string>
-    <string name="pl_cd_playlist_actions">歌单操作</string>
+    <string name="pl_cd_playlist_actions">列表操作</string>
     <string name="lib_lists_empty_folder_title">所选目录里没有音频</string>
     <string name="lib_lists_empty_full_title">全盘扫描没找到音频</string>
     <string name="lib_lists_empty_search_title">没有匹配的结果</string>
@@ -958,12 +958,12 @@
     <string name="lib_lists_group_empty_title">暂无分组</string>
     <string name="lib_lists_group_empty_body">扫描完成后即可按此维度浏览</string>
     <string name="lib_lists_remove_folder">移除目录及扫描结果</string>
-    <string name="online_section_title">在线歌单</string>
+    <string name="online_section_title">在线列表</string>
     <string name="online_section_body">支持 m3u / m3u8 / pls 直链。播放走系统播放内核，不需要下载；
 在线条目没有本地文件，因此不参与扫描、收藏与播放统计。</string>
-    <string name="online_add_title">添加在线歌单</string>
+    <string name="online_add_title">添加在线列表</string>
     <string name="online_add_subtitle">填播放列表地址（m3u / m3u8 / pls），也可以直接填一个 http(s) 音频直链</string>
-    <string name="online_empty">还没有添加过在线歌单。
+    <string name="online_empty">还没有添加过在线列表。
 提示：SomaFM（https://somafm.com/groovesalad.m3u）、Radio Paradise、各类自建电台的 m3u 都能直接用；HLS（.m3u8）需要整条流作为一项播放。</string>
     <string name="online_hls_live">HLS 直播流</string>
     <string name="online_updated_at"> · 更新于 </string>
@@ -976,7 +976,7 @@
     <string name="online_tap_to_start">点任意一条从那里开始播放</string>
     <string name="online_reading">正在读取播放列表…</string>
     <string name="online_add_failed">添加失败</string>
-    <string name="online_rename_title">重命名在线歌单</string>
+    <string name="online_rename_title">重命名在线列表</string>
     <string name="online_name_label">名称</string>
     <string name="online_delete_title">删除「%1$s」？</string>
     <string name="online_delete_body">只从本机移除这条地址与已解析的条目，不影响在线内容本身。</string>
@@ -1028,7 +1028,7 @@
     <string name="player_pane_lyrics">歌词</string>
     <string name="info_group_tags">标签信息</string>
     <string name="info_group_file">文件信息</string>
-    <string name="info_group_playlists">所在歌单</string>
+    <string name="info_group_playlists">所在列表</string>
     <string name="info_group_stats">播放统计</string>
     <string name="info_field_album">专辑</string>
     <string name="info_field_album_artist">专辑艺人</string>
@@ -1042,7 +1042,7 @@
     <string name="info_field_played_total">累计收听</string>
     <string name="info_field_added">加入曲库</string>
     <string name="info_playlist_favorites">我的收藏</string>
-    <string name="info_playlists_empty">还没有收进任何歌单</string>
+    <string name="info_playlists_empty">还没有收进任何列表</string>
     <string name="info_no_lyric_line">暂无歌词</string>
 
     <string name="eq_replaygain_mode_label">ReplayGain 模式</string>
@@ -1058,7 +1058,7 @@
     <string name="queue_shuffle_order">打乱顺序</string>
     <string name="queue_confirm_clear">确认清空</string>
     <string name="queue_clear">清空队列</string>
-    <string name="queue_save_as_playlist">存为歌单</string>
+    <string name="queue_save_as_playlist">存为列表</string>
     <string name="cd_remove">移除</string>
     <string name="sleep_timer_title">睡眠定时</string>
     <string name="sleep_remaining_pause">剩余 %1$d:%2$02d 后暂停</string>
@@ -1314,7 +1314,7 @@
     <string name="dup_remove_n">移出这 %1$d 首重复歌曲</string>
     <string name="dup_clear_results">清除扫描结果</string>
     <string name="dup_confirm_title">移出 %1$d 首重复歌曲？</string>
-    <string name="dup_confirm_body">这 %1$d 首会从曲库中移出（打上「已移出曲库」标记）：\n· 音频文件不会被删除；\n· 收藏、播放统计、歌单里的条目也会一并从曲库视图中隐藏，但数据保留；\n· 重新扫描不会再收回来，直到你在「关于与诊断 → 恢复已移出曲库的歌曲」里恢复。\n\n提交前请确认上面每一组「保留」的那首确实是你要留的。</string>
+    <string name="dup_confirm_body">这 %1$d 首会从曲库中移出（打上「已移出曲库」标记）：\n· 音频文件不会被删除；\n· 收藏、播放统计、列表里的条目也会一并从曲库视图中隐藏，但数据保留；\n· 重新扫描不会再收回来，直到你在「关于与诊断 → 恢复已移出曲库的歌曲」里恢复。\n\n提交前请确认上面每一组「保留」的那首确实是你要留的。</string>
     <string name="dup_confirm_action">移出</string>
     <string name="dup_keep">保留</string>
     <string name="dup_remove">移出</string>
@@ -1324,7 +1324,7 @@
     <!-- i18n 第 13 批：SheetsSong 单曲操作 / 音频信息 / 编辑弹窗 -->
     <string name="ss_share">分享…</string>
     <string name="ss_play_next">下一首播放</string>
-    <string name="ss_add_to_playlist">加入歌单…</string>
+    <string name="ss_add_to_playlist">加入列表…</string>
     <string name="ss_view_album">查看专辑</string>
     <string name="ss_view_artist">查看歌手</string>
     <string name="ss_edit_info">编辑歌曲信息…</string>
@@ -1357,9 +1357,9 @@
     <string name="ms_add_to_queue">加入队列</string>
     <string name="ms_remove_from_library">移出曲库</string>
     <string name="ms_delete_files">删除文件</string>
-    <string name="ms_save_queue_title">把当前队列存为歌单</string>
-    <string name="ms_save_queue_body">将把队列里的 %1$d 首歌按当前顺序保存成一个新歌单。</string>
-    <string name="ms_playlist_name_hint">歌单名称</string>
+    <string name="ms_save_queue_title">把当前队列存为列表</string>
+    <string name="ms_save_queue_body">将把队列里的 %1$d 首歌按当前顺序保存成一个新列表。</string>
+    <string name="ms_playlist_name_hint">列表名称</string>
     <string name="ms_default_playlist_name">队列 %1$s %2$s</string>
     <string name="ms_shortcut_empty_library">曲库里还没有歌曲，先选好扫描范围并等扫描完成</string>
     <string name="ms_search_not_found">没找到「%1$s」，试试歌名或歌手</string>
@@ -1368,7 +1368,7 @@
     <string name="ms_bulk_delete_title">删除 %1$d 个音频文件</string>
     <string name="ms_bulk_delete_body">将从存储中永久删除所选的 %1$d 个文件（媒体库文件会再弹一次系统确认框），同目录的歌词文件会一并删除。\n此操作无法撤销。只想让它们不出现在曲库里，请改用「移出曲库」。</string>
     <string name="ms_remove_folder_title">移除文件夹扫描结果</string>
-    <string name="ms_remove_folder_body">将从音乐库中移除「%1$s」下的 %2$d 首歌曲，同时从歌单、播放队列、收藏和播放统计中清理。\n该组对应的导入目录也会从扫描列表中移除，重新扫描后这些歌曲不会再出现；原始音频文件不会被删除。</string>
+    <string name="ms_remove_folder_body">将从音乐库中移除「%1$s」下的 %2$d 首歌曲，同时从列表、播放队列、收藏和播放统计中清理。\n该组对应的导入目录也会从扫描列表中移除，重新扫描后这些歌曲不会再出现；原始音频文件不会被删除。</string>
     <string name="ms_remove">移除</string>
 
     <!-- i18n 第 15 批：CarLibraryScreen -->
@@ -1469,7 +1469,7 @@
     <string name="svm_cleaned_n">已清理 %1$d 首失效歌曲</string>
     <string name="svm_cleaned_none">没有需要清理的歌曲</string>
     <string name="svm_cover_cleared">封面缓存已清空</string>
-    <string name="svm_user_data_cleared">已清空全部用户数据（收藏 / 统计 / 歌单 / 队列）</string>
+    <string name="svm_user_data_cleared">已清空全部用户数据（收藏 / 统计 / 列表 / 队列）</string>
     <string name="svm_library_cleared">已清空曲库与导入目录，请重新选择扫描范围</string>
     <string name="svm_crash_cleared">崩溃日志已清空</string>
     <string name="svm_crash_exported">崩溃日志已导出</string>
@@ -1623,7 +1623,7 @@
     <string name="ss_kw_download_route">下载 线路 CDN</string>
     <string name="ss_kw_lab_online">在线播放 缓存</string>
     <string name="ss_kw_menu_order">菜单顺序 分类卡 排序</string>
-    <string name="ss_kw_online_m3u">在线歌单 m3u m3u8 pls</string>
+    <string name="ss_kw_online_m3u">在线列表 m3u m3u8 pls</string>
     <string name="ss_kw_cache_limit">缓存上限</string>
     <string name="ss_kw_online_cache_prefetch">预取 后续 在线缓存</string>
     <string name="ss_kw_online_parallel_download">并行 分片 多连接</string>
@@ -1934,7 +1934,7 @@
     <string name="fs_retrace"># 还原混淆栈（把 Release 上的 mapping-v%1$s.txt 放到当前目录后）：</string>
     <string name="fs_hint">设置 → 关于与诊断 →「一键取证」可复制完整 adb 脚本（包名 %1$s，mapping-v%2$s）。</string>
 
-    <!-- i18n 第 26 批：扫尾 — 枚举残标 / 虚拟歌单 / Toast / 悬浮通知 -->
+    <!-- i18n 第 26 批：扫尾 — 枚举残标 / 虚拟列表 / Toast / 悬浮通知 -->
     <string name="scope_unset">未选择</string>
     <string name="scope_full">全盘扫描</string>
     <string name="scope_folders">指定目录</string>
@@ -1956,7 +1956,7 @@
     <string name="vp_most_played">最常播放</string>
     <string name="vp_never_played">从未播放</string>
     <string name="vp_dormant">很久没听</string>
-    <string name="vp_not_virtual">不是虚拟歌单：%1$d</string>
+    <string name="vp_not_virtual">不是虚拟列表：%1$d</string>
     <string name="vp_app_root">听风</string>
     <string name="vp_song_count">%1$d 首</string>
 
@@ -1967,11 +1967,11 @@
     <string name="qm_queue_one_no_shuffle">队列只有一首，无需打乱</string>
     <string name="qm_queue_shuffled">已打乱队列顺序</string>
 
-    <string name="pls_created">已创建歌单「%1$s」</string>
-    <string name="pls_deleted">已删除歌单</string>
-    <string name="pls_added">已加入歌单</string>
-    <string name="pls_no_dupes">歌单里没有重复歌曲</string>
-    <string name="pls_removed_dupes">已从歌单移除 %1$d 首重复歌曲</string>
+    <string name="pls_created">已创建列表「%1$s」</string>
+    <string name="pls_deleted">已删除列表</string>
+    <string name="pls_added">已加入列表</string>
+    <string name="pls_no_dupes">列表里没有重复歌曲</string>
+    <string name="pls_removed_dupes">已从列表移除 %1$d 首重复歌曲</string>
     <string name="pls_queue_empty">播放队列是空的</string>
     <string name="pls_queue_gone">队列里的歌曲已不在曲库中</string>
     <string name="pls_queue_skipped">（已跳过 %1$d 首不在曲库中的条目）</string>
@@ -2030,7 +2030,7 @@
     <string name="m3u_no_match">M3U 中没有匹配到本地歌曲</string>
     <string name="m3u_no_match_next">先扫描曲库导入对应文件，或检查清单路径是否为本机路径</string>
     <string name="m3u_import_name">导入 %1$s</string>
-    <string name="m3u_import_fallback">歌单</string>
+    <string name="m3u_import_fallback">列表</string>
     <string name="upd_new_version">发现新版本 v%1$s，可在「设置 → 更新」中升级</string>
     <string name="upd_latest_mirror">已是最新版本（v%1$s）· 经镜像线路检查，刚发布的版本可能有延迟</string>
     <string name="upd_latest">已是最新版本（v%1$s）</string>
@@ -2071,9 +2071,9 @@
     <string name="opr_url_no_host">地址里缺少域名</string>
     <string name="opr_url_bad">地址格式不对</string>
     <string name="opr_dns">解析不到这个域名（网络不可用，或地址写错了）</string>
-    <string name="opr_dns_next">检查网络后重试，或核对歌单地址是否写对</string>
+    <string name="opr_dns_next">检查网络后重试，或核对列表地址是否写对</string>
     <string name="opr_timeout">连接超时：对方没有响应，或当前网络太慢</string>
-    <string name="opr_timeout_next">换网络后重试，或稍后再刷新该歌单</string>
+    <string name="opr_timeout_next">换网络后重试，或稍后再刷新该列表</string>
     <string name="opr_ssl">HTTPS 握手失败：对方的证书不受信任</string>
     <string name="opr_ssl_next">核对系统时间是否准确，或换用可信证书的 HTTPS 地址</string>
     <string name="opr_connect">连不上这个地址（%1$s）</string>
@@ -2194,8 +2194,18 @@
     <string name="online_play_no_url">取不到播放地址：音源暂时不可用，已暂停。可在「音源管理」里重新加载，或换一首。</string>
     <string name="online_need_source_toast">未加载音源脚本，无法播放。请先在「音源管理」里导入音源。</string>
     <string name="online_tab_search">搜索</string>
+    <string name="online_tab_sheets">歌单</string>
     <string name="online_tab_boards">排行榜</string>
     <string name="online_board_empty">这个榜单暂时没有取到歌曲，换一个试试。</string>
+    <string name="online_sheet_empty_list">这个分类下暂时没有歌单，换一个分类试试。</string>
+    <string name="online_sheet_empty">这个歌单暂时没有可播放的歌曲。</string>
+    <string name="online_sheet_song_count">%1$d 首</string>
+    <string name="online_sheet_default_name">在线歌单</string>
+    <string name="online_save_to_list">收进我的列表</string>
+    <string name="online_saving">保存中…</string>
+    <string name="online_saved_to_list">已收进我的列表「%1$s」</string>
+    <string name="online_save_failed">保存失败，请重试</string>
+    <string name="online_loading">加载中…</string>
     <string name="source_mode_title">音源模式</string>
     <string name="source_mode_subtitle">切换后抽屉菜单与内容页一起改变</string>
     <string name="source_mode_local">本地曲库</string>

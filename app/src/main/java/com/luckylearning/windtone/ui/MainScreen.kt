@@ -415,26 +415,39 @@ fun MainScreen(
         }
     }
 
-    BackHandler(enabled = player.playerExpanded) { playerVm.closePlayer() }
+    // ---------------------------------------------------------------- 返回层级
+    //
+    // Compose 的 BackHandler **后注册者优先**，所以这里的顺序 = 从下到上的页面栈，
+    // 越靠后的越「上层」。之前的顺序把 showOnline/showAliyun 放在设置之后，
+    // 结果在洛雪页里进播放页再按返回，先关掉的是在线页（底层露出本地曲库），
+    // 播放页还盖着 —— 用户看到的就是「播放页返回回到了本地音乐」。
+    //
+    // 层级（底 → 顶）：内容页(本地/在线/云盘) → 曲库详情与多选 → 抽屉 → 覆盖层 → 播放页
+    // 内容页与曲库详情天然互斥（在线页时不渲染本地列表），不需要额外条件。
+    BackHandler(enabled = showAliyun && !player.playerExpanded) { showAliyun = false }
+    BackHandler(enabled = showOnline && !player.playerExpanded) { showOnline = false }
+
     BackHandler(enabled = !player.playerExpanded && library.selecting) { lib.exitSelection() }
     BackHandler(enabled = !player.playerExpanded && !library.selecting && library.selectedPlaylist != null) { lib.closePlaylist() }
     BackHandler(
         enabled = !player.playerExpanded && !library.selecting && library.selectedPlaylist == null &&
             library.selectedGroup != null,
     ) { lib.closeGroup() }
-    BackHandler(enabled = showSettings) {
+
+    BackHandler(enabled = !player.playerExpanded && showSettings) {
         showSettings = false
         crashLogText = null
     }
-    BackHandler(enabled = showReport) { showReport = false }
-    BackHandler(enabled = showCalendar) { showCalendar = false }
-    BackHandler(enabled = showDuplicates) { showDuplicates = false }
-    BackHandler(enabled = showLibraryStats) { showLibraryStats = false }
-    // 云盘页先于抽屉注册：抽屉开着时返回键只收抽屉（抽屉的 BackHandler 在后面，优先级更高）。
-    BackHandler(enabled = showAliyun) { showAliyun = false }
-    BackHandler(enabled = showOnline) { showOnline = false }
-    // 抽屉最后注册 = 优先级最高：抽屉开着时返回键只收抽屉，不会顺带退出别的层。
-    BackHandler(enabled = drawerOpen) { drawerOpen = false }
+    BackHandler(enabled = !player.playerExpanded && showReport) { showReport = false }
+    BackHandler(enabled = !player.playerExpanded && showCalendar) { showCalendar = false }
+    BackHandler(enabled = !player.playerExpanded && showDuplicates) { showDuplicates = false }
+    BackHandler(enabled = !player.playerExpanded && showLibraryStats) { showLibraryStats = false }
+
+    // 抽屉在覆盖层之下：抽屉开着时若又掀开了设置，返回先收设置
+    BackHandler(enabled = !player.playerExpanded && drawerOpen) { drawerOpen = false }
+
+    // 播放页最上层：展开时返回**只**关播放页，不穿透到底下的任何一层
+    BackHandler(enabled = player.playerExpanded) { playerVm.closePlayer() }
 
     // 一级列表的滚动位置托管：按视图各存一份，切视图（歌曲↔专辑↔歌手↔文件夹↔歌单）
     // 或进详情再返回时，列表都回到用户之前滚动到的位置。
@@ -603,6 +616,8 @@ fun MainScreen(
                     current = library.view,
                     aliyunActive = showAliyun,
                     actions = navActions,
+                    sourceMode = sourceMode,
+                    onlineActive = showOnline,
                 )
                 // 2026-10-31：播放页是不透明的全屏覆盖层，但 Compose **不做遮挡
                 // 剔除** —— 展开后底下这一整棵子树（车机导航、曲库 LazyColumn 每行
@@ -628,6 +643,7 @@ fun MainScreen(
                         onPlay = playerVm::playQueue,
                         onClose = { showOnline = false },
                         onOpenDrawer = { drawerOpen = true },
+                        playerExpanded = player.playerExpanded,
                         modifier = Modifier.weight(1f),
                     )
                 } else if (showAliyun) {

@@ -2,6 +2,7 @@ package com.luckylearning.windtone.ui
 
 import android.graphics.Bitmap
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -58,11 +59,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.luckylearning.windtone.MusicApp
 import com.luckylearning.windtone.R
+import com.luckylearning.windtone.data.db.MusicDb
+import com.luckylearning.windtone.data.db.PlaylistEntity
+import com.luckylearning.windtone.data.db.PlaylistSongEntity
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.data.online.BuiltInSearch
 import com.luckylearning.windtone.data.online.OnlineBoards
 import com.luckylearning.windtone.data.online.OnlineCover
 import com.luckylearning.windtone.data.online.OnlineLibrary
+import com.luckylearning.windtone.data.online.OnlineSonglists
 import com.luckylearning.windtone.data.online.source.OnlineSourceRegistry
 import com.luckylearning.windtone.data.online.source.OnlineTrack
 import com.luckylearning.windtone.data.online.script.LxLoadReport
@@ -101,6 +106,8 @@ internal fun OnlinePage(
     onPlay: (List<Song>, Int) -> Unit,
     onClose: () -> Unit,
     onOpenDrawer: () -> Unit,
+    /** 播放页是否展开：展开时本页的返回键必须让位（播放页在最上层） */
+    playerExpanded: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -120,12 +127,25 @@ internal fun OnlinePage(
     val pages = remember { mutableStateMapOf<String, Int>() }
     val loadingMore = remember { mutableStateMapOf<String, Boolean>() }
 
-    /** 0 = 搜索，1 = 排行榜 */
+    /** 0 = 搜索，1 = 歌单，2 = 排行榜 */
     var tab by remember { mutableIntStateOf(0) }
     var openBoard by remember { mutableStateOf<OnlineBoards.Board?>(null) }
     var boardTracks by remember { mutableStateOf<List<OnlineTrack>>(emptyList()) }
     var boardLoading by remember { mutableStateOf(false) }
     var boardError by remember { mutableStateOf<String?>(null) }
+
+    // 歌单详情（洛雪 `nav_songlist` → 点进一个歌单）
+    var openSheet by remember { mutableStateOf<OnlineSonglists.Sheet?>(null) }
+    var sheetTracks by remember { mutableStateOf<List<OnlineTrack>>(emptyList()) }
+    var sheetLoading by remember { mutableStateOf(false) }
+    var sheetError by remember { mutableStateOf<String?>(null) }
+    var sheetSaving by remember { mutableStateOf(false) }
+
+    // 详情页是子页：本页自己收返回，不让它穿透到 MainScreen 去关整个在线页。
+    // 注册在本组件内 = 比 MainScreen 的 BackHandler 晚注册 = 优先级更高，正好符合层级。
+    BackHandler(enabled = !playerExpanded && (openSheet != null || openBoard != null)) {
+        if (openSheet != null) openSheet = null else openBoard = null
+    }
 
     // 首次进入：等启动时的后台脚本加载跑完再刷新报告。
     // 不做这一步的竞态：冷启动后立刻进本页点播，注册表可能还是空的 → 取址失败，
@@ -211,8 +231,72 @@ internal fun OnlinePage(
         }
     }
 
-    fun toggleFavorite(track: OnlineTrack) {
+    fun loadSheet(sheet: OnlineSonglists.Sheet) {
+        openSheet = sheet
+        sheetTracks = emptyList()
+        sheetError = null
+        sheetLoading = true
         scope.launch {
+            val r = OnlineSonglists.detail(sheet.source, sheet.id)
+            sheetTracks = r.tracks
+            sheetError = if (r.tracks.isEmpty()) {
+                AppStrings.s(R.string.online_sheet_empty)
+            } else null
+            sheetLoading = false
+        }
+    }
+
+    /**
+     * 把当前歌单收进「我的列表」：先把每首歌入库（拿主键），再建一份本地列表。
+     *
+     * 只建列表、不改收藏：用户在洛雪里收藏歌单，期望的是「这个歌单归我了」，
+     * 不是「这 60 首都进了我喜欢的音乐」。
+     */
+    fun saveSheetToList(sheet: OnlineSonglists.Sheet) {
+        if (sheetTracks.isEmpty() || sheetSaving) return
+        sheetSaving = true
+        scope.launch {
+            val name = withContext(Dispatchers.IO) {
+                runCatching {
+                    val songs = OnlineLibrary(context).upsertAll(sheetTracks)
+                    val dao = MusicDb.get(context).playlistDao()
+                    val now = System.currentTimeMillis()
+                    val pid = dao.insert(
+                        PlaylistEntity(
+                            name = sheet.name.ifBlank { AppStrings.s(R.string.online_sheet_default_name) }
+                                .take(80),
+                            createdAt = now,
+                        ),
+                    )
+                    var position = 0
+                    songs.forEach { song ->
+                        val dbId = song.dbId ?: return@forEach
+                        dao.insertSong(
+                            PlaylistSongEntity(
+                                playlistId = pid,
+                                songId = dbId,
+                                position = position++,
+                                addedAt = now,
+                            ),
+                        )
+                    }
+                    sheet.name
+                }.getOrNull()
+            }
+            sheetSaving = false
+            if (name == null) {
+                Toast.makeText(context, AppStrings.s(R.string.online_save_failed), Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(
+                    context,
+                    AppStrings.s(R.string.online_saved_to_list, name),
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+        }
+    }
+
+    fun toggleFavorite(track: OnlineTrack) {        scope.launch {
             val fav = withContext(Dispatchers.IO) {
                 runCatching {
                     val song = OnlineLibrary(context).upsert(track)
@@ -228,12 +312,16 @@ internal fun OnlinePage(
     Column(modifier.fillMaxSize()) {
         TopAppBar(
             title = {
-                Text(openBoard?.name ?: stringResource(R.string.online_page_title))
+                Text(openSheet?.name ?: openBoard?.name ?: stringResource(R.string.online_page_title))
             },
             navigationIcon = {
                 IconButton(onClick = {
-                    // 榜单详情是一层子页：返回先退回榜单列表，再退出在线页
-                    if (openBoard != null) openBoard = null else onClose()
+                    // 详情是子页：返回先退回上层列表，再退出在线页
+                    when {
+                        openSheet != null -> openSheet = null
+                        openBoard != null -> openBoard = null
+                        else -> onClose()
+                    }
                 }) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back))
                 }
@@ -248,6 +336,22 @@ internal fun OnlinePage(
                 }
             },
         )
+
+        val sheet = openSheet
+        if (sheet != null) {
+            SheetDetailPane(
+                sheet = sheet,
+                tracks = sheetTracks,
+                loading = sheetLoading,
+                error = sheetError,
+                saving = sheetSaving,
+                onPlay = { playTracks(sheetTracks, it) },
+                onFavorite = { toggleFavorite(it) },
+                onSaveToList = { saveSheetToList(sheet) },
+            )
+            SourceStatusLine(report = report, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
+            return@Column
+        }
 
         val board = openBoard
         if (board != null) {
@@ -271,14 +375,23 @@ internal fun OnlinePage(
             Tab(
                 selected = tab == 1,
                 onClick = { tab = 1 },
+                text = { Text(stringResource(R.string.online_tab_sheets)) },
+            )
+            Tab(
+                selected = tab == 2,
+                onClick = { tab = 2 },
                 text = { Text(stringResource(R.string.online_tab_boards)) },
             )
         }
 
         SourceStatusLine(report = report, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
 
-        if (tab == 1) {
+        if (tab == 2) {
             BoardsList(onOpen = { loadBoard(it) })
+            return@Column
+        }
+        if (tab == 1) {
+            SonglistPane(onOpen = { loadSheet(it) })
             return@Column
         }
 
@@ -548,7 +661,7 @@ private fun SourceStatusLine(report: LxLoadReport, modifier: Modifier = Modifier
 }
 
 @Composable
-private fun EmptyHint(text: String) {
+internal fun EmptyHint(text: String) {
     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
         Text(
             text,
@@ -560,7 +673,7 @@ private fun EmptyHint(text: String) {
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun TrackRow(track: OnlineTrack, onPlay: () -> Unit, onFavorite: () -> Unit) {
+internal fun TrackRow(track: OnlineTrack, onPlay: () -> Unit, onFavorite: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     Box {
         Row(

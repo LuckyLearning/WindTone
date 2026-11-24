@@ -1674,6 +1674,10 @@ class PlaybackEngine(
     // ---------------------------------------------------------------- 播放界面
 
     override fun openPlayer() {
+        // 点播放栏进播放页固定落在**中间的封面页**（PlayerPane.DEFAULT）。
+        // 不归位的话，用户上次滑到歌词页再关掉、下次点开还是歌词页，
+        // 看起来就像「播放页没有封面」—— 这一页本来是最该欢迎人的。
+        if (_player.value.playerPane != PlayerPane.DEFAULT.index) setPlayerPane(PlayerPane.DEFAULT)
         _player.update { it.copy(playerExpanded = true) }
         refreshQueue()
     }

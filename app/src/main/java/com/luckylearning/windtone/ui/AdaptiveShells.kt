@@ -55,6 +55,9 @@ fun AdaptiveNavRail(
     current: LibraryView,
     aliyunActive: Boolean,
     actions: AdaptiveNavActions,
+    sourceMode: com.luckylearning.windtone.data.SourceMode =
+        com.luckylearning.windtone.data.SourceMode.LOCAL,
+    onlineActive: Boolean = false,
 ) {
     if (!LocalUiFormFactor.current.hasSideNav) return
     CarNavRail(
@@ -64,6 +67,9 @@ fun AdaptiveNavRail(
         aliyunActive = aliyunActive,
         onOpenAliyun = actions.onOpenAliyun,
         onOpenScanScope = actions.onOpenScanScope,
+        sourceMode = sourceMode,
+        onlineActive = onlineActive,
+        onOpenOnline = actions.onOpenOnline,
     )
 }
 

@@ -106,7 +106,7 @@ class LibraryDrawerTest {
         compose.onNodeWithText("在线音乐").assertIsDisplayed()
         compose.onNodeWithText("更多").assertIsDisplayed()
         // 第一组 = 原底部导航的五个浏览视图
-        listOf("歌曲", "专辑", "歌手", "合辑艺人", "流派", "年代", "文件夹", "歌单").forEach {
+        listOf("歌曲", "专辑", "歌手", "合辑艺人", "流派", "年代", "文件夹", "我的列表").forEach {
             compose.onNodeWithText(it).assertIsDisplayed()
         }
         // 第二组：云盘页升为一级入口（v1.1.75）

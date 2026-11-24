@@ -85,6 +85,7 @@ import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.ui.theme.AppVisual
 import com.luckylearning.windtone.ui.theme.isDarkScheme
 import com.luckylearning.windtone.ui.theme.windShadow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -156,7 +157,20 @@ fun CoverArt(
         val s = song ?: return@LaunchedEffect
         // 首帧已命中缓存就不必再发请求（cover() 也会同步命中，但省一次协程调度与重组）。
         if (CoverRepository.peek(s, targetPx) != null) return@LaunchedEffect
-        bitmap = runCatching { CoverRepository.cover(appContext, s, targetPx) }.getOrNull()
+        // 在线曲的封面是「先解析地址再下载」两步网络：刚起播那几秒常常拿不到，
+        // 而 LaunchedEffect 只跑一次 —— 结果是封面页永远停在渐变占位，用户滑走再回来才有图。
+        // 本地曲没封面就是真没有，不做重试（否则大库下滑会成倍放大 IO）。
+        var attempt = 0
+        while (true) {
+            val bmp = runCatching { CoverRepository.cover(appContext, s, targetPx) }.getOrNull()
+            if (bmp != null) {
+                bitmap = bmp
+                return@LaunchedEffect
+            }
+            if (!s.isOnline || attempt >= COVER_RETRIES) return@LaunchedEffect
+            attempt++
+            delay(1_200L * attempt)
+        }
     }
 
     // shape 必须 remember：`RoundedCornerShape` 每次重组都是新实例，下游的
@@ -958,3 +972,6 @@ internal fun OptionRow(
         }
     }
 }
+
+/** 在线封面重试次数：1.2s / 2.4s 两次，覆盖「刚起播还没解析出地址」的窗口 */
+private const val COVER_RETRIES = 2

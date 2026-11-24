@@ -234,6 +234,12 @@ internal fun CarNavRail(
     onOpenAliyun: () -> Unit = {},
     /** 扫描范围（v1.3.0：与手机抽屉对齐 —— 车机此前没有这个入口，只能进设置里找） */
     onOpenScanScope: () -> Unit = {},
+    /** 音源模式：决定左导航给哪几项，必须与手机抽屉同一套口径 */
+    sourceMode: com.luckylearning.windtone.data.SourceMode =
+        com.luckylearning.windtone.data.SourceMode.LOCAL,
+    /** 洛雪源页是否打开 */
+    onlineActive: Boolean = false,
+    onOpenOnline: () -> Unit = {},
 ) {
     val scheme = MaterialTheme.colorScheme
     val m = rememberCarMetrics()
@@ -270,25 +276,69 @@ internal fun CarNavRail(
                 Spacer(Modifier.width(12.dp))
                 Text(stringResource(R.string.app_name), fontSize = m.navTitleSp, fontWeight = FontWeight.Bold, color = scheme.onBackground)
             }
-            LibraryView.entries.forEach { view ->
-                CarNavItem(
-                    label = carViewLabel(view),
-                    icon = view.icon,
-                    accent = carViewAccent(view),
-                    // 云盘页打开时曲库视图不再高亮（与抽屉同一口径）
-                    selected = view == current && !aliyunActive,
-                    onClick = { onSelect(view) },
-                )
+            // 左导航与抽屉必须同构：之前在洛雪/云盘模式下这里仍列着全部本地视图，
+            // 用户在在线页里点「专辑」直接就退出了在线页 —— 页面与模式的对应关系是乱的。
+            val localActive = !onlineActive && !aliyunActive
+
+            when (sourceMode) {
+                com.luckylearning.windtone.data.SourceMode.LOCAL -> {
+                    LibraryView.entries.forEach {
+                        CarNavViewItem(it, current, localActive, onSelect)
+                    }
+                    CarNavItem(
+                        label = stringResource(R.string.source_mode_lx),
+                        icon = AppIcons.MusicNote,
+                        accent = scheme.onSurfaceVariant,
+                        selected = onlineActive,
+                        onClick = onOpenOnline,
+                    )
+                    CarNavItem(
+                        label = stringResource(R.string.drawer_aliyun),
+                        icon = AppIcons.Cloud,
+                        accent = scheme.onSurfaceVariant,
+                        selected = aliyunActive,
+                        onClick = onOpenAliyun,
+                    )
+                }
+
+                com.luckylearning.windtone.data.SourceMode.LX -> {
+                    CarNavItem(
+                        label = stringResource(R.string.source_mode_lx),
+                        icon = AppIcons.MusicNote,
+                        accent = scheme.primary,
+                        selected = onlineActive,
+                        onClick = onOpenOnline,
+                    )
+                    CarNavItem(
+                        label = stringResource(R.string.drawer_aliyun),
+                        icon = AppIcons.Cloud,
+                        accent = scheme.onSurfaceVariant,
+                        selected = aliyunActive,
+                        onClick = onOpenAliyun,
+                    )
+                    CarNavViewItem(LibraryView.SONGS, current, localActive, onSelect)
+                    CarNavViewItem(LibraryView.PLAYLIST, current, localActive, onSelect)
+                }
+
+                com.luckylearning.windtone.data.SourceMode.CLOUD -> {
+                    CarNavItem(
+                        label = stringResource(R.string.drawer_aliyun),
+                        icon = AppIcons.Cloud,
+                        accent = scheme.primary,
+                        selected = aliyunActive,
+                        onClick = onOpenAliyun,
+                    )
+                    CarNavItem(
+                        label = stringResource(R.string.source_mode_lx),
+                        icon = AppIcons.MusicNote,
+                        accent = scheme.onSurfaceVariant,
+                        selected = onlineActive,
+                        onClick = onOpenOnline,
+                    )
+                    CarNavViewItem(LibraryView.SONGS, current, localActive, onSelect)
+                    CarNavViewItem(LibraryView.PLAYLIST, current, localActive, onSelect)
+                }
             }
-            // v1.1.84：车机模式下没有抽屉，阿里云盘原本只能从抽屉进 —— 等于进不去。
-            // 这里补一个常驻入口，位置紧跟曲库视图，与手机端「在线音乐」组同一个层级。
-            CarNavItem(
-                label = stringResource(R.string.drawer_aliyun),
-                icon = AppIcons.Cloud,
-                accent = scheme.onSurfaceVariant,
-                selected = aliyunActive,
-                onClick = onOpenAliyun,
-            )
             Spacer(Modifier.weight(1f))
             // v1.3.0：与手机抽屉「更多」组对齐 —— 扫描范围 + 设置。
             // 之前车机只有「设置」，用户想换扫描目录得先点进设置再找，与手机上多一层。
@@ -310,6 +360,24 @@ internal fun CarNavRail(
         // 右缘 1px 分隔线（设计稿 .cv3-nav 的右边框）
         Box(Modifier.width(1.dp).fillMaxHeight().background(scheme.outlineVariant))
     }
+}
+
+/** 曲库视图导航项：三种模式共用同一份渲染，避免「本地有高亮、在线模式忘了改」 */
+@Composable
+private fun CarNavViewItem(
+    view: LibraryView,
+    current: LibraryView,
+    localActive: Boolean,
+    onSelect: (LibraryView) -> Unit,
+) {
+    CarNavItem(
+        label = carViewLabel(view),
+        icon = view.icon,
+        accent = carViewAccent(view),
+        // 在线/云盘页打开时曲库视图不再高亮（与抽屉同一口径）
+        selected = view == current && localActive,
+        onClick = { onSelect(view) },
+    )
 }
 
 /** 五个浏览视图的语义色（与设计稿 `.ac-*` 一致） */

@@ -114,7 +114,7 @@ class AliyunSavedPlaylists(context: Context) {
         val now = System.currentTimeMillis()
         val playlist = AliyunPlaylist(
             id = UUID.randomUUID().toString(),
-            name = name.trim().ifBlank { rootName.ifBlank { "云盘歌单" } },
+            name = name.trim().ifBlank { rootName.ifBlank { "云盘列表" } },
             driveId = driveId,
             rootName = rootName,
             files = files,

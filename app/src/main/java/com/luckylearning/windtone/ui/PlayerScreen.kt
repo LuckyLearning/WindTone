@@ -242,6 +242,15 @@ fun PlayerScreen(
         onPlayerPane(target)
     }
 
+    // 外部入口（openPlayer 归位到封面页、切歌归位）改页号时，把视觉锚点拉回来。
+    // 只在值真的不同时写：翻页走 selectPane 已经先写了锚点，StateFlow 回流时
+    // 两个值相等，这里不会触发任何写入，也就不会和翻页动画抢帧。
+    LaunchedEffect(state.playerPane) {
+        if (visualPaneState.intValue != state.playerPane) {
+            visualPaneState.intValue = state.playerPane
+        }
+    }
+
     // v1.1.92：播放页左侧的「前台识别状态」按钮。
     // 状态不能只在进入页面时读一次 —— 用户点按钮去系统里开/关，回来必须立刻反映，
     // 所以挂一个 ON_RESUME 监听重读（读一次 Settings.Secure 很便宜）。
