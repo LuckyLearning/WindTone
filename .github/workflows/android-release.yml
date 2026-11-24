@@ -183,9 +183,9 @@ jobs:
           retention-days: 7
 
       # ---------------------------------------------------------------- 发布说明
-      # 正文来自**固定模板** `.github/release-notes/template.md`，
-      # 发版时只替换 {version} / {version_code} / {date}，不需要每个版本写文案。
-      # 渲染逻辑在 scripts/render-release-notes.sh 里，与本地 release.sh 共用同一份。
+      # 正文优先取 `.github/release-notes/v{版本}.md`（每版按实际改动写），
+      # 缺失时回退兜底模板 `template.md`（本地 release.sh 缺文件会直接报错，这里只兜底不漏发）。
+      # 只替换 {version} / {version_code} / {date}，渲染逻辑在 scripts/render-release-notes.sh。
       - name: 组装 Release 说明
         id: notes
         env:

@@ -297,7 +297,7 @@ WindTone/                        ← 仓库根 == Gradle 根（已扁平化，�
 │   ├─ verify-release.sh         ★ 四步验证链：tag → workflow → 4 资产 → latest.json → 验签（--skip-ci 跳过轮询）
 │   ├─ verify_apk.py             ★ 下 universal 包验签名证书 + 包内版本串（无 apksigner，自解析 Signing Block）
 │   ├─ publish-release-repo.sh   CI 用：把产物发到公共仓库 LuckyLearning/Release（快照 force push）
-│   ├─ render-release-notes.sh   渲染发版说明（固定模板 + 只换版本号）
+│   ├─ render-release-notes.sh   渲染发版说明（每版 v{版本}.md 优先；兜底模板仅 --allow-template 时用）
 │   ├─ gen-release-manifest.py   生成公共仓库 latest.json / README 版本行
 │   ├─ sdk-setup.bat             Windows 本地 SDK 引导
 │   └─ gen_icons.py              图标生成
@@ -1110,10 +1110,10 @@ bash scripts/release.sh patch --dry      # 先看它要干什么
 
 > **tag 名必须等于 `versionName`**。workflow 里有硬校验，不一致会直接 `exit 1`，因为应用内更新靠版本号比对，tag 与 versionName 脱节会导致误判。
 
-> **发版说明是固定模板**（v1.0.7 起）：正文来自 `.github/release-notes/template.md`，
-> 由 `scripts/render-release-notes.sh` 只替换 `{version}` / `{version_code}` / `{date}` 三个占位符
-> —— **发版时不需要写任何文案，也不要让 AI 去生成内容**。
-> 想给某个版本单独写说明时，放 `.github/release-notes/v{版本}.md` 覆盖模板即可（平时不用建）。
+> **发版说明按版本实际改动编写**（2026-11-24 起，废止原「固定模板、禁止 AI 写」）：
+> 每版发版前新建 `.github/release-notes/v{版本}.md`，写本版真实改动（参考 `git log <上个 tag>..HEAD`）。
+> `scripts/render-release-notes.sh` 只替换 `{version}` / `{version_code}` / `{date}` 三个占位符。
+> 本地 `release.sh` 缺该文件会**直接报错**（不再悄悄用兜底模板）；确需兜底加 `--allow-template`。
 > 本地预览：`bash scripts/render-release-notes.sh`（跑 `release.sh` 时也会自动打印一份）。
 > 规矩见 `.github/release-notes/README.md`。
 
@@ -1243,7 +1243,7 @@ curl -s -H "Authorization: Bearer $TOKEN" $REPO/releases \
 - **触发**：推送 `v*` tag；或手动 `workflow_dispatch`（手动只构建不发布）。
 - **权限**：`contents: write`（用自动注入的 `GITHUB_TOKEN` 创建 Release，**不用 PAT**）。
 - **Runner**：`ubuntu-24.04`（**刻意固定**——`ubuntu-latest` 计划于 2026-10-19 迁移到 Ubuntu 26，固定镜像避免构建环境被静默替换）。
-- **流程**：检出 → JDK 17(temurin) → setup-android（`packages: 'platform-tools'`）→ 装 `platforms;android-35` + `build-tools:35.0.0` → setup-gradle（带缓存）→ 读版本号 → **校验 tag == versionName** → 从 Secret 还原 keystore → 单测 → `assembleRelease -PabiSplits=true` → 收集全部 APK + 算 SHA-256（写入 Step Summary）→ 上传 artifact → 组装 Release 说明（`bash scripts/render-release-notes.sh`，固定模板只换版本号）→ `softprops/action-gh-release` 创建 Release（`body_path`）。
+- **流程**：检出 → JDK 17(temurin) → setup-android（`packages: 'platform-tools'`）→ 装 `platforms;android-35` + `build-tools:35.0.0` → setup-gradle（带缓存）→ 读版本号 → **校验 tag == versionName** → 从 Secret 还原 keystore → 单测 → `assembleRelease -PabiSplits=true` → 收集全部 APK + 算 SHA-256（写入 Step Summary）→ 上传 artifact → 组装 Release 说明（`bash scripts/render-release-notes.sh`，优先 `v{版本}.md`，缺失回退兜底模板）→ `softprops/action-gh-release` 创建 Release（`body_path`）。
 
 ### 9.1.1 ABI 分包与发版说明（v1.0.7 起）
 
@@ -1264,11 +1264,11 @@ WindTone-v{版本}-universal.apk      # 拿不准架构时的兜底
 `apkNameCandidates()` 的顺序固定为：本机 ABI → 其它 ABI → universal → **历史单包命名**
 （最后一条保证 1.0.6 及以前发布的版本也能升级上来，不要删）。
 
-**Release 说明**：**固定模板** `.github/release-notes/template.md` + 渲染脚本
+**Release 说明**：**每版一份实际说明** `.github/release-notes/v{版本}.md` + 渲染脚本
 `scripts/render-release-notes.sh`（CI 调它、本地 `release.sh` 也调它，同一份逻辑，不会漂移）。
-发版时只替换 `{version}` / `{version_code}` / `{date}`，**发版过程不需要写文案**；
-单个版本要特写时用 `.github/release-notes/v{版本}.md` 覆盖（平时不建这个文件）。
-模板里的安装包名必须与上面的命名契约一致，否则用户照着下会 404。
+发版前按本版真实改动写该文件，脚本只替换 `{version}` / `{version_code}` / `{date}`；
+本地缺文件会报错，CI 缺失才回退 `.github/release-notes/template.md` 兜底。
+说明里的安装包名必须与上面的命名契约一致，否则用户照着下会 404。
 
 ### 9.2 `android-ci.yml`（Android CI）
 

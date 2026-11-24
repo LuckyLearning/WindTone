@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # ===================================================================
-#  渲染 Release 说明正文：固定模板 → 只替换版本号等占位符
+#  渲染 Release 说明正文 → 替换版本号等占位符
 #
 #  用法：
 #    bash scripts/render-release-notes.sh                     # 渲染并打印到终端
 #    bash scripts/render-release-notes.sh -o body.md          # 渲染并写入文件
 #    bash scripts/render-release-notes.sh 1.0.7 9 body.md     # 显式指定版本/versionCode/输出
+#    bash scripts/render-release-notes.sh 1.0.7 9 --require-version-file   # 缺本版说明即失败
 #
 #  取值规则：
 #    · 版本号 / versionCode 省略时从 --gradle 指定的构建文件读取（默认 :app）
-#    · 正文来源优先级：--template 指定文件 > .github/release-notes/v{版本}.md > 默认模板
+#    · 正文来源优先级：--template 指定文件 > .github/release-notes/v{版本}.md > 默认兜底模板
+#    · 从 v1.3.1 起默认走「每版一份实际说明」；--require-version-file 强制版本文件必须存在
 #    · 占位符：{version} {version_code} {date}
 #
 #  CI 与本地发版脚本共用本脚本，避免多处各写一份 sed 逻辑而漂移。
@@ -22,6 +24,7 @@ GRADLE_FILE="$ROOT/app/build.gradle.kts"
 NOTES_DIR="$ROOT/.github/release-notes"
 DEFAULT_TEMPLATE="$NOTES_DIR/template.md"
 FORCED_TEMPLATE=""
+REQUIRE_VERSION_FILE=0
 VERSION_KEY="appVersionName"
 CODE_KEY="appVersionCode"
 
@@ -49,6 +52,8 @@ while [[ $# -gt 0 ]]; do
       FORCED_TEMPLATE="$(resolve_path "${2:?--template 需要一个路径}")"; shift 2 ;;
     --template=*)
       FORCED_TEMPLATE="$(resolve_path "${1#*=}")"; shift ;;
+    --require-version-file)
+      REQUIRE_VERSION_FILE=1; shift ;;
     --notes-dir)
       NOTES_DIR="$(resolve_path "${2:?--notes-dir 需要一个路径}")"; shift 2 ;;
     --version-key)
@@ -82,6 +87,14 @@ fi
 
 DATE_UTC="$(date -u +%Y-%m-%d)"
 OVERRIDE="$NOTES_DIR/v$VERSION.md"
+
+# 强制要求「本版实际说明」：没有 v{版本}.md 就失败，避免悄悄退回兜底模板发出空话
+if (( REQUIRE_VERSION_FILE )) && [[ -z "$FORCED_TEMPLATE" && ! -f "$OVERRIDE" ]]; then
+  echo "✗ 缺少本版发版说明：${OVERRIDE#"$ROOT"/}" >&2
+  echo "  发版说明必须按本版实际改动编写（参考 git log <上个 tag>..HEAD 与改动内容）。" >&2
+  echo "  确需沿用兜底模板时，请显式传 --template，或去掉 --require-version-file。" >&2
+  exit 1
+fi
 
 if [[ -n "$FORCED_TEMPLATE" ]]; then
   SRC="$FORCED_TEMPLATE"

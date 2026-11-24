@@ -13,6 +13,7 @@
 #    bash scripts/release.sh 1.5.2          # 指定版本号
 #    bash scripts/release.sh patch --dry    # 只打印将要做什么
 #    bash scripts/release.sh patch --verify # 推完继续跑「四步验证链」直到出结论
+#    bash scripts/release.sh patch --allow-template  # 应急：没有 v{版本}.md 时用兜底模板
 #
 #  建议带 --verify：等 Release CI、核对 APK / latest.json / 验签（不跑本地测）。
 #  阻塞取决于云端构建时长；本地不再跑 Gradle 单测。
@@ -25,12 +26,14 @@ GRADLE_FILE="$ROOT/app/build.gradle.kts"
 # （直接取 "$1" 的话，开关在前就会被当成版本号）。
 DRY=0
 VERIFY=0
+ALLOW_TEMPLATE=0
 ARGS=()
 for arg in "$@"; do
   case "$arg" in
     --dry) DRY=1 ;;
     --verify) VERIFY=1 ;;
-    --*) echo "无法识别的开关：$arg（只支持 --dry / --verify）" >&2; exit 1 ;;
+    --allow-template) ALLOW_TEMPLATE=1 ;;
+    --*) echo "无法识别的开关：$arg（只支持 --dry / --verify / --allow-template）" >&2; exit 1 ;;
     *) ARGS+=("$arg") ;;
   esac
 done
@@ -65,11 +68,26 @@ fi
 #    云端 android-release 仍做 lint Error 门禁 + 签名出包；Android CI 仅手动。
 echo "→ 跳过本地单测（发版默认不测；功能合入时已测）"
 
-# 2) 预览发版说明：固定模板 + 只替换版本号，正文不需要手写/让 AI 生成
+# 2) 预览发版说明：默认必须写本版实际说明（.github/release-notes/v{版本}.md）
+#    从 v1.3.1 起不再用固定模板兜底 —— 空话说明会直接拦在发版前，而不是悄悄发出去。
+NOTES_FILE="$ROOT/.github/release-notes/v$NEW_NAME.md"
+if (( ! ALLOW_TEMPLATE )) && [[ ! -f "$NOTES_FILE" ]]; then
+  echo "✗ 找不到本版发版说明：.github/release-notes/v$NEW_NAME.md" >&2
+  echo "  从 v1.3.1 起，发版说明按本版实际改动编写，不再用固定模板兜底。" >&2
+  echo "  请参考本版改动（git log <上个 tag>..HEAD 与 diff）新建该文件后再发版；" >&2
+  echo "  确实要沿用兜底模板可加 --allow-template。" >&2
+  exit 1
+fi
 echo
-echo "→ 本次 Release 说明预览（由 .github/release-notes/ 模板自动渲染）："
+if (( ALLOW_TEMPLATE )); then
+  echo "→ 本次 Release 说明预览（来源：兜底模板 template.md）："
+else
+  echo "→ 本次 Release 说明预览（来源：.github/release-notes/v$NEW_NAME.md）："
+fi
 echo "----------------------------------------------------------------"
-bash "$ROOT/scripts/render-release-notes.sh" "$NEW_NAME" "$NEW_CODE"
+RENDER_ARGS=("$NEW_NAME" "$NEW_CODE")
+(( ALLOW_TEMPLATE )) || RENDER_ARGS+=(--require-version-file)
+bash "$ROOT/scripts/render-release-notes.sh" "${RENDER_ARGS[@]}"
 echo "----------------------------------------------------------------"
 
 # 3) 写入版本号
