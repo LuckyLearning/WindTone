@@ -5,7 +5,7 @@
 #  为什么必须走这四步（每一条都对应一次真实事故）：
 #   ① tag 引用存在       —— 早年 tag 推送静默失败，Release 根本没触发；
 #   ② workflow success   —— 构建失败时也可能留着上一版的 Release 资产，不能只看资产；
-#   ③ 4 个 ABI 资产齐全   —— 少一个就是某些架构的用户装不上；
+#   ③ 关键 ABI 资产齐全   —— 缺 arm64-v8a 或 universal 就是部分用户装不上；
 #   ④ APK 验签 + 包内版本串 —— CI 缺 KEYSTORE_BASE64 时只打 ::warning:: 且 step 仍
 #      success，「构建成功但装不上」就是这么来的；而**字节数相同≠同一个包**
 #      （zipalign 对齐会让连续几版体积一模一样），所以要连包内 AndroidManifest
@@ -122,13 +122,19 @@ else
 fi
 
 # ③ Release 资产 ------------------------------------------------------
+# 2026-11-24 起只发 arm64-v8a + universal（32 位与 x86 不再维护，见 app/build.gradle.kts
+# 的 splits.abi 注释）。不写死数量：两个关键包都在就算过，将来增删 ABI 不用回来改这里。
 REL_JSON="$(curl -s -H "Authorization: Bearer $TOKEN" \
   "https://api.github.com/repos/$REPO_SLUG/releases/tags/$TAG")"
 ASSET_N="$(echo "$REL_JSON" | grep -c "\"name\": *\"WindTone-v$NEW_NAME" || true)"
-if [[ "$ASSET_N" == "4" ]]; then
-  echo "  ③ Release 资产：4 个 ABI 齐全 ✅"
+HAS_ARM64=0; HAS_UNIVERSAL=0
+echo "$REL_JSON" | grep -q "WindTone-v$NEW_NAME-arm64-v8a.apk" && HAS_ARM64=1
+echo "$REL_JSON" | grep -q "WindTone-v$NEW_NAME-universal.apk" && HAS_UNIVERSAL=1
+if [[ "$HAS_ARM64" == "1" && "$HAS_UNIVERSAL" == "1" ]]; then
+  echo "  ③ Release 资产：arm64-v8a + universal 齐全（共 $ASSET_N 个）✅"
 else
-  echo "  ③ Release 资产：$ASSET_N 个（应为 4）❌"; FAILURES=$((FAILURES + 1))
+  echo "  ③ Release 资产：共 $ASSET_N 个，缺关键包（arm64=$HAS_ARM64 universal=$HAS_UNIVERSAL）❌"
+  FAILURES=$((FAILURES + 1))
 fi
 
 # ③b 公共分发仓库 latest.json -----------------------------------------

@@ -47,7 +47,7 @@ bash scripts/render-release-notes.sh 1.0.7 9 out.md  # 指定版本 / versionCod
 ## 改兜底模板的注意点
 
 1. 模板里的安装包名必须与 gradle 的命名契约一致
-   （`WindTone-v{version}-arm64-v8a.apk` / `-armeabi-v7a` / `-x86_64` / `-universal`），
+   （`WindTone-v{version}-arm64-v8a.apk` / `-universal`；自 1.3.1 起只发 64 位），
    否则用户照着下会 404；命名契约见 `docs/AI开发指南.md` §9.1.1。
 2. **不要在正文里手写** 文件大小 / SHA-256 —— GitHub 的 Assets 区会自动展示。
 3. 正文用简体中文；模板改动属于产品文案，改完最好在预览里过一遍。

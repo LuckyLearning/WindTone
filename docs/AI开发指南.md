@@ -1209,10 +1209,10 @@ curl -s -o /dev/null -w "tag: %{http_code}\n" -H "Authorization: Bearer $TOKEN" 
 curl -s -H "Authorization: Bearer $TOKEN" "$REPO/actions/runs?per_page=3" \
   | python -c "import sys,json;[print(r['name'],r['head_branch'],r['status'],r['conclusion']) for r in json.load(sys.stdin)['workflow_runs']]"
 
-# ③ Release 建好、4 个 ABI 资产齐全、正文是模板渲染稿
+# ③ Release 建好、关键 ABI 资产齐全（arm64-v8a + universal）、正文是本版实际说明
 curl -s -H "Authorization: Bearer $TOKEN" $REPO/releases \
   | python -c "import sys,json;r=json.load(sys.stdin)[0];print(r['tag_name'],r['name']);[print(' ',a['name'],a['size']) for a in r['assets']]"
-# 期望：arm64-v8a / armeabi-v7a / x86_64 / universal 四个，正文首行为「**听风 WindTone X.Y.Z**」
+# 期望：arm64-v8a + universal 两个（自 1.3.1 起只发 64 位），正文首行为「**听风 WindTone X.Y.Z**」
 
 # ④ 签名确实是 windtone.jks（把 asset 下载下来验一次）
 ./.toolchain/android-sdk/build-tools/35.0.0/apksigner.bat verify --print-certs wt.apk
@@ -1247,13 +1247,11 @@ curl -s -H "Authorization: Bearer $TOKEN" $REPO/releases \
 
 ### 9.1.1 ABI 分包与发版说明（v1.0.7 起）
 
-**产物**：CI 传 `-PabiSplits=true`，一次产出 4 个包（本地 dev 不传该参数，`assembleDebug` 仍只出一个包）：
+**产物**：CI 传 `-PabiSplits=true`，一次产出 2 个包（自 1.3.1 起只发 64 位，32 位与 x86 不再维护；本地 dev 不传该参数，`assembleDebug` 仍只出一个包）：
 
 ```
 WindTone-v{版本}-arm64-v8a.apk      # 绝大多数手机 / 车机
-WindTone-v{版本}-armeabi-v7a.apk    # 老设备
-WindTone-v{版本}-x86_64.apk         # 模拟器 / ChromeOS
-WindTone-v{版本}-universal.apk      # 拿不准架构时的兜底
+WindTone-v{版本}-universal.apk      # 拿不准架构时的兜底（单 ABI 时与上面内容一致）
 ```
 
 **命名是契约**：应用内更新在 Atom 通道下拿不到资产列表，只能按名字推导下载地址。
