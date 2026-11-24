@@ -29,6 +29,8 @@ class OnlineResolverTest {
         private val urlFactory: (OnlineTrack, Quality) -> String? = { t, q ->
             "https://cdn.example.com/${t.songId}-${q.id}.mp3"
         },
+        /** 同一平台可能有多份脚本，ownerId 区分它们 */
+        override val ownerId: String = "script-a",
     ) : MusicSource {
         override val capabilities: Set<Capability> = setOf(Capability.SEARCH)
         val calls = mutableListOf<Quality>()
@@ -50,6 +52,7 @@ class OnlineResolverTest {
     @Before
     fun reset() {
         OnlineSourceRegistry.clear()
+        OnlineSourceRegistry.setPreferred(emptyMap())
         OnlineUrlMemo.clear()
     }
 
@@ -130,5 +133,77 @@ class OnlineResolverTest {
                 Quality.FLAC24,
             ),
         )
+    }
+
+    // ------------------------------------------------------------ 音质口径（v1.2.62）
+
+    @Test
+    fun `曲目标 FLAC 但音源只声明 128k 时不向它要 FLAC`() {
+        // 酷我歌单元数据里几乎都写着 FLAC，而免费脚本一般只声明 128k。
+        // 以前这里会先试 flac、再试 320k，两次必然失败的请求之后才落到 128k。
+        val source = FakeSource(qualities = listOf(Quality.Q128), available = setOf(Quality.Q128))
+        assertEquals(
+            listOf(Quality.Q128),
+            OnlineResolver.qualityChain(
+                source,
+                track(qualities = listOf(Quality.FLAC, Quality.Q320, Quality.Q128)),
+                null,
+            ),
+        )
+    }
+
+    @Test
+    fun `列表标签取音源能给到的最高档而不是平台标称`() {
+        OnlineSourceRegistry.register(
+            FakeSource(qualities = listOf(Quality.Q128), available = setOf(Quality.Q128)),
+        )
+        val t = track(qualities = listOf(Quality.FLAC, Quality.Q320, Quality.Q128))
+
+        // 未取址：按「音源声明 ∩ 曲目」给，列表不再标一个播不出来的 FLAC
+        assertEquals(Quality.Q128, OnlineResolver.displayQuality(t))
+
+        // 取址后：用实际落地的档位（这里与上面一致）
+        runBlocking {
+            assertEquals(Quality.Q128, OnlineResolver.resolve(t, null)?.quality)
+        }
+        assertEquals(Quality.Q128, OnlineResolver.displayQuality(t))
+    }
+
+    @Test
+    fun `同一平台两份脚本 第一份取不到时自动换第二份`() = runBlocking {
+        val broken = FakeSource(available = emptySet(), ownerId = "script-a")
+        val working = FakeSource(available = setOf(Quality.Q320), ownerId = "script-b")
+        OnlineSourceRegistry.register(broken)
+        OnlineSourceRegistry.register(working)
+
+        val resolved = OnlineResolver.resolve(track(), preferred = null)
+
+        assertEquals("第二份脚本必须被用上", "script-b", resolved?.ownerId)
+        assertEquals(Quality.Q320, resolved?.quality)
+        assertTrue(resolved!!.url.startsWith("https://"))
+    }
+
+    @Test
+    fun `用户手选的脚本排第一`() = runBlocking {
+        val first = FakeSource(
+            qualities = listOf(Quality.Q128),
+            available = setOf(Quality.Q128),
+            ownerId = "script-a",
+        )
+        val second = FakeSource(
+            qualities = listOf(Quality.FLAC),
+            available = setOf(Quality.FLAC),
+            ownerId = "script-b",
+        )
+        OnlineSourceRegistry.register(first)
+        OnlineSourceRegistry.register(second)
+
+        // 自动：清单顺序第一份（128k）先胜出
+        assertEquals("script-a", OnlineResolver.resolve(track(), null)?.ownerId)
+
+        // 用户指定第二份：重取必须换人，且不能命中上一条备忘录
+        OnlineUrlMemo.clear()
+        OnlineSourceRegistry.setPreferred(mapOf("kw" to "script-b"))
+        assertEquals("script-b", OnlineResolver.resolve(track(), null)?.ownerId)
     }
 }

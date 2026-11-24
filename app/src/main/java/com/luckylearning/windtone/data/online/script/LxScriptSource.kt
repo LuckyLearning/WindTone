@@ -20,14 +20,20 @@ import org.json.JSONObject
 class LxScriptSource(
     private val runtime: LxRuntime,
     private val declared: LxDeclaredSource,
+    private val scriptId: String,
     private val scriptName: String,
 ) : MusicSource {
 
     override val id: String get() = declared.id
 
+    /** 同平台多脚本时，「用哪个」记的就是这个脚本 id */
+    override val ownerId: String get() = scriptId
+
     override val name: String get() = DISPLAY_NAMES[declared.id]?.let {
         "$it · $scriptName"
     } ?: scriptName
+
+    override val providerLabel: String get() = scriptName
 
     // 本接口没有独立的 PLAY 能力项；musicUrl 是脚本存在的前提，不额外声明。
     override val capabilities: Set<Capability> = setOfNotNull(

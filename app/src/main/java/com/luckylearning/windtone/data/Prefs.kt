@@ -218,6 +218,9 @@ object SettingsDefaults {
      */
     const val ONLINE_QUALITY = ""
 
+    /** 「平台用哪份音源脚本」：默认空 = 自动（按脚本清单顺序，取不到再换下一个） */
+    const val ONLINE_SOURCE_CHOICE = ""
+
     /** 开机后台自启播放：默认关（要用户明确打开，避免一上车就突然出声） */
     const val AUTO_PLAY_ON_BOOT = false
 
@@ -783,7 +786,7 @@ class Prefs private constructor(context: Context) {
         OverlayStylePrefs(raw, STYLE_KEYS) { overlayStyleIsDark() }
 
     /** 新存储（DataStore）；与 [sp] 双写过渡 */
-    private val store = SettingsDataStore(context)
+    private val store = SettingsDataStore(context, dataStoreOverride)
 
     /**
      * 双写与预热用的作用域。
@@ -1289,6 +1292,20 @@ class Prefs private constructor(context: Context) {
             val v = value.takeIf { it in QUALITY_IDS } ?: SettingsDefaults.ONLINE_QUALITY
             sp.edit().putString(KEY_ONLINE_QUALITY, v).apply()
             ioScope.launch { store.putString(KEY_ONLINE_QUALITY, v) }
+        }
+
+    /**
+     * 「某个平台用哪份音源脚本」：JSON（`{"kw":"custom:xxxx"}`，空 = 全部自动）。
+     *
+     * 只有同一个平台被多份脚本接管时才有值；读写与解析都在
+     * [com.luckylearning.windtone.data.online.OnlineSourceChoice]，这里只做落盘。
+     */
+    var onlineSourceChoice: String
+        get() = sp.getString(KEY_ONLINE_SOURCE_CHOICE, SettingsDefaults.ONLINE_SOURCE_CHOICE)
+            ?: SettingsDefaults.ONLINE_SOURCE_CHOICE
+        set(value) {
+            sp.edit().putString(KEY_ONLINE_SOURCE_CHOICE, value).apply()
+            ioScope.launch { store.putString(KEY_ONLINE_SOURCE_CHOICE, value) }
         }
 
     /** 在线后续曲预取（默认关，A11） */
@@ -2604,6 +2621,17 @@ class Prefs private constructor(context: Context) {
             synchronized(instances) { instances.clear() }
         }
 
+        /**
+         * 供测试：给之后新建的实例注入一个独立 DataStore（生产恒为 null）。
+         *
+         * 全局单例（`Context.settingsDataStore`）绑定**首个访问者的文件目录**，而 Robolectric
+         * 每个方法换新 Application —— 迁移测试跟在别的 Robolectric 类后面跑时，写会落到
+         * 已经作废的目录并被 `safeEdit` 静默吞掉，表现为「迁移永远不落地」的顺序敏感 flaky。
+         * 与 [SettingsDataStore] 的测试注入口是同一套做法。
+         */
+        internal var dataStoreOverride: androidx.datastore.core.DataStore<
+            androidx.datastore.preferences.core.Preferences>? = null
+
         // ---- 1. 音乐库与扫描 ----
         const val KEY_LIB_LOSSLESS_ONLY = "library_lossless_only"
         const val KEY_LIB_FORMAT_EXTS = "library_format_exts"
@@ -2650,6 +2678,8 @@ class Prefs private constructor(context: Context) {
         const val KEY_GAPLESS_PLAYBACK = "gapless_playback"
         const val KEY_SOURCE_MODE = "source_mode"
         const val KEY_ONLINE_QUALITY = "online_quality"
+        /** 平台 → 脚本 ownerId 的选择（JSON；空 = 自动） */
+        const val KEY_ONLINE_SOURCE_CHOICE = "online_source_choice"
 
         /** 在线音质的合法取值（与洛雪脚本协议一致；空串 = 最高可用） */
         val QUALITY_IDS: Set<String> = setOf("", "128k", "320k", "flac", "flac24bit")

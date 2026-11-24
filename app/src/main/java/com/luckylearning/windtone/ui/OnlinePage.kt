@@ -13,12 +13,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
@@ -67,11 +70,14 @@ import com.luckylearning.windtone.data.online.BuiltInSearch
 import com.luckylearning.windtone.data.online.OnlineBoards
 import com.luckylearning.windtone.data.online.OnlineCover
 import com.luckylearning.windtone.data.online.OnlineLibrary
+import com.luckylearning.windtone.data.online.OnlineResolver
 import com.luckylearning.windtone.data.online.OnlineSonglists
+import com.luckylearning.windtone.data.online.OnlineUrlMemo
 import com.luckylearning.windtone.data.online.source.OnlineSourceRegistry
 import com.luckylearning.windtone.data.online.source.OnlineTrack
 import com.luckylearning.windtone.data.online.script.LxLoadReport
 import com.luckylearning.windtone.data.online.script.LxScript
+import com.luckylearning.windtone.data.online.script.LxScriptSource
 import com.luckylearning.windtone.data.online.script.LxScriptStore
 import com.luckylearning.windtone.data.online.script.LxSourceManager
 import kotlinx.coroutines.Dispatchers
@@ -123,6 +129,8 @@ internal fun OnlinePage(
     var manage by remember { mutableStateOf(false) }
     var scripts by remember { mutableStateOf(store.all()) }
     var report by remember { mutableStateOf(LxSourceManager.report) }
+    /** 用户切换「平台 → 脚本」后 +1，让音源管理弹窗里的候选重算 */
+    var choiceRevision by remember { mutableIntStateOf(0) }
     /** 每个源已请求到第几页（1 = 只搜过第一页） */
     val pages = remember { mutableStateMapOf<String, Int>() }
     val loadingMore = remember { mutableStateMapOf<String, Boolean>() }
@@ -488,10 +496,35 @@ internal fun OnlinePage(
     }
 
     if (manage) {
+        // 音源集合 / 用户选择 都可能在弹窗里被改，用 report + choiceRevision 触发重算
+        val choices = remember(report, choiceRevision) { platformChoices() }
         SourceManagerDialog(
             scripts = scripts,
             report = report,
+            choices = choices,
             onDismiss = { manage = false },
+            onChooseSource = { platform, ownerId ->
+                scope.launch {
+                    LxSourceManager.chooseSource(context, platform, ownerId)
+                    choiceRevision++
+                    report = LxSourceManager.report
+                }
+            },
+            onMove = { script, delta ->
+                scope.launch {
+                    val list = scripts.toMutableList()
+                    val from = list.indexOfFirst { it.id == script.id }
+                    val to = from + delta
+                    if (from >= 0 && to in list.indices) {
+                        list.removeAt(from)
+                        list.add(to, script)
+                        withContext(Dispatchers.IO) { store.save(list) }
+                        scripts = store.all()
+                        // 顺序即优先级：重排后整体重载，注册表按新顺序重建
+                        report = LxSourceManager.reload(context)
+                    }
+                }
+            },
             onImport = { text, isUrl ->
                 scope.launch {
                     val imported = withContext(Dispatchers.IO) {
@@ -515,6 +548,7 @@ internal fun OnlinePage(
                     } else {
                         report = LxSourceManager.reload(context)
                         scripts = store.all()
+                        choiceRevision++
                         Toast.makeText(
                             context,
                             AppStrings.s(R.string.online_source_loaded, report.sources.size),
@@ -528,6 +562,7 @@ internal fun OnlinePage(
                     store.setEnabled(script.id, !script.enabled)
                     scripts = store.all()
                     report = LxSourceManager.reload(context)
+                    choiceRevision++
                 }
             },
             onDelete = { script ->
@@ -535,10 +570,14 @@ internal fun OnlinePage(
                     store.remove(script.id)
                     scripts = store.all()
                     report = LxSourceManager.reload(context)
+                    choiceRevision++
                 }
             },
             onReload = {
-                scope.launch { report = LxSourceManager.reload(context) }
+                scope.launch {
+                    report = LxSourceManager.reload(context)
+                    choiceRevision++
+                }
             },
         )
     }
@@ -675,6 +714,9 @@ internal fun EmptyHint(text: String) {
 @Composable
 internal fun TrackRow(track: OnlineTrack, onPlay: () -> Unit, onFavorite: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
+    // 列表标签以「这份音源真能给的最高档」为准；播过之后换成实际档位（补链完成会 +1 计数）
+    val revision = OnlineUrlMemo.revision.intValue
+    val quality = remember(track.stableKey, revision) { OnlineResolver.displayQuality(track) }
     Box {
         Row(
             Modifier
@@ -705,10 +747,10 @@ internal fun TrackRow(track: OnlineTrack, onPlay: () -> Unit, onFavorite: () -> 
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (track.qualities.isNotEmpty()) {
+            if (quality != null) {
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    track.qualities.maxByOrNull { it.ordinal }?.shortLabel ?: "",
+                    quality.shortLabel,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -762,11 +804,23 @@ private fun TrackCover(track: OnlineTrack) {
     }
 }
 
+/**
+ * 音源管理：导入 / 启停 / 排序 / 「某平台用哪份脚本」。
+ *
+ * 为什么要有「排序」和「平台选择」两套东西：
+ *  - **排序**决定默认顺序（自动模式下第一个能取到地址的脚本胜出）；
+ *  - **平台选择**是洛雪里「音源」那个下拉的手动覆盖 —— 同一个平台装了两份脚本、
+ *    其中一份对某类歌（比如无损）更全时，用户可以在不改顺序的前提下只给这个平台换人。
+ * 两者叠加后的实际顺序由 `OnlineSourceRegistry.candidates` 给出，与本页展示一致。
+ */
 @Composable
 private fun SourceManagerDialog(
     scripts: List<LxScript>,
     report: LxLoadReport,
+    choices: List<PlatformChoice>,
     onDismiss: () -> Unit,
+    onChooseSource: (platform: String, ownerId: String?) -> Unit,
+    onMove: (LxScript, Int) -> Unit,
     onImport: (String, Boolean) -> Unit,
     onToggle: (LxScript) -> Unit,
     onDelete: (LxScript) -> Unit,
@@ -777,7 +831,11 @@ private fun SourceManagerDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.online_manage_sources)) },
         text = {
-            Column {
+            Column(
+                Modifier
+                    .heightIn(max = 460.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
                 Text(
                     stringResource(R.string.online_source_loaded, report.sources.size),
                     style = MaterialTheme.typography.bodyMedium,
@@ -812,7 +870,26 @@ private fun SourceManagerDialog(
                     }
                     TextButton(onClick = onReload) { Text(stringResource(R.string.online_reload)) }
                 }
-                scripts.forEach { s ->
+
+                if (choices.isNotEmpty()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        stringResource(R.string.online_source_pick_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        stringResource(R.string.online_source_pick_hint),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    choices.forEach { choice ->
+                        PlatformSourceRow(choice = choice, onChoose = onChooseSource)
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+                scripts.forEachIndexed { index, s ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(s.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -820,7 +897,15 @@ private fun SourceManagerDialog(
                                 if (s.enabled) stringResource(R.string.online_source_enabled)
                                 else stringResource(R.string.online_source_disabled),
                                 style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                        }
+                        // 顺序即优先级（自动模式下先试上面的）；只有停用的脚本也不影响顺序语义
+                        TextButton(enabled = index > 0, onClick = { onMove(s, -1) }) {
+                            Text(stringResource(R.string.move_up))
+                        }
+                        TextButton(enabled = index < scripts.lastIndex, onClick = { onMove(s, 1) }) {
+                            Text(stringResource(R.string.move_down))
                         }
                         TextButton(onClick = { onToggle(s) }) {
                             Text(if (s.enabled) stringResource(R.string.off) else stringResource(R.string.on))
@@ -835,6 +920,83 @@ private fun SourceManagerDialog(
         confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
     )
 }
+
+/**
+ * 「某个平台用哪份脚本」的一行。
+ *
+ * 只有一个候选时不摆下拉（选择没有意义，摆出来反而让人以为还有别的）；
+ * 多个候选时点开是「自动 / 各脚本」，与洛雪的音源下拉同义。
+ */
+@Composable
+private fun PlatformSourceRow(
+    choice: PlatformChoice,
+    onChoose: (platform: String, ownerId: String?) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedLabel = choice.options.firstOrNull { it.first == choice.selected }?.second
+        ?: stringResource(R.string.online_source_auto)
+    Row(
+        Modifier.fillMaxWidth().padding(top = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(choice.title, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Box {
+            TextButton(
+                enabled = choice.options.size > 1,
+                onClick = { expanded = true },
+            ) { Text(selectedLabel) }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.online_source_auto)) },
+                    onClick = {
+                        expanded = false
+                        onChoose(choice.platform, null)
+                    },
+                )
+                choice.options.forEach { (ownerId, label) ->
+                    DropdownMenuItem(
+                        text = { Text(label) },
+                        onClick = {
+                            expanded = false
+                            onChoose(choice.platform, ownerId)
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 音源管理里「某个平台用哪份脚本」的一行 */
+private data class PlatformChoice(
+    val platform: String,
+    /** 平台显示名（酷我音乐 / QQ 音乐 …） */
+    val title: String,
+    /** 用户手选的 ownerId；null = 自动（按脚本顺序） */
+    val selected: String?,
+    /** ownerId → 脚本名 */
+    val options: List<Pair<String, String>>,
+)
+
+/**
+ * 从注册表现算一份候选表。
+ *
+ * 不缓存：音源管理是低频弹窗，而注册表在导入 / 停用 / 删除 / 重排后都会整体重建，
+ * 缓存反而要多写一套失效逻辑。列表最多几条，算一次是零成本。
+ */
+private fun platformChoices(): List<PlatformChoice> =
+    OnlineSourceRegistry.platformIds.map { pid ->
+        PlatformChoice(
+            platform = pid,
+            title = platformTitle(pid),
+            selected = OnlineSourceRegistry.preferredFor(pid),
+            options = OnlineSourceRegistry.sourcesFor(pid).map { it.ownerId to it.providerLabel },
+        )
+    }
+
+/** 平台名：内置搜索认识的四家用它的表，其余（wy / xm）用脚本源的中文名 */
+private fun platformTitle(id: String): String =
+    BuiltInSearch.SOURCE_NAMES[id] ?: LxScriptSource.DISPLAY_NAMES[id] ?: id
 
 /** 40dp @ xxhdpi 的物理像素，交给解码器按需降采样 */
 private const val COVER_PX = 120

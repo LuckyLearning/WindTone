@@ -1,12 +1,19 @@
 package com.luckylearning.windtone.data
 
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -16,9 +23,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.util.UUID
 
 /**
  * 「SharedPreferences → DataStore」双写迁移的**行为**验证。
@@ -32,17 +42,36 @@ import org.robolectric.RobolectricTestRunner
  *  5. **读行为零回归**：写完立刻回读，拿到的必须还是刚写的值。
  *
  * 用 Robolectric：`Prefs` 要 `getSharedPreferences`，DataStore 要真实文件系统。
+ *
+ * ## 为什么不读全局单例
+ * `Context.settingsDataStore` 是进程级的 `preferencesDataStore` 委托，绑定**首个访问者的
+ * 文件目录**，而 Robolectric 每个方法换新 Application（新 filesDir）。于是这个类能不能过
+ * 取决于「谁先碰到单例」—— 单跑必过、跟在别的 Robolectric 类后面跑必挂（v1.2.62 全量跑
+ * 实锤：DataStore 一直空，`warmUp` 的写落到早就作废的目录里被 `safeEdit` 静默吞掉）。
+ * 现在走 [Prefs.dataStoreOverride] 注入独立文件，与 [SettingsDataStoreTest] 同一套隔离办法。
  */
 @RunWith(RobolectricTestRunner::class)
 class PrefsDataStoreMigrationTest {
 
     private lateinit var context: Context
+    private lateinit var dataStore: DataStore<Preferences>
+    private lateinit var scope: CoroutineScope
+
+    @get:Rule
+    val tmp = TemporaryFolder()
 
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
         // 每个用例都从「没有 Prefs 实例、两边存储都空」开始。若不清缓存，后一个用例拿到的是
         // 上一个用例建的实例（它的预热协程早跑完了），「构造即预热」这条就验不到。
+        Prefs.clearCacheForTest()
+        // 给本用例注入一个带独立文件的 DataStore（见类注释「为什么不读全局单例」）
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        dataStore = PreferenceDataStoreFactory.create(scope = scope) {
+            tmp.newFile("prefs_${UUID.randomUUID()}.preferences_pb")
+        }
+        Prefs.dataStoreOverride = dataStore
         Prefs.clearCacheForTest()
         clearBoth()
     }
@@ -51,17 +80,19 @@ class PrefsDataStoreMigrationTest {
     fun tearDown() {
         clearBoth()
         Prefs.clearCacheForTest()
+        Prefs.dataStoreOverride = null
+        scope.cancel()
     }
 
     private fun sp() = context.getSharedPreferences("music_player_prefs", Context.MODE_PRIVATE)
 
     private fun clearBoth() {
         sp().edit().clear().commit()
-        runBlocking { SettingsDataStore(context).clearForTest() }
+        runBlocking { dataStore.edit { it.clear() } }
     }
 
     /** DataStore 当前内容（一次性读，读完就返回，不挂长期 collect） */
-    private fun dsNow(): Preferences = runBlocking { SettingsDataStore(context).flowForTest().first() }
+    private fun dsNow(): Preferences = runBlocking { dataStore.data.first() }
 
     /**
      * 轮询 DataStore 直到某键出现。双写是异步的，不能假设它立刻完成。
@@ -127,6 +158,7 @@ class PrefsDataStoreMigrationTest {
             .putString("library_view", "FOLDER")
             .commit()
 
+        Prefs.clearCacheForTest()
         Prefs(context) // 生产入口：构造时就该把存量搬过去
 
         awaitKey("lyric_overlay")

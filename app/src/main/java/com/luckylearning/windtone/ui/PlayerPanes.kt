@@ -162,13 +162,25 @@ internal fun SongInfoPane(
         val onlineKey = com.luckylearning.windtone.data.online.OnlineKeys.parse(song.stableKey)
         if (onlineKey != null) {
             val resolved = com.luckylearning.windtone.data.online.OnlineUrlMemo.peek(song.stableKey)
-            val sourceName = com.luckylearning.windtone.data.online.BuiltInSearch.SOURCE_NAMES[onlineKey.sourceId]
+            // 来源写**实际出力的脚本**（「酷我音乐 · fish 源」）：同一平台装了好几份音源时，
+            // 只写平台名等于没告诉用户用的是哪个；没取到址时退回平台名，仍比留空有用。
+            val sourceName = resolved?.sourceName?.takeIf { it.isNotBlank() }
+                ?: com.luckylearning.windtone.data.online.BuiltInSearch.SOURCE_NAMES[onlineKey.sourceId]
                 ?: onlineKey.sourceId
             InfoGroup(stringResource(R.string.info_group_online), groupSp) {
                 FactRow(stringResource(R.string.info_field_source), sourceName, labelSp, valueSp)
+                // 自动降级过就写在值里：列表标 FLAC、这里显示 128k 却不解释，用户只会当成 bug
+                val qualityText = resolved?.let { r ->
+                    val requested = r.requested
+                    if (requested != null && r.quality.ordinal < requested.ordinal) {
+                        stringResource(R.string.online_quality_downgraded, r.quality.label)
+                    } else {
+                        r.quality.label
+                    }
+                }
                 FactRow(
                     stringResource(R.string.info_field_quality),
-                    resolved?.quality?.label,
+                    qualityText,
                     labelSp, valueSp,
                 )
                 FactRow(

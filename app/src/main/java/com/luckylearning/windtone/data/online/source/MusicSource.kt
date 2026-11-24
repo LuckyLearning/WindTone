@@ -126,8 +126,20 @@ interface MusicSource {
     /** 音源 id（与洛雪的 `kw`/`kg`/`tx`/`wy`/`mg` 同名，自定义源用 `custom:<uuid>`） */
     val id: String
 
+    /**
+     * 这个实现**属于哪一份脚本**（脚本源 = `LxScript.id`，直连源 = 自己的 id）。
+     *
+     * 为什么要它：同一个平台（如 `kw`）可以被多份脚本同时接管，注册表里因此是
+     * 「一个平台 → 多个实现」。用户选「这个平台用哪份脚本」时记的就是这个值 ——
+     * 记 `id` 没用，因为同平台的两份脚本 `id` 完全一样。
+     */
+    val ownerId: String get() = id
+
     /** 展示名 */
     val name: String
+
+    /** 提供者短名（脚本源给脚本名）—— 音源管理里「酷我音乐 → fish 源」用 */
+    val providerLabel: String get() = name
 
     val capabilities: Set<Capability>
 
