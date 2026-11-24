@@ -67,7 +67,7 @@ LibraryViewModel   PlayerViewModel    UpdateViewModel    SettingsViewModel
 | Gradle / AGP | 8.9（Wrapper）/ 8.7.2 |
 | 签名库 | `.toolchain/keystore/windtone.jks`（alias `windtone`）—— **本地与 CI 同一套** |
 | APK 产物名 | `WindTone-v1.1.3.apk`（debug：`WindTone-v1.1.3-debug.apk`）—— 版本号随发版变化 |
-| 应用显示名 | 英文 `WindTone` / 中文 `听风`（`values/` 与 `values-zh/`） |
+| 应用显示名 | 只有中文 `听风`（`values/strings.xml`，`translatable="false"`） |
 | 数据库 | `music_player.db`，Room **v5**，9 张表（schema 快照在 `app/schemas/`） |
 | 单元测试 | **349 个**：`lyrics/` / `UpdateChecker` / `PlayMode` 为纯 JVM；`db/` 与 `playback/` 走 Robolectric（真实 SQLite）；`ui/` 是 Compose 界面冒烟（见 §11.13） |
 
@@ -451,18 +451,18 @@ ui/                       ── 展示层 ──
 
 ```
 res/
-├─ values/            **英文兜底文案** strings.xml（app_name = WindTone）、themes.xml（Theme.MusicPlayer）
-├─ values-zh/         中文 strings.xml（app_name = 听风）
+├─ values/            **唯一一份中文文案** strings.xml（app_name = 听风）、themes.xml（Theme.MusicPlayer）
 ├─ values-night/      深色主题
 ├─ drawable/ layout/  图标、小组件布局
 ├─ mipmap-*/          启动图标（含 anydpi-v26 自适应图标）
 └─ xml/               file_paths.xml（FileProvider 路径）、music_widget_info.xml
 ```
 
-> **⚠️ 两个桶的语义别搞反（2026-10-24 起的硬约定）**：`values/` 是**英文兜底**，不是"中文默认"。
-> Android 的解析规则是「当前语言 → `values`」，所以**任何一条文案都必须在 `values/` 里存在英文值**，
-> 只在 `values-zh/` 里定义会让英文设备直接 `NotFoundException` 崩溃。加语言 = 新增 `values-xx/`，代码一行不改。
-> 细则见 §10 第 17 条。
+> **⚠️ 只做中文，不做国际化（2026-11-24 用户拍板，推翻了 2026-10-24 的双桶约定）**：
+> 中文文案**直接写进默认桶 `values/`**，`values-zh/` 已删除。这样任何语言环境都命中中文，
+> 且只有一份文案要维护。`resourceConfigurations = listOf("zh")` 只保留中文、顺带裁掉三方库的其它语言资源。
+> **不要再建 `values-xx/` 目录，也不要再写英文副本** —— 新增文案只写 `values/strings.xml`（中文）。
+> `plurals` 只写 `other`（中文没有单复数）。细则见 §10 第 17 条与 §11.16。
 
 ---
 
@@ -1320,10 +1320,10 @@ WindTone-v{版本}-universal.apk      # 拿不准架构时的兜底
     - **「检查更新」只在设置 → 更新**：原先抽屉与顶栏「⋮」菜单各挂一份，都已删。顶栏「⋮」菜单从此**只放就地动作**（扫描范围 / 重扫 / 导入 / 重匹配 .lrc / 深度扫描 / 收听报告），不放跳转项。
     - 这三处 `LibraryHeader` / `LibraryDrawer` 的 `onOpenSettings`、`onCheckUpdate` 参数已随之删除；`LibraryDrawerTest` 里有两条对照测试锁住这个口径（`showsBrandAndBothGroups` 只列 7 项、`checkUpdateIsNotInDrawer` 断言抽屉里不存在「检查更新」）。
 
-17. **文案一律走资源，不再写死在 Compose 里（2026-10-24 起，新代码硬性要求）**。原「9.3 第二步不做」已被用户推翻。
-    - **两个桶**：`res/values/strings.xml` = **英文兜底**（每条都必须在，否则英文设备 `NotFoundException`）；
-      `res/values-zh/strings.xml` = 中文。**新增语言只加 `values-xx/`**，Kotlin 一行不改。
-    - **计数用 `<plurals>`**（英语要区分单复数，中文只有 `other`），插值用 `%1$d` / `%1$s`，不要用字符串拼接。
+17. **文案一律走资源，不写死在 Compose 里（2026-10-24 起）；但只维护中文一份（2026-11-24 起）**。
+    - **一个桶**：`res/values/strings.xml` 就是**唯一的中文文案**。`values-zh/` 已删除，
+      `resourceConfigurations = listOf("zh")`。**不要再建 `values-xx/`，也不要再写英文副本**。
+    - **计数用 `<plurals>`**，但只写 `other`（中文没有单复数），插值用 `%1$d` / `%1$s`，不要字符串拼接。
     - **枚举标签不写在枚举里**：`state/UiState.kt` 的 `LibraryView` / `SortOrder`、`data/Prefs.kt` 的 `PlayMode` 等，
       一律通过 `ui/UiText.kt` 的 `labelRes()`（**纯映射，JVM 单测可断言**）+ `displayName()`（`@Composable`，内部 `stringResource`）取文案。
       数据层从此**不持有界面文案**——这是能加语言的关键解耦。
@@ -1357,7 +1357,7 @@ WindTone-v{版本}-universal.apk      # 拿不准架构时的兜底
      `CollapsibleSectionTitle(title, summary, expanded, onToggle, compact = 弹层里传 true)` 代替 `SectionTitle`，**收起状态不持久化**
      ——每次进页面都收起，正是为了压掉误触面；`summary` 必须带上所有关键当前值（`1.00x · 原调`），否则收起后看不出被动过。
      ⚠️ 收起态**不搬走** ↺：它仍在展开后各行的行尾（见 §11.14-①）。
-   - **新文案一律落资源**：标题 / 副标题 / 弹窗说明同时写进 `res/values/strings.xml`（英文）与 `res/values-zh/strings.xml`（中文），
+   - **新文案一律落资源**：标题 / 副标题 / 弹窗说明写进 `res/values/strings.xml`（**中文，唯一一份**），
      行里用 `stringResource(R.string.xxx)`。**不要**为省事直接写中文字面量（见 §10 第 17 条）。
 4. 若 `SettingsScreen` 参数变了，同步改 `MainScreen.kt` 里的调用点。
 5. **出厂默认值写进 `SettingsDefaults`（`data/Prefs.kt`）**，并给该行挂 `onReset`（见 §11.14-①）。
@@ -1971,24 +1971,18 @@ launcher 应用列表 + 搜索 + 图标 + 手动贴包名，`Drawable→Bitmap` 
 已在名单的显示「已在名单」并禁用。查包名 → 加名单的动线因此全在一屏内完成。
 测试：`OverlayVisibilityTest`（4 条新增）/ `ForegroundAppStateTest`（上报去重 + 门控 + 日志纯函数）/ `LayoutContractTest`（manifest 声明）/ `SettingsScreenTest`。
 
-### 11.16 新增一条文案 / 加一种语言（i18n 流程，2026-10-24 起）
+### 11.16 新增一条文案（2026-11-24 起：单份中文，不做国际化）
 
 **新增一条文案（最常见）**：
 
-1. `res/values/strings.xml` 加**英文**值 —— 这一条是兜底，**不能省**（英文设备缺它会 `NotFoundException`）。
-2. `res/values-zh/strings.xml` 加**中文**值，**key 必须完全一致**。
-3. UI 里用 `stringResource(R.string.xxx)`；带参数就写 `%1$s` / `%1$d`（不要在 Kotlin 里拼字符串，语序因语言而异）。
-   计数类用 `<plurals>` + `pluralStringResource`（英语要分单复数，中文只写 `other`）。
-4. 枚举标签走 `ui/UiText.kt` 的 `labelRes()` 映射，**不要**在枚举里写 `String` 常量（枚举拿不到 `Context`）。
+1. `res/values/strings.xml` 加**中文**值 —— 这是唯一一份，`values-zh/` 已删除。
+2. UI 里用 `stringResource(R.string.xxx)`；带参数就写 `%1$s` / `%1$d`（不要在 Kotlin 里拼字符串）。
+   计数类用 `<plurals>` + `pluralStringResource`，**只写 `other`**。
+3. 枚举标签走 `ui/UiText.kt` 的 `labelRes()` 映射，**不要**在枚举里写 `String` 常量（枚举拿不到 `Context`）。
 
-**加一种语言（如日语）**：
-
-1. 复制 `res/values-zh/strings.xml` → `res/values-ja/strings.xml`，逐条翻译。**Kotlin 一行不用改**。
-2. 若该语言需要区分复数形态（英/法等），`<plurals>` 的 `quantity` 要按 CLDR 补齐（`one` / `other` …），
-   中文、日文只有 `other`。
-3. `app/build.gradle.kts` 的 `resourceConfigurations` 里补语言码（当前为 `zh` / `en`）。
-4. ⚠️ **别只翻译已改造模块**：未改造模块仍是硬编码中文，会表现为"一半日语一半中文"。要么先把该模块抽干净再上语言，
-   要么在加语言前把目标模块全部改造完。
+> **不要再国际化**：不要新建 `values-xx/`、不要写英文副本、不要把 `resourceConfigurations`
+> 扩回多语言。用户明确要求「不做任何的国际化，只要中文」。将来真要加语言，
+> 那是独立一轮改造：先把硬编码中文抽干净（`onboarding` 文案例外见 `#114`），再恢复 `values-xx/`。
 
 **验证**：
 

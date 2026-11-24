@@ -28,6 +28,10 @@ import com.luckylearning.windtone.MainActivity
 import com.luckylearning.windtone.MusicApp
 import com.luckylearning.windtone.data.CrashLog
 import com.luckylearning.windtone.data.Prefs
+import com.luckylearning.windtone.data.online.OnlineResolver
+import com.luckylearning.windtone.data.online.OnlineTrackStore
+import com.luckylearning.windtone.data.online.ResolvedUrl
+import com.luckylearning.windtone.data.online.source.Quality
 import com.luckylearning.windtone.playback.parallel.ParallelDownloadRegistry
 import com.luckylearning.windtone.data.aliyun.AliyunAuth
 import com.luckylearning.windtone.data.aliyun.AliyunDrive
@@ -83,10 +87,27 @@ class PlaybackService : MediaLibraryService() {
     private val cloudUrlResolver: suspend (driveId: String, fileId: String) -> String? =
     { driveId, fileId -> AliyunDrive(AliyunAuth(applicationContext)).downloadUrl(driveId, fileId).getOrNull() }
 
+    /**
+     * 在线曲目的起播项现取真直链用（与云盘同构）。
+     *
+     * 非起播项由 `LibraryBrowser.resolveOne` 重建为 `lx-pending://…`，
+     * 再由播放引擎的在线滑窗补链；这里只服务「按下播放的那一首」，
+     * 避免用户先吃一次占位错误再等补链。
+     */
+    private val onlineUrlResolver: suspend (stableKey: String) -> ResolvedUrl? =
+        { key ->
+            OnlineResolver.resolveKey(
+                key,
+                OnlineTrackStore(applicationContext),
+                Quality.of(Prefs(applicationContext).onlineQuality),
+            )
+        }
+
     private val browser by lazy {
         LibraryBrowser(
             LibraryBrowseStore((application as MusicApp).container.db),
             cloudUrlResolver,
+            onlineUrlResolver,
         )
     }
 

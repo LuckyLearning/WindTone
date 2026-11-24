@@ -207,6 +207,17 @@ object SettingsDefaults {
      */
     const val ONLINE_PARALLEL_DOWNLOAD = false
 
+    /** 音源模式默认本机曲库。改这个常量等于改所有新装用户的默认入口。 */
+    const val SOURCE_MODE = "LOCAL"
+
+    /**
+     * 在线音质偏好：空串 = 「最高可用」（不限制，由音源能力决定）。
+     *
+     * 空串而不是 `"flac"` 是有意的：各源支持的档位不同，写死一档会让「源不支持该档」
+     * 变成每次都要先失败一次再降级；空串直接走「由高到低」的自然顺序。
+     */
+    const val ONLINE_QUALITY = ""
+
     /** 开机后台自启播放：默认关（要用户明确打开，避免一上车就突然出声） */
     const val AUTO_PLAY_ON_BOOT = false
 
@@ -1250,6 +1261,34 @@ class Prefs private constructor(context: Context) {
         set(value) {
             sp.edit().putBoolean(KEY_GAPLESS_PLAYBACK, value).apply()
             ioScope.launch { store.putBoolean(KEY_GAPLESS_PLAYBACK, value) }
+        }
+
+    /**
+     * 音源模式（本地 / 云盘 / 洛雪源）。抽屉菜单与内容页都读这一处，
+     * 不允许各页面自己再存一份状态。
+     */
+    var sourceMode: SourceMode
+        get() = runCatching {
+            SourceMode.valueOf(sp.getString(KEY_SOURCE_MODE, SettingsDefaults.SOURCE_MODE)!!)
+        }.getOrDefault(SourceMode.LOCAL)
+        set(value) {
+            sp.edit().putString(KEY_SOURCE_MODE, value.name).apply()
+            ioScope.launch { store.putString(KEY_SOURCE_MODE, value.name) }
+        }
+
+    /**
+     * 在线音质偏好（`128k` / `320k` / `flac` / `flac24bit`；空 = 最高可用）。
+     *
+     * 只影响**在线取址的起点档位**：取不到时 `OnlineResolver` 仍会按档位下降，
+     * 所以这里选高档位不会导致「播不了」，最多是多一次失败重试。
+     */
+    var onlineQuality: String
+        get() = sp.getString(KEY_ONLINE_QUALITY, SettingsDefaults.ONLINE_QUALITY)
+            ?.takeIf { it in QUALITY_IDS } ?: SettingsDefaults.ONLINE_QUALITY
+        set(value) {
+            val v = value.takeIf { it in QUALITY_IDS } ?: SettingsDefaults.ONLINE_QUALITY
+            sp.edit().putString(KEY_ONLINE_QUALITY, v).apply()
+            ioScope.launch { store.putString(KEY_ONLINE_QUALITY, v) }
         }
 
     /** 在线后续曲预取（默认关，A11） */
@@ -2609,6 +2648,11 @@ class Prefs private constructor(context: Context) {
         const val KEY_OVERLAY_HANDLE_A11Y = "overlay_handle_a11y"
         const val KEY_OVERLAY_HANDLE_ORDER = "overlay_handle_order"
         const val KEY_GAPLESS_PLAYBACK = "gapless_playback"
+        const val KEY_SOURCE_MODE = "source_mode"
+        const val KEY_ONLINE_QUALITY = "online_quality"
+
+        /** 在线音质的合法取值（与洛雪脚本协议一致；空串 = 最高可用） */
+        val QUALITY_IDS: Set<String> = setOf("", "128k", "320k", "flac", "flac24bit")
         const val KEY_ONLINE_CACHE_PREFETCH = "online_cache_prefetch"
         const val KEY_ONLINE_PARALLEL_DOWNLOAD = "online_parallel_download"
         const val KEY_LYRICS_PANE = "lyrics_pane_visible"

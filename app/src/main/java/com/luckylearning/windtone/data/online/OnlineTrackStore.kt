@@ -122,6 +122,9 @@ class OnlineTrackStore(context: Context) {
         put("q", JSONArray().apply { t.qualities.forEach { put(it.id) } })
         put("vip", t.vip)
         put("raw", t.raw)
+        // 新增字段一律「有值才写」：旧存档里没有它，读的时候按 null 处理即可，
+        // 不需要升 KEY_VERSION（升了反而要在 read 里区分两套结构）
+        t.coverUrl?.let { put("img", it) }
     }
 
     private fun read(o: JSONObject): OnlineTrack {
@@ -137,6 +140,8 @@ class OnlineTrackStore(context: Context) {
             durationMs = o.optLong("d"),
             qualities = qualities,
             raw = o.optString("raw"),
+            // 旧存档（本次改动前入库）没有这个键 → 空 → 由 OnlineCover 按源现取
+            coverUrl = o.optString("img").takeIf { it.startsWith("http") },
             vip = o.optBoolean("vip"),
         )
     }

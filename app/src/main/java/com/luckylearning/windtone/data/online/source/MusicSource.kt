@@ -70,6 +70,15 @@ data class OnlineTrack(
     /** 源内原始信息（JSON 字符串），取直链时原样回传 */
     val raw: String = "",
     /**
+     * 搜索时就能拿到的封面地址。
+     *
+     * 各家能力不同：QQ / 咪咕 / 酷狗在搜索结果里直接给图，酷我要单独请求
+     * `artistpicserver` 才能换到地址（见 [com.luckylearning.windtone.data.online.OnlineCover]）。
+     * 所以本字段**允许为空**，空时由 [com.luckylearning.windtone.data.online.OnlineCover] 按源现取 ——
+     * 有值就少一次网络往返。
+     */
+    val coverUrl: String? = null,
+    /**
      * 需要会员 / 版权受限。
      *
      * 这类条目不隐藏（用户仍然能收藏、能看到），但取址必然失败 ——

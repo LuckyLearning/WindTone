@@ -60,13 +60,9 @@ class EqUnavailableCopyTest {
         assertTrue(copy, copy.contains("开始播放任意一首歌曲"))
     }
 
-    @Test
-    fun `english device copy points at fade and volume balance`() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val copy = context.getString(R.string.eq_unavailable_device)
-        assertTrue(copy, copy.contains("Fade"))
-        assertTrue(copy, copy.contains("volume balance"))
-        assertTrue(copy, copy.contains("left/right balance"))
-        assertFalse(copy, copy.contains("Start playing"))
-    }
+    /**
+     * 2026-11-24 起文案只有中文一份（`values/` 已改为中文、`values-zh` 删除），
+     * 原来断言英文措辞的用例（`english device copy points at fade and volume balance`）
+     * 已随英文文案一起移除。约束本身由上面的中文用例覆盖。
+     */
 }

@@ -12,6 +12,7 @@ import com.luckylearning.windtone.lyrics.LrcParser
 import com.luckylearning.windtone.lyrics.LyricSource
 import com.luckylearning.windtone.lyrics.Lyrics
 import com.luckylearning.windtone.data.aliyun.AliyunEnricher
+import com.luckylearning.windtone.data.online.OnlineLyrics
 import com.luckylearning.windtone.lyrics.RemoteTagFetcher
 import com.luckylearning.windtone.lyrics.TextCodec
 import kotlinx.coroutines.Dispatchers
@@ -54,6 +55,15 @@ class LyricsLoader(private val context: Context) {
     private suspend fun loadRaw(song: Song): Lyrics {
         val cloudLyric = AliyunEnricher.sidecarLyrics(context, song)
         if (cloudLyric != null) return cloudLyric
+
+        // 在线音源（`lx:` 身份）没有文件，也没有侧车和内嵌标签 ——
+        // 唯一来源是各家平台的歌词接口，走完了还空就真的没有，不必再往下试。
+        if (song.isOnline) {
+            val online = OnlineLyrics.fetch(context, song)
+            if (online != null && !online.isEmpty) return online
+            return Lyrics.EMPTY
+        }
+
         // 1) 侧车歌词文件
         val sidecarUri = song.lrcUri ?: findSidecar(song)
         if (sidecarUri != null) {

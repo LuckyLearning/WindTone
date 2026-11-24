@@ -8,6 +8,7 @@ import com.luckylearning.windtone.R
 import android.app.Application
 import android.content.ComponentCallbacks
 import android.content.res.Configuration
+import android.net.Uri
 import android.os.SystemClock
 import android.util.Log
 import androidx.media3.common.MediaItem
@@ -41,6 +42,12 @@ import com.luckylearning.windtone.data.aliyun.AliyunPlaybackWindow
 import com.luckylearning.windtone.data.aliyun.AliyunQueueItem
 import com.luckylearning.windtone.data.aliyun.AliyunQueueSnapshot
 import com.luckylearning.windtone.data.aliyun.AliyunTrackStore
+import com.luckylearning.windtone.data.online.OnlineKeys
+import com.luckylearning.windtone.data.online.OnlineResolver
+import com.luckylearning.windtone.data.online.OnlineTrackStore
+import com.luckylearning.windtone.data.online.OnlineUrlMemo
+import com.luckylearning.windtone.data.online.source.OnlineSourceRegistry
+import com.luckylearning.windtone.data.online.source.Quality
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.data.model.TrackFragment
 import com.luckylearning.windtone.lyrics.Lyrics
@@ -374,6 +381,21 @@ class PlaybackEngine(
     private var aliyunUrlRetried = false
     private var aliyunWindowJob: Job? = null
 
+    /** 在线音源的滑窗补链作业，与云盘各自独立，互不取消（一次切歌可能两类都要补） */
+    private var onlineWindowJob: Job? = null
+
+    /**
+     * 在线补链连续失败次数（stableKey → 次数）。
+     *
+     * 占位地址加载失败会被 `onPlayerError` 当成「还没补链」而无限重排补链作业 ——
+     * 没有这张表时，取址一直失败的表现是「点了播放，界面纹丝不动、也没有任何提示」，
+     * 日志里则是同一条补链在空转（v1.2.61 用户实测：「搜索后无法播放没反应」）。
+     */
+    private val onlineFillFailures = HashMap<String, Int>()
+
+    /** 上一次「取不到播放地址」提示的时间，用于节流，避免补链重试时刷屏 */
+    private var lastOnlineHintAt = 0L
+
     /** 上一次尝试把悬浮窗服务拉回来的时间，用于 30 秒节流（见 [OverlayTickHelper.shouldReviveOverlay]） */
     private var lastOverlayReviveAt = 0L
 
@@ -587,7 +609,7 @@ class PlaybackEngine(
             syncCurrentSong()
             mediaItem?.mediaId?.takeIf { stats.shouldCountPlay(it) }?.let { stats.recordPlay(it) }
             aliyunUrlRetried = false
-            scheduleAliyunWindow()
+            schedulePendingWindow()
             maybeApplyIntroSkip(c)
         }
 
@@ -606,11 +628,18 @@ class PlaybackEngine(
             // 除了看界面状态里的歌，还要看**控制器当前项**——上一曲 / 跳转刚落到
             // 未填项时，界面状态可能还停在上一首歌上，漏判会把占位错误当成真失败，
             // 触发「失败跳下一首」，表现就是「上一曲回不去、反而往前跳」（v1.1.72 真机）。
-            val pendingNow = AliyunPlaybackWindow.isPending(_player.value.current?.uri?.scheme) ||
-                AliyunPlaybackWindow.isPending(controller?.currentMediaItem?.localConfiguration?.uri?.scheme)
+            val pendingNow = PendingUrls.isPending(_player.value.current?.uri) ||
+                PendingUrls.isPending(controller?.currentMediaItem?.localConfiguration?.uri)
             if (pendingNow) {
-                scheduleAliyunWindow()
-                return
+                // 同一条在线曲已经补链失败到上限：不再重排，直接落到下面的失败分支。
+                // 否则 `schedulePendingWindow → 加载失败 → 再排` 会无限空转，
+                // 用户看到的就是「点了播放完全没反应」（v1.2.61 实机反馈）。
+                val pendingKey = controller?.currentMediaItem?.mediaId
+                val fails = pendingKey?.let { onlineFillFailures[it] } ?: 0
+                if (fails < MAX_ONLINE_FILL_ATTEMPTS) {
+                    schedulePendingWindow()
+                    return
+                }
             }
             val code = generateSequence<Throwable>(error) { it.cause }
                 .filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>()
@@ -618,11 +647,20 @@ class PlaybackEngine(
                 ?.responseCode ?: 0
             // 直链过期重试的身份也以**控制器当前项**为准（稳定键就是 mediaId），
             // 不能用界面状态里可能滞后的歌去解析，否则会刷错歌的地址
-            val cloudId = controller?.currentMediaItem?.mediaId
+            val currentMediaId = controller?.currentMediaItem?.mediaId
+            val cloudId = currentMediaId
                 ?.let { TrackFragment.parse(it.removePrefix("aliyun:")) }
             if ((code == 401 || code == 403) && !aliyunUrlRetried && cloudId != null) {
                 aliyunUrlRetried = true
                 scope.launch { refreshAliyunUrl(cloudId.first, cloudId.second) }
+                return
+            }
+            // 在线直链过期（各家的有效期从几十分钟到几小时不等）：备忘录里那条已经废了，
+            // 清掉再走一次补链，由 OnlineResolver 按音质链重新取。若换源仍失败，
+            // fillOnlineWindow 会保持占位地址，下一轮 error 走正常的失败跳曲。
+            if ((code == 401 || code == 403) && currentMediaId != null && OnlineKeys.isOnlineKey(currentMediaId)) {
+                OnlineUrlMemo.forget(currentMediaId)
+                schedulePendingWindow()
                 return
             }
             Log.w(TAG, "播放错误: ${error.errorCodeName}", error)
@@ -826,15 +864,119 @@ class PlaybackEngine(
         return true
     }
 
-    /** 切歌后把窗口边缘上还没有直链的歌补上。已经有地址的不重复取。 */
-    private fun scheduleAliyunWindow() {
-        if (currentQueue.none { TrackFragment.parse(it.uri.fragment) != null }) return
-        aliyunWindowJob?.cancel()
-        aliyunWindowJob = scope.launch { fillAliyunWindow() }
+    /**
+     * 切歌后把窗口边缘上还没有直链的歌补上。
+     *
+     * 云盘与在线各自独立调度：一次切歌可能两类都在队列里，互相 cancel 会让先发起的
+     * 那一类永远取不完。已有地址的不重复取（见各自的 pendingIndices）。
+     */
+    private fun schedulePendingWindow() {
+        if (currentQueue.any { PendingUrls.isCloud(it.uri) }) {
+            aliyunWindowJob?.cancel()
+            aliyunWindowJob = scope.launch { fillAliyunWindow() }
+        }
+        if (currentQueue.any { PendingUrls.isOnline(it.uri) }) {
+            onlineWindowJob?.cancel()
+            onlineWindowJob = scope.launch { fillOnlineWindow() }
+        }
     }
 
-    private suspend fun fillAliyunWindow() {
+    /**
+     * 在线音源的滑窗补链，与 [fillAliyunWindow] 同构。
+     *
+     * 三点与云盘不同：
+     *  1. 身份形态是 `lx:源:id` 而不是 `aliyun:ay=…`，取直链走 [OnlineResolver]；
+     *  2. 直链可能多家可用，音质降级 / 备忘录已在 resolver 内部收口；
+     *  3. 直链后挂 `#lx:源:id` fragment —— 让缓存键与 stableKey 在补链前后
+     *     保持同一个值（Media3 的 CacheKeyFactory 与 replaceMediaItem 都依赖它）。
+     */
+    private suspend fun fillOnlineWindow() {
         val c = controller ?: return
+        val index = c.currentMediaItemIndex
+        if (index < 0 || c.mediaItemCount == 0) return
+        val ordered = (0 until c.mediaItemCount).map { i ->
+            val mediaId = c.getMediaItemAt(i).mediaId
+            currentQueue.firstOrNull { it.stableKey == mediaId }
+        }
+        if (ordered.any { it == null }) return
+        val songs = ordered.filterNotNull()
+        val targets = PendingUrls.pendingIndices(
+            songs.map { it.uri }, index, PendingUrls.Kind.ONLINE,
+        )
+        if (targets.isEmpty()) return
+
+        val store = OnlineTrackStore(app)
+        // 用户偏好的音质只当「起点档位」：取不到仍会按档位下降，不会因此播不了
+        val preferred = Quality.of(prefs.onlineQuality)
+        val filled = LinkedHashMap<String, Song>()
+        val failed = mutableListOf<String>()
+        for (i in targets) {
+            val song = songs[i]
+            val key = song.stableKey
+            val resolved = withContext(Dispatchers.IO) {
+                OnlineResolver.resolveKey(key, store, preferred)
+            }
+            if (resolved == null) {
+                failed += key
+                continue
+            }
+            onlineFillFailures.remove(key)
+            filled[key] = song.copy(
+                uri = Uri.parse(resolved.url).buildUpon().fragment(key).build(),
+            )
+        }
+        if (failed.isNotEmpty()) {
+            failed.forEach { onlineFillFailures[it] = (onlineFillFailures[it] ?: 0) + 1 }
+            // 一句都没补到 = 这一窗全废，必须让用户知道原因，不能静默重试
+            if (filled.isEmpty()) notifyOnlineUnavailable()
+        }
+        if (filled.isEmpty()) return
+
+        // 与云盘同一条时序：replace 也要跨 Binder 过服务端的 resolve，
+        // 备忘录里已有直链，不会被重建回占位地址（OnlineUrlMemo.remember 已在 resolver 内完成）。
+        val c2 = controller ?: return
+        for ((key, song) in filled) {
+            val at = (0 until c2.mediaItemCount).firstOrNull { c2.getMediaItemAt(it).mediaId == key }
+                ?: continue
+            val playingThis = at == c2.currentMediaItemIndex
+            val pos = if (playingThis) c2.currentPosition.coerceAtLeast(0L) else 0L
+            nextTransitionIsSameItemReplace = true
+            c2.replaceMediaItem(at, PlaybackConnection.toMediaItem(song))
+            if (playingThis) {
+                c2.seekTo(at, pos)
+                c2.prepare()
+                if (c2.playWhenReady) c2.play()
+            }
+        }
+        currentQueue = currentQueue.map { filled[it.stableKey] ?: it }
+        Log.i(TAG, "在线音源补链：${filled.size} 首")
+    }
+
+    /**
+     * 一窗在线曲全都没取到地址时的用户提示。
+     *
+     * 分两种说清楚，因为处置完全不同：
+     *  - 一个音源脚本都没加载 → 用户要先导入脚本，换歌没用；
+     *  - 有脚本但取不到 → 源侧问题（风控 / 接口挂了 / 该曲无版权），重载音源或换一首。
+     *
+     * 同时暂停：不暂停的话占位地址会一直加载失败，`onPlayerError` 反复重排补链，
+     * 用户看到的是「点了播放却什么都没发生」。
+     */
+    private fun notifyOnlineUnavailable() {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastOnlineHintAt < 5_000L) return
+        lastOnlineHintAt = now
+        messages.post(
+            if (OnlineSourceRegistry.isEmpty) AppStrings.s(R.string.online_play_no_source)
+            else AppStrings.s(R.string.online_play_no_url),
+        )
+        controller?.let { c ->
+            _player.update { it.copy(isPlaying = false) }
+            c.pause()
+        }
+    }
+
+    private suspend fun fillAliyunWindow() {        val c = controller ?: return
         val index = c.currentMediaItemIndex
         if (index < 0 || c.mediaItemCount == 0) return
         val ordered = (0 until c.mediaItemCount).map { i ->
@@ -2284,6 +2426,9 @@ class PlaybackEngine(
 
     companion object {
         private const val TAG = "PlaybackEngine"
+
+        /** 同一条在线曲补链失败到第几次就放弃重试（转成正常失败提示） */
+        private const val MAX_ONLINE_FILL_ATTEMPTS = 3
 
         /**
          * 悬浮窗服务被系统杀掉后的重建节流间隔。

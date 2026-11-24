@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.luckylearning.windtone.data.aliyun.AliyunEndpoints
 import com.luckylearning.windtone.data.model.TrackFragment
+import com.luckylearning.windtone.data.online.OnlineKeys
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DataSource
@@ -85,9 +86,18 @@ object OnlineMediaCache {
         return if (fsId.isEmpty()) null else "pan:$fsId"
     }
 
-    /** 播放与预取共用的稳定键（阿里云盘 `#ay=` 优先）。 */
+    /**
+     * 播放与预取共用的稳定键。
+     *
+     * 优先阿里云盘 `#ay=`，其次在线音源 `#lx:源:id`，最后历史 `wt=`。
+     * 在线这一支必须认 fragment 而不认 scheme：补链前的 `lx-pending://` 与
+     * 补链后的 `https://…#lx:kw:1` 要落到同一个缓存键，否则每次换直链都会
+     * 让 128MB 缓存里的旧数据永远命中不了。
+     */
     fun stableKey(uri: Uri?): String? =
-        TrackFragment.cacheKey(uri?.fragment) ?: panCacheKey(uri)
+        TrackFragment.cacheKey(uri?.fragment)
+            ?: OnlineKeys.parse(uri?.fragment)?.let { OnlineKeys.of(it.sourceId, it.songId) }
+            ?: panCacheKey(uri)
 
     fun limitBytes(context: Context): Long {
         val stored = context.applicationContext

@@ -43,6 +43,8 @@ data class AdaptiveNavActions(
     val onSelectView: (LibraryView) -> Unit,
     val onOpenSettings: () -> Unit,
     val onOpenAliyun: () -> Unit,
+    /** 洛雪源页（设置 → 音源模式 = LX 时抽屉里的主入口） */
+    val onOpenOnline: () -> Unit = {},
     val onOpenScanScope: () -> Unit,
     val onClose: () -> Unit = {},
 )
@@ -72,6 +74,8 @@ fun AdaptiveNavDrawer(
     current: LibraryView,
     aliyunActive: Boolean,
     actions: AdaptiveNavActions,
+    sourceMode: com.luckylearning.windtone.data.SourceMode =
+        com.luckylearning.windtone.data.SourceMode.LOCAL,
     modifier: Modifier = Modifier,
 ) {
     if (LocalUiFormFactor.current.hasSideNav) return
@@ -84,6 +88,8 @@ fun AdaptiveNavDrawer(
         onClose = actions.onClose,
         aliyunActive = aliyunActive,
         onOpenAliyun = actions.onOpenAliyun,
+        sourceMode = sourceMode,
+        onOpenOnline = actions.onOpenOnline,
         modifier = modifier,
     )
 }

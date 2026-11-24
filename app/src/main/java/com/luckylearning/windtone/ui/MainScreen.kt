@@ -214,6 +214,17 @@ fun MainScreen(
     var drawerOpen by remember { mutableStateOf(false) }
     // 阿里云盘页（v1.1.75 升为一级入口）：与曲库视图互斥显示，抽屉里切换。
     var showAliyun by remember { mutableStateOf(false) }
+    // 洛雪源页：与云盘、曲库三者互斥；默认随设置里的音源模式进入对应页面。
+    val appPrefs = remember {
+        (context.applicationContext as com.luckylearning.windtone.MusicApp).container.prefs
+    }
+    val sourceMode = appPrefs.sourceMode
+    var showOnline by remember { mutableStateOf(sourceMode == com.luckylearning.windtone.data.SourceMode.LX) }
+    // 设置页改完模式返回时立即切到对应内容页，不需要重启 App
+    LaunchedEffect(sourceMode) {
+        showOnline = sourceMode == com.luckylearning.windtone.data.SourceMode.LX
+        showAliyun = sourceMode == com.luckylearning.windtone.data.SourceMode.CLOUD
+    }
     var crashLogText by remember { mutableStateOf<String?>(null) }
     var crashLogCount by remember { mutableStateOf(0) }
 
@@ -421,6 +432,7 @@ fun MainScreen(
     BackHandler(enabled = showLibraryStats) { showLibraryStats = false }
     // 云盘页先于抽屉注册：抽屉开着时返回键只收抽屉（抽屉的 BackHandler 在后面，优先级更高）。
     BackHandler(enabled = showAliyun) { showAliyun = false }
+    BackHandler(enabled = showOnline) { showOnline = false }
     // 抽屉最后注册 = 优先级最高：抽屉开着时返回键只收抽屉，不会顺带退出别的层。
     BackHandler(enabled = drawerOpen) { drawerOpen = false }
 
@@ -569,10 +581,12 @@ fun MainScreen(
                 // 选曲库视图时退出云盘页（与抽屉 onSelectView 同一口径）
                 onSelectView = {
                     showAliyun = false
+                    showOnline = false
                     lib.setView(it)
                 },
                 onOpenSettings = { settingsEntryPage = SettingsPage.ROOT; showSettings = true },
-                onOpenAliyun = { showAliyun = true },
+                onOpenAliyun = { showAliyun = true; showOnline = false },
+                onOpenOnline = { showOnline = true; showAliyun = false },
                 onOpenScanScope = { showScanScope = true },
                 onClose = { drawerOpen = false },
             )
@@ -609,7 +623,14 @@ fun MainScreen(
                 }
 
                 Column(Modifier.weight(1f)) {
-                if (showAliyun) {
+                if (showOnline) {
+                    OnlinePage(
+                        onPlay = playerVm::playQueue,
+                        onClose = { showOnline = false },
+                        onOpenDrawer = { drawerOpen = true },
+                        modifier = Modifier.weight(1f),
+                    )
+                } else if (showAliyun) {
                     // 阿里云盘一级页（v1.1.75）：自带头部（返回/标题/菜单），顶替
                     // LibraryHeader + 曲库列表的位置；迷你播放条保留在下面，播云盘歌
                     // 时照常显示。选曲库视图会自动退出云盘页（见抽屉的 onSelectView）。
@@ -704,6 +725,7 @@ fun MainScreen(
                 current = library.view,
                 aliyunActive = showAliyun,
                 actions = navActions,
+                sourceMode = sourceMode,
                 modifier = Modifier.statusBarsPadding(),
             )
 

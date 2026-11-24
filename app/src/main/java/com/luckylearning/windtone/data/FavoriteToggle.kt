@@ -65,7 +65,13 @@ class FavoriteToggle(
             emit(song.stableKey, newFav, song.title)
             return newFav
         }
-        val songId = index.idOf(song) ?: return null
+        // 在线曲（`lx:`）可能刚入库、还没被 SongIndex 收到（搜索页点长按收藏的时序），
+        // 所以 index 查不到时依次退到「自带 dbId」与「按稳定键直查库」——
+        // 少了这两步兜底，收藏在线歌会静默失败。
+        val songId = index.idOf(song)
+            ?: song.dbId.takeIf { it > 0L }
+            ?: withContext(Dispatchers.IO) { db.songDao().idOf(song.stableKey) }
+            ?: return null
         val newFav = persistLocal(songId)
         index.bump(songId) { it.copy(favorite = newFav) }
         emit(song.stableKey, newFav, song.title)

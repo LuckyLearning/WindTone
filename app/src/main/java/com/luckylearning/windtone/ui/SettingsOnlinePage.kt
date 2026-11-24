@@ -4,7 +4,9 @@ import androidx.compose.ui.res.stringResource
 import com.luckylearning.windtone.R
 
 import android.widget.Toast
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,7 +18,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -37,6 +42,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.data.SettingsDefaults
+import com.luckylearning.windtone.data.SourceMode
 import com.luckylearning.windtone.data.aliyun.AliyunAuth
 import com.luckylearning.windtone.data.aliyun.AliyunDrive
 import com.luckylearning.windtone.data.aliyun.AliyunPlaybackWindow
@@ -45,6 +51,7 @@ import com.luckylearning.windtone.data.aliyun.AliyunTrackStore
 import com.luckylearning.windtone.data.buildListeningReport
 import com.luckylearning.windtone.data.formatByteSize
 import com.luckylearning.windtone.data.model.Song
+import com.luckylearning.windtone.data.online.source.Quality
 import com.luckylearning.windtone.playback.OnlineMediaCache
 import com.luckylearning.windtone.state.ReportUiState
 import com.luckylearning.windtone.state.TopSong
@@ -64,6 +71,54 @@ internal fun SettingsOnlinePage(
     val prefs = remember { Prefs(context) }
     var prefetch by remember { mutableStateOf(prefs.onlineCachePrefetch) }
     var parallel by remember { mutableStateOf(prefs.onlineParallelDownload) }
+
+    // 音源模式：一处状态驱动抽屉菜单与内容页。默认 LOCAL（SettingsDefaults.SOURCE_MODE）。
+    SectionTitle(stringResource(R.string.source_mode_title))
+    var mode by remember { mutableStateOf(prefs.sourceMode) }
+    var modeExpanded by remember { mutableStateOf(false) }
+    PickerField(
+        label = stringResource(R.string.source_mode_subtitle),
+        value = stringResource(mode.labelRes()),
+        expanded = modeExpanded,
+        onExpandChange = { modeExpanded = it },
+        options = com.luckylearning.windtone.data.SourceMode.entries,
+        optionLabel = { stringResource(it.labelRes()) },
+        onSelect = {
+            mode = it
+            prefs.sourceMode = it
+            modeExpanded = false
+        },
+    )
+    if (mode != com.luckylearning.windtone.data.SourceMode.LOCAL) {
+        TextButton(onClick = {
+            mode = com.luckylearning.windtone.data.SourceMode.LOCAL
+            prefs.sourceMode = com.luckylearning.windtone.data.SourceMode.LOCAL
+        }) { Text(stringResource(R.string.default_label)) }
+    }
+
+    // 在线音质：只决定取址的**起点档位**，取不到仍会逐级下降，所以选高档位不会「播不了」
+    SectionTitle(stringResource(R.string.online_quality_title))
+    var quality by remember { mutableStateOf(prefs.onlineQuality) }
+    var qualityExpanded by remember { mutableStateOf(false) }
+    PickerField(
+        label = stringResource(R.string.online_quality_subtitle),
+        value = qualityLabel(quality),
+        expanded = qualityExpanded,
+        onExpandChange = { qualityExpanded = it },
+        options = listOf("") + Quality.BY_QUALITY.map { it.id },
+        optionLabel = { qualityLabel(it) },
+        onSelect = {
+            quality = it
+            prefs.onlineQuality = it
+            qualityExpanded = false
+        },
+    )
+    if (quality != SettingsDefaults.ONLINE_QUALITY) {
+        TextButton(onClick = {
+            quality = SettingsDefaults.ONLINE_QUALITY
+            prefs.onlineQuality = SettingsDefaults.ONLINE_QUALITY
+        }) { Text(stringResource(R.string.default_label)) }
+    }
 
     SectionTitle(stringResource(R.string.sources))
     ActionRow(
@@ -319,8 +374,67 @@ internal fun SettingsMenuOrderPage(
 }
 
 /** 缓存档位的短标签。容量统计用的「512.0 MB」放不进弹窗选项。 */
-private fun cacheStepLabel(bytes: Long): String = when {
-    bytes >= 1024L * 1024 * 1024 -> "${bytes / (1024L * 1024 * 1024)}GB"
+private fun cacheStepLabel(bytes: Long): String = when {    bytes >= 1024L * 1024 * 1024 -> "${bytes / (1024L * 1024 * 1024)}GB"
     bytes >= 1024L * 1024 -> "${bytes / (1024L * 1024)}MB"
     else -> formatByteSize(bytes)
+}
+
+/** 音质标签：空串表示「最高可用」（不限制档位） */
+private fun qualityLabel(id: String): String =
+    if (id.isBlank()) AppStrings.s(R.string.online_quality_auto)
+    else Quality.of(id)?.label ?: id
+
+/**
+ * 下拉选择项。
+ *
+ * **为什么不用 `OutlinedTextField + Modifier.clickable`**：`readOnly` 的 TextField 依然
+ * 会自己消费 pointer 事件去拿焦点，外层 `clickable` 收不到点击 —— 真机上表现就是
+ * 「点了没任何反应」（v1.2.61 用户实测）。这里改成纯装饰的 Box：
+ * 外观与带 label 的输入框一致，但点击由 Box 自己处理，不再和 TextField 抢事件。
+ */
+@Composable
+private fun <T> PickerField(
+    label: String,
+    value: String,
+    expanded: Boolean,
+    onExpandChange: (Boolean) -> Unit,
+    options: List<T>,
+    optionLabel: @Composable (T) -> String,
+    onSelect: (T) -> Unit,
+) {
+    Box(Modifier.fillMaxWidth()) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(4.dp))
+                .border(
+                    1.dp,
+                    if (expanded) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.outline,
+                    RoundedCornerShape(4.dp),
+                )
+                .clickable { onExpandChange(!expanded) }
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (expanded) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(value, style = MaterialTheme.typography.bodyLarge)
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { onExpandChange(false) },
+        ) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(optionLabel(option)) },
+                    onClick = { onSelect(option) },
+                )
+            }
+        }
+    }
 }

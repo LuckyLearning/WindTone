@@ -47,6 +47,8 @@ guava = "33.0.0-android"
 # OkHttp：**只服务在线音源域**（搜索 / 取直链 / 歌词 / 封面）与自定义源脚本的 request 桥。
 # 播放本身仍走 Media3 内置 HTTP 栈，不经过它 —— 两套栈各管一段，互不影响。
 okhttp = "4.12.0"
+# QuickJS：洛雪 v2 自定义源脚本的 JNI 运行时（只保留 arm64-v8a）
+quickjs = "2.4.0"
 # ZXing core：阿里云盘扫码授权 —— 本地生成登录二维码（纯 Java 库，无 Android 依赖）
 zxing = "3.5.3"
 
@@ -110,6 +112,7 @@ zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" 
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 guava = { group = "com.google.guava", name = "guava", version.ref = "guava" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+quickjs = { group = "wang.harlon.quickjs", name = "wrapper-android", version.ref = "quickjs" }
 
 # ── 单元测试 ──
 junit = { group = "junit", name = "junit", version.ref = "junit" }

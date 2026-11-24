@@ -143,7 +143,14 @@ android {
         versionCode = appVersionCode
         versionName = appVersionName
         vectorDrawables { useSupportLibrary = true }
-        resourceConfigurations += listOf("zh", "en")
+        // 本应用**只提供中文**（2026-11-24 拍板，不再维护英文副本）：界面文案单份放在
+        // 默认 values/ 下，因此这里只保留 zh，把三方库的几十种语言资源一并裁掉。
+        // 新增文案直接写中文到 values/strings.xml，不要再建 values-xx 目录。
+        resourceConfigurations += listOf("zh")
+        // 只保留 arm64-v8a：在用真机与比亚迪车机均为 64 位，不再维护 32 位与 x86。
+        // 这里用 abiFilters 而不是 splits.include —— 后者受 -PabiSplits 开关控制，
+        // 不带该参数时（本地日常构建）会退化成四 ABI 混合包。见 §7.4 ABI。
+        ndk { abiFilters += "arm64-v8a" }
         // 仪器化测试跑在模拟器/真机上；JVM 单测（Robolectric）不需要它
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -346,6 +353,8 @@ dependencies {
     // 选它的理由是可取消 + 二进制响应 + 超时三件事都要自己写，且写不好就是长期负债；
     // **播放链路不经过它**，仍走 Media3 内置 HTTP 栈（见 docs/规划-在线音乐与音源接入.md D4）。
     implementation(libs.okhttp)
+    // 洛雪 v2 自定义源脚本运行时。arm64-v8a 专用（见 defaultConfig.ndk.abiFilters）。
+    implementation(libs.quickjs)
 
     // 单元测试（lyrics/ 包为纯 JVM 逻辑，可直接跑）
     testImplementation(libs.junit)

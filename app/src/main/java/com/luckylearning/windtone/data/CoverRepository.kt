@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.util.Log
 import android.util.LruCache
 import com.luckylearning.windtone.data.model.Song
+import com.luckylearning.windtone.data.online.OnlineCover
 import com.luckylearning.windtone.diag.BitmapMeter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -317,12 +318,21 @@ object CoverRepository {
     /**
      * 原始封面字节（通知栏 / 主题取色用），带内存缓存。
      *
-     * 顺序：**内嵌图 → 同目录 folder/cover/AlbumArt.jpg（[FolderCover]）→ 空**。
+     * 顺序：**内嵌图 → 同目录 folder/cover/AlbumArt.jpg（[FolderCover]）→ 空**；
+     * 在线音源（`lx:` 身份）没有文件可读，改走 [OnlineCover] 下载封面图。
      * 空结果也会进内存缓存（负缓存），避免同一首歌反复打开 MediaMetadataRetriever / 扫目录。
+     *
+     * ⚠️ 在线分支**不能**先落负缓存再下载：下载本身有网络延迟，若先写空值，
+     * 并发的列表项请求会命中空值直接显示占位图。这里只在下载有结果时写缓存。
      */
     suspend fun loadRaw(context: Context, song: Song): ByteArray? = withContext(rawDispatcher) {
         val key = song.stableKey
         cache.get(key)?.let { return@withContext it.takeIf { b -> b.isNotEmpty() } }
+        if (song.isOnline) {
+            val online = OnlineCover.bytes(context, song)
+            if (online != null && online.isNotEmpty()) cache.put(key, online)
+            return@withContext online
+        }
         val bytes = runCatching {
             MetadataReader.embeddedPicture(context, song.uri)
                 ?.takeIf { it.size in 1..(8 * 1024 * 1024) }

@@ -2,6 +2,7 @@ package com.luckylearning.windtone.data.model
 
 import android.net.Uri
 import androidx.compose.runtime.Immutable
+import com.luckylearning.windtone.data.online.OnlineKeys
 
 /**
  * 歌曲来源：系统媒体库 / SAF 导入的文件夹 / 直接文件路径（深度扫描）/ 在线列表（M3U·PLS）/
@@ -92,7 +93,18 @@ data class Song(
      * 新增来源时务必「分区」而不是改算法：本地分支一旦变动，已有收藏 / 歌单 / 队列 /
      * 统计 / 歌词偏移会整体脱钩，且不可逆。
      */
-    val stableKey: String get() = TrackFragment.cacheKey(uri.fragment) ?: uri.toString()
+    /**
+     * 跨补链不变的身份。
+     *
+     * 云盘：`aliyun-pending://#ay=…` 与直链 `https://…#ay=…` 都要得到 `aliyun:ay=…`；
+     * 在线：`lx-pending://#lx:kw:1` 与直链 `https://…#lx:kw:1` 都要得到 `lx:kw:1`。
+     *
+     * 漏掉在线这一支的后果很具体：补链后 stableKey 变成整条 http URL，
+     * `replaceMediaItem` 按 mediaId 就找不到原来那一项，表现为「补到链也不出声」。
+     */
+    val stableKey: String get() = TrackFragment.cacheKey(uri.fragment)
+        ?: OnlineKeys.parse(uri.fragment)?.let { OnlineKeys.of(it.sourceId, it.songId) }
+        ?: uri.toString()
 
     val hasSidecarLyric: Boolean get() = lrcUri != null
 

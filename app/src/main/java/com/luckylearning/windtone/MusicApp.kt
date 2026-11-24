@@ -14,6 +14,7 @@ import com.luckylearning.windtone.data.PinyinIndex
 import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.data.StorageHotplugMonitor
 import com.luckylearning.windtone.data.UpdateChecker
+import kotlinx.coroutines.launch
 import com.luckylearning.windtone.widget.MusicWidgetProvider
 import com.luckylearning.windtone.overlay.LyricOverlayBridge
 import com.luckylearning.windtone.ui.AppStrings
@@ -72,6 +73,16 @@ class MusicApp : Application() {
         // 必须动态注册（target 26+ 收不到 manifest 里的 MEDIA_* 隐式广播）。
         step("storage-hotplug") {
             StorageHotplugMonitor(this).start()
+        }
+        // 洛雪 v2 自定义源：后台加载，不阻塞启动。脚本 600KB + JNI 初始化可能
+        // 要几百毫秒，放主线程会直接拖慢冷启动；加载失败也只是「没有在线音源」，
+        // 本地播放必须照常可用。用户导入 / 启停脚本后由管理页再次调用 reload。
+        step("lx-sources") {
+            kotlinx.coroutines.CoroutineScope(
+                kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO,
+            ).launch {
+                com.luckylearning.windtone.data.online.script.LxSourceManager.reload(this@MusicApp)
+            }
         }
         BootTrace.mark(this, "app:onCreate-done")
     }

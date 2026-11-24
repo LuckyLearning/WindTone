@@ -75,6 +75,10 @@ internal fun LibraryDrawer(
     /** 阿里云盘页是否打开（v1.1.75：云盘页升为一级入口，与曲库视图互斥显示） */
     aliyunActive: Boolean = false,
     onOpenAliyun: () -> Unit = {},
+    /** 音源模式决定这个抽屉显示哪一组菜单项（设置页下拉框驱动） */
+    sourceMode: com.luckylearning.windtone.data.SourceMode =
+        com.luckylearning.windtone.data.SourceMode.LOCAL,
+    onOpenOnline: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Box(modifier.fillMaxSize()) {
@@ -117,6 +121,8 @@ internal fun LibraryDrawer(
                 onClose = onClose,
                 aliyunActive = aliyunActive,
                 onOpenAliyun = onOpenAliyun,
+                sourceMode = sourceMode,
+                onOpenOnline = onOpenOnline,
             )
         }
     }
@@ -131,6 +137,8 @@ private fun DrawerPanel(
     onClose: () -> Unit,
     aliyunActive: Boolean,
     onOpenAliyun: () -> Unit,
+    sourceMode: com.luckylearning.windtone.data.SourceMode,
+    onOpenOnline: () -> Unit,
 ) {
     Surface(
         // --c-low（surface container low）比页面底色亮一档，抽屉才浮得起来
@@ -148,27 +156,81 @@ private fun DrawerPanel(
                 .padding(start = 12.dp, end = 12.dp, top = 14.dp, bottom = 16.dp),
         ) {
             DrawerBrand()
-            DrawerGroupLabel(stringResource(R.string.drawer_group_library))
-            LibraryView.entries.forEach { view ->
-                DrawerItem(
-                    label = view.displayName(),
-                    icon = view.icon,
-                    // 云盘页打开时曲库视图不再保持高亮（v1.1.77）：高亮唯一落在
-                    // 「在线音乐 → 阿里云盘」上，与实际停留的页面一致
-                    selected = view == currentView && !aliyunActive,
-                    onClick = { onSelectView(view); onClose() },
-                )
-            }
 
-            // 「在线音乐」：云盘页升为一级入口（v1.1.75），与曲库视图互斥显示。
-            // 放在「更多」之上：它是内容页（像五个视图一样常驻），不是设置类动作。
-            DrawerGroupLabel(stringResource(R.string.drawer_group_online))
-            DrawerItem(
-                label = stringResource(R.string.drawer_aliyun),
-                icon = AppIcons.Cloud,
-                selected = aliyunActive,
-                onClick = { onOpenAliyun(); onClose() },
-            )
+            when (sourceMode) {
+                com.luckylearning.windtone.data.SourceMode.LOCAL -> {
+                    DrawerGroupLabel(stringResource(R.string.drawer_group_library))
+                    LibraryView.entries.forEach { view ->
+                        DrawerItem(
+                            label = view.displayName(),
+                            icon = view.icon,
+                            selected = view == currentView && !aliyunActive,
+                            onClick = { onSelectView(view); onClose() },
+                        )
+                    }
+                    DrawerGroupLabel(stringResource(R.string.drawer_group_online))
+                    DrawerItem(
+                        label = stringResource(R.string.source_mode_lx),
+                        icon = AppIcons.MusicNote,
+                        selected = false,
+                        onClick = { onOpenOnline(); onClose() },
+                    )
+                    DrawerItem(
+                        label = stringResource(R.string.drawer_aliyun),
+                        icon = AppIcons.Cloud,
+                        selected = aliyunActive,
+                        onClick = { onOpenAliyun(); onClose() },
+                    )
+                }
+
+                com.luckylearning.windtone.data.SourceMode.CLOUD -> {
+                    DrawerGroupLabel(stringResource(R.string.drawer_group_online))
+                    DrawerItem(
+                        label = stringResource(R.string.drawer_aliyun),
+                        icon = AppIcons.Cloud,
+                        selected = true,
+                        onClick = { onOpenAliyun(); onClose() },
+                    )
+                    DrawerGroupLabel(stringResource(R.string.drawer_group_library))
+                    DrawerItem(
+                        label = stringResource(R.string.view_songs),
+                        icon = AppIcons.MusicNote,
+                        selected = false,
+                        onClick = { onSelectView(LibraryView.SONGS); onClose() },
+                    )
+                }
+
+                com.luckylearning.windtone.data.SourceMode.LX -> {
+                    DrawerGroupLabel(stringResource(R.string.drawer_group_online))
+                    DrawerItem(
+                        label = stringResource(R.string.online_page_title),
+                        icon = AppIcons.MusicNote,
+                        selected = true,
+                        onClick = { onOpenOnline(); onClose() },
+                    )
+                    DrawerItem(
+                        label = stringResource(R.string.drawer_aliyun),
+                        icon = AppIcons.Cloud,
+                        selected = false,
+                        onClick = { onOpenAliyun(); onClose() },
+                    )
+                    DrawerGroupLabel(stringResource(R.string.drawer_group_library))
+                    DrawerItem(
+                        label = stringResource(R.string.view_songs),
+                        icon = AppIcons.MusicNote,
+                        selected = false,
+                        onClick = { onSelectView(LibraryView.SONGS); onClose() },
+                    )
+                    // 洛雪模式下也要能进歌单：在线曲入库后就是普通歌曲，
+                    // 用户需要「把榜单里的歌攒成自己的歌单」这条路
+                    DrawerItem(
+                        label = stringResource(R.string.view_playlists),
+                        icon = AppIcons.MusicNote,
+                        selected = false,
+                        onClick = { onSelectView(LibraryView.PLAYLIST); onClose() },
+                    )
+                }
+            }
 
             // .d-gap{flex:1} —— 把「更多」组压到底部
             Spacer(Modifier.weight(1f))

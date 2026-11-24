@@ -14,6 +14,15 @@ enum class LyricSource(val label: String) {
     SIDECAR_KRC("本地歌词文件"),
     EMBEDDED_SYLT("内嵌同步歌词"),
     EMBEDDED("内嵌歌词"),
+
+    /**
+     * 在线音源取到的歌词（见 `data/online/OnlineLyrics`）。
+     *
+     * 单独一档而不是复用 [EMBEDDED]：界面上必须能让用户分清「这个词是文件里带的」
+     * 和「这个词是从网上抓的」—— 后者的时间轴质量不受本机控制，出现错位时
+     * 用户第一反应应该是调偏移量，而不是去查文件。
+     */
+    ONLINE("在线歌词"),
 }
 
 /**

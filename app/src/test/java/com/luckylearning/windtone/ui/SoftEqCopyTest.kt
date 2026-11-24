@@ -74,20 +74,22 @@ class SoftEqCopyTest {
     }
 
     @Test
-    fun englishCandidateCopyRequiresConfirmDoesNotClaimHardWorks() {
+    @Config(qualifiers = "zh-rCN")
+    fun zhCandidateCopyRequiresConfirmDoesNotClaimHardWorks() {
+        // 2026-11-24 起文案只有中文一份（values/ 已改为中文、values-zh 删除），
+        // 原来断言英文措辞的两条英文用例随之移除，这里改为钉中文同一约束
         val context = ApplicationProvider.getApplicationContext<Context>()
         val copy = context.getString(R.string.soft_eq_status_candidate)
-        assertTrue(copy, copy.lowercase().contains("unavailable"))
-        assertTrue(copy, copy.contains("confirm"))
-        assertFalse(copy, copy.contains("hard equalizer is still available"))
-        assertFalse(copy, copy.contains("hard equalizer still works"))
+        assertTrue(copy, copy.contains("确认"))
+        assertFalse(copy, copy.contains("硬均衡器仍可用"))
     }
 
     @Test
-    fun englishActiveCopySaysSoftOnWithoutDualPath() {
+    @Config(qualifiers = "zh-rCN")
+    fun activeCopySaysSoftOnWithoutDualPath() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val copy = context.getString(R.string.soft_eq_status_active)
-        assertTrue(copy, copy.contains("Software EQ"))
-        assertTrue(copy, copy.contains("never runs together"))
+        assertTrue(copy, copy.contains("软 EQ"))
+        assertTrue(copy, copy.contains("不会同时开启"))
     }
 }

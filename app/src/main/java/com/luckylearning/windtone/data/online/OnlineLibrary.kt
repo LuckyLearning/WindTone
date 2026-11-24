@@ -35,6 +35,30 @@ class OnlineLibrary(context: Context) {
      */
     suspend fun upsert(track: OnlineTrack): Song = withContext(Dispatchers.IO) {
         val dao = MusicDb.get(appContext).songDao()
+        val song = upsertOne(dao, track)
+        store.put(track)
+        song
+    }
+
+    /**
+     * 批量入库（搜索结果整页入队时用）。
+     *
+     * 与逐条调用 [upsert] 的区别只在**写盘次数**：`OnlineTrackStore` 每次 `put`
+     * 都会把整份 JSON 重写一遍，30 首逐条写就是 30 次全量序列化（O(n²)）；
+     * 这里改成全部写库后一次 `putAll`。播放行为完全一致。
+     */
+    suspend fun upsertAll(tracks: List<OnlineTrack>): List<Song> = withContext(Dispatchers.IO) {
+        if (tracks.isEmpty()) return@withContext emptyList()
+        val dao = MusicDb.get(appContext).songDao()
+        val songs = tracks.map { upsertOne(dao, it) }
+        store.putAll(tracks)
+        songs
+    }
+
+    private suspend fun upsertOne(
+        dao: com.luckylearning.windtone.data.db.SongDao,
+        track: OnlineTrack,
+    ): Song {
         val existing = dao.byUri(track.stableKey)
         val now = System.currentTimeMillis()
         val entity = track.toSong()
@@ -54,8 +78,7 @@ class OnlineLibrary(context: Context) {
             dao.update(entity)
             existing.id
         }
-        store.put(track)
-        track.toSong(dateAdded = entity.dateAdded, dbId = id)
+        return track.toSong(dateAdded = entity.dateAdded, dbId = id)
     }
 
     /** 取回某首歌的源内原始信息（取直链 / 歌词 / 封面都要它） */

@@ -155,8 +155,31 @@ internal fun SongInfoPane(
             FactRow(stringResource(R.string.info_field_track), trackText, labelSp, valueSp)
         }
 
-        InfoGroup(stringResource(R.string.info_group_file), groupSp) {
-            FactRow(
+        // 在线音源曲：「文件参数」区大半不成立（没有文件、没有实测码率、没有目录），
+        // 所以先给一块「来源」把用户真正关心的三件事说清楚 —— 哪个源、实际什么音质、是不是在线。
+        // 实际音质读的是 OnlineUrlMemo（取址成功那一刻记下的**实际**档位），
+        // 不是用户设置的偏好档位：设置 flac 而源只给 320k 时，这里必须显示 320k。
+        val onlineKey = com.luckylearning.windtone.data.online.OnlineKeys.parse(song.stableKey)
+        if (onlineKey != null) {
+            val resolved = com.luckylearning.windtone.data.online.OnlineUrlMemo.peek(song.stableKey)
+            val sourceName = com.luckylearning.windtone.data.online.BuiltInSearch.SOURCE_NAMES[onlineKey.sourceId]
+                ?: onlineKey.sourceId
+            InfoGroup(stringResource(R.string.info_group_online), groupSp) {
+                FactRow(stringResource(R.string.info_field_source), sourceName, labelSp, valueSp)
+                FactRow(
+                    stringResource(R.string.info_field_quality),
+                    resolved?.quality?.label,
+                    labelSp, valueSp,
+                )
+                FactRow(
+                    stringResource(R.string.info_field_status),
+                    stringResource(R.string.online_status_streaming),
+                    labelSp, valueSp,
+                )
+            }
+        }
+
+        InfoGroup(stringResource(R.string.info_group_file), groupSp) {            FactRow(
                 stringResource(R.string.ss_info_container),
                 audio?.container ?: song.displayName.substringAfterLast('.', "").uppercase()
                     .ifBlank { null },
@@ -177,7 +200,13 @@ internal fun SongInfoPane(
                 audio?.sizeText ?: song.sizeBytes.takeIf { it > 0L }?.let { formatBytes(it) },
                 labelSp, valueSp,
             )
-            FactRow(stringResource(R.string.ss_info_path), songDisplayPath(song), labelSp, valueSp, maxLines = 4)
+            // 在线歌没有本地路径，URI 只是身份（`lx:kw:123`）—— 直接显示这串内部键
+            // 对用户没有任何意义，交给「—」，与「文件参数不成立」的语义一致
+            FactRow(
+                stringResource(R.string.ss_info_path),
+                if (onlineKey != null) null else songDisplayPath(song),
+                labelSp, valueSp, maxLines = 4,
+            )
         }
 
         InfoGroup(stringResource(R.string.info_group_playlists), groupSp) {

@@ -286,7 +286,13 @@ internal class LibraryBrowser(
                 val memo = OnlineUrlMemo.peek(mediaId)
                 val url = memo?.url
                     ?: if (isStart) onlineUrlResolver?.invoke(mediaId)?.url else null
-                val uri = if (url != null) Uri.parse(url) else OnlineKeys.pendingUri(mediaId)
+                // 直链必须挂 #lx:源:id，否则 Song.stableKey 会退化成整条 URL，
+                // 补链后的 replace / 缓存键 / 车机 mediaId 三处一起对不上。
+                val uri = if (url != null) {
+                    Uri.parse(url).buildUpon().fragment(mediaId).build()
+                } else {
+                    OnlineKeys.pendingUri(mediaId)
+                }
                 listOf(item.buildUpon().setUri(uri).build())
             }
             looksLikeUri(mediaId) -> listOf(item.buildUpon().setUri(mediaId).build())
