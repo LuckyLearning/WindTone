@@ -282,6 +282,13 @@ object AppIcons {
     // 抄效果图路径时一律改写成：`a rx ry rot laf sf x y`。
 
     /** 顶栏汉堡按钮：打开侧边抽屉（效果图 `#i-menu`） */
+    val Search: ImageVector by lazy {
+        build(
+            "Search",
+            "M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zM9.5 14C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z",
+        )
+    }
+
     val Menu: ImageVector by lazy {
         build("Menu", "M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z")
     }

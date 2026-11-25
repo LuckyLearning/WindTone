@@ -43,8 +43,10 @@ data class AdaptiveNavActions(
     val onSelectView: (LibraryView) -> Unit,
     val onOpenSettings: () -> Unit,
     val onOpenAliyun: () -> Unit,
-    /** 洛雪源页（设置 → 音源模式 = LX 时抽屉里的主入口） */
+    /** 洛雪源页（设置 → 音源模式 = LX 时内容区就是这一页） */
     val onOpenOnline: () -> Unit = {},
+    /** 洛雪分区：搜索 / 歌单 / 排行榜 / 音源管理。抽屉和车机左导航共用。 */
+    val onSelectLx: (LxSection) -> Unit = {},
     val onOpenScanScope: () -> Unit,
     val onClose: () -> Unit = {},
 )
@@ -58,6 +60,7 @@ fun AdaptiveNavRail(
     sourceMode: com.luckylearning.windtone.data.SourceMode =
         com.luckylearning.windtone.data.SourceMode.LOCAL,
     onlineActive: Boolean = false,
+    lxSection: LxSection = LxSection.SEARCH,
 ) {
     if (!LocalUiFormFactor.current.hasSideNav) return
     CarNavRail(
@@ -70,6 +73,8 @@ fun AdaptiveNavRail(
         sourceMode = sourceMode,
         onlineActive = onlineActive,
         onOpenOnline = actions.onOpenOnline,
+        lxSection = lxSection,
+        onSelectLx = actions.onSelectLx,
     )
 }
 
@@ -82,6 +87,7 @@ fun AdaptiveNavDrawer(
     actions: AdaptiveNavActions,
     sourceMode: com.luckylearning.windtone.data.SourceMode =
         com.luckylearning.windtone.data.SourceMode.LOCAL,
+    lxSection: LxSection = LxSection.SEARCH,
     modifier: Modifier = Modifier,
 ) {
     if (LocalUiFormFactor.current.hasSideNav) return
@@ -96,6 +102,8 @@ fun AdaptiveNavDrawer(
         onOpenAliyun = actions.onOpenAliyun,
         sourceMode = sourceMode,
         onOpenOnline = actions.onOpenOnline,
+        lxSection = lxSection,
+        onSelectLx = actions.onSelectLx,
         modifier = modifier,
     )
 }

@@ -37,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luckylearning.windtone.R
+import com.luckylearning.windtone.data.SourceMode
 import com.luckylearning.windtone.state.LibraryView
 import com.luckylearning.windtone.ui.theme.AppVisual
 import com.luckylearning.windtone.ui.theme.windShadow
@@ -49,9 +50,9 @@ import com.luckylearning.windtone.ui.theme.windShadow
  *    → `RoundedCornerShape(topEnd / bottomEnd)`；
  *  - 滑入 **220ms**（效果图 `transition:transform .22s ease`），收起时滑出屏幕左侧；
  *  - 遮罩 `--dim`（深色 .62 / 浅色 .34）**盖住下层内容并吃掉触摸**，点它收起；
- *  - 品牌块 = 44dp 圆形 halo（primaryContainer）+「听风」16sp/800 +「WindTone · 本地音乐」11sp；
- *  - 两组：**音乐库**（原底部导航的五个浏览视图）/ **在线音乐**（阿里云盘，v1.1.75 升为一级入口）/
- *    **更多**（扫描范围 · 设置）；
+ *  - 品牌块 = 44dp 圆形 halo（primaryContainer）+「听风」16sp/800 + 当前音源模式副标题；
+ *  - 菜单按 [SourceMenus] 整组切换：本地只有曲库，云盘只有阿里云盘，洛雪只有
+ *    搜索 / 歌单 / 排行榜 / 音源管理。设置始终在。扫描范围只在本地。
  *  - 选中项：风之渐变实底胶囊 + 加粗 + 白字 + 靛蓝投影（v2，对应 `.d-item.on`）。
  *
  * ⚠️ 抽屉盖在迷你播放条之上、但不盖播放页 / 设置页这类全屏覆盖层 ——
@@ -76,9 +77,11 @@ internal fun LibraryDrawer(
     aliyunActive: Boolean = false,
     onOpenAliyun: () -> Unit = {},
     /** 音源模式决定这个抽屉显示哪一组菜单项（设置页下拉框驱动） */
-    sourceMode: com.luckylearning.windtone.data.SourceMode =
-        com.luckylearning.windtone.data.SourceMode.LOCAL,
+    sourceMode: SourceMode = SourceMode.LOCAL,
     onOpenOnline: () -> Unit = {},
+    /** 洛雪当前分区，用来高亮左侧「搜索 / 歌单 / 排行榜 / 音源管理」 */
+    lxSection: LxSection = LxSection.SEARCH,
+    onSelectLx: (LxSection) -> Unit = { onOpenOnline() },
     modifier: Modifier = Modifier,
 ) {
     Box(modifier.fillMaxSize()) {
@@ -123,6 +126,8 @@ internal fun LibraryDrawer(
                 onOpenAliyun = onOpenAliyun,
                 sourceMode = sourceMode,
                 onOpenOnline = onOpenOnline,
+                lxSection = lxSection,
+                onSelectLx = onSelectLx,
             )
         }
     }
@@ -137,8 +142,10 @@ private fun DrawerPanel(
     onClose: () -> Unit,
     aliyunActive: Boolean,
     onOpenAliyun: () -> Unit,
-    sourceMode: com.luckylearning.windtone.data.SourceMode,
+    sourceMode: SourceMode,
     onOpenOnline: () -> Unit,
+    lxSection: LxSection,
+    onSelectLx: (LxSection) -> Unit,
 ) {
     Surface(
         // --c-low（surface container low）比页面底色亮一档，抽屉才浮得起来
@@ -155,100 +162,87 @@ private fun DrawerPanel(
                 .fillMaxSize()
                 .padding(start = 12.dp, end = 12.dp, top = 14.dp, bottom = 16.dp),
         ) {
-            DrawerBrand()
+            DrawerBrand(stringResource(SourceMenus.subtitleRes(sourceMode)))
 
-            when (sourceMode) {
-                com.luckylearning.windtone.data.SourceMode.LOCAL -> {
-                    DrawerGroupLabel(stringResource(R.string.drawer_group_library))
-                    LibraryView.entries.forEach { view ->
-                        DrawerItem(
-                            label = view.displayName(),
-                            icon = view.icon,
-                            selected = view == currentView && !aliyunActive,
-                            onClick = { onSelectView(view); onClose() },
-                        )
-                    }
-                    DrawerGroupLabel(stringResource(R.string.drawer_group_online))
+            val groups = SourceMenus.groups(sourceMode)
+            groups.forEachIndexed { index, group ->
+                if (index == groups.lastIndex) {
+                    // .d-gap{flex:1} —— 把最后一组（更多）压到底部
+                    Spacer(Modifier.weight(1f))
+                }
+                DrawerGroupLabel(stringResource(group.labelRes))
+                group.items.forEach { item ->
                     DrawerItem(
-                        label = stringResource(R.string.source_mode_lx),
-                        icon = AppIcons.MusicNote,
-                        selected = false,
-                        onClick = { onOpenOnline(); onClose() },
-                    )
-                    DrawerItem(
-                        label = stringResource(R.string.drawer_aliyun),
-                        icon = AppIcons.Cloud,
-                        selected = aliyunActive,
-                        onClick = { onOpenAliyun(); onClose() },
+                        label = drawerItemLabel(item),
+                        icon = drawerItemIcon(item),
+                        selected = SourceMenus.isSelected(
+                            item, sourceMode, currentView, aliyunActive, lxSection,
+                        ),
+                        onClick = {
+                            dispatchDrawerItem(
+                                item = item,
+                                onSelectView = onSelectView,
+                                onOpenAliyun = onOpenAliyun,
+                                onOpenOnline = onOpenOnline,
+                                onSelectLx = onSelectLx,
+                                onOpenScanScope = onOpenScanScope,
+                                onOpenSettings = onOpenSettings,
+                            )
+                            onClose()
+                        },
                     )
                 }
-
-                com.luckylearning.windtone.data.SourceMode.CLOUD -> {
-                    DrawerGroupLabel(stringResource(R.string.drawer_group_online))
-                    DrawerItem(
-                        label = stringResource(R.string.drawer_aliyun),
-                        icon = AppIcons.Cloud,
-                        selected = true,
-                        onClick = { onOpenAliyun(); onClose() },
-                    )
-                    DrawerGroupLabel(stringResource(R.string.drawer_group_library))
-                    DrawerItem(
-                        label = stringResource(R.string.view_songs),
-                        icon = AppIcons.MusicNote,
-                        selected = false,
-                        onClick = { onSelectView(LibraryView.SONGS); onClose() },
-                    )
-                }
-
-                com.luckylearning.windtone.data.SourceMode.LX -> {
-                    DrawerGroupLabel(stringResource(R.string.drawer_group_online))
-                    DrawerItem(
-                        label = stringResource(R.string.online_page_title),
-                        icon = AppIcons.MusicNote,
-                        selected = true,
-                        onClick = { onOpenOnline(); onClose() },
-                    )
-                    DrawerItem(
-                        label = stringResource(R.string.drawer_aliyun),
-                        icon = AppIcons.Cloud,
-                        selected = false,
-                        onClick = { onOpenAliyun(); onClose() },
-                    )
-                    DrawerGroupLabel(stringResource(R.string.drawer_group_library))
-                    DrawerItem(
-                        label = stringResource(R.string.view_songs),
-                        icon = AppIcons.MusicNote,
-                        selected = false,
-                        onClick = { onSelectView(LibraryView.SONGS); onClose() },
-                    )
-                    // 洛雪模式下也要能进歌单：在线曲入库后就是普通歌曲，
-                    // 用户需要「把榜单里的歌攒成自己的歌单」这条路
-                    DrawerItem(
-                        label = stringResource(R.string.view_playlists),
-                        icon = AppIcons.MusicNote,
-                        selected = false,
-                        onClick = { onSelectView(LibraryView.PLAYLIST); onClose() },
-                    )
-                }
-            }
-
-            // .d-gap{flex:1} —— 把「更多」组压到底部
-            Spacer(Modifier.weight(1f))
-
-            DrawerGroupLabel(stringResource(R.string.drawer_group_more))
-            DrawerItem(stringResource(R.string.drawer_scan_scope), AppIcons.Folder, false) {
-                onOpenScanScope(); onClose()
-            }
-            DrawerItem(stringResource(R.string.drawer_settings), AppIcons.Tune, false) {
-                onOpenSettings(); onClose()
             }
         }
     }
 }
 
+private fun dispatchDrawerItem(
+    item: SourceMenuItem,
+    onSelectView: (LibraryView) -> Unit,
+    onOpenAliyun: () -> Unit,
+    onOpenOnline: () -> Unit,
+    onSelectLx: (LxSection) -> Unit,
+    onOpenScanScope: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    when (item) {
+        is SourceMenuItem.Library -> onSelectView(item.view)
+        is SourceMenuItem.Lx -> {
+            onOpenOnline()
+            onSelectLx(item.section)
+        }
+        SourceMenuItem.Aliyun -> onOpenAliyun()
+        SourceMenuItem.ScanScope -> onOpenScanScope()
+        SourceMenuItem.Settings -> onOpenSettings()
+    }
+}
+
+@Composable
+private fun drawerItemLabel(item: SourceMenuItem): String = when (item) {
+    is SourceMenuItem.Library -> item.view.displayName()
+    is SourceMenuItem.Lx -> stringResource(item.section.labelRes)
+    SourceMenuItem.Aliyun -> stringResource(R.string.drawer_aliyun)
+    SourceMenuItem.ScanScope -> stringResource(R.string.drawer_scan_scope)
+    SourceMenuItem.Settings -> stringResource(R.string.drawer_settings)
+}
+
+private fun drawerItemIcon(item: SourceMenuItem) = when (item) {
+    is SourceMenuItem.Library -> item.view.icon
+    is SourceMenuItem.Lx -> when (item.section) {
+        LxSection.SEARCH -> AppIcons.Search
+        LxSection.SHEETS -> AppIcons.QueueMusic
+        LxSection.BOARDS -> AppIcons.BarChart
+        LxSection.SOURCES -> AppIcons.Tune
+    }
+    SourceMenuItem.Aliyun -> AppIcons.Cloud
+    SourceMenuItem.ScanScope -> AppIcons.Folder
+    SourceMenuItem.Settings -> AppIcons.Tune
+}
+
 /** 品牌块：44dp 圆形 halo + 中英双行标题（效果图 `.d-brand / .d-halo / .d-t / .d-s`） */
 @Composable
-private fun DrawerBrand() {
+private fun DrawerBrand(subtitle: String) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -279,7 +273,7 @@ private fun DrawerBrand() {
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Text(
-                stringResource(R.string.drawer_brand_subtitle),
+                subtitle,
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 1.dp),

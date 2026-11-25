@@ -246,6 +246,13 @@ object OnlineBoards {
                 qualities += Quality.Q128
                 types.put(JSONObject().put("type", Quality.Q128.id).put("hash", hash))
             }
+            // 榜单的封面字段和搜索不是同一个名字。带 `{size}` 的模板不展开就是 404，
+            // 所以走和搜索同一条 [BuiltInSearch.kgCover]。没有字段就保持无封面，不编一个地址。
+            val cover = BuiltInSearch.kgCover(
+                item.optString("album_sizable_cover").ifBlank {
+                    item.optString("sizable_cover")
+                }.ifBlank { item.optString("imgurl") },
+            )
             val raw = JSONObject().apply {
                 put("source", "kg")
                 put("songmid", audioId)
@@ -256,6 +263,7 @@ object OnlineBoards {
                 put("albumName", BuiltInSearch.decodeName(item.optString("remark")))
                 put("duration", item.optInt("duration"))
                 put("types", types)
+                if (!cover.isNullOrBlank()) put("img", cover)
             }
             out += OnlineTrack(
                 sourceId = "kg",
@@ -266,6 +274,7 @@ object OnlineBoards {
                 durationMs = item.optLong("duration") * 1000L,
                 qualities = qualities,
                 raw = raw.toString(),
+                coverUrl = cover,
             )
         }
         return out
@@ -426,13 +435,21 @@ object OnlineBoards {
     private fun mgCover(d: JSONObject): String {
         d.optJSONArray("albumImgs")?.let { arr ->
             var best = ""
+            var webp = ""
             for (i in 0 until arr.length()) {
                 val img = arr.optJSONObject(i)?.optString("img").orEmpty()
-                // 咪咕部分条目给 webp：能解码但耗电、且和 jpg 混排时容易取到小图，优先跳过
-                if (img.isBlank() || img.endsWith(".webp", ignoreCase = true)) continue
-                if (img.length > best.length) best = img
+                if (img.isBlank()) continue
+                val https = img.replaceFirst("http://", "https://")
+                // 有 jpg/png 时跳过 webp（和 jpg 混排时 webp 经常是更小的一档）。
+                // 整组只有 webp 时不能再丢掉，否则这张封面就没了；BitmapFactory 能解 webp。
+                if (https.endsWith(".webp", ignoreCase = true)) {
+                    if (https.length > webp.length) webp = https
+                } else if (https.length > best.length) {
+                    best = https
+                }
             }
-            if (best.isNotBlank()) return best.replaceFirst("http://", "https://")
+            if (best.isNotBlank()) return best
+            if (webp.isNotBlank()) return webp
         }
         val img3 = d.optString("img3")
         if (img3.isBlank()) return ""

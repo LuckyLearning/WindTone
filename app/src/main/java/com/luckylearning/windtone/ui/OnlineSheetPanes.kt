@@ -2,6 +2,12 @@ package com.luckylearning.windtone.ui
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import com.luckylearning.windtone.ui.theme.AppVisual
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -44,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.luckylearning.windtone.R
@@ -232,30 +239,32 @@ internal fun SonglistPane(
 private fun SheetCard(sheet: OnlineSonglists.Sheet, onClick: () -> Unit) {
     var bitmap by remember(sheet.key) { mutableStateOf<Bitmap?>(null) }
     LaunchedEffect(sheet.key, sheet.cover) {
-        bitmap = runCatching { OnlineCover.thumbUrl(sheet.cover, SHEET_COVER_PX) }.getOrNull()
+        bitmap = sheetCoverRetry { OnlineCover.thumbUrl(sheet.cover, SHEET_COVER_PX) }
     }
     Column(Modifier.clickable(onClick = onClick)) {
         Box(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .clip(RoundedCornerShape(10.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+                .clip(RoundedCornerShape(14.dp))
+                .background(AppVisual.coverBrush(sheet.key)),
             contentAlignment = Alignment.Center,
         ) {
             val bmp = bitmap
             if (bmp != null) {
+                val image = remember(bmp) { bmp.asImageBitmap() }
                 androidx.compose.foundation.Image(
-                    bitmap = bmp.asImageBitmap(),
+                    bitmap = image,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )
             } else {
-                Icon(
-                    AppIcons.MusicNote, null,
-                    Modifier.size(28.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                Text(
+                    AppVisual.coverInitial(sheet.name),
+                    color = Color.White,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
                 )
             }
         }
@@ -295,7 +304,15 @@ internal fun SheetDetailPane(
 ) {
     when {
         loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator()
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    stringResource(R.string.online_loading),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         tracks.isEmpty() -> EmptyHint(error ?: AppStrings.s(R.string.online_sheet_empty))
         else -> LazyColumn(
@@ -354,30 +371,49 @@ internal fun SheetDetailPane(
 private fun SheetCoverLarge(sheet: OnlineSonglists.Sheet) {
     var bitmap by remember(sheet.key) { mutableStateOf<Bitmap?>(null) }
     LaunchedEffect(sheet.key, sheet.cover) {
-        bitmap = runCatching { OnlineCover.thumbUrl(sheet.cover, SHEET_COVER_LARGE_PX) }.getOrNull()
+        bitmap = sheetCoverRetry { OnlineCover.thumbUrl(sheet.cover, SHEET_COVER_LARGE_PX) }
     }
     Box(
         Modifier
             .size(88.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .clip(RoundedCornerShape(14.dp))
+            .background(AppVisual.coverBrush(sheet.key)),
         contentAlignment = Alignment.Center,
     ) {
         val bmp = bitmap
         if (bmp != null) {
+            val image = remember(bmp) { bmp.asImageBitmap() }
             androidx.compose.foundation.Image(
-                bitmap = bmp.asImageBitmap(),
+                bitmap = image,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
-            Icon(
-                AppIcons.MusicNote, null,
-                Modifier.size(30.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            Text(
+                AppVisual.coverInitial(sheet.name),
+                color = Color.White,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
             )
         }
+    }
+}
+
+private suspend fun sheetCoverRetry(block: suspend () -> Bitmap?): Bitmap? {
+    var attempt = 0
+    while (true) {
+        val bmp = try {
+            block()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
+        if (bmp != null) return bmp
+        if (attempt >= 2) return null
+        attempt++
+        delay(800L * attempt)
     }
 }
 

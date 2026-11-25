@@ -234,12 +234,15 @@ internal fun CarNavRail(
     onOpenAliyun: () -> Unit = {},
     /** 扫描范围（v1.3.0：与手机抽屉对齐 —— 车机此前没有这个入口，只能进设置里找） */
     onOpenScanScope: () -> Unit = {},
-    /** 音源模式：决定左导航给哪几项，必须与手机抽屉同一套口径 */
+    /** 音源模式：决定左导航给哪几项，必须与手机抽屉同一套 [SourceMenus] */
     sourceMode: com.luckylearning.windtone.data.SourceMode =
         com.luckylearning.windtone.data.SourceMode.LOCAL,
     /** 洛雪源页是否打开 */
     onlineActive: Boolean = false,
     onOpenOnline: () -> Unit = {},
+    /** 洛雪当前分区。左导航与抽屉高亮同一项。 */
+    lxSection: LxSection = LxSection.SEARCH,
+    onSelectLx: (LxSection) -> Unit = {},
 ) {
     val scheme = MaterialTheme.colorScheme
     val m = rememberCarMetrics()
@@ -276,108 +279,83 @@ internal fun CarNavRail(
                 Spacer(Modifier.width(12.dp))
                 Text(stringResource(R.string.app_name), fontSize = m.navTitleSp, fontWeight = FontWeight.Bold, color = scheme.onBackground)
             }
-            // 左导航与抽屉必须同构：之前在洛雪/云盘模式下这里仍列着全部本地视图，
-            // 用户在在线页里点「专辑」直接就退出了在线页 —— 页面与模式的对应关系是乱的。
-            val localActive = !onlineActive && !aliyunActive
-
-            when (sourceMode) {
-                com.luckylearning.windtone.data.SourceMode.LOCAL -> {
-                    LibraryView.entries.forEach {
-                        CarNavViewItem(it, current, localActive, onSelect)
-                    }
+            // 与手机抽屉同一份 [SourceMenus]：模式切换是整组换菜单，不是逐项隐藏。
+            val groups = SourceMenus.groups(sourceMode)
+            groups.forEachIndexed { index, group ->
+                if (index == groups.lastIndex) Spacer(Modifier.weight(1f))
+                Text(
+                    stringResource(group.labelRes),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = scheme.primary,
+                    modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 2.dp),
+                )
+                group.items.forEach { item ->
+                    val libraryView = (item as? SourceMenuItem.Library)?.view
                     CarNavItem(
-                        label = stringResource(R.string.source_mode_lx),
-                        icon = AppIcons.MusicNote,
-                        accent = scheme.onSurfaceVariant,
-                        selected = onlineActive,
-                        onClick = onOpenOnline,
+                        label = if (libraryView != null) carViewLabel(libraryView) else carMenuLabel(item),
+                        icon = carMenuIcon(item),
+                        accent = if (libraryView != null) carViewAccent(libraryView) else scheme.onSurfaceVariant,
+                        selected = sourceMenuSelected(
+                            item, sourceMode, current, aliyunActive, onlineActive, lxSection,
+                        ),
+                        onClick = {
+                            when (item) {
+                                is SourceMenuItem.Library -> onSelect(item.view)
+                                is SourceMenuItem.Lx -> {
+                                    onOpenOnline()
+                                    onSelectLx(item.section)
+                                }
+                                SourceMenuItem.Aliyun -> onOpenAliyun()
+                                SourceMenuItem.ScanScope -> onOpenScanScope()
+                                SourceMenuItem.Settings -> onOpenSettings()
+                            }
+                        },
                     )
-                    CarNavItem(
-                        label = stringResource(R.string.drawer_aliyun),
-                        icon = AppIcons.Cloud,
-                        accent = scheme.onSurfaceVariant,
-                        selected = aliyunActive,
-                        onClick = onOpenAliyun,
-                    )
-                }
-
-                com.luckylearning.windtone.data.SourceMode.LX -> {
-                    CarNavItem(
-                        label = stringResource(R.string.source_mode_lx),
-                        icon = AppIcons.MusicNote,
-                        accent = scheme.primary,
-                        selected = onlineActive,
-                        onClick = onOpenOnline,
-                    )
-                    CarNavItem(
-                        label = stringResource(R.string.drawer_aliyun),
-                        icon = AppIcons.Cloud,
-                        accent = scheme.onSurfaceVariant,
-                        selected = aliyunActive,
-                        onClick = onOpenAliyun,
-                    )
-                    CarNavViewItem(LibraryView.SONGS, current, localActive, onSelect)
-                    CarNavViewItem(LibraryView.PLAYLIST, current, localActive, onSelect)
-                }
-
-                com.luckylearning.windtone.data.SourceMode.CLOUD -> {
-                    CarNavItem(
-                        label = stringResource(R.string.drawer_aliyun),
-                        icon = AppIcons.Cloud,
-                        accent = scheme.primary,
-                        selected = aliyunActive,
-                        onClick = onOpenAliyun,
-                    )
-                    CarNavItem(
-                        label = stringResource(R.string.source_mode_lx),
-                        icon = AppIcons.MusicNote,
-                        accent = scheme.onSurfaceVariant,
-                        selected = onlineActive,
-                        onClick = onOpenOnline,
-                    )
-                    CarNavViewItem(LibraryView.SONGS, current, localActive, onSelect)
-                    CarNavViewItem(LibraryView.PLAYLIST, current, localActive, onSelect)
                 }
             }
-            Spacer(Modifier.weight(1f))
-            // v1.3.0：与手机抽屉「更多」组对齐 —— 扫描范围 + 设置。
-            // 之前车机只有「设置」，用户想换扫描目录得先点进设置再找，与手机上多一层。
-            CarNavItem(
-                label = stringResource(R.string.drawer_scan_scope),
-                icon = AppIcons.Folder,
-                accent = scheme.onSurfaceVariant,
-                selected = false,
-                onClick = onOpenScanScope,
-            )
-            CarNavItem(
-                label = stringResource(R.string.drawer_settings),
-                icon = AppIcons.Tune,
-                accent = scheme.onSurfaceVariant,
-                selected = false,
-                onClick = onOpenSettings,
-            )
         }
         // 右缘 1px 分隔线（设计稿 .cv3-nav 的右边框）
         Box(Modifier.width(1.dp).fillMaxHeight().background(scheme.outlineVariant))
     }
 }
 
-/** 曲库视图导航项：三种模式共用同一份渲染，避免「本地有高亮、在线模式忘了改」 */
-@Composable
-private fun CarNavViewItem(
-    view: LibraryView,
+private fun sourceMenuSelected(
+    item: SourceMenuItem,
+    mode: com.luckylearning.windtone.data.SourceMode,
     current: LibraryView,
-    localActive: Boolean,
-    onSelect: (LibraryView) -> Unit,
-) {
-    CarNavItem(
-        label = carViewLabel(view),
-        icon = view.icon,
-        accent = carViewAccent(view),
-        // 在线/云盘页打开时曲库视图不再高亮（与抽屉同一口径）
-        selected = view == current && localActive,
-        onClick = { onSelect(view) },
-    )
+    aliyunActive: Boolean,
+    onlineActive: Boolean,
+    lxSection: LxSection,
+): Boolean {
+    val base = SourceMenus.isSelected(item, mode, current, aliyunActive, lxSection)
+    return when (item) {
+        is SourceMenuItem.Lx -> base && onlineActive
+        is SourceMenuItem.Library -> base && !onlineActive
+        else -> base
+    }
+}
+
+@Composable
+private fun carMenuLabel(item: SourceMenuItem): String = when (item) {
+    is SourceMenuItem.Library -> carViewLabel(item.view)
+    is SourceMenuItem.Lx -> stringResource(item.section.labelRes)
+    SourceMenuItem.Aliyun -> stringResource(R.string.drawer_aliyun)
+    SourceMenuItem.ScanScope -> stringResource(R.string.drawer_scan_scope)
+    SourceMenuItem.Settings -> stringResource(R.string.drawer_settings)
+}
+
+private fun carMenuIcon(item: SourceMenuItem) = when (item) {
+    is SourceMenuItem.Library -> item.view.icon
+    is SourceMenuItem.Lx -> when (item.section) {
+        LxSection.SEARCH -> AppIcons.Search
+        LxSection.SHEETS -> AppIcons.QueueMusic
+        LxSection.BOARDS -> AppIcons.BarChart
+        LxSection.SOURCES -> AppIcons.Tune
+    }
+    SourceMenuItem.Aliyun -> AppIcons.Cloud
+    SourceMenuItem.ScanScope -> AppIcons.Folder
+    SourceMenuItem.Settings -> AppIcons.Tune
 }
 
 /** 五个浏览视图的语义色（与设计稿 `.ac-*` 一致） */

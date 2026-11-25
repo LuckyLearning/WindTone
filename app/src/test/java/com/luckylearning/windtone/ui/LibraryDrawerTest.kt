@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import com.luckylearning.windtone.data.SourceMode
 import com.luckylearning.windtone.state.LibraryView
 import com.luckylearning.windtone.ui.theme.MusicPlayerTheme
 import org.junit.Assert.assertEquals
@@ -55,9 +56,16 @@ class LibraryDrawerTest {
         var scanScope = false
         var settings = false
         var aliyun = false
+        var online = false
+        var lx: LxSection? = null
     }
 
-    private fun renderOpen(currentView: LibraryView = LibraryView.SONGS): Recorder {
+    private fun renderOpen(
+        currentView: LibraryView = LibraryView.SONGS,
+        sourceMode: SourceMode = SourceMode.LOCAL,
+        lxSection: LxSection = LxSection.SEARCH,
+        aliyunActive: Boolean = false,
+    ): Recorder {
         val rec = Recorder()
         compose.setContent {
             MusicPlayerTheme {
@@ -68,6 +76,11 @@ class LibraryDrawerTest {
                     onOpenScanScope = { rec.scanScope = true },
                     onOpenSettings = { rec.settings = true },
                     onOpenAliyun = { rec.aliyun = true },
+                    onOpenOnline = { rec.online = true },
+                    onSelectLx = { rec.lx = it },
+                    sourceMode = sourceMode,
+                    lxSection = lxSection,
+                    aliyunActive = aliyunActive,
                     onClose = { rec.closed = true },
                 )
             }
@@ -96,25 +109,60 @@ class LibraryDrawerTest {
         compose.onNodeWithText("歌曲").assertDoesNotExist()
     }
 
-    /** 品牌块 + 三组共 8 项，一个都不能少 */
+    /** 本地模式：曲库视图 + 扫描范围 + 设置。不混入洛雪分区和云盘。 */
     @Test
-    fun showsBrandAndBothGroups() {
+    fun localModeShowsOnlyLibrary() {
         renderOpen()
         compose.onNodeWithText("听风").assertIsDisplayed()
         compose.onNodeWithText("WindTone · 本地音乐").assertIsDisplayed()
         compose.onNodeWithText("音乐库").assertIsDisplayed()
-        compose.onNodeWithText("在线音乐").assertIsDisplayed()
         compose.onNodeWithText("更多").assertIsDisplayed()
-        // 第一组 = 原底部导航的五个浏览视图
         listOf("歌曲", "专辑", "歌手", "合辑艺人", "流派", "年代", "文件夹", "我的列表").forEach {
             compose.onNodeWithText(it).assertIsDisplayed()
         }
-        // 第二组：云盘页升为一级入口（v1.1.75）
-        compose.onNodeWithText("阿里云盘").assertIsDisplayed()
-        // 第三组 = 两个快捷入口（2026-10-17 起「检查更新」已从抽屉移除）
         listOf("扫描范围", "设置").forEach {
             compose.onNodeWithText(it).assertIsDisplayed()
         }
+        compose.onNodeWithText("在线音乐").assertDoesNotExist()
+        compose.onNodeWithText("阿里云盘").assertDoesNotExist()
+        compose.onNodeWithText("洛雪音源").assertDoesNotExist()
+        compose.onNodeWithText("音源管理").assertDoesNotExist()
+    }
+
+    /** 洛雪模式：左侧就是搜索 / 歌单 / 排行榜 / 音源管理，不再挂云盘和本地曲库。 */
+    @Test
+    fun lxModeShowsOnlyLxSections() {
+        val rec = renderOpen(sourceMode = SourceMode.LX, lxSection = LxSection.SEARCH)
+        compose.onNodeWithText("WindTone · 洛雪音源").assertIsDisplayed()
+        listOf("搜索", "歌单", "排行榜", "音源管理", "设置").forEach {
+            compose.onNodeWithText(it).assertIsDisplayed()
+        }
+        listOf("阿里云盘", "歌曲", "我的列表", "专辑", "扫描范围", "音乐库").forEach {
+            compose.onNodeWithText(it).assertDoesNotExist()
+        }
+        compose.onNodeWithText("歌单").performClick()
+        compose.waitForIdle()
+        assertEquals(LxSection.SHEETS, rec.lx)
+        assertTrue(rec.online)
+        assertTrue(rec.closed)
+        assertNull(rec.selected)
+    }
+
+    /** 云盘模式只留云盘和设置。 */
+    @Test
+    fun cloudModeShowsOnlyAliyun() {
+        val rec = renderOpen(sourceMode = SourceMode.CLOUD, aliyunActive = true)
+        compose.onNodeWithText("WindTone · 阿里云盘").assertIsDisplayed()
+        compose.onNodeWithText("阿里云盘").assertIsDisplayed()
+        compose.onNodeWithText("设置").assertIsDisplayed()
+        listOf("歌曲", "我的列表", "搜索", "歌单", "扫描范围", "洛雪音源").forEach {
+            compose.onNodeWithText(it).assertDoesNotExist()
+        }
+        compose.onNodeWithText("阿里云盘").performClick()
+        compose.waitForIdle()
+        assertTrue(rec.aliyun)
+        assertTrue(rec.closed)
+        assertNull(rec.selected)
     }
 
     /**
@@ -169,10 +217,10 @@ class LibraryDrawerTest {
         assertTrue(rec.settings)
     }
 
-    /** 阿里云盘一级入口（v1.1.75）：点了必须回调 onOpenAliyun，且不算视图切换 */
+    /** 云盘入口只在云盘模式里，点了回调 onOpenAliyun，且不算视图切换 */
     @Test
     fun tappingAliyunFiresItsCallbackAndCloses() {
-        val rec = renderOpen()
+        val rec = renderOpen(sourceMode = SourceMode.CLOUD, aliyunActive = true)
         compose.onNodeWithText("阿里云盘").performClick()
         compose.waitForIdle()
         assertTrue(rec.aliyun)

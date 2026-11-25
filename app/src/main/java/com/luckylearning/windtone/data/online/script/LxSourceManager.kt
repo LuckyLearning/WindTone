@@ -39,6 +39,20 @@ object LxSourceManager {
 
     val report: LxLoadReport get() = lastReport
 
+    /** 启动后的第一次 reload 已经结束（结果可以是 0 个源）。 */
+    val isReady: Boolean get() = ready
+
+    /**
+     * 播放 / 点歌前用：加载还在跑，或正有一次 reload 拿着锁时，等它结束再判断「有没有音源」。
+     *
+     * 不等的话，冷启动恢复上一首在线歌会在注册表还是空的那几百毫秒里失败，
+     * 提示「还没加载音源脚本」，而页面随后刷新成「已加载 N 个音源」。
+     */
+    suspend fun ensureLoaded(context: Context): LxLoadReport {
+        if (ready && !mutex.isLocked) return lastReport
+        return awaitReady(context)
+    }
+
     /** reload 串行锁：启动后台加载与 UI 主动 reload 不能并发，否则互相 destroy runtime */
     private val mutex = Mutex()
 

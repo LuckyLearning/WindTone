@@ -891,6 +891,10 @@ class PlaybackEngine(
      *     保持同一个值（Media3 的 CacheKeyFactory 与 replaceMediaItem 都依赖它）。
      */
     private suspend fun fillOnlineWindow() {
+        // 注册表空着时先等启动加载结束，避免把「还在加载」说成「没导入脚本」。
+        if (OnlineSourceRegistry.isEmpty) {
+            com.luckylearning.windtone.data.online.script.LxSourceManager.ensureLoaded(app)
+        }
         val c = controller ?: return
         val index = c.currentMediaItemIndex
         if (index < 0 || c.mediaItemCount == 0) return
@@ -966,8 +970,12 @@ class PlaybackEngine(
         val now = SystemClock.elapsedRealtime()
         if (now - lastOnlineHintAt < 5_000L) return
         lastOnlineHintAt = now
+        val missingScript = com.luckylearning.windtone.data.online.OnlinePlayHint.missingScript(
+            registryEmpty = OnlineSourceRegistry.isEmpty,
+            loadedPlatforms = com.luckylearning.windtone.data.online.script.LxSourceManager.report.sources.size,
+        )
         messages.post(
-            if (OnlineSourceRegistry.isEmpty) AppStrings.s(R.string.online_play_no_source)
+            if (missingScript) AppStrings.s(R.string.online_play_no_source)
             else AppStrings.s(R.string.online_play_no_url),
         )
         controller?.let { c ->

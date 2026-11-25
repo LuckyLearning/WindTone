@@ -3,7 +3,10 @@ package com.luckylearning.windtone.ui
 import android.graphics.Bitmap
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,12 +23,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -35,10 +38,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -54,12 +55,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.luckylearning.windtone.ui.theme.AppVisual
+import com.luckylearning.windtone.ui.theme.LocalUiFormFactor
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import com.luckylearning.windtone.MusicApp
 import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.db.MusicDb
@@ -109,11 +119,17 @@ import java.util.concurrent.TimeUnit
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun OnlinePage(
+    place: LxFrame,
+    canPop: Boolean,
+    onBack: () -> Unit,
+    onOpenDetail: (LxDetail) -> Unit,
+    onSelectSection: (LxSection) -> Unit,
     onPlay: (List<Song>, Int) -> Unit,
-    onClose: () -> Unit,
     onOpenDrawer: () -> Unit,
     /** 播放页是否展开：展开时本页的返回键必须让位（播放页在最上层） */
     playerExpanded: Boolean = false,
+    /** 抽屉 / 设置盖住本页时不拦返回，让上层先收自己 */
+    backEnabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -126,17 +142,16 @@ internal fun OnlinePage(
     var searched by remember { mutableStateOf(false) }
     var searching by remember { mutableStateOf(false) }
     var selectedSource by remember { mutableStateOf("all") }
-    var manage by remember { mutableStateOf(false) }
     var scripts by remember { mutableStateOf(store.all()) }
     var report by remember { mutableStateOf(LxSourceManager.report) }
+    var sourcesReady by remember { mutableStateOf(LxSourceManager.isReady) }
     /** 用户切换「平台 → 脚本」后 +1，让音源管理弹窗里的候选重算 */
     var choiceRevision by remember { mutableIntStateOf(0) }
     /** 每个源已请求到第几页（1 = 只搜过第一页） */
     val pages = remember { mutableStateMapOf<String, Int>() }
     val loadingMore = remember { mutableStateMapOf<String, Boolean>() }
 
-    /** 0 = 搜索，1 = 歌单，2 = 排行榜 */
-    var tab by remember { mutableIntStateOf(0) }
+    var searchGen by remember { mutableIntStateOf(0) }
     var openBoard by remember { mutableStateOf<OnlineBoards.Board?>(null) }
     var boardTracks by remember { mutableStateOf<List<OnlineTrack>>(emptyList()) }
     var boardLoading by remember { mutableStateOf(false) }
@@ -149,20 +164,38 @@ internal fun OnlinePage(
     var sheetError by remember { mutableStateOf<String?>(null) }
     var sheetSaving by remember { mutableStateOf(false) }
 
-    // 详情页是子页：本页自己收返回，不让它穿透到 MainScreen 去关整个在线页。
-    // 注册在本组件内 = 比 MainScreen 的 BackHandler 晚注册 = 优先级更高，正好符合层级。
-    BackHandler(enabled = !playerExpanded && (openSheet != null || openBoard != null)) {
-        if (openSheet != null) openSheet = null else openBoard = null
+    // 子页和上一个分区都由外面的栈决定。本页只在还能退的时候消费返回，
+    // 并且让位给抽屉 / 设置 / 播放页（backEnabled）。根上不消费，Activity 回到桌面。
+    BackHandler(enabled = backEnabled && !playerExpanded && canPop) { onBack() }
+
+    // 栈把子页收起时，本地详情跟着收。切到别的分区时不擦掉底下那一帧的结果，
+    // 返回还要看得到。
+    LaunchedEffect(place.section, place.detail) {
+        if (place.section != LxSection.SEARCH) {
+            // 离开搜索后再回来的结果不能改当前栈顶（那已经是歌单 / 榜单了）
+            searchGen++
+        } else if (place.detail == LxDetail.NONE) {
+            searchGen++
+            searched = false
+            results = emptyList()
+            searching = false
+        }
+        if (place.section == LxSection.SHEETS && place.detail != LxDetail.SHEET) openSheet = null
+        if (place.section == LxSection.BOARDS && place.detail != LxDetail.BOARD) openBoard = null
     }
 
     // 首次进入：等启动时的后台脚本加载跑完再刷新报告。
     // 不做这一步的竞态：冷启动后立刻进本页点播，注册表可能还是空的 → 取址失败，
     // 用户会看到「搜得到但播不了」，且不会主动重试。awaitReady 内部有 Mutex 串行化。
-    LaunchedEffect(Unit) { report = LxSourceManager.awaitReady(context.applicationContext) }
+    LaunchedEffect(Unit) {
+        report = LxSourceManager.awaitReady(context.applicationContext)
+        sourcesReady = true
+    }
 
     fun doSearch() {
         val q = keyword.trim()
         if (q.isBlank() || searching) return
+        val gen = ++searchGen
         searching = true
         searched = true
         pages.clear()
@@ -171,9 +204,11 @@ internal fun OnlinePage(
                 q,
                 sources = if (selectedSource == "all") BuiltInSearch.SOURCES else listOf(selectedSource),
             )
+            if (gen != searchGen) return@launch
             results = r
             r.forEach { pages[it.source] = 1 }
             searching = false
+            onOpenDetail(LxDetail.RESULTS)
         }
     }
 
@@ -207,14 +242,18 @@ internal fun OnlinePage(
     fun playTracks(tracks: List<OnlineTrack>, index: Int) {
         if (tracks.isEmpty()) return
         // 搜索/榜单走内置接口、不需要脚本，所以「有结果」不代表「能播」：
-        // 没有音源时直链根本换不到。这里挡在入队之前，并把音源管理直接弹出来，
-        // 否则用户点一首歌只会看到「什么都没发生」（v1.2.61 实机反馈）。
-        if (OnlineSourceRegistry.isEmpty) {
-            Toast.makeText(context, AppStrings.s(R.string.online_need_source_toast), Toast.LENGTH_LONG).show()
-            manage = true
-            return
-        }
+        // 没有音源时直链根本换不到。先等启动加载结束，避免「已加载 N 个音源」
+        // 和「还没导入脚本」同时出现；确认仍然是空的，再打开左侧音源管理。
         scope.launch {
+            if (OnlineSourceRegistry.isEmpty) {
+                report = LxSourceManager.ensureLoaded(context.applicationContext)
+                sourcesReady = true
+            }
+            if (OnlineSourceRegistry.isEmpty) {
+                Toast.makeText(context, AppStrings.s(R.string.online_need_source_toast), Toast.LENGTH_LONG).show()
+                onSelectSection(LxSection.SOURCES)
+                return@launch
+            }
             val songs = withContext(Dispatchers.IO) {
                 runCatching { OnlineLibrary(context).upsertAll(tracks) }.getOrDefault(emptyList())
             }
@@ -228,6 +267,7 @@ internal fun OnlinePage(
 
     fun loadBoard(board: OnlineBoards.Board) {
         openBoard = board
+        onOpenDetail(LxDetail.BOARD)
         boardTracks = emptyList()
         boardError = null
         boardLoading = true
@@ -241,6 +281,7 @@ internal fun OnlinePage(
 
     fun loadSheet(sheet: OnlineSonglists.Sheet) {
         openSheet = sheet
+        onOpenDetail(LxDetail.SHEET)
         sheetTracks = emptyList()
         sheetError = null
         sheetLoading = true
@@ -317,121 +358,259 @@ internal fun OnlinePage(
         }
     }
 
-    Column(modifier.fillMaxSize()) {
+    val sideNav = LocalUiFormFactor.current.hasSideNav
+    val title = when {
+        place.section == LxSection.SHEETS && place.detail == LxDetail.SHEET && openSheet != null ->
+            openSheet?.name.orEmpty()
+        place.section == LxSection.BOARDS && place.detail == LxDetail.BOARD && openBoard != null ->
+            openBoard?.name.orEmpty()
+        else -> stringResource(place.section.labelRes)
+    }
+
+    Column(
+        modifier
+            .fillMaxSize()
+            // 与曲库、云盘同一套：内容区右滑拉出抽屉。左缘留给系统返回。
+            // 车机左导航常驻，不接管这套手势（车机触摸板误触率高）。
+            .then(if (sideNav) Modifier else Modifier.pointerInput(onOpenDrawer) {
+                var dragged = 0f
+                val threshold = 72.dp.toPx()
+                detectHorizontalDragGestures(
+                    onDragStart = { dragged = 0f },
+                    onDragCancel = { dragged = 0f },
+                    onDragEnd = {
+                        if (dragged >= threshold) onOpenDrawer()
+                        dragged = 0f
+                    },
+                    onHorizontalDrag = { _, amount -> dragged += amount },
+                )
+            }),
+    ) {
         TopAppBar(
             title = {
-                Text(openSheet?.name ?: openBoard?.name ?: stringResource(R.string.online_page_title))
+                AnimatedContent(
+                    targetState = title,
+                    transitionSpec = { SettingsMotion.titleFade() },
+                    label = "lx-title",
+                ) { text ->
+                    Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             },
             navigationIcon = {
-                IconButton(onClick = {
-                    // 详情是子页：返回先退回上层列表，再退出在线页
-                    when {
-                        openSheet != null -> openSheet = null
-                        openBoard != null -> openBoard = null
-                        else -> onClose()
+                // 子页 / 上一个分区：返回。根上手机给汉堡，车机左导航已经常驻，不再放一个打不开的抽屉按钮。
+                if (canPop) {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back))
                     }
-                }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back))
+                } else if (!sideNav) {
+                    IconButton(onClick = onOpenDrawer) {
+                        Icon(AppIcons.Menu, contentDescription = stringResource(R.string.online_open_menu))
+                    }
                 }
             },
             actions = {
-                // 抽屉入口保留：在线页是一级页，用户在这里也应该能直接跳到云盘/收藏
-                IconButton(onClick = onOpenDrawer) {
-                    Icon(AppIcons.Menu, contentDescription = null)
-                }
-                TextButton(onClick = { manage = true }) {
-                    Text(stringResource(R.string.online_manage_sources))
+                if (canPop && !sideNav) {
+                    IconButton(onClick = onOpenDrawer) {
+                        Icon(AppIcons.Menu, contentDescription = stringResource(R.string.online_open_menu))
+                    }
                 }
             },
         )
 
-        val sheet = openSheet
-        if (sheet != null) {
-            SheetDetailPane(
-                sheet = sheet,
-                tracks = sheetTracks,
-                loading = sheetLoading,
-                error = sheetError,
-                saving = sheetSaving,
-                onPlay = { playTracks(sheetTracks, it) },
-                onFavorite = { toggleFavorite(it) },
-                onSaveToList = { saveSheetToList(sheet) },
-            )
-            SourceStatusLine(report = report, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
-            return@Column
-        }
-
-        val board = openBoard
-        if (board != null) {
-            BoardDetail(
-                tracks = boardTracks,
-                loading = boardLoading,
-                error = boardError,
-                onPlay = { playTracks(boardTracks, it) },
-                onFavorite = { toggleFavorite(it) },
-            )
-            SourceStatusLine(report = report, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
-            return@Column
-        }
-
-        TabRow(selectedTabIndex = tab) {
-            Tab(
-                selected = tab == 0,
-                onClick = { tab = 0 },
-                text = { Text(stringResource(R.string.online_tab_search)) },
-            )
-            Tab(
-                selected = tab == 1,
-                onClick = { tab = 1 },
-                text = { Text(stringResource(R.string.online_tab_sheets)) },
-            )
-            Tab(
-                selected = tab == 2,
-                onClick = { tab = 2 },
-                text = { Text(stringResource(R.string.online_tab_boards)) },
+        if (place.section != LxSection.SOURCES) {
+            SourceStatusBanner(
+                ready = sourcesReady,
+                report = report,
+                onManage = { onSelectSection(LxSection.SOURCES) },
             )
         }
 
-        SourceStatusLine(report = report, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
-
-        if (tab == 2) {
-            BoardsList(onOpen = { loadBoard(it) })
-            return@Column
+        AnimatedContent(
+            targetState = place,
+            modifier = Modifier.weight(1f).fillMaxWidth().clipToBounds(),
+            transitionSpec = {
+                SettingsMotion.slide(forward = LxBackStack.forward(initialState, targetState))
+            },
+            label = "lx-place",
+        ) { target ->
+            when (target.section) {
+                LxSection.SOURCES -> {
+                    val choices = remember(report, choiceRevision) { platformChoices() }
+                    SourceManagerPage(
+                        scripts = scripts,
+                        report = report,
+                        choices = choices,
+                        onChooseSource = { platform, ownerId ->
+                            scope.launch {
+                                LxSourceManager.chooseSource(context, platform, ownerId)
+                                choiceRevision++
+                                report = LxSourceManager.report
+                            }
+                        },
+                        onMove = { script, delta ->
+                            scope.launch {
+                                val list = scripts.toMutableList()
+                                val from = list.indexOfFirst { it.id == script.id }
+                                val to = from + delta
+                                if (from >= 0 && to in list.indices) {
+                                    list.removeAt(from)
+                                    list.add(to, script)
+                                    withContext(Dispatchers.IO) { store.save(list) }
+                                    scripts = store.all()
+                                    report = LxSourceManager.reload(context)
+                                }
+                            }
+                        },
+                        onImport = { text, isUrl ->
+                            scope.launch {
+                                val imported = withContext(Dispatchers.IO) {
+                                    val code = if (isUrl) downloadScript(text) else text
+                                    if (code.isNullOrBlank() || code.length < 200) return@withContext null
+                                    val (name, version) = LxScript.parseMeta(code)
+                                    val script = LxScript(
+                                        id = "custom:" + UUID.randomUUID().toString(),
+                                        name = name.ifBlank { text.takeLast(40) },
+                                        code = code,
+                                        version = version,
+                                        addedAt = System.currentTimeMillis(),
+                                    )
+                                    store.upsert(script)
+                                    script
+                                }
+                                if (imported == null) {
+                                    Toast.makeText(context, AppStrings.s(R.string.online_import_failed), Toast.LENGTH_SHORT).show()
+                                } else {
+                                    report = LxSourceManager.reload(context)
+                                    scripts = store.all()
+                                    choiceRevision++
+                                    Toast.makeText(
+                                        context,
+                                        AppStrings.s(R.string.online_source_loaded, report.sources.size),
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                }
+                            }
+                        },
+                        onToggle = { script ->
+                            scope.launch {
+                                store.setEnabled(script.id, !script.enabled)
+                                scripts = store.all()
+                                report = LxSourceManager.reload(context)
+                                choiceRevision++
+                            }
+                        },
+                        onDelete = { script ->
+                            scope.launch {
+                                store.remove(script.id)
+                                scripts = store.all()
+                                report = LxSourceManager.reload(context)
+                                choiceRevision++
+                            }
+                        },
+                        onReload = {
+                            scope.launch {
+                                report = LxSourceManager.reload(context)
+                                choiceRevision++
+                            }
+                        },
+                    )
+                }
+                LxSection.SHEETS -> {
+                    val sheet = openSheet
+                    if (target.detail == LxDetail.SHEET && sheet != null) {
+                        SheetDetailPane(
+                            sheet = sheet,
+                            tracks = sheetTracks,
+                            loading = sheetLoading,
+                            error = sheetError,
+                            saving = sheetSaving,
+                            onPlay = { playTracks(sheetTracks, it) },
+                            onFavorite = { toggleFavorite(it) },
+                            onSaveToList = { saveSheetToList(sheet) },
+                        )
+                    } else {
+                        SonglistPane(onOpen = { loadSheet(it) })
+                    }
+                }
+                LxSection.BOARDS -> {
+                    if (target.detail == LxDetail.BOARD && openBoard != null) {
+                        BoardDetail(
+                            tracks = boardTracks,
+                            loading = boardLoading,
+                            error = boardError,
+                            onPlay = { playTracks(boardTracks, it) },
+                            onFavorite = { toggleFavorite(it) },
+                        )
+                    } else {
+                        BoardsList(onOpen = { loadBoard(it) })
+                    }
+                }
+                LxSection.SEARCH -> SearchBody(
+                    keyword = keyword,
+                    onKeyword = { keyword = it },
+                    searching = searching,
+                    onSearch = { doSearch() },
+                    selectedSource = selectedSource,
+                    onSelectSource = { selectedSource = it },
+                    searched = searched && target.detail == LxDetail.RESULTS,
+                    results = results,
+                    loadingMore = loadingMore,
+                    onLoadMore = { loadMore(it) },
+                    onPlay = { tracks, index -> playTracks(tracks, index) },
+                    onFavorite = { toggleFavorite(it) },
+                )
+            }
         }
-        if (tab == 1) {
-            SonglistPane(onOpen = { loadSheet(it) })
-            return@Column
-        }
+    }
 
+}
+
+
+@Composable
+private fun SearchBody(
+    keyword: String,
+    onKeyword: (String) -> Unit,
+    searching: Boolean,
+    onSearch: () -> Unit,
+    selectedSource: String,
+    onSelectSource: (String) -> Unit,
+    searched: Boolean,
+    results: List<BuiltInSearch.Result>,
+    loadingMore: Map<String, Boolean>,
+    onLoadMore: (BuiltInSearch.Result) -> Unit,
+    onPlay: (List<OnlineTrack>, Int) -> Unit,
+    onFavorite: (OnlineTrack) -> Unit,
+) {
+    Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             OutlinedTextField(
                 value = keyword,
-                onValueChange = { keyword = it },
-                label = { Text(stringResource(R.string.online_search_hint)) },
+                onValueChange = onKeyword,
+                placeholder = { Text(stringResource(R.string.online_search_hint)) },
                 singleLine = true,
+                shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.weight(1f),
             )
             Spacer(Modifier.width(8.dp))
-            Button(onClick = { doSearch() }, enabled = !searching) {
+            Button(
+                onClick = onSearch,
+                enabled = !searching,
+                shape = RoundedCornerShape(16.dp),
+            ) {
                 Text(if (searching) stringResource(R.string.online_searching) else stringResource(R.string.online_search))
             }
         }
-
         SourceFilterRow(
             selected = selectedSource,
-            onSelect = { selectedSource = it },
+            onSelect = onSelectSource,
             modifier = Modifier.padding(horizontal = 12.dp),
         )
-
+        Box(Modifier.weight(1f).fillMaxWidth()) {
         when {
-            searching -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-            // 三种空态必须分开：「没搜过」「搜了没结果」「搜了但每个源都报错」——
-            // 统一显示「暂无结果」会让用户以为是关键词的问题，而实际是接口挂了 / 没网
+            searching -> LoadingHint(stringResource(R.string.online_searching))
             !searched -> EmptyHint(stringResource(R.string.online_idle_hint))
             results.all { it.tracks.isEmpty() } -> {
                 val errors = results.mapNotNull { it.error }
@@ -444,14 +623,14 @@ internal fun OnlinePage(
                 }
             }
             else -> LazyColumn(
-                Modifier.fillMaxSize().padding(horizontal = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                Modifier.fillMaxSize().padding(horizontal = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 results.forEach { group ->
                     if (group.tracks.isEmpty()) return@forEach
                     item(key = "head_${group.source}") {
                         Row(
-                            Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp, start = 4.dp),
+                            Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp, start = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
@@ -467,12 +646,12 @@ internal fun OnlinePage(
                             )
                         }
                     }
-                    items(group.tracks, key = { it.stableKey }) { track ->
+                    items(group.tracks, key = { "${group.source}:${it.stableKey}" }) { track ->
                         val index = group.tracks.indexOfFirst { it.stableKey == track.stableKey }
                         TrackRow(
                             track = track,
-                            onPlay = { playTracks(group.tracks, index) },
-                            onFavorite = { toggleFavorite(track) },
+                            onPlay = { onPlay(group.tracks, index) },
+                            onFavorite = { onFavorite(track) },
                         )
                     }
                     item(key = "more_${group.source}") {
@@ -481,7 +660,7 @@ internal fun OnlinePage(
                             Modifier.fillMaxWidth().padding(vertical = 4.dp),
                             horizontalArrangement = Arrangement.Center,
                         ) {
-                            TextButton(onClick = { loadMore(group) }, enabled = !loading) {
+                            TextButton(onClick = { onLoadMore(group) }, enabled = !loading) {
                                 Text(
                                     if (loading) stringResource(R.string.online_searching)
                                     else stringResource(R.string.online_load_more),
@@ -493,97 +672,11 @@ internal fun OnlinePage(
                 item { Spacer(Modifier.height(24.dp)) }
             }
         }
-    }
-
-    if (manage) {
-        // 音源集合 / 用户选择 都可能在弹窗里被改，用 report + choiceRevision 触发重算
-        val choices = remember(report, choiceRevision) { platformChoices() }
-        SourceManagerDialog(
-            scripts = scripts,
-            report = report,
-            choices = choices,
-            onDismiss = { manage = false },
-            onChooseSource = { platform, ownerId ->
-                scope.launch {
-                    LxSourceManager.chooseSource(context, platform, ownerId)
-                    choiceRevision++
-                    report = LxSourceManager.report
-                }
-            },
-            onMove = { script, delta ->
-                scope.launch {
-                    val list = scripts.toMutableList()
-                    val from = list.indexOfFirst { it.id == script.id }
-                    val to = from + delta
-                    if (from >= 0 && to in list.indices) {
-                        list.removeAt(from)
-                        list.add(to, script)
-                        withContext(Dispatchers.IO) { store.save(list) }
-                        scripts = store.all()
-                        // 顺序即优先级：重排后整体重载，注册表按新顺序重建
-                        report = LxSourceManager.reload(context)
-                    }
-                }
-            },
-            onImport = { text, isUrl ->
-                scope.launch {
-                    val imported = withContext(Dispatchers.IO) {
-                        val code = if (isUrl) downloadScript(text) else text
-                        if (code.isNullOrBlank() || code.length < 200) {
-                            return@withContext null
-                        }
-                        val (name, version) = LxScript.parseMeta(code)
-                        val script = LxScript(
-                            id = "custom:" + UUID.randomUUID().toString(),
-                            name = name.ifBlank { text.takeLast(40) },
-                            code = code,
-                            version = version,
-                            addedAt = System.currentTimeMillis(),
-                        )
-                        store.upsert(script)
-                        script
-                    }
-                    if (imported == null) {
-                        Toast.makeText(context, AppStrings.s(R.string.online_import_failed), Toast.LENGTH_SHORT).show()
-                    } else {
-                        report = LxSourceManager.reload(context)
-                        scripts = store.all()
-                        choiceRevision++
-                        Toast.makeText(
-                            context,
-                            AppStrings.s(R.string.online_source_loaded, report.sources.size),
-                            Toast.LENGTH_SHORT,
-                        ).show()
-                    }
-                }
-            },
-            onToggle = { script ->
-                scope.launch {
-                    store.setEnabled(script.id, !script.enabled)
-                    scripts = store.all()
-                    report = LxSourceManager.reload(context)
-                    choiceRevision++
-                }
-            },
-            onDelete = { script ->
-                scope.launch {
-                    store.remove(script.id)
-                    scripts = store.all()
-                    report = LxSourceManager.reload(context)
-                    choiceRevision++
-                }
-            },
-            onReload = {
-                scope.launch {
-                    report = LxSourceManager.reload(context)
-                    choiceRevision++
-                }
-            },
-        )
+        }
     }
 }
 
-/** 榜单列表：按平台分组，每组 3 个一行（不依赖 FlowRow 的实验 API） */
+/** 榜单列表：按平台分组。卡片而不是一排挤在一起的线框按钮。 */
 @Composable
 private fun BoardsList(onOpen: (OnlineBoards.Board) -> Unit) {
     LazyColumn(
@@ -603,17 +696,26 @@ private fun BoardsList(onOpen: (OnlineBoards.Board) -> Unit) {
                 item(key = "r_${group.source}_$rowIndex") {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         row.forEach { board ->
-                            OutlinedButton(
-                                onClick = { onOpen(board) },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(8.dp),
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp)
+                                    .clickable { onOpen(board) },
                             ) {
-                                Text(
-                                    board.name,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
+                                Box(
+                                    Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        board.name,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        textAlign = TextAlign.Center,
+                                    )
+                                }
                             }
                         }
                         // 补空位，避免最后一行按钮被拉宽
@@ -636,9 +738,7 @@ private fun BoardDetail(
     onFavorite: (OnlineTrack) -> Unit,
 ) {
     when {
-        loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
-        }
+        loading -> LoadingHint(stringResource(R.string.online_loading))
         tracks.isEmpty() -> EmptyHint(error ?: AppStrings.s(R.string.online_board_empty))
         else -> LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 12.dp),
@@ -684,28 +784,90 @@ private fun SourceFilterRow(
 }
 
 @Composable
-private fun SourceStatusLine(report: LxLoadReport, modifier: Modifier = Modifier) {
-    val text = if (report.sources.isEmpty()) {
-        stringResource(R.string.online_no_script_hint)
-    } else {
-        stringResource(R.string.online_loaded_sources, report.sources.size)
+private fun SourceStatusBanner(
+    ready: Boolean,
+    report: LxLoadReport,
+    onManage: () -> Unit,
+) {
+    if (!ready) {
+        Text(
+            stringResource(R.string.online_sources_loading),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        )
+        return
+    }
+    if (report.sources.isEmpty()) {
+        Surface(
+            color = MaterialTheme.colorScheme.errorContainer,
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+        ) {
+            Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                Text(
+                    stringResource(R.string.online_no_script_hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+                TextButton(onClick = onManage) {
+                    Text(stringResource(R.string.online_open_sources))
+                }
+            }
+        }
+        return
     }
     Text(
-        text,
-        style = MaterialTheme.typography.labelSmall,
-        color = if (report.sources.isEmpty()) MaterialTheme.colorScheme.error
-        else MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier,
+        stringResource(R.string.online_loaded_sources, report.sources.size),
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
     )
+    if (report.errors.isNotEmpty()) {
+        Text(
+            stringResource(R.string.online_source_errors, report.errors.joinToString("; ")),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+        )
+    }
+}
+
+@Composable
+private fun LoadingHint(text: String) {
+    Column(
+        Modifier.fillMaxSize().padding(32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        CircularProgressIndicator()
+        Spacer(Modifier.height(12.dp))
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }
 
 @Composable
 internal fun EmptyHint(text: String) {
-    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+    Column(
+        Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            Modifier
+                .size(72.dp)
+                .clip(CircleShape)
+                .background(AppVisual.WindGradient),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(AppIcons.MusicNote, contentDescription = null, tint = Color.White, modifier = Modifier.size(32.dp))
+        }
+        Spacer(Modifier.height(16.dp))
         Text(
             text,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
         )
     }
 }
@@ -718,12 +880,18 @@ internal fun TrackRow(track: OnlineTrack, onPlay: () -> Unit, onFavorite: () -> 
     val revision = OnlineUrlMemo.revision.intValue
     val quality = remember(track.stableKey, revision) { OnlineResolver.displayQuality(track) }
     Box {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .combinedClickable(onClick = onPlay, onLongClick = { menu = true }),
+        ) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
-                .combinedClickable(onClick = onPlay, onLongClick = { menu = true })
-                .padding(vertical = 8.dp, horizontal = 4.dp),
+                .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             TrackCover(track)
@@ -756,6 +924,7 @@ internal fun TrackRow(track: OnlineTrack, onPlay: () -> Unit, onFavorite: () -> 
                 )
             }
         }
+        }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.online_play_this)) },
@@ -769,38 +938,61 @@ internal fun TrackRow(track: OnlineTrack, onPlay: () -> Unit, onFavorite: () -> 
     }
 }
 
-/** 40dp 封面，取不到就是一块纯色占位 —— 不阻塞行高，也不留白洞 */
+/** 与曲库行同一档：48dp、12dp 圆角。没有图时用同一套首字渐变，不再是一块灰底音符。 */
 @Composable
 private fun TrackCover(track: OnlineTrack) {
     val context = LocalContext.current
     var bitmap by remember(track.stableKey) { mutableStateOf<Bitmap?>(null) }
     LaunchedEffect(track.stableKey) {
-        bitmap = runCatching {
-            OnlineCover.thumb(context, track, COVER_PX)
-        }.getOrNull()
+        bitmap = loadArtworkRetry { OnlineCover.thumb(context, track, COVER_PX) }
     }
+    val shape = RoundedCornerShape(12.dp)
     Box(
         Modifier
-            .size(40.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .size(48.dp)
+            .clip(shape)
+            .background(AppVisual.coverBrush(track.stableKey)),
         contentAlignment = Alignment.Center,
     ) {
         val bmp = bitmap
         if (bmp != null) {
+            val image = remember(bmp) { bmp.asImageBitmap() }
             androidx.compose.foundation.Image(
-                bitmap = bmp.asImageBitmap(),
+                bitmap = image,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
-            Icon(
-                AppIcons.MusicNote, null,
-                Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            Text(
+                AppVisual.coverInitial(track.title),
+                color = Color.White,
+                fontSize = 16.sp,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
             )
         }
+    }
+}
+
+/**
+ * 列表滑走会取消这次加载。CancellationException 必须往外抛，否则被吞掉后
+ * 这一行会停在占位上，即使重新进入组合也不会再要图。
+ * 失败再试两次：首屏并发高时，排在后面的请求经常第一次超时。
+ */
+private suspend fun loadArtworkRetry(block: suspend () -> Bitmap?): Bitmap? {
+    var attempt = 0
+    while (true) {
+        val bmp = try {
+            block()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
+        if (bmp != null) return bmp
+        if (attempt >= 2) return null
+        attempt++
+        delay(800L * attempt)
     }
 }
 
@@ -814,11 +1006,10 @@ private fun TrackCover(track: OnlineTrack) {
  * 两者叠加后的实际顺序由 `OnlineSourceRegistry.candidates` 给出，与本页展示一致。
  */
 @Composable
-private fun SourceManagerDialog(
+private fun SourceManagerPage(
     scripts: List<LxScript>,
     report: LxLoadReport,
     choices: List<PlatformChoice>,
-    onDismiss: () -> Unit,
     onChooseSource: (platform: String, ownerId: String?) -> Unit,
     onMove: (LxScript, Int) -> Unit,
     onImport: (String, Boolean) -> Unit,
@@ -827,15 +1018,12 @@ private fun SourceManagerDialog(
     onReload: () -> Unit,
 ) {
     var text by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.online_manage_sources)) },
-        text = {
-            Column(
-                Modifier
-                    .heightIn(max = 460.dp)
-                    .verticalScroll(rememberScrollState()),
-            ) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
                 Text(
                     stringResource(R.string.online_source_loaded, report.sources.size),
                     style = MaterialTheme.typography.bodyMedium,
@@ -915,10 +1103,7 @@ private fun SourceManagerDialog(
                         }
                     }
                 }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
-    )
+    }
 }
 
 /**
@@ -998,8 +1183,8 @@ private fun platformChoices(): List<PlatformChoice> =
 private fun platformTitle(id: String): String =
     BuiltInSearch.SOURCE_NAMES[id] ?: LxScriptSource.DISPLAY_NAMES[id] ?: id
 
-/** 40dp @ xxhdpi 的物理像素，交给解码器按需降采样 */
-private const val COVER_PX = 120
+/** 48dp @ xxhdpi 的物理像素，交给解码器按需降采样 */
+private const val COVER_PX = 144
 
 private suspend fun downloadScript(url: String): String? = withContext(Dispatchers.IO) {
     runCatching {

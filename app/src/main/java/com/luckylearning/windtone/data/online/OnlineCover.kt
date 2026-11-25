@@ -5,8 +5,10 @@ import android.util.Log
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.data.online.source.OnlineTrack
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
@@ -36,23 +38,50 @@ object OnlineCover {
             size > CACHE_SIZE
     }
 
+    /**
+     * 封面客户端单独抬高「同一主机并发」。
+     * 搜索一屏几十张图如果挤在默认的每主机 5 连接里，排在后面的请求会在排队期间被超时掐掉，
+     * 表现就是滑得快的那几行永远是占位、滑慢或重进才有图。
+     * 真正的超时从拿到名额之后才开始算，见 [fetchBytes]。
+     */
     private val client = OkHttpClient.Builder()
+        .dispatcher(Dispatcher().apply {
+            maxRequests = 64
+            maxRequestsPerHost = 16
+        })
         .connectTimeout(6, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .callTimeout(12, TimeUnit.SECONDS)
         .followRedirects(true)
         .build()
 
+    /** 同时真正打出去的封面请求。多出来的在信号量上挂起，不消耗超时。 */
+    private val slots = Semaphore(8)
+
     /** 封面地址（在线歌才有；非在线 / 取不到返回 null） */
     suspend fun urlFor(context: Context, song: Song): String? {
         if (!song.isOnline) return null
         val track = runCatching { OnlineLibrary(context).trackOf(song.stableKey) }.getOrNull()
             ?: return null
-        track.coverUrl?.takeIf { it.startsWith("http") }?.let { return it }
+        return imageUrl(track)
+    }
 
+    /**
+     * 这首歌最终能下到的图片地址。
+     *
+     * 直接地址（搜索结果里的 https 图、展开过 `{size}` 的酷狗图）立刻返回。
+     * 酷我只有 `pic.web` 或干脆没有 coverUrl 时，再请求一次换出真实地址并缓存。
+     * 缓存里只放归一后的图片地址，不放解析端点。
+     */
+    internal suspend fun imageUrl(track: OnlineTrack): String? {
         synchronized(urlCache) { urlCache[track.stableKey] }?.let { return it }
-        val resolved = withTimeoutOrNull(TIMEOUT_MS) { runCatching { resolveUrl(track) }.getOrNull() }
-            ?.takeIf { it.startsWith("http") } ?: return null
+        OnlineCoverUrls.directImage(track.coverUrl, rawImg(track))?.let { direct ->
+            synchronized(urlCache) { urlCache[track.stableKey] = direct }
+            return direct
+        }
+        if (track.sourceId != "kw" && !OnlineCoverUrls.isKuwoResolver(track.coverUrl)) return null
+        val resolved = withTimeoutOrNull(TIMEOUT_MS) { runCatching { resolveKuwo(track.songId) }.getOrNull() }
+            ?: return null
         synchronized(urlCache) { urlCache[track.stableKey] = resolved }
         return resolved
     }
@@ -60,14 +89,35 @@ object OnlineCover {
     /** 下载封面字节（受 [MAX_BYTES] 限制，超限视为失败 —— 播放页封面不值得为它爆堆） */
     suspend fun bytes(context: Context, song: Song): ByteArray? = withContext(Dispatchers.IO) {
         val url = urlFor(context, song) ?: return@withContext null
-        withTimeoutOrNull(TIMEOUT_MS + 3_000L) {
-            runCatching { download(url) }.getOrNull()
+        fetchBytes(url)
+    }
+
+    private suspend fun fetchBytes(url: String): ByteArray? {
+        val normalized = OnlineCoverUrls.normalizeImage(url) ?: return null
+        slots.acquire()
+        try {
+            return withTimeoutOrNull(TIMEOUT_MS + 5_000L) { downloadImage(normalized) }
+        } finally {
+            slots.release()
         }
     }
 
+    /**
+     * 下图片。若正文是一行 URL（酷我 `pic.web`，或某个我们没认出的解析端点），再跟一次。
+     * 只跟一次，避免错误页互相指。
+     */
+    private fun downloadImage(url: String, followed: Boolean = false): ByteArray? {
+        val bytes = download(url) ?: return null
+        if (OnlineCoverUrls.looksLikeImage(bytes)) return bytes
+        if (followed) return null
+        val next = OnlineCoverUrls.textUrl(bytes) ?: return null
+        return downloadImage(next, followed = true)
+    }
+
     private fun download(url: String): ByteArray? {
-        val request = Request.Builder().url(url).header("User-Agent", UA).build()
-        return client.newCall(request).execute().use { response ->
+        val builder = Request.Builder().url(url).header("User-Agent", UA)
+        OnlineCoverUrls.refererFor(url)?.let { builder.header("Referer", it) }
+        return client.newCall(builder.build()).execute().use { response ->
             if (!response.isSuccessful) {
                 Log.w(TAG, "封面下载失败 ${response.code}：$url")
                 return@use null
@@ -104,13 +154,8 @@ object OnlineCover {
         withContext(Dispatchers.IO) {
             val key = "${track.stableKey}@$targetPx"
             synchronized(thumbCache) { thumbCache[key] }?.let { return@withContext it }
-            val url = track.coverUrl?.takeIf { it.startsWith("http") }
-                ?: withTimeoutOrNull(TIMEOUT_MS) { runCatching { resolveUrl(track) }.getOrNull() }
-                    ?.takeIf { it.startsWith("http") }
-                ?: return@withContext null
-            val bytes = withTimeoutOrNull(TIMEOUT_MS) {
-                runCatching { download(url) }.getOrNull()
-            } ?: return@withContext null
+            val url = imageUrl(track) ?: return@withContext null
+            val bytes = fetchBytes(url) ?: return@withContext null
             val bmp = com.luckylearning.windtone.data.CoverRepository.decodeScaled(bytes, targetPx)
                 ?: return@withContext null
             synchronized(thumbCache) { thumbCache[key] = bmp }
@@ -126,12 +171,10 @@ object OnlineCover {
      */
     suspend fun thumbUrl(url: String, targetPx: Int): android.graphics.Bitmap? =
         withContext(Dispatchers.IO) {
-            if (!url.startsWith("http")) return@withContext null
-            val key = "url:$url@$targetPx"
+            val normalized = OnlineCoverUrls.normalizeImage(url) ?: return@withContext null
+            val key = "url:$normalized@$targetPx"
             synchronized(thumbCache) { thumbCache[key] }?.let { return@withContext it }
-            val bytes = withTimeoutOrNull(TIMEOUT_MS) {
-                runCatching { download(url) }.getOrNull()
-            } ?: return@withContext null
+            val bytes = fetchBytes(normalized) ?: return@withContext null
             val bmp = com.luckylearning.windtone.data.CoverRepository.decodeScaled(bytes, targetPx)
                 ?: return@withContext null
             synchronized(thumbCache) { thumbCache[key] = bmp }
@@ -140,23 +183,21 @@ object OnlineCover {
 
     // ---------------------------------------------------------------- 分派
 
-    /**
-     * 只有酷我需要二次解析：`pic.web` 返回的是图片 URL 的**文本**。
-     * 酷狗的 `{size}` 模板已在搜索阶段替换好（见 `BuiltInSearch.kgCover`），这里不必再处理。
-     */
-    private fun resolveUrl(track: OnlineTrack): String? = when (track.sourceId) {
-        "kw" -> {
-            val url = "http://artistpicserver.kuwo.cn/pic.web?corp=kuwo&type=rid_pic" +
-                "&pictype=500&size=500&rid=${track.songId}"
-            val request = Request.Builder().url(url).header("User-Agent", UA).build()
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@use null
-                response.body?.string()?.trim()?.takeIf { it.startsWith("http") }
-            }
+    private fun rawImg(track: OnlineTrack): String? =
+        runCatching { JSONObject(track.raw).optString("img") }.getOrNull()
+
+    /** `pic.web` 返回图片 URL 文本，再归一（https / `{size}`）。 */
+    private fun resolveKuwo(songId: String): String? {
+        if (songId.isBlank()) return null
+        val url = "http://artistpicserver.kuwo.cn/pic.web?corp=kuwo&type=rid_pic" +
+            "&pictype=500&size=500&rid=$songId"
+        val request = Request.Builder().url(url).header("User-Agent", UA)
+            .header("Referer", "http://www.kuwo.cn/")
+            .build()
+        return client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return@use null
+            OnlineCoverUrls.normalizeImage(response.body?.string())
         }
-        // 其余三家走 raw 里的 img 字段（老存档可能没有 coverUrl，但 raw 里一直有）
-        else -> runCatching { JSONObject(track.raw).optString("img") }.getOrNull()
-            ?.takeIf { it.startsWith("http") }
     }
 
     private const val UA =

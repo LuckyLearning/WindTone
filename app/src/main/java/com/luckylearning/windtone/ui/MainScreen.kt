@@ -51,6 +51,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
@@ -94,6 +96,19 @@ private const val PLAYER_EXPAND_ANIM_MS = 320L
  * 列表区 / 顶栏 / 空态已拆到 `LibraryLists.kt` 与 `LibraryHeader.kt`（批次 8.6）——
  * 这里只保留「谁在什么条件下显示什么」以及跨域回调的接线。
  */
+private val LxStackSaver = listSaver<List<LxFrame>, String>(
+    save = { frames -> frames.map { "${it.section.name}:${it.detail.name}" } },
+    restore = { saved ->
+        saved.mapNotNull { raw ->
+            val parts = raw.split(":")
+            if (parts.size != 2) null
+            else runCatching {
+                LxFrame(LxSection.valueOf(parts[0]), LxDetail.valueOf(parts[1]))
+            }.getOrNull()
+        }.ifEmpty { LxBackStack.root() }
+    },
+)
+
 @Composable
 fun MainScreen(
     lib: LibraryViewModel,
@@ -220,6 +235,10 @@ fun MainScreen(
     }
     val sourceMode = appPrefs.sourceMode
     var showOnline by remember { mutableStateOf(sourceMode == com.luckylearning.windtone.data.SourceMode.LX) }
+    // 洛雪的分区 + 子页栈。返回、顶栏、抽屉点选都改这一份。
+    var lxStack by rememberSaveable(stateSaver = LxStackSaver) {
+        mutableStateOf(LxBackStack.root())
+    }
     // 设置页改完模式返回时立即切到对应内容页，不需要重启 App
     LaunchedEffect(sourceMode) {
         showOnline = sourceMode == com.luckylearning.windtone.data.SourceMode.LX
@@ -424,8 +443,32 @@ fun MainScreen(
     //
     // 层级（底 → 顶）：内容页(本地/在线/云盘) → 曲库详情与多选 → 抽屉 → 覆盖层 → 播放页
     // 内容页与曲库详情天然互斥（在线页时不渲染本地列表），不需要额外条件。
-    BackHandler(enabled = showAliyun && !player.playerExpanded) { showAliyun = false }
-    BackHandler(enabled = showOnline && !player.playerExpanded) { showOnline = false }
+    //
+    // 洛雪 / 云盘是各自模式的首页，不是盖在本地曲库上的一层：
+    // 在首页上按返回应回到桌面，而不是把在线页关掉、露出本地曲库。
+    // 洛雪的子页和分区栈由 OnlinePage 自己的 BackHandler 消费（比这里晚注册）。
+    // 云盘子目录同理，由 AliyunPanPage 消费。这里只处理「从别的模式临时打开」的退出。
+    BackHandler(
+        enabled = showAliyun && !player.playerExpanded &&
+            sourceMode != com.luckylearning.windtone.data.SourceMode.CLOUD,
+    ) { showAliyun = false }
+    BackHandler(
+        enabled = showOnline && !player.playerExpanded &&
+            sourceMode != com.luckylearning.windtone.data.SourceMode.LX,
+    ) { showOnline = false }
+    // 模式首页的根上：回到桌面，不 finish（前台播放服务还在），也不揭开另一模式的页面。
+    // 注册在子页 BackHandler 之前，子目录 / 洛雪子页启用时由后注册者优先。
+    val lxAtRoot = showOnline &&
+        sourceMode == com.luckylearning.windtone.data.SourceMode.LX &&
+        !LxBackStack.canPop(lxStack)
+    val cloudAtRoot = showAliyun &&
+        sourceMode == com.luckylearning.windtone.data.SourceMode.CLOUD
+    BackHandler(enabled = lxAtRoot && !player.playerExpanded) {
+        (context as? Activity)?.moveTaskToBack(true)
+    }
+    BackHandler(enabled = cloudAtRoot && !player.playerExpanded) {
+        (context as? Activity)?.moveTaskToBack(true)
+    }
 
     BackHandler(enabled = !player.playerExpanded && library.selecting) { lib.exitSelection() }
     BackHandler(enabled = !player.playerExpanded && !library.selecting && library.selectedPlaylist != null) { lib.closePlaylist() }
@@ -600,6 +643,11 @@ fun MainScreen(
                 onOpenSettings = { settingsEntryPage = SettingsPage.ROOT; showSettings = true },
                 onOpenAliyun = { showAliyun = true; showOnline = false },
                 onOpenOnline = { showOnline = true; showAliyun = false },
+                onSelectLx = { section ->
+                    showOnline = true
+                    showAliyun = false
+                    lxStack = LxBackStack.select(lxStack, section)
+                },
                 onOpenScanScope = { showScanScope = true },
                 onClose = { drawerOpen = false },
             )
@@ -618,6 +666,7 @@ fun MainScreen(
                     actions = navActions,
                     sourceMode = sourceMode,
                     onlineActive = showOnline,
+                    lxSection = lxStack.lastOrNull()?.section ?: LxSection.SEARCH,
                 )
                 // 2026-10-31：播放页是不透明的全屏覆盖层，但 Compose **不做遮挡
                 // 剔除** —— 展开后底下这一整棵子树（车机导航、曲库 LazyColumn 每行
@@ -639,11 +688,23 @@ fun MainScreen(
 
                 Column(Modifier.weight(1f)) {
                 if (showOnline) {
+                    val lxPlace = lxStack.lastOrNull() ?: LxFrame(LxSection.SEARCH)
                     OnlinePage(
+                        place = lxPlace,
+                        canPop = LxBackStack.canPop(lxStack),
+                        onBack = {
+                            LxBackStack.back(lxStack)?.let { lxStack = it }
+                        },
+                        onOpenDetail = { detail ->
+                            lxStack = LxBackStack.openDetail(lxStack, detail)
+                        },
+                        onSelectSection = { section ->
+                            lxStack = LxBackStack.select(lxStack, section)
+                        },
                         onPlay = playerVm::playQueue,
-                        onClose = { showOnline = false },
                         onOpenDrawer = { drawerOpen = true },
                         playerExpanded = player.playerExpanded,
+                        backEnabled = !drawerOpen && !showSettings && !player.playerExpanded,
                         modifier = Modifier.weight(1f),
                     )
                 } else if (showAliyun) {
@@ -652,7 +713,13 @@ fun MainScreen(
                     // 时照常显示。选曲库视图会自动退出云盘页（见抽屉的 onSelectView）。
                     AliyunPanPage(
                         onPlay = playerVm::playQueue,
-                        onClose = { showAliyun = false },
+                        onClose = {
+                            if (sourceMode == com.luckylearning.windtone.data.SourceMode.CLOUD) {
+                                (context as? Activity)?.moveTaskToBack(true)
+                            } else {
+                                showAliyun = false
+                            }
+                        },
                         onOpenDrawer = { drawerOpen = true },
                         // 抽屉开着时云盘页不拦返回键：返回键优先收抽屉（云盘页在子目录
                         // 里会拦返回逐级回上级，两个 BackHandler 后注册者优先，必须让位）
@@ -742,6 +809,7 @@ fun MainScreen(
                 aliyunActive = showAliyun,
                 actions = navActions,
                 sourceMode = sourceMode,
+                lxSection = lxStack.lastOrNull()?.section ?: LxSection.SEARCH,
                 modifier = Modifier.statusBarsPadding(),
             )
 

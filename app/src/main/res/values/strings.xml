@@ -116,11 +116,14 @@
          ================================================================ -->
     <string name="drawer_group_library">音乐库</string>
     <string name="drawer_group_online">在线音乐</string>
+    <string name="drawer_group_lx">洛雪音源</string>
     <string name="drawer_aliyun">阿里云盘</string>
     <string name="drawer_group_more">更多</string>
     <string name="drawer_scan_scope">扫描范围</string>
     <string name="drawer_settings">设置</string>
     <string name="drawer_brand_subtitle">WindTone · 本地音乐</string>
+    <string name="drawer_brand_cloud">WindTone · 阿里云盘</string>
+    <string name="drawer_brand_lx">WindTone · 洛雪音源</string>
 
     <!-- ================================================================
          复数字符串（中文只有 other）
@@ -2173,7 +2176,10 @@
     <string name="online_source_enabled">已启用</string>
     <string name="online_source_disabled">已停用</string>
     <string name="online_idle_hint">在内置目录里搜索，点任意一首即从那里开始连续播放整个结果列表。</string>
-    <string name="online_no_script_hint">尚未加载音源脚本，播放会失败。点右上角「音源管理」导入。</string>
+    <string name="online_no_script_hint">尚未加载音源脚本，现在还播不了。请从左侧「音源管理」导入。</string>
+    <string name="online_sources_loading">正在加载音源…</string>
+    <string name="online_open_sources">打开音源管理</string>
+    <string name="online_open_menu">打开菜单</string>
     <string name="online_all_sources_failed">所有音源都失败了，请检查网络。</string>
     <string name="online_group_count">%1$d 首</string>
     <string name="online_load_more">加载更多</string>
@@ -2194,9 +2200,9 @@
     <string name="info_field_quality">音质</string>
     <string name="info_field_status">状态</string>
     <string name="online_status_streaming">在线播放</string>
-    <string name="online_play_no_source">还没加载音源脚本，播不了。点右上角「音源管理」导入音源后再试。</string>
+    <string name="online_play_no_source">还没加载音源脚本，播不了。请从左侧「音源管理」导入后再试。</string>
     <string name="online_play_no_url">取不到播放地址：音源暂时不可用，已暂停。可在「音源管理」里重新加载，或换一首。</string>
-    <string name="online_need_source_toast">未加载音源脚本，无法播放。请先在「音源管理」里导入音源。</string>
+    <string name="online_need_source_toast">未加载音源脚本，无法播放。请先在左侧「音源管理」里导入音源。</string>
     <string name="online_tab_search">搜索</string>
     <string name="online_tab_sheets">歌单</string>
     <string name="online_tab_boards">排行榜</string>

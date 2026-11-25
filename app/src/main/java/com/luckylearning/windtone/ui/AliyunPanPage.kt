@@ -437,7 +437,11 @@ internal fun AliyunPanPage(
                 .fillMaxWidth()
                 .padding(start = 2.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
         ) {
-            IconButton(onClick = onClose) {
+            IconButton(onClick = {
+                // 子目录先回上级（与本页 BackHandler 同一口径），到根才把退出交给外面。
+                // 云盘模式的根是首页：外面会回到桌面，而不是露出本地曲库。
+                if (loggedIn && stack.size > 1) goUp() else onClose()
+            }) {
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = stringResource(R.string.aliyun_cd_back),

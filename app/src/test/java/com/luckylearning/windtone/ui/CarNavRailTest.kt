@@ -6,6 +6,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import com.luckylearning.windtone.R
+import com.luckylearning.windtone.data.SourceMode
 import com.luckylearning.windtone.state.LibraryView
 import com.luckylearning.windtone.ui.theme.MusicPlayerTheme
 import org.junit.Assert.assertTrue
@@ -45,6 +46,10 @@ class CarNavRailTest {
         aliyunActive: Boolean = false,
         onOpenAliyun: () -> Unit = {},
         onSelect: (LibraryView) -> Unit = {},
+        sourceMode: SourceMode = SourceMode.LOCAL,
+        onlineActive: Boolean = false,
+        lxSection: LxSection = LxSection.SEARCH,
+        onSelectLx: (LxSection) -> Unit = {},
     ) {
         compose.setContent {
             MusicPlayerTheme {
@@ -54,6 +59,10 @@ class CarNavRailTest {
                     onOpenSettings = {},
                     aliyunActive = aliyunActive,
                     onOpenAliyun = onOpenAliyun,
+                    sourceMode = sourceMode,
+                    onlineActive = onlineActive,
+                    lxSection = lxSection,
+                    onSelectLx = onSelectLx,
                 )
             }
         }
@@ -61,26 +70,42 @@ class CarNavRailTest {
     }
 
     @Test
-    fun `车机导航里有云盘入口且可点击`() {
+    fun `本地模式左导航没有云盘和洛雪`() {
+        render()
+        compose.onNodeWithText(viewLabel(LibraryView.SONGS)).assertIsDisplayed()
+        compose.onNodeWithText(aliyunLabel).assertDoesNotExist()
+        compose.onNodeWithText("搜索").assertDoesNotExist()
+    }
+
+    @Test
+    fun `云盘模式左导航只有云盘且可点击`() {
         var opened = false
-        render(onOpenAliyun = { opened = true })
+        render(sourceMode = SourceMode.CLOUD, aliyunActive = true, onOpenAliyun = { opened = true })
 
         compose.onNodeWithText(aliyunLabel).assertIsDisplayed()
+        compose.onNodeWithText(viewLabel(LibraryView.ALBUM)).assertDoesNotExist()
+        compose.onNodeWithText(viewLabel(LibraryView.SONGS)).assertDoesNotExist()
         compose.onNodeWithText(aliyunLabel).performClick()
         compose.waitForIdle()
         assertTrue("点云盘应打开阿里云盘页", opened)
     }
 
     @Test
-    fun `曲库视图与云盘互斥高亮`() {
-        // 云盘页打开时点任意曲库视图，回调照常触发（由调用方负责关闭云盘页），
-        // 本用例只锁「入口存在且不吞点击」——高亮视觉无法在语义树里断言。
-        var selected: LibraryView? = null
-        render(current = LibraryView.SONGS, aliyunActive = true, onSelect = { selected = it })
-
-        compose.onNodeWithText(viewLabel(LibraryView.ALBUM)).performClick()
+    fun `洛雪模式左导航是搜索歌单排行榜和音源管理`() {
+        var section: LxSection? = null
+        render(
+            sourceMode = SourceMode.LX,
+            onlineActive = true,
+            lxSection = LxSection.SEARCH,
+            onSelectLx = { section = it },
+        )
+        listOf("搜索", "歌单", "排行榜", "音源管理").forEach {
+            compose.onNodeWithText(it).assertIsDisplayed()
+        }
+        compose.onNodeWithText(aliyunLabel).assertDoesNotExist()
+        compose.onNodeWithText(viewLabel(LibraryView.SONGS)).assertDoesNotExist()
+        compose.onNodeWithText("排行榜").performClick()
         compose.waitForIdle()
-        assertTrue("云盘页打开时曲库视图仍可点（用于退出云盘）", selected == LibraryView.ALBUM)
-        compose.onNodeWithText(aliyunLabel).assertIsDisplayed()
+        assertTrue(section == LxSection.BOARDS)
     }
 }

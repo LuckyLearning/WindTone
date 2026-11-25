@@ -2,6 +2,7 @@ package com.luckylearning.windtone.data.online
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -62,6 +63,28 @@ class OnlineBoardsTest {
         assertTrue(track.raw.contains("\"hash\":\"BBBBFLAC\""))
         assertTrue(track.qualities.any { it.id == "320k" })
         assertTrue(track.qualities.any { it.id == "flac" })
+        assertNull(track.coverUrl)
+    }
+
+    @Test
+    fun parsesKgBoardCoverAndExpandsSizeTemplate() {
+        val text = """
+            {"data":{"info":[
+              {"songname":"晴天","singername":"周杰伦","audio_id":"1","hash":"H",
+               "filesize":100,"duration":200,"album_id":"9","remark":"叶惠美",
+               "album_sizable_cover":"http://imge.kugou.com/stdmusic/{size}/20250125/abc.jpg"}
+            ]}}
+        """.trimIndent()
+        val track = OnlineBoards.parseKgBoard(text).single()
+        assertEquals(
+            "https://imge.kugou.com/stdmusic/480/20250125/abc.jpg",
+            track.coverUrl,
+        )
+        // org.json 会把 / 写成 \/，不能拿原始文本做包含判断
+        assertEquals(
+            "https://imge.kugou.com/stdmusic/480/20250125/abc.jpg",
+            org.json.JSONObject(track.raw).optString("img"),
+        )
     }
 
     @Test
@@ -102,6 +125,19 @@ class OnlineBoardsTest {
         assertEquals(189_000L, track.durationMs)
         // webp 直接跳过，优先 jpg（省解码、也避免取到小图）
         assertTrue(track.coverUrl!!.endsWith("b.jpg"))
+    }
+
+    @Test
+    fun miguBoardKeepsWebpWhenThatIsTheOnlyImage() {
+        val text = """
+            {"code":"000000","columnInfo":{"contents":[
+              {"objectInfo":{"songId":"1","copyrightId":"2","songName":"a","singer":"b",
+               "length":"00:03:09",
+               "albumImgs":[{"img":"http://d.musicapp.migu.cn/only.webp"}]}}
+            ]}}
+        """.trimIndent()
+        val track = OnlineBoards.parseMgBoard(text).single()
+        assertEquals("https://d.musicapp.migu.cn/only.webp", track.coverUrl)
     }
 
     @Test
