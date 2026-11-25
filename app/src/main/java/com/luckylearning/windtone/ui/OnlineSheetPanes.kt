@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -23,6 +24,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed as listItemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -53,6 +55,7 @@ import com.luckylearning.windtone.data.online.BuiltInSearch
 import com.luckylearning.windtone.data.online.OnlineSonglists
 import com.luckylearning.windtone.data.online.source.OnlineTrack
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * 歌单页的 UI 状态。
@@ -63,8 +66,13 @@ import kotlinx.coroutines.launch
  *
  * 这里同时承载「已经加载过哪一档」的标记：
  * - [tagsLoadedFor]：分类列表属于哪个平台；
- * - [loadedKey]：当前 `平台|分类` 的第一页是否已载入。
+ * - [loadedKey]：当前 `平台|分类` 的第一页**已经成功取到**。
  * 两者让 `LaunchedEffect` 在返回时重跑也能立刻退出，不重置数据。
+ *
+ * ⚠️ [loadedKey] 只能在请求成功之后写。1.3.4 之前是在发请求前就写，请求一旦被
+ * `AnimatedContent` 切页取消（或等到超时），`loading` 留在 true、`loadedKey` 已经等于
+ * 当前档，effect 重跑又被短路 —— 表现就是歌单页永远停在骨架屏，怎么进出都不恢复。
+ * 现在失败/取消都不写 `loadedKey`，`loading` 由 `finally` 兜住，回来会重新请求。
  */
 internal class SonglistUiState {
     var source by mutableStateOf(OnlineSonglists.SOURCES.first())
@@ -77,8 +85,23 @@ internal class SonglistUiState {
     var loading by mutableStateOf(true)
     var loadingMore by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
+    /** 这次空态是「请求失败/超时」而不是「这一类真没歌单」，决定要不要给重试按钮 */
+    var failed by mutableStateOf(false)
     var tagsLoadedFor by mutableStateOf<String?>(null)
     var loadedKey by mutableStateOf<String?>(null)
+    /** 点「重试」时 +1，让两个 effect 重跑一遍 */
+    var retryTick by mutableIntStateOf(0)
+
+    /** 清掉「已加载」标记并重来一次；分类缓存命中时不会再打网络 */
+    fun retry() {
+        tagId = ""
+        groups = emptyList()
+        tagsLoadedFor = null
+        loadedKey = null
+        failed = false
+        error = null
+        retryTick++
+    }
 }
 
 /**
@@ -100,64 +123,104 @@ internal fun SonglistPane(
 
     // 换平台：分类要重取。分类是静态的（OnlineSonglists 内有缓存），换回来不会再打网络。
     // 返回本页时 effect 会重跑一次，靠 tagsLoadedFor 直接退出，不能重新清空列表。
-    LaunchedEffect(state.source) {
+    LaunchedEffect(state.source, state.retryTick) {
         if (state.tagsLoadedFor == state.source) return@LaunchedEffect
-        state.tagsLoadedFor = state.source
+
         state.loading = true
         state.error = null
+        state.failed = false
+        // 先把上一家平台的东西清干净。tagId 若留着，下面那个 effect 会拿着
+        // 「新平台 + 旧平台的 tag」发一次注定失败的请求，白等十几秒。
+        state.tagId = ""
+        state.groups = emptyList()
         state.sheets = emptyList()
         state.page = 1
         state.hasMore = false
         state.groupIndex = 0
-        state.tagId = ""
         state.loadedKey = null
-        state.groups = OnlineSonglists.tags(state.source)
-        val first = state.groups.firstOrNull()?.tags?.firstOrNull()?.id
+
+        // 取消（用户切走）会在这里抛 CancellationException，后面几行不会执行 ——
+        // 这正是「不记已加载、回来能重来」的保证，别把 tagsLoadedFor 提前写。
+        val groups = withTimeoutOrNull(TAGS_TIMEOUT_MS) { OnlineSonglists.tags(state.source) }
+            .orEmpty()
+        state.groups = groups
+        state.tagsLoadedFor = state.source
+
+        val first = groups.firstOrNull()?.tags?.firstOrNull()?.id
         if (first != null) {
             // 赋值即触发下面那个 effect 去拉第一页，避免这里再写一份请求
             state.tagId = first
             return@LaunchedEffect
         }
+
         // 该平台没有分类（或分类接口挂了）：不传 tagId 也有一批默认歌单
-        val r = OnlineSonglists.list(state.source, "", 1)
-        state.sheets = r.items
-        state.page = r.page
-        state.hasMore = r.hasMore
-        state.loadedKey = "${state.source}|"
-        if (r.items.isEmpty()) state.error = AppStrings.s(R.string.online_sheet_empty_list)
-        state.loading = false
+        try {
+            val r = withTimeoutOrNull(LIST_TIMEOUT_MS) { OnlineSonglists.list(state.source, "", 1) }
+            if (r == null) {
+                state.failed = true
+                state.error = AppStrings.s(R.string.online_sheet_load_failed)
+            } else {
+                state.sheets = r.items
+                state.page = r.page
+                state.hasMore = r.hasMore
+                if (r.items.isEmpty()) state.error = AppStrings.s(R.string.online_sheet_empty_list)
+                // 只有真拿到才记；失败/取消留空，下次进来还能再试
+                state.loadedKey = "${state.source}|"
+            }
+        } finally {
+            state.loading = false
+        }
     }
 
     // 换分类：结果整体替换（不是追加），页码回到 1，网格回到顶部。
     // 返回本页时 loadedKey 已等于当前 key，直接退出，保留列表与滚动位置。
-    LaunchedEffect(state.source, state.tagId) {
+    LaunchedEffect(state.source, state.tagId, state.retryTick) {
         if (state.tagId.isBlank()) return@LaunchedEffect
         val key = "${state.source}|${state.tagId}"
         if (state.loadedKey == key) return@LaunchedEffect
-        state.loadedKey = key
         state.loading = true
         state.error = null
+        state.failed = false
         gridState.scrollToItem(0)
-        val r = OnlineSonglists.list(state.source, state.tagId, 1)
-        state.sheets = r.items
-        state.page = r.page
-        state.hasMore = r.hasMore
-        if (r.items.isEmpty()) state.error = AppStrings.s(R.string.online_sheet_empty_list)
-        state.loading = false
+        try {
+            val r = withTimeoutOrNull(LIST_TIMEOUT_MS) { OnlineSonglists.list(state.source, state.tagId, 1) }
+            if (r == null) {
+                state.failed = true
+                state.error = AppStrings.s(R.string.online_sheet_load_failed)
+            } else {
+                state.sheets = r.items
+                state.page = r.page
+                state.hasMore = r.hasMore
+                if (r.items.isEmpty()) state.error = AppStrings.s(R.string.online_sheet_empty_list)
+                // 成功才记这一档。以前是发请求前就写 loadedKey，
+                // 请求被取消后 effect 重跑会被它短路，页面永远停在骨架上。
+                state.loadedKey = key
+            }
+        } finally {
+            state.loading = false
+        }
     }
 
     fun loadMore() {
         if (state.loadingMore || !state.hasMore) return
         state.loadingMore = true
         scope.launch {
-            val next = state.page + 1
-            val r = OnlineSonglists.list(state.source, state.tagId, next)
-            if (r.items.isNotEmpty()) {
-                state.sheets = (state.sheets + r.items).distinctBy { it.key }
-                state.page = next
+            try {
+                val next = state.page + 1
+                val r = withTimeoutOrNull(LIST_TIMEOUT_MS) {
+                    OnlineSonglists.list(state.source, state.tagId, next)
+                }
+                if (r != null && r.items.isNotEmpty()) {
+                    state.sheets = (state.sheets + r.items).distinctBy { it.key }
+                    state.page = next
+                    state.hasMore = r.hasMore
+                } else if (r != null) {
+                    state.hasMore = false
+                }
+            } finally {
+                // 取消或超时也要把按钮恢复成可点，否则「加载更多」会永久转圈
+                state.loadingMore = false
             }
-            state.hasMore = r.hasMore && r.items.isNotEmpty()
-            state.loadingMore = false
         }
     }
 
@@ -220,6 +283,16 @@ internal fun SonglistPane(
             state.loading -> LxGridSkeleton()
             state.sheets.isEmpty() -> LxEmptyPane(
                 title = state.error ?: AppStrings.s(R.string.online_sheet_empty_list),
+                // 请求失败/超时才给重试；「这一类真没歌单」不用假装能重试
+                action = if (state.failed) {
+                    {
+                        Button(onClick = { state.retry() }) {
+                            Text(AppStrings.s(R.string.online_retry))
+                        }
+                    }
+                } else {
+                    null
+                },
             )
             else -> {
                 LazyVerticalGrid(
@@ -315,6 +388,8 @@ internal fun SheetDetailPane(
     /** 已经收进我的列表：按钮换文案并禁用，避免再点一次建出第二条同名列表 */
     saved: Boolean = false,
     favoriteKeys: Set<String> = emptySet(),
+    /** 由 `OnlinePage` 顶层持有：返回列表再进来时停在上次看的那一首 */
+    listState: LazyListState = rememberLazyListState(),
     onPlay: (Int) -> Unit,
     onFavorite: (OnlineTrack) -> Unit,
     onSaveToList: () -> Unit,
@@ -326,6 +401,7 @@ internal fun SheetDetailPane(
         )
         else -> LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 12.dp),
+            state = listState,
             verticalArrangement = Arrangement.spacedBy(6.dp),
             contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
         ) {
@@ -414,6 +490,13 @@ private fun SheetCoverLarge(sheet: OnlineSonglists.Sheet) {
         initialSize = 30.sp,
     )
 }
+
+/**
+ * 分类 / 歌单列表的单次等待上限。比 OkHttp 自身的 readTimeout(20s) 短，
+ * 先让界面落到「失败了，点重试」而不是干等转圈。
+ */
+private const val TAGS_TIMEOUT_MS = 10_000L
+private const val LIST_TIMEOUT_MS = 12_000L
 
 /** 150dp 卡片在 xxhdpi 上约 450px；取 320 兼顾清晰度与内存 */
 private const val SHEET_COVER_PX = 320

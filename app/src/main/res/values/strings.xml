@@ -2210,6 +2210,8 @@
     <string name="online_board_empty">这个榜单暂时没有取到歌曲，换一个试试。</string>
     <string name="online_sheet_empty_list">这个分类下暂时没有歌单，换一个分类试试。</string>
     <string name="online_sheet_empty">这个歌单暂时没有可播放的歌曲。</string>
+    <string name="online_sheet_load_failed">歌单没有加载出来，可能是网络或接口暂时不通。</string>
+    <string name="online_retry">重试</string>
     <string name="online_sheet_song_count">%1$d 首</string>
     <string name="online_sheet_default_name">在线歌单</string>
     <string name="online_save_to_list">收进我的列表</string>

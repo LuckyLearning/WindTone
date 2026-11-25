@@ -22,10 +22,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -189,6 +191,17 @@ internal fun OnlinePage(
     val songlistState = remember { SonglistUiState() }
     val sheetGridState = rememberLazyGridState()
 
+    // 榜单列表 / 榜单详情 / 歌单详情的滚动位置同理：AnimatedContent 切子页会把内容移出组合，
+    // 状态留在里面就等于每次都从第一行开始。三个都提到这一层。
+    val boardListState = rememberLazyListState()
+    val boardDetailState = rememberLazyListState()
+    val sheetDetailState = rememberLazyListState()
+
+    // 已经取过的榜单 / 歌单。返回列表再点同一项时复用结果，不重拉、不跳回顶部；
+    // 换一项才清空并从头加载。
+    var boardKey by remember { mutableStateOf<String?>(null) }
+    var sheetKey by remember { mutableStateOf<String?>(null) }
+
     // 子页和上一个分区都由外面的栈决定。本页只在还能退的时候消费返回，
     // 并且让位给抽屉 / 设置 / 播放页（backEnabled）。根上不消费，Activity 回到桌面。
     BackHandler(enabled = backEnabled && !playerExpanded && canPop) { onBack() }
@@ -305,32 +318,52 @@ internal fun OnlinePage(
     fun loadBoard(board: OnlineBoards.Board) {
         openBoard = board
         onOpenDetail(LxDetail.BOARD)
+        val key = "${board.source}:${board.id}"
+        // 刚看过同一榜单（返回列表后又点回来）：列表和滚动位置都还在，直接复用，
+        // 不再重拉第一页、也不跳回顶部。
+        if (boardKey == key && boardTracks.isNotEmpty()) return
+        boardKey = key
         boardTracks = emptyList()
         boardError = null
         boardLoading = true
         scope.launch {
-            val r = runCatching { OnlineBoards.fetch(board) }.getOrNull()
-            boardTracks = r?.tracks.orEmpty()
-            boardError = r?.error ?: AppStrings.s(R.string.online_board_empty)
-            boardLoading = false
+            // 换榜单要从头看。这个协程会等列表重新出现再落位，不挡下面的请求。
+            launch { boardDetailState.scrollToItem(0) }
+            try {
+                val r = runCatching { OnlineBoards.fetch(board) }.getOrNull()
+                boardTracks = r?.tracks.orEmpty()
+                boardError = r?.error ?: AppStrings.s(R.string.online_board_empty)
+            } finally {
+                boardLoading = false
+            }
         }
     }
 
     fun loadSheet(sheet: OnlineSonglists.Sheet) {
         openSheet = sheet
         onOpenDetail(LxDetail.SHEET)
-        sheetTracks = emptyList()
-        sheetError = null
-        sheetLoading = true
-        sheetSaved = false
+        val key = "${sheet.source}:${sheet.id}"
+        val cached = sheetKey == key && sheetTracks.isNotEmpty()
+        if (!cached) {
+            sheetKey = key
+            sheetTracks = emptyList()
+            sheetError = null
+            sheetLoading = true
+        }
         scope.launch {
+            // 收藏状态每次都重查：用户可能刚在「我的列表」里删掉了它
             sheetSaved = withContext(Dispatchers.IO) { OnlineLists.isSaved(context, sheet) }
-            val r = OnlineSonglists.detail(sheet.source, sheet.id)
-            sheetTracks = r.tracks
-            sheetError = if (r.tracks.isEmpty()) {
-                AppStrings.s(R.string.online_sheet_empty)
-            } else null
-            sheetLoading = false
+            if (cached) return@launch
+            launch { sheetDetailState.scrollToItem(0) }
+            try {
+                val r = OnlineSonglists.detail(sheet.source, sheet.id)
+                sheetTracks = r.tracks
+                sheetError = if (r.tracks.isEmpty()) {
+                    AppStrings.s(R.string.online_sheet_empty)
+                } else null
+            } finally {
+                sheetLoading = false
+            }
         }
     }
 
@@ -639,6 +672,7 @@ internal fun OnlinePage(
                             saving = sheetSaving,
                             saved = sheetSaved,
                             favoriteKeys = favoriteKeys,
+                            listState = sheetDetailState,
                             onPlay = { playTracks(sheetTracks, it) },
                             onFavorite = { toggleFavorite(it) },
                             onSaveToList = { saveSheetToList(sheet) },
@@ -677,11 +711,12 @@ internal fun OnlinePage(
                             loading = boardLoading,
                             error = boardError,
                             favoriteKeys = favoriteKeys,
+                            listState = boardDetailState,
                             onPlay = { playTracks(boardTracks, it) },
                             onFavorite = { toggleFavorite(it) },
                         )
                     } else {
-                        BoardsList(onOpen = { loadBoard(it) })
+                        BoardsList(listState = boardListState, onOpen = { loadBoard(it) })
                     }
                 }
                 LxSection.SEARCH -> SearchBody(
@@ -825,9 +860,14 @@ private fun SearchBody(
 
 /** 榜单列表：按平台分组。卡片带主色小标记，不再是三列纯文字按钮。 */
 @Composable
-private fun BoardsList(onOpen: (OnlineBoards.Board) -> Unit) {
+private fun BoardsList(
+    /** 由 `OnlinePage` 顶层持有：点进某个榜单再返回，停在上次看到的分组 */
+    listState: LazyListState = rememberLazyListState(),
+    onOpen: (OnlineBoards.Board) -> Unit,
+) {
     LazyColumn(
         Modifier.fillMaxSize().padding(horizontal = 12.dp),
+        state = listState,
         verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp),
     ) {
@@ -888,6 +928,7 @@ private fun BoardDetail(
     loading: Boolean,
     error: String?,
     favoriteKeys: Set<String> = emptySet(),
+    listState: LazyListState = rememberLazyListState(),
     onPlay: (Int) -> Unit,
     onFavorite: (OnlineTrack) -> Unit,
 ) {
@@ -896,6 +937,7 @@ private fun BoardDetail(
         tracks.isEmpty() -> LxEmptyPane(title = error ?: AppStrings.s(R.string.online_board_empty))
         else -> LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 12.dp),
+            state = listState,
             verticalArrangement = Arrangement.spacedBy(6.dp),
             contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
         ) {
