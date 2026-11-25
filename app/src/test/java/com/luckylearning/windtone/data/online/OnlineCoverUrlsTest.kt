@@ -78,6 +78,25 @@ class OnlineCoverUrlsTest {
     }
 
     @Test
+    fun kuwoRidIsExtractedForSheetCovers() {
+        // 歌单封面只给 pic.web 解析端点，没有 OnlineTrack.songId 可借，必须能从 URL 自取 rid
+        assertEquals(
+            "228908",
+            OnlineCoverUrls.kuwoRid(
+                "http://artistpicserver.kuwo.cn/pic.web?corp=kuwo&type=rid_pic&pictype=500&size=500&rid=228908",
+            ),
+        )
+        assertEquals(
+            "42",
+            OnlineCoverUrls.kuwoRid("https://artistpicserver.kuwo.cn/pic.web?rid=42&x=1"),
+        )
+        assertNull(OnlineCoverUrls.kuwoRid("https://img1.kuwo.cn/a.jpg"))
+        assertNull(OnlineCoverUrls.kuwoRid("https://artistpicserver.kuwo.cn/pic.web?rid="))
+        assertNull(OnlineCoverUrls.kuwoRid("https://artistpicserver.kuwo.cn/pic.web?rid=abc"))
+        assertNull(OnlineCoverUrls.kuwoRid(null))
+    }
+
+    @Test
     fun webpMagicCountsAsAnImage() {
         val bytes = ByteArray(16)
         "RIFF".toByteArray().copyInto(bytes, 0)

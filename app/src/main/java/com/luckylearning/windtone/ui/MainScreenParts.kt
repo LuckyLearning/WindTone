@@ -69,6 +69,8 @@ internal fun PlayerPane(
     onExportLyrics: ((android.net.Uri) -> Unit)?,
     /** 悬浮窗样式速选面板「更多设置…」：打开设置页（v1.1.78） */
     onOpenSettings: () -> Unit = {},
+    /** 播放页之上是否还有覆盖层（设置等）；有则播放页不消费返回 */
+    backEnabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier.fillMaxSize()) {
@@ -115,6 +117,7 @@ internal fun PlayerPane(
             loadSongFacts = playerVm::loadSongFacts,
             loadSongAudioInfo = playerVm::loadSongAudioInfo,
             pane = onExportLyrics == null,
+            backEnabled = backEnabled,
         )
     }
 }

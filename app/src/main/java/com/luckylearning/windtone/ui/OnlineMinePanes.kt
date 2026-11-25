@@ -1,30 +1,24 @@
 package com.luckylearning.windtone.ui
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -47,35 +41,29 @@ internal fun MyListsPane(
     onOpen: (OnlineLists.Summary) -> Unit,
 ) {
     when {
-        loading && lists.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
-        }
-        lists.isEmpty() -> EmptyHint(stringResource(R.string.online_mine_empty))
+        // 骨架保持列表形状：加载完成时行原地出现，不再「空白 → 一堆」跳一下
+        loading && lists.isEmpty() -> LxListSkeleton(rows = 8)
+        lists.isEmpty() -> LxEmptyPane(title = stringResource(R.string.online_mine_empty))
         else -> LazyColumn(
-            Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            Modifier.fillMaxSize().padding(horizontal = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
         ) {
             items(lists, key = { it.id }) { list ->
                 MyListRow(list = list, onClick = { onOpen(list) })
             }
-            item { Spacer(Modifier.height(24.dp)) }
         }
     }
 }
 
 @Composable
 private fun MyListRow(list: OnlineLists.Summary, onClick: () -> Unit) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        shape = MaterialTheme.shapes.medium,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 10.dp, vertical = 4.dp)
-            .clip(MaterialTheme.shapes.medium)
-            .clickable(onClick = onClick),
+    LxCard(
+        onClick = onClick,
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(10.dp)) {
-            PlaylistCoverArt(songs = list.cover, size = 52.dp, cornerRadius = 12.dp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            PlaylistCoverArt(songs = list.cover, size = 56.dp, cornerRadius = 12.dp)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
@@ -85,14 +73,15 @@ private fun MyListRow(list: OnlineLists.Summary, onClick: () -> Unit) {
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                Spacer(Modifier.height(2.dp))
                 Text(
                     pluralStringResource(R.plurals.lib_song_count, list.count, list.count),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Spacer(Modifier.width(8.dp))
-            CountPill("${list.count}")
+            LxCountPill(list.count)
         }
     }
 }
@@ -107,13 +96,12 @@ internal fun MyListDetailPane(
     onFavorite: (Song) -> Unit,
 ) {
     when {
-        loading && songs.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
-        }
-        songs.isEmpty() -> EmptyHint(stringResource(R.string.online_mine_empty))
+        loading && songs.isEmpty() -> LxListSkeleton(rows = 8)
+        songs.isEmpty() -> LxEmptyPane(title = stringResource(R.string.online_mine_empty))
         else -> LazyColumn(
-            Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            Modifier.fillMaxSize().padding(horizontal = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
         ) {
             items(songs, key = { it.stableKey }) { song ->
                 val index = songs.indexOfFirst { it.stableKey == song.stableKey }
@@ -124,7 +112,6 @@ internal fun MyListDetailPane(
                     onFavorite = { onFavorite(song) },
                 )
             }
-            item { Spacer(Modifier.height(24.dp)) }
         }
     }
 }
@@ -136,20 +123,12 @@ private fun MySongRow(
     onPlay: () -> Unit,
     onFavorite: () -> Unit,
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        shape = RoundedCornerShape(14.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 10.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .clickable(onClick = onPlay),
+    LxCard(
+        onClick = onPlay,
+        contentPadding = PaddingValues(start = 10.dp, end = 2.dp, top = 8.dp, bottom = 8.dp),
     ) {
-        Row(
-            Modifier.fillMaxWidth().padding(start = 10.dp, end = 2.dp, top = 8.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            CoverArt(song = song, size = 44.dp, cornerRadius = 10.dp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CoverArt(song = song, size = 48.dp, cornerRadius = 12.dp)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(
@@ -158,11 +137,12 @@ private fun MySongRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                Spacer(Modifier.height(2.dp))
                 Text(
                     listOf(song.artistOrUnknown, formatDuration(song.durationMs))
                         .filter { it.isNotBlank() && it != "--:--" }
                         .joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,

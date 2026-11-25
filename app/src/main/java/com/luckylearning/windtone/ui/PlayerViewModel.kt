@@ -119,6 +119,9 @@ class PlayerViewModel(private val app: Application) :
         return info
     }
 
+    /** 播放页展开 / 再次进入时的歌词兜底：只在当前曲没有歌词时重载一次 */
+    fun ensureLyrics() = engine.ensureLyrics()
+
     /** 把当前歌词导出成 LRC 文件（带翻译行的双语歌词会同时导出） */
     fun exportLyrics(target: Uri) {
         viewModelScope.launch {

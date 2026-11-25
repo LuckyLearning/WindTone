@@ -11,6 +11,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,7 +22,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -179,6 +183,11 @@ internal fun OnlinePage(
     var myListSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     var myListLoading by remember { mutableStateOf(false) }
     var confirmDeleteList by remember { mutableStateOf(false) }
+
+    // 歌单页的数据与滚动位置必须放在这一层：AnimatedContent 打开歌单详情时会把
+    // SonglistPane 移出组合，状态若留在它内部，返回时整页重建 —— 重新拉第一页、回到顶部。
+    val songlistState = remember { SonglistUiState() }
+    val sheetGridState = rememberLazyGridState()
 
     // 子页和上一个分区都由外面的栈决定。本页只在还能退的时候消费返回，
     // 并且让位给抽屉 / 设置 / 播放页（backEnabled）。根上不消费，Activity 回到桌面。
@@ -444,19 +453,23 @@ internal fun OnlinePage(
             .fillMaxSize()
             // 与曲库、云盘同一套：内容区右滑拉出抽屉。左缘留给系统返回。
             // 车机左导航常驻，不接管这套手势（车机触摸板误触率高）。
-            .then(if (sideNav) Modifier else Modifier.pointerInput(onOpenDrawer) {
-                var dragged = 0f
-                val threshold = 72.dp.toPx()
-                detectHorizontalDragGestures(
-                    onDragStart = { dragged = 0f },
-                    onDragCancel = { dragged = 0f },
-                    onDragEnd = {
-                        if (dragged >= threshold) onOpenDrawer()
-                        dragged = 0f
-                    },
-                    onHorizontalDrag = { _, amount -> dragged += amount },
-                )
-            }),
+            // 设置 / 播放页盖住本页时也不接管，否则覆盖层上的横向滑动会穿透到底层开抽屉。
+            .then(
+                if (sideNav) Modifier else Modifier.pointerInput(onOpenDrawer, backEnabled, playerExpanded) {
+                    if (!backEnabled || playerExpanded) return@pointerInput
+                    var dragged = 0f
+                    val threshold = 72.dp.toPx()
+                    detectHorizontalDragGestures(
+                        onDragStart = { dragged = 0f },
+                        onDragCancel = { dragged = 0f },
+                        onDragEnd = {
+                            if (dragged >= threshold) onOpenDrawer()
+                            dragged = 0f
+                        },
+                        onHorizontalDrag = { _, amount -> dragged += amount },
+                    )
+                },
+            ),
     ) {
         if (confirmDeleteList) {
             AlertDialog(
@@ -631,7 +644,11 @@ internal fun OnlinePage(
                             onSaveToList = { saveSheetToList(sheet) },
                         )
                     } else {
-                        SonglistPane(onOpen = { loadSheet(it) })
+                        SonglistPane(
+                            state = songlistState,
+                            gridState = sheetGridState,
+                            onOpen = { loadSheet(it) },
+                        )
                     }
                 }
                 LxSection.MINE -> {
@@ -655,6 +672,7 @@ internal fun OnlinePage(
                 LxSection.BOARDS -> {
                     if (target.detail == LxDetail.BOARD && openBoard != null) {
                         BoardDetail(
+                            title = openBoard?.name.orEmpty(),
                             tracks = boardTracks,
                             loading = boardLoading,
                             error = boardError,
@@ -705,25 +723,33 @@ private fun SearchBody(
     onFavorite: (OnlineTrack) -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        // 搜索区做成一张卡：输入框与按钮同属一个容器，避免两个控件各自为政
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
-            OutlinedTextField(
-                value = keyword,
-                onValueChange = onKeyword,
-                placeholder = { Text(stringResource(R.string.online_search_hint)) },
-                singleLine = true,
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.width(8.dp))
-            Button(
-                onClick = onSearch,
-                enabled = !searching,
-                shape = RoundedCornerShape(16.dp),
+            Row(
+                Modifier.padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(if (searching) stringResource(R.string.online_searching) else stringResource(R.string.online_search))
+                OutlinedTextField(
+                    value = keyword,
+                    onValueChange = onKeyword,
+                    placeholder = { Text(stringResource(R.string.online_search_hint)) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(
+                    onClick = onSearch,
+                    enabled = !searching,
+                    shape = RoundedCornerShape(14.dp),
+                    contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
+                ) {
+                    Text(if (searching) stringResource(R.string.online_searching) else stringResource(R.string.online_search))
+                }
             }
         }
         SourceFilterRow(
@@ -732,109 +758,112 @@ private fun SearchBody(
             modifier = Modifier.padding(horizontal = 12.dp),
         )
         Box(Modifier.weight(1f).fillMaxWidth()) {
-        when {
-            searching -> LoadingHint(stringResource(R.string.online_searching))
-            !searched -> EmptyHint(stringResource(R.string.online_idle_hint))
-            results.all { it.tracks.isEmpty() } -> {
-                val errors = results.mapNotNull { it.error }
-                if (errors.isNotEmpty() && errors.size == results.size) {
-                    EmptyHint(
-                        stringResource(R.string.online_all_sources_failed) + "\n" + errors.joinToString("\n"),
-                    )
-                } else {
-                    EmptyHint(stringResource(R.string.online_no_result))
+            when {
+                // 搜索是「等一屏结果」，用骨架保持列表的形状，结果回来时不会整页跳一下
+                searching -> LxListSkeleton(rows = 6)
+                !searched -> LxEmptyPane(title = stringResource(R.string.online_idle_hint))
+                results.all { it.tracks.isEmpty() } -> {
+                    val errors = results.mapNotNull { it.error }
+                    if (errors.isNotEmpty() && errors.size == results.size) {
+                        LxEmptyPane(
+                            title = stringResource(R.string.online_all_sources_failed),
+                            hint = errors.joinToString("\n"),
+                        )
+                    } else {
+                        LxEmptyPane(title = stringResource(R.string.online_no_result))
+                    }
                 }
-            }
-            else -> LazyColumn(
-                Modifier.fillMaxSize().padding(horizontal = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                results.forEach { group ->
-                    if (group.tracks.isEmpty()) return@forEach
-                    item(key = "head_${group.source}") {
-                        Row(
-                            Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp, start = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                BuiltInSearch.SOURCE_NAMES[group.source] ?: group.source,
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                stringResource(R.string.online_group_count, group.tracks.size),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                else -> LazyColumn(
+                    Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    contentPadding = PaddingValues(bottom = 24.dp),
+                ) {
+                    results.forEach { group ->
+                        if (group.tracks.isEmpty()) return@forEach
+                        item(key = "head_${group.source}") {
+                            LxSectionTitle(
+                                text = BuiltInSearch.SOURCE_NAMES[group.source] ?: group.source,
+                                count = group.tracks.size,
                             )
                         }
-                    }
-                    items(group.tracks, key = { "${group.source}:${it.stableKey}" }) { track ->
-                        val index = group.tracks.indexOfFirst { it.stableKey == track.stableKey }
-                        TrackRow(
-                            track = track,
-                            favorite = track.stableKey in favoriteKeys,
-                            onPlay = { onPlay(group.tracks, index) },
-                            onFavorite = { onFavorite(track) },
-                        )
-                    }
-                    item(key = "more_${group.source}") {
-                        val loading = loadingMore[group.source] == true
-                        Row(
-                            Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.Center,
-                        ) {
-                            TextButton(onClick = { onLoadMore(group) }, enabled = !loading) {
-                                Text(
-                                    if (loading) stringResource(R.string.online_searching)
-                                    else stringResource(R.string.online_load_more),
-                                )
+                        itemsIndexed(
+                            group.tracks,
+                            key = { _, track -> "${group.source}:${track.stableKey}" },
+                        ) { index, track ->
+                            TrackRow(
+                                track = track,
+                                favorite = track.stableKey in favoriteKeys,
+                                onPlay = { onPlay(group.tracks, index) },
+                                onFavorite = { onFavorite(track) },
+                                staggerMs = (index % 8) * 30L,
+                            )
+                        }
+                        item(key = "more_${group.source}") {
+                            val loading = loadingMore[group.source] == true
+                            Row(
+                                Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.Center,
+                            ) {
+                                TextButton(onClick = { onLoadMore(group) }, enabled = !loading) {
+                                    if (loading) {
+                                        CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                                        Spacer(Modifier.width(8.dp))
+                                    }
+                                    Text(
+                                        if (loading) stringResource(R.string.online_searching)
+                                        else stringResource(R.string.online_load_more),
+                                    )
+                                }
                             }
                         }
                     }
                 }
-                item { Spacer(Modifier.height(24.dp)) }
             }
-        }
         }
     }
 }
 
-/** 榜单列表：按平台分组。卡片而不是一排挤在一起的线框按钮。 */
+/** 榜单列表：按平台分组。卡片带主色小标记，不再是三列纯文字按钮。 */
 @Composable
 private fun BoardsList(onOpen: (OnlineBoards.Board) -> Unit) {
     LazyColumn(
         Modifier.fillMaxSize().padding(horizontal = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp),
     ) {
         OnlineBoards.GROUPS.forEach { group ->
             item(key = "g_${group.source}") {
-                Text(
-                    group.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(top = 12.dp, bottom = 2.dp, start = 4.dp),
-                )
+                LxSectionTitle(group.name)
             }
             group.boards.chunked(3).forEachIndexed { rowIndex, row ->
                 item(key = "r_${group.source}_$rowIndex") {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         row.forEach { board ->
                             Surface(
-                                shape = RoundedCornerShape(14.dp),
+                                shape = RoundedCornerShape(16.dp),
                                 color = MaterialTheme.colorScheme.surfaceContainerLow,
                                 modifier = Modifier
                                     .weight(1f)
-                                    .heightIn(min = 48.dp)
+                                    .heightIn(min = 64.dp)
+                                    .clip(RoundedCornerShape(16.dp))
                                     .clickable { onOpen(board) },
                             ) {
-                                Box(
-                                    Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
-                                    contentAlignment = Alignment.Center,
+                                Column(
+                                    Modifier.padding(horizontal = 10.dp, vertical = 12.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center,
                                 ) {
+                                    Box(
+                                        Modifier
+                                            .size(width = 18.dp, height = 3.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.primary),
+                                    )
+                                    Spacer(Modifier.height(8.dp))
                                     Text(
                                         board.name,
                                         style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis,
                                         textAlign = TextAlign.Center,
@@ -848,13 +877,13 @@ private fun BoardsList(onOpen: (OnlineBoards.Board) -> Unit) {
                 }
             }
         }
-        item { Spacer(Modifier.height(24.dp)) }
     }
 }
 
-/** 榜单详情：与搜索结果同一套行样式，点一首从该首开始连续播放整个榜单 */
+/** 榜单详情：头部信息 + 与搜索结果同一套行样式，点一首从该首开始连续播放整个榜单 */
 @Composable
 private fun BoardDetail(
+    title: String,
     tracks: List<OnlineTrack>,
     loading: Boolean,
     error: String?,
@@ -863,22 +892,45 @@ private fun BoardDetail(
     onFavorite: (OnlineTrack) -> Unit,
 ) {
     when {
-        loading -> LoadingHint(stringResource(R.string.online_loading))
-        tracks.isEmpty() -> EmptyHint(error ?: AppStrings.s(R.string.online_board_empty))
+        loading -> LxListSkeleton(rows = 8)
+        tracks.isEmpty() -> LxEmptyPane(title = error ?: AppStrings.s(R.string.online_board_empty))
         else -> LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
         ) {
-            items(tracks, key = { it.stableKey }) { track ->
-                val index = tracks.indexOfFirst { it.stableKey == track.stableKey }
+            item(key = "head") {
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(Modifier.padding(14.dp)) {
+                        Text(
+                            title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            AppStrings.s(R.string.online_sheet_song_count, tracks.size),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            itemsIndexed(tracks, key = { _, track -> track.stableKey }) { index, track ->
                 TrackRow(
                     track = track,
                     favorite = track.stableKey in favoriteKeys,
                     onPlay = { onPlay(index) },
                     onFavorite = { onFavorite(track) },
+                    staggerMs = (index % 8) * 30L,
                 )
             }
-            item { Spacer(Modifier.height(24.dp)) }
         }
     }
 }
@@ -891,9 +943,12 @@ private fun SourceFilterRow(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        val options = listOf("all") + BuiltInSearch.SOURCES
-        options.forEach { id ->
+    val options = listOf("all") + BuiltInSearch.SOURCES
+    LazyRow(
+        modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        items(options) { id ->
             FilterChip(
                 selected = selected == id,
                 onClick = { onSelect(id) },
@@ -928,47 +983,56 @@ private fun SourceStatusBanner(
         Surface(
             color = MaterialTheme.colorScheme.errorContainer,
             shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .clickable(onClick = onManage),
         ) {
-            Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
                 Text(
                     stringResource(R.string.online_no_script_hint),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onErrorContainer,
                 )
-                TextButton(onClick = onManage) {
-                    Text(stringResource(R.string.online_open_sources))
-                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    stringResource(R.string.online_open_sources),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
             }
         }
         return
     }
-    Text(
-        stringResource(R.string.online_loaded_sources, report.sources.size),
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-    )
-    if (report.errors.isNotEmpty()) {
-        Text(
-            stringResource(R.string.online_source_errors, report.errors.joinToString("; ")),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.error,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
-        )
-    }
-}
-
-@Composable
-private fun LoadingHint(text: String) {
-    Column(
-        Modifier.fillMaxSize().padding(32.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
+    // 有音源时不再占一整行：一个小圆点 + 数量，长列表页顶部保持干净
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        CircularProgressIndicator()
-        Spacer(Modifier.height(12.dp))
-        Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Box(
+            Modifier
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            stringResource(R.string.online_loaded_sources, report.sources.size),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
+        if (report.errors.isNotEmpty()) {
+            Spacer(Modifier.width(8.dp))
+            Text(
+                stringResource(R.string.online_source_errors, report.errors.joinToString("; ")),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
@@ -1006,6 +1070,8 @@ internal fun TrackRow(
     onFavorite: () -> Unit,
     /** 已收藏：心形实心 + 主色。以前只有在长按菜单里能收藏、行内没有任何标记，看起来「点了没变」 */
     favorite: Boolean = false,
+    /** 首屏错峰（毫秒）：避免同一帧为整屏行同时发起封面请求 */
+    staggerMs: Long = 0L,
 ) {
     var menu by remember { mutableStateOf(false) }
     // 列表标签以「这份音源真能给的最高档」为准；播过之后换成实际档位（补链完成会 +1 计数）
@@ -1014,10 +1080,10 @@ internal fun TrackRow(
     Box {
         Surface(
             color = MaterialTheme.colorScheme.surfaceContainerLow,
-            shape = RoundedCornerShape(14.dp),
+            shape = RoundedCornerShape(16.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
+                .clip(RoundedCornerShape(16.dp))
                 .combinedClickable(onClick = onPlay, onLongClick = { menu = true }),
         ) {
         Row(
@@ -1026,7 +1092,14 @@ internal fun TrackRow(
                 .padding(start = 10.dp, end = 2.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TrackCover(track)
+            LxTrackCover(
+                track = track,
+                targetPx = COVER_PX,
+                modifier = Modifier.size(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                initialSize = 16.sp,
+                staggerMs = staggerMs,
+            )
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(
@@ -1081,64 +1154,6 @@ internal fun TrackRow(
     }
 }
 
-/** 与曲库行同一档：48dp、12dp 圆角。没有图时用同一套首字渐变，不再是一块灰底音符。 */
-@Composable
-private fun TrackCover(track: OnlineTrack) {
-    val context = LocalContext.current
-    var bitmap by remember(track.stableKey) { mutableStateOf<Bitmap?>(null) }
-    LaunchedEffect(track.stableKey) {
-        bitmap = loadArtworkRetry { OnlineCover.thumb(context, track, COVER_PX) }
-    }
-    val shape = RoundedCornerShape(12.dp)
-    Box(
-        Modifier
-            .size(48.dp)
-            .clip(shape)
-            .background(AppVisual.coverBrush(track.stableKey)),
-        contentAlignment = Alignment.Center,
-    ) {
-        val bmp = bitmap
-        if (bmp != null) {
-            val image = remember(bmp) { bmp.asImageBitmap() }
-            androidx.compose.foundation.Image(
-                bitmap = image,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
-        } else {
-            Text(
-                AppVisual.coverInitial(track.title),
-                color = Color.White,
-                fontSize = 16.sp,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-            )
-        }
-    }
-}
-
-/**
- * 列表滑走会取消这次加载。CancellationException 必须往外抛，否则被吞掉后
- * 这一行会停在占位上，即使重新进入组合也不会再要图。
- * 失败再试两次：首屏并发高时，排在后面的请求经常第一次超时。
- */
-private suspend fun loadArtworkRetry(block: suspend () -> Bitmap?): Bitmap? {
-    var attempt = 0
-    while (true) {
-        val bmp = try {
-            block()
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            null
-        }
-        if (bmp != null) return bmp
-        if (attempt >= 2) return null
-        attempt++
-        delay(800L * attempt)
-    }
-}
-
 /**
  * 音源管理：导入 / 启停 / 排序 / 「某平台用哪份脚本」。
  *
@@ -1165,87 +1180,172 @@ private fun SourceManagerPage(
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-                Text(
-                    stringResource(R.string.online_source_loaded, report.sources.size),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                if (report.errors.isNotEmpty()) {
+        // 概览：加载结果 + 隐私说明 + 重新加载
+        LxCard(contentPadding = PaddingValues(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
                     Text(
-                        stringResource(R.string.online_source_errors, report.errors.joinToString("; ")),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    stringResource(R.string.online_source_privacy),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    label = { Text(stringResource(R.string.online_source_url_hint)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                )
-                Row {
-                    TextButton(onClick = { onImport(text, true) }) {
-                        Text(stringResource(R.string.online_import_url))
-                    }
-                    TextButton(onClick = { onImport(text, false) }) {
-                        Text(stringResource(R.string.online_import_code))
-                    }
-                    TextButton(onClick = onReload) { Text(stringResource(R.string.online_reload)) }
-                }
-
-                if (choices.isNotEmpty()) {
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        stringResource(R.string.online_source_pick_title),
+                        stringResource(R.string.online_source_loaded, report.sources.size),
                         style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                     )
+                    Spacer(Modifier.height(2.dp))
                     Text(
-                        stringResource(R.string.online_source_pick_hint),
+                        stringResource(R.string.online_source_privacy),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    choices.forEach { choice ->
-                        PlatformSourceRow(choice = choice, onChoose = onChooseSource)
-                    }
                 }
+                TextButton(
+                    onClick = onReload,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                ) {
+                    Text(stringResource(R.string.online_reload))
+                }
+            }
+            if (report.errors.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    stringResource(R.string.online_source_errors, report.errors.joinToString("; ")),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
 
-                Spacer(Modifier.height(8.dp))
-                scripts.forEachIndexed { index, s ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+        // 导入：输入框与两个入口合在一张卡里
+        LxCard(contentPadding = PaddingValues(14.dp)) {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text(stringResource(R.string.online_source_url_hint)) },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2,
+                shape = RoundedCornerShape(12.dp),
+            )
+            Spacer(Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(
+                    onClick = { onImport(text, true) },
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                ) {
+                    Text(stringResource(R.string.online_import_url))
+                }
+                TextButton(
+                    onClick = { onImport(text, false) },
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                ) {
+                    Text(stringResource(R.string.online_import_code))
+                }
+            }
+        }
+
+        if (choices.isNotEmpty()) {
+            LxSectionTitle(stringResource(R.string.online_source_pick_title))
+            LxCard(contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)) {
+                Text(
+                    stringResource(R.string.online_source_pick_hint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(4.dp))
+                choices.forEach { choice ->
+                    PlatformSourceRow(choice = choice, onChoose = onChooseSource)
+                }
+            }
+        }
+
+        LxSectionTitle(
+            stringResource(R.string.online_scripts_title),
+            count = scripts.size,
+        )
+        if (scripts.isEmpty()) {
+            LxCard(contentPadding = PaddingValues(14.dp)) {
+                Text(
+                    stringResource(R.string.online_no_script_hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            LxCard(contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)) {
+                scripts.forEachIndexed { index, script ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (script.enabled) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+                                ),
+                        )
+                        Spacer(Modifier.width(8.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(s.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
-                                if (s.enabled) stringResource(R.string.online_source_enabled)
+                                script.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                if (script.enabled) stringResource(R.string.online_source_enabled)
                                 else stringResource(R.string.online_source_disabled),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         // 顺序即优先级（自动模式下先试上面的）；只有停用的脚本也不影响顺序语义
-                        TextButton(enabled = index > 0, onClick = { onMove(s, -1) }) {
-                            Text(stringResource(R.string.move_up))
+                        TextButton(
+                            enabled = index > 0,
+                            onClick = { onMove(script, -1) },
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
+                        ) {
+                            Text(stringResource(R.string.move_up), style = MaterialTheme.typography.labelSmall)
                         }
-                        TextButton(enabled = index < scripts.lastIndex, onClick = { onMove(s, 1) }) {
-                            Text(stringResource(R.string.move_down))
+                        TextButton(
+                            enabled = index < scripts.lastIndex,
+                            onClick = { onMove(script, 1) },
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
+                        ) {
+                            Text(stringResource(R.string.move_down), style = MaterialTheme.typography.labelSmall)
                         }
-                        TextButton(onClick = { onToggle(s) }) {
-                            Text(if (s.enabled) stringResource(R.string.off) else stringResource(R.string.on))
+                        TextButton(
+                            onClick = { onToggle(script) },
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
+                        ) {
+                            Text(
+                                if (script.enabled) stringResource(R.string.off)
+                                else stringResource(R.string.on),
+                                style = MaterialTheme.typography.labelSmall,
+                            )
                         }
-                        IconButton(onClick = { onDelete(s) }) {
-                            Icon(Icons.Filled.Delete, stringResource(R.string.delete))
+                        IconButton(onClick = { onDelete(script) }, modifier = Modifier.size(38.dp)) {
+                            Icon(
+                                Icons.Filled.Delete,
+                                stringResource(R.string.delete),
+                                modifier = Modifier.size(20.dp),
+                            )
                         }
                     }
+                    if (index != scripts.lastIndex) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(start = 14.dp)
+                                .height(1.dp)
+                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                        )
+                    }
                 }
+            }
+        }
     }
 }
 

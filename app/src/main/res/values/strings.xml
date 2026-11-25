@@ -2193,6 +2193,7 @@
     <string name="online_quality_auto">最高可用</string>
     <string name="online_quality_downgraded">%1$s（已降级）</string>
     <string name="online_source_pick_title">音源选择</string>
+    <string name="online_scripts_title">已导入脚本</string>
     <string name="online_source_pick_hint">同一个平台导入了多份脚本时，用哪份由这里决定；第一份取不到地址会自动换下一份。</string>
     <string name="online_source_auto">自动（按顺序）</string>
     <string name="info_group_online">在线</string>

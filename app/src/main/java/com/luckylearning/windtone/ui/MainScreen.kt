@@ -470,6 +470,11 @@ fun MainScreen(
         (context as? Activity)?.moveTaskToBack(true)
     }
 
+    // 抽屉在覆盖层之下：先注册；设置 / 报告等盖在它上面时，后注册者优先把返回收走。
+    // 2026-11-25：旧顺序把抽屉写在设置之后，导致「从抽屉进设置再按返回」先收抽屉、
+    // 设置页还盖着 —— 看起来就是返回没反应。顺序按真实层级排。
+    BackHandler(enabled = !player.playerExpanded && drawerOpen) { drawerOpen = false }
+
     BackHandler(enabled = !player.playerExpanded && library.selecting) { lib.exitSelection() }
     BackHandler(enabled = !player.playerExpanded && !library.selecting && library.selectedPlaylist != null) { lib.closePlaylist() }
     BackHandler(
@@ -477,20 +482,20 @@ fun MainScreen(
             library.selectedGroup != null,
     ) { lib.closeGroup() }
 
-    BackHandler(enabled = !player.playerExpanded && showSettings) {
+    // 覆盖层（设置 / 报告 / 日历 / 重复清理 / 统计）可以在播放页之上打开
+    // （播放页悬浮窗速选里就有「更多设置」），所以它们不能因为 playerExpanded 而让位。
+    BackHandler(enabled = showSettings) {
         showSettings = false
         crashLogText = null
     }
-    BackHandler(enabled = !player.playerExpanded && showReport) { showReport = false }
-    BackHandler(enabled = !player.playerExpanded && showCalendar) { showCalendar = false }
-    BackHandler(enabled = !player.playerExpanded && showDuplicates) { showDuplicates = false }
-    BackHandler(enabled = !player.playerExpanded && showLibraryStats) { showLibraryStats = false }
+    BackHandler(enabled = showReport) { showReport = false }
+    BackHandler(enabled = showCalendar) { showCalendar = false }
+    BackHandler(enabled = showDuplicates) { showDuplicates = false }
+    BackHandler(enabled = showLibraryStats) { showLibraryStats = false }
 
-    // 抽屉在覆盖层之下：抽屉开着时若又掀开了设置，返回先收设置
-    BackHandler(enabled = !player.playerExpanded && drawerOpen) { drawerOpen = false }
-
-    // 播放页最上层：展开时返回**只**关播放页，不穿透到底下的任何一层
-    BackHandler(enabled = player.playerExpanded) { playerVm.closePlayer() }
+    // 播放页：只有它上面**没有任何覆盖层**时才消费返回，避免「关掉播放页、设置还盖着」。
+    val overlayAbovePlayer = showSettings || showReport || showCalendar || showDuplicates || showLibraryStats
+    BackHandler(enabled = player.playerExpanded && !overlayAbovePlayer) { playerVm.closePlayer() }
 
     // 一级列表的滚动位置托管：按视图各存一份，切视图（歌曲↔专辑↔歌手↔文件夹↔歌单）
     // 或进详情再返回时，列表都回到用户之前滚动到的位置。
@@ -640,7 +645,7 @@ fun MainScreen(
                     showOnline = false
                     lib.setView(it)
                 },
-                onOpenSettings = { settingsEntryPage = SettingsPage.ROOT; showSettings = true },
+                onOpenSettings = { settingsEntryPage = SettingsPage.ROOT; drawerOpen = false; showSettings = true },
                 onOpenAliyun = { showAliyun = true; showOnline = false },
                 onOpenOnline = { showOnline = true; showAliyun = false },
                 onSelectLx = { section ->
@@ -679,6 +684,8 @@ fun MainScreen(
                 var underlyingVisible by remember { mutableStateOf(true) }
                 LaunchedEffect(player.playerExpanded) {
                     if (player.playerExpanded) {
+                        // 再次进入播放页：当前曲歌词为空时补一次（在线曲首屏最容易落空）
+                        playerVm.ensureLyrics()
                         delay(PLAYER_EXPAND_ANIM_MS)
                         underlyingVisible = false
                     } else {
@@ -724,7 +731,7 @@ fun MainScreen(
                         onOpenDrawer = { drawerOpen = true },
                         // 抽屉开着时云盘页不拦返回键：返回键优先收抽屉（云盘页在子目录
                         // 里会拦返回逐级回上级，两个 BackHandler 后注册者优先，必须让位）
-                        backEnabled = !drawerOpen,
+                        backEnabled = !drawerOpen && !showSettings && !player.playerExpanded,
                         modifier = Modifier.weight(1f),
                     )
                 } else {
@@ -831,7 +838,8 @@ fun MainScreen(
                     onShowAudioInfo = { player.current?.let { infoSong = it; playerVm.inspectAudio(it) } },
                     onExportLyrics = { uri -> playerVm.exportLyrics(uri) },
                     // 悬浮窗样式速选面板的「更多设置…」：直接掀开设置覆盖层
-                    onOpenSettings = { settingsEntryPage = SettingsPage.OVERLAY; showSettings = true },
+                    onOpenSettings = { settingsEntryPage = SettingsPage.OVERLAY; drawerOpen = false; showSettings = true },
+                    backEnabled = !overlayAbovePlayer,
                 )
             }
 

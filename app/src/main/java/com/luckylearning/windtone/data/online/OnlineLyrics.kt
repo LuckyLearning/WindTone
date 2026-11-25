@@ -8,6 +8,7 @@ import com.luckylearning.windtone.lyrics.LrcParser
 import com.luckylearning.windtone.lyrics.Lyrics
 import com.luckylearning.windtone.lyrics.LyricSource
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
@@ -47,7 +48,13 @@ object OnlineLyrics {
     private const val TAG = "OnlineLyrics"
 
     /** 单次取词上限。歌词属于「有更好、没有也能播」，不值得让用户等 */
-    private const val TIMEOUT_MS = 7_000L
+    private const val TIMEOUT_MS = 6_000L
+    /** 脚本取词的独立预算：脚本是可选路径，不能挤掉内置接口 */
+    private const val SCRIPT_TIMEOUT_MS = 1_500L
+    /** 首次落空后的快速重试间隔 */
+    private const val RETRY_DELAY_MS = 400L
+    /** 刚入库时另一个 store 实例可能还没看到文件落盘 */
+    private const val TRACK_RECHECK_MS = 180L
 
     /** 内存缓存条目数。切歌来回切是常态，8 条足够覆盖一轮；只缓存**成功**结果 */
     private const val CACHE_SIZE = 8
@@ -73,14 +80,40 @@ object OnlineLyrics {
         val key = song.stableKey
         synchronized(cache) { cache[key] }?.let { return it }
 
-        val track = runCatching { OnlineLibrary(context).trackOf(key) }.getOrNull() ?: return null
-        val lyrics = withTimeoutOrNull(TIMEOUT_MS) {
-            runCatching { fetchText(track) }.getOrNull()
-        }?.let { text -> parse(text) } ?: return null
-
+        val track = trackOfWithRetry(context, key) ?: return null
+        val text = fetchTextWithRetry(track) ?: return null
+        val lyrics = parse(text)
         if (lyrics.lines.isEmpty()) return null
+
         synchronized(cache) { cache[key] = lyrics }
         return lyrics
+    }
+
+    /**
+     * 取源内原始信息。刚入库的那一瞬，另一个 [OnlineTrackStore] 实例可能还没看到
+     * 文件落盘 —— 一次 180ms 的复查比把「暂时没有」当成「永远没有」便宜得多。
+     */
+    private suspend fun trackOfWithRetry(context: Context, key: String): OnlineTrack? {
+        runCatching { OnlineLibrary(context).trackOf(key) }.getOrNull()?.let { return it }
+        delay(TRACK_RECHECK_MS)
+        return runCatching { OnlineLibrary(context).trackOf(key) }.getOrNull()
+    }
+
+    /**
+     * 取词并做一次快速重试。
+     *
+     * 首次进入 / 切歌时冷启动的 DNS、TLS、脚本加载都可能让第一次落空；
+     * 旧实现只取一次，于是 UI 停在「无歌词」，直到用户切走再切回。
+     * 成功结果仍会进 [cache]，重试不会把失败也缓存住。
+     */
+    private suspend fun fetchTextWithRetry(track: OnlineTrack): String? {
+        withTimeoutOrNull(TIMEOUT_MS) {
+            runCatching { fetchText(track) }.getOrNull()
+        }?.takeIf { it.isNotBlank() }?.let { return it }
+        delay(RETRY_DELAY_MS)
+        return withTimeoutOrNull(TIMEOUT_MS) {
+            runCatching { fetchText(track) }.getOrNull()
+        }?.takeIf { it.isNotBlank() }
     }
 
     /** 供单测与诊断使用：清空缓存（切音源、改歌词偏移调试时） */
@@ -97,7 +130,10 @@ object OnlineLyrics {
      * 不产生任何网络请求，所以这条前置检查是零成本的。
      */
     private suspend fun fetchText(track: OnlineTrack): String? {
-        OnlineResolver.lyric(track)?.let { if (it.isNotBlank()) return it }
+        // 脚本只有声明 lyric 能力时才会真执行；给它 1.5s 预算，
+        // 慢/卡不能把后面的内置接口一起拖过总超时（首次无词的另一条来路）。
+        withTimeoutOrNull(SCRIPT_TIMEOUT_MS) { OnlineResolver.lyric(track) }
+            ?.takeIf { it.isNotBlank() }?.let { return it }
         return when (track.sourceId) {
             "kw" -> getKw(track.songId)
             "kg" -> getKg(track)

@@ -1,17 +1,10 @@
 package com.luckylearning.windtone.ui
 
-import android.graphics.Bitmap
-import androidx.compose.foundation.background
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
-import com.luckylearning.windtone.ui.theme.AppVisual
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -25,16 +18,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed as listItemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -48,17 +43,43 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.online.BuiltInSearch
-import com.luckylearning.windtone.data.online.OnlineCover
 import com.luckylearning.windtone.data.online.OnlineSonglists
 import com.luckylearning.windtone.data.online.source.OnlineTrack
 import kotlinx.coroutines.launch
+
+/**
+ * 歌单页的 UI 状态。
+ *
+ * 提到 `OnlinePage` 顶层持有（而不是放在 [SonglistPane] 里面）是为了扛住
+ * `AnimatedContent` 的「进详情 → 离开组合 → 返回重建」：普通 `remember` 一离开组合就没了，
+ * 回来时 `source/tagId/sheets` 全变回初值，于是重新拉第一页、滚动位置也归零。
+ *
+ * 这里同时承载「已经加载过哪一档」的标记：
+ * - [tagsLoadedFor]：分类列表属于哪个平台；
+ * - [loadedKey]：当前 `平台|分类` 的第一页是否已载入。
+ * 两者让 `LaunchedEffect` 在返回时重跑也能立刻退出，不重置数据。
+ */
+internal class SonglistUiState {
+    var source by mutableStateOf(OnlineSonglists.SOURCES.first())
+    var groups by mutableStateOf<List<OnlineSonglists.TagGroup>>(emptyList())
+    var groupIndex by mutableIntStateOf(0)
+    var tagId by mutableStateOf("")
+    var sheets by mutableStateOf<List<OnlineSonglists.Sheet>>(emptyList())
+    var page by mutableIntStateOf(1)
+    var hasMore by mutableStateOf(false)
+    var loading by mutableStateOf(true)
+    var loadingMore by mutableStateOf(false)
+    var error by mutableStateOf<String?>(null)
+    var tagsLoadedFor by mutableStateOf<String?>(null)
+    var loadedKey by mutableStateOf<String?>(null)
+}
 
 /**
  * 「歌单」页（洛雪 `nav_songlist`）：平台 → 分类 → 歌单网格 → 歌单详情。
@@ -70,210 +91,202 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SonglistPane(
+    state: SonglistUiState,
+    gridState: LazyGridState,
     onOpen: (OnlineSonglists.Sheet) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
 
-    var source by remember { mutableStateOf(OnlineSonglists.SOURCES.first()) }
-    var groups by remember { mutableStateOf<List<OnlineSonglists.TagGroup>>(emptyList()) }
-    var groupIndex by remember { mutableIntStateOf(0) }
-    var tagId by remember { mutableStateOf("") }
-
-    var sheets by remember { mutableStateOf<List<OnlineSonglists.Sheet>>(emptyList()) }
-    var page by remember { mutableIntStateOf(1) }
-    var hasMore by remember { mutableStateOf(false) }
-    var loading by remember { mutableStateOf(true) }
-    var loadingMore by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    // 换平台：分类要重取。分类是静态的（OnlineSonglists 内有缓存），换回来不会再打网络
-    LaunchedEffect(source) {
-        loading = true
-        error = null
-        sheets = emptyList()
-        page = 1
-        hasMore = false
-        groupIndex = 0
-        tagId = ""
-        groups = OnlineSonglists.tags(source)
-        val first = groups.firstOrNull()?.tags?.firstOrNull()?.id
+    // 换平台：分类要重取。分类是静态的（OnlineSonglists 内有缓存），换回来不会再打网络。
+    // 返回本页时 effect 会重跑一次，靠 tagsLoadedFor 直接退出，不能重新清空列表。
+    LaunchedEffect(state.source) {
+        if (state.tagsLoadedFor == state.source) return@LaunchedEffect
+        state.tagsLoadedFor = state.source
+        state.loading = true
+        state.error = null
+        state.sheets = emptyList()
+        state.page = 1
+        state.hasMore = false
+        state.groupIndex = 0
+        state.tagId = ""
+        state.loadedKey = null
+        state.groups = OnlineSonglists.tags(state.source)
+        val first = state.groups.firstOrNull()?.tags?.firstOrNull()?.id
         if (first != null) {
             // 赋值即触发下面那个 effect 去拉第一页，避免这里再写一份请求
-            tagId = first
+            state.tagId = first
             return@LaunchedEffect
         }
         // 该平台没有分类（或分类接口挂了）：不传 tagId 也有一批默认歌单
-        val r = OnlineSonglists.list(source, "", 1)
-        sheets = r.items
-        page = r.page
-        hasMore = r.hasMore
-        if (r.items.isEmpty()) error = AppStrings.s(R.string.online_sheet_empty_list)
-        loading = false
+        val r = OnlineSonglists.list(state.source, "", 1)
+        state.sheets = r.items
+        state.page = r.page
+        state.hasMore = r.hasMore
+        state.loadedKey = "${state.source}|"
+        if (r.items.isEmpty()) state.error = AppStrings.s(R.string.online_sheet_empty_list)
+        state.loading = false
     }
 
-    // 换分类：结果整体替换（不是追加），页码回到 1
-    LaunchedEffect(source, tagId) {
-        if (tagId.isBlank()) return@LaunchedEffect
-        loading = true
-        error = null
-        val r = OnlineSonglists.list(source, tagId, 1)
-        sheets = r.items
-        page = r.page
-        hasMore = r.hasMore
-        if (r.items.isEmpty()) error = AppStrings.s(R.string.online_sheet_empty_list)
-        loading = false
+    // 换分类：结果整体替换（不是追加），页码回到 1，网格回到顶部。
+    // 返回本页时 loadedKey 已等于当前 key，直接退出，保留列表与滚动位置。
+    LaunchedEffect(state.source, state.tagId) {
+        if (state.tagId.isBlank()) return@LaunchedEffect
+        val key = "${state.source}|${state.tagId}"
+        if (state.loadedKey == key) return@LaunchedEffect
+        state.loadedKey = key
+        state.loading = true
+        state.error = null
+        gridState.scrollToItem(0)
+        val r = OnlineSonglists.list(state.source, state.tagId, 1)
+        state.sheets = r.items
+        state.page = r.page
+        state.hasMore = r.hasMore
+        if (r.items.isEmpty()) state.error = AppStrings.s(R.string.online_sheet_empty_list)
+        state.loading = false
     }
 
     fun loadMore() {
-        if (loadingMore || !hasMore) return
-        loadingMore = true
+        if (state.loadingMore || !state.hasMore) return
+        state.loadingMore = true
         scope.launch {
-            val next = page + 1
-            val r = OnlineSonglists.list(source, tagId, next)
+            val next = state.page + 1
+            val r = OnlineSonglists.list(state.source, state.tagId, next)
             if (r.items.isNotEmpty()) {
-                sheets = (sheets + r.items).distinctBy { it.key }
-                page = next
+                state.sheets = (state.sheets + r.items).distinctBy { it.key }
+                state.page = next
             }
-            hasMore = r.hasMore && r.items.isNotEmpty()
-            loadingMore = false
+            state.hasMore = r.hasMore && r.items.isNotEmpty()
+            state.loadingMore = false
         }
     }
 
     Column(modifier.fillMaxSize()) {
-        // 平台：只列四家，切过去失败的由下方空态说明，不隐藏入口
-        LazyRow(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        // 平台 / 分组 / 标签三层筛选收在同一块浅色面板里，避免三排 chip 直接贴在内容上
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            items(OnlineSonglists.SOURCES) { id ->
-                FilterChip(
-                    selected = source == id,
-                    onClick = { source = id },
-                    label = {
-                        Text(
-                            BuiltInSearch.SOURCE_NAMES[id]?.removeSuffix("音乐") ?: id,
-                            style = MaterialTheme.typography.labelMedium,
-                        )
-                    },
-                )
-            }
-        }
-
-        if (groups.isNotEmpty()) {
-            // 分组：主题 / 语种 / 风格…（四家里只有咪咕没有分组，已被合并成一组）
-            LazyRow(
-                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                items(groups.indices.toList()) { index ->
-                    val group = groups[index]
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(OnlineSonglists.SOURCES) { id ->
                     FilterChip(
-                        selected = groupIndex == index,
-                        onClick = {
-                            groupIndex = index
-                            group.tags.firstOrNull()?.id?.let { tagId = it }
-                        },
+                        selected = state.source == id,
+                        onClick = { if (state.source != id) state.source = id },
                         label = {
-                            Text(group.name, style = MaterialTheme.typography.labelMedium)
+                            Text(
+                                BuiltInSearch.SOURCE_NAMES[id]?.removeSuffix("音乐") ?: id,
+                                style = MaterialTheme.typography.labelMedium,
+                            )
                         },
                     )
                 }
             }
-            val tags = groups.getOrNull(groupIndex)?.tags.orEmpty()
-            LazyRow(
-                Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                items(tags) { tag ->
-                    FilterChip(
-                        selected = tagId == tag.id,
-                        onClick = { if (tagId != tag.id) tagId = tag.id },
-                        label = {
-                            Text(tag.name, style = MaterialTheme.typography.labelSmall)
-                        },
-                    )
+
+            if (state.groups.isNotEmpty()) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(state.groups.indices.toList()) { index ->
+                        val group = state.groups[index]
+                        FilterChip(
+                            selected = state.groupIndex == index,
+                            onClick = {
+                                state.groupIndex = index
+                                group.tags.firstOrNull()?.id?.let { state.tagId = it }
+                            },
+                            label = {
+                                Text(group.name, style = MaterialTheme.typography.labelMedium)
+                            },
+                        )
+                    }
+                }
+                val tags = state.groups.getOrNull(state.groupIndex)?.tags.orEmpty()
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(tags) { tag ->
+                        FilterChip(
+                            selected = state.tagId == tag.id,
+                            onClick = { if (state.tagId != tag.id) state.tagId = tag.id },
+                            label = {
+                                Text(tag.name, style = MaterialTheme.typography.labelSmall)
+                            },
+                        )
+                    }
                 }
             }
         }
 
         when {
-            loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-            sheets.isEmpty() -> EmptyHint(error ?: AppStrings.s(R.string.online_no_result))
+            // 骨架而不是整页转圈：加载完成时卡片原地出现，不出现「空 → 一堆」的跳动
+            state.loading -> LxGridSkeleton()
+            state.sheets.isEmpty() -> LxEmptyPane(
+                title = state.error ?: AppStrings.s(R.string.online_sheet_empty_list),
+            )
             else -> {
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(140.dp),
+                    columns = GridCells.Adaptive(150.dp),
+                    state = gridState,
                     modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
                 ) {
-                    items(sheets, key = { it.key }) { sheet ->
-                        SheetCard(sheet, onClick = { onOpen(sheet) })
+                    itemsIndexed(state.sheets, key = { _, sheet -> sheet.key }) { index, sheet ->
+                        SheetCard(sheet, index, onClick = { onOpen(sheet) })
                     }
-                    if (hasMore) {
+                    if (state.hasMore) {
                         item(span = { GridItemSpan(maxLineSpan) }) {
                             Row(
-                                Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                Modifier.fillMaxWidth().padding(vertical = 8.dp),
                                 horizontalArrangement = Arrangement.Center,
                             ) {
-                                TextButton(onClick = { loadMore() }, enabled = !loadingMore) {
+                                TextButton(onClick = { loadMore() }, enabled = !state.loadingMore) {
+                                    if (state.loadingMore) {
+                                        CircularProgressIndicator(
+                                            Modifier.size(16.dp),
+                                            strokeWidth = 2.dp,
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                    }
                                     Text(
-                                        if (loadingMore) AppStrings.s(R.string.online_loading)
+                                        if (state.loadingMore) AppStrings.s(R.string.online_loading)
                                         else AppStrings.s(R.string.online_load_more),
                                     )
                                 }
                             }
                         }
                     }
-                    item(span = { GridItemSpan(maxLineSpan) }) { Spacer(Modifier.height(24.dp)) }
                 }
             }
         }
     }
 }
 
-/** 歌单卡片：封面 + 两行标题 + 作者/播放量。封面取不到就是纯色块，不留空洞 */
+/** 歌单卡片：封面 + 两行标题 + 作者/播放量。封面取不到就是首字渐变，不留空洞。 */
 @Composable
-private fun SheetCard(sheet: OnlineSonglists.Sheet, onClick: () -> Unit) {
-    var bitmap by remember(sheet.key) { mutableStateOf<Bitmap?>(null) }
-    LaunchedEffect(sheet.key, sheet.cover) {
-        bitmap = sheetCoverRetry { OnlineCover.thumbUrl(sheet.cover, SHEET_COVER_PX) }
-    }
-    Column(Modifier.clickable(onClick = onClick)) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(RoundedCornerShape(14.dp))
-                .background(AppVisual.coverBrush(sheet.key)),
-            contentAlignment = Alignment.Center,
-        ) {
-            val bmp = bitmap
-            if (bmp != null) {
-                val image = remember(bmp) { bmp.asImageBitmap() }
-                androidx.compose.foundation.Image(
-                    bitmap = image,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
-                Text(
-                    AppVisual.coverInitial(sheet.name),
-                    color = Color.White,
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-        }
+private fun SheetCard(sheet: OnlineSonglists.Sheet, index: Int, onClick: () -> Unit) {
+    Column(
+        Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick),
+    ) {
+        LxCover(
+            url = sheet.cover,
+            cacheKey = sheet.key,
+            name = sheet.name,
+            targetPx = SHEET_COVER_PX,
+            modifier = Modifier.fillMaxWidth().aspectRatio(1f),
+            shape = RoundedCornerShape(14.dp),
+            initialSize = 30.sp,
+            // 首屏卡片错峰 45ms：同一帧不再排 10 个请求，滑起来更顺
+            staggerMs = (index % 6) * 45L,
+        )
         Text(
             sheet.name,
             style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 6.dp),
+            modifier = Modifier.padding(top = 8.dp, start = 2.dp, end = 2.dp),
         )
         Text(
             listOf(sheet.author, sheet.playCount).filter { it.isNotBlank() }.joinToString(" · "),
@@ -281,6 +294,7 @@ private fun SheetCard(sheet: OnlineSonglists.Sheet, onClick: () -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 2.dp, start = 2.dp, end = 2.dp),
         )
     }
 }
@@ -306,126 +320,103 @@ internal fun SheetDetailPane(
     onSaveToList: () -> Unit,
 ) {
     when {
-        loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                CircularProgressIndicator()
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    stringResource(R.string.online_loading),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        tracks.isEmpty() -> EmptyHint(error ?: AppStrings.s(R.string.online_sheet_empty))
+        loading -> LxListSkeleton(rows = 8)
+        tracks.isEmpty() -> LxEmptyPane(
+            title = error ?: AppStrings.s(R.string.online_sheet_empty),
+        )
         else -> LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
         ) {
             item(key = "head") {
-                Row(
-                    Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    shape = RoundedCornerShape(18.dp),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    SheetCoverLarge(sheet)
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            sheet.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            listOf(
-                                sheet.author,
-                                AppStrings.s(R.string.online_sheet_song_count, tracks.size),
-                                sheet.playCount,
-                            ).filter { it.isNotBlank() }.joinToString(" · "),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        Button(onClick = onSaveToList, enabled = !saving && !saved) {
+                    Row(
+                        Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        SheetCoverLarge(sheet)
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
                             Text(
-                                when {
-                                    saving -> AppStrings.s(R.string.online_saving)
-                                    saved -> AppStrings.s(R.string.online_saved_button)
-                                    else -> AppStrings.s(R.string.online_save_to_list)
-                                },
+                                sheet.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
                             )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                listOf(
+                                    sheet.author,
+                                    AppStrings.s(R.string.online_sheet_song_count, tracks.size),
+                                    sheet.playCount,
+                                ).filter { it.isNotBlank() }.joinToString(" · "),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            Button(
+                                onClick = onSaveToList,
+                                enabled = !saving && !saved,
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                            ) {
+                                if (saving) {
+                                    CircularProgressIndicator(
+                                        Modifier.size(14.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.onPrimary,
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                }
+                                Text(
+                                    when {
+                                        saving -> AppStrings.s(R.string.online_saving)
+                                        saved -> AppStrings.s(R.string.online_saved_button)
+                                        else -> AppStrings.s(R.string.online_save_to_list)
+                                    },
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                            }
                         }
                     }
                 }
             }
-            items(tracks, key = { it.stableKey }) { track ->
-                val index = tracks.indexOfFirst { it.stableKey == track.stableKey }
+            listItemsIndexed(tracks, key = { _, track -> track.stableKey }) { index, track ->
                 TrackRow(
                     track = track,
                     favorite = track.stableKey in favoriteKeys,
                     onPlay = { onPlay(index) },
                     onFavorite = { onFavorite(track) },
+                    staggerMs = (index % 6) * 30L,
                 )
             }
-            item { Spacer(Modifier.height(24.dp)) }
         }
     }
 }
 
 @Composable
 private fun SheetCoverLarge(sheet: OnlineSonglists.Sheet) {
-    var bitmap by remember(sheet.key) { mutableStateOf<Bitmap?>(null) }
-    LaunchedEffect(sheet.key, sheet.cover) {
-        bitmap = sheetCoverRetry { OnlineCover.thumbUrl(sheet.cover, SHEET_COVER_LARGE_PX) }
-    }
-    Box(
-        Modifier
-            .size(88.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(AppVisual.coverBrush(sheet.key)),
-        contentAlignment = Alignment.Center,
-    ) {
-        val bmp = bitmap
-        if (bmp != null) {
-            val image = remember(bmp) { bmp.asImageBitmap() }
-            androidx.compose.foundation.Image(
-                bitmap = image,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
-        } else {
-            Text(
-                AppVisual.coverInitial(sheet.name),
-                color = Color.White,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-    }
+    LxCover(
+        url = sheet.cover,
+        cacheKey = sheet.key,
+        name = sheet.name,
+        targetPx = SHEET_COVER_LARGE_PX,
+        modifier = Modifier.size(96.dp),
+        shape = RoundedCornerShape(16.dp),
+        initialSize = 30.sp,
+    )
 }
 
-private suspend fun sheetCoverRetry(block: suspend () -> Bitmap?): Bitmap? {
-    var attempt = 0
-    while (true) {
-        val bmp = try {
-            block()
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            null
-        }
-        if (bmp != null) return bmp
-        if (attempt >= 2) return null
-        attempt++
-        delay(800L * attempt)
-    }
-}
+/** 150dp 卡片在 xxhdpi 上约 450px；取 320 兼顾清晰度与内存 */
+private const val SHEET_COVER_PX = 320
 
-/** 140dp 卡片在 xhdpi 上是 420px；取 300 已够清晰，再大只是白占内存 */
-private const val SHEET_COVER_PX = 300
-
-/** 详情头部 88dp → 264px，取同档位避免二次解码 */
-private const val SHEET_COVER_LARGE_PX = 300
+/** 详情头部 96dp → 约 290px，与列表同档，避免二次解码 */
+private const val SHEET_COVER_LARGE_PX = 320

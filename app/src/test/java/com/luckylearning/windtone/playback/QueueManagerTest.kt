@@ -169,15 +169,17 @@ class QueueManagerTest {
     }
 
     @Test
-    fun `previous 播放超过 3 秒回到本曲开头`() {
-        val (m, p) = fixture(listOf(song("A")))
+    fun `previous 播放超过 3 秒也直接切上一曲`() {
+        val (m, p) = fixture(listOf(song("A"), song("B")))
         p.currentPosition = 5000L
         m.previous()
-        assertTrue(p.events.contains("seekTo(0)"))
+        // 2026-11-25：不再「先回本曲开头」，一次点击必须切上一曲
+        assertTrue(p.events.contains("prev"))
+        assertFalse("不应再把本曲打回开头", p.events.contains("seekTo(0)"))
     }
 
     @Test
-    fun `previous 播放不足 3 秒跳上一首`() {
+    fun `previous 播放不足 3 秒也直接切上一曲`() {
         val (m, p) = fixture(listOf(song("A"), song("B")))
         p.currentPosition = 1000L
         m.previous()

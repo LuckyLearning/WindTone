@@ -2151,7 +2151,34 @@ class PlaybackEngine(
             _player.update {
                 it.copy(lyrics = raw, lyricsLoading = false)
             }
+
+            // 2026-11-25：在线曲首屏第一次落空很常见（网络未热 / 音源刚加载 / 曲目刚入库）。
+            // 旧实现只取一次，UI 就停在「无歌词」，用户切走再切回才恢复。
+            // 这里空着再给一次机会：切歌或关闭播放页都会 cancel 本 job，不会串到下一首。
+            if (raw.isEmpty && song.isOnline) {
+                delay(1_200L)
+                if (seq != lyricsSeq || _player.value.lyrics.lines.isNotEmpty()) return@launch
+                val retry = runCatching { lyricsLoader.load(song) }.getOrDefault(Lyrics.EMPTY)
+                if (seq != lyricsSeq || retry.isEmpty) return@launch
+                rawLyrics = retry
+                _player.update { it.copy(lyrics = retry, lyricsLoading = false) }
+            }
         }
+    }
+
+    /**
+     * 播放页展开 / 再次进入时的歌词兜底。
+     *
+     * 只补「当前曲歌词为空且不在加载中」这一种情况：已有歌词不重复请求，
+     * 正在加载的也不叠加一次。首次播放、切歌后的自愈已经由 [loadLyrics] 负责；
+     * 这里是「关掉播放页再打开」时的第二道保险。
+     */
+    fun ensureLyrics() {
+        val st = _player.value
+        if (st.lyricsLoading) return
+        if (st.lyrics.lines.isNotEmpty()) return
+        val song = st.current ?: return
+        loadLyrics(song)
     }
 
     /**

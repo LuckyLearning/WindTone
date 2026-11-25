@@ -26,6 +26,21 @@ internal object OnlineCoverUrls {
     }
 
     /**
+     * 从酷我 `pic.web` 地址里取出 `rid`。
+     *
+     * 歌单封面只有这个地址（没有 `OnlineTrack.songId` 可借），所以解析要能从 URL 自取。
+     * 只接受纯数字，避免把 `rid=` 后面的其他参数（或空串）当 id 去请求。
+     */
+    fun kuwoRid(url: String?): String? {
+        if (!isKuwoResolver(url)) return null
+        val raw = url!!.substringAfter("rid=", "")
+            .substringBefore("&")
+            .substringBefore("#")
+            .trim()
+        return raw.takeIf { it.isNotEmpty() && it.all { ch -> ch in '0'..'9' } }
+    }
+
+    /**
      * 能直接当图片下的地址。解析端点、空串、非 http 返回 null，
      * 调用方再决定要不要走酷我的二次请求。
      */

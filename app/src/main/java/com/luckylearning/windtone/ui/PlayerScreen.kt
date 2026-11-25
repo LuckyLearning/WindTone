@@ -217,6 +217,13 @@ fun PlayerScreen(
     // 手机版歌名在顶栏、不带红心，这两个参数在手机模式下不会被用到。
     isFavorite: Boolean = false,
     onToggleFavorite: (Song) -> Unit = {},
+    /**
+     * 播放页是否可以消费返回键。
+     *
+     * 设置 / 报告等覆盖层可以在播放页之上打开（悬浮窗速选 →「更多设置」），
+     * 这时返回必须先关覆盖层，不能让播放页的沉浸态 handler 把它吃掉。
+     */
+    backEnabled: Boolean = true,
 ) {
     // 中部三页（v1.2.55）：信息 / 图片 / 歌词。状态在引擎里（落盘，跨会话保留），
     // 这里只是个只读视图 + 回调。showLyrics 仍被沉浸态、屏幕常亮、顶栏图标判断复用 ——
@@ -377,7 +384,8 @@ fun PlayerScreen(
 
     // 沉浸态下按返回：先恢复完整界面，而不是直接收起播放页（手机 / 车机一致）。
     // enabled 只在沉浸态为真，其余情况不拦截，交给上层原有的返回逻辑。
-    BackHandler(enabled = immersive) { keepAwake() }
+    // 覆盖层（设置等）盖在上面时 backEnabled=false，让覆盖层先消费。
+    BackHandler(enabled = immersive && backEnabled) { keepAwake() }
 
     // ---------------------------------------------------------- 音量手势
     val appContext = LocalContext.current.applicationContext
@@ -913,15 +921,6 @@ fun PlayerScreen(
                 TimeLabel(progressState, durationFallback, showPosition = true)
                 Spacer(Modifier.weight(1f))
                 TimeLabel(progressState, durationFallback, showPosition = false)
-            }
-
-            // N2：±10s / ±15s 快进快退。车机走系统通知/方控 seek，这里不重复占位。
-            // 沉浸态整块控制收起，按钮一并隐藏。
-            if (!immersive && layoutSpec.seekJumpButtons) {
-                SeekJumpButtons(
-                    onSeekBy = { delta -> onSeekBy(delta); keepAwake() },
-                    modifier = Modifier.padding(top = 2.dp),
-                )
             }
 
             // 与下方控制行的间隔只在完整态需要；沉浸态控制行不渲染，

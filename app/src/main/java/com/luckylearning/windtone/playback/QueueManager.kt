@@ -75,10 +75,15 @@ class QueueManager(
 
     fun next() = act { it.seekToNextMediaItem() }
 
-    fun previous() = act { c ->
-        // 前五秒回上一首，否则回到本曲开头（与系统媒体通知一致）
-        if (c.currentPosition > 3000L) c.seekTo(0L) else c.seekToPreviousMediaItem()
-    }
+    /**
+     * 上一曲。
+     *
+     * 2026-11-25 用户明确要求：点一次就必须切到上一曲。
+     * 旧实现是「当前进度 > 3s 先 seekTo(0)」——那是系统媒体通知的习惯，
+     * 但在这里表现为「第一下把本曲从头重播并重新缓存，第二下才真的切歌」，
+     * 既不符合按钮语义，也让在线曲白跑一次补链。这里不再看进度。
+     */
+    fun previous() = act { it.seekToPreviousMediaItem() }
 
     fun seekTo(ms: Long) = act { c ->
         val target = ms.coerceIn(0L, c.duration.coerceAtLeast(0L))

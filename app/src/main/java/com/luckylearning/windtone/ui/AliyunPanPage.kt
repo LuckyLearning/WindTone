@@ -416,7 +416,9 @@ internal fun AliyunPanPage(
             .background(MaterialTheme.colorScheme.background)
             // 右滑开抽屉：与曲库列表同一套手势（v1.1.76 补齐；一级页原来只有汉堡键能开抽屉）。
             // detectHorizontalDragGestures 自带水平 touch-slop 判定，纵向滚动自然赢下竞争。
-            .pointerInput(onOpenDrawer) {
+            .pointerInput(onOpenDrawer, backEnabled) {
+                // 抽屉 / 覆盖层打开时调用方会关掉 backEnabled：这时也不再接管右滑
+                if (!backEnabled) return@pointerInput
                 var dragged = 0f
                 val threshold = 72.dp.toPx()
                 detectHorizontalDragGestures(
