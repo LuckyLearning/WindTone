@@ -54,8 +54,17 @@ abstract class MusicDb : RoomDatabase() {
         @Volatile
         private var instance: MusicDb? = null
 
-        fun get(context: Context): MusicDb = instance ?: synchronized(this) {
-            instance ?: Room.databaseBuilder(
+        /**
+         * 测试专用：注入内存库。
+         *
+         * 生产路径永远不写它（保持 null）。之所以需要：在线列表的「收进即幂等 / 同名合并」
+         * 是数据层行为，用内存库验证才能在几条用例里跑完，不必反复建真实数据库文件。
+         */
+        @Volatile
+        internal var testOverride: MusicDb? = null
+
+        fun get(context: Context): MusicDb = testOverride ?: instance ?: synchronized(this) {
+            testOverride ?: instance ?: Room.databaseBuilder(
                 context.applicationContext,
                 MusicDb::class.java,
                 DB_NAME,

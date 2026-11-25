@@ -29,7 +29,6 @@ import com.luckylearning.windtone.lyrics.LockScreenLyricPublisher
  */
 @Composable
 internal fun SettingsLabPage(
-    onOpenOnline: () -> Unit,
     onOpenMenuOrder: () -> Unit,
 ) {
     SectionTitle(stringResource(R.string.set_lab_title))
@@ -40,14 +39,8 @@ internal fun SettingsLabPage(
         modifier = Modifier.padding(vertical = 6.dp),
     )
 
-    ActionRow(
-        title = stringResource(R.string.set_lab_online_title),
-        subtitle = stringResource(R.string.set_lab_online_subtitle),
-        onClick = onOpenOnline,
-        trailing = stringResource(R.string.set_tag_experimental),
-        chevron = true,
-    )
-
+    // 「在线播放」已于 2026-11-25 提升为设置主页的一级卡（音源模式是硬开关），
+    // 不再从实验室进 —— 这里只留真正的实验项。
     ActionRow(
         title = stringResource(R.string.set_lab_menu_order_title),
         subtitle = stringResource(R.string.set_lab_menu_order_subtitle),

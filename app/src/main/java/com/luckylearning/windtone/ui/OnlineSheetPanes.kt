@@ -298,6 +298,9 @@ internal fun SheetDetailPane(
     loading: Boolean,
     error: String?,
     saving: Boolean,
+    /** 已经收进我的列表：按钮换文案并禁用，避免再点一次建出第二条同名列表 */
+    saved: Boolean = false,
+    favoriteKeys: Set<String> = emptySet(),
     onPlay: (Int) -> Unit,
     onFavorite: (OnlineTrack) -> Unit,
     onSaveToList: () -> Unit,
@@ -345,10 +348,13 @@ internal fun SheetDetailPane(
                             overflow = TextOverflow.Ellipsis,
                         )
                         Spacer(Modifier.height(6.dp))
-                        Button(onClick = onSaveToList, enabled = !saving) {
+                        Button(onClick = onSaveToList, enabled = !saving && !saved) {
                             Text(
-                                if (saving) AppStrings.s(R.string.online_saving)
-                                else AppStrings.s(R.string.online_save_to_list),
+                                when {
+                                    saving -> AppStrings.s(R.string.online_saving)
+                                    saved -> AppStrings.s(R.string.online_saved_button)
+                                    else -> AppStrings.s(R.string.online_save_to_list)
+                                },
                             )
                         }
                     }
@@ -358,6 +364,7 @@ internal fun SheetDetailPane(
                 val index = tracks.indexOfFirst { it.stableKey == track.stableKey }
                 TrackRow(
                     track = track,
+                    favorite = track.stableKey in favoriteKeys,
                     onPlay = { onPlay(index) },
                     onFavorite = { onFavorite(track) },
                 )

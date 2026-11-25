@@ -23,7 +23,7 @@ class SettingsMotionTest {
         assertEquals(0, SettingsPage.ROOT.depth())
     }
 
-    /** 六个分类页都在第一层 —— 它们直接挂在主页下。 */
+    /** 七个分类页都在第一层 —— 它们直接挂在主页下。 */
     @Test
     fun categoryPagesAreDepthOne() {
         val categories = listOf(
@@ -31,6 +31,7 @@ class SettingsMotionTest {
             SettingsPage.PLAYBACK,
             SettingsPage.LYRICS,
             SettingsPage.LIBRARY,
+            SettingsPage.ONLINE_HUB,
             SettingsPage.ABOUT,
             SettingsPage.LAB,
         )
@@ -39,18 +40,17 @@ class SettingsMotionTest {
         }
     }
 
-    /** 收进上层页面的入口行（悬浮歌词 / 更新 / 在线播放 / 菜单顺序）都在第二层及以下。 */
+    /** 收进上层页面的入口行（悬浮歌词 / 更新 / 菜单顺序）都在第二层及以下。 */
     @Test
     fun nestedPagesAreDeeperThanTheirParents() {
         listOf(
             SettingsPage.OVERLAY,
             SettingsPage.UPDATE,
             SettingsPage.DIAGNOSIS,
-            SettingsPage.ONLINE_HUB,
             SettingsPage.MENU_ORDER,
         ).forEach { page ->
             assertTrue(
-                "${page.name} 的父页不该是主页（v1.1.80 起它已降级为上层页面里的入口行）",
+                "${page.name} 的父页不该是主页（它是上层页面里的入口行）",
                 page.parent() != SettingsPage.ROOT,
             )
             assertEquals(
@@ -59,8 +59,8 @@ class SettingsMotionTest {
                 page.depth(),
             )
         }
-        // 在线播放嵌在「实验室 → 在线播放」里，是唯一的三层页面
-        assertEquals(3, SettingsPage.ONLINE.depth())
+        // 在线歌单（M3U）嵌在「在线播放」里；在线播放已提升为一级卡，故它是二层
+        assertEquals(2, SettingsPage.ONLINE.depth())
     }
 
     /**

@@ -12,15 +12,17 @@ class SettingsMenuOrderTest {
         val order = SettingsMenuOrder.merge(emptyList())
         assertEquals(SettingsMenuOrder.DEFAULT, order)
         assertEquals("LAB", order.last())
-        // v1.1.80：主页只剩 6 张卡
-        assertEquals(6, order.size)
+        // 2026-11-25：在线播放从实验室提升为一级卡，主页 7 张
+        assertEquals(7, order.size)
+        assertTrue(order.contains("ONLINE_HUB"))
     }
 
     /**
-     * 老用户的存档里还留着已降级的三个分类 id（悬浮歌词 / 在线播放 / 更新）。
+     * 老用户的存档里还留着已降级的分类 id（悬浮歌词 / 更新）。
      *
-     * 它们现在分别是「歌词」「实验室」「关于」里的入口行，不再是分类卡；
+     * 它们现在分别是「歌词」「关于」里的入口行，不再是分类卡；
      * merge 必须把它们过滤掉，否则主页会凭空少一张卡、或者拼出一个不存在的页面。
+     * 在线播放自 2026-11-25 起重新成为一级卡，存档里若已有它应保留原位。
      */
     @Test
     fun `老存档里已降级的分类会被过滤`() {
@@ -28,7 +30,7 @@ class SettingsMenuOrderTest {
         val order = SettingsMenuOrder.merge(saved)
         assertEquals(SettingsMenuOrder.DEFAULT.toSet(), order.toSet())
         assertFalse("OVERLAY 已收进歌词页", order.contains("OVERLAY"))
-        assertFalse("ONLINE_HUB 已收进实验室", order.contains("ONLINE_HUB"))
+        assertTrue("ONLINE_HUB 已提升为一级卡", order.contains("ONLINE_HUB"))
         assertFalse("UPDATE 已收进关于", order.contains("UPDATE"))
         assertFalse("MENU_ORDER 不是分类卡", order.contains("MENU_ORDER"))
         // 保留下来的相对顺序不被过滤打乱
@@ -57,6 +59,7 @@ class SettingsMenuOrderTest {
 
         assertEquals(SettingsMenuOrder.DEFAULT, order)
         assertFalse("旧 id 不该留在顺序里", order.contains("DIAGNOSTICS"))
-        assertEquals(4, order.indexOf("ABOUT"))
+        // 前有 5 张卡（含在线播放）时，关于排在第 6 位
+        assertEquals(5, order.indexOf("ABOUT"))
     }
 }

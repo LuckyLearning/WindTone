@@ -2214,6 +2214,12 @@
     <string name="online_save_to_list">收进我的列表</string>
     <string name="online_saving">保存中…</string>
     <string name="online_saved_to_list">已收进我的列表「%1$s」</string>
+    <string name="online_saved_button">已在我的列表</string>
+    <string name="online_list_updated">已更新我的列表「%1$s」</string>
+    <string name="online_fav_added">已收藏</string>
+    <string name="online_fav_removed">已取消收藏</string>
+    <string name="online_mine_empty">还没有收进任何歌单。在平台歌单里点「收进我的列表」后会出现在这里。</string>
+    <string name="online_list_delete_confirm">删除后不可恢复；列表里的歌仍在曲库里，不会一起删掉。</string>
     <string name="online_save_failed">保存失败，请重试</string>
     <string name="online_loading">加载中…</string>
     <string name="source_mode_title">音源模式</string>

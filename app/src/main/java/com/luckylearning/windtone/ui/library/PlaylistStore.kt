@@ -4,6 +4,8 @@ import com.luckylearning.windtone.data.db.PlaylistEntity
 import com.luckylearning.windtone.data.db.PlaylistSongEntity
 import com.luckylearning.windtone.data.findDuplicateGroups
 import com.luckylearning.windtone.data.model.Song
+import com.luckylearning.windtone.data.online.OnlineKeys
+import com.luckylearning.windtone.data.online.SavedSheetStore
 import com.luckylearning.windtone.state.PlaylistInfo
 import com.luckylearning.windtone.state.VirtualPlaylist
 import com.luckylearning.windtone.state.playlistCoverSongs
@@ -46,11 +48,23 @@ internal class PlaylistStore(private val session: LibrarySession) : PlaylistActi
     private suspend fun refreshPlaylistsNow() {
         val entities = withContext(Dispatchers.IO) { db.playlistDao().all() }
         val links = withContext(Dispatchers.IO) { db.playlistDao().allSongs() }
+        // 判定「在线列表」用两条依据（映射 / 含 lx: 曲目）：本地自建列表两样都不沾。
+        // 这类列表归洛雪模式的「我的列表」，不在本地模式重复出现一遍。
+        val uriById = withContext(Dispatchers.IO) {
+            db.songDao().allIdUri().associate { it.id to it.uri }
+        }
+        val onlineIds = withContext(Dispatchers.IO) {
+            SavedSheetStore(session.app).all().values.toSet()
+        }
         val songsById = _library.value.songs.associateBy { it.dbId }
         val byPlaylist = links.groupBy { it.playlistId }
 
-        val infos = entities.map { p ->
-            val songs = byPlaylist[p.id].orEmpty().mapNotNull { songsById[it.songId] }
+        val infos = entities.mapNotNull { p ->
+            val rows = byPlaylist[p.id].orEmpty()
+            val online = p.id in onlineIds ||
+                rows.any { row -> OnlineKeys.isOnlineKey(uriById[row.songId]) }
+            if (online) return@mapNotNull null
+            val songs = rows.mapNotNull { songsById[it.songId] }
             PlaylistInfo(p.id, p.name, songs.size, playlistCoverSongs(songs))
         }
         // 统计直接用内存里的每曲状态，不再为了"最近播放/最常播放"再查一次库
@@ -144,7 +158,12 @@ internal class PlaylistStore(private val session: LibrarySession) : PlaylistActi
 
     override fun deletePlaylist(id: Long) {
         scope.launch {
-            withContext(Dispatchers.IO) { db.playlistDao().deletePlaylist(id) }
+            withContext(Dispatchers.IO) {
+                db.playlistDao().deletePlaylist(id)
+                // 同步摘掉「在线歌单 → 本列表」的映射：列表 id 在 SQLite 里可能被后来的
+                // 新建列表复用，残留映射会把一条本地列表误判成在线列表。
+                SavedSheetStore(session.app).repoint(id, null)
+            }
             closePlaylist()
             refreshPlaylists()
             pushMessage(AppStrings.s(R.string.pls_deleted).ifEmpty { "已删除歌单" })

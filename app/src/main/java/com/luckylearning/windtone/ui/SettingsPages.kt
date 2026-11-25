@@ -122,6 +122,9 @@ internal fun SettingsRootPage(
     minSongDurationSec: Int,
     pages: List<SettingsPage>,
     onNavigate: (SettingsPage) -> Unit,
+    /** 在线播放卡的副标题显示当前音源模式：这是全局开关，进页前就该看得见 */
+    sourceMode: com.luckylearning.windtone.data.SourceMode =
+        com.luckylearning.windtone.data.SourceMode.LOCAL,
 ) {
     val context = LocalContext.current
     var query by rememberSaveable { mutableStateOf("") }
@@ -225,7 +228,15 @@ internal fun SettingsRootPage(
                 icon = AppIcons.Info,
                 onClick = { onNavigate(SettingsPage.ABOUT) },
             )
-            // v1.1.80：实验室功能 —— 实验性入口先放这里，确认稳定后再移出去
+            // 2026-11-25：在线播放从实验室提升为一级卡 —— 音源模式决定整页内容，
+            // 埋在「实验室 → 在线播放」里要三步才够得到。副标题直接显示当前模式。
+            SettingsPage.ONLINE_HUB -> CategoryRow(
+                title = stringResource(R.string.set_lab_online_title),
+                subtitle = stringResource(sourceMode.labelRes()),
+                icon = AppIcons.MusicNote,
+                onClick = { onNavigate(SettingsPage.ONLINE_HUB) },
+            )
+            // 实验室功能 —— 实验性入口先放这里，确认稳定后再移出去
             SettingsPage.LAB -> CategoryRow(
                 title = stringResource(R.string.set_lab_title),
                 subtitle = stringResource(R.string.online_playback_reorder_menu_experimental),

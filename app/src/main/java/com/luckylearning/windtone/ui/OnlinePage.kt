@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -80,9 +81,11 @@ import com.luckylearning.windtone.data.online.BuiltInSearch
 import com.luckylearning.windtone.data.online.OnlineBoards
 import com.luckylearning.windtone.data.online.OnlineCover
 import com.luckylearning.windtone.data.online.OnlineLibrary
+import com.luckylearning.windtone.data.online.OnlineLists
 import com.luckylearning.windtone.data.online.OnlineResolver
 import com.luckylearning.windtone.data.online.OnlineSonglists
 import com.luckylearning.windtone.data.online.OnlineUrlMemo
+import com.luckylearning.windtone.data.online.SavedSheetStore
 import com.luckylearning.windtone.data.online.source.OnlineSourceRegistry
 import com.luckylearning.windtone.data.online.source.OnlineTrack
 import com.luckylearning.windtone.data.online.script.LxLoadReport
@@ -99,7 +102,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 /**
- * 洛雪源页面：搜索 + 排行榜 + 脚本管理 + 点播。
+ * 洛雪源页面：搜索 + 歌单 + 排行榜 + 我的列表 + 脚本管理 + 点播。
  *
  * 与云盘页互斥显示（同为「在线内容」的一级页），但**不共用**它的数据层：
  * 云盘走 AliyunDrive，这里走 BuiltInSearch / OnlineBoards（发现歌曲）+ 脚本（换直链），
@@ -130,6 +133,8 @@ internal fun OnlinePage(
     playerExpanded: Boolean = false,
     /** 抽屉 / 设置盖住本页时不拦返回，让上层先收自己 */
     backEnabled: Boolean = true,
+    /** 已收藏的稳定键（与曲库共用一份）：行内心形据此显示实心 */
+    favoriteKeys: Set<String> = emptySet(),
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -163,6 +168,17 @@ internal fun OnlinePage(
     var sheetLoading by remember { mutableStateOf(false) }
     var sheetError by remember { mutableStateOf<String?>(null) }
     var sheetSaving by remember { mutableStateOf(false) }
+    /** 当前歌单是否已经收进我的列表（进详情时查一次，保存成功后置 true） */
+    var sheetSaved by remember { mutableStateOf(false) }
+
+    // 我的列表：只放从在线歌单收进来的列表。洛雪模式下「歌单」是平台歌单，
+    // 自己攒下来的那一份在「我的列表」，与本地模式同名入口各看各的。
+    var myLists by remember { mutableStateOf<List<OnlineLists.Summary>>(emptyList()) }
+    var myListsLoading by remember { mutableStateOf(false) }
+    var openMyList by remember { mutableStateOf<OnlineLists.Summary?>(null) }
+    var myListSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var myListLoading by remember { mutableStateOf(false) }
+    var confirmDeleteList by remember { mutableStateOf(false) }
 
     // 子页和上一个分区都由外面的栈决定。本页只在还能退的时候消费返回，
     // 并且让位给抽屉 / 设置 / 播放页（backEnabled）。根上不消费，Activity 回到桌面。
@@ -182,6 +198,18 @@ internal fun OnlinePage(
         }
         if (place.section == LxSection.SHEETS && place.detail != LxDetail.SHEET) openSheet = null
         if (place.section == LxSection.BOARDS && place.detail != LxDetail.BOARD) openBoard = null
+        if (place.section == LxSection.MINE && place.detail != LxDetail.LIST) openMyList = null
+    }
+
+    // 「我的列表」每次进来重读一遍：保存发生在歌单详情，回到这里要立刻看到新列表。
+    // 读之前先做一次同名合并 —— v1.3.2 之前重复点「收进我的列表」留下的两条同名列表，
+    // 靠这一次幂等清理收拢成一条，不用用户自己删。
+    LaunchedEffect(place.section) {
+        if (place.section != LxSection.MINE) return@LaunchedEffect
+        myListsLoading = true
+        withContext(Dispatchers.IO) { OnlineLists.mergeDuplicates(context) }
+        myLists = withContext(Dispatchers.IO) { OnlineLists.summaries(context) }
+        myListsLoading = false
     }
 
     // 首次进入：等启动时的后台脚本加载跑完再刷新报告。
@@ -285,7 +313,9 @@ internal fun OnlinePage(
         sheetTracks = emptyList()
         sheetError = null
         sheetLoading = true
+        sheetSaved = false
         scope.launch {
+            sheetSaved = withContext(Dispatchers.IO) { OnlineLists.isSaved(context, sheet) }
             val r = OnlineSonglists.detail(sheet.source, sheet.id)
             sheetTracks = r.tracks
             sheetError = if (r.tracks.isEmpty()) {
@@ -295,68 +325,108 @@ internal fun OnlinePage(
         }
     }
 
+    fun loadMyList(list: OnlineLists.Summary) {
+        openMyList = list
+        onOpenDetail(LxDetail.LIST)
+        myListSongs = emptyList()
+        myListLoading = true
+        scope.launch {
+            myListSongs = withContext(Dispatchers.IO) { OnlineLists.songs(context, list.id) }
+            myListLoading = false
+        }
+    }
+
     /**
-     * 把当前歌单收进「我的列表」：先把每首歌入库（拿主键），再建一份本地列表。
+     * 把当前歌单收进「我的列表」。
      *
      * 只建列表、不改收藏：用户在洛雪里收藏歌单，期望的是「这个歌单归我了」，
      * 不是「这 60 首都进了我喜欢的音乐」。
+     *
+     * 幂等交给 [OnlineLists.saveSheet]：已经收过的歌单再点只补新曲目，不再新建 ——
+     * 之前每次点都插一条新列表，用户看不到生效反馈就会再点一次，结果列表里两条一模一样的。
      */
     fun saveSheetToList(sheet: OnlineSonglists.Sheet) {
         if (sheetTracks.isEmpty() || sheetSaving) return
         sheetSaving = true
         scope.launch {
-            val name = withContext(Dispatchers.IO) {
-                runCatching {
-                    val songs = OnlineLibrary(context).upsertAll(sheetTracks)
-                    val dao = MusicDb.get(context).playlistDao()
-                    val now = System.currentTimeMillis()
-                    val pid = dao.insert(
-                        PlaylistEntity(
-                            name = sheet.name.ifBlank { AppStrings.s(R.string.online_sheet_default_name) }
-                                .take(80),
-                            createdAt = now,
-                        ),
-                    )
-                    var position = 0
-                    songs.forEach { song ->
-                        val dbId = song.dbId ?: return@forEach
-                        dao.insertSong(
-                            PlaylistSongEntity(
-                                playlistId = pid,
-                                songId = dbId,
-                                position = position++,
-                                addedAt = now,
-                            ),
-                        )
-                    }
-                    sheet.name
-                }.getOrNull()
+            val result = withContext(Dispatchers.IO) {
+                OnlineLists.saveSheet(context, sheet, sheetTracks)
             }
             sheetSaving = false
-            if (name == null) {
-                Toast.makeText(context, AppStrings.s(R.string.online_save_failed), Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(
-                    context,
-                    AppStrings.s(R.string.online_saved_to_list, name),
-                    Toast.LENGTH_SHORT,
-                ).show()
+            when (result) {
+                is OnlineLists.SaveResult.Failed ->
+                    Toast.makeText(context, AppStrings.s(R.string.online_save_failed), Toast.LENGTH_SHORT).show()
+                is OnlineLists.SaveResult.Created -> {
+                    sheetSaved = true
+                    Toast.makeText(
+                        context,
+                        AppStrings.s(R.string.online_saved_to_list, sheet.name),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+                is OnlineLists.SaveResult.Updated -> {
+                    sheetSaved = true
+                    Toast.makeText(
+                        context,
+                        AppStrings.s(R.string.online_list_updated, sheet.name),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
             }
         }
     }
 
-    fun toggleFavorite(track: OnlineTrack) {        scope.launch {
+    fun toggleFavorite(track: OnlineTrack) {
+        scope.launch {
             val fav = withContext(Dispatchers.IO) {
                 runCatching {
                     val song = OnlineLibrary(context).upsert(track)
                     app?.container?.favorites?.toggleSong(song)
                 }.getOrNull()
             }
-            if (fav == null) {
-                Toast.makeText(context, AppStrings.s(R.string.online_favorite_failed), Toast.LENGTH_SHORT).show()
+            // 成功也给一句反馈：行内心形会变，但列表滚动时用户未必盯着那一行
+            val text = when (fav) {
+                null -> AppStrings.s(R.string.online_favorite_failed)
+                true -> AppStrings.s(R.string.online_fav_added)
+                false -> AppStrings.s(R.string.online_fav_removed)
             }
+            Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
         }
     }
+
+    /** 我的列表里的曲目已经是入库的 [Song]，不需要再 upsert 一次 */
+    fun toggleFavoriteSong(song: Song) {
+        scope.launch {
+            val fav = withContext(Dispatchers.IO) {
+                runCatching { app?.container?.favorites?.toggleSong(song) }.getOrNull()
+            }
+            val text = when (fav) {
+                null -> AppStrings.s(R.string.online_favorite_failed)
+                true -> AppStrings.s(R.string.online_fav_added)
+                false -> AppStrings.s(R.string.online_fav_removed)
+            }
+            Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * 删除一份在线列表。
+     *
+     * 在线列表不在本地模式出现，这里若没有删除入口，用户就只剩「新建」一种操作 ——
+     * 收错了的歌单永远清不掉。
+     */
+    fun deleteMyList(list: OnlineLists.Summary) {
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                MusicDb.get(context).playlistDao().deletePlaylist(list.id)
+                SavedSheetStore(context).repoint(list.id, null)
+            }
+            openMyList = null
+            onBack()
+            myLists = withContext(Dispatchers.IO) { OnlineLists.summaries(context) }
+        }
+    }
+
 
     val sideNav = LocalUiFormFactor.current.hasSideNav
     val title = when {
@@ -364,6 +434,8 @@ internal fun OnlinePage(
             openSheet?.name.orEmpty()
         place.section == LxSection.BOARDS && place.detail == LxDetail.BOARD && openBoard != null ->
             openBoard?.name.orEmpty()
+        place.section == LxSection.MINE && place.detail == LxDetail.LIST && openMyList != null ->
+            openMyList?.name.orEmpty()
         else -> stringResource(place.section.labelRes)
     }
 
@@ -386,6 +458,24 @@ internal fun OnlinePage(
                 )
             }),
     ) {
+        if (confirmDeleteList) {
+            AlertDialog(
+                onDismissRequest = { confirmDeleteList = false },
+                title = { Text(stringResource(R.string.pl_delete_playlist)) },
+                text = { Text(stringResource(R.string.online_list_delete_confirm)) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        confirmDeleteList = false
+                        openMyList?.let { deleteMyList(it) }
+                    }) { Text(stringResource(R.string.delete)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmDeleteList = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                },
+            )
+        }
         TopAppBar(
             title = {
                 AnimatedContent(
@@ -409,6 +499,16 @@ internal fun OnlinePage(
                 }
             },
             actions = {
+                // 我的列表详情：删除这份列表（在线列表不在本地模式出现，这里是唯一入口）
+                val mine = openMyList
+                if (place.section == LxSection.MINE && place.detail == LxDetail.LIST && mine != null) {
+                    IconButton(onClick = { confirmDeleteList = true }) {
+                        Icon(
+                            Icons.Filled.Delete,
+                            contentDescription = stringResource(R.string.pl_delete_playlist),
+                        )
+                    }
+                }
                 if (canPop && !sideNav) {
                     IconButton(onClick = onOpenDrawer) {
                         Icon(AppIcons.Menu, contentDescription = stringResource(R.string.online_open_menu))
@@ -524,6 +624,8 @@ internal fun OnlinePage(
                             loading = sheetLoading,
                             error = sheetError,
                             saving = sheetSaving,
+                            saved = sheetSaved,
+                            favoriteKeys = favoriteKeys,
                             onPlay = { playTracks(sheetTracks, it) },
                             onFavorite = { toggleFavorite(it) },
                             onSaveToList = { saveSheetToList(sheet) },
@@ -532,12 +634,31 @@ internal fun OnlinePage(
                         SonglistPane(onOpen = { loadSheet(it) })
                     }
                 }
+                LxSection.MINE -> {
+                    val list = openMyList
+                    if (target.detail == LxDetail.LIST && list != null) {
+                        MyListDetailPane(
+                            songs = myListSongs,
+                            loading = myListLoading,
+                            favoriteKeys = favoriteKeys,
+                            onPlay = { index -> onPlay(myListSongs, index) },
+                            onFavorite = { song -> toggleFavoriteSong(song) },
+                        )
+                    } else {
+                        MyListsPane(
+                            lists = myLists,
+                            loading = myListsLoading,
+                            onOpen = { loadMyList(it) },
+                        )
+                    }
+                }
                 LxSection.BOARDS -> {
                     if (target.detail == LxDetail.BOARD && openBoard != null) {
                         BoardDetail(
                             tracks = boardTracks,
                             loading = boardLoading,
                             error = boardError,
+                            favoriteKeys = favoriteKeys,
                             onPlay = { playTracks(boardTracks, it) },
                             onFavorite = { toggleFavorite(it) },
                         )
@@ -556,6 +677,7 @@ internal fun OnlinePage(
                     results = results,
                     loadingMore = loadingMore,
                     onLoadMore = { loadMore(it) },
+                    favoriteKeys = favoriteKeys,
                     onPlay = { tracks, index -> playTracks(tracks, index) },
                     onFavorite = { toggleFavorite(it) },
                 )
@@ -578,6 +700,7 @@ private fun SearchBody(
     results: List<BuiltInSearch.Result>,
     loadingMore: Map<String, Boolean>,
     onLoadMore: (BuiltInSearch.Result) -> Unit,
+    favoriteKeys: Set<String> = emptySet(),
     onPlay: (List<OnlineTrack>, Int) -> Unit,
     onFavorite: (OnlineTrack) -> Unit,
 ) {
@@ -650,6 +773,7 @@ private fun SearchBody(
                         val index = group.tracks.indexOfFirst { it.stableKey == track.stableKey }
                         TrackRow(
                             track = track,
+                            favorite = track.stableKey in favoriteKeys,
                             onPlay = { onPlay(group.tracks, index) },
                             onFavorite = { onFavorite(track) },
                         )
@@ -734,6 +858,7 @@ private fun BoardDetail(
     tracks: List<OnlineTrack>,
     loading: Boolean,
     error: String?,
+    favoriteKeys: Set<String> = emptySet(),
     onPlay: (Int) -> Unit,
     onFavorite: (OnlineTrack) -> Unit,
 ) {
@@ -748,6 +873,7 @@ private fun BoardDetail(
                 val index = tracks.indexOfFirst { it.stableKey == track.stableKey }
                 TrackRow(
                     track = track,
+                    favorite = track.stableKey in favoriteKeys,
                     onPlay = { onPlay(index) },
                     onFavorite = { onFavorite(track) },
                 )
@@ -874,7 +1000,13 @@ internal fun EmptyHint(text: String) {
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-internal fun TrackRow(track: OnlineTrack, onPlay: () -> Unit, onFavorite: () -> Unit) {
+internal fun TrackRow(
+    track: OnlineTrack,
+    onPlay: () -> Unit,
+    onFavorite: () -> Unit,
+    /** 已收藏：心形实心 + 主色。以前只有在长按菜单里能收藏、行内没有任何标记，看起来「点了没变」 */
+    favorite: Boolean = false,
+) {
     var menu by remember { mutableStateOf(false) }
     // 列表标签以「这份音源真能给的最高档」为准；播过之后换成实际档位（补链完成会 +1 计数）
     val revision = OnlineUrlMemo.revision.intValue
@@ -891,7 +1023,7 @@ internal fun TrackRow(track: OnlineTrack, onPlay: () -> Unit, onFavorite: () -> 
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .padding(start = 10.dp, end = 2.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             TrackCover(track)
@@ -921,6 +1053,17 @@ internal fun TrackRow(track: OnlineTrack, onPlay: () -> Unit, onFavorite: () -> 
                     quality.shortLabel,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            IconButton(onClick = onFavorite, modifier = Modifier.size(38.dp)) {
+                Icon(
+                    imageVector = if (favorite) AppIcons.Favorite else AppIcons.FavoriteBorder,
+                    contentDescription = stringResource(
+                        if (favorite) R.string.cd_unfavorite else R.string.cd_favorite,
+                    ),
+                    tint = if (favorite) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
                 )
             }
         }

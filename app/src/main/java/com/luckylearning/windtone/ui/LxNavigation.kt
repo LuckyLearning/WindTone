@@ -11,13 +11,15 @@ enum class LxSection(val labelRes: Int) {
     SEARCH(R.string.online_tab_search),
     SHEETS(R.string.online_tab_sheets),
     BOARDS(R.string.online_tab_boards),
+    /** 「我的列表」：只放从在线歌单收进来的本地列表（本地自建列表留在本地模式） */
+    MINE(R.string.view_playlists),
     SOURCES(R.string.online_manage_sources),
 }
 
 /**
  * 分区上的子页。
  *
- * 搜索结果、歌单详情、榜单详情都是子页：返回先退子页，再退上一个分区。
+ * 搜索结果、歌单详情、榜单详情、我的列表详情都是子页：返回先退子页，再退上一个分区。
  * 音源管理本身是分区，没有再套一层子页。
  */
 enum class LxDetail {
@@ -25,6 +27,8 @@ enum class LxDetail {
     RESULTS,
     SHEET,
     BOARD,
+    /** 我的列表 → 某个列表的曲目 */
+    LIST,
 }
 
 data class LxFrame(

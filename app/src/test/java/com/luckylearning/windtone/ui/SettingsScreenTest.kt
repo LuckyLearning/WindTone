@@ -208,10 +208,8 @@ class SettingsScreenTest {
         compose.waitForIdle()
     }
 
-    /** v1.1.80：在线播放收进了实验室功能。 */
+    /** 2026-11-25：在线播放从实验室提升为一级卡，主页直接进。 */
     private fun openOnlinePage() {
-        compose.onNodeWithText("实验室功能").performScrollTo().performClick()
-        compose.waitForIdle()
         compose.onNodeWithText("在线播放").performScrollTo().performClick()
         compose.waitForIdle()
     }
@@ -267,19 +265,19 @@ class SettingsScreenTest {
         compose.onNodeWithText("未加入白名单", substring = true).assertIsDisplayed()
     }
 
-    /** 主页分类卡（v1.1.80：6 张，一屏放下）。 */
+    /** 主页分类卡（2026-11-25：7 张，在线播放是一级卡）。 */
     @Test
-    fun rootShowsSixCategoryCards() {
+    fun rootShowsCategoryCards() {
         render()
-        listOf("外观", "播放", "歌词", "曲库与存储", "关于与更新", "实验室功能").forEach {
+        listOf("外观", "播放", "歌词", "曲库与存储", "在线播放", "关于与更新", "实验室功能").forEach {
             compose.onNodeWithText(it).performScrollTo().assertIsDisplayed()
         }
         // 分类卡与子页里的 ActionRow 的区别就在这一行摘要（连摘要一起断言，
         // 免得以后退回成没有摘要的普通 ActionRow 也照样"通过"）
         compose.onNodeWithText("主题模式 · 主题取色 · 车载模式").assertIsDisplayed()
         compose.onNodeWithText("统计 · 清理 · 过滤 < 60 秒").assertIsDisplayed()
-        // 降级成入口行的三个分类不许再出现在主页
-        listOf("悬浮歌词", "在线播放", "更新", "调整菜单顺序").forEach {
+        // 仍留在上层页面里的入口行不许出现在主页
+        listOf("悬浮歌词", "更新", "调整菜单顺序").forEach {
             compose.onNodeWithText(it).assertDoesNotExist()
         }
     }

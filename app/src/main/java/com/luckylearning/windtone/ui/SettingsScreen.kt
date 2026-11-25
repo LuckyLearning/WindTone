@@ -81,6 +81,7 @@ import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.data.DataMaintenance
 import com.luckylearning.windtone.data.DownloadRoute
 import com.luckylearning.windtone.data.OverlayPreset
+import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.data.ThemeMode
 import com.luckylearning.windtone.data.UpdateChecker
@@ -161,7 +162,9 @@ internal fun SettingsPage.parent(): SettingsPage = when (this) {
     SettingsPage.OVERLAY -> SettingsPage.LYRICS
     // 2026-10-30 结构调整：更新与诊断都挂在「关于与更新」下（原来更新挂在「关于与诊断」下）
     SettingsPage.UPDATE, SettingsPage.DIAGNOSIS -> SettingsPage.ABOUT
-    SettingsPage.ONLINE_HUB, SettingsPage.MENU_ORDER -> SettingsPage.LAB
+    // 2026-11-25：在线播放从实验室提升为一级卡，父级改回主页
+    SettingsPage.ONLINE_HUB -> SettingsPage.ROOT
+    SettingsPage.MENU_ORDER -> SettingsPage.LAB
     SettingsPage.ONLINE -> SettingsPage.ONLINE_HUB
     else -> SettingsPage.ROOT
 }
@@ -371,6 +374,9 @@ fun SettingsScreen(
     val menuContext = LocalContext.current
     val menuStore = remember { SettingsMenuStore(menuContext) }
     var menuOrder by remember { mutableStateOf(menuStore.load()) }
+    // 根页「在线播放」卡的副标题要显示当前音源模式：在子页改完返回时 page 变化会重组，
+    // 这里每次重组读一次 Prefs（内存缓存，开销可忽略），不额外维护一份 state。
+    val settingsPrefs = remember { Prefs(menuContext) }
 
     // 子页里按返回键先回上一级（v1.1.80 起是逐级退：悬浮歌词 → 歌词 → 主页）
     BackHandler(enabled = page != SettingsPage.ROOT) { page = page.parent() }
@@ -510,6 +516,7 @@ fun SettingsScreen(
                             minSongDurationSec = minSongDurationSec,
                             pages = SettingsMenuOrder.pages(menuOrder),
                             onNavigate = { page = it },
+                            sourceMode = settingsPrefs.sourceMode,
                         )
 
                         SettingsPage.APPEARANCE -> SettingsAppearancePage(
@@ -665,7 +672,6 @@ fun SettingsScreen(
 
                         // v1.1.80：实验室功能（在线播放 / 调整菜单顺序先收在这里）
                         SettingsPage.LAB -> SettingsLabPage(
-                            onOpenOnline = { page = SettingsPage.ONLINE_HUB },
                             onOpenMenuOrder = { page = SettingsPage.MENU_ORDER },
                         )
 

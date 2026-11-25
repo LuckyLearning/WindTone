@@ -96,28 +96,32 @@ internal fun SettingsOnlinePage(
         }) { Text(stringResource(R.string.default_label)) }
     }
 
-    // 在线音质：只决定取址的**起点档位**，取不到仍会逐级下降，所以选高档位不会「播不了」
-    SectionTitle(stringResource(R.string.online_quality_title))
+    // 在线音质：只决定取址的**起点档位**，取不到仍会逐级下降，所以选高档位不会「播不了」。
+    // 只有洛雪音源才走脚本换直链、才有档位可挑；本地与云盘显示这一项只会让人以为有作用。
+    // remember 必须在条件外：条件里调 remember 会在模式切换时打乱组合顺序。
     var quality by remember { mutableStateOf(prefs.onlineQuality) }
     var qualityExpanded by remember { mutableStateOf(false) }
-    PickerField(
-        label = stringResource(R.string.online_quality_subtitle),
-        value = qualityLabel(quality),
-        expanded = qualityExpanded,
-        onExpandChange = { qualityExpanded = it },
-        options = listOf("") + Quality.BY_QUALITY.map { it.id },
-        optionLabel = { qualityLabel(it) },
-        onSelect = {
-            quality = it
-            prefs.onlineQuality = it
-            qualityExpanded = false
-        },
-    )
-    if (quality != SettingsDefaults.ONLINE_QUALITY) {
-        TextButton(onClick = {
-            quality = SettingsDefaults.ONLINE_QUALITY
-            prefs.onlineQuality = SettingsDefaults.ONLINE_QUALITY
-        }) { Text(stringResource(R.string.default_label)) }
+    if (mode == com.luckylearning.windtone.data.SourceMode.LX) {
+        SectionTitle(stringResource(R.string.online_quality_title))
+        PickerField(
+            label = stringResource(R.string.online_quality_subtitle),
+            value = qualityLabel(quality),
+            expanded = qualityExpanded,
+            onExpandChange = { qualityExpanded = it },
+            options = listOf("") + Quality.BY_QUALITY.map { it.id },
+            optionLabel = { qualityLabel(it) },
+            onSelect = {
+                quality = it
+                prefs.onlineQuality = it
+                qualityExpanded = false
+            },
+        )
+        if (quality != SettingsDefaults.ONLINE_QUALITY) {
+            TextButton(onClick = {
+                quality = SettingsDefaults.ONLINE_QUALITY
+                prefs.onlineQuality = SettingsDefaults.ONLINE_QUALITY
+            }) { Text(stringResource(R.string.default_label)) }
+        }
     }
 
     SectionTitle(stringResource(R.string.sources))

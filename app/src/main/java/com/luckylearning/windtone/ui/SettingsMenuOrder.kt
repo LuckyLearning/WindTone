@@ -6,17 +6,18 @@ import android.content.Context
 internal object SettingsMenuOrder {
 
     /**
-     * 主页分类卡默认顺序（v1.1.80 重排）。
+     * 主页分类卡默认顺序。
      *
-     * 这一版把「悬浮歌词」「更新」「在线播放」三张卡降级成上层页面里的入口行，
-     * 「调整菜单顺序」收进实验室 —— 主页回到 **6 张卡、一屏放下**。
-     * 老用户存档里那三个已不是分类的 id 会在 [merge] 里被过滤掉。
+     * 2026-11-25：音源模式是硬开关（选错了整页内容都不一样），继续埋在
+     * 「设置 → 实验室 → 在线播放」里太深，把「在线播放」提升为一级卡。
+     * 实验室只剩「调整菜单顺序」与车载蓝牙歌词这类真正的实验项。
      */
     val DEFAULT = listOf(
         "APPEARANCE",
         "PLAYBACK",
         "LYRICS",
         "LIBRARY",
+        "ONLINE_HUB",
         "ABOUT",
         "LAB",
     )

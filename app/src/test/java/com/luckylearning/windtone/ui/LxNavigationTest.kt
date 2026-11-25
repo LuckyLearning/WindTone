@@ -76,7 +76,7 @@ class LxNavigationTest {
 
         val lx = SourceMenus.ids(SourceMode.LX)
         assertEquals(
-            listOf("lx:SEARCH", "lx:SHEETS", "lx:BOARDS", "lx:SOURCES", "settings"),
+            listOf("lx:SEARCH", "lx:SHEETS", "lx:BOARDS", "lx:MINE", "lx:SOURCES", "settings"),
             lx,
         )
     }

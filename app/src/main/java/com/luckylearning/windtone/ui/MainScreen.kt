@@ -705,6 +705,7 @@ fun MainScreen(
                         onOpenDrawer = { drawerOpen = true },
                         playerExpanded = player.playerExpanded,
                         backEnabled = !drawerOpen && !showSettings && !player.playerExpanded,
+                        favoriteKeys = library.favoriteUris,
                         modifier = Modifier.weight(1f),
                     )
                 } else if (showAliyun) {

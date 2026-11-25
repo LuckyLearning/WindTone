@@ -51,8 +51,8 @@ import com.luckylearning.windtone.ui.theme.windShadow
  *  - 滑入 **220ms**（效果图 `transition:transform .22s ease`），收起时滑出屏幕左侧；
  *  - 遮罩 `--dim`（深色 .62 / 浅色 .34）**盖住下层内容并吃掉触摸**，点它收起；
  *  - 品牌块 = 44dp 圆形 halo（primaryContainer）+「听风」16sp/800 + 当前音源模式副标题；
- *  - 菜单按 [SourceMenus] 整组切换：本地只有曲库，云盘只有阿里云盘，洛雪只有
- *    搜索 / 歌单 / 排行榜 / 音源管理。设置始终在。扫描范围只在本地。
+ *  - 菜单按 [SourceMenus] 整组切换：本地只有曲库，云盘只有阿里云盘，洛雪是
+ *    搜索 / 歌单 / 排行榜 / 我的列表 / 音源管理。设置始终在。扫描范围只在本地。
  *  - 选中项：风之渐变实底胶囊 + 加粗 + 白字 + 靛蓝投影（v2，对应 `.d-item.on`）。
  *
  * ⚠️ 抽屉盖在迷你播放条之上、但不盖播放页 / 设置页这类全屏覆盖层 ——
@@ -233,6 +233,8 @@ private fun drawerItemIcon(item: SourceMenuItem) = when (item) {
         LxSection.SEARCH -> AppIcons.Search
         LxSection.SHEETS -> AppIcons.QueueMusic
         LxSection.BOARDS -> AppIcons.BarChart
+        // 与本地「我的列表」同一枚图标：同样的东西，不因为来源不同换样子
+        LxSection.MINE -> AppIcons.LibraryMusic
         LxSection.SOURCES -> AppIcons.Tune
     }
     SourceMenuItem.Aliyun -> AppIcons.Cloud

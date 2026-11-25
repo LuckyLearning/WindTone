@@ -351,6 +351,7 @@ private fun carMenuIcon(item: SourceMenuItem) = when (item) {
         LxSection.SEARCH -> AppIcons.Search
         LxSection.SHEETS -> AppIcons.QueueMusic
         LxSection.BOARDS -> AppIcons.BarChart
+        LxSection.MINE -> AppIcons.LibraryMusic
         LxSection.SOURCES -> AppIcons.Tune
     }
     SourceMenuItem.Aliyun -> AppIcons.Cloud

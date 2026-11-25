@@ -23,8 +23,9 @@ class SettingsPageParentTest {
     }
 
     @Test
-    fun labChildrenReturnToLabThenOnlineHub() {
-        assertEquals(SettingsPage.LAB, SettingsPage.ONLINE_HUB.parent())
+    fun labChildrenReturnToLabThenRoot() {
+        // 2026-11-25：在线播放提升为一级卡，父级是主页而不是实验室
+        assertEquals(SettingsPage.ROOT, SettingsPage.ONLINE_HUB.parent())
         assertEquals(SettingsPage.LAB, SettingsPage.MENU_ORDER.parent())
         assertEquals(SettingsPage.ONLINE_HUB, SettingsPage.ONLINE.parent())
     }
@@ -36,6 +37,7 @@ class SettingsPageParentTest {
             SettingsPage.PLAYBACK,
             SettingsPage.LYRICS,
             SettingsPage.LIBRARY,
+            SettingsPage.ONLINE_HUB,
             SettingsPage.ABOUT,
             SettingsPage.LAB,
         ).forEach { page ->

@@ -129,15 +129,15 @@ class LibraryDrawerTest {
         compose.onNodeWithText("音源管理").assertDoesNotExist()
     }
 
-    /** 洛雪模式：左侧就是搜索 / 歌单 / 排行榜 / 音源管理，不再挂云盘和本地曲库。 */
+    /** 洛雪模式：左侧是搜索 / 歌单 / 排行榜 / 我的列表 / 音源管理，不再挂云盘和本地曲库视图。 */
     @Test
     fun lxModeShowsOnlyLxSections() {
         val rec = renderOpen(sourceMode = SourceMode.LX, lxSection = LxSection.SEARCH)
         compose.onNodeWithText("WindTone · 洛雪音源").assertIsDisplayed()
-        listOf("搜索", "歌单", "排行榜", "音源管理", "设置").forEach {
+        listOf("搜索", "歌单", "排行榜", "我的列表", "音源管理", "设置").forEach {
             compose.onNodeWithText(it).assertIsDisplayed()
         }
-        listOf("阿里云盘", "歌曲", "我的列表", "专辑", "扫描范围", "音乐库").forEach {
+        listOf("阿里云盘", "歌曲", "专辑", "扫描范围", "音乐库").forEach {
             compose.onNodeWithText(it).assertDoesNotExist()
         }
         compose.onNodeWithText("歌单").performClick()
@@ -145,6 +145,17 @@ class LibraryDrawerTest {
         assertEquals(LxSection.SHEETS, rec.lx)
         assertTrue(rec.online)
         assertTrue(rec.closed)
+        assertNull(rec.selected)
+    }
+
+    /** 洛雪模式的「我的列表」是独立分区：点它回的是 MINE，不是本地列表视图。 */
+    @Test
+    fun lxMineSectionIsItsOwnSection() {
+        val rec = renderOpen(sourceMode = SourceMode.LX, lxSection = LxSection.SEARCH)
+        compose.onNodeWithText("我的列表").performClick()
+        compose.waitForIdle()
+        assertEquals(LxSection.MINE, rec.lx)
+        assertTrue(rec.online)
         assertNull(rec.selected)
     }
 
