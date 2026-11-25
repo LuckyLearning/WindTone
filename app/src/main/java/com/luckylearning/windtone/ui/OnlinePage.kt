@@ -6,7 +6,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -63,7 +62,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -201,6 +199,11 @@ internal fun OnlinePage(
     // 换一项才清空并从头加载。
     var boardKey by remember { mutableStateOf<String?>(null) }
     var sheetKey by remember { mutableStateOf<String?>(null) }
+    // 新开一个榜单/歌单才滚回顶部。记在页面外面：详情离开组合再回来时代数没变，不再滚。
+    var boardScrollGen by remember { mutableIntStateOf(0) }
+    var boardScrolledGen by remember { mutableIntStateOf(0) }
+    var sheetScrollGen by remember { mutableIntStateOf(0) }
+    var sheetScrolledGen by remember { mutableIntStateOf(0) }
 
     // 子页和上一个分区都由外面的栈决定。本页只在还能退的时候消费返回，
     // 并且让位给抽屉 / 设置 / 播放页（backEnabled）。根上不消费，Activity 回到桌面。
@@ -323,12 +326,11 @@ internal fun OnlinePage(
         // 不再重拉第一页、也不跳回顶部。
         if (boardKey == key && boardTracks.isNotEmpty()) return
         boardKey = key
+        boardScrollGen++
         boardTracks = emptyList()
         boardError = null
         boardLoading = true
         scope.launch {
-            // 换榜单要从头看。这个协程会等列表重新出现再落位，不挡下面的请求。
-            launch { boardDetailState.scrollToItem(0) }
             try {
                 val r = runCatching { OnlineBoards.fetch(board) }.getOrNull()
                 boardTracks = r?.tracks.orEmpty()
@@ -346,6 +348,7 @@ internal fun OnlinePage(
         val cached = sheetKey == key && sheetTracks.isNotEmpty()
         if (!cached) {
             sheetKey = key
+            sheetScrollGen++
             sheetTracks = emptyList()
             sheetError = null
             sheetLoading = true
@@ -354,7 +357,6 @@ internal fun OnlinePage(
             // 收藏状态每次都重查：用户可能刚在「我的列表」里删掉了它
             sheetSaved = withContext(Dispatchers.IO) { OnlineLists.isSaved(context, sheet) }
             if (cached) return@launch
-            launch { sheetDetailState.scrollToItem(0) }
             try {
                 val r = OnlineSonglists.detail(sheet.source, sheet.id)
                 sheetTracks = r.tracks
@@ -487,21 +489,9 @@ internal fun OnlinePage(
             // 与曲库、云盘同一套：内容区右滑拉出抽屉。左缘留给系统返回。
             // 车机左导航常驻，不接管这套手势（车机触摸板误触率高）。
             // 设置 / 播放页盖住本页时也不接管，否则覆盖层上的横向滑动会穿透到底层开抽屉。
-            .then(
-                if (sideNav) Modifier else Modifier.pointerInput(onOpenDrawer, backEnabled, playerExpanded) {
-                    if (!backEnabled || playerExpanded) return@pointerInput
-                    var dragged = 0f
-                    val threshold = 72.dp.toPx()
-                    detectHorizontalDragGestures(
-                        onDragStart = { dragged = 0f },
-                        onDragCancel = { dragged = 0f },
-                        onDragEnd = {
-                            if (dragged >= threshold) onOpenDrawer()
-                            dragged = 0f
-                        },
-                        onHorizontalDrag = { _, amount -> dragged += amount },
-                    )
-                },
+            .drawerSwipe(
+                enabled = !sideNav && backEnabled && !playerExpanded,
+                onOpen = onOpenDrawer,
             ),
     ) {
         if (confirmDeleteList) {
@@ -673,6 +663,9 @@ internal fun OnlinePage(
                             saved = sheetSaved,
                             favoriteKeys = favoriteKeys,
                             listState = sheetDetailState,
+                            scrollGen = sheetScrollGen,
+                            scrolledGen = sheetScrolledGen,
+                            onScrolled = { sheetScrolledGen = it },
                             onPlay = { playTracks(sheetTracks, it) },
                             onFavorite = { toggleFavorite(it) },
                             onSaveToList = { saveSheetToList(sheet) },
@@ -712,6 +705,9 @@ internal fun OnlinePage(
                             error = boardError,
                             favoriteKeys = favoriteKeys,
                             listState = boardDetailState,
+                            scrollGen = boardScrollGen,
+                            scrolledGen = boardScrolledGen,
+                            onScrolled = { boardScrolledGen = it },
                             onPlay = { playTracks(boardTracks, it) },
                             onFavorite = { toggleFavorite(it) },
                         )
@@ -929,13 +925,25 @@ private fun BoardDetail(
     error: String?,
     favoriteKeys: Set<String> = emptySet(),
     listState: LazyListState = rememberLazyListState(),
+    /** 换了一个榜才 +1。和 [scrolledGen] 一起避免返回时再滚回顶部。 */
+    scrollGen: Int = 0,
+    scrolledGen: Int = 0,
+    onScrolled: (Int) -> Unit = {},
     onPlay: (Int) -> Unit,
     onFavorite: (OnlineTrack) -> Unit,
 ) {
     when {
         loading -> LxListSkeleton(rows = 8)
         tracks.isEmpty() -> LxEmptyPane(title = error ?: AppStrings.s(R.string.online_board_empty))
-        else -> LazyColumn(
+        else -> {
+            // 列表已经在组合里再滚。骨架还显示时调用会停在「等第一次布局」，
+            // 而且那次布局要等骨架撤掉才会发生。
+            LaunchedEffect(scrollGen) {
+                if (scrollGen == 0 || scrollGen == scrolledGen) return@LaunchedEffect
+                listState.scrollToItem(0)
+                onScrolled(scrollGen)
+            }
+            LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 12.dp),
             state = listState,
             verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -973,6 +981,7 @@ private fun BoardDetail(
                     staggerMs = (index % 8) * 30L,
                 )
             }
+        }
         }
     }
 }

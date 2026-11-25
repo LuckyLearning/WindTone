@@ -31,6 +31,7 @@ class SonglistUiStateTest {
         s.tagId = "12"
         s.tagsLoadedFor = "tx"
         s.loadedKey = "tx|12"
+        s.scrolledKey = "tx|12"
         s.failed = true
         s.error = "boom"
 
@@ -39,6 +40,7 @@ class SonglistUiStateTest {
         assertEquals("", s.tagId)
         assertNull(s.tagsLoadedFor)
         assertNull(s.loadedKey)
+        assertNull(s.scrolledKey)
         assertNull(s.error)
         assertFalse(s.failed)
         assertEquals(1, s.retryTick)

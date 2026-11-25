@@ -89,6 +89,12 @@ internal class SonglistUiState {
     var failed by mutableStateOf(false)
     var tagsLoadedFor by mutableStateOf<String?>(null)
     var loadedKey by mutableStateOf<String?>(null)
+    /**
+     * 已经为哪个 [loadedKey] 滚回过顶部。
+     * 必须和列表数据一起活在页面外面：歌单页离开组合再回来时不能再滚一次，
+     * 否则「返回保持位置」会被这次 scrollToItem(0) 清掉。
+     */
+    var scrolledKey by mutableStateOf<String?>(null)
     /** 点「重试」时 +1，让两个 effect 重跑一遍 */
     var retryTick by mutableIntStateOf(0)
 
@@ -98,9 +104,26 @@ internal class SonglistUiState {
         groups = emptyList()
         tagsLoadedFor = null
         loadedKey = null
+        scrolledKey = null
         failed = false
         error = null
         retryTick++
+    }
+}
+
+/**
+ * 歌单分类 / 列表的取数入口。默认就是 [OnlineSonglists]；
+ * 测试可以换一份不碰网络的实现，用来钉「骨架会不会一直停着」。
+ */
+internal class SonglistGateway(
+    val tags: suspend (String) -> List<OnlineSonglists.TagGroup>,
+    val list: suspend (String, String, Int) -> OnlineSonglists.SheetPage,
+) {
+    companion object {
+        val Default = SonglistGateway(
+            tags = { OnlineSonglists.tags(it) },
+            list = { source, tagId, page -> OnlineSonglists.list(source, tagId, page) },
+        )
     }
 }
 
@@ -117,6 +140,7 @@ internal fun SonglistPane(
     state: SonglistUiState,
     gridState: LazyGridState,
     onOpen: (OnlineSonglists.Sheet) -> Unit,
+    gateway: SonglistGateway = SonglistGateway.Default,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -141,7 +165,7 @@ internal fun SonglistPane(
 
         // 取消（用户切走）会在这里抛 CancellationException，后面几行不会执行 ——
         // 这正是「不记已加载、回来能重来」的保证，别把 tagsLoadedFor 提前写。
-        val groups = withTimeoutOrNull(TAGS_TIMEOUT_MS) { OnlineSonglists.tags(state.source) }
+        val groups = withTimeoutOrNull(TAGS_TIMEOUT_MS) { gateway.tags(state.source) }
             .orEmpty()
         state.groups = groups
         state.tagsLoadedFor = state.source
@@ -155,7 +179,7 @@ internal fun SonglistPane(
 
         // 该平台没有分类（或分类接口挂了）：不传 tagId 也有一批默认歌单
         try {
-            val r = withTimeoutOrNull(LIST_TIMEOUT_MS) { OnlineSonglists.list(state.source, "", 1) }
+            val r = withTimeoutOrNull(LIST_TIMEOUT_MS) { gateway.list(state.source, "", 1) }
             if (r == null) {
                 state.failed = true
                 state.error = AppStrings.s(R.string.online_sheet_load_failed)
@@ -181,9 +205,12 @@ internal fun SonglistPane(
         state.loading = true
         state.error = null
         state.failed = false
-        gridState.scrollToItem(0)
+        // 这里不能 scrollToItem。loading=true 时网格被骨架替换，不在组合里；
+        // LazyGridState.scroll 会先等那次布局（AwaitFirstLayoutModifier），
+        // 布局又要等 loading 变 false 才会发生 —— 协程停在 scrollToItem，
+        // finally 跑不到，骨架就永远留着。滚回顶部放到数据已经显示之后。
         try {
-            val r = withTimeoutOrNull(LIST_TIMEOUT_MS) { OnlineSonglists.list(state.source, state.tagId, 1) }
+            val r = withTimeoutOrNull(LIST_TIMEOUT_MS) { gateway.list(state.source, state.tagId, 1) }
             if (r == null) {
                 state.failed = true
                 state.error = AppStrings.s(R.string.online_sheet_load_failed)
@@ -208,7 +235,7 @@ internal fun SonglistPane(
             try {
                 val next = state.page + 1
                 val r = withTimeoutOrNull(LIST_TIMEOUT_MS) {
-                    OnlineSonglists.list(state.source, state.tagId, next)
+                    gateway.list(state.source, state.tagId, next)
                 }
                 if (r != null && r.items.isNotEmpty()) {
                     state.sheets = (state.sheets + r.items).distinctBy { it.key }
@@ -222,6 +249,14 @@ internal fun SonglistPane(
                 state.loadingMore = false
             }
         }
+    }
+
+    // 网格已经画出来之后才滚回顶部。同一档回来（scrolledKey 还在）不再滚，保留位置。
+    LaunchedEffect(state.loadedKey, state.loading) {
+        val key = state.loadedKey ?: return@LaunchedEffect
+        if (state.loading || key == state.scrolledKey) return@LaunchedEffect
+        if (state.sheets.isNotEmpty()) gridState.scrollToItem(0)
+        state.scrolledKey = key
     }
 
     Column(modifier.fillMaxSize()) {
@@ -390,6 +425,9 @@ internal fun SheetDetailPane(
     favoriteKeys: Set<String> = emptySet(),
     /** 由 `OnlinePage` 顶层持有：返回列表再进来时停在上次看的那一首 */
     listState: LazyListState = rememberLazyListState(),
+    scrollGen: Int = 0,
+    scrolledGen: Int = 0,
+    onScrolled: (Int) -> Unit = {},
     onPlay: (Int) -> Unit,
     onFavorite: (OnlineTrack) -> Unit,
     onSaveToList: () -> Unit,
@@ -399,7 +437,13 @@ internal fun SheetDetailPane(
         tracks.isEmpty() -> LxEmptyPane(
             title = error ?: AppStrings.s(R.string.online_sheet_empty),
         )
-        else -> LazyColumn(
+        else -> {
+            LaunchedEffect(scrollGen) {
+                if (scrollGen == 0 || scrollGen == scrolledGen) return@LaunchedEffect
+                listState.scrollToItem(0)
+                onScrolled(scrollGen)
+            }
+            LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 12.dp),
             state = listState,
             verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -474,6 +518,7 @@ internal fun SheetDetailPane(
                     staggerMs = (index % 6) * 30L,
                 )
             }
+        }
         }
     }
 }
