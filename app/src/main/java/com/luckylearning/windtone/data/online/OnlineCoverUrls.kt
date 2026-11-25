@@ -13,7 +13,10 @@ package com.luckylearning.windtone.data.online
  *    不替换就是 404。搜索在 [com.luckylearning.windtone.data.online.BuiltInSearch.kgCover]
  *    里替换过，榜单以前没走那条。
  * 3. **明文 http 被 CDN 拒绝。** 酷狗、QQ、咪咕的图床对 `http://` 经常 403，https 才稳定。
- *    酷我图床相反，`pic.web` 返回的地址很多只有 http，这里不把酷我图升到 https。
+ *    酷我要按主机拆开（2026-11-25 对歌单列表实拉）：
+ *    `img1.kuwo.cn` 的 https 返回 JPEG；`img1.kwcdn.kuwo.cn` 的 https 证书主机名对不上
+ *    （Hostname mismatch），只有 http 能下到图。歌单解析以前把这两种都改成 https，
+ *    kwcdn 那一批就停在占位图。这里按主机把协议改对，已经存成错误协议的地址也会在下载前改回来。
  * 4. **缺 Referer。** QQ 歌词接口已经带 `Referer: https://y.qq.com/`，
  *    同站的 `y.gtimg.cn` 封面不带就会间歇 403。酷狗、咪咕同样。
  */
@@ -101,11 +104,25 @@ internal object OnlineCoverUrls {
         return normalizeImage(text)
     }
 
+    /**
+     * 按图床主机改协议。
+     *
+     * - `*.kwcdn.kuwo.cn`：证书不含这个主机名，https 握手失败，强制 http。
+     * - `img*.kuwo.cn`（不含 kwcdn）：http 经常超时，https 能下到 JPEG，强制 https。
+     * - 酷狗 / QQ / 咪咕：明文 http 经常 403，升到 https。
+     * 其它主机保持原样。已经是目标协议的地址不会被改坏。
+     */
     private fun upgradeKnownCdn(url: String): String {
-        if (!url.startsWith("http://")) return url
         val host = hostOf(url)
-        val upgrade = host.endsWith("kugou.com") || host.endsWith("qq.com") ||
-            host.endsWith("gtimg.cn") || host.endsWith("migu.cn")
-        return if (upgrade) "https://" + url.removePrefix("http://") else url
+        val scheme = when {
+            host.endsWith("kwcdn.kuwo.cn") -> "http"
+            host.startsWith("img") && host.endsWith("kuwo.cn") -> "https"
+            host.endsWith("kugou.com") || host.endsWith("qq.com") ||
+                host.endsWith("gtimg.cn") || host.endsWith("migu.cn") -> "https"
+            else -> return url
+        }
+        val rest = url.substringAfter("://", missingDelimiterValue = "")
+        if (rest.isEmpty()) return url
+        return "$scheme://$rest"
     }
 }

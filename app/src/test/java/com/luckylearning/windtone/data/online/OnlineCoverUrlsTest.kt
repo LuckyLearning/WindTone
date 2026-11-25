@@ -28,7 +28,8 @@ class OnlineCoverUrlsTest {
             "http://artistpicserver.kuwo.cn/pic.web?rid=1",
             image,
         )
-        assertEquals(image, got)
+        // img*.kuwo.cn 的 http 经常超时，下载前升到 https
+        assertEquals("https://img1.kuwo.cn/star/albumcover/500/a.jpg", got)
     }
 
     @Test
@@ -41,7 +42,7 @@ class OnlineCoverUrlsTest {
     }
 
     @Test
-    fun miguAndQqCleartextUpgradeButKuwoImageHostDoesNot() {
+    fun miguQqAndKuwoImageHostsUseTheSchemeThatActuallyReturnsBytes() {
         assertEquals(
             "https://d.musicapp.migu.cn/a.jpg",
             OnlineCoverUrls.normalizeImage("http://d.musicapp.migu.cn/a.jpg"),
@@ -50,8 +51,29 @@ class OnlineCoverUrlsTest {
             "https://y.gtimg.cn/music/photo_new/T002R500x500M000abc.jpg",
             OnlineCoverUrls.normalizeImage("http://y.gtimg.cn/music/photo_new/T002R500x500M000abc.jpg"),
         )
-        val kuwo = "http://img2.kuwo.cn/star/albumcover/500/b.jpg"
-        assertEquals(kuwo, OnlineCoverUrls.normalizeImage(kuwo))
+        // 2026-11-25：img1.kuwo.cn 的 https 是 JPEG；http 不稳定
+        assertEquals(
+            "https://img2.kuwo.cn/star/albumcover/500/b.jpg",
+            OnlineCoverUrls.normalizeImage("http://img2.kuwo.cn/star/albumcover/500/b.jpg"),
+        )
+        assertEquals(
+            "https://img1.kuwo.cn/star/userpl2015/a.jpg",
+            OnlineCoverUrls.normalizeImage("https://img1.kuwo.cn/star/userpl2015/a.jpg"),
+        )
+    }
+
+    @Test
+    fun kwcdnPlaylistCoversStayOnHttpBecauseHttpsCertificateDoesNotMatch() {
+        // 歌单列表里大约三分之一是 img1.kwcdn.kuwo.cn。
+        // https 报 Hostname mismatch，http 返回 JPEG。解析阶段曾经把 http 一律改成 https。
+        val http = "http://img1.kwcdn.kuwo.cn/star/userpl2015/83/89/a.jpg"
+        val https = "https://img1.kwcdn.kuwo.cn/star/userpl2015/83/89/a.jpg"
+        assertEquals(http, OnlineCoverUrls.normalizeImage(http))
+        assertEquals(http, OnlineCoverUrls.normalizeImage(https))
+        assertEquals(
+            "http://www.kuwo.cn/",
+            OnlineCoverUrls.refererFor(https),
+        )
     }
 
     @Test
@@ -71,7 +93,7 @@ class OnlineCoverUrlsTest {
 
         val pointer = "http://img2.kuwo.cn/star/albumcover/500/c.jpg".toByteArray(Charsets.ISO_8859_1)
         assertFalse(OnlineCoverUrls.looksLikeImage(pointer))
-        assertEquals("http://img2.kuwo.cn/star/albumcover/500/c.jpg", OnlineCoverUrls.textUrl(pointer))
+        assertEquals("https://img2.kuwo.cn/star/albumcover/500/c.jpg", OnlineCoverUrls.textUrl(pointer))
 
         val html = "<html>denied</html>".toByteArray()
         assertNull(OnlineCoverUrls.textUrl(html))

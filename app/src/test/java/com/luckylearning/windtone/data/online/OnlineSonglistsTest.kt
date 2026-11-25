@@ -98,6 +98,24 @@ class OnlineSonglistsTest {
     }
 
     @Test
+    fun kwcdnCoversAreNotForcedOntoHttps() {
+        val json = """
+            {"code":200,"data":{"total":2,"pn":1,"rn":36,"data":[
+              {"id":"1","digest":"8","name":"甲","uname":"a","img":"http://img1.kwcdn.kuwo.cn/a.jpg","listencnt":1,"total":1},
+              {"id":"2","digest":"8","name":"乙","uname":"b","img":"https://img1.kwcdn.kuwo.cn/b.jpg","listencnt":1,"total":1}
+            ]}}
+        """.trimIndent()
+        val covers = OnlineSonglists.parseKwSheets(json, 1).items.map { it.cover }
+        assertEquals(
+            listOf(
+                "http://img1.kwcdn.kuwo.cn/a.jpg",
+                "http://img1.kwcdn.kuwo.cn/b.jpg",
+            ),
+            covers,
+        )
+    }
+
+    @Test
     fun txSheetsReadBasicNode() {
         val json = """
             {"code":0,"playlist":{"code":0,"data":{"content":{"total_cnt":949,"v_item":[

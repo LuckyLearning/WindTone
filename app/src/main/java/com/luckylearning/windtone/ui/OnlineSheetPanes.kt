@@ -33,9 +33,9 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -84,6 +85,11 @@ internal class SonglistUiState {
     var hasMore by mutableStateOf(false)
     var loading by mutableStateOf(true)
     var loadingMore by mutableStateOf(false)
+    /**
+     * 下一页超时后先停住自动加载。停在底部时如果立刻再请求，会每 12 秒打一次。
+     * 可见项下标变了（用户又滑了一下）再允许。
+     */
+    var morePaused by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
     /** 这次空态是「请求失败/超时」而不是「这一类真没歌单」，决定要不要给重试按钮 */
     var failed by mutableStateOf(false)
@@ -115,6 +121,16 @@ internal class SonglistUiState {
  * 歌单分类 / 列表的取数入口。默认就是 [OnlineSonglists]；
  * 测试可以换一份不碰网络的实现，用来钉「骨架会不会一直停着」。
  */
+/** 歌单网格滚到尾部时的快照。放进 [snapshotFlow]，避免在里面改状态。 */
+private data class ScrollTail(
+    val last: Int,
+    val total: Int,
+    val loading: Boolean,
+    val loadingMore: Boolean,
+    val paused: Boolean,
+    val hasMore: Boolean,
+)
+
 internal class SonglistGateway(
     val tags: suspend (String) -> List<OnlineSonglists.TagGroup>,
     val list: suspend (String, String, Int) -> OnlineSonglists.SheetPage,
@@ -160,6 +176,7 @@ internal fun SonglistPane(
         state.sheets = emptyList()
         state.page = 1
         state.hasMore = false
+        state.morePaused = false
         state.groupIndex = 0
         state.loadedKey = null
 
@@ -205,6 +222,7 @@ internal fun SonglistPane(
         state.loading = true
         state.error = null
         state.failed = false
+        state.morePaused = false
         // 这里不能 scrollToItem。loading=true 时网格被骨架替换，不在组合里；
         // LazyGridState.scroll 会先等那次布局（AwaitFirstLayoutModifier），
         // 布局又要等 loading 变 false 才会发生 —— 协程停在 scrollToItem，
@@ -229,7 +247,9 @@ internal fun SonglistPane(
     }
 
     fun loadMore() {
-        if (state.loadingMore || !state.hasMore) return
+        if (state.loadingMore || state.loading || state.morePaused || !state.hasMore || state.sheets.isEmpty()) return
+        val key = state.loadedKey ?: return
+        val before = state.sheets.size
         state.loadingMore = true
         scope.launch {
             try {
@@ -237,17 +257,45 @@ internal fun SonglistPane(
                 val r = withTimeoutOrNull(LIST_TIMEOUT_MS) {
                     gateway.list(state.source, state.tagId, next)
                 }
-                if (r != null && r.items.isNotEmpty()) {
-                    state.sheets = (state.sheets + r.items).distinctBy { it.key }
-                    state.page = next
-                    state.hasMore = r.hasMore
-                } else if (r != null) {
+                // 用户已经换了分类：这次结果作废，不能拼到新列表后面
+                if (state.loadedKey != key) return@launch
+                if (r == null) {
+                    state.morePaused = true
+                } else if (r.items.isEmpty()) {
                     state.hasMore = false
+                } else {
+                    val merged = (state.sheets + r.items).distinctBy { it.key }
+                    state.sheets = merged
+                    state.page = next
+                    // 整页都是重复项时再请求也拿不到新歌单，停下来
+                    state.hasMore = r.hasMore && merged.size > before
                 }
             } finally {
-                // 取消或超时也要把按钮恢复成可点，否则「加载更多」会永久转圈
                 state.loadingMore = false
             }
+        }
+    }
+
+    // 滑到接近底部再取下一页。没有「加载更多」按钮。
+    LaunchedEffect(state.loadedKey) {
+        var pausedAt = Int.MIN_VALUE
+        snapshotFlow {
+            val last = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            val total = gridState.layoutInfo.totalItemsCount
+            ScrollTail(last, total, state.loading, state.loadingMore, state.morePaused, state.hasMore)
+        }.collect { tail ->
+            if (tail.paused) {
+                if (pausedAt == Int.MIN_VALUE) pausedAt = tail.last
+                else if (tail.last != pausedAt && tail.last >= 0) {
+                    state.morePaused = false
+                    pausedAt = Int.MIN_VALUE
+                }
+                return@collect
+            }
+            pausedAt = Int.MIN_VALUE
+            val nearEnd = !tail.loading && !tail.loadingMore && tail.hasMore &&
+                tail.total > 0 && tail.last >= tail.total - 4
+            if (nearEnd) loadMore()
         }
     }
 
@@ -315,10 +363,11 @@ internal fun SonglistPane(
 
         when {
             // 骨架而不是整页转圈：加载完成时卡片原地出现，不出现「空 → 一堆」的跳动
-            state.loading -> LxGridSkeleton()
+            state.loading -> LxGridSkeleton(Modifier.weight(1f))
             state.sheets.isEmpty() -> LxEmptyPane(
                 title = state.error ?: AppStrings.s(R.string.online_sheet_empty_list),
                 // 请求失败/超时才给重试；「这一类真没歌单」不用假装能重试
+                modifier = Modifier.weight(1f),
                 action = if (state.failed) {
                     {
                         Button(onClick = { state.retry() }) {
@@ -330,10 +379,16 @@ internal fun SonglistPane(
                 },
             )
             else -> {
+                // weight 而不是 fillMaxSize：上面还有分类条，网格只占剩余高度。
+                // fillMaxSize 会按整页高度测量，视口比看得见的区域更高，滑起来像没动。
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(150.dp),
                     state = gridState,
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp)
+                        .testTag("sheet-grid"),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                     contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
@@ -341,25 +396,13 @@ internal fun SonglistPane(
                     itemsIndexed(state.sheets, key = { _, sheet -> sheet.key }) { index, sheet ->
                         SheetCard(sheet, index, onClick = { onOpen(sheet) })
                     }
-                    if (state.hasMore) {
+                    if (state.loadingMore) {
                         item(span = { GridItemSpan(maxLineSpan) }) {
-                            Row(
-                                Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                                horizontalArrangement = Arrangement.Center,
+                            Box(
+                                Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                                contentAlignment = Alignment.Center,
                             ) {
-                                TextButton(onClick = { loadMore() }, enabled = !state.loadingMore) {
-                                    if (state.loadingMore) {
-                                        CircularProgressIndicator(
-                                            Modifier.size(16.dp),
-                                            strokeWidth = 2.dp,
-                                        )
-                                        Spacer(Modifier.width(8.dp))
-                                    }
-                                    Text(
-                                        if (state.loadingMore) AppStrings.s(R.string.online_loading)
-                                        else AppStrings.s(R.string.online_load_more),
-                                    )
-                                }
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                             }
                         }
                     }

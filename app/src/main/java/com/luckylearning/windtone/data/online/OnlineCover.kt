@@ -242,15 +242,27 @@ object OnlineCover {
      * 同一地址并发只下载一次：等待者共享 [CompletableDeferred] 的结果。
      * 失败时也 complete(null)，等待者不会挂在取消的生产者上。
      */
-    private suspend fun fetchBytesShared(url: String): ByteArray? {
+    private suspend fun fetchBytesShared(url: String, missed: Int = 0): ByteArray? {
         val normalized = OnlineCoverUrls.normalizeImage(url) ?: return null
         val created = CompletableDeferred<ByteArray?>()
         val existing = inFlight.putIfAbsent(normalized, created)
-        if (existing != null) return existing.await()
+        if (existing != null) {
+            return try {
+                existing.await()
+            } catch (_: SharedCoverMiss) {
+                // 生产方被滑出屏幕取消了。等它的人再试一次，不要把这次 null 记成 90 秒失败。
+                if (missed >= 1) null else fetchBytesShared(url, missed + 1)
+            }
+        }
         try {
             val bytes = fetchBytes(normalized)
             created.complete(bytes)
             return bytes
+        } catch (cancelled: CancellationException) {
+            // 先摘掉飞行记录再唤醒等待者，否则等待者会拿到同一个已取消的 deferred 死循环。
+            inFlight.remove(normalized, created)
+            if (!created.isCompleted) created.completeExceptionally(SharedCoverMiss())
+            throw cancelled
         } catch (t: Throwable) {
             created.complete(null)
             throw t
@@ -258,6 +270,9 @@ object OnlineCover {
             inFlight.remove(normalized, created)
         }
     }
+
+    /** 单飞的生产方被取消。等待者应重试，而不是把它当成「这张图下载失败」。 */
+    private class SharedCoverMiss : Exception()
 
     private suspend fun fetchBytes(url: String): ByteArray? {
         val normalized = OnlineCoverUrls.normalizeImage(url) ?: return null

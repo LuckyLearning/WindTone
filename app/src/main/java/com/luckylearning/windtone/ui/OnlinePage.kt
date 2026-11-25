@@ -4,6 +4,12 @@ import android.graphics.Bitmap
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -61,6 +67,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -221,8 +228,11 @@ internal fun OnlinePage(
             results = emptyList()
             searching = false
         }
-        if (place.section == LxSection.SHEETS && place.detail != LxDetail.SHEET) openSheet = null
-        if (place.section == LxSection.BOARDS && place.detail != LxDetail.BOARD) openBoard = null
+        // 歌单 / 榜单详情关掉时不擦掉 openSheet / openBoard。
+        // 列表留在底层，详情只是盖上去再滑走；滑走的那一帧还要画刚才那个详情。
+        // 离开这个分区再清，避免切回来时用过期的详情盖住列表。
+        if (place.section != LxSection.SHEETS) openSheet = null
+        if (place.section != LxSection.BOARDS) openBoard = null
         if (place.section == LxSection.MINE && place.detail != LxDetail.LIST) openMyList = null
     }
 
@@ -483,6 +493,11 @@ internal fun OnlinePage(
         else -> stringResource(place.section.labelRes)
     }
 
+    // 稳定对象：播放进度重组时不能换成新 lambda，否则右滑手势的协程会重开，
+    // 正在进行的纵向滑动被掐掉。
+    val drawerOpener = remember { DrawerOpener() }
+    drawerOpener.onOpen = onOpenDrawer
+
     Column(
         modifier
             .fillMaxSize()
@@ -491,7 +506,7 @@ internal fun OnlinePage(
             // 设置 / 播放页盖住本页时也不接管，否则覆盖层上的横向滑动会穿透到底层开抽屉。
             .drawerSwipe(
                 enabled = !sideNav && backEnabled && !playerExpanded,
-                onOpen = onOpenDrawer,
+                opener = drawerOpener,
             ),
     ) {
         if (confirmDeleteList) {
@@ -566,6 +581,14 @@ internal fun OnlinePage(
             modifier = Modifier.weight(1f).fillMaxWidth().clipToBounds(),
             transitionSpec = {
                 SettingsMotion.slide(forward = LxBackStack.forward(initialState, targetState))
+            },
+            // 歌单 / 排行榜的「列表 ↔ 详情」不换内容槽。换槽会把列表移出组合，
+            // 返回时滚动节点是新装上的，纵向滑动会停住。详情改由槽内覆盖。
+            contentKey = { frame ->
+                when (frame.section) {
+                    LxSection.SHEETS, LxSection.BOARDS -> frame.section
+                    else -> frame
+                }
             },
             label = "lx-place",
         ) { target ->
@@ -653,30 +676,34 @@ internal fun OnlinePage(
                 }
                 LxSection.SHEETS -> {
                     val sheet = openSheet
-                    if (target.detail == LxDetail.SHEET && sheet != null) {
-                        SheetDetailPane(
-                            sheet = sheet,
-                            tracks = sheetTracks,
-                            loading = sheetLoading,
-                            error = sheetError,
-                            saving = sheetSaving,
-                            saved = sheetSaved,
-                            favoriteKeys = favoriteKeys,
-                            listState = sheetDetailState,
-                            scrollGen = sheetScrollGen,
-                            scrolledGen = sheetScrolledGen,
-                            onScrolled = { sheetScrolledGen = it },
-                            onPlay = { playTracks(sheetTracks, it) },
-                            onFavorite = { toggleFavorite(it) },
-                            onSaveToList = { saveSheetToList(sheet) },
-                        )
-                    } else {
-                        SonglistPane(
-                            state = songlistState,
-                            gridState = sheetGridState,
-                            onOpen = { loadSheet(it) },
-                        )
-                    }
+                    LxStackedDetail(
+                        showDetail = target.detail == LxDetail.SHEET && sheet != null,
+                        list = {
+                            SonglistPane(
+                                state = songlistState,
+                                gridState = sheetGridState,
+                                onOpen = { loadSheet(it) },
+                            )
+                        },
+                        detail = {
+                            if (sheet != null) SheetDetailPane(
+                                sheet = sheet,
+                                tracks = sheetTracks,
+                                loading = sheetLoading,
+                                error = sheetError,
+                                saving = sheetSaving,
+                                saved = sheetSaved,
+                                favoriteKeys = favoriteKeys,
+                                listState = sheetDetailState,
+                                scrollGen = sheetScrollGen,
+                                scrolledGen = sheetScrolledGen,
+                                onScrolled = { sheetScrolledGen = it },
+                                onPlay = { playTracks(sheetTracks, it) },
+                                onFavorite = { toggleFavorite(it) },
+                                onSaveToList = { saveSheetToList(sheet) },
+                            )
+                        },
+                    )
                 }
                 LxSection.MINE -> {
                     val list = openMyList
@@ -697,23 +724,28 @@ internal fun OnlinePage(
                     }
                 }
                 LxSection.BOARDS -> {
-                    if (target.detail == LxDetail.BOARD && openBoard != null) {
-                        BoardDetail(
-                            title = openBoard?.name.orEmpty(),
-                            tracks = boardTracks,
-                            loading = boardLoading,
-                            error = boardError,
-                            favoriteKeys = favoriteKeys,
-                            listState = boardDetailState,
-                            scrollGen = boardScrollGen,
-                            scrolledGen = boardScrolledGen,
-                            onScrolled = { boardScrolledGen = it },
-                            onPlay = { playTracks(boardTracks, it) },
-                            onFavorite = { toggleFavorite(it) },
-                        )
-                    } else {
-                        BoardsList(listState = boardListState, onOpen = { loadBoard(it) })
-                    }
+                    val board = openBoard
+                    LxStackedDetail(
+                        showDetail = target.detail == LxDetail.BOARD && board != null,
+                        list = {
+                            BoardsList(listState = boardListState, onOpen = { loadBoard(it) })
+                        },
+                        detail = {
+                            BoardDetail(
+                                title = board?.name.orEmpty(),
+                                tracks = boardTracks,
+                                loading = boardLoading,
+                                error = boardError,
+                                favoriteKeys = favoriteKeys,
+                                listState = boardDetailState,
+                                scrollGen = boardScrollGen,
+                                scrolledGen = boardScrolledGen,
+                                onScrolled = { boardScrolledGen = it },
+                                onPlay = { playTracks(boardTracks, it) },
+                                onFavorite = { toggleFavorite(it) },
+                            )
+                        },
+                    )
                 }
                 LxSection.SEARCH -> SearchBody(
                     keyword = keyword,
@@ -854,6 +886,41 @@ private fun SearchBody(
     }
 }
 
+/**
+ * 详情盖在列表上，列表不离开组合。
+ *
+ * 歌单和排行榜以前在 [AnimatedContent] 里用 if/else 把列表换成详情。
+ * 进详情时列表被移出组合，返回时用原来的滚动状态装回一个新节点。
+ * 这一下之后两个列表都不再吃纵向滑动。列表留在底层，详情只盖住它。
+ */
+@Composable
+internal fun LxStackedDetail(
+    showDetail: Boolean,
+    modifier: Modifier = Modifier,
+    list: @Composable () -> Unit,
+    detail: @Composable () -> Unit,
+) {
+    Box(modifier.fillMaxSize()) {
+        list()
+        AnimatedVisibility(
+            visible = showDetail,
+            modifier = Modifier.fillMaxSize(),
+            enter = slideInHorizontally(tween(SettingsMotion.SlideMs)) { width -> width } +
+                fadeIn(tween(SettingsMotion.FadeMs)),
+            exit = slideOutHorizontally(tween(SettingsMotion.SlideMs)) { width -> width } +
+                fadeOut(tween(SettingsMotion.FadeMs)),
+        ) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background),
+            ) {
+                detail()
+            }
+        }
+    }
+}
+
 /** 榜单列表：按平台分组。卡片带主色小标记，不再是三列纯文字按钮。 */
 @Composable
 private fun BoardsList(
@@ -862,7 +929,7 @@ private fun BoardsList(
     onOpen: (OnlineBoards.Board) -> Unit,
 ) {
     LazyColumn(
-        Modifier.fillMaxSize().padding(horizontal = 12.dp),
+        Modifier.fillMaxSize().padding(horizontal = 12.dp).testTag("board-list"),
         state = listState,
         verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp),

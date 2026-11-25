@@ -250,7 +250,8 @@ object OnlineSonglists {
                 source = "kw",
                 id = id,
                 name = BuiltInSearch.decodeName(item.optString("name")),
-                cover = item.optString("img").replaceFirst("http://", "https://"),
+                // 协议按图床主机归一：kwcdn 必须留在 http，img*.kuwo.cn 升到 https
+                cover = OnlineCoverUrls.normalizeImage(item.optString("img")).orEmpty(),
                 author = BuiltInSearch.decodeName(item.optString("uname")),
                 playCount = formatCount(item.optLong("listencnt")),
                 total = item.optInt("total"),
