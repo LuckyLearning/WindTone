@@ -397,8 +397,9 @@ fun MainScreen(
     }
 
     if (showReport) {
-        // 进入报告页时按当前档位拉一次数据（切 7/30 天时由页面内部再拉）
-        LaunchedEffect(Unit) { if (library.report == null) lib.loadReport() }
+        // 进入报告页时按当前档位拉一次数据（切 7/30 天时由页面内部再拉）。
+        // 必须每次进入都拉：否则听完歌再打开，还是进页时那份空数据。
+        LaunchedEffect(Unit) { lib.loadReport() }
     }
 
     // ---------------------------------------------------------------- 外部播放入口

@@ -80,8 +80,9 @@ internal class PlaylistStore(private val session: LibrarySession) : PlaylistActi
         val most = index.allStates().asSequence()
             .filter { it.playCount > 0 }
             .sortedByDescending { it.playCount }
-            .take(100)
             .mapNotNull { songsById[it.songId] }
+            .filter { it.source != SongSource.ONLINE }
+            .take(100)
             .toList()
         // 「我的收藏」虚拟歌单：有收藏就列出全部，最近听过的排前面
         val favorites = index.allStates().asSequence()

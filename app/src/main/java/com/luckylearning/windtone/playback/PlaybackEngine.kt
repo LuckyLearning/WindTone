@@ -377,6 +377,7 @@ class PlaybackEngine(
             override fun addListenTime(mediaId: String, ms: Long, now: Long) =
                 aliyunTracks.addListenTime(mediaId, ms, now)
         },
+        onRecorded = { onPlayRecorded?.invoke() },
     )
     private var aliyunUrlRetried = false
     private var aliyunWindowJob: Job? = null
@@ -512,6 +513,18 @@ class PlaybackEngine(
     /** 曲库刷新后推过来：用于解析 mediaId → Song（收藏标记、统计写入都靠它） */
     fun setLibrarySongs(songs: List<Song>) {
         librarySongs = songs
+    }
+
+    /** 起播队列里已入库的歌：曲库侧据此合并进内存列表，避免报告/最近播放对不上 */
+    var onQueueSongs: ((List<Song>) -> Unit)? = null
+
+    /** 播放次数或收听时长刚落库：曲库侧据此刷新最近播放与统计 */
+    var onPlayRecorded: (() -> Unit)? = null
+
+    /** 起播前把已入库的歌记进曲库索引，否则播放次数和最近播放都写不进去。 */
+    private fun rememberForStats(songs: List<Song>) {
+        index.remember(songs)
+        onQueueSongs?.invoke(songs)
     }
 
     /** 歌曲被彻底删除（曲库侧已清库并级联清理）：把它们从队列与曲库副本里摘掉 */
@@ -1361,16 +1374,28 @@ class PlaybackEngine(
 
     // ================================================================ 播放动作
 
-    override fun playQueue(queue: List<Song>, startIndex: Int) = queueManager.playQueue(queue, startIndex)
-    override fun playShuffled(songs: List<Song>) = queueManager.playShuffled(songs)
+    override fun playQueue(queue: List<Song>, startIndex: Int) {
+        rememberForStats(queue)
+        queueManager.playQueue(queue, startIndex)
+    }
+    override fun playShuffled(songs: List<Song>) {
+        rememberForStats(songs)
+        queueManager.playShuffled(songs)
+    }
     override fun togglePlay() = queueManager.togglePlay()
     override fun next() = queueManager.next()
     override fun previous() = queueManager.previous()
     override fun seekTo(ms: Long) = queueManager.seekTo(ms)
     override fun seekBy(deltaMs: Long) = queueManager.seekBy(deltaMs)
     override fun cyclePlayMode() = queueManager.cyclePlayMode()
-    override fun playNext(song: Song) = queueManager.playNext(song)
-    override fun enqueue(songs: List<Song>) = queueManager.enqueue(songs)
+    override fun playNext(song: Song) {
+        rememberForStats(listOf(song))
+        queueManager.playNext(song)
+    }
+    override fun enqueue(songs: List<Song>) {
+        rememberForStats(songs)
+        queueManager.enqueue(songs)
+    }
     override fun refreshQueue() = queueManager.refreshQueue()
     override fun jumpToQueue(index: Int) = queueManager.jumpToQueue(index)
     override fun removeQueueItem(index: Int) = queueManager.removeQueueItem(index)

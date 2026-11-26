@@ -6,6 +6,7 @@ import com.luckylearning.windtone.data.db.PlayerStateEntity
 import com.luckylearning.windtone.data.db.QueueSongEntity
 import com.luckylearning.windtone.data.db.toSong
 import com.luckylearning.windtone.data.model.Song
+import com.luckylearning.windtone.data.model.SongSource
 
 /**
  * 播放域的持久化门面（Repository）。
@@ -97,4 +98,17 @@ class PlaybackStore(private val db: MusicDb) {
         dao.ensure(songId, now)
         dao.setLyricOffset(songId, offsetMs, now)
     }
+
+    /**
+     * 按 mediaId（歌曲 stableKey / 库里的 uri）查找已入库的歌。
+     * 内存索引还没跟上时，统计用它找回主键和来源，避免播放次数写丢。
+     */
+    suspend fun findByMediaId(mediaId: String): StoredSongRef? {
+        val row = db.songDao().byUri(mediaId) ?: return null
+        val source = runCatching { SongSource.valueOf(row.source) }.getOrDefault(SongSource.MEDIA_STORE)
+        return StoredSongRef(row.id, source)
+    }
 }
+
+/** 统计回查数据库时用的轻量引用 */
+data class StoredSongRef(val id: Long, val source: SongSource)

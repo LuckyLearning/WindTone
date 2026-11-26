@@ -27,6 +27,7 @@ class PlaybackStats(
     private val index: SongIndex,
     private val scope: CoroutineScope,
     private val online: OnlinePlayLedger? = null,
+    private val onRecorded: (() -> Unit)? = null,
 ) {
 
     /** 当前正在累计收听的曲目（stableKey），null = 没有在累计 */
@@ -59,21 +60,37 @@ class PlaybackStats(
      */
     fun recordPlay(mediaId: String) {
         val songId = index.idOf(mediaId)
-        if (songId == null) {
-            if (online != null && TrackFragment.cacheKeyOfMediaId(mediaId)) {
-                scope.launch {
-                    val now = System.currentTimeMillis()
-                    withContext(Dispatchers.IO) { runCatching { online.recordPlay(mediaId, now) } }
-                }
+        if (songId != null) {
+            recordKnownPlay(songId)
+            return
+        }
+        if (online != null && TrackFragment.cacheKeyOfMediaId(mediaId)) {
+            scope.launch {
+                val now = System.currentTimeMillis()
+                withContext(Dispatchers.IO) { runCatching { online.recordPlay(mediaId, now) } }
+                onRecorded?.invoke()
             }
             return
         }
+        // 索引还没跟上（刚 upsert 的在线曲、或自动扫描被跳过后尚未 rebuild）
+        scope.launch {
+            val now = System.currentTimeMillis()
+            val found = withContext(Dispatchers.IO) { store.findByMediaId(mediaId) } ?: return@launch
+            index.remember(mediaId, found.id, found.source)
+            withContext(Dispatchers.IO) { runCatching { store.recordPlay(found.id, now) } }
+            index.bump(found.id) { it.copy(playCount = it.playCount + 1, lastPlayedAt = now) }
+            onRecorded?.invoke()
+        }
+    }
+
+    private fun recordKnownPlay(songId: Long) {
         scope.launch {
             val now = System.currentTimeMillis()
             withContext(Dispatchers.IO) {
                 runCatching { store.recordPlay(songId, now) }
             }
             index.bump(songId) { it.copy(playCount = it.playCount + 1, lastPlayedAt = now) }
+            onRecorded?.invoke()
         }
     }
 
@@ -97,21 +114,38 @@ class PlaybackStats(
                         // 云盘曲不在本地曲库表，没有 songId，但仍要进报告的小时桶
                         runCatching { store.addListenBucket(hour, played, SourceMode.CLOUD.name) }
                     }
+                    onRecorded?.invoke()
                 }
+                return
+            }
+            val played = ms
+            scope.launch {
+                val now = System.currentTimeMillis()
+                val found = withContext(Dispatchers.IO) { store.findByMediaId(key) } ?: return@launch
+                index.remember(key, found.id, found.source)
+                val source = sourceModeOf(found.source)
+                withContext(Dispatchers.IO) {
+                    runCatching { store.addListenTime(found.id, played, hour, now, source) }
+                }
+                index.bump(found.id) { it.copy(playedMs = it.playedMs + played) }
+                onRecorded?.invoke()
             }
             return
         }
-        val source = when (index.sourceOf(songId)) {
-            SongSource.ONLINE -> SourceMode.LX.name
-            else -> SourceMode.LOCAL.name
-        }
+        val source = sourceModeOf(index.sourceOf(songId))
         scope.launch {
             val now = System.currentTimeMillis()
             withContext(Dispatchers.IO) {
                 runCatching { store.addListenTime(songId, ms, hour, now, source) }
             }
             index.bump(songId) { it.copy(playedMs = it.playedMs + ms) }
+            onRecorded?.invoke()
         }
+    }
+
+    private fun sourceModeOf(source: SongSource): String = when (source) {
+        SongSource.ONLINE -> SourceMode.LX.name
+        else -> SourceMode.LOCAL.name
     }
 
     /** 丢弃尚未落库的累计收听时长（「清空统计」前必须调用，否则它会被写回去） */

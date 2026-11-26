@@ -88,6 +88,7 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
      * Bus 自带 3s 合并；这里再挡「正在扫 / 未选范围」。
      */
     fun startHotplugWatch() {
+        bindPlaybackRecording()
         scope.launch {
             StorageHotplugBus.rescanRequests.collect {
                 if (_library.value.scanning) {
@@ -102,6 +103,42 @@ internal class LibraryCore(private val session: LibrarySession) : LibraryActions
                 scan(auto = false)
             }
         }
+    }
+
+    /**
+     * 把播放引擎的统计回调接到曲库：起播时把新入库的歌并进内存列表，
+     * 落库后刷新最近播放、播放统计和（若已打开过）收听报告。
+     */
+    fun bindPlaybackRecording() {
+        playback.onQueueSongs = { includeSongs(it) }
+        playback.onPlayRecorded = {
+            session.playlists.refreshPlaylists()
+            if (_library.value.report != null) session.reports.loadReport()
+        }
+    }
+
+    /**
+     * 把已入库、但还没并进当前曲库列表的歌补进来。
+     * 扫描本身会经 persistSongs 把在线曲并回列表；这里覆盖「本会话刚 upsert、扫描还没跑」的空档。
+     */
+    internal fun includeSongs(songs: List<Song>) {
+        val incoming = songs.filter { it.dbId != 0L }
+        if (incoming.isEmpty()) return
+        val cur = _library.value.songs
+        val byKey = LinkedHashMap<String, Song>(cur.size + incoming.size)
+        for (s in cur) byKey[s.stableKey] = s
+        var changed = false
+        for (s in incoming) {
+            val old = byKey[s.stableKey]
+            if (old == null || old.dbId != s.dbId) {
+                byKey[s.stableKey] = s
+                changed = true
+            }
+        }
+        if (!changed) return
+        val merged = byKey.values.toList()
+        _library.update { it.copy(songs = merged) }
+        playback.setLibrarySongs(merged)
     }
 
     /**

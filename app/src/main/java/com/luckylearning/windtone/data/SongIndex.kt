@@ -30,6 +30,7 @@ class SongIndex {
 
     // ------------------------------------------------------------------ uri ↔ 主键
 
+    @Synchronized
     fun idOf(uri: String): Long? = idByUri[uri]
 
     /** 优先用 Song 自带的 dbId（持久化时已回填），回落查表 */
@@ -38,24 +39,54 @@ class SongIndex {
 
     fun idOrZero(song: Song): Long = idOf(song) ?: 0L
 
-    /** 曲库重建后整体刷新映射（列表就是索引的唯一真相） */
+    /** 曲库重建后整体刷新映射。刚入库、尚未并进曲库列表的歌靠 [remember] 补进索引。 */
+    @Synchronized
     fun rebuild(songs: List<Song>) {
         idByUri.clear()
         for (s in songs) if (s.dbId != 0L) idByUri[s.stableKey] = s.dbId
         sourceById = songs.filter { it.dbId != 0L }.associateBy({ it.dbId }, { it.source })
     }
 
+    /**
+     * 把已入库的歌记进索引，不丢弃现有条目。
+     *
+     * 洛雪起播会先 upsert 进数据库再播放，但曲库列表要等到下次扫描才会合并这些歌。
+     * 若不在起播前 remember，[idOf] 对 mediaId 会落空，播放次数和最近播放都写不进去。
+     */
+    @Synchronized
+    fun remember(songs: List<Song>) {
+        var sources = sourceById
+        for (s in songs) {
+            if (s.dbId == 0L) continue
+            idByUri[s.stableKey] = s.dbId
+            sources = sources + (s.dbId to s.source)
+        }
+        sourceById = sources
+    }
+
+    /** 按 mediaId（即 stableKey）补一条映射，供统计在索引未命中时回查数据库后写回。 */
+    @Synchronized
+    fun remember(mediaId: String, songId: Long, source: SongSource) {
+        if (songId == 0L || mediaId.isEmpty()) return
+        idByUri[mediaId] = songId
+        sourceById = sourceById + (songId to source)
+    }
+
     /** 该主键歌曲的来源；索引里没有时按本地曲处理（读侧兜底，不写库） */
+    @Synchronized
     fun sourceOf(songId: Long): SongSource = sourceById[songId] ?: SongSource.MEDIA_STORE
 
+    @Synchronized
     fun removeUri(uri: String) {
         idByUri.remove(uri)
     }
 
+    @Synchronized
     fun removeUris(uris: Collection<String>) {
         uris.forEach { idByUri.remove(it) }
     }
 
+    @Synchronized
     fun clearIds() {
         idByUri.clear()
         sourceById = emptyMap()
