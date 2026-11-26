@@ -262,6 +262,8 @@ internal fun OnlinePage(
         searching = true
         searched = true
         pages.clear()
+        // 旧搜索的在飞翻页不会再自己收尾，这里统一放掉，避免新结果第一页就点不动「加载更多」
+        loadingMore.clear()
         scope.launch {
             val r = BuiltInSearch.search(
                 q,
@@ -278,21 +280,29 @@ internal fun OnlinePage(
     /** 单组翻页：只请求这一家，合并去重后写回该组 */
     fun loadMore(group: BuiltInSearch.Result) {
         if (loadingMore[group.source] == true) return
+        val gen = searchGen
+        val q = keyword.trim()
         val next = (pages[group.source] ?: 1) + 1
         loadingMore[group.source] = true
         scope.launch {
-            val more = runCatching {
-                BuiltInSearch.search(keyword.trim(), listOf(group.source), page = next)
-            }.getOrNull()
-            val fresh = more?.firstOrNull()?.tracks.orEmpty()
-            if (fresh.isNotEmpty()) {
-                results = results.map { g ->
-                    if (g.source != group.source) g
-                    else g.copy(tracks = (g.tracks + fresh).distinctBy { it.stableKey })
+            try {
+                val more = runCatching {
+                    BuiltInSearch.search(q, listOf(group.source), page = next)
+                }.getOrNull()
+                // 用户已经发起了新搜索：旧翻页结果不能拼到新结果后面
+                if (gen != searchGen) return@launch
+                val fresh = more?.firstOrNull()?.tracks.orEmpty()
+                if (fresh.isNotEmpty()) {
+                    results = results.map { g ->
+                        if (g.source != group.source) g
+                        else g.copy(tracks = (g.tracks + fresh).distinctBy { it.stableKey })
+                    }
+                    pages[group.source] = next
                 }
-                pages[group.source] = next
+            } finally {
+                // 新搜索已经接管这些组时，不要把它刚设上的 loading 清掉
+                if (gen == searchGen) loadingMore[group.source] = false
             }
-            loadingMore[group.source] = false
         }
     }
 
@@ -343,10 +353,12 @@ internal fun OnlinePage(
         scope.launch {
             try {
                 val r = runCatching { OnlineBoards.fetch(board) }.getOrNull()
+                // 用户已经点开别的榜单：这份结果作废，不能盖到新榜单的标题下
+                if (boardKey != key) return@launch
                 boardTracks = r?.tracks.orEmpty()
                 boardError = r?.error ?: AppStrings.s(R.string.online_board_empty)
             } finally {
-                boardLoading = false
+                if (boardKey == key) boardLoading = false
             }
         }
     }
@@ -365,16 +377,20 @@ internal fun OnlinePage(
         }
         scope.launch {
             // 收藏状态每次都重查：用户可能刚在「我的列表」里删掉了它
-            sheetSaved = withContext(Dispatchers.IO) { OnlineLists.isSaved(context, sheet) }
+            val saved = withContext(Dispatchers.IO) { OnlineLists.isSaved(context, sheet) }
+            // 用户已经点开别的歌单：收藏状态同样不能盖过去
+            if (sheetKey != key) return@launch
+            sheetSaved = saved
             if (cached) return@launch
             try {
                 val r = OnlineSonglists.detail(sheet.source, sheet.id)
+                if (sheetKey != key) return@launch
                 sheetTracks = r.tracks
                 sheetError = if (r.tracks.isEmpty()) {
                     AppStrings.s(R.string.online_sheet_empty)
                 } else null
             } finally {
-                sheetLoading = false
+                if (sheetKey == key) sheetLoading = false
             }
         }
     }
@@ -401,12 +417,15 @@ internal fun OnlinePage(
      */
     fun saveSheetToList(sheet: OnlineSonglists.Sheet) {
         if (sheetTracks.isEmpty() || sheetSaving) return
+        val key = "${sheet.source}:${sheet.id}"
         sheetSaving = true
         scope.launch {
             val result = withContext(Dispatchers.IO) {
                 OnlineLists.saveSheet(context, sheet, sheetTracks)
             }
             sheetSaving = false
+            // 保存期间切到了别的歌单：这一份的收藏标记不能写到当前页上
+            if (sheetKey != key) return@launch
             when (result) {
                 is OnlineLists.SaveResult.Failed ->
                     Toast.makeText(context, AppStrings.s(R.string.online_save_failed), Toast.LENGTH_SHORT).show()

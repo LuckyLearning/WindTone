@@ -177,13 +177,20 @@ internal fun SonglistPane(
         state.page = 1
         state.hasMore = false
         state.morePaused = false
+        state.loadingMore = false
         state.groupIndex = 0
         state.loadedKey = null
 
         // 取消（用户切走）会在这里抛 CancellationException，后面几行不会执行 ——
         // 这正是「不记已加载、回来能重来」的保证，别把 tagsLoadedFor 提前写。
         val groups = withTimeoutOrNull(TAGS_TIMEOUT_MS) { gateway.tags(state.source) }
-            .orEmpty()
+        if (groups == null) {
+            // 超时不能记成「已加载」：否则返回本页时 167 行的短路会让这家分类再也不重取
+            state.failed = true
+            state.error = AppStrings.s(R.string.online_sheet_load_failed)
+            state.loading = false
+            return@LaunchedEffect
+        }
         state.groups = groups
         state.tagsLoadedFor = state.source
 
@@ -197,7 +204,7 @@ internal fun SonglistPane(
         // 该平台没有分类（或分类接口挂了）：不传 tagId 也有一批默认歌单
         try {
             val r = withTimeoutOrNull(LIST_TIMEOUT_MS) { gateway.list(state.source, "", 1) }
-            if (r == null) {
+            if (r == null || r.error != null) {
                 state.failed = true
                 state.error = AppStrings.s(R.string.online_sheet_load_failed)
             } else {
@@ -223,13 +230,14 @@ internal fun SonglistPane(
         state.error = null
         state.failed = false
         state.morePaused = false
+        state.loadingMore = false
         // 这里不能 scrollToItem。loading=true 时网格被骨架替换，不在组合里；
         // LazyGridState.scroll 会先等那次布局（AwaitFirstLayoutModifier），
         // 布局又要等 loading 变 false 才会发生 —— 协程停在 scrollToItem，
         // finally 跑不到，骨架就永远留着。滚回顶部放到数据已经显示之后。
         try {
             val r = withTimeoutOrNull(LIST_TIMEOUT_MS) { gateway.list(state.source, state.tagId, 1) }
-            if (r == null) {
+            if (r == null || r.error != null) {
                 state.failed = true
                 state.error = AppStrings.s(R.string.online_sheet_load_failed)
             } else {
@@ -259,7 +267,7 @@ internal fun SonglistPane(
                 }
                 // 用户已经换了分类：这次结果作废，不能拼到新列表后面
                 if (state.loadedKey != key) return@launch
-                if (r == null) {
+                if (r == null || r.error != null) {
                     state.morePaused = true
                 } else if (r.items.isEmpty()) {
                     state.hasMore = false

@@ -57,25 +57,24 @@ internal fun Modifier.drawerSwipe(enabled: Boolean, opener: DrawerOpener): Modif
             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
             var dx = 0f
             var dy = 0f
-            var opening = false
+            // 记「当前」判定，而不是「曾经打开过」：先右滑再转纵向，松手不能开抽屉。
+            var decision = DrawerSwipe.Decision.PENDING
             while (true) {
                 val event = awaitPointerEvent(PointerEventPass.Initial)
                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
                 if (!change.pressed) {
-                    if (opening && dx >= openDistance) opener.onOpen()
+                    if (decision == DrawerSwipe.Decision.OPEN && dx >= openDistance) opener.onOpen()
                     break
                 }
                 val delta = change.positionChange()
                 dx += delta.x
                 dy += delta.y
-                when (DrawerSwipe.decide(dx, dy, slop)) {
+                decision = DrawerSwipe.decide(dx, dy, slop)
+                when (decision) {
                     DrawerSwipe.Decision.PENDING -> Unit
                     // 让给列表，但手指还按着，循环留到松手。
                     DrawerSwipe.Decision.YIELD -> Unit
-                    DrawerSwipe.Decision.OPEN -> {
-                        opening = true
-                        change.consume()
-                    }
+                    DrawerSwipe.Decision.OPEN -> change.consume()
                 }
             }
         }

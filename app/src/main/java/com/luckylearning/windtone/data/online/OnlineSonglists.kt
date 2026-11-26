@@ -57,7 +57,13 @@ object OnlineSonglists {
         val key: String get() = "sheet:$source:$id"
     }
 
-    data class SheetPage(val items: List<Sheet>, val page: Int, val hasMore: Boolean)
+    data class SheetPage(
+        val items: List<Sheet>,
+        val page: Int,
+        val hasMore: Boolean,
+        /** 非 null 表示这次请求失败，而不是「这一类真没有歌单」；界面据此决定给不给重试 */
+        val error: String? = null,
+    )
 
     data class Detail(val sheet: Sheet?, val tracks: List<OnlineTrack>)
 
@@ -79,7 +85,8 @@ object OnlineSonglists {
     suspend fun list(source: String, tagId: String, page: Int): SheetPage = withContext(Dispatchers.IO) {
         runCatching { fetchList(source, tagId, page) }
             .onFailure { Log.w(TAG, "歌单列表失败 $source/$tagId#$page: ${it.message}") }
-            .getOrDefault(SheetPage(emptyList(), page, false))
+            // 失败不能吞成「正常空页」：界面靠 error 区分要不要给重试按钮
+            .getOrElse { SheetPage(emptyList(), page, false, error = it.message ?: "failed") }
     }
 
     suspend fun detail(source: String, id: String, page: Int = 1): Detail = withContext(Dispatchers.IO) {

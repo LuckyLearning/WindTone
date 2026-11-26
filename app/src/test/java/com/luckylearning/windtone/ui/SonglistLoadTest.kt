@@ -9,11 +9,13 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import com.luckylearning.windtone.data.online.OnlineSonglists
 import com.luckylearning.windtone.ui.theme.MusicPlayerTheme
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -21,6 +23,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * 歌单骨架停住的回归。
@@ -186,6 +189,88 @@ class SonglistLoadTest {
                 requested.size == callsAfterEnd,
             )
         }
+    }
+
+    /**
+     * 分类接口超时不能记成「已加载」。
+     *
+     * 以前 `withTimeoutOrNull(...).orEmpty()` 之后无条件写 `tagsLoadedFor`，
+     * 返回本页时 effect 直接短路，这家平台的分类就再也取不到，只剩「全部」默认歌单。
+     */
+    @Test
+    fun timedOutTagsDoNotLockThePlatformIntoAnEmptyCategoryList() {
+        val state = SonglistUiState()
+        compose.setContent {
+            val grid = rememberLazyGridState()
+            MusicPlayerTheme {
+                SonglistPane(
+                    state = state,
+                    gridState = grid,
+                    onOpen = {},
+                    gateway = SonglistGateway(
+                        tags = {
+                            // 超过页面的 10 秒上限。测试时钟是虚拟的，不真等。
+                            delay(60_000)
+                            emptyList()
+                        },
+                        list = { _, _, page -> OnlineSonglists.SheetPage(emptyList(), page, false) },
+                    ),
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+        compose.waitUntil(timeoutMillis = 20_000) { state.failed && !state.loading }
+        assertNull("分类超时不能记成已加载，否则不再重取", state.tagsLoadedFor)
+        compose.onNodeWithText("重试").assertIsDisplayed()
+    }
+
+    /**
+     * 数据层把网络失败收成带 `error` 的页（而不是「真没有歌单」），
+     * 界面必须据此给重试，不能只显示一句「这个分类暂时没有歌单」。
+     */
+    @Test
+    fun failedPageThatReturnsImmediatelyStillOffersRetry() {
+        val state = SonglistUiState()
+        val recovered = AtomicBoolean(false)
+        compose.setContent {
+            val grid = rememberLazyGridState()
+            MusicPlayerTheme {
+                SonglistPane(
+                    state = state,
+                    gridState = grid,
+                    onOpen = {},
+                    gateway = SonglistGateway(
+                        tags = {
+                            listOf(
+                                OnlineSonglists.TagGroup(
+                                    "热门",
+                                    listOf(OnlineSonglists.Tag("9", "流行")),
+                                ),
+                            )
+                        },
+                        list = { _, _, page ->
+                            if (!recovered.get()) {
+                                // 数据层把网络失败收成带 error 的页，不是「真没有歌单」
+                                OnlineSonglists.SheetPage(emptyList(), page, false, error = "network")
+                            } else {
+                                OnlineSonglists.SheetPage(
+                                    listOf(OnlineSonglists.Sheet("kw", "1", "恢复的歌单")),
+                                    page,
+                                    false,
+                                )
+                            }
+                        },
+                    ),
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+        compose.waitUntil(timeoutMillis = 5_000) { state.failed && !state.loading }
+        compose.onNodeWithText("重试").assertIsDisplayed()
+        compose.runOnIdle { recovered.set(true) }
+        compose.onNodeWithText("重试").performClick()
+        compose.waitUntil(timeoutMillis = 5_000) { state.sheets.isNotEmpty() && !state.loading }
+        compose.onNodeWithText("恢复的歌单").assertIsDisplayed()
     }
 
     private fun sheet(id: Int) = OnlineSonglists.Sheet(

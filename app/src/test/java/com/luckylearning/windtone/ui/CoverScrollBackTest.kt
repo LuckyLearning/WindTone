@@ -74,11 +74,16 @@ class CoverScrollBackTest {
                     val n = hits.incrementAndGet()
                     try {
                         if (n == 1 && holdFirst) Thread.sleep(2_000)
-                        socket.getOutputStream().use { output ->
-                            val head = "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: ${jpeg.size}\r\nConnection: close\r\n\r\n"
-                            output.write(head.toByteArray(Charsets.US_ASCII))
-                            output.write(jpeg)
-                        }
+                        val output = socket.getOutputStream()
+                        val head = "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: ${jpeg.size}\r\nConnection: close\r\n\r\n"
+                        output.write(head.toByteArray(Charsets.US_ASCII))
+                        output.write(jpeg)
+                        output.flush()
+                        // 半关闭输出，等客户端读完再关整个连接。直接 close 在 Windows 上会发 RST，
+                        // 客户端读到一半就 SocketException，loadBitmap 会误以为下载失败再请求一次。
+                        runCatching { socket.shutdownOutput() }
+                        socket.soTimeout = 500
+                        runCatching { socket.getInputStream().read() }
                     } catch (_: Exception) {
                     } finally {
                         runCatching { socket.close() }
