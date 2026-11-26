@@ -1011,6 +1011,7 @@ fun MainScreen(
                     state = library.report,
                     onClose = { showReport = false },
                     onSetDays = lib::setReportDays,
+                    onSetFilter = lib::setReportFilter,
                     onPlayTop = { songs -> if (songs.isNotEmpty()) playerVm.playQueue(songs, 0) },
                     onOpenCalendar = {
                         showCalendar = true

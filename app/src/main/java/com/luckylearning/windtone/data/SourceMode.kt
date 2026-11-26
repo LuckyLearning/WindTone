@@ -26,3 +26,28 @@ enum class SourceMode {
         LX -> R.string.source_mode_lx
     }
 }
+
+/**
+ * 收听报告的查看范围：全部合并 + 三种音源各自单看。
+ *
+ * 与 [SourceMode] 分开是因为报告多一个「全部」档，且它不写入任何偏好——
+ * 只是当前这一屏的筛选，退出报告就回到默认。
+ */
+enum class ReportFilter {
+    ALL, LOCAL, LX, CLOUD;
+
+    fun labelRes(): Int = when (this) {
+        ALL -> R.string.online_filter_all
+        LOCAL -> R.string.source_mode_local
+        LX -> R.string.source_mode_lx
+        CLOUD -> R.string.source_mode_cloud
+    }
+
+    /** listen_log 的 source 列取值；ALL 表示不按来源过滤 */
+    val sourceName: String? get() = when (this) {
+        ALL -> null
+        LOCAL -> SourceMode.LOCAL.name
+        LX -> SourceMode.LX.name
+        CLOUD -> SourceMode.CLOUD.name
+    }
+}

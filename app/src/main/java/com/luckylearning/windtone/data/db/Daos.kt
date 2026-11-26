@@ -473,12 +473,16 @@ interface ListenLogDao {
     @Query("SELECT * FROM listen_log WHERE hourEpoch >= :fromHour ORDER BY hourEpoch ASC")
     suspend fun since(fromHour: Long): List<ListenLogEntity>
 
-    /** 该小时是否已有桶（没有则先建一个空的，避免 UPDATE 匹配不到行） */
-    @Query("INSERT OR IGNORE INTO listen_log (hourEpoch, ms) VALUES (:hour, 0)")
-    suspend fun ensureHour(hour: Long)
+    /** 取回某音源从某个小时起的桶（升序），用于报告的分类型查看 */
+    @Query("SELECT * FROM listen_log WHERE hourEpoch >= :fromHour AND source = :source ORDER BY hourEpoch ASC")
+    suspend fun sinceBySource(fromHour: Long, source: String): List<ListenLogEntity>
 
-    @Query("UPDATE listen_log SET ms = ms + :delta WHERE hourEpoch = :hour")
-    suspend fun addMs(hour: Long, delta: Long)
+    /** 该小时该音源是否已有桶（没有则先建一个空的，避免 UPDATE 匹配不到行） */
+    @Query("INSERT OR IGNORE INTO listen_log (hourEpoch, source, ms) VALUES (:hour, :source, 0)")
+    suspend fun ensureHour(hour: Long, source: String)
+
+    @Query("UPDATE listen_log SET ms = ms + :delta WHERE hourEpoch = :hour AND source = :source")
+    suspend fun addMs(hour: Long, source: String, delta: Long)
 
     /**
      * 累加一段收听到当前小时桶。
@@ -487,10 +491,10 @@ interface ListenLogDao {
      * 「插入忽略 + 更新」两步在事务里等价且处处可用（与搜索历史同口径）。
      */
     @Transaction
-    suspend fun add(hour: Long, delta: Long) {
+    suspend fun add(hour: Long, source: String, delta: Long) {
         if (delta <= 0L) return
-        ensureHour(hour)
-        addMs(hour, delta)
+        ensureHour(hour, source)
+        addMs(hour, source, delta)
     }
 
     @Query("DELETE FROM listen_log WHERE hourEpoch < :beforeHour")

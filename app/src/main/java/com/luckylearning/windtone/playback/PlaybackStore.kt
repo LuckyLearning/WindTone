@@ -35,12 +35,21 @@ class PlaybackStore(private val db: MusicDb) {
      * 结算一段收听时长：[ms] 累加进每曲统计，同时写进收听报告的小时桶，
      * 并顺手裁掉保留期之外的桶（表大小恒定有界）。
      */
-    suspend fun addListenTime(songId: Long, ms: Long, hour: Long, now: Long) {
+    suspend fun addListenTime(songId: Long, ms: Long, hour: Long, now: Long, source: String) {
         val dao = db.songStateDao()
         dao.ensure(songId, now)
         dao.addPlayedMs(songId, ms, now)
+        addListenBucket(hour, ms, source)
+    }
+
+    /**
+     * 只写收听报告的小时桶，不碰 song_state（云盘曲不在本地曲库表，没有 songId）。
+     *
+     * 三场景分开记桶：本地曲 LOCAL、洛雪在线 LX、云盘 CLOUD，报告据此分类型查看。
+     */
+    suspend fun addListenBucket(hour: Long, ms: Long, source: String) {
         val log = db.listenLogDao()
-        log.add(hour, ms)
+        log.add(hour, source, ms)
         log.prune(hour - ListenLogEntity.RETENTION_DAYS * 24L)
     }
 

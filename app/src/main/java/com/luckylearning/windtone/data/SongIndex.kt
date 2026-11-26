@@ -2,6 +2,7 @@ package com.luckylearning.windtone.data
 
 import com.luckylearning.windtone.data.db.SongStateEntity
 import com.luckylearning.windtone.data.model.Song
+import com.luckylearning.windtone.data.model.SongSource
 
 /**
  * 曲库的**内存索引**：`uri → 主键` 与「每曲状态」两张表的常驻副本。
@@ -20,6 +21,10 @@ class SongIndex {
 
     private val idByUri = HashMap<String, Long>()
 
+    /** 每首歌的来源（v6 收听报告分类型用）；与 idByUri 在 rebuild 时一起建 */
+    @Volatile
+    private var sourceById: Map<Long, SongSource> = emptyMap()
+
     @Volatile
     private var states: Map<Long, SongStateEntity> = emptyMap()
 
@@ -37,7 +42,11 @@ class SongIndex {
     fun rebuild(songs: List<Song>) {
         idByUri.clear()
         for (s in songs) if (s.dbId != 0L) idByUri[s.stableKey] = s.dbId
+        sourceById = songs.filter { it.dbId != 0L }.associateBy({ it.dbId }, { it.source })
     }
+
+    /** 该主键歌曲的来源；索引里没有时按本地曲处理（读侧兜底，不写库） */
+    fun sourceOf(songId: Long): SongSource = sourceById[songId] ?: SongSource.MEDIA_STORE
 
     fun removeUri(uri: String) {
         idByUri.remove(uri)
@@ -47,7 +56,10 @@ class SongIndex {
         uris.forEach { idByUri.remove(it) }
     }
 
-    fun clearIds() = idByUri.clear()
+    fun clearIds() {
+        idByUri.clear()
+        sourceById = emptyMap()
+    }
 
     // ------------------------------------------------------------------ 每曲状态
 

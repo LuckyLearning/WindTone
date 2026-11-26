@@ -725,7 +725,7 @@ class SettingsScreenTest {
      * 枚举项增删时的长度契约另由 [SettingsPagePositionsTest] 直接断言。
      */
     @Test
-    fun onlinePagePicksCacheInDialogAndOpensReport() {
+    fun onlinePagePicksCacheInDialogAndHasNoSeparateReportEntry() {
         render()
         openOnlinePage()
 
@@ -746,12 +746,9 @@ class SettingsScreenTest {
         compose.waitForIdle()
         compose.onNodeWithText("128MB").assertIsDisplayed()
 
-        compose.onNodeWithText("收听报告").performScrollTo().performClick()
-        compose.waitUntil(5_000) {
-            compose.onAllNodesWithText("每日收听时长").fetchSemanticsNodes().isNotEmpty()
-        }
-        compose.onNodeWithText("每日收听时长").assertIsDisplayed()
-        compose.onNodeWithText("最常播放").performScrollTo().assertIsDisplayed()
+        // v6 起三场景收听报告统一到曲库侧一个入口，设置页不再单独挂云盘报告；
+        // 否则两份报告口径不一致（本地那份已能按云盘筛选）。
+        compose.onAllNodesWithText("收听报告").assertCountEquals(0)
 
         OnlineMediaCache.setLimitBytes(
             ApplicationProvider.getApplicationContext(),

@@ -1,5 +1,7 @@
 package com.luckylearning.windtone.ui.library
 
+import com.luckylearning.windtone.data.ReportFilter
+
 /**
  * 收听报告域对外的**动作面**。
  *
@@ -9,6 +11,8 @@ package com.luckylearning.windtone.ui.library
  */
 interface ReportActions {
     fun setReportDays(days: Int)
+    /** 切换收听报告的音源筛选（全部 / 本地 / 洛雪 / 云盘） */
+    fun setReportFilter(filter: ReportFilter)
     /** 载入听歌日历指定年月（H7） */
     fun loadCalendar(year: Int, month: Int)
 }

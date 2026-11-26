@@ -6,9 +6,9 @@ nav_order: 12
 parent: 开发文档
 ---
 
-# WindTone 数据库开发文档（MusicDb · v5）
+# WindTone 数据库开发文档（MusicDb · v6）
 
-> 更新：2026-10-25 · 对应代码：`data/db/`（`MusicDb` version **5**）· `data/Prefs.kt`
+> 更新：2026-11-26 · 对应代码：`data/db/`（`MusicDb` version **6**）· `data/Prefs.kt`
 > 回答的问题：**现在哪些数据存在哪、为什么这么分、怎么迁、改的时候别碰什么。**
 
 ---
@@ -29,7 +29,7 @@ parent: 开发文档
 
 ---
 
-## 二、Room v5 结构（9 表 / 8 DAO）
+## 二、Room v6 结构（9 表 / 8 DAO）
 
 文件 `music_player.db`（**勿改名**），`exportSchema = true`，schema 快照在
 `app/schemas/com.luckylearning.windtone.data.db.MusicDb/`（**入库**，改表后必须跟着提交）。
@@ -118,7 +118,8 @@ parent: 开发文档
 | v2 | `play_stats` 加 `playedMs` |
 | v3 | 新增 `scanned_folders`（目录登记，当时与 `prefs.folderUris` 双写） |
 | v4 | 曲库化：8 张表、整数主键、软删、每曲状态合并、队列入表 |
-| **v5** | **新增 `listen_log` 收听日志表 + ListenLogDao**（当前版本） |
+| v5 | 新增 `listen_log` 收听日志表 + ListenLogDao |
+| **v6** | **`listen_log` 加 `source` 列、主键改复合 `(hourEpoch, source)`**（当前版本）——收听报告按本地 / 洛雪 / 云盘分类型查看 |
 
 **不保留任何迁移路径**（2026-10-14 产品口径：**不做跨版本兼容，软件重新手动安装**）：
 代码里**没有** `Migrations.kt`、**没有** `PrefsRoomMigration.kt`，`MusicDb` 只挂 `fallbackToDestructiveMigration()`。
@@ -130,16 +131,19 @@ parent: 开发文档
 
 ---
 
-### 2.x 收听日志 `listen_log` — v5 新增
+### 2.x 收听日志 `listen_log` — v5 新增 / v6 加来源
 
-按小时桶累计收听毫秒，供收听报告画日曲线 / 时段分布。**无外键、不挂 songId**。
+按「小时 × 音源」累计收听毫秒，供收听报告画日曲线 / 时段分布并按类型筛选。**无外键、不挂 songId**。
 
 | 列 | 说明 |
 |---|---|
-| `hourEpoch` | 主键：桶的小时起点（`epochMillis / 3600000`） |
-| `ms` | 该小时内累计收听毫秒数 |
+| `hourEpoch` | 联合主键之一：桶的小时起点（`epochMillis / 3600000`） |
+| `source` | 联合主键之一：音源场景，取 `SourceMode.name`（`LOCAL` / `LX` / `CLOUD`） |
+| `ms` | 该小时、该音源累计收听毫秒数 |
 
-DAO：`ListenLogDao`（`since` / `add` / `prune` / `clear`）。保留约 `ListenLogEntity.RETENTION_DAYS`（400）天，由 prune 清理。
+DAO：`ListenLogDao`（`since` / `sinceBySource` / `add` / `prune` / `clear`）。保留约 `ListenLogEntity.RETENTION_DAYS`（400）天，由 prune 清理。
+
+⚠️ v6 是破坏性升级：旧版同一小时只有一行（本地与洛雪混记），无法回填拆分，升级后统计清零重来。云盘原存 Preferences 的 `listen_hours` 只用于自身榜单；v6 起播放时也往本表写 `CLOUD` 桶，报告统一读这里。
 
 ## 三、没有启动期搬迁（原 `PrefsRoomMigration` 已删除）
 

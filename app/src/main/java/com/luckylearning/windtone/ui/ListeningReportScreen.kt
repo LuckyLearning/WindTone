@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.ListeningReport
+import com.luckylearning.windtone.data.ReportFilter
 import com.luckylearning.windtone.data.formatDayLabel
 import com.luckylearning.windtone.data.formatListenDuration
 import com.luckylearning.windtone.data.model.Song
@@ -56,9 +57,9 @@ private val REPORT_SPANS = listOf(7, 30)
 /**
  * 收听报告页（批次 10.1）。
  *
- * 本地路径：曲线/时段读 `listen_log`，榜单读 `song_state`（不新增网络请求）。
- * 在线路径由 OnlineListeningReport 注入阿里云盘统计后复用本屏；
- * 可用 title / emptyPlaysHint / emptyListenHint 覆盖壳文案。
+ * 曲线/时段从 v6 起读带来源的 `listen_log`，榜单读 `song_state` + 云盘独立统计，
+ * 四种筛选（全部 / 本地 / 洛雪 / 云盘）在同一屏内切换，不新增网络请求。
+ * title / emptyPlaysHint / emptyListenHint 可覆盖壳文案。
  *
  * 图表自绘（Row + 加权 Box），不引图表库：需要的只有"柱状对比"这一种形式，
  * 为了它多背一个几百 KB 的依赖、多一套主题适配，收益不成比例。
@@ -68,9 +69,11 @@ fun ListeningReportScreen(
     state: ReportUiState?,
     onClose: () -> Unit,
     onSetDays: (Int) -> Unit,
+    /** 音源筛选切换；不传则隐藏筛选行（保留给仅展示单场景的复用方） */
+    onSetFilter: ((ReportFilter) -> Unit)? = null,
     onPlayTop: (List<Song>) -> Unit,
     onOpenCalendar: (() -> Unit)? = null,
-    /** 标题；在线报告传 olr_title，默认本地收听报告。 */
+    /** 标题；默认收听报告，可由复用方覆盖。 */
     title: String? = null,
     /** 榜单空态；在线报告可覆盖。 */
     emptyPlaysHint: String? = null,
@@ -80,6 +83,7 @@ fun ListeningReportScreen(
     BackHandler { onClose() }
 
     val days = state?.days ?: REPORT_SPANS.last()
+    val filter = state?.filter ?: ReportFilter.ALL
     val report = state?.report
     val resolvedTitle = title ?: stringResource(R.string.lib_listening_report)
     val resolvedEmptyPlays = emptyPlaysHint ?: stringResource(R.string.lr_empty_plays)
@@ -124,6 +128,19 @@ fun ListeningReportScreen(
                             selected = span == days,
                             onClick = { if (span != days) onSetDays(span) },
                         )
+                    }
+                }
+                // ------------------------------------------------ 音源筛选（全部 / 本地 / 洛雪 / 云盘）
+                if (onSetFilter != null) {
+                    Spacer(Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        ReportFilter.entries.forEach { item ->
+                            SpanChip(
+                                label = stringResource(item.labelRes()),
+                                selected = item == filter,
+                                onClick = { if (item != filter) onSetFilter(item) },
+                            )
+                        }
                     }
                 }
                 if (onOpenCalendar != null) {

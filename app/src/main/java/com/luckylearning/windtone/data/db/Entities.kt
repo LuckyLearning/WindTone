@@ -259,11 +259,18 @@ data class SearchHistoryEntity(
  *
  * 无外键：它统计的是「设备在这些小时里放了多少音乐」，与具体歌曲是否被删无关。
  */
-@Entity(tableName = "listen_log")
+@Entity(
+    tableName = "listen_log",
+    // v6：同一小时里三种音源各占一行，否则「全部 / 分类型」无法从同一份桶里拆出来。
+    // 复合主键 = (小时, 来源)；来源取 SourceMode.name（LOCAL / LX / CLOUD）。
+    primaryKeys = ["hourEpoch", "source"],
+)
 data class ListenLogEntity(
-    /** 桶的小时起点（`epochMillis / 3600000`），主键即桶序号 */
-    @PrimaryKey val hourEpoch: Long,
-    /** 该小时内累计收听毫秒数 */
+    /** 桶的小时起点（`epochMillis / 3600000`） */
+    val hourEpoch: Long,
+    /** 音源场景：LOCAL / LX / CLOUD（见 SourceMode） */
+    val source: String,
+    /** 该小时、该音源累计收听毫秒数 */
     val ms: Long,
 ) {
     companion object {

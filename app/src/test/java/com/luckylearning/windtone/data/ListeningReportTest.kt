@@ -262,4 +262,29 @@ class ListeningReportTest {
         assertEquals(60_000L, sh.days.last().ms)
         assertEquals(60_000L, utc.days.last().ms)
     }
+
+    // ---------------------------------------------------------------- 音源筛选口径
+
+    @Test
+    fun reportFilterMapsToListenLogSource() {
+        assertEquals(null, ReportFilter.ALL.sourceName)
+        assertEquals("LOCAL", ReportFilter.LOCAL.sourceName)
+        assertEquals("LX", ReportFilter.LX.sourceName)
+        assertEquals("CLOUD", ReportFilter.CLOUD.sourceName)
+    }
+
+    @Test
+    fun sameHourFromDifferentSourcesAllCountInTotal() {
+        // 「全部」是把同一小时的三行一起喂给聚合函数，总时长应为三者之和
+        val hour = at(today, 10) / HOUR_MS
+        val buckets = listOf(
+            ListenBucket(hour, 3_000L),
+            ListenBucket(hour, 2_000L),
+            ListenBucket(hour, 1_000L),
+        )
+        val all = buildListeningReport(buckets, at(today, 12), 1, zone)
+        val local = buildListeningReport(listOf(buckets[0]), at(today, 12), 1, zone)
+        assertEquals(6_000L, all.totalMs)
+        assertEquals(3_000L, local.totalMs)
+    }
 }

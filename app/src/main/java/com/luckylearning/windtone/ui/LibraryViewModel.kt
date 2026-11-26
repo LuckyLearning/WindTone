@@ -3,6 +3,7 @@ package com.luckylearning.windtone.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.luckylearning.windtone.data.ReportFilter
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.state.LibraryUiState
 import com.luckylearning.windtone.ui.library.DuplicateActions
@@ -78,7 +79,10 @@ class LibraryViewModel private constructor(
     // 又拿不到实例状态（`selectedSongs()` / 当前报告天数）。因此在这里直接声明默认值，
     // 再转发给对应域的实现；接口侧则刻意不包含它们（见三个 Actions 接口的注释）。
 
-    fun loadReport(days: Int = session.reports.currentDays()) = session.reports.loadReport(days)
+    fun loadReport(
+        days: Int = session.reports.currentDays(),
+        filter: ReportFilter = session.reports.currentFilter(),
+    ) = session.reports.loadReport(days, filter)
 
     fun bulkRemoveFromLibrary(songs: List<Song> = session.selection.selectedSongs()) =
         session.selection.bulkRemoveFromLibrary(songs)

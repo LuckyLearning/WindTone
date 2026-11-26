@@ -7,6 +7,7 @@ import com.luckylearning.windtone.data.DownloadRoute
 import com.luckylearning.windtone.data.DuplicateGroup
 import com.luckylearning.windtone.data.ListenCalendarMonth
 import com.luckylearning.windtone.data.ListeningReport
+import com.luckylearning.windtone.data.ReportFilter
 import com.luckylearning.windtone.data.ScanScope
 import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.data.LibraryFormatFilter
@@ -384,6 +385,8 @@ data class TopSong(
 @Immutable
 data class ReportUiState(
     val days: Int = 30,
+    /** 音源筛选：全部 / 本地 / 洛雪 / 云盘 */
+    val filter: ReportFilter = ReportFilter.ALL,
     val report: ListeningReport = EMPTY_REPORT,
     val topPlayed: List<TopSong> = emptyList(),
     val topListened: List<TopSong> = emptyList(),

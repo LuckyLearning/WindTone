@@ -64,13 +64,26 @@ class PlaybackStoreTest {
     fun addListenTimeAccumulatesAndWritesHourBucket() = runBlocking {
         val id = newSong("u1")
         val hour = 5_000L
-        store.addListenTime(id, 3_000L, hour, 1L)
-        store.addListenTime(id, 2_000L, hour, 2L)
+        store.addListenTime(id, 3_000L, hour, 1L, "LOCAL")
+        store.addListenTime(id, 2_000L, hour, 2L, "LOCAL")
 
         assertEquals("每曲累计收听时长", 5_000L, db.songStateDao().bySongId(id)!!.playedMs)
-        val bucket = db.listenLogDao().since(hour).single()
+        val bucket = db.listenLogDao().sinceBySource(hour, "LOCAL").single()
         assertEquals("小时桶序号", hour, bucket.hourEpoch)
         assertEquals("小时桶累计", 5_000L, bucket.ms)
+    }
+
+    @Test
+    fun listenBucketsAreIsolatedPerSource() = runBlocking {
+        val hour = 6_000L
+        store.addListenBucket(hour, 3_000L, "LOCAL")
+        store.addListenBucket(hour, 2_000L, "LX")
+        store.addListenBucket(hour, 1_000L, "CLOUD")
+
+        assertEquals("同一小时三种音源各占一行", 3, db.listenLogDao().since(hour).size)
+        assertEquals("本地桶", 3_000L, db.listenLogDao().sinceBySource(hour, "LOCAL").single().ms)
+        assertEquals("洛雪桶", 2_000L, db.listenLogDao().sinceBySource(hour, "LX").single().ms)
+        assertEquals("云盘桶", 1_000L, db.listenLogDao().sinceBySource(hour, "CLOUD").single().ms)
     }
 
     @Test

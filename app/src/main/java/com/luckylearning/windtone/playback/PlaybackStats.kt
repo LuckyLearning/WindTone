@@ -2,7 +2,9 @@ package com.luckylearning.windtone.playback
 
 import android.os.SystemClock
 import com.luckylearning.windtone.data.HOUR_MS
+import com.luckylearning.windtone.data.SourceMode
 import com.luckylearning.windtone.data.SongIndex
+import com.luckylearning.windtone.data.model.SongSource
 import com.luckylearning.windtone.data.model.TrackFragment
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -82,23 +84,31 @@ class PlaybackStats(
         listenAccumMs = 0L
         if (ms < 1000L) return
         val songId = index.idOf(key)
+        // 收听报告的小时桶按**本次结算时刻**归属（一次累计最多 30 秒，
+        // 恰好跨整点的情况误差可以忽略）
+        val hour = System.currentTimeMillis() / HOUR_MS
         if (songId == null) {
             if (online != null && TrackFragment.cacheKeyOfMediaId(key)) {
                 val played = ms
                 scope.launch {
                     val now = System.currentTimeMillis()
-                    withContext(Dispatchers.IO) { runCatching { online.addListenTime(key, played, now) } }
+                    withContext(Dispatchers.IO) {
+                        runCatching { online.addListenTime(key, played, now) }
+                        // 云盘曲不在本地曲库表，没有 songId，但仍要进报告的小时桶
+                        runCatching { store.addListenBucket(hour, played, SourceMode.CLOUD.name) }
+                    }
                 }
             }
             return
         }
-        // 收听报告的小时桶按**本次结算时刻**归属（一次累计最多 30 秒，
-        // 恰好跨整点的情况误差可以忽略）
-        val hour = System.currentTimeMillis() / HOUR_MS
+        val source = when (index.sourceOf(songId)) {
+            SongSource.ONLINE -> SourceMode.LX.name
+            else -> SourceMode.LOCAL.name
+        }
         scope.launch {
             val now = System.currentTimeMillis()
             withContext(Dispatchers.IO) {
-                runCatching { store.addListenTime(songId, ms, hour, now) }
+                runCatching { store.addListenTime(songId, ms, hour, now, source) }
             }
             index.bump(songId) { it.copy(playedMs = it.playedMs + ms) }
         }

@@ -6,7 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 /**
- * 应用数据库（v5）。
+ * 应用数据库（v6）。
  *
  * 九张表分三类（详见 docs/数据库设计-MusicDb.md）：
  *  - **曲库**：[SongEntity]、[FolderEntity] —— 扫描得来的数据，可由重扫重建；
@@ -34,7 +34,7 @@ import androidx.room.RoomDatabase
         SearchHistoryEntity::class,
         ListenLogEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class MusicDb : RoomDatabase() {

@@ -27,13 +27,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,26 +40,13 @@ import androidx.compose.ui.unit.dp
 import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.data.SourceMode
-import com.luckylearning.windtone.data.aliyun.AliyunAuth
-import com.luckylearning.windtone.data.aliyun.AliyunDrive
-import com.luckylearning.windtone.data.aliyun.AliyunPlaybackWindow
-import com.luckylearning.windtone.data.aliyun.AliyunTrackRecord
-import com.luckylearning.windtone.data.aliyun.AliyunTrackStore
-import com.luckylearning.windtone.data.buildListeningReport
 import com.luckylearning.windtone.data.formatByteSize
-import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.data.online.source.Quality
 import com.luckylearning.windtone.playback.OnlineMediaCache
-import com.luckylearning.windtone.state.ReportUiState
-import com.luckylearning.windtone.state.TopSong
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @Composable
 internal fun SettingsOnlinePage(
     onOpenPlaylists: () -> Unit,
-    onOpenReport: () -> Unit,
 ) {
     val context = LocalContext.current
     var limit by remember { mutableLongStateOf(OnlineMediaCache.limitBytes(context)) }
@@ -194,14 +178,6 @@ internal fun SettingsOnlinePage(
         },
     )
 
-    SectionTitle(stringResource(R.string.playback_history))
-    ActionRow(
-        title = stringResource(R.string.lib_listening_report),
-        subtitle = stringResource(R.string.listening_time_time_of_day),
-        onClick = onOpenReport,
-        chevron = true,
-    )
-
     if (pickingLimit) {
         AlertDialog(
             onDismissRequest = { pickingLimit = false },
@@ -264,82 +240,6 @@ internal fun SettingsOnlinePage(
             confirmButton = {
                 TextButton(onClick = { pickingLimit = false }) { Text(stringResource(R.string.off)) }
             },
-        )
-    }
-}
-
-/**
- * 在线曲目的收听报告（i18n 第 18 批）。版式与本地 [ListeningReportScreen] 相同，
- * 标题/空态用 `olr_*`，其余分区复用 `lr_*`；
- * 小时桶和榜单都来自 [AliyunTrackStore]，不读曲库的 `listen_log`。
- */
-@Composable
-internal fun OnlineListeningReport(
-    onClose: () -> Unit,
-    onPlay: (List<Song>, Int) -> Unit,
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var days by remember { mutableIntStateOf(30) }
-    var state by remember { mutableStateOf<ReportUiState?>(null) }
-
-    LaunchedEffect(days) {
-        val span = days
-        val now = System.currentTimeMillis()
-        state = withContext(Dispatchers.IO) {
-            val store = AliyunTrackStore(context)
-            val records = store.records()
-            ReportUiState(
-                days = span,
-                report = buildListeningReport(store.listenBuckets(), now, span),
-                topPlayed = records.top(byPlay = true),
-                topListened = records.top(byPlay = false),
-            )
-        }
-    }
-
-    ListeningReportScreen(
-        state = state,
-        onClose = onClose,
-        onSetDays = { days = it },
-        title = stringResource(R.string.olr_title),
-        emptyPlaysHint = stringResource(R.string.olr_empty_plays),
-        emptyListenHint = stringResource(R.string.olr_empty_listen),
-        onPlayTop = { songs ->
-            if (songs.isEmpty()) return@ListeningReportScreen
-            scope.launch {
-                val drive = AliyunDrive(AliyunAuth(context))
-                val filled = withContext(Dispatchers.IO) { drive.fillWindow(songs, 0) }
-                val playAt = AliyunPlaybackWindow.firstReady(
-                    filled.map { AliyunPlaybackWindow.isPending(it.uri.scheme) },
-                    0,
-                )
-                if (playAt == null) {
-                    Toast.makeText(context, AppStrings.s(R.string.no_playable_url_was_returned), Toast.LENGTH_SHORT).show()
-                } else {
-                    onPlay(filled, playAt)
-                }
-            }
-        },
-    )
-}
-
-private fun List<AliyunTrackRecord>.top(byPlay: Boolean): List<TopSong> {
-    val ranked = if (byPlay) {
-        filter { it.playCount > 0 }.sortedByDescending { it.playCount }
-    } else {
-        filter { it.playedMs > 0 }.sortedByDescending { it.playedMs }
-    }
-    return ranked.take(10).map { record ->
-        val song = AliyunDrive(tokenProvider = { null }).pendingSong(record)
-        TopSong(
-            songId = song.id,
-            stableKey = song.stableKey,
-            title = song.title.ifBlank { AppStrings.s(R.string.untitled) },
-            artist = song.artistOrUnknown,
-            playCount = record.playCount,
-            listenedMs = record.playedMs,
-            cover = song,
         )
     }
 }

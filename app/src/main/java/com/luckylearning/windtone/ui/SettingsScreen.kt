@@ -370,7 +370,6 @@ fun SettingsScreen(
 
     // 当前处于哪一层：主页面 / 音乐库 / 更新 / 关于与诊断
     var page by remember { mutableStateOf(initialPage) }
-    var showOnlineReport by remember { mutableStateOf(false) }
     val menuContext = LocalContext.current
     val menuStore = remember { SettingsMenuStore(menuContext) }
     var menuOrder by remember { mutableStateOf(menuStore.load()) }
@@ -629,7 +628,6 @@ fun SettingsScreen(
 
                         SettingsPage.ONLINE_HUB -> SettingsOnlinePage(
                             onOpenPlaylists = { page = SettingsPage.ONLINE },
-                            onOpenReport = { showOnlineReport = true },
                         )
 
                         SettingsPage.MENU_ORDER -> SettingsMenuOrderPage(
@@ -695,12 +693,6 @@ fun SettingsScreen(
                     Spacer(Modifier.height(28.dp))
                 }
             }
-        }
-        if (showOnlineReport) {
-            OnlineListeningReport(
-                onClose = { showOnlineReport = false },
-                onPlay = onPlayQueue,
-            )
         }
         // 车载：常驻「播放页」固定在**左下角**（v1.2.8 用户拍板：驾驶员左手边顺手）。
         // 放在 Box 覆盖层里不随页面滚动 —— 主页与每个子页都在，一步回正在播放；
