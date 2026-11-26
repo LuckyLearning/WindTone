@@ -11,9 +11,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.coroutineContext
+import kotlin.coroutines.resume
+import kotlinx.coroutines.isActive
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -64,6 +68,17 @@ object OnlineCover {
 
     /** 下载失败时间戳：key 是缓存键（含目标边长） */
     private val failedAt = object : LruCache<String, Long>(128) {}
+
+    /**
+     * 已经下到的图片字节。
+     *
+     * 解码后的位图按张占几百 KB，滑过一两屏就会被 LRU 挤掉。
+     * 只留位图的话，滚回来要重新联网；这次请求一旦被滑出屏幕取消，
+     * 或者赶上失败冷却，封面就停在占位图。字节小得多，滚回来可以直接再解码。
+     */
+    private val byteCache = object : LruCache<String, ByteArray>(BYTE_CACHE_BYTES) {
+        override fun sizeOf(key: String, value: ByteArray): Int = value.size
+    }
 
     /** 正在飞行的地址 → 共享结果。同一张图并发请求只发一次。 */
     private val inFlight = ConcurrentHashMap<String, CompletableDeferred<ByteArray?>>()
@@ -139,8 +154,14 @@ object OnlineCover {
     // ---------------------------------------------------------------- 缩略图（列表 / 歌单）
 
     /** 同步预读：列表行重新进入组合时先看缓存，命中就不用等一帧协程再换图。 */
-    fun peekTrack(stableKey: String, targetPx: Int): Bitmap? =
-        synchronized(thumbCache) { thumbCache.get("$stableKey@$targetPx") }
+    fun peekTrack(stableKey: String, targetPx: Int): Bitmap? {
+        val key = "$stableKey@$targetPx"
+        val url = synchronized(urlCache) { urlCache.get(stableKey) }
+        if (url == null) {
+            return synchronized(thumbCache) { liveBitmap(key) }
+        }
+        return bitmapOrDecode(key, url, targetPx)
+    }
 
     /**
      * 同步预读歌单封面。`url` 可能是酷我 `pic.web`，此时查「解析后的真实地址」再查图；
@@ -152,7 +173,7 @@ object OnlineCover {
         val real = OnlineCoverUrls.normalizeImage(raw)
             ?: synchronized(resolvedUrlCache) { resolvedUrlCache.get(raw) }
             ?: return null
-        return synchronized(thumbCache) { thumbCache.get("url:$real@$targetPx") }
+        return bitmapOrDecode("url:$real@$targetPx", real, targetPx)
     }
 
     /**
@@ -207,20 +228,24 @@ object OnlineCover {
      * 重试放在这一层（而不是每个调用点各写一份），重试时不再叠加 UI 的延迟。
      */
     private suspend fun loadBitmap(realUrl: String, targetPx: Int, cacheKey: String): Bitmap? {
-        synchronized(thumbCache) { thumbCache.get(cacheKey) }?.let { return it }
+        bitmapOrDecode(cacheKey, realUrl, targetPx)?.let { return it }
         val failed = synchronized(failedAt) { failedAt.get(cacheKey) }
         if (failed != null && System.currentTimeMillis() - failed < FAIL_COOLDOWN_MS) return null
 
         var attempt = 0
-        while (true) {
+        while (coroutineContext.isActive) {
             val bytes = try {
                 fetchBytesShared(realUrl)
             } catch (cancelled: CancellationException) {
                 throw cancelled
+            } catch (_: CoverInterrupted) {
+                // 生产者被滑出屏幕取消。这次不算失败，也不写 90 秒冷却。
+                return null
             } catch (_: Exception) {
                 null
             }
             if (bytes != null) {
+                rememberBytes(realUrl, bytes)
                 val bmp = runCatching { CoverRepository.decodeScaled(bytes, targetPx) }.getOrNull()
                 if (bmp != null) {
                     synchronized(thumbCache) { thumbCache.put(cacheKey, bmp) }
@@ -232,8 +257,52 @@ object OnlineCover {
             attempt++
             delay(RETRY_BASE_MS * attempt)
         }
-        synchronized(failedAt) { failedAt.put(cacheKey, System.currentTimeMillis()) }
+        if (coroutineContext.isActive) {
+            synchronized(failedAt) { failedAt.put(cacheKey, System.currentTimeMillis()) }
+        }
         return null
+    }
+
+    /**
+     * 位图还在就直接用。被挤掉之后，用已经下过的字节再解码，不再发请求。
+     * 已 recycle 的位图不能再画，丢掉后走字节。
+     */
+    private fun bitmapOrDecode(cacheKey: String, realUrl: String, targetPx: Int): Bitmap? {
+        synchronized(thumbCache) { liveBitmap(cacheKey) }?.let { return it }
+        val bytes = synchronized(byteCache) { byteCache.get(byteKey(realUrl)) } ?: return null
+        val bmp = runCatching { CoverRepository.decodeScaled(bytes, targetPx) }.getOrNull() ?: return null
+        synchronized(thumbCache) { thumbCache.put(cacheKey, bmp) }
+        return bmp
+    }
+
+    private fun liveBitmap(cacheKey: String): Bitmap? {
+        val bmp = thumbCache.get(cacheKey) ?: return null
+        if (!bmp.isRecycled) return bmp
+        thumbCache.remove(cacheKey)
+        return null
+    }
+
+    private fun rememberBytes(realUrl: String, bytes: ByteArray) {
+        if (bytes.isEmpty()) return
+        synchronized(byteCache) { byteCache.put(byteKey(realUrl), bytes) }
+    }
+
+    private fun byteKey(realUrl: String): String =
+        OnlineCoverUrls.normalizeImage(realUrl) ?: realUrl
+
+    /** 测试：只丢掉解码后的位图，字节还在。用来模拟滑出屏幕后 LRU 把位图挤掉。 */
+    internal fun dropDecodedThumbsForTest() {
+        synchronized(thumbCache) { thumbCache.evictAll() }
+    }
+
+    /** 测试之间清掉进程内缓存，避免上一例的冷却或字节串到下一例。 */
+    internal fun clearForTest() {
+        synchronized(thumbCache) { thumbCache.evictAll() }
+        synchronized(byteCache) { byteCache.evictAll() }
+        synchronized(failedAt) { failedAt.evictAll() }
+        synchronized(urlCache) { urlCache.evictAll() }
+        synchronized(resolvedUrlCache) { resolvedUrlCache.evictAll() }
+        inFlight.clear()
     }
 
     // ---------------------------------------------------------------- 网络
@@ -250,8 +319,8 @@ object OnlineCover {
             return try {
                 existing.await()
             } catch (_: SharedCoverMiss) {
-                // 生产方被滑出屏幕取消了。等它的人再试一次，不要把这次 null 记成 90 秒失败。
-                if (missed >= 1) null else fetchBytesShared(url, missed + 1)
+                // 生产方被滑出屏幕取消了。等它的人再试，不要把 null 记成 90 秒失败。
+                if (missed >= 2) throw CoverInterrupted() else fetchBytesShared(url, missed + 1)
             }
         }
         try {
@@ -274,6 +343,9 @@ object OnlineCover {
     /** 单飞的生产方被取消。等待者应重试，而不是把它当成「这张图下载失败」。 */
     private class SharedCoverMiss : Exception()
 
+    /** 重试几次仍然只遇到被取消的生产者。调用方不要写失败冷却。 */
+    private class CoverInterrupted : Exception()
+
     private suspend fun fetchBytes(url: String): ByteArray? {
         val normalized = OnlineCoverUrls.normalizeImage(url) ?: return null
         slots.acquire()
@@ -288,7 +360,7 @@ object OnlineCover {
      * 下图片。若正文是一行 URL（酷我 `pic.web`，或某个我们没认出的解析端点），再跟一次。
      * 只跟一次，避免错误页互相指。
      */
-    private fun downloadImage(url: String, followed: Boolean = false): ByteArray? {
+    private suspend fun downloadImage(url: String, followed: Boolean = false): ByteArray? {
         val bytes = download(url) ?: return null
         if (OnlineCoverUrls.looksLikeImage(bytes)) return bytes
         if (followed) return null
@@ -296,20 +368,34 @@ object OnlineCover {
         return downloadImage(next, followed = true)
     }
 
-    private fun download(url: String): ByteArray? {
+    /**
+     * 滑出屏幕时取消正在进行的请求。
+     * 否则 OkHttp 会把信号量占到自然结束，后面滚回来的封面一直排队，看起来像又变回占位图。
+     * 取消造成的 IO 异常不当成下载失败。
+     */
+    private suspend fun download(url: String): ByteArray? = suspendCancellableCoroutine { cont ->
         val builder = Request.Builder().url(url).header("User-Agent", UA)
         OnlineCoverUrls.refererFor(url)?.let { builder.header("Referer", it) }
-        return client.newCall(builder.build()).execute().use { response ->
-            if (!response.isSuccessful) {
-                Log.w(TAG, "封面下载失败 ${response.code}：$url")
-                return@use null
+        val call = client.newCall(builder.build())
+        cont.invokeOnCancellation { call.cancel() }
+        try {
+            val bytes = call.execute().use { response ->
+                if (!response.isSuccessful) {
+                    Log.w(TAG, "封面下载失败 ${response.code}：$url")
+                    null
+                } else {
+                    val length = response.body?.contentLength() ?: -1L
+                    if (length > MAX_BYTES) {
+                        Log.w(TAG, "封面过大（$length）：$url")
+                        null
+                    } else {
+                        response.body?.bytes()?.takeIf { it.isNotEmpty() && it.size <= MAX_BYTES }
+                    }
+                }
             }
-            val length = response.body?.contentLength() ?: -1L
-            if (length > MAX_BYTES) {
-                Log.w(TAG, "封面过大（$length）：$url")
-                return@use null
-            }
-            response.body?.bytes()?.takeIf { it.isNotEmpty() && it.size <= MAX_BYTES }
+            if (cont.isActive) cont.resume(bytes)
+        } catch (t: Throwable) {
+            if (cont.isActive) cont.resume(null)
         }
     }
 
@@ -334,4 +420,7 @@ object OnlineCover {
 
     private const val UA =
         "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36"
+
+    /** 压缩后的封面字节。320px JPEG 大约几十 KB，8MB 够滑出再滑回一整屏歌单。 */
+    private const val BYTE_CACHE_BYTES = 8 * 1024 * 1024
 }

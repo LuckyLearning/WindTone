@@ -1,8 +1,6 @@
 package com.luckylearning.windtone.ui
 
 import android.graphics.Bitmap
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -33,7 +31,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -158,6 +155,8 @@ internal fun LxChipRow(
  * - **先查缓存**：命中就直接画，避免「占位一帧 → 换图」的闪；
  * - 未命中才起协程；[staggerMs] 让首屏卡片错峰几十毫秒，避免同一帧排队几十个请求；
  * - 失败保持首字渐变，不显示错误图标（列表里不该比没图更吵）。
+ * - 已经有位图时不要从透明度 0 再淡入。滚出再滚回时组合是新的，
+ *   从 0 淡入的那 200ms 看起来就是封面又变回了占位图。
  */
 @Composable
 internal fun LxCover(
@@ -174,7 +173,7 @@ internal fun LxCover(
         mutableStateOf(OnlineCover.peekThumb(url, targetPx))
     }
     LaunchedEffect(cacheKey, url, targetPx) {
-        if (bitmap != null || url.isNullOrBlank()) return@LaunchedEffect
+        if (bitmap?.isRecycled == false || url.isNullOrBlank()) return@LaunchedEffect
         if (staggerMs > 0L) delay(staggerMs)
         OnlineCover.thumbUrl(url, targetPx)?.let { bitmap = it }
     }
@@ -231,20 +230,14 @@ private fun LxCoverFrame(
         contentAlignment = Alignment.Center,
     ) {
         val bmp = bitmap
-        if (bmp != null) {
-            // 200ms 淡入：网络图从占位底色上浮出来，避免硬切造成的「闪」
-            var shown by remember(bmp) { mutableStateOf(false) }
-            LaunchedEffect(bmp) { shown = true }
-            val alpha by animateFloatAsState(
-                targetValue = if (shown) 1f else 0f,
-                animationSpec = tween(200),
-                label = "lx-cover-alpha",
-            )
+        if (bmp != null && !bmp.isRecycled) {
+            // 不要从 0 淡入。滚出屏幕再回来时这项会重新进入组合，
+            // 透明度从 0 开始的那一段就是用户看到的「封面又变回占位图」。
             Image(
                 bitmap = remember(bmp) { bmp.asImageBitmap() },
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().alpha(alpha),
+                modifier = Modifier.fillMaxSize(),
             )
         } else {
             Text(
