@@ -93,6 +93,7 @@ import com.luckylearning.windtone.data.online.OnlineBoards
 import com.luckylearning.windtone.data.online.OnlineCover
 import com.luckylearning.windtone.data.online.OnlineLibrary
 import com.luckylearning.windtone.data.online.OnlineLists
+import com.luckylearning.windtone.data.online.OnlineRecent
 import com.luckylearning.windtone.data.online.OnlineResolver
 import com.luckylearning.windtone.data.online.OnlineSonglists
 import com.luckylearning.windtone.data.online.OnlineUrlMemo
@@ -191,6 +192,11 @@ internal fun OnlinePage(
     var myListLoading by remember { mutableStateOf(false) }
     var confirmDeleteList by remember { mutableStateOf(false) }
 
+    // 洛雪「最近播放」：只取在线曲，和本地「最近播放」按来源隔离
+    var recentSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var recentLoading by remember { mutableStateOf(false) }
+    var recentOpen by remember { mutableStateOf(false) }
+
     // 歌单页的数据与滚动位置必须放在这一层：AnimatedContent 打开歌单详情时会把
     // SonglistPane 移出组合，状态若留在它内部，返回时整页重建 —— 重新拉第一页、回到顶部。
     val songlistState = remember { SonglistUiState() }
@@ -215,6 +221,8 @@ internal fun OnlinePage(
     // 子页和上一个分区都由外面的栈决定。本页只在还能退的时候消费返回，
     // 并且让位给抽屉 / 设置 / 播放页（backEnabled）。根上不消费，Activity 回到桌面。
     BackHandler(enabled = backEnabled && !playerExpanded && canPop) { onBack() }
+    // 最近播放是页面内的一层：后注册者优先，先关它，再退分区
+    BackHandler(enabled = recentOpen) { recentOpen = false }
 
     // 栈把子页收起时，本地详情跟着收。切到别的分区时不擦掉底下那一帧的结果，
     // 返回还要看得到。
@@ -234,6 +242,8 @@ internal fun OnlinePage(
         if (place.section != LxSection.SHEETS) openSheet = null
         if (place.section != LxSection.BOARDS) openBoard = null
         if (place.section == LxSection.MINE && place.detail != LxDetail.LIST) openMyList = null
+        // 最近播放是 MINE 内的临时层，离开分区就收掉
+        if (place.section != LxSection.MINE) recentOpen = false
     }
 
     // 「我的列表」每次进来重读一遍：保存发生在歌单详情，回到这里要立刻看到新列表。
@@ -244,6 +254,8 @@ internal fun OnlinePage(
         myListsLoading = true
         withContext(Dispatchers.IO) { OnlineLists.mergeDuplicates(context) }
         myLists = withContext(Dispatchers.IO) { OnlineLists.summaries(context) }
+        // 最近播放只在 MINE 出现；进来先算一次，用于显示数量和封面
+        recentSongs = withContext(Dispatchers.IO) { OnlineRecent.songs(context) }
         myListsLoading = false
     }
 
@@ -396,6 +408,7 @@ internal fun OnlinePage(
     }
 
     fun loadMyList(list: OnlineLists.Summary) {
+        recentOpen = false
         openMyList = list
         onOpenDetail(LxDetail.LIST)
         myListSongs = emptyList()
@@ -403,6 +416,17 @@ internal fun OnlinePage(
         scope.launch {
             myListSongs = withContext(Dispatchers.IO) { OnlineLists.songs(context, list.id) }
             myListLoading = false
+        }
+    }
+
+    /** 打开洛雪「最近播放」：每次重查，刚播过的歌要立刻排在最前 */
+    fun loadRecent() {
+        recentOpen = true
+        openMyList = null
+        recentLoading = true
+        scope.launch {
+            recentSongs = withContext(Dispatchers.IO) { OnlineRecent.songs(context) }
+            recentLoading = false
         }
     }
 
@@ -726,19 +750,29 @@ internal fun OnlinePage(
                 }
                 LxSection.MINE -> {
                     val list = openMyList
-                    if (target.detail == LxDetail.LIST && list != null) {
-                        MyListDetailPane(
+                    when {
+                        // 最近播放盖在「我的列表」上，返回先收它
+                        recentOpen -> MyListDetailPane(
+                            songs = recentSongs,
+                            loading = recentLoading,
+                            favoriteKeys = favoriteKeys,
+                            onPlay = { index -> onPlay(recentSongs, index) },
+                            onFavorite = { song -> toggleFavoriteSong(song) },
+                        )
+                        target.detail == LxDetail.LIST && list != null -> MyListDetailPane(
                             songs = myListSongs,
                             loading = myListLoading,
                             favoriteKeys = favoriteKeys,
                             onPlay = { index -> onPlay(myListSongs, index) },
                             onFavorite = { song -> toggleFavoriteSong(song) },
                         )
-                    } else {
-                        MyListsPane(
+                        else -> MyListsPane(
                             lists = myLists,
                             loading = myListsLoading,
+                            recentCover = recentSongs.take(4),
+                            recentCount = recentSongs.size,
                             onOpen = { loadMyList(it) },
+                            onOpenRecent = { loadRecent() },
                         )
                     }
                 }

@@ -49,4 +49,41 @@ class CachePrefetchPolicyTest {
         assertFalse(CachePrefetchPolicy.shouldStart(playing = false, bufferAheadMs = 30_000, currentTailOpen = true))
         assertFalse(CachePrefetchPolicy.shouldStart(playing = true, bufferAheadMs = 30_000, currentTailOpen = true))
     }
+
+    @Test
+    fun `暂停时先补当前曲再预取后续`() {
+        // -1 = 当前曲，0/1 = 后续下标；总数不超过 MAX_SONGS
+        assertEquals(
+            listOf(-1, 0),
+            CachePrefetchPolicy.batch(
+                currentRemote = true,
+                upcomingSchemes = listOf("https", "https"),
+                paused = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `播放中不补当前曲，名额留给后续`() {
+        assertEquals(
+            listOf(0, 1),
+            CachePrefetchPolicy.batch(
+                currentRemote = true,
+                upcomingSchemes = listOf("https", "https"),
+                paused = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `本地当前曲不占名额`() {
+        assertEquals(
+            listOf(0, 1),
+            CachePrefetchPolicy.batch(
+                currentRemote = false,
+                upcomingSchemes = listOf("https", "https"),
+                paused = true,
+            ),
+        )
+    }
 }

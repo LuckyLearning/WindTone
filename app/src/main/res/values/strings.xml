@@ -663,8 +663,8 @@
     <string name="cleared_played_songs_will_be">清空后，听过的歌需要重新下载</string>
     <string name="online_cache_cleared">已清除在线缓存</string>
     <string name="nothing_to_clear">当前没有可清除的缓存</string>
-    <string name="online_cache_prefetch">预取后续曲</string>
-    <string name="online_cache_prefetch_sub">默认关，省流量与缓存。打开后：当前曲缓冲领先足够时，后台把后面的在线歌先拉进缓存。</string>
+    <string name="online_cache_prefetch">自动缓存歌曲</string>
+    <string name="online_cache_prefetch_sub">默认开启：暂停时把当前曲没缓存的后半段补齐，缓冲领先足够时预取后面的在线歌。总占用受上面「缓存上限」约束。</string>
     <string name="online_parallel_download">并行分片下载</string>
     <string name="online_parallel_download_sub">默认关（车机偏省）。打开后：当前在线曲用少量连接分段下载。</string>
     <string name="playback_history">播放记录</string>

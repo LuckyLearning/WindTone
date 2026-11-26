@@ -4,6 +4,7 @@ import com.luckylearning.windtone.data.db.PlaylistEntity
 import com.luckylearning.windtone.data.db.PlaylistSongEntity
 import com.luckylearning.windtone.data.findDuplicateGroups
 import com.luckylearning.windtone.data.model.Song
+import com.luckylearning.windtone.data.model.SongSource
 import com.luckylearning.windtone.data.online.OnlineKeys
 import com.luckylearning.windtone.data.online.SavedSheetStore
 import com.luckylearning.windtone.state.PlaylistInfo
@@ -67,12 +68,14 @@ internal class PlaylistStore(private val session: LibrarySession) : PlaylistActi
             val songs = rows.mapNotNull { songsById[it.songId] }
             PlaylistInfo(p.id, p.name, songs.size, playlistCoverSongs(songs))
         }
-        // 统计直接用内存里的每曲状态，不再为了"最近播放/最常播放"再查一次库
+        // 统计直接用内存里的每曲状态，不再为了"最近播放/最常播放"再查一次库。
+        // 只算本地曲：在线曲归洛雪模式的「最近播放」，不在这里混进来。
         val recent = index.allStates().asSequence()
             .filter { it.lastPlayedAt > 0 }
             .sortedByDescending { it.lastPlayedAt }
-            .take(100)
             .mapNotNull { songsById[it.songId] }
+            .filter { it.source != SongSource.ONLINE }
+            .take(100)
             .toList()
         val most = index.allStates().asSequence()
             .filter { it.playCount > 0 }

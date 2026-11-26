@@ -197,10 +197,10 @@ object SettingsDefaults {
     const val GAPLESS_PLAYBACK = true
 
     /**
-     * 在线后续曲预取（A11）。默认关：车机多本地，预取只浪费带宽/缓存；
-     * 纯本地队列本就不进候选，此开关挡住「偶有在线」时的后台下载。
+     * 在线歌曲自动缓存。默认开：暂停时补齐当前曲没缓存的后半段，缓冲充足时预取后续曲；
+     * 落盘上限统一走「设置 → 在线播放 → 播放缓存 → 缓存上限」，不另设一套。
      */
-    const val ONLINE_CACHE_PREFETCH = false
+    const val ONLINE_CACHE_PREFETCH = true
 
     /**
      * 当前曲并行分片下载（A11）。默认关：多连接抢带宽与 CPU；需要时可在设置打开。

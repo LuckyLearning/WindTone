@@ -38,20 +38,60 @@ import com.luckylearning.windtone.data.online.OnlineLists
 internal fun MyListsPane(
     lists: List<OnlineLists.Summary>,
     loading: Boolean,
+    /** 最近播放的前几首，用来拼封面；空列表时显示占位 */
+    recentCover: List<Song> = emptyList(),
+    recentCount: Int = 0,
     onOpen: (OnlineLists.Summary) -> Unit,
+    onOpenRecent: () -> Unit = {},
 ) {
     when {
         // 骨架保持列表形状：加载完成时行原地出现，不再「空白 → 一堆」跳一下
-        loading && lists.isEmpty() -> LxListSkeleton(rows = 8)
-        lists.isEmpty() -> LxEmptyPane(title = stringResource(R.string.online_mine_empty))
+        loading && lists.isEmpty() && recentCount == 0 -> LxListSkeleton(rows = 8)
+        lists.isEmpty() && recentCount == 0 ->
+            LxEmptyPane(title = stringResource(R.string.online_mine_empty))
         else -> LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
             contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
         ) {
+            // 「最近播放」固定排第一：按时间自动生成，不属于用户自建列表
+            item(key = "recent") {
+                RecentRow(cover = recentCover, count = recentCount, onClick = onOpenRecent)
+            }
             items(lists, key = { it.id }) { list ->
                 MyListRow(list = list, onClick = { onOpen(list) })
             }
+        }
+    }
+}
+
+/** 与自建列表同一套卡片：最近播放只是数据来源不同，样式不另起一套 */
+@Composable
+private fun RecentRow(cover: List<Song>, count: Int, onClick: () -> Unit) {
+    LxCard(
+        onClick = onClick,
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            PlaylistCoverArt(songs = cover, size = 56.dp, cornerRadius = 12.dp)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.vp_recent),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    pluralStringResource(R.plurals.lib_song_count, count, count),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            LxCountPill(count)
         }
     }
 }

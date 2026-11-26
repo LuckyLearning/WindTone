@@ -211,6 +211,27 @@ interface SongStateDao {
     @Query("SELECT songId FROM song_state WHERE lastPlayedAt > 0 ORDER BY lastPlayedAt DESC LIMIT :limit")
     suspend fun recentIds(limit: Int): List<Long>
 
+    /**
+     * 「最近播放」按来源隔离：只取 `songs.source = :source` 的歌。
+     *
+     * 本地曲与在线曲共用 `song_state`，界面上各自只要自己场景的记录，
+     * 所以在 SQL 里 JOIN `songs` 过滤，避免把在线曲混进本地「最近播放」。
+     */
+    @Query(
+        "SELECT st.songId FROM song_state st JOIN songs s ON s.id = st.songId " +
+            "WHERE st.lastPlayedAt > 0 AND s.source = :source " +
+            "ORDER BY st.lastPlayedAt DESC LIMIT :limit"
+    )
+    suspend fun recentIdsBySource(source: String, limit: Int): List<Long>
+
+    /** 同上，取反：本地场景排除在线曲。 */
+    @Query(
+        "SELECT st.songId FROM song_state st JOIN songs s ON s.id = st.songId " +
+            "WHERE st.lastPlayedAt > 0 AND s.source != :source " +
+            "ORDER BY st.lastPlayedAt DESC LIMIT :limit"
+    )
+    suspend fun recentIdsExcludingSource(source: String, limit: Int): List<Long>
+
     /** 「最常播放」：按播放次数倒序 */
     @Query("SELECT songId FROM song_state WHERE playCount > 0 ORDER BY playCount DESC LIMIT :limit")
     suspend fun mostPlayedIds(limit: Int): List<Long>

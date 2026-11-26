@@ -51,6 +51,26 @@ object CachePrefetchPolicy {
     }
 
     /**
+     * 这一批要预取哪些位置：`-1` = 当前曲，其余是 [upcomingSchemes] 的下标。
+     *
+     * 只有**暂停**时才补当前曲：播放器不读，写缓存不会和播放抢同一段 span 的锁；
+     * 播放中即使缓冲领先，也把名额留给后面的歌，避免「补当前曲」把正在播的那首拖慢。
+     * 本地当前曲不占名额（没有远程内容可下）。
+     */
+    fun batch(
+        currentRemote: Boolean,
+        upcomingSchemes: List<String?>,
+        paused: Boolean,
+        max: Int = MAX_SONGS,
+    ): List<Int> {
+        val out = ArrayList<Int>(max)
+        if (paused && currentRemote && max > 0) out += -1
+        val room = max - out.size
+        if (room > 0) out += candidates(upcomingSchemes, room)
+        return out
+    }
+
+    /**
      * 现在允许开始预取吗。
      *
      * [currentTailOpen] 表示当前曲从播放位置往前的缺口还没补到 [MIN_AHEAD_MS]，

@@ -42,6 +42,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -153,6 +154,8 @@ internal fun AliyunPanPage(
     /** 保存云盘歌单的本地存档（改名 / 删除也走它） */
     val savedPlaylists = remember { AliyunSavedPlaylists(context) }
     val tracks = remember { AliyunTrackStore(context) }
+    // 云盘「最近播放」：与本机曲库完全分开，数据在 aliyun_tracks
+    var recentTracks by remember { mutableStateOf(tracks.recent()) }
     var playlists by remember { mutableStateOf(savedPlaylists.all()) }
     var query by remember { mutableStateOf("") }
     var editingPlaylistId by remember { mutableStateOf<String?>(null) }
@@ -311,9 +314,20 @@ internal fun AliyunPanPage(
         openQueue(songs, start)
     }
 
+    /** 云盘「最近播放」：整份最近列表进队列，从第一首起播 */
+    fun playRecent() {
+        val recent = tracks.recent()
+        if (recent.isEmpty()) return
+        if (driveId.isBlank()) {
+            error = context.getString(R.string.aliyun_error_no_drive_id)
+            return
+        }
+        recentTracks = recent
+        openQueue(recent.map { drive.pendingSong(it) }, 0)
+    }
+
     /** 递归扫描当前目录（含下 2 层子目录）成歌单，完成后弹命名框 */
-    fun startScan() {
-        val rootId = stack.last()
+    fun startScan() {        val rootId = stack.last()
         val rootName = dirNames.lastOrNull().orEmpty()
         scanning = true
         scanProgress = context.getString(R.string.aliyun_progress_scanning)
@@ -559,6 +573,8 @@ internal fun AliyunPanPage(
                     onGoUp = ::goUp,
                     onRefresh = { load(stack.last()) },
                     onPlayAll = { playFrom(null) },
+                    recentCount = recentTracks.size,
+                    onPlayRecent = { playRecent() },
                     onStopScan = { scanJob?.cancel() },
                     onPlayPlaylist = { p ->
                         val songs = p.files.map { hit ->
@@ -818,6 +834,8 @@ private fun LoggedInBody(
     onGoUp: () -> Unit,
     onRefresh: () -> Unit,
     onPlayAll: () -> Unit,
+    recentCount: Int,
+    onPlayRecent: () -> Unit,
     onStopScan: () -> Unit,
     onPlayPlaylist: (com.luckylearning.windtone.data.aliyun.AliyunPlaylist) -> Unit,
     onManagePlaylist: (String) -> Unit,
@@ -1034,6 +1052,45 @@ private fun LoggedInBody(
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
                     maxLines = 1,
+                )
+            }
+        }
+    }
+
+    // 云盘「最近播放」：与「播放全部」并列，点击整份最近列表起播
+    if (recentCount > 0 && driveId.isNotBlank()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 2.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                    .clickable(enabled = !loading && !scanning, onClick = onPlayRecent)
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+            ) {
+                Icon(
+                    AppIcons.QueueMusic,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    stringResource(R.string.vp_recent),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    pluralStringResource(R.plurals.lib_song_count, recentCount, recentCount),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }

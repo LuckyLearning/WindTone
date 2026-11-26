@@ -2088,6 +2088,17 @@ class PlaybackEngine(
         currentQueue.firstOrNull { it.stableKey == mediaId }
             ?: librarySongs.firstOrNull { it.stableKey == mediaId }
 
+    /**
+     * 当前曲若是远程歌，取它的 Song。暂停时用它把整首补齐；
+     * 本地 / 占位地址不值得预取，直接返回 null。
+     */
+    private fun currentRemoteSong(c: MediaController): Song? {
+        val item = c.currentMediaItem ?: return null
+        val uri = item.localConfiguration?.uri ?: return null
+        if (!CachePrefetchPolicy.isRemote(uri.scheme)) return null
+        return songByMediaId(item.mediaId)
+    }
+
     private fun syncCurrentSong(force: Boolean = false) {
         val c = controller ?: return
         val mediaId = c.currentMediaItem?.mediaId ?: run {
@@ -2388,7 +2399,14 @@ class PlaybackEngine(
                                 bufferedMs - pos < CachePrefetchPolicy.MIN_AHEAD_MS,
                         )
                     ) {
-                        runCatching { CachePrefetcher.plan(app, upcomingSongs(c)) }
+                        runCatching {
+                            CachePrefetcher.plan(
+                                app,
+                                current = currentRemoteSong(c),
+                                upcoming = upcomingSongs(c),
+                                paused = !playing,
+                            )
+                        }
                     }
                 }
 

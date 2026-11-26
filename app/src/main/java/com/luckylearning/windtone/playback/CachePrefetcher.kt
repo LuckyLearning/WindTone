@@ -69,9 +69,15 @@ object CachePrefetcher {
      * [upcoming] 是**按播放顺序**排好的后续曲目（随机播放时不是曲库顺序，调用方负责取
      * MediaController 的真实队列）。
      */
-    fun plan(context: Context, upcoming: List<Song>) {
-        val picked = CachePrefetchPolicy.candidates(upcoming.map { it.uri.scheme })
-            .map { upcoming[it] }
+    fun plan(context: Context, current: Song?, upcoming: List<Song>, paused: Boolean = false) {
+        val currentRemote = current != null && CachePrefetchPolicy.isRemote(current.uri.scheme)
+        val picked = CachePrefetchPolicy.batch(
+            currentRemote = currentRemote,
+            upcomingSchemes = upcoming.map { it.uri.scheme },
+            paused = paused,
+        ).mapNotNull { idx ->
+            if (idx == -1) current else upcoming.getOrNull(idx)
+        }.distinctBy { it.id }
         val ids = picked.map { it.id }
 
         synchronized(lock) {
