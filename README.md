@@ -13,13 +13,11 @@ Android 原生本地音乐播放器 —— Kotlin + Jetpack Compose，**数据�
 
 ## 下载安装
 
-源码本仓库公开；安装包仍单独放在公共分发仓库 **[LuckyLearning/Release](https://github.com/LuckyLearning/Release/tree/main/WindTone)**（按「软件 / 版本」分目录，只保留最近 5 个版本）。每个版本按 CPU 架构分成 4 个包（Release 签名包，R8 混淆 + 资源压缩，约 3 MB）：
+源码本仓库公开；安装包仍单独放在公共分发仓库 **[LuckyLearning/Release](https://github.com/LuckyLearning/Release/tree/main/WindTone)**（按「软件 / 版本」分目录，只保留最近 5 个版本）。自 1.3.1 起只维护 64 位，每个版本提供 2 个包（Release 签名包，R8 混淆 + 资源压缩，约 3 MB）：
 
 | 文件 | 说明 |
 |---|---|
-| `WindTone-vX.Y.Z-arm64-v8a.apk` | **绝大多数手机装这个**（近十年的 64 位 ARM 设备） |
-| `WindTone-vX.Y.Z-armeabi-v7a.apk` | 更老的 32 位 ARM 设备 |
-| `WindTone-vX.Y.Z-x86_64.apk` | 模拟器 / x86 设备 |
+| `WindTone-vX.Y.Z-arm64-v8a.apk` | **绝大多数手机 / 车机装这个**（64 位 ARM 设备） |
 | `WindTone-vX.Y.Z-universal.apk` | 全架构合一，体积略大；**拿不准架构时用它** |
 
 > **升级前请看**：同一套数据表结构（当前 `schema v5`）之间覆盖升级数据完整保留；
@@ -43,7 +41,7 @@ Android 原生本地音乐播放器 —— Kotlin + Jetpack Compose，**数据�
 | [AI 开发指南](https://luckylearning.github.io/WindTone/AI开发指南.html) | 项目约定、架构分层与踩坑记录 |
 | [数据库设计](https://luckylearning.github.io/WindTone/数据库设计-MusicDb.html) | MusicDb schema 与各表职责 |
 | [发版规则](https://luckylearning.github.io/WindTone/版本号发版规则.html) | 版本号规则与发版流程（一键发版 + 验证链） |
-| [功能规划](https://luckylearning.github.io/WindTone/功能规划.html) | 各期规划与已否决的方案 |
+| [功能规划（存档）](https://github.com/LuckyLearning/WindTone/blob/main/docs/archive/功能规划.md) | 各期规划与已否决的方案 |
 
 ---
 
@@ -57,8 +55,8 @@ Android 原生本地音乐播放器 —— Kotlin + Jetpack Compose，**数据�
 | 构建 | AGP 8.7.2 / Gradle 8.9；依赖与插件版本统一由 Version Catalog 管控 |
 | 最低版本 | Android 7.0（API 24），compileSdk / targetSdk 35 |
 | 架构 | 分域 ViewModel（播放 / 曲库 / 设置 / 更新）+ 手写服务定位器 `AppContainer`，无 Hilt / Koin |
-| 网络 | **只有**一个用途 —— 访问 `api.github.com` 检查更新；不引入 OkHttp / Gson |
-| 单元测试 | 349 项（JVM + Robolectric），lint Error 级 0 |
+| 网络 | 两类用途：① 访问 `api.github.com` 检查 / 下载更新；② 使用在线音乐时向所选音源或平台请求搜索、播放地址、歌词与封面（不中转、不采集）。网络层用 OkHttp |
+| 单元测试 | 1700+ 项（JVM + Robolectric），lint Error 级 0 |
 
 ---
 
@@ -79,7 +77,7 @@ WindTone/
 │  ├─ ui/                       Compose 界面与四个分域 ViewModel
 │  ├─ overlay/ widget/ tile/    悬浮歌词 / 桌面小部件 / 快捷磁贴
 │  └─ MusicApp.kt MainActivity.kt
-├─ app/src/test/                349 个单元测试
+├─ app/src/test/                1700+ 个单元测试
 ├─ docs/                        文档站源目录（GitHub Pages 发布目录）
 ├─ scripts/                     图标生成、本地 SDK 引导、发版与推送助手
 ├─ gradle/                      Wrapper + `libs.versions.toml`（依赖与插件版本唯一来源）
