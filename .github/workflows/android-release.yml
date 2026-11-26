@@ -34,6 +34,13 @@ jobs:
     # 固定镜像：ubuntu-latest 将于 2026-10-19 迁移到 Ubuntu 26，避免构建环境被静默替换
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    # Maven Central 偶发对 GitHub 共享出口 IP 返回 429。Gradle 默认只试 2 次（1s/2s）
+    # 就停用整个仓库，导致发版卡在依赖下载。拉长重试窗口给限流恢复时间；
+    # 这组是 Gradle 内部属性，升级 wrapper 时需重新确认仍生效（network.retry.* 对 429 无效）。
+    env:
+      GRADLE_OPTS: >-
+        -Dorg.gradle.internal.repository.max.tentatives=6
+        -Dorg.gradle.internal.repository.initial.backoff=5000
 
     steps:
       - name: 检出代码

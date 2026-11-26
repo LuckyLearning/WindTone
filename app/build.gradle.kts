@@ -240,6 +240,11 @@ android {
     lint {
         abortOnError = false
         checkReleaseBuilds = false
+        // 只 lint 主源码：否则 AGP 会生成 DebugUnitTestLintModel / AndroidTestLintModel，
+        // 进而解析 testRuntimeClasspath、下载 Robolectric 的 nativeruntime-dist-compat(~150MB)。
+        // 发版 CI 只跑 lintDebug，这个大文件曾被 Maven Central 429 限流打断出包；
+        // 单测仍由本地 / Android CI 全量跑，不受影响。
+        ignoreTestSources = true
     }
 
     /**
