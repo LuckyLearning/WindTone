@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -143,8 +144,9 @@ internal fun MyListDetailPane(
             verticalArrangement = Arrangement.spacedBy(6.dp),
             contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
         ) {
-            items(songs, key = { it.stableKey }) { song ->
-                val index = songs.indexOfFirst { it.stableKey == song.stableKey }
+            // 用 itemsIndexed 直接拿下标：旧写法每行 indexOfFirst 全表线性查找，
+            // 组合期 O(N²)，Recent 100 首 / 详情数百首时滚动掉帧。
+            itemsIndexed(songs, key = { _, song -> song.stableKey }) { index, song ->
                 MySongRow(
                     song = song,
                     favorite = song.stableKey in favoriteKeys,

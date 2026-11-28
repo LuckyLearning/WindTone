@@ -48,23 +48,22 @@ class AliyunTrackStoreTest {
         assertEquals(2, row.playCount)
         assertEquals(20, row.lastPlayedAt)
         assertEquals(5_000, row.playedMs)
-        assertEquals(5_000, store.listenBuckets().single().ms)
+        // v6 起小时桶统一写 Room listen_log，SP 不再双写（避免每 30 秒全量 JSON 重写）
+        assertTrue(store.listenBuckets().isEmpty())
         assertEquals(listOf("f"), store.favorites().map { it.fileId })
         assertEquals(listOf("f"), store.recent().map { it.fileId })
         assertEquals(listOf("f"), store.mostPlayed().map { it.fileId })
     }
 
     @Test
-    fun `收听时长按小时累加，超出保留期的桶会丢掉`() {
+    fun `收听时长只累加到曲目记录，小时桶归 Room listen_log 管`() {
         val mediaId = "aliyun:ay=d/f"
         store.addListenTime(mediaId, 1_000, 0L)
         val recent = (400L * 24 + 5) * 3_600_000L
         store.addListenTime(mediaId, 2_000, recent)
         store.addListenTime(mediaId, 3_000, recent)
-        val buckets = store.listenBuckets()
-        assertEquals(1, buckets.size)
-        assertEquals(recent / 3_600_000L, buckets.single().hourEpoch)
-        assertEquals(5_000, buckets.single().ms)
+        assertEquals(6_000, store.get("d", "f")!!.playedMs)
+        assertTrue("SP 不再双写小时桶", store.listenBuckets().isEmpty())
     }
 
     @Test

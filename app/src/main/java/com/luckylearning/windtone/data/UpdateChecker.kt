@@ -215,8 +215,12 @@ object UpdateChecker {
     /**
      * 对单条候选 URL 拉清单并解析；失败抛异常（含 [HttpFail] 以便汇总 HTTP 码）。
      */
-    private fun probeManifestUrl(url: String, current: String): UpdateCheckResult {
-        val resp = httpGet(url, accept = "application/json")
+    private fun probeManifestUrl(
+        url: String,
+        current: String,
+        onConnection: ((HttpURLConnection) -> Unit)? = null,
+    ): UpdateCheckResult {
+        val resp = httpGet(url, accept = "application/json", onConnection = onConnection)
         if (resp.code != 200) throw HttpFail(resp.code, url)
         val parsed = parseManifest(resp.body, current, viaMirror = !isOfficialRaw(url))
         if (parsed is UpdateCheckResult.Failed) throw IOException(parsed.reason)
@@ -234,10 +238,17 @@ object UpdateChecker {
         val failures = AtomicInteger(0)
         val n = candidates.size
         val lastError = AtomicReference<Throwable?>(null)
+        // HttpURLConnection 阻塞在 connect/read 时，协程 cancel 只会置标志位，连接仍占用
+        // IO 线程与 socket 直到各自超时（最长 10s）。登记每个连接，胜出/取消时主动 disconnect。
+        val connections = java.util.Collections.synchronizedList(mutableListOf<HttpURLConnection>())
         val jobs = candidates.map { url ->
             launch(Dispatchers.IO) {
                 try {
-                    val result = probeManifestUrl(url, current)
+                    val result = probeManifestUrl(url, current, onConnection = { conn ->
+                        synchronized(connections) {
+                            if (winner.isCompleted) conn.disconnect() else connections.add(conn)
+                        }
+                    })
                     winner.complete(result)
                 } catch (t: Throwable) {
                     if (t is CancellationException) throw t
@@ -254,6 +265,11 @@ object UpdateChecker {
                     lastError.get() ?: java.net.SocketTimeoutException(AppStrings.s(R.string.uc_timeout).ifEmpty { "连接更新服务器超时，请稍后重试，或点「打开发布页面」手动下载" }),
                 )
         } finally {
+            // 先断开所有还在途的连接，再取消协程：顺序反过来则连接注册可能晚于遍历
+            synchronized(connections) {
+                connections.forEach { runCatching { it.disconnect() } }
+                connections.clear()
+            }
             jobs.forEach { it.cancel() }
         }
     }
@@ -702,6 +718,12 @@ object UpdateChecker {
 
     /** 交给系统安装器。失败返回带原因的 [Result] */
     fun install(context: Context, apk: File): Result<Unit> = runCatching {
+        // 最后一道闸门：文件 SHA-256 的基准来自 latest.json，而 AUTO 线路会取第三方
+        // 镜像的首个响应 —— 若镜像同时伪造清单与安装包，摘要校验会「正确地」放行。
+        // 签名证书固化在 APK 内、无法随清单伪造，是与应用来源无关的信任锚。
+        if (!AppIntegrity.isTrustedApkFile(context, apk)) {
+            throw IOException(AppStrings.s(R.string.uc_bad_signature).ifEmpty { "安装包签名校验失败" })
+        }
         val uri: Uri = FileProvider.getUriForFile(
             context,
             "${context.packageName}.fileprovider",
@@ -781,6 +803,7 @@ object UpdateChecker {
         url: String,
         accept: String,
         configure: (HttpURLConnection) -> Unit = {},
+        onConnection: ((HttpURLConnection) -> Unit)? = null,
     ): HttpResp {
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
@@ -793,6 +816,7 @@ object UpdateChecker {
             setRequestProperty("User-Agent", "WindTone-Android/$currentVersion")
             configure(this)
         }
+        onConnection?.invoke(conn)
         return try {
             val code = conn.responseCode
             val stream = if (code in 200..299) conn.inputStream else conn.errorStream

@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import com.luckylearning.windtone.BuildConfig
+import java.io.File
 import java.security.MessageDigest
 
 /**
@@ -66,6 +67,43 @@ object AppIntegrity {
         if (!isOfficial) {
             Log.w(TAG, "非官方签名构建：cert=$sha，已停用自更新")
         }
+    }
+
+    /**
+     * 校验一个**待安装的 APK 文件**是否为官方签名（应用内更新的最后一道闸门）。
+     *
+     * 为什么必须在下载时的文件 SHA-256 校验之外再做这一层：`latest.json` 里的摘要与 APK
+     * 直链来自同一份清单，而 AUTO 线路会竞速采用第三方镜像的首个响应。若某镜像
+     * 返回伪造清单（把摘要换成木马包的），文件 SHA-256 校验会「正确地」通过。
+     * 签名证书是编译期固化在 APK 里的，攻击者无法在保留官方签名的前提下替换内容，
+     * 因此它才是与清单无关的信任锚。
+     *
+     * 返回 false 时调用方必须拒绝安装；取不到签名（文件损坏 / ROM 拒绝解析）同样拒绝。
+     */
+    fun isTrustedApkFile(context: Context, apk: File): Boolean {
+        // debug 构建用 debug key 签名，与发布白名单无关；自编译调试不该被拦住
+        if (BuildConfig.DEBUG) return true
+        val sha = runCatching { readArchiveCertSha256(context, apk) }.getOrNull() ?: return false
+        return sha in TRUSTED_CERT_SHA256
+    }
+
+    private fun readArchiveCertSha256(context: Context, apk: File): String? {
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            PackageManager.GET_SIGNING_CERTIFICATES
+        } else {
+            @Suppress("DEPRECATION")
+            PackageManager.GET_SIGNATURES
+        }
+        val info = context.packageManager.getPackageArchiveInfo(apk.absolutePath, flags) ?: return null
+        val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            info.signingInfo?.apkContentsSigners
+        } else {
+            @Suppress("DEPRECATION")
+            info.signatures
+        }
+        val bytes = signatures?.firstOrNull()?.toByteArray() ?: return null
+        val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
+        return digest.joinToString("") { "%02X".format(it) }
     }
 
     /** 给用户/诊断看的一句话 */

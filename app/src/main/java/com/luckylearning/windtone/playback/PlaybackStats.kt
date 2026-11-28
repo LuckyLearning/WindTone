@@ -75,7 +75,13 @@ class PlaybackStats(
         // 索引还没跟上（刚 upsert 的在线曲、或自动扫描被跳过后尚未 rebuild）
         scope.launch {
             val now = System.currentTimeMillis()
-            val found = withContext(Dispatchers.IO) { store.findByMediaId(mediaId) } ?: return@launch
+            val found = withContext(Dispatchers.IO) { store.findByMediaId(mediaId) }
+            if (found == null) {
+                // 队列里残留的已移除条目：写不进统计也要通知界面，让「最近播放」等
+                // 依赖 onRecorded 刷新的地方至少重查一次，而不是静默停在旧值。
+                onRecorded?.invoke()
+                return@launch
+            }
             index.remember(mediaId, found.id, found.source)
             withContext(Dispatchers.IO) { runCatching { store.recordPlay(found.id, now) } }
             index.bump(found.id) { it.copy(playCount = it.playCount + 1, lastPlayedAt = now) }
@@ -121,7 +127,11 @@ class PlaybackStats(
             val played = ms
             scope.launch {
                 val now = System.currentTimeMillis()
-                val found = withContext(Dispatchers.IO) { store.findByMediaId(key) } ?: return@launch
+                val found = withContext(Dispatchers.IO) { store.findByMediaId(key) }
+                if (found == null) {
+                    onRecorded?.invoke()
+                    return@launch
+                }
                 index.remember(key, found.id, found.source)
                 val source = sourceModeOf(found.source)
                 withContext(Dispatchers.IO) {

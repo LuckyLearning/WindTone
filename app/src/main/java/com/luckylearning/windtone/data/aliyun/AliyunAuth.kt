@@ -4,6 +4,7 @@ import android.content.Context
 import com.luckylearning.windtone.BuildConfig
 import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.UserFacingCopy
+import com.luckylearning.windtone.data.crypto.TokenCipher
 import com.luckylearning.windtone.ui.AppStrings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -114,10 +115,24 @@ class AliyunAuth(context: Context) {
         BuildConfig.ALIYUN_CLIENT_ID.isNotBlank() && BuildConfig.ALIYUN_CLIENT_SECRET.isNotBlank()
 
     fun currentToken(): AliyunToken? {
-        val at = sp.getString(KEY_ACCESS, null)?.takeIf { it.isNotBlank() } ?: return null
+        val at = TokenCipher.decrypt(sp.getString(KEY_ACCESS, null))
+            ?.takeIf { it.isNotBlank() } ?: return null
+        val refreshRaw = sp.getString(KEY_REFRESH, null)
+        val refresh = TokenCipher.decrypt(refreshRaw).orEmpty()
+        // 历史明文 → 顺手迁移成密文（同一次 commit，避免两处状态不一致）
+        if (TokenCipher.isPlaintext(refreshRaw) || TokenCipher.isPlaintext(sp.getString(KEY_ACCESS, null))) {
+            save(
+                AliyunToken(
+                    accessToken = at,
+                    refreshToken = refresh,
+                    expiresAt = sp.getLong(KEY_EXPIRES_AT, 0L),
+                ),
+                tokenSource(),
+            )
+        }
         return AliyunToken(
             accessToken = at,
-            refreshToken = sp.getString(KEY_REFRESH, "").orEmpty(),
+            refreshToken = refresh,
             expiresAt = sp.getLong(KEY_EXPIRES_AT, 0L),
         )
     }
@@ -210,8 +225,8 @@ class AliyunAuth(context: Context) {
     /** 落盘（commit 同步写：刷新成功但没来得及落盘就杀进程，同样会丢新令牌） */
     fun save(token: AliyunToken, source: AliyunTokenSource = tokenSource()) {
         sp.edit()
-            .putString(KEY_ACCESS, token.accessToken)
-            .putString(KEY_REFRESH, token.refreshToken)
+            .putString(KEY_ACCESS, TokenCipher.encrypt(token.accessToken))
+            .putString(KEY_REFRESH, TokenCipher.encrypt(token.refreshToken))
             .putLong(KEY_EXPIRES_AT, token.expiresAt)
             .putString(KEY_SOURCE, source.stored)
             .commit()

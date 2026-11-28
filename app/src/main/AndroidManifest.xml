@@ -308,8 +308,9 @@
             android:enabled="true"
             android:exported="true">
             <intent-filter>
+                <!-- QUICKBOOT_POWERON 不是系统受保护广播，任意应用可伪造拉起播放服务，
+                     故不再监听；开机自启统一走 BOOT_COMPLETED（受保护）。 -->
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
             </intent-filter>
         </receiver>
 

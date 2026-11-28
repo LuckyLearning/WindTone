@@ -132,10 +132,17 @@ internal class ReportController(private val session: LibrarySession) : ReportAct
                 withContext(Dispatchers.IO) {
                     val byId = _library.value.songs.associateBy { it.dbId }
                     val states = index.allStates()
+                    // 归桶必须走 index.sourceOf：它按 songId 查来源且有 MEDIA_STORE 兜底。
+                    // 旧写法 byId[it.songId]?.source 在在线曲刚入库、还没并进界面曲库列表时
+                    // 返回 null，`null != ONLINE` 为真 → 洛雪曲被算进「本地」榜。
                     val inScope = when (filter) {
                         ReportFilter.ALL -> states
-                        ReportFilter.LOCAL -> states.filter { byId[it.songId]?.source != SongSource.ONLINE }
-                        ReportFilter.LX -> states.filter { byId[it.songId]?.source == SongSource.ONLINE }
+                        ReportFilter.LOCAL -> states.filter {
+                            index.sourceOf(it.songId) != SongSource.ONLINE
+                        }
+                        ReportFilter.LX -> states.filter {
+                            index.sourceOf(it.songId) == SongSource.ONLINE
+                        }
                         ReportFilter.CLOUD -> emptyList()
                     }
                     val played = inScope.asSequence()

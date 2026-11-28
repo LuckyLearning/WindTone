@@ -44,7 +44,7 @@ import kotlinx.coroutines.launch
  *     用完整 URI —— 与 [OnlineMediaCache] 里 `CacheKeyFactory` 的取法完全对齐。
  *  3. **失败必须静默**。预取是「顺手做的事」，任何一个文件拉不下来都不该弹提示，
  *     只写日志、只影响那一首。
- *  4. **同一批不重复调度**。ticker 每 3 秒问一次，靠 id 列表去重；真下完了
+ *  4. **同一批不重复调度**。ticker 每 3 秒问一次，靠 stableKey 列表去重；真下完了
  *     `ProgressiveDownloader` 也会立刻返回（它按 span 跳过已缓存区间）。
  */
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -57,7 +57,8 @@ object CachePrefetcher {
     private val lock = Any()
 
     private var jobs: List<Job> = emptyList()
-    private var plannedIds: List<Long> = emptyList()
+    /** 批次身份用 stableKey 而非 Song.id：在线曲入库后 id=mediaStoreId=0，多首会撞成同一批 */
+    private var plannedKeys: List<String> = emptyList()
     private val active = mutableListOf<ProgressiveDownloader>()
 
     private val _status = MutableStateFlow("空闲")
@@ -70,29 +71,25 @@ object CachePrefetcher {
      * MediaController 的真实队列）。
      */
     fun plan(context: Context, current: Song?, upcoming: List<Song>, paused: Boolean = false) {
-        val currentRemote = current != null && CachePrefetchPolicy.isRemote(current.uri.scheme)
-        val picked = CachePrefetchPolicy.batch(
-            currentRemote = currentRemote,
-            upcomingSchemes = upcoming.map { it.uri.scheme },
-            paused = paused,
-        ).mapNotNull { idx ->
-            if (idx == -1) current else upcoming.getOrNull(idx)
-        }.distinctBy { it.id }
-        val ids = picked.map { it.id }
+        val picked = pickSongs(current, upcoming, paused)
+        // ⚠️ 批次身份与去重键必须是一致的稳定身份：Song.id 对在线曲恒为 0，
+        // 用它去重会把「当前曲 + 后续两首」压成一首，切歌后 ids 又全是 [0]，
+        // 于是 plannedIds 命中直接 return，自动缓存对洛雪在线曲整体失效。
+        val batchKey = picked.map { it.stableKey }
 
         synchronized(lock) {
-            if (ids.isEmpty()) {
+            if (batchKey.isEmpty()) {
                 // 队列里没有远程歌了：把还在跑的停掉，别让它们白占带宽
-                if (plannedIds.isNotEmpty()) {
+                if (plannedKeys.isNotEmpty()) {
                     cancelLocked()
                     _status.value = "空闲（后面没有在线歌曲）"
                 }
                 return
             }
             // 同一批只调度一次：ticker 每 3 秒问一遍，不必重复起线程
-            if (ids == plannedIds) return
+            if (batchKey == plannedKeys) return
             cancelLocked()
-            plannedIds = ids
+            plannedKeys = batchKey
         }
 
         val app = context.applicationContext
@@ -115,8 +112,28 @@ object CachePrefetcher {
         synchronized(lock) {
             // 期间可能被 cancel()（用户在诊断页点了停止）或换了批次：这一批必须立刻作废，
             // 否则会留下「没人管得住」的下载线程继续吃带宽
-            if (plannedIds == ids) jobs = newJobs else newJobs.forEach { it.cancel() }
+            if (plannedKeys == batchKey) jobs = newJobs else newJobs.forEach { it.cancel() }
         }
+    }
+
+    /**
+     * 选出这一批要预取的歌（纯函数，便于单测钉住「id 恒 0」这类回归）。
+     *
+     * 去重按 [Song.stableKey]：它在补链前后不变，也是缓存键的来源。
+     */
+    internal fun pickSongs(
+        current: Song?,
+        upcoming: List<Song>,
+        paused: Boolean,
+    ): List<Song> {
+        val currentRemote = current != null && CachePrefetchPolicy.isRemote(current.uri.scheme)
+        return CachePrefetchPolicy.batch(
+            currentRemote = currentRemote,
+            upcomingSchemes = upcoming.map { it.uri.scheme },
+            paused = paused,
+        ).mapNotNull { idx ->
+            if (idx == -1) current else upcoming.getOrNull(idx)
+        }.distinctBy { it.stableKey }
     }
 
     /** 停止全部预取（切歌时上一批已经没意义了 / 用户在诊断页手动停） */
@@ -134,7 +151,7 @@ object CachePrefetcher {
         // 取消协程不会立刻打断阻塞中的 read，必须显式 cancel 下载器
         active.forEach { runCatching { it.cancel() } }
         active.clear()
-        plannedIds = emptyList()
+        plannedKeys = emptyList()
     }
 
     /** 下载一首到缓存；返回是否真的下成功（已完整缓存也算成功） */

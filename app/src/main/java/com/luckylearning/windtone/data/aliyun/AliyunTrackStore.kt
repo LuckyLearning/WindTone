@@ -64,7 +64,10 @@ class AliyunTrackStore(context: Context) {
 
     fun records(): List<AliyunTrackRecord> = all().values.toList()
 
-    /** 在线收听的小时桶。和本地 `listen_log` 分开存，报告算法共用。 */
+    /**
+     * 历史 SP 小时桶（v6 前使用，现仅保留读取能力用于数据排查）。
+     * 报告已统一读 Room `listen_log`，[addListenTime] 不再写入这里。
+     */
     fun listenBuckets(): List<ListenBucket> {
         val raw = sp.getString(HOURS, null) ?: return emptyList()
         return runCatching {
@@ -157,7 +160,8 @@ class AliyunTrackStore(context: Context) {
         val parsed = parseMediaId(mediaId) ?: return
         val existing = get(parsed.first, parsed.second) ?: AliyunTrackRecord(parsed.first, parsed.second)
         put(existing.copy(playedMs = existing.playedMs + ms, lastPlayedAt = now))
-        addBucket(now / HOUR_MS, ms)
+        // 小时桶已统一写入 Room listen_log（由 PlaybackStats.addListenBucket），
+        // 这里不再另写一份 SP：原 addBucket 无任何读取点，却每 30 秒全量重写 JSON。
     }
 
     fun saveQueue(snapshot: AliyunQueueSnapshot?) {
@@ -277,22 +281,9 @@ class AliyunTrackStore(context: Context) {
 
     private fun key(driveId: String, fileId: String) = "$driveId/$fileId"
 
-    private fun addBucket(hour: Long, ms: Long) {
-        val kept = listenBuckets().associate { it.hourEpoch to it.ms }.toMutableMap()
-        kept[hour] = (kept[hour] ?: 0L) + ms
-        val cutoff = hour - RETENTION_DAYS * 24L
-        val arr = JSONArray()
-        kept.forEach { (h, value) ->
-            if (h >= cutoff && value > 0L) arr.put(JSONObject().put("h", h).put("ms", value))
-        }
-        sp.edit().putString(HOURS, arr.toString()).apply()
-    }
-
     private companion object {
         const val TRACKS = "tracks"
         const val QUEUE = "queue"
         const val HOURS = "listen_hours"
-        /** 与本地收听报告同一保留期，避免在线小时桶无限涨 */
-        const val RETENTION_DAYS = 400
     }
 }

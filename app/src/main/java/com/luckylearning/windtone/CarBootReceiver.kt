@@ -29,7 +29,9 @@ class CarBootReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action ?: return
-        if (action != Intent.ACTION_BOOT_COMPLETED && action != "android.intent.action.QUICKBOOT_POWERON") return
+        // QUICKBOOT_POWERON 非系统保护广播（任意应用可伪造），Manifest 已不再注册；
+        // 这里也只认 BOOT_COMPLETED，双保险。
+        if (action != Intent.ACTION_BOOT_COMPLETED) return
 
         val prefs = Prefs(context)
         val kind = BootAction.decide(prefs.autoPlayOnBoot, prefs.carMode)

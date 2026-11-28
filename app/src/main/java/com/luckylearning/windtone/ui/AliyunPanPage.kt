@@ -288,6 +288,9 @@ internal fun AliyunPanPage(
                 error = context.getString(R.string.aliyun_error_no_playable_url)
             } else {
                 onPlay(filled, playAt)
+                // 刚点的这首在 TrackStore 里已记 lastPlayedAt，立即重算「最近播放」，
+                // 否则要退出再进云盘页才能看到（onPlayRecorded 只通知曲库，不通知本页）。
+                recentTracks = tracks.recent()
             }
         }
     }

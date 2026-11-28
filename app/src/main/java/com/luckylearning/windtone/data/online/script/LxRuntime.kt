@@ -11,6 +11,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeout
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
@@ -21,6 +23,7 @@ import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
 import org.json.JSONTokener
+import java.io.IOException
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.security.MessageDigest
@@ -377,7 +380,10 @@ class LxRuntime(
      * - `binary=true` 时给字节数组（preload 的 `utils.buffer.bufToString` 接受数组）。
      */
     private fun startHttpRequest(requestKey: String, url: String, options: JSONObject?) {
-        if (!url.startsWith("http", ignoreCase = true)) {
+        // 严格解析：startsWith("http") 会让 "httpx://" 之类的畸形前缀进入 OkHttp，
+        // 而 OkHttp 的 Request.Builder().url() 对部分畸形串行为不一致。
+        val parsed = runCatching { url.toHttpUrlOrNull() }.getOrNull()
+        if (parsed == null || (parsed.scheme != "http" && parsed.scheme != "https")) {
             respondError(requestKey, "unsupported url scheme")
             return
         }
@@ -411,7 +417,7 @@ class LxRuntime(
             bodyText = if (rawBody is String) JSONObject.quote(rawBody) else rawBody.toString()
         }
 
-        val builder = Request.Builder().url(url)
+        val builder = Request.Builder().url(parsed)
         for (name in headers.keys()) {
             runCatching { builder.addHeader(name, headers.optString(name)) }
         }
@@ -445,7 +451,9 @@ class LxRuntime(
             override fun onResponse(call: Call, response: Response) {
                 httpCalls.remove(requestKey)
                 val payload = runCatching {
-                    val bytes = response.body?.bytes() ?: ByteArray(0)
+                    // 服务端响应无上限：恶意/异常源返回数百 MB 会让 bytes() 直接 OOM。
+                    // 流式读取并在超出上限时抛异常，落到 respondError（仅这一次请求失败）。
+                    val bytes = readBodyCapped(response, MAX_RESPONSE_BYTES)
                     val bodyJson: Any = if (binary) {
                         JSONArray().apply { bytes.forEach { put(it.toInt()) } }
                     } else {
@@ -552,7 +560,30 @@ class LxRuntime(
         }
     }
 
+    /**
+     * 流式读取响应体，超过 [limit] 立即抛异常。
+     *
+     * OkHttp 的 `body.bytes()` 会一次性把整段读进内存；音源脚本的服务器地址来自
+     * 用户导入的脚本，异常/恶意源可返回超大 body 直接把应用拖进 OOM。
+     */
+    private fun readBodyCapped(response: Response, limit: Int): ByteArray {
+        val source = response.body?.source() ?: return ByteArray(0)
+        val out = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(8 * 1024)
+        var total = 0
+        while (true) {
+            val read = source.read(buffer)
+            if (read < 0) break
+            total += read
+            if (total > limit) throw IOException("response too large (>$limit bytes)")
+            out.write(buffer, 0, read)
+        }
+        return out.toByteArray()
+    }
+
     companion object {
         private const val TAG = "LxRuntime"
+        /** 音源脚本单次 HTTP 响应上限：足够覆盖歌词/歌单/封面，挡住异常大响应 */
+        private const val MAX_RESPONSE_BYTES = 8 * 1024 * 1024
     }
 }

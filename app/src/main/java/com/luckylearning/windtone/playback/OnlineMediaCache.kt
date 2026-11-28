@@ -383,13 +383,17 @@ private class AdjustableEvictor(
 
     fun trim(cache: Cache, extra: Long = 0L) {
         val max = OnlineMediaCache.limitBytes(context)
+        // 快照只取一次：原实现每淘汰一个 span 就重扫全部 key 的 getCachedSpans（磁盘索引
+        // 查询），接近上限时每个新分片都触发 O(总 span 数) 扫描，抢下载/播放线程资源。
+        val spans = cache.keys.asSequence()
+            .flatMap { cache.getCachedSpans(it) }
+            .toMutableList()
+        if (spans.isEmpty()) return
+        spans.sortBy { it.lastTouchTimestamp }
+        var cursor = 0
         var guard = 0
-        while (cache.cacheSpace + extra > max && guard++ < 10_000) {
-            val oldest = cache.keys
-                .asSequence()
-                .flatMap { cache.getCachedSpans(it) }
-                .minByOrNull { it.lastTouchTimestamp }
-                ?: break
+        while (cache.cacheSpace + extra > max && cursor < spans.size && guard++ < 10_000) {
+            val oldest = spans[cursor++]
             cache.removeSpan(oldest)
         }
     }

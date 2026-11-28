@@ -521,6 +521,17 @@ class PlaybackEngine(
     /** 播放次数或收听时长刚落库：曲库侧据此刷新最近播放与统计 */
     var onPlayRecorded: (() -> Unit)? = null
 
+    /**
+     * 结算尚未落库的收听时长（服务销毁 / 任务被划掉时调用）。
+     *
+     * ticker 每 30 秒才 flush 一次，听歌不足 30 秒就熄火/被回收会永久丢这段时长。
+     * 落库本身由 [PlaybackStats.flushListen] 投递到 Main scope；进程被杀时无法保证
+     * 写完，但正常 onDestroy（车机熄火、用户退出）能救回绝大多数场景。
+     */
+    fun flushPendingListen() {
+        stats.flushListen()
+    }
+
     /** 起播前把已入库的歌记进曲库索引，否则播放次数和最近播放都写不进去。 */
     private fun rememberForStats(songs: List<Song>) {
         index.remember(songs)

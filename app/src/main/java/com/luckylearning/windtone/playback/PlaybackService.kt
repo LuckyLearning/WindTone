@@ -368,6 +368,9 @@ class PlaybackService : MediaLibraryService() {
         mediaSession
 
     override fun onTaskRemoved(rootIntent: Intent?) {
+        // 用户划掉任务前先结算累计收听时长：ticker 每 30 秒才落库，
+        // 不等这一步就销毁服务会永久丢掉最后一段（报告曲线偏短）。
+        runCatching { (application as com.luckylearning.windtone.MusicApp).container.playback.flushPendingListen() }
         val player = mediaSession?.player
         if (player == null || !player.playWhenReady || player.mediaItemCount == 0) {
             stopSelf()
@@ -375,6 +378,7 @@ class PlaybackService : MediaLibraryService() {
     }
 
     override fun onDestroy() {
+        runCatching { (application as com.luckylearning.windtone.MusicApp).container.playback.flushPendingListen() }
         AudioFx.release()
         TrackVolume.release()
         AudioFocusController.release()

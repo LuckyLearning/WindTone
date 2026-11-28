@@ -2044,6 +2044,7 @@
     <string name="upd_no_perm_needed">当前系统无需额外授权，请直接点击安装</string>
     <string name="upd_open_perm_fail">无法打开授权页，请到「设置 → 应用 → 安装未知应用」中手动允许</string>
     <string name="uc_non_official">当前安装包不是官方签名构建（%1$s），已停用应用内更新</string>
+    <string name="uc_bad_signature">安装包签名校验失败，已拒绝安装。请从官方渠道重新下载。</string>
     <string name="uc_no_release">公共仓库还没有发布版本</string>
     <string name="uc_check_http">检查更新失败（HTTP %1$d）</string>
     <string name="uc_bad_manifest">版本清单格式不正确</string>
