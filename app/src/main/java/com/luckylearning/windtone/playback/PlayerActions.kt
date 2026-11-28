@@ -97,6 +97,12 @@ interface PlayerActions : OverlayActions {
     fun setLyricOffsetAbsolute(offsetMs: Int)
     fun setLyricScale(scale: Float)
 
+    /** 用户在「搜索歌词」里选定的正文；按 stableKey 持久化，下次播放优先使用 */
+    fun applySearchedLyrics(stableKey: String, text: String)
+
+    /** 清掉手动歌词，回到自动获取链路 */
+    fun clearSearchedLyrics(stableKey: String)
+
     /** 点歌词行是否跳转（默认关） */
     /** 播放页左侧竖排是否显示「无障碍状态」按钮（v1.1.92） */
     fun setPlayerA11yAction(enabled: Boolean)

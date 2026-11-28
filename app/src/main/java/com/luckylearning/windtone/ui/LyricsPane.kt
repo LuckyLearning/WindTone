@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -90,13 +91,15 @@ fun LyricsPane(
      * 判成点击，播放进度就莫名其妙跳走。
      */
     tapSeeks: Boolean = false,
+    /** 无歌词态 / 歌词不对时的入口：打开「搜索歌词」 */
+    onSearchLyrics: (() -> Unit)? = null,
 ) {
     val effectiveScale = if (carMode) scale * CAR_LYRIC_BOOST else scale
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         when {
             loading -> LyricsLoading()
 
-            lyrics.isEmpty -> NoLyricsHint()
+            lyrics.isEmpty -> NoLyricsHint(onSearchLyrics)
 
             !lyrics.synced -> PlainLyrics(lyrics, effectiveScale)
 
@@ -142,7 +145,7 @@ private fun LyricsLoading() {
 }
 
 @Composable
-private fun NoLyricsHint() {
+private fun NoLyricsHint(onSearchLyrics: (() -> Unit)? = null) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.padding(28.dp),
@@ -160,6 +163,12 @@ private fun NoLyricsHint() {
             textAlign = TextAlign.Center,
             lineHeight = 18.sp,
         )
+        if (onSearchLyrics != null) {
+            Spacer(Modifier.height(8.dp))
+            TextButton(onClick = onSearchLyrics) {
+                Text(stringResource(R.string.lyrics_search))
+            }
+        }
     }
 }
 

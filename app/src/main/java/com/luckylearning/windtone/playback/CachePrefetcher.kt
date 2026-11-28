@@ -183,7 +183,7 @@ object CachePrefetcher {
         }
     }
 
-    private fun httpFactory(song: Song): DefaultHttpDataSource.Factory {
+    internal fun httpFactory(song: Song): DefaultHttpDataSource.Factory {
         val aliyun = TrackFragment.parse(song.uri.fragment) != null ||
             AliyunEndpoints.isDownloadHost(song.uri.host)
         val factory = DefaultHttpDataSource.Factory()
@@ -207,7 +207,7 @@ object CachePrefetcher {
  * 睡眠发生在 IO 线程，不会卡界面。
  */
 @UnstableApi
-private class ThrottledSourceFactory(
+internal class ThrottledSourceFactory(
     private val upstream: DataSource.Factory,
     private val bytesPerSecond: Int,
 ) : DataSource.Factory {

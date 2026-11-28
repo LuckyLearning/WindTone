@@ -382,6 +382,8 @@ class PlaybackService : MediaLibraryService() {
         AudioFx.release()
         TrackVolume.release()
         AudioFocusController.release()
+        // 先停边播边存的补齐线程：它正拿着 SimpleCache 的文件句柄
+        runCatching { OnlineSongSaver.cancelAll() }
         // 缓存持有目录锁与索引文件：不释放的话，进程内下次建 SimpleCache 会直接抛
         // 「Another SimpleCache instance uses the folder」，在线播放从此永久没缓存。
         OnlineMediaCache.release()

@@ -3,6 +3,7 @@ package com.luckylearning.windtone.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.luckylearning.windtone.data.DownloadsBus
 import com.luckylearning.windtone.data.ReportFilter
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.state.LibraryUiState
@@ -14,8 +15,11 @@ import com.luckylearning.windtone.ui.library.M3uActions
 import com.luckylearning.windtone.ui.library.PlaylistActions
 import com.luckylearning.windtone.ui.library.ReportActions
 import com.luckylearning.windtone.ui.library.SelectionActions
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -54,6 +58,14 @@ class LibraryViewModel private constructor(
         // （以及「随 ViewModel 一起取消」的语义）与拆分前的 `viewModelScope.launch` 完全一致。
         session.scope = viewModelScope
         session.core.startHotplugWatch()
+        // 边播边存落盘后刷新「我的列表 → 边播边存」。合并 1.2s 内的多次保存，
+        // 避免连播时每首文件都触发一次目录扫描。
+        viewModelScope.launch {
+            DownloadsBus.changes.drop(1).collectLatest {
+                delay(1_200L)
+                session.playlists.refreshPlaylists()
+            }
+        }
         // 磁贴与播放页共用 FavoriteToggle：这里订阅变更，让 favoriteUris / 虚拟歌单对齐。
         viewModelScope.launch {
             val favorites = (getApplication<Application>() as com.luckylearning.windtone.MusicApp)

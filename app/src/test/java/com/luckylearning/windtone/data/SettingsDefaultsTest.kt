@@ -76,6 +76,8 @@ class SettingsDefaultsTest {
         check("autoPlayOnBoot", prefs.autoPlayOnBoot, SettingsDefaults.AUTO_PLAY_ON_BOOT)
         check("onlineCachePrefetch", prefs.onlineCachePrefetch, SettingsDefaults.ONLINE_CACHE_PREFETCH)
         check("onlineParallelDownload", prefs.onlineParallelDownload, SettingsDefaults.ONLINE_PARALLEL_DOWNLOAD)
+        check("onlineSaveToDirectory", prefs.onlineSaveToDirectory, SettingsDefaults.ONLINE_SAVE_TO_DIRECTORY)
+        check("onlineSaveDirectoryUri", prefs.onlineSaveDirectoryUri, SettingsDefaults.ONLINE_SAVE_DIRECTORY_URI)
 
         // 播放页歌词
         check("lyricScale", prefs.lyricScale, SettingsDefaults.LYRIC_SCALE)

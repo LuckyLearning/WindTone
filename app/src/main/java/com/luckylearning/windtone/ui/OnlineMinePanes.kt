@@ -42,13 +42,17 @@ internal fun MyListsPane(
     /** 最近播放的前几首，用来拼封面；空列表时显示占位 */
     recentCover: List<Song> = emptyList(),
     recentCount: Int = 0,
+    downloadsConfigured: Boolean = false,
+    downloadsCover: List<Song> = emptyList(),
+    downloadsCount: Int = 0,
     onOpen: (OnlineLists.Summary) -> Unit,
     onOpenRecent: () -> Unit = {},
+    onOpenDownloads: () -> Unit = {},
 ) {
     when {
         // 骨架保持列表形状：加载完成时行原地出现，不再「空白 → 一堆」跳一下
-        loading && lists.isEmpty() && recentCount == 0 -> LxListSkeleton(rows = 8)
-        lists.isEmpty() && recentCount == 0 ->
+        loading && lists.isEmpty() && recentCount == 0 && !downloadsConfigured -> LxListSkeleton(rows = 8)
+        lists.isEmpty() && recentCount == 0 && !downloadsConfigured ->
             LxEmptyPane(title = stringResource(R.string.online_mine_empty))
         else -> LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 12.dp),
@@ -57,7 +61,23 @@ internal fun MyListsPane(
         ) {
             // 「最近播放」固定排第一：按时间自动生成，不属于用户自建列表
             item(key = "recent") {
-                RecentRow(cover = recentCover, count = recentCount, onClick = onOpenRecent)
+                VirtualRow(
+                    title = stringResource(R.string.vp_recent),
+                    cover = recentCover,
+                    count = recentCount,
+                    onClick = onOpenRecent,
+                )
+            }
+            // 下载目录里有什么，列表就有什么；不写曲库，目录在就显示（空也显示）
+            if (downloadsConfigured) {
+                item(key = "downloads") {
+                    VirtualRow(
+                        title = stringResource(R.string.vp_downloads),
+                        cover = downloadsCover,
+                        count = downloadsCount,
+                        onClick = onOpenDownloads,
+                    )
+                }
             }
             items(lists, key = { it.id }) { list ->
                 MyListRow(list = list, onClick = { onOpen(list) })
@@ -66,9 +86,9 @@ internal fun MyListsPane(
     }
 }
 
-/** 与自建列表同一套卡片：最近播放只是数据来源不同，样式不另起一套 */
+/** 与自建列表同一套卡片：最近播放 / 边播边存只是数据来源不同，样式不另起一套 */
 @Composable
-private fun RecentRow(cover: List<Song>, count: Int, onClick: () -> Unit) {
+private fun VirtualRow(title: String, cover: List<Song>, count: Int, onClick: () -> Unit) {
     LxCard(
         onClick = onClick,
         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
@@ -78,7 +98,7 @@ private fun RecentRow(cover: List<Song>, count: Int, onClick: () -> Unit) {
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    stringResource(R.string.vp_recent),
+                    title,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
@@ -135,10 +155,13 @@ internal fun MyListDetailPane(
     favoriteKeys: Set<String>,
     onPlay: (Int) -> Unit,
     onFavorite: (Song) -> Unit,
+    emptyTitleRes: Int = R.string.online_mine_empty,
+    /** 下载目录的曲目不在曲库里，没有收藏外键；这一列对它无意义 */
+    showFavorite: Boolean = true,
 ) {
     when {
         loading && songs.isEmpty() -> LxListSkeleton(rows = 8)
-        songs.isEmpty() -> LxEmptyPane(title = stringResource(R.string.online_mine_empty))
+        songs.isEmpty() -> LxEmptyPane(title = stringResource(emptyTitleRes))
         else -> LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -150,6 +173,7 @@ internal fun MyListDetailPane(
                 MySongRow(
                     song = song,
                     favorite = song.stableKey in favoriteKeys,
+                    showFavorite = showFavorite,
                     onPlay = { onPlay(index) },
                     onFavorite = { onFavorite(song) },
                 )
@@ -162,6 +186,7 @@ internal fun MyListDetailPane(
 private fun MySongRow(
     song: Song,
     favorite: Boolean,
+    showFavorite: Boolean,
     onPlay: () -> Unit,
     onFavorite: () -> Unit,
 ) {
@@ -190,16 +215,18 @@ private fun MySongRow(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            IconButton(onClick = onFavorite, modifier = Modifier.size(38.dp)) {
-                Icon(
-                    imageVector = if (favorite) AppIcons.Favorite else AppIcons.FavoriteBorder,
-                    contentDescription = stringResource(
-                        if (favorite) R.string.cd_unfavorite else R.string.cd_favorite,
-                    ),
-                    tint = if (favorite) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp),
-                )
+            if (showFavorite) {
+                IconButton(onClick = onFavorite, modifier = Modifier.size(38.dp)) {
+                    Icon(
+                        imageVector = if (favorite) AppIcons.Favorite else AppIcons.FavoriteBorder,
+                        contentDescription = stringResource(
+                            if (favorite) R.string.cd_unfavorite else R.string.cd_favorite,
+                        ),
+                        tint = if (favorite) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
             }
         }
     }

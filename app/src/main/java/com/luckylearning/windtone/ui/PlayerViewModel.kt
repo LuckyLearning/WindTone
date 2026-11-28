@@ -122,6 +122,13 @@ class PlayerViewModel(private val app: Application) :
     /** 播放页展开 / 再次进入时的歌词兜底：只在当前曲没有歌词时重载一次 */
     fun ensureLyrics() = engine.ensureLyrics()
 
+    /** 搜索歌词选中后立即替换当前歌词（并持久化，下次播放优先使用） */
+    override fun applySearchedLyrics(stableKey: String, text: String) =
+        engine.applySearchedLyrics(stableKey, text)
+
+    /** 恢复自动获取的歌词 */
+    override fun clearSearchedLyrics(stableKey: String) = engine.clearSearchedLyrics(stableKey)
+
     /** 把当前歌词导出成 LRC 文件（带翻译行的双语歌词会同时导出） */
     fun exportLyrics(target: Uri) {
         viewModelScope.launch {

@@ -82,9 +82,13 @@ import com.luckylearning.windtone.ui.theme.AppVisual
 import com.luckylearning.windtone.ui.theme.LocalUiFormFactor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import com.luckylearning.windtone.MusicApp
 import com.luckylearning.windtone.R
 import com.luckylearning.windtone.data.db.MusicDb
+import com.luckylearning.windtone.data.DownloadedSongs
+import com.luckylearning.windtone.data.DownloadsBus
+import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.data.db.PlaylistEntity
 import com.luckylearning.windtone.data.db.PlaylistSongEntity
 import com.luckylearning.windtone.data.model.Song
@@ -197,6 +201,24 @@ internal fun OnlinePage(
     var recentLoading by remember { mutableStateOf(false) }
     var recentOpen by remember { mutableStateOf(false) }
 
+    // 边播边存：下载目录里的音频，虚拟列表，不写曲库；目录在就显示（空也显示）
+    val prefs = remember { Prefs(context) }
+    var downloads by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var downloadsLoading by remember { mutableStateOf(false) }
+    var downloadsConfigured by remember { mutableStateOf(prefs.onlineSaveDirectoryUri.isNotBlank()) }
+    var downloadsOpen by remember { mutableStateOf(false) }
+    suspend fun reloadDownloads() {
+        val dir = prefs.onlineSaveDirectoryUri
+        downloadsConfigured = dir.isNotBlank()
+        if (dir.isBlank()) {
+            downloads = emptyList()
+            return
+        }
+        downloadsLoading = true
+        downloads = runCatching { DownloadedSongs.load(context, dir) }.getOrDefault(emptyList())
+        downloadsLoading = false
+    }
+
     // 歌单页的数据与滚动位置必须放在这一层：AnimatedContent 打开歌单详情时会把
     // SonglistPane 移出组合，状态若留在它内部，返回时整页重建 —— 重新拉第一页、回到顶部。
     val songlistState = remember { SonglistUiState() }
@@ -223,6 +245,7 @@ internal fun OnlinePage(
     BackHandler(enabled = backEnabled && !playerExpanded && canPop) { onBack() }
     // 最近播放是页面内的一层：后注册者优先，先关它，再退分区
     BackHandler(enabled = recentOpen) { recentOpen = false }
+    BackHandler(enabled = downloadsOpen) { downloadsOpen = false }
 
     // 栈把子页收起时，本地详情跟着收。切到别的分区时不擦掉底下那一帧的结果，
     // 返回还要看得到。
@@ -242,8 +265,19 @@ internal fun OnlinePage(
         if (place.section != LxSection.SHEETS) openSheet = null
         if (place.section != LxSection.BOARDS) openBoard = null
         if (place.section == LxSection.MINE && place.detail != LxDetail.LIST) openMyList = null
-        // 最近播放是 MINE 内的临时层，离开分区就收掉
-        if (place.section != LxSection.MINE) recentOpen = false
+        // 最近播放 / 边播边存是 MINE 内的临时层，离开分区就收掉
+        if (place.section != LxSection.MINE) {
+            recentOpen = false
+            downloadsOpen = false
+        }
+    }
+
+    // 进入「我的列表」时刷新下载目录；保存完成后由 DownloadsBus 再刷一次。
+    LaunchedEffect(place.section) {
+        if (place.section == LxSection.MINE) reloadDownloads()
+    }
+    LaunchedEffect(Unit) {
+        DownloadsBus.changes.collect { reloadDownloads() }
     }
 
     // 「我的列表」每次进来重读一遍：保存发生在歌单详情，回到这里要立刻看到新列表。
@@ -759,6 +793,15 @@ internal fun OnlinePage(
                             onPlay = { index -> onPlay(recentSongs, index) },
                             onFavorite = { song -> toggleFavoriteSong(song) },
                         )
+                        downloadsOpen -> MyListDetailPane(
+                            songs = downloads,
+                            loading = downloadsLoading,
+                            favoriteKeys = favoriteKeys,
+                            onPlay = { index -> onPlay(downloads, index) },
+                            onFavorite = { song -> toggleFavoriteSong(song) },
+                            emptyTitleRes = R.string.downloads_empty,
+                            showFavorite = false,
+                        )
                         target.detail == LxDetail.LIST && list != null -> MyListDetailPane(
                             songs = myListSongs,
                             loading = myListLoading,
@@ -771,8 +814,12 @@ internal fun OnlinePage(
                             loading = myListsLoading,
                             recentCover = recentSongs.take(4),
                             recentCount = recentSongs.size,
+                            downloadsConfigured = downloadsConfigured,
+                            downloadsCover = downloads.take(4),
+                            downloadsCount = downloads.size,
                             onOpen = { loadMyList(it) },
                             onOpenRecent = { loadRecent() },
+                            onOpenDownloads = { downloadsOpen = true },
                         )
                     }
                 }

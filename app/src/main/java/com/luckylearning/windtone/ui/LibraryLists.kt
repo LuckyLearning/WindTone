@@ -522,8 +522,9 @@ internal fun PlaylistListView(
     onFullScan: () -> Unit = {},
     onOpenScanScope: () -> Unit = {},
 ) {
-    // 空库：整页主 CTA，不展示 0 首的虚拟歌单壳子
-    if (library.songs.isEmpty()) {
+    // 空库：整页主 CTA，不展示 0 首的虚拟歌单壳子。
+    // 例外：已经配置了下载目录 —— 边播边存列表不依赖本地曲库，必须能进来。
+    if (library.songs.isEmpty() && !library.downloadsConfigured) {
         LibraryEmptyHint(
             scanScope = library.scanScope,
             granted = granted,
@@ -557,6 +558,14 @@ internal fun PlaylistListView(
                 info = virtualPlaylistInfo(VirtualPlaylist.FAVORITES, library),
                 onOpen = lib::openPlaylist,
             )
+        }
+        if (library.downloadsConfigured) {
+            item {
+                PlaylistRowPlay(
+                    info = virtualPlaylistInfo(VirtualPlaylist.DOWNLOADS, library),
+                    onOpen = lib::openPlaylist,
+                )
+            }
         }
         item {
             PlaylistRowPlay(

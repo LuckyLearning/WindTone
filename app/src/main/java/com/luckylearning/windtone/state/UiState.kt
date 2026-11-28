@@ -126,6 +126,8 @@ object VirtualPlaylist {
     const val NEVER_PLAYED = -5L
     /** 「很久没听」——智能歌单：播过但 [DORMANT_DAYS] 天内没再听 */
     const val DORMANT = -6L
+    /** 「边播边存」——下载目录里的音频（虚拟列表，不写曲库） */
+    const val DOWNLOADS = -7L
 
     /** 「很久没听」的判定天数 */
     const val DORMANT_DAYS = 30
@@ -250,6 +252,15 @@ fun virtualPlaylistInfo(id: Long, library: LibraryUiState): PlaylistInfo = when 
             virtual = true,
         )
 
+    VirtualPlaylist.DOWNLOADS ->
+        PlaylistInfo(
+            id,
+            AppStrings.s(R.string.vp_downloads).ifEmpty { "边播边存" },
+            library.extraDownloads.size,
+            playlistCoverSongs(library.extraDownloads),
+            virtual = true,
+        )
+
     else -> error(AppStrings.s(R.string.vp_not_virtual, id).ifEmpty { "不是虚拟歌单：$id" })
 }
 
@@ -331,6 +342,10 @@ data class LibraryUiState(
     val extraNeverPlayed: List<Song> = emptyList(),
     /** 「很久没听」：播过但 30 天内没听，最久没听排前，最多 100 首 */
     val extraDormant: List<Song> = emptyList(),
+    /** 「边播边存」：下载目录里的音频（只存在于虚拟列表，不写曲库） */
+    val extraDownloads: List<Song> = emptyList(),
+    /** 是否配置了下载目录；配置了就在「我的列表」里显示「边播边存」（空列表也显示） */
+    val downloadsConfigured: Boolean = false,
     val letterIndex: Map<Char, Int> = emptyMap(),
     val searchHistory: List<String> = emptyList(),
     val playStats: PlayStats = PlayStats(),

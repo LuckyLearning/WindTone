@@ -798,6 +798,17 @@
           <div style="font-size:15px">清空缓存</div>
           <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">清空后，听过的歌需要重新下载</div>
         </div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-top:8px">
+          <div style="flex:1"><div style="font-size:15px">下载目录</div>
+            <div style="font-size:11px;color:var(--on-surface-variant);margin-top:3px">选择后授予读写权限；保存本身不改曲库，若目录在扫描范围内下次扫描仍会收录</div></div>
+          <span style="font-size:12px;color:var(--primary);font-weight:700">未选择</span>
+          <svg class="ic ic-18" style="color:var(--on-surface-variant)"><use href="#i-chevron"/></svg>
+        </div>
+        <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;margin-top:8px">
+          <div style="flex:1"><div style="font-size:15px">边播边存</div>
+            <div class="sw-s">默认关。打开后，在线歌曲边播边缓存；缓存补齐时自动复制一份到下面的下载目录。保存只读缓存，不会切换当前播放源或改动播放列表。</div></div>
+          <span class="switch off"><i></i></span>
+        </div>
         <div class="section-label" style="padding:0;margin:16px 0 4px">播放记录</div>
         <div style="background:var(--surface-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px">
           <div style="flex:1"><div style="font-size:15px">收听报告</div>
@@ -836,6 +847,7 @@
   </div>
   <p class="note"><b>缓存上限</b>点开弹窗单选，选中项标题用 primary 色并在右侧打 ✓。点任一项立即生效并关闭；「关闭」只是收起弹窗。默认 512MB，偏离默认时这一行出现 ↺。<br>
   <b>用量</b>仍是没有圆点的进度条，写在「缓存上限」上面。清空缓存是就地动作，不加右箭头。<br>
+  <b>下载目录 / 边播边存</b>：目录行点开系统文件树授权读写，选中后显示叶名；开关默认关，未选目录时即使打开也不生效。恢复默认会同时释放目录授权并关掉开关。<br>
   <b>收听报告</b>在本页「播放记录」里。打开后的页面与曲库「收听报告」相同（近 7 天 / 近 30 天、每日时长、时段分布、最常播放、最长收听）。数据只来自阿里云盘自己的播放记录和小时桶，不读本地 <code>listen_log</code>，也不写进本地报告。<br>
   阿里云盘、在线歌单不再出现在「音乐库」里。</p>
 </figure>

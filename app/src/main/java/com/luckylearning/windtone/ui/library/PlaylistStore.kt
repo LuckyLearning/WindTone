@@ -1,5 +1,6 @@
 package com.luckylearning.windtone.ui.library
 
+import com.luckylearning.windtone.data.DownloadedSongs
 import com.luckylearning.windtone.data.db.PlaylistEntity
 import com.luckylearning.windtone.data.db.PlaylistSongEntity
 import com.luckylearning.windtone.data.findDuplicateGroups
@@ -96,6 +97,13 @@ internal class PlaylistStore(private val session: LibrarySession) : PlaylistActi
         val allStates = index.allStates()
         val neverPlayed = neverPlayedSongs(_library.value.songs, allStates)
         val dormant = dormantSongs(_library.value.songs, allStates, System.currentTimeMillis())
+        // 「边播边存」：只读用户授权的下载目录，不写曲库、不触发扫描
+        val downloadDir = session.prefs.onlineSaveDirectoryUri
+        val downloads = if (downloadDir.isBlank()) {
+            emptyList()
+        } else {
+            withContext(Dispatchers.IO) { DownloadedSongs.load(session.app, downloadDir) }
+        }
         _library.update {
             it.copy(
                 playlists = infos,
@@ -105,6 +113,8 @@ internal class PlaylistStore(private val session: LibrarySession) : PlaylistActi
                 extraRecentlyAdded = recentlyAdded,
                 extraNeverPlayed = neverPlayed,
                 extraDormant = dormant,
+                extraDownloads = downloads,
+                downloadsConfigured = downloadDir.isNotBlank(),
                 // 虚拟歌单的曲目已经算出来了：「打开我的收藏」这类入口等的就是这一步
                 // （它和曲库装载是两条并行任务，不算完就打开会看到一个空收藏夹）
                 playlistsLoaded = true,
@@ -122,6 +132,7 @@ internal class PlaylistStore(private val session: LibrarySession) : PlaylistActi
                 playlist.virtual && playlist.id == VirtualPlaylist.FAVORITES -> _library.value.extraFavorites
                 playlist.virtual && playlist.id == VirtualPlaylist.NEVER_PLAYED -> _library.value.extraNeverPlayed
                 playlist.virtual && playlist.id == VirtualPlaylist.DORMANT -> _library.value.extraDormant
+                playlist.virtual && playlist.id == VirtualPlaylist.DOWNLOADS -> _library.value.extraDownloads
                 else -> {
                     val rows = withContext(Dispatchers.IO) { db.playlistDao().songsOf(playlist.id) }
                     val byId = _library.value.songs.associateBy { it.dbId }

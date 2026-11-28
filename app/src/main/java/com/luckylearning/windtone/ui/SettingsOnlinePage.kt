@@ -3,7 +3,10 @@ package com.luckylearning.windtone.ui
 import androidx.compose.ui.res.stringResource
 import com.luckylearning.windtone.R
 
+import android.content.Intent
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -37,10 +40,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.luckylearning.windtone.data.DownloadedSongs
+import com.luckylearning.windtone.data.DownloadsBus
 import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.data.SettingsDefaults
 import com.luckylearning.windtone.data.SourceMode
 import com.luckylearning.windtone.data.formatByteSize
+import com.luckylearning.windtone.data.treeDisplayName
 import com.luckylearning.windtone.data.online.source.Quality
 import com.luckylearning.windtone.playback.OnlineMediaCache
 
@@ -55,6 +61,37 @@ internal fun SettingsOnlinePage(
     val prefs = remember { Prefs(context) }
     var prefetch by remember { mutableStateOf(prefs.onlineCachePrefetch) }
     var parallel by remember { mutableStateOf(prefs.onlineParallelDownload) }
+    var saving by remember { mutableStateOf(prefs.onlineSaveToDirectory) }
+    var saveDir by remember { mutableStateOf(prefs.onlineSaveDirectoryUri) }
+    val saveDirLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        val granted = runCatching {
+            context.contentResolver.takePersistableUriPermission(uri, flags)
+        }.isSuccess
+        if (!granted) {
+            Toast.makeText(context, AppStrings.s(R.string.online_save_directory_pick_failed), Toast.LENGTH_SHORT).show()
+            return@rememberLauncherForActivityResult
+        }
+        val previous = saveDir
+        if (previous.isNotBlank() && previous != uri.toString()) {
+            runCatching {
+                context.contentResolver.releasePersistableUriPermission(
+                    android.net.Uri.parse(previous),
+                    flags,
+                )
+            }
+        }
+        saveDir = uri.toString()
+        prefs.onlineSaveDirectoryUri = saveDir
+        DownloadedSongs.invalidate()
+        DownloadsBus.notifyChanged()
+    }
+    val saveDirPermissionOk = saveDir.isNotBlank() && context.contentResolver.persistedUriPermissions.any {
+        it.uri.toString() == saveDir && it.isWritePermission
+    }
 
     // 音源模式：一处状态驱动抽屉菜单与内容页。默认 LOCAL（SettingsDefaults.SOURCE_MODE）。
     SectionTitle(stringResource(R.string.source_mode_title))
@@ -175,6 +212,54 @@ internal fun SettingsOnlinePage(
         onReset = resetAction(parallel != SettingsDefaults.ONLINE_PARALLEL_DOWNLOAD) {
             parallel = SettingsDefaults.ONLINE_PARALLEL_DOWNLOAD
             prefs.onlineParallelDownload = SettingsDefaults.ONLINE_PARALLEL_DOWNLOAD
+        },
+    )
+
+    ActionRow(
+        title = stringResource(R.string.online_save_directory),
+        subtitle = when {
+            saveDir.isBlank() -> stringResource(R.string.online_save_directory_sub)
+            !saveDirPermissionOk -> stringResource(R.string.online_save_directory_no_permission)
+            else -> stringResource(R.string.online_save_directory_picked, treeDisplayName(saveDir))
+        },
+        trailing = if (saveDir.isBlank()) stringResource(R.string.online_save_directory_not_set) else null,
+        chevron = true,
+        onReset = if (saveDir.isNotBlank() || saving) {
+            {
+                if (saveDir.isNotBlank()) {
+                    runCatching {
+                        context.contentResolver.releasePersistableUriPermission(
+                            android.net.Uri.parse(saveDir),
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                        )
+                    }
+                }
+                saveDir = SettingsDefaults.ONLINE_SAVE_DIRECTORY_URI
+                prefs.onlineSaveDirectoryUri = saveDir
+                saving = SettingsDefaults.ONLINE_SAVE_TO_DIRECTORY
+                prefs.onlineSaveToDirectory = saving
+                DownloadedSongs.invalidate()
+                DownloadsBus.notifyChanged()
+            }
+        } else {
+            null
+        },
+        onClick = { saveDirLauncher.launch(null) },
+    )
+    SwitchRow(
+        title = stringResource(R.string.online_save_to_directory),
+        subtitle = stringResource(R.string.online_save_to_directory_sub),
+        checked = saving && saveDirPermissionOk,
+        onCheckedChange = {
+            if (it && !saveDirPermissionOk) {
+                Toast.makeText(context, AppStrings.s(R.string.online_save_directory_no_permission), Toast.LENGTH_SHORT).show()
+            }
+            saving = it
+            prefs.onlineSaveToDirectory = it
+        },
+        onReset = resetAction(saving != SettingsDefaults.ONLINE_SAVE_TO_DIRECTORY) {
+            saving = SettingsDefaults.ONLINE_SAVE_TO_DIRECTORY
+            prefs.onlineSaveToDirectory = saving
         },
     )
 

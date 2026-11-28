@@ -207,6 +207,15 @@ object SettingsDefaults {
      */
     const val ONLINE_PARALLEL_DOWNLOAD = false
 
+    /**
+     * 边播边存：默认关。打开后在线歌曲播放并把缓存补齐时，自动复制一份到用户选的目录；
+     * 只读取缓存，不删除、不切换播放源。目录未选时开关不生效。
+     */
+    const val ONLINE_SAVE_TO_DIRECTORY = false
+
+    /** 下载目录（SAF 树 URI）。空 = 未选择，恢复默认即清空。 */
+    const val ONLINE_SAVE_DIRECTORY_URI = ""
+
     /** 音源模式默认本机曲库。改这个常量等于改所有新装用户的默认入口。 */
     const val SOURCE_MODE = "LOCAL"
 
@@ -1322,6 +1331,23 @@ class Prefs private constructor(context: Context) {
         set(value) {
             sp.edit().putBoolean(KEY_ONLINE_PARALLEL_DOWNLOAD, value).apply()
             ioScope.launch { store.putBoolean(KEY_ONLINE_PARALLEL_DOWNLOAD, value) }
+        }
+
+    /** 边播边存（默认关；只保存到用户授权的 SAF 目录） */
+    var onlineSaveToDirectory: Boolean
+        get() = sp.getBoolean(KEY_ONLINE_SAVE_TO_DIRECTORY, SettingsDefaults.ONLINE_SAVE_TO_DIRECTORY)
+        set(value) {
+            sp.edit().putBoolean(KEY_ONLINE_SAVE_TO_DIRECTORY, value).apply()
+            ioScope.launch { store.putBoolean(KEY_ONLINE_SAVE_TO_DIRECTORY, value) }
+        }
+
+    /** 边播边存的目录（SAF 树 URI；空串表示未选） */
+    var onlineSaveDirectoryUri: String
+        get() = sp.getString(KEY_ONLINE_SAVE_DIRECTORY_URI, SettingsDefaults.ONLINE_SAVE_DIRECTORY_URI)
+            ?: SettingsDefaults.ONLINE_SAVE_DIRECTORY_URI
+        set(value) {
+            sp.edit().putString(KEY_ONLINE_SAVE_DIRECTORY_URI, value).apply()
+            ioScope.launch { store.putString(KEY_ONLINE_SAVE_DIRECTORY_URI, value) }
         }
 
     /** 播放页左侧竖排是否显示「无障碍状态」按钮（v1.1.92） */
@@ -2685,6 +2711,8 @@ class Prefs private constructor(context: Context) {
         val QUALITY_IDS: Set<String> = setOf("", "128k", "320k", "flac", "flac24bit")
         const val KEY_ONLINE_CACHE_PREFETCH = "online_cache_prefetch"
         const val KEY_ONLINE_PARALLEL_DOWNLOAD = "online_parallel_download"
+        const val KEY_ONLINE_SAVE_TO_DIRECTORY = "online_save_to_directory"
+        const val KEY_ONLINE_SAVE_DIRECTORY_URI = "online_save_directory_uri"
         const val KEY_LYRICS_PANE = "lyrics_pane_visible"
         /** 播放页中部页序号（0 信息 / 1 图片 / 2 歌词，v1.2.55）。旧布尔键只读作迁移。 */
         const val KEY_PLAYER_PANE = "player_pane"

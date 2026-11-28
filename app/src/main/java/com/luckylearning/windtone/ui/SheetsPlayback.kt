@@ -429,6 +429,7 @@ fun PlayerOptionsSheet(
     onOpenEq: () -> Unit,
     onOpenSleep: () -> Unit,
     onExportLyrics: () -> Unit,
+    onSearchLyrics: () -> Unit = {},
     onAudioInfo: () -> Unit,
     /** N1：分享当前曲（文本；本地可读时附带音频） */
     onShareCurrent: () -> Unit = {},
@@ -488,6 +489,13 @@ fun PlayerOptionsSheet(
                 title = stringResource(R.string.po_bookmarks),
                 subtitle = stringResource(R.string.po_bookmarks_sub),
                 onClick = onOpenBookmarks,
+            )
+            // 当前歌词缺失 / 对不上时的兜底入口：搜索平台歌词并手动选定。
+            OptionRow(
+                icon = AppIcons.Search,
+                title = stringResource(R.string.lyrics_search),
+                subtitle = stringResource(R.string.lyrics_search_sub),
+                onClick = onSearchLyrics,
             )
 
             SectionLabel(stringResource(R.string.po_section_effects))

@@ -667,6 +667,14 @@
     <string name="online_cache_prefetch_sub">默认开启：暂停时把当前曲没缓存的后半段补齐，缓冲领先足够时预取后面的在线歌。总占用受上面「缓存上限」约束。</string>
     <string name="online_parallel_download">并行分片下载</string>
     <string name="online_parallel_download_sub">默认关（车机偏省）。打开后：当前在线曲用少量连接分段下载。</string>
+    <string name="online_save_to_directory">边播边存</string>
+    <string name="online_save_to_directory_sub">默认关。打开后，在线歌曲边播边缓存；缓存补齐时自动复制一份到下面的下载目录。保存只读缓存，不会切换当前播放源或改动播放列表。</string>
+    <string name="online_save_directory">下载目录</string>
+    <string name="online_save_directory_sub">选择后授予读写权限；保存本身不改曲库，若目录在扫描范围内下次扫描仍会收录</string>
+    <string name="online_save_directory_not_set">未选择</string>
+    <string name="online_save_directory_picked">已选择：%1$s</string>
+    <string name="online_save_directory_no_permission">目录授权已失效，请重新选择下载目录</string>
+    <string name="online_save_directory_pick_failed">无法写入该目录，请换一个位置</string>
     <string name="playback_history">播放记录</string>
     <string name="listening_time_time_of_day">阿里云盘歌曲的收听时长、时段和榜单（云盘页已在抽屉一级入口，入口不再挂这里）</string>
     <string name="lowering_the_limit_immediately_drops">调小上限会立刻删掉最久没听的歌。默认 512MB。</string>
@@ -759,6 +767,15 @@
     <!-- Debt 2026-10-25: lyrics empty + Aliyun chrome -->
     <string name="lyrics_none">暂无歌词</string>
     <string name="lyrics_fetch_order_hint">歌词获取顺序：\n1. 阿里云盘同目录侧车（.lrc / .krc / .yrc / .txt）\n2. 音频同目录的同名歌词文件\n3. 音频文件内嵌歌词（MP3 USLT/SYLT、FLAC/Ogg LYRICS、M4A ©lyr）\n4. 本机曲库同名曲的歌词（仅本地，不联网搜词）\n\n网盘曲若以上都没有，会如实显示本提示；请在云盘同目录放同名歌词，或把歌加入本机曲库。</string>
+    <string name="lyrics_search">搜索歌词</string>
+    <string name="lyrics_search_sub">当前歌词缺失或不对时，搜平台歌词替换</string>
+    <string name="lyrics_search_hint">输入歌名 / 歌手，例：晴天 周杰伦</string>
+    <string name="lyrics_search_action">搜索</string>
+    <string name="lyrics_search_searching">正在搜索…</string>
+    <string name="lyrics_search_fetching">正在获取歌词…</string>
+    <string name="lyrics_search_empty">没有搜到歌词，换个关键词试试</string>
+    <string name="lyrics_search_failed">这首没有可用歌词，换一个结果</string>
+    <string name="lyrics_search_restore">恢复自动获取的歌词</string>
     <string name="lyrics_plain_text_no_timeline">纯文本歌词（无时间轴）</string>
     <string name="aliyun_status_not_signed_in">在线音乐 · 未连接</string>
     <string name="aliyun_status_signed_in">已登录</string>
@@ -1630,6 +1647,8 @@
     <string name="ss_kw_cache_limit">缓存上限</string>
     <string name="ss_kw_online_cache_prefetch">预取 后续 在线缓存</string>
     <string name="ss_kw_online_parallel_download">并行 分片 多连接</string>
+    <string name="ss_kw_online_save_to_directory">边播边存 下载 保存 离线</string>
+    <string name="ss_kw_online_save_directory">下载目录 文件夹 保存位置</string>
     <string name="ss_kw_listening_report">收听报告 听歌</string>
 
     <!-- i18n 第 23 批：ForegroundProbe 前台识别排障报告正文（fp_*） -->
@@ -1954,6 +1973,8 @@
     <string name="drt_ghproxy_net_hint">公共加速镜像，备用</string>
 
     <string name="vp_favorites">我的收藏</string>
+    <string name="vp_downloads">边播边存</string>
+    <string name="downloads_empty">下载目录里还没有歌曲</string>
     <string name="vp_recent">最近播放</string>
     <string name="vp_recently_added">最近添加</string>
     <string name="vp_most_played">最常播放</string>

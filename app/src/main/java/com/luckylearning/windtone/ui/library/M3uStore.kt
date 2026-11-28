@@ -92,6 +92,7 @@ internal class M3uStore(private val session: LibrarySession) : M3uActions {
                 playlist.virtual && playlist.id == VirtualPlaylist.FAVORITES -> _library.value.extraFavorites
                 playlist.virtual && playlist.id == VirtualPlaylist.NEVER_PLAYED -> _library.value.extraNeverPlayed
                 playlist.virtual && playlist.id == VirtualPlaylist.DORMANT -> _library.value.extraDormant
+                playlist.virtual && playlist.id == VirtualPlaylist.DOWNLOADS -> _library.value.extraDownloads
                 else -> {
                     val rows = withContext(Dispatchers.IO) { db.playlistDao().songsOf(playlist.id) }
                     val byId = _library.value.songs.associateBy { it.dbId }

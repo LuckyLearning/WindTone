@@ -3,6 +3,7 @@ import com.luckylearning.windtone.state.PlaybackProgress
 import com.luckylearning.windtone.state.PlayMode
 import com.luckylearning.windtone.state.playModeOf
 import com.luckylearning.windtone.state.PlayerUiState
+import com.luckylearning.windtone.lyrics.LyricSource
 
 import android.content.Context
 import android.media.AudioManager
@@ -197,6 +198,10 @@ fun PlayerScreen(
     /** D1：逐句循环（灌入同一 A-B 引擎） */
     onLoopLyricLine: (Long, Long) -> Unit = { _, _ -> },
     onExportLyrics: (android.net.Uri) -> Unit,
+    /** 搜索歌词选中：stableKey + 正文，由引擎立即替换并持久化 */
+    onApplySearchedLyrics: (String, String) -> Unit = { _, _ -> },
+    /** 恢复自动获取的歌词 */
+    onClearSearchedLyrics: (String) -> Unit = {},
     onShowAudioInfo: () -> Unit = {},
     /**
      * 悬浮歌词的快捷入口（播放设置弹层 → 歌词分组）。
@@ -280,6 +285,7 @@ fun PlayerScreen(
     var showOverlayStyle by remember { mutableStateOf(false) }
     var showEq by remember { mutableStateOf(false) }
     var showSleep by remember { mutableStateOf(false) }
+    var showLyricsSearch by remember { mutableStateOf(false) }
     var showBookmarks by remember { mutableStateOf(false) }
     // 长按歌词行校准偏移：存「该行时间戳 to 按下时的播放位置」。
     // 刻意在按下瞬间把位置**快照**下来，而不是让弹窗每 250ms 读一次进度——
@@ -744,6 +750,7 @@ fun PlayerScreen(
                                             progressState = progressState,
                                             onSeekTo = onSeekTo,
                                             onLineLongPress = onLineLongPress,
+                                            onSearchLyrics = { showLyricsSearch = true },
                                             modifier = Modifier
                                                 .weight(1.08f)
                                                 .fillMaxHeight()
@@ -768,6 +775,7 @@ fun PlayerScreen(
                                         progressState = progressState,
                                         onSeekTo = onSeekTo,
                                         onLineLongPress = onLineLongPress,
+                                        onSearchLyrics = { showLyricsSearch = true },
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .padding(bottom = 20.dp),
@@ -1124,6 +1132,7 @@ fun PlayerScreen(
                 showOptions = false
                 lyricsExportLauncher.launch("${song?.baseName ?: appContext.getString(R.string.player_lyrics_filename_default)}.lrc")
             },
+            onSearchLyrics = { showOptions = false; showLyricsSearch = true },
             onAudioInfo = { showOptions = false; onShowAudioInfo() },
             onShareCurrent = {
                 showOptions = false
@@ -1186,6 +1195,18 @@ fun PlayerScreen(
         onAfterSongs = { onSleepAfterSongs(it); showSleep = false },
         onCancel = { onCancelSleep(); showSleep = false },
     )
+    if (showLyricsSearch) {
+        LyricsSearchSheet(
+            song = song,
+            manual = state.lyrics.source == LyricSource.MANUAL,
+            onApply = { text ->
+                song?.let { onApplySearchedLyrics(it.stableKey, text) }
+                showLyricsSearch = false
+            },
+            onRestore = song?.let { s -> { onClearSearchedLyrics(s.stableKey); showLyricsSearch = false } },
+            onDismiss = { showLyricsSearch = false },
+        )
+    }
 
     // ---------------------------------------------- 长按歌词行 → D1 菜单 / 校准偏移
     lyricLineMenu?.let { (lineIndex, lineMs, positionMs) ->
@@ -1326,6 +1347,7 @@ private fun PlayerLyrics(
     progressState: State<PlaybackProgress>,
     onSeekTo: (Long) -> Unit,
     onLineLongPress: (Int, Long) -> Unit,
+    onSearchLyrics: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LyricsPane(
@@ -1340,6 +1362,7 @@ private fun PlayerLyrics(
         carMode = adaptiveFormFactor().isCar,
         tapSeeks = state.lyricTapSeeks,
         onLineLongPress = onLineLongPress,
+        onSearchLyrics = onSearchLyrics,
     )
 }
 

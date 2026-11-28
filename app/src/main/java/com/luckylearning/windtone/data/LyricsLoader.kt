@@ -53,6 +53,13 @@ class LyricsLoader(private val context: Context) {
     }
 
     private suspend fun loadRaw(song: Song): Lyrics {
+        // 用户手动搜过歌词并选定：优先级最高。否则每次切歌都会被自动链路覆盖，
+        // 用户会觉得「选了也没用」。
+        LyricsOverrideStore.get(context, song.stableKey)?.let { text ->
+            val parsed = com.luckylearning.windtone.data.online.LyricsSearch.parse(text)
+            if (!parsed.isEmpty) return parsed
+        }
+
         val cloudLyric = AliyunEnricher.sidecarLyrics(context, song)
         if (cloudLyric != null) return cloudLyric
 

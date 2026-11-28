@@ -23,6 +23,9 @@ enum class LyricSource(val label: String) {
      * 用户第一反应应该是调偏移量，而不是去查文件。
      */
     ONLINE("在线歌词"),
+
+    /** 用户在「搜索歌词」里手动选定并保存的版本（优先级最高） */
+    MANUAL("手动选择"),
 }
 
 /**

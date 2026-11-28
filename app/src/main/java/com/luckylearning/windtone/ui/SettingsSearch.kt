@@ -66,6 +66,8 @@ object SettingsSearchCatalog {
         SettingsSearchEntry(R.string.cache_limit, SettingsPage.ONLINE_HUB, sectionRes = R.string.playback_cache, keywordsRes = R.string.ss_kw_cache_limit),
         SettingsSearchEntry(R.string.online_cache_prefetch, SettingsPage.ONLINE_HUB, sectionRes = R.string.playback_cache, keywordsRes = R.string.ss_kw_online_cache_prefetch),
         SettingsSearchEntry(R.string.online_parallel_download, SettingsPage.ONLINE_HUB, sectionRes = R.string.playback_cache, keywordsRes = R.string.ss_kw_online_parallel_download),
+        SettingsSearchEntry(R.string.online_save_to_directory, SettingsPage.ONLINE_HUB, sectionRes = R.string.playback_cache, keywordsRes = R.string.ss_kw_online_save_to_directory),
+        SettingsSearchEntry(R.string.online_save_directory, SettingsPage.ONLINE_HUB, sectionRes = R.string.playback_cache, keywordsRes = R.string.ss_kw_online_save_directory),
         SettingsSearchEntry(R.string.lib_listening_report, SettingsPage.LIBRARY, sectionRes = R.string.playback_history, keywordsRes = R.string.ss_kw_listening_report),
     )
 }

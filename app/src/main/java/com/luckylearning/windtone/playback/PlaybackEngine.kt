@@ -42,6 +42,8 @@ import com.luckylearning.windtone.data.aliyun.AliyunPlaybackWindow
 import com.luckylearning.windtone.data.aliyun.AliyunQueueItem
 import com.luckylearning.windtone.data.aliyun.AliyunQueueSnapshot
 import com.luckylearning.windtone.data.aliyun.AliyunTrackStore
+import com.luckylearning.windtone.data.LyricsOverrideStore
+import com.luckylearning.windtone.data.online.LyricsSearch
 import com.luckylearning.windtone.data.online.OnlineKeys
 import com.luckylearning.windtone.data.online.OnlineResolver
 import com.luckylearning.windtone.data.online.OnlineTrackStore
@@ -49,6 +51,7 @@ import com.luckylearning.windtone.data.online.OnlineUrlMemo
 import com.luckylearning.windtone.data.online.source.OnlineSourceRegistry
 import com.luckylearning.windtone.data.online.source.Quality
 import com.luckylearning.windtone.data.model.Song
+import com.luckylearning.windtone.data.model.SongSource
 import com.luckylearning.windtone.data.model.TrackFragment
 import com.luckylearning.windtone.lyrics.Lyrics
 import com.luckylearning.windtone.lyrics.LockScreenLyricPublisher
@@ -403,6 +406,18 @@ class PlaybackEngine(
     /** 上一次规划后台预取的时间（ticker 每 200ms 走一次，靠它节流到 3 秒） */
     private var lastPrefetchPlanAt = 0L
 
+    /** 边播边存的上次开关状态：只在「开→关」时取消在途补齐，别每 200ms 都叫一次 cancel */
+    private var lastSaveEnabled = false
+
+    /**
+     * 上一首「可保存的远程歌」。
+     *
+     * 不能直接用 `_player.value.current`：在线曲在补链前是 `lx-pending://`，补链后媒体项
+     * 已换成 https，但队列里的 Song 仍可能保留占位 URI。保存要以**媒体项真实 URI**为准，
+     * 所以在每次 syncCurrentSong 时算好一份，切歌时拿它落盘。
+     */
+    private var lastSavableSong: Song? = null
+
     /**
      * 上一次应用到悬浮窗的「是不是夜间那套」（v1.2.52）。
      *
@@ -587,6 +602,19 @@ class PlaybackEngine(
                 consecutiveErrors = 0
                 maybeApplyIntroSkip(c)
             }
+            if (playbackState == Player.STATE_ENDED) {
+                // 单曲队列播完不会切歌：也把这首交给边播边存补齐并落盘。
+                savableSongOf(c)?.let { ended ->
+                    runCatching {
+                        OnlineSongSaver.enqueue(
+                            app,
+                            ended,
+                            prefs.onlineSaveDirectoryUri,
+                            completeCache = true,
+                        )
+                    }
+                }
+            }
             _player.update { it.copy(durationMs = c.duration.coerceAtLeast(0L)) }
             _progress.update { it.copy(bufferedMs = c.bufferedPosition.coerceAtLeast(0L)) }
         }
@@ -609,6 +637,18 @@ class PlaybackEngine(
                 clearAbLoopInternal()
                 introAppliedMediaId = null
                 outroFiredMediaId = null
+                // 边播边存：这首不再出声后才允许补齐剩余分片（补齐走独立低限速通道，
+                // 不删缓存、不动队列；保存失败也不影响下一首）。同曲换封面等替换不算切歌。
+                lastSavableSong?.let { previous ->
+                    runCatching {
+                        OnlineSongSaver.enqueue(
+                            app,
+                            previous,
+                            prefs.onlineSaveDirectoryUri,
+                            completeCache = true,
+                        )
+                    }
+                }
             }
 
             val c = controller ?: return
@@ -1760,6 +1800,25 @@ class PlaybackEngine(
         _player.update { it.copy(lyricOffsetMs = next) }
     }
 
+    override fun applySearchedLyrics(stableKey: String, text: String) {
+        val song = _player.value.current ?: return
+        if (song.stableKey != stableKey) return
+        val parsed = LyricsSearch.parse(text)
+        if (parsed.isEmpty) return
+        LyricsOverrideStore.put(app, stableKey, text)
+        lyricsJob?.cancel()
+        lyricsSeq++
+        rawLyrics = parsed
+        _player.update { it.copy(lyrics = parsed, lyricsLoading = false) }
+    }
+
+    override fun clearSearchedLyrics(stableKey: String) {
+        LyricsOverrideStore.clear(app, stableKey)
+        val song = _player.value.current ?: return
+        if (song.stableKey != stableKey) return
+        loadLyrics(song)
+    }
+
     /** 逐曲歌词偏移：写进 `song_state`（旧实现是 Prefs 里按 hashCode 拼的散列键） */
     private fun persistLyricOffset(songId: Long, offsetMs: Int) {
         index.bump(songId) { it.copy(lyricOffsetMs = offsetMs) }
@@ -2135,12 +2194,35 @@ class PlaybackEngine(
         return songByMediaId(item.mediaId)
     }
 
+    /**
+     * 边播边存用：以播放器**媒体项的真实 URI** 为准，队列里查不到（或仍是占位 URI）时
+     * 用 metadata 拼一个最小 Song。这样冷启动恢复在线队列后也能落盘。
+     */
+    private fun savableSongOf(c: MediaController): Song? {
+        val item = c.currentMediaItem ?: return null
+        val uri = item.localConfiguration?.uri ?: return null
+        if (!CachePrefetchPolicy.isRemote(uri.scheme)) return null
+        val known = songByMediaId(item.mediaId)
+        if (known != null && CachePrefetchPolicy.isRemote(known.uri.scheme)) return known
+        val title = item.mediaMetadata.title?.toString().orEmpty()
+        return Song(
+            id = 0L,
+            uri = uri,
+            title = title.ifBlank { uri.lastPathSegment.orEmpty() },
+            artist = item.mediaMetadata.artist?.toString(),
+            album = item.mediaMetadata.albumTitle?.toString(),
+            displayName = title.ifBlank { uri.lastPathSegment.orEmpty() },
+            source = SongSource.ONLINE,
+        )
+    }
+
     private fun syncCurrentSong(force: Boolean = false) {
         val c = controller ?: return
         val mediaId = c.currentMediaItem?.mediaId ?: run {
             stats.flushListen()
             _player.update { it.copy(current = null, lyrics = Lyrics.EMPTY) }
             LyricOverlayBridge.clear()
+            lastSavableSong = null
             return
         }
         if (!force && currentLyricsSong == mediaId) return
@@ -2175,6 +2257,8 @@ class PlaybackEngine(
         loadLyrics(song)
         loadArtwork(song)
         enrichAliyun(song)
+        // 媒体项可能刚补链成 https；以真实 URI 记一份给「切歌后落盘」用
+        lastSavableSong = savableSongOf(c)
     }
 
     private fun loadLyrics(song: Song) {
@@ -2421,6 +2505,25 @@ class PlaybackEngine(
                 // 不必再开一条计时器。预取失败一律静默，不影响播放。
                 if (now - lastPrefetchPlanAt >= CachePrefetchPolicy.PLAN_INTERVAL_MS) {
                     lastPrefetchPlanAt = now
+
+                    // 边播边存（默认关）：播放中只在缓存已完整时做纯磁盘复制；
+                    // 开关关掉时取消在途补齐，不让后台继续吃带宽。
+                    val saveDir = prefs.onlineSaveDirectoryUri
+                    val saveEnabled = OnlineSongSaver.enabled(app, saveDir)
+                    if (!saveEnabled && lastSaveEnabled) {
+                        runCatching { OnlineSongSaver.cancelAll() }
+                    }
+                    lastSaveEnabled = saveEnabled
+                    if (saveEnabled) {
+                        savableSongOf(c)?.let { current ->
+                            if (OnlineSongSaver.isCacheComplete(app, current)) {
+                                runCatching {
+                                    OnlineSongSaver.enqueue(app, current, saveDir, completeCache = false)
+                                }
+                            }
+                        }
+                    }
+
                     if (!prefs.onlineCachePrefetch) {
                         // 关预取时停掉可能还在跑的任务，避免设置关掉后仍占带宽
                         runCatching { CachePrefetcher.cancel() }

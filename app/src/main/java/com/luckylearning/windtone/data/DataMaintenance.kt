@@ -85,6 +85,7 @@ class DataMaintenance(
         db.playlistDao().clearAll()
         db.listenLogDao().clear()
         CoverRepository.clear()
+        LyricsOverrideStore.clearAll(context)
     }
 
     /**

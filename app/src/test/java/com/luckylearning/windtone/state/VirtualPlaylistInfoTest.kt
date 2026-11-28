@@ -81,6 +81,23 @@ class VirtualPlaylistInfoTest {
         assertEquals(mostPlayed, m.coverSong)
     }
 
+    @Test
+    fun downloadsInfoUsesDownloadedSongsAndCanBeEmpty() {
+        val info = virtualPlaylistInfo(
+            VirtualPlaylist.DOWNLOADS,
+            LibraryUiState(extraDownloads = listOf(favorite)),
+        )
+        assertEquals(VirtualPlaylist.DOWNLOADS, info.id)
+        assertEquals("边播边存", info.name)
+        assertEquals(1, info.songCount)
+        assertEquals(favorite, info.coverSong)
+        assertTrue(info.virtual)
+
+        val empty = virtualPlaylistInfo(VirtualPlaylist.DOWNLOADS, LibraryUiState())
+        assertEquals(0, empty.songCount)
+        assertNull(empty.coverSong)
+    }
+
     /** 空收藏夹也要能拼出来（打开后由界面显示「还没有收藏」的空状态，而不是崩） */
     @Test
     fun emptyFavoritesStillProducesAnEntry() {

@@ -116,6 +116,16 @@ object OnlineLyrics {
         }?.takeIf { it.isNotBlank() }
     }
 
+    /**
+     * 给「搜索歌词」用：按任意搜索结果取歌词正文，不要求这首歌已经在曲库里。
+     *
+     * 内部与自动取词走同一条分派（脚本 lyric → 内置四家），只多了 IO 线程包裹；
+     * 失败/超时返回 null，由界面提示换一个候选。
+     */
+    suspend fun fetchTextFor(track: OnlineTrack): String? = withContext(Dispatchers.IO) {
+        fetchTextWithRetry(track)?.takeIf { it.isNotBlank() }
+    }
+
     /** 供单测与诊断使用：清空缓存（切音源、改歌词偏移调试时） */
     fun clearCache() = synchronized(cache) { cache.clear() }
 
