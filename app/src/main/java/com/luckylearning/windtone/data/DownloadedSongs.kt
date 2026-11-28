@@ -27,7 +27,8 @@ object DownloadedSongs {
     private const val TAG = "DownloadedSongs"
     private const val MAX_SONGS = 500
     private const val CACHE_MS = 2_000L
-    private val LRC_EXTENSIONS = listOf(".lrc", ".krc", ".yrc", ".txt")
+    // 歌词旁车是下载目录里唯一的附加文件；.lrc.txt 兼容老版本被 SAF 补后缀的文件。
+    private val LRC_EXTENSIONS = listOf(".lrc", ".lrc.txt", ".krc", ".yrc", ".txt")
 
     private val audioExtensions = setOf(
         "mp3", "flac", "m4a", "aac", "ogg", "oga", "opus", "wav", "wma",
@@ -97,28 +98,29 @@ object DownloadedSongs {
             if (!isAudio(entry.name, entry.mime)) continue
 
             val base = entry.name.substringBeforeLast('.', entry.name)
-            val meta = byName["$base.wtmeta.json"]?.let { readMeta(resolver, tree, it) }
+            // 元信息与封面已内嵌进音频本身，统一从音频标签读取（写侧见 AudioTags）。
+            // 歌词仍是同目录旁车；.lrc.txt 兼容老版本 SAF 自动补的后缀。
             val lrc = LRC_EXTENSIONS.firstNotNullOfOrNull { ext -> byName["$base$ext"] }
             val uri = DocumentsContract.buildDocumentUriUsingTree(tree, entry.docId)
-            val embedded = if (meta == null) readEmbeddedMeta(context, uri) else null
+            val embedded = readEmbeddedMeta(context, uri)
             out += Song(
                 id = 0L,
                 uri = uri,
-                title = meta?.title ?: embedded?.title ?: displayTitle(entry.name),
-                artist = meta?.artist ?: embedded?.artist,
-                album = meta?.album ?: embedded?.album,
-                albumArtist = meta?.albumArtist ?: embedded?.albumArtist,
-                durationMs = meta?.durationMs?.takeIf { it > 0 } ?: embedded?.durationMs ?: 0L,
+                title = embedded?.title ?: displayTitle(entry.name),
+                artist = embedded?.artist,
+                album = embedded?.album,
+                albumArtist = embedded?.albumArtist,
+                durationMs = embedded?.durationMs?.takeIf { it > 0 } ?: 0L,
                 sizeBytes = entry.size,
                 mimeType = entry.mime,
                 displayName = entry.name,
                 folderPath = entry.docId.substringAfter(':', entry.docId).substringBeforeLast('/', ""),
                 source = SongSource.FOLDER,
-                trackNo = meta?.trackNo ?: 0,
+                trackNo = embedded?.trackNo ?: 0,
                 lrcUri = lrc?.let { DocumentsContract.buildDocumentUriUsingTree(tree, it.docId) },
-                genre = meta?.genre,
-                year = meta?.year,
-                discNumber = meta?.discNumber,
+                genre = embedded?.genre,
+                year = embedded?.year,
+                discNumber = embedded?.discNumber,
                 dateAdded = entry.modified,
             )
         }
@@ -156,29 +158,7 @@ object DownloadedSongs {
         return out
     }
 
-    private fun readMeta(resolver: ContentResolver, tree: Uri, entry: Entry): Meta? = runCatching {
-        val uri = DocumentsContract.buildDocumentUriUsingTree(tree, entry.docId)
-        val text = resolver.openInputStream(uri)?.use { input ->
-            input.bufferedReader(Charsets.UTF_8).readText().take(64 * 1024)
-        }.orEmpty()
-        if (text.isBlank()) return null
-        val obj = org.json.JSONObject(text)
-        fun str(key: String): String? =
-            if (obj.isNull(key)) null else obj.optString(key).takeIf { it.isNotBlank() }
-        Meta(
-            title = str("title"),
-            artist = str("artist"),
-            album = str("album"),
-            albumArtist = str("albumArtist"),
-            durationMs = obj.optLong("durationMs", 0L),
-            year = obj.optInt("year", 0).takeIf { it > 0 },
-            genre = str("genre"),
-            trackNo = obj.optInt("trackNo", 0),
-            discNumber = obj.optInt("discNumber", 0).takeIf { it > 0 },
-        )
-    }.getOrNull()
-
-    /** 老版本保存的文件没有旁车；从音频标签补一次基本信息，至少歌曲信息页不空。 */
+    /** 元信息统一从音频内嵌标签读取（写侧见 AudioTags），至少歌曲信息页不空。 */
     private fun readEmbeddedMeta(context: Context, uri: Uri): Meta? = runCatching {
         val mmr = android.media.MediaMetadataRetriever()
         try {
@@ -194,6 +174,10 @@ object DownloadedSongs {
                 year = value(android.media.MediaMetadataRetriever.METADATA_KEY_YEAR)
                     ?.toIntOrNull()?.takeIf { it > 0 },
                 genre = value(android.media.MediaMetadataRetriever.METADATA_KEY_GENRE),
+                trackNo = value(android.media.MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER)
+                    ?.substringBefore('/')?.toIntOrNull() ?: 0,
+                discNumber = value(android.media.MediaMetadataRetriever.METADATA_KEY_DISC_NUMBER)
+                    ?.substringBefore('/')?.toIntOrNull()?.takeIf { it > 0 },
             )
         } finally {
             runCatching { mmr.release() }

@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.io.ByteArrayOutputStream
 import java.io.FileInputStream
 import java.io.IOException
 import java.io.OutputStream
@@ -118,7 +119,12 @@ object OnlineSongSaver {
             job = scope.launch {
                 val saved = runCatching {
                     if (completeCache && !isCacheComplete(app, key)) ensureFullyCached(app, song, key)
-                    copyToDirectory(app, song, key, treeUri, lyrics)
+                    // 封面与标签内嵌进音频本身：下载目录只留「音频 + 歌词」两个文件。
+                    // 封面取不到（网络失败 / 音源无封面）也不影响音频落盘。
+                    val cover = runCatching {
+                        com.luckylearning.windtone.data.CoverRepository.loadRaw(app, song)
+                    }.getOrNull()
+                    copyToDirectory(app, song, key, treeUri, lyrics, cover)
                 }.onFailure {
                     Log.d(TAG, "保存失败（不影响播放）: ${song.displayName}", it)
                     synchronized(lock) { failedAt[key] = SystemClock.elapsedRealtime() }
@@ -202,6 +208,7 @@ object OnlineSongSaver {
         key: String,
         treeUri: String,
         lyrics: Lyrics?,
+        cover: ByteArray?,
     ): String? {
         val resolver = context.contentResolver
         if (!hasWritePermission(context, treeUri)) return null
@@ -217,10 +224,11 @@ object OnlineSongSaver {
         // （externalstorage 会报 IllegalArgumentException: Invalid URI）。
         val parentUri = DocumentsContract.buildDocumentUriUsingTree(tree, parentDocId)
 
-        // 音频已经在目录里也补一次元数据 / 歌词旁车：老版本保存的文件没有旁车，
-        // 用户重新播放时就能把歌手、专辑、时长和歌词接上。
+        // 音频已经在目录里：只补歌词旁车 + 清掉老版本遗留的 .wtmeta.json/.cover。
+        // 元信息/封面已内嵌在音频里，不再依赖旁车。
         if (name in existing) {
-            writeSidecars(resolver, parentUri, children, existing, name, song, lyrics)
+            writeLyricsSidecar(resolver, parentUri, children, existing, name, lyrics)
+            removeLegacySidecars(resolver, tree, children, existing, name)
             savedNames += marker
             return null
         }
@@ -240,13 +248,36 @@ object OnlineSongSaver {
         val cache = OnlineMediaCache.cacheForPrefetch(context) ?: return null
         var ok = false
         try {
-            val out = resolver.openOutputStream(docUri, "w") ?: return null
-            out.use { stream ->
-                val bytes = copyCachedSpans(cache, key, stream)
-                if (bytes <= 0L) throw IOException("缓存为空")
+            // 先把完整音频拼到内存，内嵌标签/封面后再一次写出。
+            // 上限用 Runtime.maxMemory() 的比例（红线：禁止写死 MB）：超大文件跳过注入，
+            // 直接写原音频，宁可没标签也不能 OOM。
+            val buffer = ByteArrayOutputStream()
+            val bytes = copyCachedSpans(cache, key, buffer)
+            if (bytes <= 0L) throw IOException("缓存为空")
+            val budget = (Runtime.getRuntime().maxMemory() / 8).coerceAtLeast(8L * 1024 * 1024)
+            val tagged = if (bytes <= budget) {
+                AudioTags.write(
+                    buffer.toByteArray(),
+                    AudioTags.Meta(
+                        title = song.title,
+                        artist = song.artist,
+                        album = song.album,
+                        albumArtist = song.albumArtist,
+                        year = song.year,
+                        genre = song.genre,
+                        trackNo = song.trackNo,
+                        discNumber = song.discNumber,
+                    ),
+                    cover,
+                )
+            } else {
+                buffer.toByteArray()
             }
+            val out = resolver.openOutputStream(docUri, "w") ?: return null
+            out.use { it.write(tagged) }
             ok = true
-            writeSidecars(resolver, parentUri, children, existing, name, song, lyrics)
+            writeLyricsSidecar(resolver, parentUri, children, existing, name, lyrics)
+            removeLegacySidecars(resolver, tree, children, existing, name)
             savedNames += marker
             DownloadedSongs.invalidate()
             DownloadsBus.notifyChanged()
@@ -257,31 +288,64 @@ object OnlineSongSaver {
     }
 
     /**
-     * 音频旁车：`.wtmeta.json` 存歌名/歌手/专辑/时长等标签，`.lrc` 存播放时已经拿到的歌词。
-     * 下载目录列表扫描时优先读这两份，播放页的歌曲信息与歌词才不会是空白。
-     * 写失败只记日志，不影响音频文件本身。
+     * 只写歌词旁车 `.lrc`（元信息与封面已内嵌进音频）。
+     *
+     * MIME 用 `application/octet-stream` 而非 `text/plain`：ExternalStorageProvider 会按
+     * MIME 自动补后缀，`text/plain` + `歌名.lrc` 会变成 `歌名.lrc.txt`，列表就认不出。
      */
-    private fun writeSidecars(
+    private fun writeLyricsSidecar(
         resolver: android.content.ContentResolver,
         parentUri: Uri,
         children: Uri,
         existing: Set<String>,
         audioName: String,
-        song: Song,
         lyrics: Lyrics?,
     ) {
         val base = audioName.substringBeforeLast('.')
-        writeTextIfAbsent(
-            resolver, parentUri, children, existing,
-            "$base.wtmeta.json", "application/json", metadataJson(song),
-        )
         val lrc = lyrics?.takeIf { !it.isEmpty }?.let { lyricsToLrc(it) }
         if (!lrc.isNullOrBlank()) {
             writeTextIfAbsent(
                 resolver, parentUri, children, existing,
-                "$base.lrc", "text/plain", lrc,
+                "$base.lrc", "application/octet-stream", lrc,
             )
         }
+    }
+
+    /** 清掉老版本遗留的 `.wtmeta.json` / `.cover` 旁车，让下载目录只剩「音频 + 歌词」。 */
+    private fun removeLegacySidecars(
+        resolver: android.content.ContentResolver,
+        tree: Uri,
+        children: Uri,
+        existing: Set<String>,
+        audioName: String,
+    ) {
+        val base = audioName.substringBeforeLast('.')
+        val legacy = listOf("$base.wtmeta.json", "$base.cover", "$base.wtmeta.json.txt", "$base.cover.txt")
+        for (name in legacy) {
+            if (name !in existing) continue
+            val docId = findDocId(resolver, children, name) ?: continue
+            runCatching {
+                DocumentsContract.deleteDocument(resolver, DocumentsContract.buildDocumentUriUsingTree(tree, docId))
+            }
+        }
+    }
+
+    /** 从目录子项里找某个显示名对应的 docId（清理旁车用）。 */
+    private fun findDocId(resolver: android.content.ContentResolver, children: Uri, name: String): String? {
+        val projection = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+        )
+        resolver.query(children, projection, null, null, null)?.use { cursor ->
+            val idIdx = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+            val nameIdx = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+            if (idIdx >= 0 && nameIdx >= 0) {
+                while (cursor.moveToNext()) {
+                    if (cursor.getString(nameIdx) == name) return cursor.getString(idIdx)
+                }
+            }
+        }
+        return null
     }
 
     private fun writeTextIfAbsent(
