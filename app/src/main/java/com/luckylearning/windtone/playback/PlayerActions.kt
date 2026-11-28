@@ -97,8 +97,8 @@ interface PlayerActions : OverlayActions {
     fun setLyricOffsetAbsolute(offsetMs: Int)
     fun setLyricScale(scale: Float)
 
-    /** 用户在「搜索歌词」里选定的正文；按 stableKey 持久化，下次播放优先使用 */
-    fun applySearchedLyrics(stableKey: String, text: String)
+    /** 用户在「搜索歌词」里选定的正文；按 stableKey 持久化，下次播放优先使用。返回是否真的应用到当前曲。 */
+    fun applySearchedLyrics(stableKey: String, text: String): Boolean
 
     /** 清掉手动歌词，回到自动获取链路 */
     fun clearSearchedLyrics(stableKey: String)

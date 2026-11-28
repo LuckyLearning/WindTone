@@ -123,7 +123,7 @@ class PlayerViewModel(private val app: Application) :
     fun ensureLyrics() = engine.ensureLyrics()
 
     /** 搜索歌词选中后立即替换当前歌词（并持久化，下次播放优先使用） */
-    override fun applySearchedLyrics(stableKey: String, text: String) =
+    override fun applySearchedLyrics(stableKey: String, text: String): Boolean =
         engine.applySearchedLyrics(stableKey, text)
 
     /** 恢复自动获取的歌词 */

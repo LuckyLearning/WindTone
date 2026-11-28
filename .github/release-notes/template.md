@@ -12,10 +12,12 @@
 
 | 安装包 | 适用设备 |
 | --- | --- |
-| `WindTone-v{version}-arm64-v8a.apk` | 绝大多数手机 / 车机（64 位） |
-| `WindTone-v{version}-universal.apk` | 不确定架构时选它 |
+| `WindTone-v{version}-armeabi-v7a.apk` | 32 位 ARM 手机 / 车机 |
+| `WindTone-v{version}-arm64-v8a.apk` | 绝大多数 64 位手机 / 车机 |
+| `WindTone-v{version}-x86.apk` | 32 位 x86 模拟器 / 设备 |
+| `WindTone-v{version}-x86_64.apk` | 64 位 x86 模拟器 / 设备 |
 
-> 自 1.3.1 起只提供 64 位（arm64-v8a）安装包；32 位与 x86 机型不再维护。
+> 2026-11-28 起恢复全平台四分包，不再提供 universal 包。
 
 **升级**：也可以在应用内「设置 → 更新 → 检查更新」一键升级（安装包由 GitHub 上的公共分发仓库提供，直连不通时会自动切换镜像线路）。
 

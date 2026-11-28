@@ -122,18 +122,19 @@ else
 fi
 
 # ③ Release 资产 ------------------------------------------------------
-# 2026-11-24 起只发 arm64-v8a + universal（32 位与 x86 不再维护，见 app/build.gradle.kts
-# 的 splits.abi 注释）。不写死数量：两个关键包都在就算过，将来增删 ABI 不用回来改这里。
+# 2026-11-28 起发全平台四分包（armeabi-v7a / arm64-v8a / x86 / x86_64），
+# 不再产出 universal；四个 ABI 缺一不可。
 REL_JSON="$(curl -s -H "Authorization: Bearer $TOKEN" \
   "https://api.github.com/repos/$REPO_SLUG/releases/tags/$TAG")"
 ASSET_N="$(echo "$REL_JSON" | grep -c "\"name\": *\"WindTone-v$NEW_NAME" || true)"
-HAS_ARM64=0; HAS_UNIVERSAL=0
-echo "$REL_JSON" | grep -q "WindTone-v$NEW_NAME-arm64-v8a.apk" && HAS_ARM64=1
-echo "$REL_JSON" | grep -q "WindTone-v$NEW_NAME-universal.apk" && HAS_UNIVERSAL=1
-if [[ "$HAS_ARM64" == "1" && "$HAS_UNIVERSAL" == "1" ]]; then
-  echo "  ③ Release 资产：arm64-v8a + universal 齐全（共 $ASSET_N 个）✅"
+MISSING_ABIS=()
+for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+  echo "$REL_JSON" | grep -q "WindTone-v$NEW_NAME-$abi.apk" || MISSING_ABIS+=("$abi")
+done
+if [[ ${#MISSING_ABIS[@]} -eq 0 ]]; then
+  echo "  ③ Release 资产：四 ABI 齐全（共 $ASSET_N 个）✅"
 else
-  echo "  ③ Release 资产：共 $ASSET_N 个，缺关键包（arm64=$HAS_ARM64 universal=$HAS_UNIVERSAL）❌"
+  echo "  ③ Release 资产：共 $ASSET_N 个，缺 ${MISSING_ABIS[*]} ❌"
   FAILURES=$((FAILURES + 1))
 fi
 
@@ -174,8 +175,8 @@ fi
 # ④ APK 验签 + 包内版本串 ---------------------------------------------
 PY="$(pick_python)" || PY=""
 if [[ -n "$PY" ]]; then
-  echo "  ④ 下载 universal 包验签（python: $PY）"
-  if "$PY" "$ROOT/scripts/verify_apk.py" "$TAG" "$REPO_SLUG"; then
+  echo "  ④ 下载 arm64-v8a 包验签（python: $PY）"
+  if "$PY" "$ROOT/scripts/verify_apk.py" "$TAG" "$REPO_SLUG" arm64-v8a; then
     echo "     → PASS ✅"
   else
     echo "     → FAIL ❌"; FAILURES=$((FAILURES + 1))

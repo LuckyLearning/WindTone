@@ -34,14 +34,16 @@ Android 原生本地音乐播放器。**数据全部留在本机**，只在你�
 
 ## 下载安装
 
-最新安装包在公共分发仓库 **[LuckyLearning/Release](https://github.com/LuckyLearning/Release/tree/main/WindTone)**（**源码已公开**于 [LuckyLearning/WindTone](https://github.com/LuckyLearning/WindTone)；安装包仍单独放在分发仓，按「软件 / 版本」分目录，只保留最近 5 个版本，供应用内更新匿名读取）。每个版本按 CPU 架构分包（自 1.3.1 起只发 64 位，共 2 个包；Release 签名包，R8 混淆 + 资源压缩，约 5 MB）：
+最新安装包在公共分发仓库 **[LuckyLearning/Release](https://github.com/LuckyLearning/Release/tree/main/WindTone)**（**源码已公开**于 [LuckyLearning/WindTone](https://github.com/LuckyLearning/WindTone)；安装包仍单独放在分发仓，按「软件 / 版本」分目录，只保留最近 5 个版本，供应用内更新匿名读取）。每个版本按 CPU 架构分包（2026-11-28 起恢复全平台，共 4 个包；Release 签名包，R8 混淆 + 资源压缩，约 5 MB）：
 
 | 文件 | 说明 |
 |---|---|
+| `WindTone-vX.Y.Z-armeabi-v7a.apk` | 32 位 ARM 手机 / 车机 |
 | `WindTone-vX.Y.Z-arm64-v8a.apk` | **绝大多数手机装这个**（近十年的 64 位 ARM 设备） |
-| `WindTone-vX.Y.Z-universal.apk` | 全架构合一，体积略大；**拿不准架构时用它** |
+| `WindTone-vX.Y.Z-x86.apk` | 32 位 x86 模拟器 / 设备 |
+| `WindTone-vX.Y.Z-x86_64.apk` | 64 位 x86 模拟器 / 设备 |
 
-> 32 位（armeabi-v7a）与 x86_64 包自 1.3.1 起不再提供。
+> 本轮不再提供 universal 包，请按设备架构选择。
 
 安装步骤：
 

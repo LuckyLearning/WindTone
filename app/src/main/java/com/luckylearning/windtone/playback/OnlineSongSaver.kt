@@ -21,6 +21,7 @@ import com.luckylearning.windtone.data.DownloadsBus
 import com.luckylearning.windtone.data.Prefs
 import com.luckylearning.windtone.data.docIdOf
 import com.luckylearning.windtone.data.model.Song
+import com.luckylearning.windtone.lyrics.Lyrics
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -96,7 +97,13 @@ object OnlineSongSaver {
      * [completeCache] = false：只在缓存已完整时复制（播放中走这条）；
      * [completeCache] = true：允许补齐剩余分片后再复制（切歌后走这条）。
      */
-    fun enqueue(context: Context, song: Song, treeUri: String, completeCache: Boolean) {
+    fun enqueue(
+        context: Context,
+        song: Song,
+        treeUri: String,
+        completeCache: Boolean,
+        lyrics: Lyrics? = null,
+    ) {
         if (!enabled(context, treeUri)) return
         if (!CachePrefetchPolicy.isRemote(song.uri.scheme)) return
         val key = OnlineMediaCache.stableKey(song.uri) ?: return
@@ -111,7 +118,7 @@ object OnlineSongSaver {
             job = scope.launch {
                 val saved = runCatching {
                     if (completeCache && !isCacheComplete(app, key)) ensureFullyCached(app, song, key)
-                    copyToDirectory(app, song, key, treeUri)
+                    copyToDirectory(app, song, key, treeUri, lyrics)
                 }.onFailure {
                     Log.d(TAG, "保存失败（不影响播放）: ${song.displayName}", it)
                     synchronized(lock) { failedAt[key] = SystemClock.elapsedRealtime() }
@@ -189,7 +196,13 @@ object OnlineSongSaver {
      * SimpleCache 的分片文件名含起始位置，`span.file` 里的数据从 [CacheSpan.position] 开始；
      * 多个分片必须按位置拼接，直接拿某一个文件当整首会前功尽弃。
      */
-    private fun copyToDirectory(context: Context, song: Song, key: String, treeUri: String): String? {
+    private fun copyToDirectory(
+        context: Context,
+        song: Song,
+        key: String,
+        treeUri: String,
+        lyrics: Lyrics?,
+    ): String? {
         val resolver = context.contentResolver
         if (!hasWritePermission(context, treeUri)) return null
         val name = outputFileName(song)
@@ -197,17 +210,22 @@ object OnlineSongSaver {
         val marker = marker(treeUri, name)
         if (marker in savedNames) return null
         val existing = existingNames(resolver, tree)
-        if (name in existing) {
-            savedNames += marker
-            return null
-        }
 
-        val mime = mimeTypeOf(name, song.mimeType)
         val parentDocId = docIdOf(treeUri) ?: return null
         val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, parentDocId)
         // createDocument 要的是「父文档 URI」，不能直接丢 tree URI 进去
         // （externalstorage 会报 IllegalArgumentException: Invalid URI）。
         val parentUri = DocumentsContract.buildDocumentUriUsingTree(tree, parentDocId)
+
+        // 音频已经在目录里也补一次元数据 / 歌词旁车：老版本保存的文件没有旁车，
+        // 用户重新播放时就能把歌手、专辑、时长和歌词接上。
+        if (name in existing) {
+            writeSidecars(resolver, parentUri, children, existing, name, song, lyrics)
+            savedNames += marker
+            return null
+        }
+
+        val mime = mimeTypeOf(name, song.mimeType)
         val docUri = runCatching {
             DocumentsContract.createDocument(resolver, parentUri, mime, name)
         }.getOrNull() ?: runCatching {
@@ -228,6 +246,7 @@ object OnlineSongSaver {
                 if (bytes <= 0L) throw IOException("缓存为空")
             }
             ok = true
+            writeSidecars(resolver, parentUri, children, existing, name, song, lyrics)
             savedNames += marker
             DownloadedSongs.invalidate()
             DownloadsBus.notifyChanged()
@@ -235,6 +254,58 @@ object OnlineSongSaver {
         } finally {
             if (!ok) runCatching { DocumentsContract.deleteDocument(resolver, docUri) }
         }
+    }
+
+    /**
+     * 音频旁车：`.wtmeta.json` 存歌名/歌手/专辑/时长等标签，`.lrc` 存播放时已经拿到的歌词。
+     * 下载目录列表扫描时优先读这两份，播放页的歌曲信息与歌词才不会是空白。
+     * 写失败只记日志，不影响音频文件本身。
+     */
+    private fun writeSidecars(
+        resolver: android.content.ContentResolver,
+        parentUri: Uri,
+        children: Uri,
+        existing: Set<String>,
+        audioName: String,
+        song: Song,
+        lyrics: Lyrics?,
+    ) {
+        val base = audioName.substringBeforeLast('.')
+        writeTextIfAbsent(
+            resolver, parentUri, children, existing,
+            "$base.wtmeta.json", "application/json", metadataJson(song),
+        )
+        val lrc = lyrics?.takeIf { !it.isEmpty }?.let { lyricsToLrc(it) }
+        if (!lrc.isNullOrBlank()) {
+            writeTextIfAbsent(
+                resolver, parentUri, children, existing,
+                "$base.lrc", "text/plain", lrc,
+            )
+        }
+    }
+
+    private fun writeTextIfAbsent(
+        resolver: android.content.ContentResolver,
+        parentUri: Uri,
+        children: Uri,
+        existing: Set<String>,
+        name: String,
+        mime: String,
+        text: String,
+    ) {
+        if (name in existing) return
+        runCatching {
+            val doc = DocumentsContract.createDocument(resolver, parentUri, mime, name)
+                ?: resolver.insert(
+                    children,
+                    ContentValues().apply {
+                        put(DocumentsContract.Document.COLUMN_DISPLAY_NAME, name)
+                        put(DocumentsContract.Document.COLUMN_MIME_TYPE, mime)
+                    },
+                )
+                ?: return
+            resolver.openOutputStream(doc, "w")?.use { it.write(text.toByteArray(Charsets.UTF_8)) }
+        }.onFailure { Log.d(TAG, "旁车写入失败：$name", it) }
     }
 
     private fun existingNames(resolver: android.content.ContentResolver, tree: Uri): Set<String> {
@@ -310,6 +381,43 @@ object OnlineSongSaver {
     }
 
     // ------------------------------------------------------------ 纯函数（单测覆盖）
+
+    /** 旁车元数据：只放播放页信息能直接用的字段，版本号留作以后扩展。 */
+    internal fun metadataJson(song: Song): String = org.json.JSONObject().apply {
+        put("v", 1)
+        put("title", song.title)
+        put("artist", song.artist)
+        put("album", song.album)
+        put("albumArtist", song.albumArtist)
+        put("durationMs", song.durationMs)
+        put("year", song.year)
+        put("genre", song.genre)
+        put("trackNo", song.trackNo)
+        put("discNumber", song.discNumber)
+        put("mimeType", song.mimeType)
+        put("originalKey", song.stableKey)
+    }.toString()
+
+    /** 把当前歌词写成标准 LRC；无时间轴就写纯文本，交给读取端按纯文本解析。 */
+    internal fun lyricsToLrc(lyrics: Lyrics): String {
+        val sb = StringBuilder()
+        lyrics.title?.takeIf { it.isNotBlank() }?.let { sb.append("[ti:").append(it).append("]\n") }
+        lyrics.artist?.takeIf { it.isNotBlank() }?.let { sb.append("[ar:").append(it).append("]\n") }
+        lyrics.album?.takeIf { it.isNotBlank() }?.let { sb.append("[al:").append(it).append("]\n") }
+        for (line in lyrics.lines) {
+            if (lyrics.synced) sb.append(lrcTime(line.timeMs))
+            sb.append(line.text).append('\n')
+        }
+        return sb.toString()
+    }
+
+    private fun lrcTime(ms: Long): String {
+        val safe = ms.coerceAtLeast(0L)
+        val minutes = safe / 60_000
+        val seconds = (safe % 60_000) / 1000
+        val hundredths = (safe % 1000) / 10
+        return "[%02d:%02d.%02d]".format(minutes, seconds, hundredths)
+    }
 
     /** 去掉文件系统与 SAF 都不友好的字符；保留中文，尽量贴近歌名。 */
     internal fun sanitizeFileName(raw: String, maxLength: Int = 80): String {

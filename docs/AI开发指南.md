@@ -295,7 +295,7 @@ WindTone/                        ← 仓库根 == Gradle 根（已扁平化，�
 │   ├─ push.sh                   用 .github-token 推送（GIT_ASKPASS，token 不落盘；退出码已根治 trap 污染）
 │   ├─ release.sh                跑单测 → 改版本号 → 提交 → 打 tag → 推送 + 推后查证（--verify 接着跑验证链）
 │   ├─ verify-release.sh         ★ 四步验证链：tag → workflow → 4 资产 → latest.json → 验签（--skip-ci 跳过轮询）
-│   ├─ verify_apk.py             ★ 下 universal 包验签名证书 + 包内版本串（无 apksigner，自解析 Signing Block）
+│   ├─ verify_apk.py             ★ 下 arm64-v8a 包验签名证书 + 包内版本串（无 apksigner，自解析 Signing Block）
 │   ├─ publish-release-repo.sh   CI 用：把产物发到公共仓库 LuckyLearning/Release（快照 force push）
 │   ├─ render-release-notes.sh   渲染发版说明（每版 v{版本}.md 优先；兜底模板仅 --allow-template 时用）
 │   ├─ gen-release-manifest.py   生成公共仓库 latest.json / README 版本行
@@ -1191,7 +1191,7 @@ PUT /repos/{owner}/{repo}/actions/secrets/{name}       → 提交 encrypted_valu
 ```bash
 bash scripts/verify-release.sh vX.Y.Z            # 等 CI 跑完再核（自动轮询，45s 一次）
 bash scripts/verify-release.sh vX.Y.Z --skip-ci  # CI 已确认跑完，只核后半段
-python scripts/verify_apk.py vX.Y.Z              # 只下 universal 包验签
+python scripts/verify_apk.py vX.Y.Z Owner/Repo arm64-v8a   # 只下 arm64 包验签
 ```
 
 输出以 `✓ 验证链全部通过：vX.Y.Z` / `✗ 验证链有 N 项未通过` 结尾，退出码同步（0/1）。
@@ -1209,10 +1209,10 @@ curl -s -o /dev/null -w "tag: %{http_code}\n" -H "Authorization: Bearer $TOKEN" 
 curl -s -H "Authorization: Bearer $TOKEN" "$REPO/actions/runs?per_page=3" \
   | python -c "import sys,json;[print(r['name'],r['head_branch'],r['status'],r['conclusion']) for r in json.load(sys.stdin)['workflow_runs']]"
 
-# ③ Release 建好、关键 ABI 资产齐全（arm64-v8a + universal）、正文是本版实际说明
+# ③ Release 建好、关键 ABI 资产齐全（armeabi-v7a / arm64-v8a / x86 / x86_64）、正文是本版实际说明
 curl -s -H "Authorization: Bearer $TOKEN" $REPO/releases \
   | python -c "import sys,json;r=json.load(sys.stdin)[0];print(r['tag_name'],r['name']);[print(' ',a['name'],a['size']) for a in r['assets']]"
-# 期望：arm64-v8a + universal 两个（自 1.3.1 起只发 64 位），正文首行为「**听风 WindTone X.Y.Z**」
+# 期望：四个 ABI 包齐全（2026-11-28 起恢复全平台），正文首行为「**听风 WindTone X.Y.Z**」
 
 # ④ 签名确实是 windtone.jks（把 asset 下载下来验一次）
 ./.toolchain/android-sdk/build-tools/35.0.0/apksigner.bat verify --print-certs wt.apk
@@ -1247,11 +1247,13 @@ curl -s -H "Authorization: Bearer $TOKEN" $REPO/releases \
 
 ### 9.1.1 ABI 分包与发版说明（v1.0.7 起）
 
-**产物**：CI 传 `-PabiSplits=true`，一次产出 2 个包（自 1.3.1 起只发 64 位，32 位与 x86 不再维护；本地 dev 不传该参数，`assembleDebug` 仍只出一个包）：
+**产物**：CI 传 `-PabiSplits=true`，一次产出 4 个包（2026-11-28 拍板恢复全平台；本地 dev 不传该参数，`assembleDebug` 仍出一个四 ABI 混合包）：
 
 ```
-WindTone-v{版本}-arm64-v8a.apk      # 绝大多数手机 / 车机
-WindTone-v{版本}-universal.apk      # 拿不准架构时的兜底（单 ABI 时与上面内容一致）
+WindTone-v{版本}-armeabi-v7a.apk    # 32 位 ARM
+WindTone-v{版本}-arm64-v8a.apk      # 绝大多数 64 位手机 / 车机
+WindTone-v{版本}-x86.apk            # 32 位 x86 模拟器 / 设备
+WindTone-v{版本}-x86_64.apk         # 64 位 x86 模拟器 / 设备
 ```
 
 **命名是契约**：应用内更新在 Atom 通道下拿不到资产列表，只能按名字推导下载地址。

@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,18 +48,18 @@ import kotlinx.coroutines.launch
 /**
  * 搜索歌词：当前歌词缺失或明显对不上时的手动换词入口。
  *
- * **两步走，绝不自动套用**：
- *  1. 点候选 → 只拉取并展示预览，列表里标「已选」，不动当前歌词；
- *  2. 确认预览后按「使用这份歌词」→ 才替换并持久化。
+ * **点候选即切换，但弹层不关**：
+ *  - 不会在搜索完成时自动套用任何结果，必须由用户点某一个候选；
+ *  - 点中后立即替换当前歌词，同时保留列表，方便继续点别的版本当场比较；
+ *  - 列表右侧「当前使用」标出正在生效的那一份，「恢复自动获取」随时退回自动链路。
  *
- * 这样用户在多个同名版本间可以来回点、看够再决定；已应用手动词之后，再次打开仍可
- * 重新搜索换一份，或「恢复自动获取」。
+ * 这样既不是「系统替你选」，也不会出现「选了半天却没生效」。
  */
 @Composable
 internal fun LyricsSearchSheet(
     song: Song?,
     manual: Boolean,
-    onApply: (String) -> Unit,
+    onApply: (String) -> Boolean,
     onRestore: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
@@ -76,7 +75,7 @@ internal fun LyricsSearchSheet(
     var results by remember { mutableStateOf<List<LyricsSearch.Candidate>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
     var selectedKey by remember { mutableStateOf<String?>(null) }
-    var selectedText by remember { mutableStateOf<String?>(null) }
+    var appliedKey by remember { mutableStateOf<String?>(null) }
     var selectedLyrics by remember { mutableStateOf<Lyrics?>(null) }
     var fetchingKey by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf<Int?>(null) }
@@ -87,7 +86,7 @@ internal fun LyricsSearchSheet(
         searching = true
         message = null
         selectedKey = null
-        selectedText = null
+        appliedKey = null
         selectedLyrics = null
         scope.launch {
             results = runCatching { LyricsSearch.search(q) }.getOrDefault(emptyList())
@@ -96,29 +95,40 @@ internal fun LyricsSearchSheet(
         }
     }
 
-    /** 点候选只“选中 + 取预览”，不应用；应用只由底部按钮触发。 */
+    /** 点候选即应用；失败（取不到词 / 已切歌）只提示，不动当前歌词。 */
     fun selectCandidate(candidate: LyricsSearch.Candidate) {
         if (fetchingKey != null) return
-        selectedKey = candidate.key
-        selectedText = null
-        selectedLyrics = null
-        message = null
         fetchingKey = candidate.key
+        message = null
         scope.launch {
             val text = runCatching { LyricsSearch.fetchText(candidate.track) }.getOrNull()
             fetchingKey = null
             if (text.isNullOrBlank()) {
-                selectedKey = null
                 message = R.string.lyrics_search_failed
+                return@launch
+            }
+            val parsed = LyricsSearch.parse(text)
+            if (parsed.isEmpty) {
+                message = R.string.lyrics_search_failed
+                return@launch
+            }
+            if (onApply(text)) {
+                selectedKey = candidate.key
+                appliedKey = candidate.key
+                selectedLyrics = parsed
             } else {
-                selectedText = text
-                selectedLyrics = LyricsSearch.parse(text)
+                message = R.string.lyrics_search_song_changed
             }
         }
     }
 
     // 打开即按当前歌名 / 歌手搜一次，减少一次点击；用户仍可改关键词重搜。
+    // 换歌时也把上一首的选择 / 预览清掉，避免把 A 的结果看成 B 的。
     LaunchedEffect(song?.stableKey) {
+        selectedKey = null
+        appliedKey = null
+        selectedLyrics = null
+        message = null
         if (query.isNotBlank()) runSearch()
     }
 
@@ -178,19 +188,19 @@ internal fun LyricsSearchSheet(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 260.dp)
+                    .heightIn(max = 250.dp)
                     .padding(top = 4.dp),
             ) {
                 items(results, key = { it.key }) { candidate ->
-                    val selected = selectedKey == candidate.key
                     val fetching = fetchingKey == candidate.key
+                    val applied = appliedKey == candidate.key
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
                             .background(
-                                if (selected) MaterialTheme.colorScheme.primaryContainer
+                                if (applied) MaterialTheme.colorScheme.primaryContainer
                                 else MaterialTheme.colorScheme.surface,
                             )
                             .clickable(enabled = fetchingKey == null) { selectCandidate(candidate) }
@@ -214,13 +224,13 @@ internal fun LyricsSearchSheet(
                         Spacer(Modifier.width(8.dp))
                         when {
                             fetching -> CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                            selected -> Text(
-                                stringResource(R.string.lyrics_search_selected),
+                            applied -> Text(
+                                stringResource(R.string.lyrics_search_current),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary,
                             )
                             else -> Text(
-                                stringResource(R.string.lyrics_search_select),
+                                stringResource(R.string.lyrics_search_switch),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -238,7 +248,7 @@ internal fun LyricsSearchSheet(
                 ) {
                     Column(
                         Modifier
-                            .heightIn(max = 150.dp)
+                            .heightIn(max = 130.dp)
                             .verticalScroll(rememberScrollState())
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                     ) {
@@ -249,7 +259,7 @@ internal fun LyricsSearchSheet(
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            lyrics.lines.take(10).joinToString("\n") { it.text.ifBlank { " " } },
+                            lyrics.lines.take(8).joinToString("\n") { it.text.ifBlank { " " } },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
@@ -266,13 +276,8 @@ internal fun LyricsSearchSheet(
                     }
                 }
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-                Spacer(Modifier.width(4.dp))
-                Button(
-                    onClick = { selectedText?.let(onApply) },
-                    enabled = selectedText != null && fetchingKey == null,
-                ) {
-                    Text(stringResource(R.string.lyrics_search_use))
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.lyrics_search_done))
                 }
             }
         }

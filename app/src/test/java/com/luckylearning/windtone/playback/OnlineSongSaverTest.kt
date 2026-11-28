@@ -5,6 +5,8 @@ import androidx.media3.datasource.cache.CacheSpan
 import androidx.test.core.app.ApplicationProvider
 import com.luckylearning.windtone.data.model.Song
 import com.luckylearning.windtone.data.model.SongSource
+import com.luckylearning.windtone.lyrics.LyricLine
+import com.luckylearning.windtone.lyrics.Lyrics
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -111,6 +113,38 @@ class OnlineSongSaverTest {
         assertEquals("audio/mpeg", OnlineSongSaver.mimeTypeOf("x.mp3", "audio/flac"))
         assertEquals("audio/ogg", OnlineSongSaver.mimeTypeOf("x.ogg", null))
         assertEquals("audio/mpeg", OnlineSongSaver.mimeTypeOf("x.bin", null))
+    }
+
+    @Test
+    fun `旁车元数据保留歌名歌手与时长`() {
+        val s = song("https://cdn.example.com/a.mp3").copy(
+            title = "晴天",
+            artist = "周杰伦",
+            album = "叶惠美",
+            durationMs = 269_000L,
+        )
+        val json = org.json.JSONObject(OnlineSongSaver.metadataJson(s))
+        assertEquals("晴天", json.getString("title"))
+        assertEquals("周杰伦", json.getString("artist"))
+        assertEquals("叶惠美", json.getString("album"))
+        assertEquals(269_000L, json.getLong("durationMs"))
+    }
+
+    @Test
+    fun `已有歌词写成带时间轴的旁车 LRC`() {
+        val lyrics = Lyrics(
+            lines = listOf(
+                LyricLine(1_000L, "第一句"),
+                LyricLine(63_500L, "第二句"),
+            ),
+            synced = true,
+            title = "晴天",
+            artist = "周杰伦",
+        )
+        val lrc = OnlineSongSaver.lyricsToLrc(lyrics)
+        assertTrue(lrc.contains("[ti:晴天]"))
+        assertTrue(lrc.contains("[00:01.00]第一句"))
+        assertTrue(lrc.contains("[01:03.50]第二句"))
     }
 
     @Test

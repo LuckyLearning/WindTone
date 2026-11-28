@@ -776,10 +776,11 @@
     <string name="lyrics_search_empty">没有搜到歌词，换个关键词试试</string>
     <string name="lyrics_search_failed">这首没有可用歌词，换一个结果</string>
     <string name="lyrics_search_preview">歌词预览 · 共 %1$d 行</string>
-    <string name="lyrics_search_preview_hint">先点一份候选看内容，确认后再应用</string>
-    <string name="lyrics_search_use">使用这份歌词</string>
-    <string name="lyrics_search_selected">已选</string>
-    <string name="lyrics_search_select">选择</string>
+    <string name="lyrics_search_preview_hint">点候选立即切换当前歌词，可继续点别的版本比较</string>
+    <string name="lyrics_search_current">当前使用</string>
+    <string name="lyrics_search_switch">切换</string>
+    <string name="lyrics_search_done">完成</string>
+    <string name="lyrics_search_song_changed">歌曲已切换，请重新选择</string>
     <string name="lyrics_search_restore">恢复自动获取的歌词</string>
     <string name="lyrics_plain_text_no_timeline">纯文本歌词（无时间轴）</string>
     <string name="aliyun_status_not_signed_in">在线音乐 · 未连接</string>

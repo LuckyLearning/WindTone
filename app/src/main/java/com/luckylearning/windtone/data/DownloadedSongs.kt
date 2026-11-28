@@ -26,9 +26,8 @@ object DownloadedSongs {
 
     private const val TAG = "DownloadedSongs"
     private const val MAX_SONGS = 500
-    /** 只看下载目录本身：边播边存把文件直接写在这一层，不跟着用户的其他子目录跑 */
-    private const val MAX_DEPTH = 1
     private const val CACHE_MS = 2_000L
+    private val LRC_EXTENSIONS = listOf(".lrc", ".krc", ".yrc", ".txt")
 
     private val audioExtensions = setOf(
         "mp3", "flac", "m4a", "aac", "ogg", "oga", "opus", "wav", "wma",
@@ -55,7 +54,7 @@ object DownloadedSongs {
                 return@withContext cached
             }
         }
-        val list = runCatching { scan(context.contentResolver, Uri.parse(treeUri)) }
+        val list = runCatching { scan(context, Uri.parse(treeUri)) }
             .onFailure { Log.d(TAG, "扫描下载目录失败（按空处理）", it) }
             .getOrDefault(emptyList())
         synchronized(this@DownloadedSongs) {
@@ -66,23 +65,67 @@ object DownloadedSongs {
         list
     }
 
-    private fun scan(resolver: ContentResolver, tree: Uri): List<Song> {
+    private data class Entry(
+        val docId: String,
+        val name: String,
+        val mime: String,
+        val size: Long,
+        val modified: Long,
+    )
+
+    private data class Meta(
+        val title: String? = null,
+        val artist: String? = null,
+        val album: String? = null,
+        val albumArtist: String? = null,
+        val durationMs: Long = 0L,
+        val year: Int? = null,
+        val genre: String? = null,
+        val trackNo: Int = 0,
+        val discNumber: Int? = null,
+    )
+
+    private fun scan(context: Context, tree: Uri): List<Song> {
+        val resolver = context.contentResolver
         val rootId = docIdOf(tree.toString()) ?: return emptyList()
+        val entries = queryChildren(resolver, tree, rootId)
+        val byName = entries.associateBy { it.name }
         val out = ArrayList<Song>()
-        val seen = HashSet<String>()
-        walk(resolver, tree, rootId, 0, out, seen)
+        for (entry in entries) {
+            if (out.size >= MAX_SONGS) break
+            if (entry.mime == DocumentsContract.Document.MIME_TYPE_DIR) continue
+            if (!isAudio(entry.name, entry.mime)) continue
+
+            val base = entry.name.substringBeforeLast('.', entry.name)
+            val meta = byName["$base.wtmeta.json"]?.let { readMeta(resolver, tree, it) }
+            val lrc = LRC_EXTENSIONS.firstNotNullOfOrNull { ext -> byName["$base$ext"] }
+            val uri = DocumentsContract.buildDocumentUriUsingTree(tree, entry.docId)
+            val embedded = if (meta == null) readEmbeddedMeta(context, uri) else null
+            out += Song(
+                id = 0L,
+                uri = uri,
+                title = meta?.title ?: embedded?.title ?: displayTitle(entry.name),
+                artist = meta?.artist ?: embedded?.artist,
+                album = meta?.album ?: embedded?.album,
+                albumArtist = meta?.albumArtist ?: embedded?.albumArtist,
+                durationMs = meta?.durationMs?.takeIf { it > 0 } ?: embedded?.durationMs ?: 0L,
+                sizeBytes = entry.size,
+                mimeType = entry.mime,
+                displayName = entry.name,
+                folderPath = entry.docId.substringAfter(':', entry.docId).substringBeforeLast('/', ""),
+                source = SongSource.FOLDER,
+                trackNo = meta?.trackNo ?: 0,
+                lrcUri = lrc?.let { DocumentsContract.buildDocumentUriUsingTree(tree, it.docId) },
+                genre = meta?.genre,
+                year = meta?.year,
+                discNumber = meta?.discNumber,
+                dateAdded = entry.modified,
+            )
+        }
         return out.sortedByDescending { it.dateAdded }
     }
 
-    private fun walk(
-        resolver: ContentResolver,
-        tree: Uri,
-        dirDocId: String,
-        depth: Int,
-        out: MutableList<Song>,
-        seen: MutableSet<String>,
-    ) {
-        if (out.size >= MAX_SONGS) return
+    private fun queryChildren(resolver: ContentResolver, tree: Uri, dirDocId: String): List<Entry> {
         val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, dirDocId)
         val projection = arrayOf(
             DocumentsContract.Document.COLUMN_DOCUMENT_ID,
@@ -91,6 +134,7 @@ object DownloadedSongs {
             DocumentsContract.Document.COLUMN_SIZE,
             DocumentsContract.Document.COLUMN_LAST_MODIFIED,
         )
+        val out = ArrayList<Entry>()
         resolver.query(children, projection, null, null, null)?.use { cursor ->
             val idIdx = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
             val nameIdx = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
@@ -98,34 +142,63 @@ object DownloadedSongs {
             val sizeIdx = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
             val timeIdx = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
             if (idIdx < 0 || nameIdx < 0 || mimeIdx < 0) return@use
-            while (cursor.moveToNext() && out.size < MAX_SONGS) {
+            while (cursor.moveToNext() && out.size < 2_000) {
                 val docId = cursor.getString(idIdx) ?: continue
-                val name = cursor.getString(nameIdx).orEmpty()
-                val mime = cursor.getString(mimeIdx).orEmpty()
-                if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
-                    if (depth + 1 < MAX_DEPTH) walk(resolver, tree, docId, depth + 1, out, seen)
-                    continue
-                }
-                if (!isAudio(name, mime)) continue
-                val uri = DocumentsContract.buildDocumentUriUsingTree(tree, docId)
-                if (!seen.add(uri.toString())) continue
-                out += Song(
-                    id = 0L,
-                    uri = uri,
-                    title = displayTitle(name),
-                    artist = null,
-                    album = null,
-                    durationMs = 0L,
-                    sizeBytes = if (sizeIdx >= 0) cursor.getLong(sizeIdx) else 0L,
-                    mimeType = mime,
-                    displayName = name,
-                    folderPath = docId.substringAfter(':', docId).substringBeforeLast('/', ""),
-                    source = SongSource.FOLDER,
-                    dateAdded = if (timeIdx >= 0) cursor.getLong(timeIdx) else 0L,
+                out += Entry(
+                    docId = docId,
+                    name = cursor.getString(nameIdx).orEmpty(),
+                    mime = cursor.getString(mimeIdx).orEmpty(),
+                    size = if (sizeIdx >= 0) cursor.getLong(sizeIdx) else 0L,
+                    modified = if (timeIdx >= 0) cursor.getLong(timeIdx) else 0L,
                 )
             }
         }
+        return out
     }
+
+    private fun readMeta(resolver: ContentResolver, tree: Uri, entry: Entry): Meta? = runCatching {
+        val uri = DocumentsContract.buildDocumentUriUsingTree(tree, entry.docId)
+        val text = resolver.openInputStream(uri)?.use { input ->
+            input.bufferedReader(Charsets.UTF_8).readText().take(64 * 1024)
+        }.orEmpty()
+        if (text.isBlank()) return null
+        val obj = org.json.JSONObject(text)
+        fun str(key: String): String? =
+            if (obj.isNull(key)) null else obj.optString(key).takeIf { it.isNotBlank() }
+        Meta(
+            title = str("title"),
+            artist = str("artist"),
+            album = str("album"),
+            albumArtist = str("albumArtist"),
+            durationMs = obj.optLong("durationMs", 0L),
+            year = obj.optInt("year", 0).takeIf { it > 0 },
+            genre = str("genre"),
+            trackNo = obj.optInt("trackNo", 0),
+            discNumber = obj.optInt("discNumber", 0).takeIf { it > 0 },
+        )
+    }.getOrNull()
+
+    /** 老版本保存的文件没有旁车；从音频标签补一次基本信息，至少歌曲信息页不空。 */
+    private fun readEmbeddedMeta(context: Context, uri: Uri): Meta? = runCatching {
+        val mmr = android.media.MediaMetadataRetriever()
+        try {
+            mmr.setDataSource(context, uri)
+            fun value(key: Int): String? = mmr.extractMetadata(key)?.takeIf { it.isNotBlank() }
+            Meta(
+                title = value(android.media.MediaMetadataRetriever.METADATA_KEY_TITLE),
+                artist = value(android.media.MediaMetadataRetriever.METADATA_KEY_ARTIST),
+                album = value(android.media.MediaMetadataRetriever.METADATA_KEY_ALBUM),
+                albumArtist = value(android.media.MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST),
+                durationMs = value(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
+                    ?.toLongOrNull() ?: 0L,
+                year = value(android.media.MediaMetadataRetriever.METADATA_KEY_YEAR)
+                    ?.toIntOrNull()?.takeIf { it > 0 },
+                genre = value(android.media.MediaMetadataRetriever.METADATA_KEY_GENRE),
+            )
+        } finally {
+            runCatching { mmr.release() }
+        }
+    }.getOrNull()
 
     internal fun isAudio(name: String, mime: String): Boolean {
         if (mime.startsWith("audio/", ignoreCase = true)) return true

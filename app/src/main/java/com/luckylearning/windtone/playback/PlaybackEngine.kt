@@ -611,6 +611,7 @@ class PlaybackEngine(
                             ended,
                             prefs.onlineSaveDirectoryUri,
                             completeCache = true,
+                            lyrics = rawLyrics,
                         )
                     }
                 }
@@ -646,6 +647,7 @@ class PlaybackEngine(
                             previous,
                             prefs.onlineSaveDirectoryUri,
                             completeCache = true,
+                            lyrics = rawLyrics,
                         )
                     }
                 }
@@ -1800,16 +1802,18 @@ class PlaybackEngine(
         _player.update { it.copy(lyricOffsetMs = next) }
     }
 
-    override fun applySearchedLyrics(stableKey: String, text: String) {
-        val song = _player.value.current ?: return
-        if (song.stableKey != stableKey) return
+    override fun applySearchedLyrics(stableKey: String, text: String): Boolean {
+        val song = _player.value.current ?: return false
+        // 搜索期间可能已经自动切歌：不把 A 的歌词套到 B 上，交给界面提示重选。
+        if (song.stableKey != stableKey) return false
         val parsed = LyricsSearch.parse(text)
-        if (parsed.isEmpty) return
+        if (parsed.isEmpty) return false
         LyricsOverrideStore.put(app, stableKey, text)
         lyricsJob?.cancel()
         lyricsSeq++
         rawLyrics = parsed
         _player.update { it.copy(lyrics = parsed, lyricsLoading = false) }
+        return true
     }
 
     override fun clearSearchedLyrics(stableKey: String) {
@@ -2518,7 +2522,13 @@ class PlaybackEngine(
                         savableSongOf(c)?.let { current ->
                             if (OnlineSongSaver.isCacheComplete(app, current)) {
                                 runCatching {
-                                    OnlineSongSaver.enqueue(app, current, saveDir, completeCache = false)
+                                    OnlineSongSaver.enqueue(
+                                        app,
+                                        current,
+                                        saveDir,
+                                        completeCache = false,
+                                        lyrics = rawLyrics,
+                                    )
                                 }
                             }
                         }

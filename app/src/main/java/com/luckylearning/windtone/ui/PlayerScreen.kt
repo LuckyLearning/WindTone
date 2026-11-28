@@ -198,8 +198,8 @@ fun PlayerScreen(
     /** D1：逐句循环（灌入同一 A-B 引擎） */
     onLoopLyricLine: (Long, Long) -> Unit = { _, _ -> },
     onExportLyrics: (android.net.Uri) -> Unit,
-    /** 搜索歌词选中：stableKey + 正文，由引擎立即替换并持久化 */
-    onApplySearchedLyrics: (String, String) -> Unit = { _, _ -> },
+    /** 搜索歌词选中：stableKey + 正文，由引擎立即替换并持久化；返回是否应用到当前曲 */
+    onApplySearchedLyrics: (String, String) -> Boolean = { _, _ -> false },
     /** 恢复自动获取的歌词 */
     onClearSearchedLyrics: (String) -> Unit = {},
     onShowAudioInfo: () -> Unit = {},
@@ -1199,10 +1199,8 @@ fun PlayerScreen(
         LyricsSearchSheet(
             song = song,
             manual = state.lyrics.source == LyricSource.MANUAL,
-            onApply = { text ->
-                song?.let { onApplySearchedLyrics(it.stableKey, text) }
-                showLyricsSearch = false
-            },
+            // 选中即应用，但弹层不关：用户可以继续点别的候选当场切换
+            onApply = { text -> song?.let { onApplySearchedLyrics(it.stableKey, text) } == true },
             onRestore = song?.let { s -> { onClearSearchedLyrics(s.stableKey); showLyricsSearch = false } },
             onDismiss = { showLyricsSearch = false },
         )

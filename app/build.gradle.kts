@@ -9,6 +9,7 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+
 /**
  * 版本号单一来源：改版本只改这两行即可。
  * CI（.github/workflows/android-release.yml）会从这里读取并与 tag 做一致性校验。
@@ -147,10 +148,12 @@ android {
         // 默认 values/ 下，因此这里只保留 zh，把三方库的几十种语言资源一并裁掉。
         // 新增文案直接写中文到 values/strings.xml，不要再建 values-xx 目录。
         resourceConfigurations += listOf("zh")
-        // 只保留 arm64-v8a：在用真机与比亚迪车机均为 64 位，不再维护 32 位与 x86。
-        // 这里用 abiFilters 而不是 splits.include —— 后者受 -PabiSplits 开关控制，
-        // 不带该参数时（本地日常构建）会退化成四 ABI 混合包。见 §7.4 ABI。
-        ndk { abiFilters += "arm64-v8a" }
+        // 全平台 ABI（2026-11-28 用户拍板）：本地日常构建出一个四 ABI 混合包，
+        // CI 发版（-PabiSplits=true）才按 ABI 拆成 4 个。两者不能同时设 abiFilters，
+        // 否则 AGP 会报「ndk abiFilters 与 splits abi filters 冲突」。
+        if (!abiSplitsEnabled) {
+            ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64") }
+        }
         // 仪器化测试跑在模拟器/真机上；JVM 单测（Robolectric）不需要它
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -250,17 +253,15 @@ android {
     /**
      * ABI 分包（仅 `-PabiSplits=true` 时生效，见文件顶部的说明）。
      *
-     * **只出 arm64-v8a**（2026-11-24 用户拍板）：目标设备是 arm64 车机与手机，
-     * 32 位机型不再维护。这一条同时约束了后续引入的原生库（自定义音源运行时的 QuickJS
-     * 是 JNI，只需 arm64 的 so），不必为 v7a / x86 各背一份。
-     * universal 包保留：单 ABI 时它与 `-arm64-v8a` 内容一致，发版脚本不必改。
+     * **全平台四分包**（2026-11-28 用户拍板，废止 2026-11-24 的「只发 arm64」）：
+     * 发版产出 armeabi-v7a / arm64-v8a / x86 / x86_64 四个包，不再额外产出 universal。
      */
     splits {
         abi {
             isEnable = abiSplitsEnabled
             reset()
-            include("arm64-v8a")
-            isUniversalApk = true
+            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            isUniversalApk = false
         }
     }
 
@@ -358,7 +359,7 @@ dependencies {
     // 选它的理由是可取消 + 二进制响应 + 超时三件事都要自己写，且写不好就是长期负债；
     // **播放链路不经过它**，仍走 Media3 内置 HTTP 栈（见 docs/规划-在线音乐与音源接入.md D4）。
     implementation(libs.okhttp)
-    // 洛雪 v2 自定义源脚本运行时。arm64-v8a 专用（见 defaultConfig.ndk.abiFilters）。
+    // 洛雪 v2 自定义源脚本运行时。wrapper AAR 自带 armeabi-v7a / arm64-v8a / x86 / x86_64 四套 so。
     implementation(libs.quickjs)
 
     // 单元测试（lyrics/ 包为纯 JVM 逻辑，可直接跑）
