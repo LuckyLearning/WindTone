@@ -322,6 +322,12 @@ object CoverRepository {
      * 在线音源（`lx:` 身份）没有文件可读，改走 [OnlineCover] 下载封面图。
      * 空结果也会进内存缓存（负缓存），避免同一首歌反复打开 MediaMetadataRetriever / 扫目录。
      *
+     * 内嵌图有两条读取路：先走系统 MMR（本地文件最快），读不到再退回
+     * [EmbeddedAudioInfo] 的字节级解析 —— MMR 对 SAF 文档 uri 支持很弱，
+     * 尤其 FLAC 的 Vorbis PICTURE 块不会暴露成 embeddedPicture，而「边播边存」
+     * 下载的正大多是 FLAC，只靠 MMR 会一直空白（v1.3.15 修复）。
+     * 每一步各自包 runCatching：任一路抛异常都不能挡住后面的回退。
+     *
      * ⚠️ 在线分支**不能**先落负缓存再下载：下载本身有网络延迟，若先写空值，
      * 并发的列表项请求会命中空值直接显示占位图。这里只在下载有结果时写缓存。
      */
@@ -333,12 +339,18 @@ object CoverRepository {
             if (online != null && online.isNotEmpty()) cache.put(key, online)
             return@withContext online
         }
-        val bytes = runCatching {
+        // 每条回退各自包 runCatching：MMR 在 SAF uri 上抛异常时仍要继续走字节解析。
+        val mmrPicture = runCatching {
             MetadataReader.embeddedPicture(context, song.uri)
                 ?.takeIf { it.size in 1..(8 * 1024 * 1024) }
-                ?: FolderCover.readBytes(song)
-                ?: empty
-        }.getOrDefault(empty)
+        }.getOrNull()
+        val embeddedPicture = mmrPicture ?: runCatching {
+            EmbeddedAudioInfo.read(context, song, wantPicture = true)
+                ?.picture?.takeIf { it.size in 1..(8 * 1024 * 1024) }
+        }.getOrNull()
+        val bytes = embeddedPicture
+            ?: runCatching { FolderCover.readBytes(song) }.getOrNull()
+            ?: empty
         cache.put(key, bytes)
         bytes.takeIf { it.isNotEmpty() }
     }

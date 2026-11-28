@@ -102,7 +102,7 @@ object DownloadedSongs {
             // 歌词仍是同目录旁车；.lrc.txt 兼容老版本 SAF 自动补的后缀。
             val lrc = LRC_EXTENSIONS.firstNotNullOfOrNull { ext -> byName["$base$ext"] }
             val uri = DocumentsContract.buildDocumentUriUsingTree(tree, entry.docId)
-            val embedded = readEmbeddedMeta(context, uri)
+            val embedded = readEmbeddedMeta(context, uri, entry.name, entry.mime)
             out += Song(
                 id = 0L,
                 uri = uri,
@@ -158,10 +158,17 @@ object DownloadedSongs {
         return out
     }
 
-    /** 元信息统一从音频内嵌标签读取（写侧见 AudioTags），至少歌曲信息页不空。 */
-    private fun readEmbeddedMeta(context: Context, uri: Uri): Meta? = runCatching {
+    /**
+     * 元信息从音频内嵌标签读取（写侧见 AudioTags）。
+     *
+     * MMR 对 SAF 文档 uri 的内嵌标签支持很弱（尤其 FLAC），缺关键字段时退回
+     * [EmbeddedAudioInfo] 的字节级解析 —— 与写入侧同一套容器格式，读回的才是
+     * 下载时真正写进去的歌名/歌手/专辑（v1.3.15）。
+     * 只读文字不取封面，且仅在 MMR 缺字段时才读字节，避免扫描 500 首时反复读全文件。
+     */
+    private fun readEmbeddedMeta(context: Context, uri: Uri, name: String, mime: String): Meta? = runCatching {
         val mmr = android.media.MediaMetadataRetriever()
-        try {
+        val fromMmr = try {
             mmr.setDataSource(context, uri)
             fun value(key: Int): String? = mmr.extractMetadata(key)?.takeIf { it.isNotBlank() }
             Meta(
@@ -182,6 +189,26 @@ object DownloadedSongs {
         } finally {
             runCatching { mmr.release() }
         }
+        val needFallback = fromMmr.title.isNullOrBlank() ||
+            fromMmr.artist.isNullOrBlank() || fromMmr.album.isNullOrBlank()
+        val fromBytes = if (needFallback) {
+            runCatching {
+                EmbeddedAudioInfo.read(
+                    context, uri, AudioFormats.extensionOf(name), mime, wantPicture = false,
+                )
+            }.getOrNull()
+        } else null
+        Meta(
+            title = fromBytes?.title ?: fromMmr.title,
+            artist = fromBytes?.artist ?: fromMmr.artist,
+            album = fromBytes?.album ?: fromMmr.album,
+            albumArtist = fromMmr.albumArtist,
+            durationMs = fromMmr.durationMs,
+            year = fromMmr.year,
+            genre = fromMmr.genre,
+            trackNo = fromMmr.trackNo,
+            discNumber = fromMmr.discNumber,
+        )
     }.getOrNull()
 
     internal fun isAudio(name: String, mime: String): Boolean {

@@ -401,8 +401,25 @@ internal object EmbeddedTags {
         artist = readTextAtom("\u00A9ART")
         album = readTextAtom("\u00A9alb")
 
-        val res = EmbeddedTagResult(lyricsText, null, title, artist, album)
-        return if (res.hasLyrics || title != null) res else null
+        // covr 封面（v1.3.15）：解析器原本只服务歌词，从不读封面，导致内嵌进 M4A 的
+        // 封面在读取侧（边播边存下载歌）永远是空白。data atom 内容 = flag(4)+locale(4)+图片，
+        // findAtom 返回的是内容起点，故跳过 8 字节才是图片字节。
+        var picture: ByteArray? = null
+        val covr = findAtom(r, ilst.first, ilst.second, "covr")
+        if (covr != null) {
+            val d = findAtom(r, covr.first, covr.second, "data")
+            if (d != null) {
+                val start = d.first + 8
+                val len = (d.second - start).toInt()
+                if (len in 33 until (8 * 1024 * 1024)) {
+                    r.position = start
+                    picture = r.readBytes(len)?.takeIf { it.isNotEmpty() }
+                }
+            }
+        }
+
+        val res = EmbeddedTagResult(lyricsText, null, title, artist, album, picture)
+        return if (res.hasLyrics || title != null || picture != null) res else null
     }
 
     /** 在 [start, end) 范围内查找指定 fourcc 的 atom，返回 (内容起点, atom 结束位置) */

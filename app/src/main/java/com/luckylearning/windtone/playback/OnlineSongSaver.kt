@@ -229,6 +229,9 @@ object OnlineSongSaver {
         if (name in existing) {
             writeLyricsSidecar(resolver, parentUri, children, existing, name, lyrics)
             removeLegacySidecars(resolver, tree, children, existing, name)
+            // v1.3.13 及之前的文件只有旁车、音频本身没有标签；升级后重新保存时补写一次，
+            // 否则老文件播放时封面/歌手依旧空白（内嵌标签齐全的文件不动）。
+            retrofitEmbeddedTags(resolver, tree, children, name, song, cover)
             savedNames += marker
             return null
         }
@@ -279,6 +282,18 @@ object OnlineSongSaver {
             writeLyricsSidecar(resolver, parentUri, children, existing, name, lyrics)
             removeLegacySidecars(resolver, tree, children, existing, name)
             savedNames += marker
+            // 刚落盘的歌立刻把封面放进内存缓存：下载完点开就能看到封面，
+            // 不必等列表重扫 + 再从文件解析。stableKey 与下载列表一致（都是文档 uri）。
+            cover?.takeIf { it.isNotEmpty() }?.let { coverBytes ->
+                runCatching {
+                    val savedUri = DocumentsContract.buildDocumentUriUsingTree(
+                        tree, DocumentsContract.getDocumentId(docUri),
+                    )
+                    com.luckylearning.windtone.data.CoverRepository.rememberRaw(
+                        song.copy(uri = savedUri), coverBytes,
+                    )
+                }
+            }
             DownloadedSongs.invalidate()
             DownloadsBus.notifyChanged()
             return name
@@ -312,6 +327,78 @@ object OnlineSongSaver {
     }
 
     /** 清掉老版本遗留的 `.wtmeta.json` / `.cover` 旁车，让下载目录只剩「音频 + 歌词」。 */
+    /**
+     * 给老版本保存的文件补写内嵌标签/封面（下载入口侧）。
+     *
+     * v1.3.14 起新文件已经在落盘时内嵌，但用户目录里 v1.3.13 的老文件只有
+     * `.wtmeta.json` / `.cover` 旁车；升级后重新播放保存走的是「文件已存在」分支，
+     * 若不补写就永远读不到内嵌信息。这里先读回音频字节做幂等检测：
+     * 只有缺歌名或缺封面才重写，已完整的文件一次 IO 都不多写。
+     * 超大文件 / 读写失败一律静默跳过，绝不影响音频可播。
+     */
+    private fun retrofitEmbeddedTags(
+        resolver: android.content.ContentResolver,
+        tree: Uri,
+        children: Uri,
+        name: String,
+        song: Song,
+        cover: ByteArray?,
+    ) {
+        val docId = findDocId(resolver, children, name) ?: return
+        val uri = DocumentsContract.buildDocumentUriUsingTree(tree, docId)
+        val budget = (Runtime.getRuntime().maxMemory() / 8).coerceAtLeast(8L * 1024 * 1024)
+        val original = try {
+            resolver.openInputStream(uri)?.use { input ->
+                val out = ByteArrayOutputStream()
+                val buf = ByteArray(64 * 1024)
+                var total = 0
+                while (true) {
+                    val n = input.read(buf)
+                    if (n < 0) break
+                    if (total + n > budget) return
+                    out.write(buf, 0, n)
+                    total += n
+                }
+                out.toByteArray()
+            }
+        } catch (_: Throwable) {
+            null
+        } ?: return
+        if (original.isEmpty()) return
+
+        val mime = mimeTypeOf(name, song.mimeType)
+        val info = com.luckylearning.windtone.data.EmbeddedAudioInfo.parse(
+            original, com.luckylearning.windtone.data.AudioFormats.extensionOf(name), mime, true,
+        )
+        val need = info?.title.isNullOrBlank() ||
+            (cover?.isNotEmpty() == true && info?.picture == null)
+        if (!need) return
+
+        val tagged = AudioTags.write(
+            original,
+            AudioTags.Meta(
+                title = song.title,
+                artist = song.artist,
+                album = song.album,
+                albumArtist = song.albumArtist,
+                year = song.year,
+                genre = song.genre,
+                trackNo = song.trackNo,
+                discNumber = song.discNumber,
+            ),
+            cover,
+        )
+        if (tagged.size == original.size && tagged.contentEquals(original)) return
+        runCatching {
+            resolver.openOutputStream(uri, "w")?.use { it.write(tagged) }
+        }
+        cover?.takeIf { it.isNotEmpty() }?.let { bytes ->
+            runCatching {
+                com.luckylearning.windtone.data.CoverRepository.rememberRaw(song.copy(uri = uri), bytes)
+            }
+        }
+    }
+
     private fun removeLegacySidecars(
         resolver: android.content.ContentResolver,
         tree: Uri,
